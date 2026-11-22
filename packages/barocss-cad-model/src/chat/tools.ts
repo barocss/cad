@@ -258,7 +258,8 @@ async function runPartTool(state: ChatState, name: string, args: Record<string, 
   }
   // (R3: every part tool's handler, in a module per v2 action group, by name.)
   if (Object.hasOwn(PART_HANDLERS, name)) {
-    const reviewsCandidate = name === 'render_views' || (name === 'inspect' && (args.proposal !== undefined || args.expectedProposalRevision !== undefined));
+    const reviewsCandidate = name === 'render_views' || ((name === 'inspect' || name === 'check_spec')
+      && (args.proposal !== undefined || args.expectedProposalRevision !== undefined));
     const dispatch = Object.hasOwn(PROPOSAL_HANDLERS, name) || reviewsCandidate ? runProposalTool : runToolCounted;
     return PART_HANDLERS[name](state, args, evaluate, options, dispatch);
   }

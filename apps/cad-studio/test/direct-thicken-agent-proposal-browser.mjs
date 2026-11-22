@@ -4,7 +4,8 @@ import { join } from 'node:path';
 import { createFlow, sha256 } from './flow-helper.mjs';
 import { withMcpSession } from './mcp-browser-session.mjs';
 
-const inspectFaces = process.argv.includes('--candidate-faces');
+const radialWall = process.argv.includes('--radial-wall');
+const inspectFaces = radialWall || process.argv.includes('--candidate-faces');
 const reviewImage = inspectFaces || process.argv.includes('--candidate-image');
 const rails = reviewImage || process.argv.includes('--rails');
 const weight = Math.SQRT1_2;
@@ -15,6 +16,11 @@ const railSource = `@model panel {version:0;length-unit:mm;${rail('a', 0)}${rail
 const thickness = rails ? 2 : 3;
 const expectedVolume = rails ? 216 * Math.PI : 3600;
 const volumeLabel = rails ? '+678.58 mm³' : '+3600 mm³';
+const wall = { id: 'WALL-2', source: 'The radial wall must be 2 ± 0.01 mm.', hard: true,
+  check: { query: { fn: 'radial_wall', a: 'n0.normal', b: 'n0.reverse' }, op: '==', value: 2, tol: 0.01, unit: 'mm' } };
+const checkWall = args => ({ action: 'check', requirement: wall.id, ...args });
+const proposeThicken = (args, title) => ({ action: 'propose', title,
+  ...(radialWall ? { requirements: [wall.id] } : {}), ops: [{ tool: 'features', args }] });
 const seed = {
   format: 'barocss-cad-model', schema: 3, units: 'mm', parameters: {}, nodes: [], outputs: {}, nextId: 0,
   direct: {
@@ -34,11 +40,15 @@ if (rails) pins.push('packages/barocss-cad-model/src/chat/directRuledProposal.ts
   'packages/barocss-cad/src/brep/thicken-cylinder.ts', 'apps/cad-studio/src/state/useProposalPreview.ts');
 if (reviewImage) pins.push('packages/barocss-cad-model/src/chat/directProposalReview.ts',
   'packages/barocss-cad-model/src/chat/part/views.ts', 'packages/barocss-cad-model/src/chat/views.ts');
+if (radialWall) pins.push('packages/barocss-cad-model/src/chat/radialWall.ts', 'packages/barocss-cad-model/src/chat/spec.ts',
+  'packages/barocss-cad-model/src/chat/part/directCandidate.ts', 'packages/barocss-cad-model/src/chat/part/requirements.ts');
 const f = await createFlow({
   name: 'direct-thicken-agent-proposal', output: process.argv[2],
-  envFrozen: inspectFaces ? 'D1638_SOURCE_FROZEN' : reviewImage ? 'D1637_SOURCE_FROZEN' : rails ? 'D1636_SOURCE_FROZEN' : 'D1628_SOURCE_FROZEN',
+  envFrozen: radialWall ? 'D1639_SOURCE_FROZEN' : inspectFaces ? 'D1638_SOURCE_FROZEN'
+    : reviewImage ? 'D1637_SOURCE_FROZEN' : rails ? 'D1636_SOURCE_FROZEN' : 'D1628_SOURCE_FROZEN',
   initialFiles: pins, requiredFrozen: pins,
-  qualification: inspectFaces ? 'Measure the named native cylinder faces in a pending image and match them after a Studio approval and fresh Open.'
+  qualification: radialWall ? 'Check the pinned native wall, refuse a thin proposal in Studio and match the approved evidence after fresh Open.'
+    : inspectFaces ? 'Measure the named native cylinder faces in a pending image and match them after a Studio approval and fresh Open.'
     : reviewImage ? 'Compare the unapproved Exact Thicken image from local MCP with the Studio candidate and the approved model after fresh Open.'
     : rails ? 'Approve a pinned Ruled sheet and its exact semicylinder Thicken from two rails in one desktop Studio decision.'
     : 'Approve a pinned planar Direct Thicken proposal in desktop Studio and check its native solid after Save and fresh Open.',
@@ -129,7 +139,38 @@ await f.run(async () => {
   const doc = rails ? seed : await f.inspect('input', seed, 'make'), file = join(f.output, 'pending-thicken.bcad');
   const original = Buffer.from(JSON.stringify(doc));
   await writeFile(file, original);
+  if (radialWall) {
+    const thinFile = join(f.output, 'thin-thicken.bcad');
+    await writeFile(thinFile, original);
+    await mcp(thinFile, 'thin-wall', async call => {
+      await call('requirements', { action: 'set', requirements: [wall] });
+      const before = await call('query', { action: 'summary' });
+      const command = { action: 'command', command: 'direct-thicken', expectedRevision: before.direct_revision,
+        values: { first: before.direct_curves[0].id, second: before.direct_curves[1].id, t: 1, side: 'reverse', mode: 'exact-cylinder' } };
+      const result = await call('proposals', proposeThicken(command, '1 mm wall violates WALL-2'));
+      assert.deepEqual(result.checks.newly_failing, [wall.id]);
+      const [{ id: proposal, directReviewRevision: expectedProposalRevision }] = (await call('proposals', { action: 'list' })).proposals;
+      const thin = await call('requirements', checkWall({ proposal, expectedProposalRevision, expectedDirectRevision: before.direct_revision }));
+      assert.equal(thin.status, 'fail');
+      near(thin.measured, 1);
+      f.report.observations.push({ refusedWall: thin });
+    });
+    const thinBytes = await readFile(thinFile), thinPending = JSON.parse(thinBytes);
+    await f.freshOpen(thinFile, thinPending, '00-thin-pending');
+    await button('Chat').first().click();
+    await button('Iso').click();
+    await f.page.getByTitle('Frame all (F)', { exact: true }).click();
+    await button('Preview', card()).click();
+    await card().getByLabel('Volume change').getByText('+358.14 mm³', { exact: true }).waitFor();
+    await button('Accept', card()).click();
+    await f.waitToast(/P1 could not be applied.*WALL-2.*measured .*mm.*expected 2 ± 0\.01 mm/);
+    await f.same(thinPending);
+    await f.snapshot('00-thin-refused');
+    assert.deepEqual(await readFile(thinFile), thinBytes);
+  }
   const { pin, review } = await mcp(file, 'proposal', async (call, request) => {
+    if (radialWall) await call('requirements', { action: 'set', requirements: [wall] });
+    const sourceBytes = await readFile(file);
     const help = await call('describe', { command: 'direct-thicken' });
     assert.equal(help.command, 'direct-thicken');
     const before = await call('query', { action: 'summary' });
@@ -138,12 +179,12 @@ await f.run(async () => {
       ? { first: before.direct_curves[0].id, second: before.direct_curves[1].id, t: thickness, side: 'reverse', mode: 'exact-cylinder' }
       : { surface: before.direct_surfaces[0].id, t: thickness, side: 'both' };
     const command = { action: 'command', command: help.command, expectedRevision: before.direct_revision, values };
-    const propose = args => ({ action: 'propose', title: rails ? 'Create and thicken a Ruled semicylinder' : 'Thicken the planar Ruled sheet', ops: [{ tool: 'features', args }] });
+    const propose = args => proposeThicken(args, rails ? 'Create and thicken a Ruled semicylinder' : 'Thicken the planar Ruled sheet');
     assert.match((await call('features', command, true)).error, /user approval/i);
     assert.match((await call('proposals', propose({ ...command, expectedRevision: '0'.repeat(64) }), true)).error, /Direct inputs changed/);
     assert.match((await call('proposals', propose({ ...command, values: { ...command.values, t: 0 } }), true)).error, /positive thickness/);
     if (rails) assert.match((await call('proposals', propose({ ...command, values: { ...values, t: 10 } }), true)).error, /kernel could not build this.*Nothing was applied/i);
-    assert.deepEqual(await readFile(file), original);
+    assert.deepEqual(await readFile(file), sourceBytes);
     const result = await call('proposals', propose(command));
     assert.deepEqual([result.proposal, result.applied], ['P1', false]);
     assert.equal(result.change.volume, Math.round(expectedVolume * 1000) / 1000);
@@ -187,6 +228,18 @@ await f.run(async () => {
         review.inspect = inspect;
         review.faces = measured.faces;
       }
+      if (radialWall) {
+        assert.deepEqual(result.checks.newly_passing, [wall.id]);
+        const wallArgs = checkWall(args);
+        const reply = await request('tools/call', { name: 'requirements', arguments: wallArgs });
+        assert.equal(reply.isError, false, reply.content[0].text);
+        const measured = JSON.parse(reply.content[0].text);
+        assert.deepEqual(reply.structuredContent, measured);
+        assert.deepEqual([measured.revision, measured.candidate, measured.unit, measured.status, measured.requirement, measured.entities],
+          [candidate.revision, candidate.candidate, 'mm', 'pass', wall.id, review.inspect.faces]);
+        near(measured.measured, 2);
+        review.wall = measured;
+      }
     }
     assert.deepEqual(await readFile(file), pending);
     return { pin: before.direct_revision, review };
@@ -227,6 +280,11 @@ await f.run(async () => {
     const editedBytes = await readFile(edited.file);
     await mcp(edited.file, 'stale-review', async (call, request) => {
       const { direct_revision } = await call('query', { action: 'summary' });
+      if (radialWall) {
+        const old = await call('requirements', checkWall(review.args), true);
+        const stale = await call('requirements', checkWall({ ...review.args, expectedDirectRevision: direct_revision }), true);
+        assert.deepEqual([old.code, stale.code, old.measured, stale.measured], ['DIRECT_CHECK_STALE', 'DIRECT_CHECK_PROPOSAL_STALE', undefined, undefined]);
+      }
       await refuseReview(request, review.args, 'DIRECT_RENDER_STALE');
       await refuseReview(request, { ...review.args, expectedDirectRevision: direct_revision }, 'DIRECT_RENDER_PROPOSAL_STALE');
       if (review.inspect) {
@@ -280,6 +338,21 @@ await f.run(async () => {
         const refused = await call('query', { ...review.inspect, expectedDirectRevision: direct_revision }, true);
         assert.equal(refused.code, 'DIRECT_INSPECT_PROPOSAL_UNAVAILABLE');
         assert.equal(refused.faces, undefined);
+      }
+      if (radialWall) {
+        const decision = accepted.proposals[0].decided.evidence_revisions;
+        assert.deepEqual(accepted.history.at(-1).evidence_revisions, decision);
+        assert.equal(decision.after, review.wall.evidenceRevision);
+        assert.notEqual(decision.before, decision.after);
+        const evidence = await call('requirements', { action: 'evidence', expectedRevision: decision.after });
+        const [file] = evidence.files;
+        assert.equal(file.sha256, sha256(Buffer.from(file.text)));
+        const row = JSON.parse(file.text).evidence.find(row => row.requirement?.id === wall.id);
+        assert.deepEqual([row.result.run, row.result.verdict, row.result.number, row.result.value.entities, row.freshness.state],
+          [decision.after, 'pass', review.wall.measured, review.wall.entities, 'current']);
+        const retired = await call('requirements', checkWall({ ...review.args, expectedDirectRevision: direct_revision }), true);
+        assert.equal(retired.code, 'DIRECT_CHECK_PROPOSAL_UNAVAILABLE');
+        f.report.observations.push({ approvedWall: row, decision, candidateWall: review.wall });
       }
     });
     assert.deepEqual(await readFile(saved.file), approvedBytes);

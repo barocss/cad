@@ -1,11 +1,14 @@
 // The v2 `requirements` group's handlers (R3, moved verbatim from chat/tools.ts's runPartTool): the part's
 // requirements, set from the brief, and the spec checked against them.
 import { saidIn } from '../brief';
-import { checkRequirement, checkSpec, expectedOf, newPolicy, updatePolicy, validateSuite } from '../spec';
+import { checkRequirement, checkSpec, expectedOf, newPolicy, runCheck, updatePolicy, validateSuite } from '../spec';
 import type { Requirement } from '../../engine/schema/spec';
 import { inspectLocalHeightPlan, isLocalTaskCount } from '../../team/localHeightPlan';
-import { digestOf } from '../../util/digest';
-import { type ChatState, type Evaluate, type ToolOutcome, type PartHandler, json, fail } from '../toolKit';
+import { digestOf, requirementEvidenceRevision } from '../../util/digest';
+import { revisionOf } from '../../util/revision';
+import { directInspectionRevision } from '../sweepSource';
+import { type ChatState, type Evaluate, type ToolOutcome, type PartHandler, type PartRun, json, fail } from '../toolKit';
+import { isDirectPin, pinnedDirectCandidate } from './directCandidate';
 
 async function setRequirementsTool(state: ChatState, args: Record<string, unknown>): Promise<ToolOutcome> {
   const list = Array.isArray(args.requirements) ? args.requirements : null;
@@ -29,7 +32,32 @@ async function setRequirementsTool(state: ChatState, args: Record<string, unknow
   const doc = { ...state.doc, requirements: [...kept, ...marked] };
   return { state: { ...state, doc }, content: json({ ok: true, requirements: doc.requirements.map(r => ({ id: r.id, hard: r.hard, check: `${r.check.query.fn} ${expectedOf(r.check)}` })) }), isError: false, changed: true, summary: `${list.length} requirement${list.length === 1 ? '' : 's'} set` };
 }
-async function checkSpecTool(state: ChatState, args: Record<string, unknown>, evaluate: Evaluate): Promise<ToolOutcome> {
+async function checkCandidateWall(state: ChatState, args: Record<string, unknown>, evaluate: Evaluate, dispatch: PartRun): Promise<ToolOutcome> {
+  const { requirement, expectedDirectRevision } = args;
+  if (typeof requirement !== 'string' || !requirement || !isDirectPin(expectedDirectRevision) || args.validate !== undefined)
+    return fail(state, 'Pass the radial wall requirement ID and both Direct proposal pins.', { code: 'DIRECT_CHECK_INPUT' });
+  if (state.partOf || state.doc.instances?.length)
+    return fail(state, 'Check an Exact Thicken proposal in a base part without placed parts.', { code: 'DIRECT_CHECK_SCOPE' });
+  const baseDirectRevision = directInspectionRevision(state.doc);
+  if (expectedDirectRevision !== baseDirectRevision)
+    return fail(state, 'The Direct inputs changed. Read query.summary again.', { code: 'DIRECT_CHECK_STALE' });
+  const replay = await pinnedDirectCandidate(state, args, baseDirectRevision, evaluate, dispatch, 'CHECK');
+  if ('refusal' in replay) return replay.refusal;
+  const { candidate, preview, pending } = replay;
+  const matches = (preview.doc.requirements ?? []).filter(r => r.id === requirement);
+  if (!pending.requirements?.includes(requirement) || matches.length !== 1 || matches[0].check.query.fn !== 'radial_wall')
+    return fail(state, 'Choose a radial wall requirement named by this proposal.', { code: 'DIRECT_CHECK_REQUIREMENT' });
+  const { check } = matches[0], result = await runCheck(preview.doc, preview.bodies, evaluate, check);
+  return { state, content: json({
+    revision: revisionOf(preview.doc), evidenceRevision: requirementEvidenceRevision(preview.doc),
+    candidate: { ...candidate, directRevision: directInspectionRevision(preview.doc) },
+    requirement, expected: expectedOf(check), unit: 'mm', ...result,
+  }), isError: false, changed: false, summary: `${requirement}: ${result.status}` };
+}
+
+const checkSpecTool: PartHandler = async (state, args, evaluate, _options, dispatch) => {
+  if ([args.requirement, args.proposal, args.expectedProposalRevision, args.expectedDirectRevision].some(value => value !== undefined))
+    return checkCandidateWall(state, args, evaluate, dispatch);
   if (!state.doc.requirements?.length) return fail(state, 'There are no requirements yet: set_requirements first, from the brief.');
   const { outcomes, ...report } = await checkSpec(state.doc, state.bodies, evaluate);
   // (validate: the suite against cheap mutants, to catch checks that cannot fail; the policy: best, rounds, hint.)
@@ -37,7 +65,7 @@ async function checkSpecTool(state: ChatState, args: Record<string, unknown>, ev
   const turns = typeof process !== 'undefined' && process.env?.CAD_MAX_TURNS ? Number(process.env.CAD_MAX_TURNS) : undefined;
   const { policy, out } = updatePolicy(state.policy ?? newPolicy(), state.doc, report, outcomes, turns);
   return { state: { ...state, policy }, content: json({ ...report, ...(validation ?? {}), policy: out }), isError: false, changed: false, summary: `${report.summary.pass} pass, ${report.summary.fail} fail, ${report.summary.unknown} unknown` };
-}
+};
 
 async function inspectLocalTaskPlanTool(state: ChatState, args: Record<string, unknown>): Promise<ToolOutcome> {
   const { occurrences, expectedRevision } = args;

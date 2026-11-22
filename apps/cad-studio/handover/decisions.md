@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1639: [Check a named radial wall before Exact Thicken approval](notes/agent-exact-thicken-wall-approval-2026-11-22/README.md), #322 and #324. Bind the native wall check to the candidate image, refuse a thin wall in Studio and reproduce the passing evidence after native Open.
 - D1638: [Inspect native faces in a pending Exact Thicken](notes/agent-exact-thicken-native-faces-2026-11-22/README.md), #322 and #324. Pin inspection to the image candidate and verify coaxial radii and outward normal sense against the approved native file.
 - D1637: [Agent image review for a pending Exact Thicken](notes/agent-exact-thicken-visual-review-2026-11-22/README.md), #322 and #324. Render the pinned candidate solids read-only and match the PNG after Studio approval and fresh Open.
 - D1636: [Propose a Ruled surface and its exact Thicken together](notes/agent-ruled-exact-thicken-2026-11-22/README.md), #322 and #368. Use two pinned Direct rails, one private candidate and one Studio approval, with atomic refusal and native Open.

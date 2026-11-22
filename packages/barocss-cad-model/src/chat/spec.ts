@@ -26,6 +26,7 @@ import { canonical, canonicalOf } from '../util/revision';
 import { MM_PER_INCH } from '../util/units';
 import { isObj } from '../util/guards';
 import type { Query, Predicate, Failure, Report, Outcome, Evaluate, Validation, Policy } from '../engine/schema/spec';
+import { radialWallOf } from './radialWall';
 
 
 
@@ -176,6 +177,7 @@ async function measure(doc: StudioDoc, bodies: readonly BodyResult[], evaluate: 
         return { unknown: `Face "${name}" has no verified cylindrical bore wall in a closed solid.` };
       return { x: diameter, entities: [name] };
     }
+    case 'radial_wall': return radialWallOf(doc, bodies, q);
     case 'min_wall': {
       const walls = bodiesOf(bodies, q.body).map(b => wallThickness(b)) as { thinnest: number | null; face?: string }[];
       const thin = walls.filter(w => w.thinnest !== null).sort((x, y) => x.thinnest! - y.thinnest!)[0];
@@ -283,7 +285,11 @@ function gearPair(doc: StudioDoc, bodies: readonly BodyResult[], q: Extract<Quer
 
 /** One predicate against the part as it stands. */
 export async function runCheck(doc: StudioDoc, bodies: readonly BodyResult[], evaluate: Evaluate, p: Predicate): Promise<Outcome> {
-  if (!bodies.length && p.query.fn !== 'count_solids' && p.query.fn !== 'hole_diameter')
+  const { query } = p;
+  const radialWall = query.fn === 'radial_wall';
+  const problem = radialWall ? radialWallPredicateProblem(p, query) : undefined;
+  if (problem) return { status: 'unknown', why: problem };
+  if (!bodies.length && p.query.fn !== 'count_solids' && p.query.fn !== 'hole_diameter' && !radialWall)
     return { status: 'fail', measured: 'no body', hint: 'the part has no body yet' };
   const m = await measure(doc, bodies, evaluate, p.query);
   if ('unknown' in m) return { status: 'unknown', why: m.unknown };
@@ -297,12 +303,12 @@ export async function runCheck(doc: StudioDoc, bodies: readonly BodyResult[], ev
   const r = inchDiameter ? meetsHoleDiameterMm(m.x, p) : meets(m.x, p);
   if (!r) return { status: 'unknown', why: 'the inch hole diameter needs a positive exact value and a finite tolerance range' };
   const raw = inchDiameter ? m.x / MM_PER_INCH : m.x;
-  const measured = r4(raw);
+  const measured = radialWall ? raw : r4(raw);
   const physical = p.query.fn === 'bbox' || p.query.fn === 'volume' || p.query.fn === 'mass';
   const hint = !r.ok && (physical || inchDiameter) && meets(measured, p).ok
     ? [m.hint, `measured ${raw}${p.unit ? ' ' + p.unit : ''} before display rounding`].filter(Boolean).join('. ')
     : m.hint;
-  return { status: r.ok ? 'pass' : 'fail', measured, delta: r4(r.delta), ...(m.entities ? { entities: m.entities } : {}), ...(hint ? { hint } : {}) };
+  return { status: r.ok ? 'pass' : 'fail', measured, delta: radialWall ? r.delta : r4(r.delta), ...(m.entities ? { entities: m.entities } : {}), ...(hint ? { hint } : {}) };
 }
 
 /** Every requirement's predicate against the part: failures in full, passes by count, unknowns with why. */
@@ -324,7 +330,18 @@ export async function checkSpec(doc: StudioDoc, bodies: readonly BodyResult[], e
   return { model_hash: modelHash(doc), summary: { pass, fail: failures.length, unknown: unknowns.length, hard_failing: hard }, failures, unknowns, outcomes };
 }
 
-const FNS = ['bbox', 'volume', 'mass', 'count_solids', 'count_faces_of_kind', 'distance_between', 'radius', 'hole_diameter', 'min_wall', 'draft_min', 'clearance', 'gear_center_distance', 'gear_backlash', 'gear_contact_ratio', 'gear_clearance', 'library_check', 'hole_alignment', 'overhang_area', 'print_rule', 'subd_deviation', 'keepout', 'datum_distance'];
+const FNS = ['bbox', 'volume', 'mass', 'count_solids', 'count_faces_of_kind', 'distance_between', 'radius', 'hole_diameter', 'radial_wall', 'min_wall', 'draft_min', 'clearance', 'gear_center_distance', 'gear_backlash', 'gear_contact_ratio', 'gear_clearance', 'library_check', 'hole_alignment', 'overhang_area', 'print_rule', 'subd_deviation', 'keepout', 'datum_distance'];
+function radialWallPredicateProblem(p: { op?: unknown; unit?: unknown; value?: unknown; min?: unknown; max?: unknown; tol?: unknown }, q: { a?: unknown; b?: unknown }) {
+  if (typeof q.a !== 'string' || !q.a.trim() || typeof q.b !== 'string' || !q.b.trim() || q.a === q.b)
+    return 'radial_wall takes two distinct exact native face names a and b';
+  if (p.unit !== undefined && p.unit !== 'mm') return 'radial_wall uses mm';
+  const finite = (x: unknown): x is number => typeof x === 'number' && Number.isFinite(x);
+  if (p.op === 'between') {
+    if (!finite(p.min) || !finite(p.max) || p.min > p.max || p.tol !== undefined) return 'radial_wall between needs ordered finite limits and no tolerance';
+  } else if (!['==', '<=', '>='].includes(String(p.op)) || !finite(p.value) || (p.tol !== undefined && (!finite(p.tol) || p.tol < 0))) {
+    return 'radial_wall needs a finite limit and a nonnegative finite tolerance, if supplied';
+  }
+}
 /** Why a requirement cannot be kept (malformed), or null. */
 export function checkRequirement(r: unknown): string | null {
   if (typeof r !== 'object' || r === null) return 'a requirement is an object';
@@ -340,6 +357,8 @@ export function checkRequirement(r: unknown): string | null {
   if (f.fn === 'count_faces_of_kind' && !['plane', 'curved'].includes(String(f.kind))) return `${q.id}: count_faces_of_kind takes kind plane or curved`;
   if (f.fn === 'distance_between' && (f.a === undefined || f.b === undefined)) return `${q.id}: distance_between takes a and b (faces or edges)`;
   if ((f.fn === 'radius' || f.fn === 'hole_diameter') && f.face === undefined) return `${q.id}: ${f.fn} takes a face`;
+  const radialProblem = f.fn === 'radial_wall' ? radialWallPredicateProblem(c, f) : undefined;
+  if (radialProblem) return `${q.id}: ${radialProblem}`;
   if (f.fn === 'clearance' && (typeof f.a !== 'string' || typeof f.b !== 'string')) return `${q.id}: clearance takes two body keys a and b`;
   if (f.fn === 'hole_alignment' && (typeof f.board !== 'string' || (f.features !== undefined && (!Array.isArray(f.features) || f.features.some(x => typeof x !== 'string'))))) return `${q.id}: hole_alignment takes board (base or a part id) and features? (library part ids)`;
   if (f.fn === 'library_check' && (typeof f.feature !== 'string' || typeof f.check !== 'string')) return `${q.id}: library_check takes a library part's feature id (n<k>) and the rule's id (check)`;

@@ -93,7 +93,12 @@ const READ: Record<string, JsonSchema | null> = {
   section: o({ axis: str, at: num, cut: arr }, ['axis', 'at', 'cut']),
   wall_thickness: o({ body: str, thinnest: num, at: arr, face: str, note: str }, ['body']),
   draft: o({ body: str, pull: arr, walls: arr, under_min: arr, note: str }, ['body', 'walls']),
-  check_spec: o({ model_hash: str, summary: obj, failures: arr, unknowns: arr, policy: obj, validation: obj }, ['model_hash', 'summary']),
+  check_spec: { type: 'object', oneOf: [
+    o({ model_hash: str, summary: obj, failures: arr, unknowns: arr, policy: obj, validation: obj }, ['model_hash', 'summary']),
+    o({ revision: str, evidenceRevision: str, candidate: directCandidatePin, requirement: str, expected: str, unit: { type: 'string', const: 'mm' },
+      status: { type: 'string', enum: ['pass', 'fail', 'unknown'] }, measured: num, delta: num, entities: arr, why: str, hint: str },
+    ['revision', 'evidenceRevision', 'candidate', 'requirement', 'expected', 'unit', 'status']),
+  ] },
   // (FR4a, D127: a frame's cut list.)
   cut_list: o({ rows: arr, totals: obj, densities: str, nesting: obj, csv: str }, ['rows', 'totals', 'densities', 'nesting']),
   // (D155: a hole–shaft fit.)

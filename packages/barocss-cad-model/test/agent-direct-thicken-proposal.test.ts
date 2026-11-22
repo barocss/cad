@@ -1,10 +1,13 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { outputSchemaOf, validate } from '../src/chat/contract';
+import { runCheck } from '../src/chat/spec';
 import { directInspectionRevision } from '../src/chat/sweepSource';
 import { acceptProposal, dispatchTool, previewProposal, type ChatState } from '../src/chat/tools';
 import { directOps, emptyDirect, geometryOf, importSource } from '../src/engine/direct';
-import { emptyDoc } from '../src/engine/doc';
+import { emptyDoc, withNode } from '../src/engine/doc';
 import { evaluatePart } from '../src/engine/evaluate';
+import type { Requirement } from '../src/engine/schema/spec';
 
 test('a reviewed Direct Thicken snapshots the visible whole source and always needs Studio approval', async () => {
   const rails = importSource(emptyDirect(), `@model rails {version:0;length-unit:mm;
@@ -91,6 +94,66 @@ test('a Direct Thicken proposal previews the exact obtuse sector before user app
   assert.ok('state' in accepted);
   assert.deepEqual(accepted.state.doc.nodes, preview.doc.nodes);
   assert.equal(accepted.state.doc.direct, direct);
+});
+
+test('a linked radial wall requirement checks the pinned native output and gates approval', async () => {
+  const w = Math.SQRT1_2;
+  const direct = importSource(emptyDirect(), `@model sector {version:0;length-unit:mm;
+    @surface #s {type:nurbs;degree-u:2;degree-v:1;knots-u:[0,0,0,1,1,1];knots-v:[0,0,1,1];
+      control-points:[[[10,0,0],[10,0,12]],[[10,10,0],[10,10,12]],[[0,10,0],[0,10,12]]];
+      weights:[[1,1],[${w},${w}],[1,1]];}
+  }`, 'Quarter cylinder');
+  const check: Requirement['check'] = { query: { fn: 'radial_wall', a: 'n0.reverse', b: 'n0.normal' }, op: '==', value: 2, unit: 'mm' };
+  const wall: Requirement = { id: 'get_part_summary', source: 'Use a 2 mm radial wall.', hard: true, check };
+  const state: ChatState = { doc: { ...emptyDoc(), direct, requirements: [wall] }, bodies: [] };
+  const evaluate = async (doc: ChatState['doc']) => evaluatePart(doc, 1);
+  const call = (from: ChatState, name: string, args: Record<string, unknown>) => dispatchTool(from, name, args, evaluate);
+  const expectedDirectRevision = directInspectionRevision(state.doc);
+  const propose = (t: number, from = state) => call(from, 'proposals', { action: 'propose', title: 'Exact wall',
+    requirements: [wall.id], ops: [{ tool: 'features', args: { action: 'command', command: 'direct-thicken',
+      expectedRevision: directInspectionRevision(from.doc), values: { surface: direct.objects[0].id, t, side: 'reverse', mode: 'exact-cylinder' } } }],
+  });
+
+  for (const [t, verdict] of [[1.999999, 'fail'], [2, 'pass']] as const) {
+    const made = await propose(t);
+    assert.equal(made.isError, false, made.content);
+    const pending = made.state, bytes = JSON.stringify(pending.doc);
+    const [{ id: proposal, directReviewRevision: expectedProposalRevision }] = JSON.parse((await call(pending, 'proposals', { action: 'list' })).content).proposals;
+    const args = { action: 'check', requirement: wall.id, proposal, expectedProposalRevision, expectedDirectRevision };
+    const checked = await call(pending, 'requirements', args);
+    const report = JSON.parse(checked.content);
+    assert.equal(checked.isError, false, checked.content);
+    assert.equal(checked.state, pending);
+    assert.equal(checked.changed, false);
+    assert.deepEqual(validate(outputSchemaOf('check_spec')!, report), []);
+    assert.deepEqual([report.requirement, report.status, report.entities], [wall.id, verdict, ['n0.normal', 'n0.reverse']]);
+    assert.ok(Math.abs(report.measured - t) < 1e-10);
+    const refused = await call(pending, 'requirements', { ...args, expectedProposalRevision: '0'.repeat(64) });
+    assert.equal(JSON.parse(refused.content).code, 'DIRECT_CHECK_PROPOSAL_STALE');
+    const accepted = await acceptProposal(pending, proposal, evaluate);
+    if (verdict === 'fail') assert.match('error' in accepted ? accepted.error : '', /measured .* mm, expected 2 ± 0 mm/);
+    else {
+      assert.ok('state' in accepted);
+      const doc = accepted.state.doc;
+      const native = await evaluate(doc);
+      assert.ok(native.ok);
+      assert.equal((await runCheck(doc, native.bodies, evaluate, check)).status, 'pass');
+      for (const b of ['n0.v-min', 'missing', 'n0.reverse']) {
+        const invalid = { ...check, query: { ...check.query, b } } as Requirement['check'];
+        assert.equal((await runCheck(doc, native.bodies, evaluate, invalid)).status, 'unknown');
+      }
+      const consumed = withNode(doc, { kind: 'scale', parent: { node: 0, side: 'solid' }, factor: 2 });
+      const scaled = await evaluate(consumed);
+      assert.ok(scaled.ok);
+      assert.equal((await runCheck(consumed, scaled.bodies, evaluate, check)).status, 'unknown');
+    }
+    assert.equal(JSON.stringify(pending.doc), bytes);
+  }
+  const missingWall = { ...wall, check: { ...check, query: { fn: 'radial_wall' as const, a: 'n0.normal', b: 'missing' } } };
+  const unknown = await propose(2, { ...state, doc: { ...state.doc, requirements: [missingWall] } });
+  assert.equal(unknown.isError, false, unknown.content);
+  const refused = await acceptProposal(unknown.state, 'P1', evaluate);
+  assert.match('error' in refused ? refused.error : '', /needs the distinct native inner and outer faces/);
 });
 
 test('an ordered rail pair proposes a Ruled sheet and exact semicylinder as one approved change', async () => {
