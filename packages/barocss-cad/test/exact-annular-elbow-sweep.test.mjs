@@ -205,7 +205,7 @@ for (const hasTail of [true, false]) {
     }
   });
 
-  test(`annular ${route} refuses eccentric, unsupported and thin holes without admitting arc-first paths`, () => {
+  test(`annular ${route} refuses eccentric, unsupported and thin holes while the reversed line-and-arc is now supported`, () => {
     const rail = selectedRail(elbow()), refused = (sketch, code, detail, path = rail.curve) => assert.throws(() => evaluateCadPart(document(path, sketch)),
       error => error instanceof CadPartError && error.feature === 'w' && error.code === code && detail.test(error.message));
     refused(section(1, [50.25, -30]), 'GEOMETRY', new RegExp(`Exact ${route} sweep needs the bore concentric`));
@@ -220,6 +220,8 @@ for (const hasTail of [true, false]) {
     const rectangle = [[49.5, -30.5], [50.5, -30.5], [50.5, -29.5], [49.5, -29.5]].map(start => ({ kind: 'line', start }));
     refused({ ...section(), sideTags: undefined, holes: [rectangle] }, 'CAPABILITY', /accepts at most one circular hole/);
     const arcFirst = { ...rail.lineArc, controlPoints: rail.lineArc.controlPoints.toReversed(), weights: rail.lineArc.weights.toReversed() };
-    refused(section(), 'CAPABILITY', /one open circular arc/, arcFirst);
+    const reversed = evaluateCadPart(document(arcFirst)).outputs[0];
+    assert.ok(checkBrep(reversed.brep, { strict: true }).valid);
+    near(massPropertiesOf(reversed).volume, Math.PI * 3 * (10 + 10 * Math.PI));
   });
 }

@@ -296,6 +296,24 @@ function tangentLineArc(path: Curve, refuse: Refuse) {
   return { ...arc, length: line.length };
 }
 
+/** Reuse the certified line-and-arc rail with exact NURBS parameter reversal. */
+function tangentArcLine(path: Curve, refuse: Refuse) {
+  const { degree, controlPoints, weights, knots } = path;
+  if (degree !== 2 || controlPoints.length !== 5 || weights[0] === weights[1]
+    || weights[2] !== weights[3] || weights[3] !== weights[4]) return;
+  const sum = knots[0] + knots[knots.length - 1];
+  return tangentLineArc({ ...path, controlPoints: [...controlPoints].reverse(), weights: [...weights].reverse(),
+    knots: [...knots].reverse().map(knot => sum - knot) }, refuse);
+}
+
+/** Keep the existing producer's diagnostics, but identify the authored rail order. */
+function arcLineRefusal(refuse: Refuse): Refuse {
+  return (code, message) => refuse(code, message.replaceAll('line-and-arc', 'arc-and-line')
+    .replace('a straight segment followed by one circular arc from 30° to 120°',
+      'one circular arc from 30° to 120° followed by one straight segment')
+    .replace('Exact sweep needs a path radius larger', 'Exact arc-and-line sweep needs a path radius larger'));
+}
+
 function tangentLineArcLine(path: Curve, refuse: Refuse) {
   const { degree, controlPoints: poles, weights, knots } = path;
   if (degree !== 2 || poles.length !== 7 || (weights[0] !== weights[1] && weights[5] !== weights[6])) return;
@@ -913,6 +931,30 @@ export function exactSweep(input: ExactSweepInput, refuse: Refuse): SweepSolid {
     const report = checkBrep(result.brep, { strict: true });
     if (!report.valid || report.topology.length !== 1 || report.topology[0].genus !== 1)
       return refuse('GEOMETRY', 'The exact closed-circle sweep did not produce one valid closed ring.');
+    return result;
+  }
+
+  const arcLineRefuse = arcLineRefusal(refuse), arcLine = tangentArcLine(path, arcLineRefuse);
+  if (arcLine) {
+    if (!disk || profileRadius === undefined)
+      return refuse('CAPABILITY', 'Exact arc-and-line sweep needs one circular disk section.');
+    const hole = circularHole(holes, 'arc-and-line', refuse);
+    const bore = hole && concentricBore(disk, hole, refuse, 'arc-and-line');
+    const axes = frame(arcLine.tangent), [x, y] = axes;
+    const section: JoinedSection = { profile: [originDisk(profileRadius)],
+      bendCentre: [dot(arcLine.toCentre, x), dot(arcLine.toCentre, y)],
+      radialReach: profileRadius, extent: profileRadius, edgeCount: 2 };
+    const local = lineAndArcSweep(id, arcLine, section, bore, sideTags, arcLineRefuse);
+    // The producer travels from the authored end to its start. Only cap names change;
+    // native surfaces, outward senses, seam names and canonical edge directions stay intact.
+    const capName = <T extends { name?: string }>(element: T): T => element.name === undefined ? element
+      : { ...element, name: element.name.split('|').map(name => name === `${id}.start` ? `${id}.end`
+        : name === `${id}.end` ? `${id}.start` : name).join('|') };
+    const brep = { ...local.brep, faces: local.brep.faces.map(capName), edges: local.brep.edges.map(capName) };
+    const result = place({ ...local, brep }, axes, arcLine.start);
+    const report = checkBrep(result.brep, { strict: true });
+    if (!report.valid || report.topology.length !== 1 || report.topology[0].genus !== (bore ? 1 : 0))
+      return refuse('GEOMETRY', 'The exact arc-and-line sweep did not produce a valid closed solid.');
     return result;
   }
 

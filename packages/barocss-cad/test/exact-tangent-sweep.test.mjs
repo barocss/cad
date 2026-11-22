@@ -104,7 +104,7 @@ test('joined native path refuses kinks, backtracking, invalid spans and sections
   refused({ ...quarter, weights: [1, 1, 1, 0.7, 1] }, 'CAPABILITY', /straight segment followed/);
   refused({ ...quarter, weights: [1, 1, 1, Math.SQRT1_2, 1.01] }, 'CAPABILITY', /straight segment followed/);
   const arcFirst = { ...quarter, controlPoints: quarter.controlPoints.toReversed(), weights: quarter.weights.toReversed() };
-  refused(arcFirst, 'CAPABILITY', /one open circular arc/);
+  assert.ok(checkBrep(evaluateCadPart(document(arcFirst)).outputs[0].brep, { strict: true }).valid);
   refused(quarter, 'GEOMETRY', /bore concentric/, { ...disk, center: [0, 0], holes: [[{ kind: 'arc', center: [.25, 0], start: [1.25, 0], direction: 'ccw' }]] });
   refused(quarter, 'CAPABILITY', /one circular disk or one bend-aligned rectangular section/, {
     id: 's', kind: 'sketch', profile: 'loop', segments: [
