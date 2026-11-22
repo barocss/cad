@@ -19,6 +19,7 @@ import type { CallRecord } from './codex';
 import { LONG_BRIEFS } from './long';
 import { bracketRevisionBrief } from './bracket-revision';
 import { pinMateRevisionBrief } from './pin-mate-revision';
+import { counterboreDrawingRevisionBrief } from './counterbore-drawing-revision';
 import { type Element, allNodes, check, evaluates, hasKind, oneSolid, reads, size, sizeOf, solids, sorted, volume, volumeOf, type Check, type Judged } from './oracle';
 
 // (The bundle runs from a temporary folder: ai-eval.mjs passes the repository's path.)
@@ -505,7 +506,7 @@ export const BRIEFS: Brief[] = [
   // mechanisms and robots
   rb9(14, 'mechanism'), SCARA, MOTION, rb9(11, 'mechanism', { flatten: true }),
   // manufacturing outputs
-  DRAWING, CNC, CASTING, STEP_3MF, URDF, rb9(9, 'outputs'),
+  counterboreDrawingRevisionBrief(REPO), DRAWING, CNC, CASTING, STEP_3MF, URDF, rb9(9, 'outputs'),
   // products
   rb9(13, 'product'), A9, ...(P1 ? [P1] : []),
   // long, descriptive prompts, scored per element
