@@ -30,7 +30,7 @@ import { evaluateCurve, evaluateSurface, curveDomain, curveEvaluator, surfaceDom
 import { catmullRom, chainNeighbours, surfaceIsoclines } from '../nurbs/surfaces/surface-isocline.js';
 import { chainCurve, intersectPatches, SurfaceIntersectionError, type IntersectionChain } from '../intersect/surface-intersection.js';
 import { triangulatePolygonWithHoles } from './brep-tessellate.js';
-import { linearToleranceMM } from '../numeric-policy.js';
+import { geometryScaleMM, linearToleranceMM } from '../numeric-policy.js';
 import { add, cross, dot, len, scale, sub, unit } from '../core/vec3.js';
 import type { Curve, Point, Surface } from '../types.js';
 import { maxAt, minAt } from '../core/extent.js';
@@ -119,6 +119,8 @@ interface GFace {
   solid: 0 | 1; surf: Surf; region: CurveRegion2; out: 1 | -1; min: P3; max: P3; name?: string; cuts: CurveSegment2[];
   /** The source face's id. */
   id: string;
+  /** Whole, natively bound cylinder rulings inherited from an Exact Sweep. Never newly cut edges. */
+  nativeRulings?: readonly Curve[];
 }
 /** A 3D curve piece: a segment, or an arc about c in the plane ⊥ n from u through `sweep` (≥ 0, CCW about n). */
 type Curve3 = { kind: 'line'; p: P3; q: P3 } | { kind: 'arc'; c: P3; n: P3; r: number; u: P3; sweep: number }
@@ -422,8 +424,50 @@ function curve3Of(f: { surf: Surf }, g: CurveSegment2): Curve3 {
   return { kind: 'line', p: to3(f, [u, g.a[1]]), q: to3(f, [u, g.b[1]]) };
 }
 
+/** A complete linear edge, in either direction, agrees coefficient by coefficient. */
+function rulingDirection(edge: Curve, poles: readonly Point[], roundoff: number): 1 | -1 | undefined {
+  if (edge.degree !== 1 || edge.controlPoints.length !== 2 || edge.weights.length !== 2
+    || edge.weights[0] !== edge.weights[1] || edge.knots.length !== 4 || poles.length !== 2) return;
+  const [start, end] = curveDomain(edge);
+  if (!(start < end) || edge.knots[0] !== start || edge.knots[1] !== start || edge.knots[2] !== end || edge.knots[3] !== end) return;
+  const forward = edge.controlPoints.every((point, i) => len(sub(point, poles[i])) <= roundoff);
+  const reverse = edge.controlPoints.every((point, i) => len(sub(point, poles[1 - i])) <= roundoff);
+  if (forward !== reverse) return forward ? 1 : -1;
+}
+
+/** Bind only a whole boundary ruling of a rational cylinder chart; no projection or fitting. */
+function cylinderRulingBinding(edge: Curve, surface: Surface, roundoff: number): Curve | undefined {
+  if (surface.degreeU !== 2 || surface.degreeV !== 1 || surface.knotsV.length !== 4
+    || surface.controlPoints.some(row => row.length !== 2)) return;
+  const { u, v } = surfaceDomain(surface), matches: Curve[] = [], [start, end] = curveDomain(edge);
+  if (!surface.knotsU.slice(0, 3).every(knot => knot === u[0]) || !surface.knotsU.slice(-3).every(knot => knot === u[1])
+    || surface.knotsV[0] !== v[0] || surface.knotsV[1] !== v[0] || surface.knotsV[2] !== v[1] || surface.knotsV[3] !== v[1]) return;
+  for (const side of [0, 1]) {
+    const row = side ? surface.controlPoints.length - 1 : 0, weights = surface.weights[row];
+    if (weights.length !== 2 || weights[0] !== weights[1]) continue;
+    const direction = rulingDirection(edge, surface.controlPoints[row], roundoff);
+    if (direction === undefined) continue;
+    const range = direction === 1 ? v : [v[1], v[0]];
+    matches.push({ kind: 'curve', id: 'pcurve', degree: 1, knots: [start, start, end, end],
+      controlPoints: [[u[side], range[0], 0], [u[side], range[1], 0]], weights: [1, 1] });
+  }
+  if (matches.length === 1) return matches[0];
+}
+
+function nativeRulingMatches(edge: Curve, surface: Surface, binding: Curve | null, roundoff: number): boolean {
+  if (!binding) return false;
+  const expected = cylinderRulingBinding(edge, surface, roundoff);
+  return expected !== undefined && binding.degree === 1 && binding.controlPoints.length === 2
+    && binding.weights.length === 2 && binding.weights[0] === binding.weights[1]
+    && binding.knots.length === expected.knots.length && binding.knots.every((k, i) => k === expected.knots[i])
+    && binding.controlPoints.every((point, i) => len(sub(point, expected.controlPoints[i])) <= 512 * Number.EPSILON);
+}
+
 function facesOf(brep: Brep, solid: 0 | 1, tol: number): GFace[] {
   const edges = new Map(brep.edges.map(e => [e.id, e])), coedges = new Map(brep.coedges.map(c => [c.id, c])), loops = new Map(brep.loops.map(l => [l.id, l]));
+  const nativeSource = brep.source.family === 'sweep-curve';
+  const owners = nativeSource ? new Map(brep.faces.flatMap(face => face.loops.map(loop => [loop, face] as const))) : undefined;
+  const roundoff = nativeSource ? 512 * Number.EPSILON * Math.max(1, geometryScaleMM(brep.vertices.map(vertex => vertex.point))) : 0;
   return brep.faces.map(face => {
     const surf = surfaceOf(face, tol), g = { surf };
     const outer = face.loops.find(l => loops.get(l)!.kind === 'outer')!, ordered = [outer, ...face.loops.filter(l => l !== outer)];
@@ -464,7 +508,16 @@ function facesOf(brep: Brep, solid: 0 | 1, tol: number): GFace[] {
     // A general patch bulges past its edges (a hemisphere bounded by two meridians in one plane): its
     // control net bounds it.
     if (surf.kind === 'nurbs') for (const row of surfaceOfFace(face).controlPoints) for (const p of row) for (let k = 0; k < 3; k++) { min[k] = Math.min(min[k], p[k]); max[k] = Math.max(max[k], p[k]); }
-    return { solid, surf, region: { outer: rings[0], holes: rings.slice(1) }, out: 1 as const, min, max, ...(face.name === undefined ? {} : { name: baseName(face.name) }), cuts: [], id: face.id };
+    const nativeRulings = owners && surf.kind === 'cylinder' && face.surface.kind === 'surface'
+      ? ordered.flatMap(lid => loops.get(lid)!.coedges.flatMap(cid => {
+        const use = coedges.get(cid)!, edge = edges.get(use.edge)!, twin = use.twin ? coedges.get(use.twin) : undefined;
+        const peer = twin ? owners.get(twin.loop) : undefined;
+        return twin && peer?.surface.kind === 'surface'
+          && nativeRulingMatches(edge.curve, face.surface as Surface, use.pcurve, roundoff)
+          && nativeRulingMatches(edge.curve, peer.surface, twin.pcurve, roundoff) ? [edge.curve] : [];
+      })) : [];
+    return { solid, surf, region: { outer: rings[0], holes: rings.slice(1) }, out: 1 as const, min, max, ...(face.name === undefined ? {} : { name: baseName(face.name) }), cuts: [], id: face.id,
+      ...(nativeRulings.length ? { nativeRulings } : {}) };
   });
 }
 
@@ -2505,12 +2558,27 @@ function stitchWith(pieces: Piece[], id: string, tol: number, exactEdges = false
     return { surface: { kind: 'surface', id: `${id}_s${pi}`, degreeU: curve.degree, degreeV: 1, knotsU: [...curve.knots], knotsV: [0, 0, 1, 1],
       controlPoints: curve.controlPoints.map(q => [q, add(q, scale(s.a, v1 - v0))]), weights: curve.weights.map(w => [w, w]) }, sense: s.s * p.out > 0 ? 'forward' : 'reversed' };
   };
+  const faceInput = (pi: number) => {
+    const chart = surface(pi), inherited = pieces[pi].face.nativeRulings;
+    const roundoff = inherited ? 512 * Number.EPSILON * Math.max(1, geometryScaleMM(chart.surface.controlPoints.flat())) : 0;
+    return { id: 'f' + pi, name: faceNames[pi], ...chart, loops: loops[pi].map((uses2, li) => ({
+      kind: li === 0 ? 'outer' as const : 'inner' as const,
+      uses: uses2.map(u => {
+        const edge = edgeList[u.index].curve;
+        // The Boolean may rebuild a retained cylinder over a smaller angular range. Rebind its inherited
+        // whole ruling to that final chart, never copy the old U coordinate onto the new surface.
+        const pcurve = inherited?.some(source => rulingDirection(edge, source.controlPoints, roundoff) !== undefined)
+          ? cylinderRulingBinding(edge, chart.surface, roundoff) : undefined;
+        return { edge: u.edge, sense: u.sense, ...(pcurve ? { pcurve } : {}) };
+      }),
+    })) };
+  };
   const usedVertices = new Set(edgeList.filter((_, i) => uses.has(i)).flatMap(e => e.vertices));
   const result = buildBrep({ source: { family: 'analytic-boolean', id },
     vertices: vertexList.filter(v => usedVertices.has(v.id)),
     edges: edgeList.filter((_, i) => uses.has(i)),
     bodies: bodies.map((bd, k) => ({ id: `${id}_body${k}`, kind: 'solid' as const, shells: [bd.outer, ...bd.cavities].map((g, si) => ({ id: 's' + si, closed: true,
-      faces: g.members.map(pi => ({ id: 'f' + pi, name: faceNames[pi], ...surface(pi), loops: loops[pi].map((uses2, li) => ({ kind: li === 0 ? 'outer' as const : 'inner' as const, uses: uses2.map(u => ({ edge: u.edge, sense: u.sense })) })) })) })) })),
+      faces: g.members.map(faceInput) })) })),
     tolerance: Math.max(tol, inputTol) });
   // Solids that touch at a vertex give a non-manifold result; refuse it plainly (as for edges).
   const report = checkBrep(result);
