@@ -6,6 +6,7 @@ import { currentPartRevision, withMcpSession } from './mcp-browser-session.mjs';
 import { clickModelCommand } from './model-rail-helper.mjs';
 
 const [output, input] = process.argv.slice(2);
+const wallEvidence = process.argv.includes('--wall-evidence');
 const originalBytes = await readFile(input), stock = JSON.parse(originalBytes);
 const solid = node => ({ node, side: 'solid' });
 const stockIndex = stock.nodes.length - 1, sketch = stockIndex + 1, tool = sketch + 1, cut = tool + 1, heal = cut + 1;
@@ -24,12 +25,15 @@ const pins = [
   'apps/cad-studio/test/mcp-browser-session.mjs', 'apps/cad-studio/test/model-rail-helper.mjs',
   ...['app/deleteFaceCommand', 'chat/names', 'engine/doc', 'engine/mesh'].map(name => 'packages/barocss-cad-model/src/' + name + '.ts'),
   'packages/barocss-cad/src/part/part-delete-face.ts',
+  ...wallEvidence ? ['packages/barocss-cad-model/src/chat/thickenWall.ts',
+    'packages/barocss-cad-model/src/engine/exactThickenEdit.ts'] : [],
   'packages/barocss-cad/src/features/heal-exact-cylinder-bore.ts',
 ];
 const f = await createFlow({
   name: 'delete-exact-semicylinder-radial-bore', output, envFrozen: 'D1664_SOURCE_FROZEN',
   initialFiles: pins, requiredFrozen: pins,
-  qualification: 'Restore the exact stock after a radial through bore and retain the inclined reference and signed wall Offset.',
+  qualification: wallEvidence ? 'Check the current radial wall after healing, including a measured requirement failure and fresh Open.'
+    : 'Restore the exact stock after a radial through bore and retain the inclined reference and signed wall Offset.',
   limits: ['One upright Exact semicylinder and a centered circular cutter through both radial skins. Desktop WebGPU and local stdio MCP.'],
   inspectorSource: `
 import { readFileSync } from 'node:fs';
@@ -47,6 +51,36 @@ const near = (actual, expected, tolerance = 1e-7) =>
   assert.ok(Math.abs(actual - expected) <= tolerance, `${actual} != ${expected} within ${tolerance}`);
 const item = (rows, key) => rows.find(row => row.key === key);
 const volume = height => Math.PI / 2 * (12 ** 2 - 8 ** 2) * height - (12 ** 3 - 8 ** 3) / 3;
+
+const wallRow = () => f.page.getByRole('listitem', { name: 'Requirement WALL-4', exact: true });
+async function requireWall(status) {
+  const row = wallRow().and(f.page.locator('.req.' + status));
+  await row.waitFor();
+  if (status === 'unknown') await row.getByText(/Radial wall thickness needs/).waitFor();
+  return row;
+}
+
+async function readWallEvidence(file, label, number, verdict, oldRevision) {
+  const saved = await readFile(file);
+  const revision = await withMcpSession({ app: f.app, output: f.output, clientName: f.name }, file, label, async call => {
+    const proof = await call('requirements', { action: 'evidence' });
+    assert.match(proof.revision, /^[a-f0-9]{64}$/);
+    const row = JSON.parse(proof.files[0].text).evidence.find(candidate => candidate.requirement?.id === 'WALL-4');
+    assert.deepEqual([row.result.status, row.result.verdict, row.freshness.state, row.result.run],
+      ['ok', verdict, 'current', proof.revision]);
+    near(row.result.number, number, 1e-10);
+    assert.deepEqual(row.result.value.entities, ['n0.normal', 'n0.reverse']);
+    if (oldRevision) {
+      assert.notEqual(oldRevision, proof.revision);
+      const stale = await call('requirements', { action: 'evidence', expectedRevision: oldRevision }, true);
+      assert.match(JSON.stringify(stale), /OUTPUT_STALE/);
+    }
+    f.report.observations.push({ label, revision: proof.revision, result: row.result.number, verdict, rejectedOldRevision: !!oldRevision });
+    return proof.revision;
+  });
+  assert.deepEqual(await readFile(file), saved);
+  return revision;
+}
 
 function removedVolume() {
   // Integrate the vertical chords through the two positive-Y cylinder roots.
@@ -144,6 +178,7 @@ await f.run(async () => {
   const drilled = await f.doc();
   assert.deepEqual(drilled.nodes.at(-1), { id: 'n' + cut, kind: 'difference', parent: solid(stockIndex), tool: solid(tool) });
   await check('02-drilled-stock', drilled, expected, cut, 13);
+  if (wallEvidence) await requireWall('unknown');
 
   f.phase = 'Pick the radial bore and apply Delete face';
   await selectBore();
@@ -159,6 +194,7 @@ await f.run(async () => {
   assert.deepEqual(repaired.nodes.slice(0, heal), drilled.nodes);
   assert.deepEqual([node.kind, node.parent, node.faces], ['delete-face', solid(cut), [cutName + '#1']]);
   await check('04-healed-stock', repaired, expected, heal, 13);
+  if (wallEvidence) await requireWall('pass');
   await f.snapshot('04-wall-healed');
 
   f.phase = 'Replay the same repair through revision-pinned local MCP';
@@ -184,10 +220,12 @@ await f.run(async () => {
   await f.undo();
   await f.same(drilled);
   await check('05-undo-native', drilled, expected, cut, 13);
+  if (wallEvidence) await requireWall('unknown');
   await f.snapshot('05-undo-restores-bore');
   await f.redo();
   await f.same(repaired);
   await check('06-redo-native', repaired, expected, heal, 13);
+  if (wallEvidence) await requireWall('pass');
 
   f.phase = 'Move the linked donor while the repair stays in History';
   await f.openFeatureEditor(3, 'inclined reference position');
@@ -215,5 +253,44 @@ await f.run(async () => {
   await f.snapshot('09-reopened-cap-link');
   await button('Cancel', edit).click();
   await f.same(moved);
+  if (wallEvidence) {
+    f.phase = 'Read the restored 4 mm wall on the reopened revision';
+    const row = await requireWall('pass');
+    await row.getByRole('button').click();
+    const capture = await f.snapshot('10-restored-wall-passes');
+    const faces = capture.selection.selection.faces;
+    assert.equal(faces.length, 2);
+    assert.equal(faces[0].body, faces[1].body);
+    assert.notEqual(faces[0].face, faces[1].face);
+    const oldRevision = await readWallEvidence(saved.file, 'restored-four-mm', 4, 'pass');
+
+    f.phase = 'Reduce the earlier wall Offset while preserving the heal';
+    const offset = stock.nodes.findIndex(node => node.kind === 'offset-face');
+    await f.openFeatureEditor(offset, 'upstream wall Offset');
+    await button('Edit offset', f.editor()).click();
+    const dialog = f.page.getByRole('dialog', { name: 'Edit Offset face', exact: true });
+    await dialog.getByLabel('Offset', { exact: true }).fill('1');
+    const commit = button('Apply', dialog);
+    await commit.and(dialog.locator('button:not([disabled])')).waitFor({ timeout: 15000 });
+    await commit.click();
+    await f.changed(moved);
+    const thinner = await f.doc();
+    assert.deepEqual(thinner.nodes.slice(offset + 1), moved.nodes.slice(offset + 1));
+    const failed = await requireWall('fail');
+    await failed.getByText(/3(?:\.0+)? \(want/).waitFor();
+    await f.snapshot('11-current-three-mm-fails');
+
+    await f.undo();
+    await f.same(moved);
+    await requireWall('pass');
+    await f.redo();
+    await f.same(thinner);
+    await requireWall('fail');
+    const savedThinner = await f.save('healed-three-mm-wall');
+    await f.freshOpen(savedThinner.file, thinner, '12-three-mm-reopened');
+    await requireWall('fail');
+    await f.snapshot('13-reopened-failing-wall');
+    await readWallEvidence(savedThinner.file, 'current-three-mm', 3, 'fail', oldRevision);
+  }
   assert.deepEqual(await readFile(input), originalBytes);
 });

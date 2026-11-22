@@ -6,7 +6,7 @@ import { runCheck } from '../src/chat/spec';
 import { dispatchTool, type ChatState } from '../src/chat/tools';
 import { directFaceDocumentProblem, emptyDoc, parentsOf, usesOf, withNode, type StudioDoc } from '../src/engine/doc';
 import { evaluatePart, partBreps } from '../src/engine/evaluate';
-import { isExactThickenEdit } from '../src/engine/exactThickenEdit';
+import { isExactThickenBoreHeal, isExactThickenEdit } from '../src/engine/exactThickenEdit';
 import { partSnapshot } from '../src/engine/part';
 import { readStudioDoc } from '../src/engine/migrate';
 import { revisionOf } from '../src/util/revision';
@@ -330,4 +330,58 @@ test('the linked upper-cap wall edit requires current ownership and a pinned sin
   const missingDonor = await dispatchTool(incompleteView, 'features', req, evaluate);
   assert.ok(missingDonor.isError && !missingDonor.changed);
   assert.equal(missingDonor.state.doc, moved);
+});
+
+test('wall evidence follows the current Exact semicylinder through bore repair', async () => {
+  const a = 'n0.normal', b = 'n0.reverse', solid = (node: number) => ({ node, side: 'solid' as const });
+  const check = { query: { fn: 'radial_wall', a, b }, op: '>=', value: 4, tol: 0.01, unit: 'mm' } as const;
+  const apply = async (doc: StudioDoc, name: string, faces: string[], values?: Record<string, number>) => {
+    const reply = await dispatchTool(await stateOf(doc), 'features', {
+      action: 'command', command: name, faces, values, expectedRevision: revisionOf(doc),
+    }, evaluate);
+    assert.ok(reply.changed && !reply.isError, reply.content);
+    return reply.state.doc;
+  };
+  const read = async (doc: StudioDoc, query: { fn: 'radial_wall'; a: string; b: string } = check.query) =>
+    runCheck(doc, (await stateOf(doc)).bodies, evaluate, { ...check, query });
+
+  for (const wallFirst of [false, true]) {
+    const source = inclinedCapSource();
+    const replace = (doc: StudioDoc) => apply(doc, 'replace-face', ['n0.v-max', 'n2.bottom']);
+    const offset = (doc: StudioDoc) => apply(doc, 'offset-face', [a], { d: 2 });
+    const stock = wallFirst ? await replace(await offset(source)) : await offset(await replace(source));
+    const circle = withNode(stock, { kind: 'sketch', profile: 'circle', center: [0, 0], radius: 1.5,
+      plane: { origin: [20, 25, 3], normal: [0, 1, 0], xAxis: [1, 0, 0] } });
+    const tool = withNode(circle, { kind: 'extrude', sketch: 6, height: 9 });
+    const cut = withNode(tool, { kind: 'difference', parent: solid(5), tool: solid(7) });
+    assert.equal((await read(cut)).status, 'unknown');
+
+    const healed = await apply(cut, 'delete-face', ['n7.side0#2']);
+    const proof = await read(healed);
+    assert.equal(proof.status, 'pass');
+    near(typeof proof.measured === 'number' ? proof.measured : undefined, 4);
+    assert.deepEqual(proof.entities, [a, b]);
+    assert.deepEqual(await read(healed, { fn: 'radial_wall', a: b, b: a }), proof);
+    assert.equal((await read(healed, { fn: 'radial_wall', a, b: 'n0.v-max' })).status, 'unknown');
+
+    const thinner = structuredClone(healed), wall = thinner.nodes[wallFirst ? 4 : 5];
+    assert.ok(wall.kind === 'offset-face' && wall.target === undefined);
+    wall.distance = 1;
+    const failure = await read(thinner);
+    assert.equal(failure.status, 'fail');
+    near(typeof failure.measured === 'number' ? failure.measured : undefined, 3);
+    assert.deepEqual(failure.entities, [a, b]);
+    const current = partSnapshot(thinner);
+    const repaired = current.outputs.find(output => output.id === 'n9')!.brep;
+    const previous = partSnapshot(healed).outputs.find(output => output.id === 'n9')!.brep;
+    assert.equal(isExactThickenBoreHeal(thinner, current, 9, repaired, [a, b]), true);
+    assert.equal(isExactThickenBoreHeal(thinner, current, 9, previous, [a, b]), false);
+
+    const opened = await readStudioFile(encodeStudioFile(healed));
+    assert.ok('doc' in opened);
+    assert.deepEqual(await read(opened.doc), proof);
+
+    const moved = withNode(healed, { kind: 'translate', parent: solid(9), offset: [2, 0, 0] });
+    assert.equal((await read(moved)).status, 'unknown');
+  }
 });

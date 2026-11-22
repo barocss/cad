@@ -1,7 +1,7 @@
 import { reevaluate, type Brep, type CadPartSnapshot, type Surface } from '@barocss/cad';
 import { offsetExactSemicylinderCapIfAdmitted, offsetExactSemicylinderMixedOffsetIfAdmitted, offsetExactSemicylinderSecondWallIfAdmitted, offsetExactSemicylinderWallAfterReplacementIfAdmitted, offsetExactSemicylinderWallIfAdmitted, replaceExactSemicylinderCapAfterWallIfAdmitted, replaceExactSemicylinderCapIfAdmitted } from '@barocss/cad/internal/exact-cylinder-cap-offset';
 import { canonical } from '../util/revision';
-import { exactSemicylinderCapAfterWall, exactSemicylinderCapSource, exactSemicylinderSecondOffset, exactSemicylinderWallAfterReplacement, type StudioDoc } from './doc';
+import { exactSemicylinderCapAfterWall, exactSemicylinderCapSource, exactSemicylinderSecondOffset, exactSemicylinderWallAfterReplacement, radialBoreDeleteFaces, type StudioDoc } from './doc';
 import { featureId } from './ids';
 import { resolveOffsetPlaneDistance, resolveReplacementPlane } from './offsetPlane';
 
@@ -85,4 +85,22 @@ export function isExactThickenEdit(doc: StudioDoc, snapshot: CadPartSnapshot, in
   } catch {
     return false;
   }
+}
+
+/** Verify the certified bore repair against a replay of its current, uncut native stock. */
+export function isExactThickenBoreHeal(doc: StudioDoc, snapshot: CadPartSnapshot, index: number, brep: Brep,
+  names: readonly [string, string]): boolean {
+  const { nodes } = doc, heal = nodes[index];
+  if (heal?.kind !== 'delete-face' || heal.suppressed || heal.held !== undefined || heal.parent.side !== 'solid' ||
+      heal.parent.node >= index || heal.faces.length !== 1 || Object.keys(heal.rematched ?? {}).length > 0) return false;
+  const cutIndex = heal.parent.node, cut = nodes[cutIndex], [face] = heal.faces;
+  if (cut?.kind !== 'difference' ||
+      !radialBoreDeleteFaces(nodes, cutIndex, doc.parameters)?.some(name => name === face)) return false;
+
+  const healId = featureId(nodes, index), cutId = featureId(nodes, cutIndex), stockId = featureId(nodes, cut.parent.node);
+  const { features } = snapshot.document;
+  const nativeHeal = features.find(feature => feature.id === healId), nativeCut = features.find(feature => feature.id === cutId);
+  if (nativeHeal?.kind !== 'delete-face' || nativeHeal.target !== cutId || nativeHeal.face !== face ||
+      nativeCut?.kind !== 'difference' || nativeCut.target !== stockId || nativeCut.tool !== featureId(nodes, cut.tool.node)) return false;
+  return isExactThickenEdit(doc, snapshot, cut.parent.node, brep, names);
 }

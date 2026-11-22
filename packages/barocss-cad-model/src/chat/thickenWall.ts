@@ -4,18 +4,18 @@ import type { BodyResult } from '../engine/evaluate';
 import { bodyNodeOf, featureId } from '../engine/ids';
 import { bodyKeyOf, partSnapshot } from '../engine/part';
 import { isAxialThickenCut, isClosedSixFaceSolid } from '../engine/axialThickenCut';
-import { isExactThickenEdit } from '../engine/exactThickenEdit';
+import { isExactThickenBoreHeal, isExactThickenEdit } from '../engine/exactThickenEdit';
 import { dot, sub } from '../engine/vec3';
 import type { Query } from '../engine/schema/spec';
 
 type WallQuery = Extract<Query, { fn: 'radial_wall' | 'planar_wall' }>;
 export const isThickenWallQuery = (fn: unknown): fn is WallQuery['fn'] => fn === 'radial_wall' || fn === 'planar_wall';
 
-/** Measure the two native skins of a current Exact Thicken or a qualified change to one of its axial ends. */
+/** Measure the two native skins of a current Exact Thicken or a qualified edit. */
 export function thickenWallOf(doc: StudioDoc, bodies: readonly BodyResult[], { fn, a, b }: WallQuery) {
   const radial = fn === 'radial_wall';
   const unknown = { unknown: radial
-    ? 'Radial wall thickness needs the distinct native inner and outer faces of one current Exact cylinder Thicken solid, its full axial-end cut, its original axial-cap or cylindrical wall Offset, or its original upper-cap replacement.'
+    ? 'Radial wall thickness needs the distinct native inner and outer faces of one current Exact cylinder Thicken solid, its full axial-end cut, its original axial-cap or cylindrical wall Offset, its original upper-cap replacement, or its certified radial-bore heal.'
     : 'Planar wall thickness needs the distinct normal and reverse skin faces of one current Exact planar Thicken solid.' };
   if (!bodies.length || typeof a !== 'string' || typeof b !== 'string' || a === b) return unknown;
   const keys = new Set(bodies.map(body => body.key));
@@ -31,7 +31,7 @@ export function thickenWallOf(doc: StudioDoc, bodies: readonly BodyResult[], { f
   if (owner?.side !== 'solid' || !node || node.suppressed || id !== feature || featureId(doc.nodes, owner.node) !== feature ||
       !isClosedSixFaceSolid(brep)) return unknown;
   const direct = node.kind === 'thicken' && node.mode === (radial ? 'exact-cylinder' : 'exact-planar');
-  if (!direct && (!radial || (node.kind !== 'difference' && node.kind !== 'offset-face' && node.kind !== 'replace-face'))) return unknown;
+  if (!direct && (!radial || (node.kind !== 'difference' && node.kind !== 'offset-face' && node.kind !== 'replace-face' && node.kind !== 'delete-face'))) return unknown;
   const firstGeometry = faceGeometry(first[0].face), secondGeometry = faceGeometry(second[0].face);
   if (!radial) {
     const normalName = `${feature}.normal`, reverseName = `${feature}.reverse`;
@@ -48,7 +48,9 @@ export function thickenWallOf(doc: StudioDoc, bodies: readonly BodyResult[], { f
   if (!direct) {
     const retained = node.kind === 'difference'
       ? isAxialThickenCut(doc, snapshot, owner.node, brep, [a, b], [firstGeometry, secondGeometry])
-      : isExactThickenEdit(doc, snapshot, owner.node, brep, [a, b]);
+      : node.kind === 'delete-face'
+        ? isExactThickenBoreHeal(doc, snapshot, owner.node, brep, [a, b])
+        : isExactThickenEdit(doc, snapshot, owner.node, brep, [a, b]);
     if (!retained) return unknown;
   }
   const outerFirst = firstGeometry.out === 1;
