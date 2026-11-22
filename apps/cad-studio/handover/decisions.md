@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1673: [Sweep a circular disk around a closed circle](notes/exact-closed-circle-sweep-2026-11-22/README.md), #10. Verify native ring closure, eight inspectable seams, editable Studio Save/Open and local Agent approval.
 - D1672: [Trim and round the inlet of an Exact elbow](notes/exact-elbow-inlet-fillet-2026-11-22/README.md), #10. Verify box Intersect, the complete new rim, Fillet and upstream Sweep edits, and native Studio Save/Open.
 - D1671: [Sweep a circular disk through a tangent elbow](notes/exact-line-arc-line-sweep-2026-11-22/README.md), #10. Verify four native junction edges, editable Studio Open and a revision-bound local Agent proposal.
 - D1670: [Sweep a circular disk along a tangent line and arc](notes/exact-tangent-line-arc-sweep-2026-11-22/README.md), #10. Verify both native junction edges, diameter edit, Studio Save and Open and a local Agent proposal.

@@ -5,8 +5,8 @@ import { buildProfileLoop, ExtrudedProfileLimits, type ProfileSegment, type Prof
 import { brepFromPrismatic, prismaticFromProfile } from '../features/prismatic-solid.js';
 import { revolveMassProperties, revolveProfile, revolveSweepProfile, type RevolveInput } from '../features/revolve.js';
 import { CadNumericPolicy, geometryScaleMM, linearToleranceMM } from '../numeric-policy.js';
-import type { Curve, Point } from '../types.js';
-import { checkBrep, type Brep } from './brep-core.js';
+import type { Curve, Point, Surface } from '../types.js';
+import { checkBrep, type Brep, type BrepCoedge } from './brep-core.js';
 import { faceGeometry } from './analytic-boolean.js';
 import { glueAtSharedFace } from './brep-glue.js';
 import { transformBrep } from './brep-transform.js';
@@ -144,6 +144,48 @@ function circularSpan(start: Point, middle: Point, end: Point, weight: number, t
   const tangent = unit(add(halfChord, scale(heightDirection, circularHeight)));
   const angle = circularHeight === maxHeight ? 2 * Math.PI / 3 : 2 * Math.atan2(circularHeight, a);
   return { start, toCentre, tangent, radius: len(toCentre), angle, tolerance };
+}
+
+/** Certify the ordered rational quadrants of a full circle without fitting or sampling the curve. */
+function closedCircularPath(path: Curve, refuse: Refuse) {
+  const { degree, controlPoints: poles, weights, knots } = path;
+  if (degree !== 2 || poles.length !== 9) return;
+  const unsupported = () => refuse('CAPABILITY', 'Exact closed-circle sweep needs one full circular path with four rational quarter spans.');
+  const [first, second, third, fourth, last] = [knots[2], knots[3], knots[5], knots[7], knots[9]];
+  if (knots[0] !== first || knots[4] !== second || knots[6] !== third || knots[8] !== fourth || knots[11] !== last
+    || !(first < second && second < third && third < fourth && fourth < last)
+    || weights.some((weight, index) => index % 2 === 0 && weight !== weights[0])) return unsupported();
+  const tolerance = pathTolerance(path, refuse), [start] = poles;
+  const relative = poles.map(pole => sub(pole, start));
+  // A Sketch-derived Direct curve writes nine decimal places, including the final sin(2π) pole.
+  const closureTolerance = Math.min(tolerance, 2e-9 + 128 * Number.EPSILON * Math.max(1, geometryScaleMM(poles)));
+  const open = () => refuse('GEOMETRY', 'The exact closed-circle sweep path must close with a common forward tangent.');
+  if (len(relative[8]) > closureTolerance) return open();
+
+  // The first and third quadrant vertices are opposite on the diameter. Work relative to the first pole.
+  const toCentre = scale(relative[4], 0.5), radial = scale(toCentre, -1), radius = len(radial);
+  if (!(radius > tolerance)) return unsupported();
+  const e0 = scale(radial, 1 / radius), side = sub(relative[2], toCentre);
+  const transverse = sub(side, scale(e0, dot(side, e0)));
+  if (!(len(transverse) > tolerance)) return unsupported();
+  const tangent = unit(transverse), nextRadial = scale(tangent, radius);
+  const quadrants = [radial, nextRadial, scale(radial, -1), scale(nextRadial, -1), radial];
+  const angularTolerance = 4 * closureTolerance / radius;
+  for (let turn = 0; turn < 4; turn++) {
+    const i = 2 * turn, a = quadrants[turn], b = quadrants[turn + 1], weight = weights[i + 1] / weights[0];
+    if (!(weight > 0 && weight < 1)) return unsupported();
+    const poleError = Math.max(len(sub(sub(relative[i], toCentre), a)), len(sub(sub(relative[i + 1], toCentre), add(a, b))),
+      len(sub(sub(relative[i + 2], toCentre), b)));
+    // A positive rational span moves by at most the largest pole correction. For the weight correction,
+    // B1(1−B1) ≤ 1/4, the denominators are ≥ (1+w)/2, and the tangent pole is within R of the chord.
+    const weightError = radius * Math.abs(weight - Math.SQRT1_2) / ((1 + weight) * (1 + Math.SQRT1_2));
+    if (poleError + weightError > tolerance) return unsupported();
+    const departure = unit(sub(relative[i + 1], relative[i])), arrival = unit(sub(relative[i + 2], relative[i + 1]));
+    // The canonical arrival is −a/R, also the next canonical departure, including at the closed seam.
+    if (len(sub(departure, scale(b, 1 / radius))) > angularTolerance
+      || len(add(arrival, scale(a, 1 / radius))) > angularTolerance) return open();
+  }
+  return { start, tangent, toCentre, radius, tolerance };
 }
 
 /** Recover a circle through both path ends and certify both spans on that one carrier. */
@@ -333,6 +375,38 @@ function sectionBinding(edge: Curve, boundary: RationalBoundary, fixed: number, 
     controlPoints: [point(first), point(last)], weights: [1, 1] };
 }
 
+function ringChartEdge(edge: Curve, surface: Surface, tolerance: number) {
+  const { u, v } = surfaceDomain(surface), grid = surface.controlPoints;
+  const matches: { side: string; pcurve: Curve }[] = [];
+  for (const end of [0, 1]) {
+    const row = end ? grid.length - 1 : 0, col = end ? grid[0].length - 1 : 0;
+    const vBinding = sectionBinding(edge, { degree: surface.degreeV, knots: surface.knotsV,
+      controlPoints: grid[row], weights: surface.weights[row] }, u[end], v, 'v', tolerance);
+    if (vBinding) matches.push({ side: `u${end}`, pcurve: vBinding });
+    const uBinding = sectionBinding(edge, { degree: surface.degreeU, knots: surface.knotsU,
+      controlPoints: grid.map(row => row[col]), weights: surface.weights.map(row => row[col]) }, v[end], u, 'u', tolerance);
+    if (uBinding) matches.push({ side: `v${end}`, pcurve: uBinding });
+  }
+  if (matches.length === 1) return matches[0];
+}
+
+/** Attach each ring coedge to exactly one isocurve of its own revolved patch. */
+function bindClosedRing(brep: Brep, tolerance: number): Brep | undefined {
+  if (brep.faces.length !== 4 || brep.coedges.length !== 16) return;
+  const facesByLoop = new Map(brep.faces.flatMap(face => face.loops.map(loop => [loop, face] as const)));
+  const edges = new Map(brep.edges.map(edge => [edge.id, edge]));
+  const bound = new Set<string>(), coedges: BrepCoedge[] = [];
+  for (const { id, edge, sense, loop, next, prev, twin } of brep.coedges) {
+    const face = facesByLoop.get(loop), curve = edges.get(edge)?.curve;
+    if (!face || face.surface.kind !== 'surface' || !curve) return;
+    const match = ringChartEdge(curve, face.surface, tolerance);
+    if (!match || bound.has(`${face.id}/${match.side}`)) return;
+    bound.add(`${face.id}/${match.side}`);
+    coedges.push({ id, edge, sense, loop, next, prev, twin, pcurve: match.pcurve });
+  }
+  return { ...brep, coedges };
+}
+
 /** Bind the exact section isocurves to the final canonical edge directions after gluing. */
 function bindBendSections(glued: Brep, id: string, hasTail: boolean, tolerance: number): Brep | undefined {
   const facesByLoop = new Map(glued.faces.flatMap(face => face.loops.map(loop => [loop, face] as const)));
@@ -481,6 +555,29 @@ export function exactSweep(input: ExactSweepInput, refuse: Refuse): SweepSolid {
     // Carry the outer area centroid at the path start, without changing the hole's offset from it.
     const offset = sub(start, add(scale(x, section.anchor[0]), scale(y, section.anchor[1])));
     return place({ brep: brepFromPrismatic(prism, { id }), mass: density => prismaticMassProperties(prism, density) }, axes, offset);
+  }
+
+  const closed = closedCircularPath(path, refuse);
+  if (closed) {
+    if (profileRadius === undefined || holes.length)
+      return refuse('CAPABILITY', 'Exact closed-circle sweep needs one circular disk section without holes.');
+    const { start, tangent, toCentre, radius, tolerance } = closed;
+    if (radius > CadNumericPolicy.coordinateAbs)
+      return refuse('PARAMETER', 'Exact closed-circle sweep path radius must be at most 10000 mm.');
+    const axes = frame(tangent), [x, y] = axes;
+    const [dx, dy] = [dot(toCentre, x), dot(toCentre, y)], localRadius = Math.hypot(dx, dy);
+    const clearance = () => refuse('PARAMETER', 'Exact closed-circle sweep needs a path radius larger than the profile radius.');
+    if (!(localRadius - profileRadius > tolerance)) return clearance();
+    const revolve: RevolveInput = { id, profile: [originDisk(profileRadius)], axis: { origin: [dx, dy], direction: [-dy, dx] },
+      angle: 360, ...(sideTags ? { sideTags: sideTags.outer } : {}) };
+    const ring = revolveSweepProfile(revolve, { minimum: tolerance, refuse: clearance });
+    const brep = bindClosedRing(ring, 128 * Number.EPSILON * Math.max(1, localRadius + profileRadius));
+    if (!brep) return refuse('GEOMETRY', 'The exact closed-circle sweep could not bind the native ring seams.');
+    const result = place({ brep, mass: density => revolveMassProperties(revolve, density) }, axes, start);
+    const report = checkBrep(result.brep, { strict: true });
+    if (!report.valid || report.topology.length !== 1 || report.topology[0].genus !== 1)
+      return refuse('GEOMETRY', 'The exact closed-circle sweep did not produce one valid closed ring.');
+    return result;
   }
 
   const lineArc = tangentLineArcLine(path, refuse) ?? tangentLineArc(path, refuse);

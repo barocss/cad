@@ -1,0 +1,257 @@
+import assert from 'node:assert/strict';
+import { copyFile, readFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import { createFlow } from './flow-helper.mjs';
+import { currentPartRevision, withMcpSession } from './mcp-browser-session.mjs';
+
+const railRadius = 20;
+const knots = [0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 4];
+const ellipse = [[20, 0], [20, 12], [0, 12], [-20, 12], [-20, 0], [-20, -12], [0, -12], [20, -12], [20, 0]]
+  .map(([x, y]) => [x, y, 0]);
+const weights = Array.from({ length: 9 }, (_, i) => i % 2 === 0 ? 1 : Math.SQRT1_2);
+const seed = { format: 'barocss-cad-model', schema: 3, units: 'mm', parameters: {}, nextId: 1,
+  nodes: [{ id: 'n0', kind: 'sketch', profile: 'circle', center: [5, -8], radius: 2 }], outputs: {},
+  direct: { sources: { control: `@model control { version:0; length-unit:mm;
+    @curve #ellipse { type:nurbs; degree:2; knots:${JSON.stringify(knots)};
+      control-points:${JSON.stringify(ellipse)}; weights:${JSON.stringify(weights)}; } }` },
+  objects: [{ id: 'ellipse', name: 'Ellipse control', source: 'control', geometry: 'ellipse' }] } };
+const pins = [
+  'packages/barocss-cad/src/brep/exact-sweep.ts', 'packages/barocss-cad/src/features/revolve.ts',
+  'packages/barocss-cad/src/brep/edge-continuity.ts', 'packages/barocss-cad-model/src/app/profileCommands.ts',
+  'packages/barocss-cad-model/src/engine/curveSource.ts', 'packages/barocss-cad-model/src/chat/part/features.ts',
+  'packages/barocss-cad-model/src/engine/errors.ts', 'apps/cad-studio/src/sketch/useSketchActions.ts',
+];
+
+const f = await createFlow({
+  name: 'exact-closed-circle-sweep', output: process.argv[2], envFrozen: 'D1673_SOURCE_FROZEN',
+  initialFiles: pins, requiredFrozen: pins,
+  qualification: 'Draw the circular path in Studio, create the closed exact Sweep, inspect its seams and reopen its editable History.',
+  limits: ['One four-quarter R20 mm path, a circular disk, desktop WebGPU, and local L1 MCP.'],
+  inspectorSource: `
+import { readFileSync } from 'node:fs';
+import {
+  brepMassProperties, checkBrep, evaluateSurface, faceGeometry, massPropertiesOf,
+  measureBrepEdgeContinuity, surfaceDomain,
+} from '@barocss/cad';
+import { partSnapshot } from '@barocss/cad-model/engine/part';
+import { digestOf } from '@barocss/cad-model/util/digest';
+const doc = JSON.parse(readFileSync(process.argv[2], 'utf8'));
+const { outputs: [output] } = partSnapshot(doc), { brep } = output;
+const intervals = [0, .17, .5, .83, 1], at = ([lo, hi], t) => lo + (hi - lo) * t;
+const samples = brep.faces.map(face => {
+  const { u, v } = surfaceDomain(face.surface);
+  return intervals.flatMap(s => intervals.map(t => evaluateSurface(face.surface, at(u, s), at(v, t))));
+});
+console.log(JSON.stringify({ check: checkBrep(brep, { strict: true }), source: brep.source, bodyCount: output.bodyCount,
+  mass: massPropertiesOf(output), quadrature: brepMassProperties(brep, 1).volume, samples,
+  planes: brep.faces.filter(face => faceGeometry(face).kind === 'plane').length,
+  pcurves: brep.coedges.filter(use => use.pcurve).length,
+  seams: brep.edges.map(edge => measureBrepEdgeContinuity(brep, edge.id, { curvature: true })),
+  digest: digestOf(brep) }));
+`,
+});
+
+const button = (name, scope = f.page) => scope.getByRole('button', { name, exact: true });
+const browser = () => f.page.getByRole('complementary', { name: 'Browser', exact: true });
+const hud = () => f.page.getByRole('dialog', { name: 'Sweep', exact: true });
+const status = value => hud().locator('.status').filter({ hasText: new RegExp(`^${value}$`) });
+const card = id => f.page.getByRole('listitem', { name: `Proposal ${id}`, exact: true });
+const near = (value, expected, tolerance = 1e-7) =>
+  assert.ok(Math.abs(value - expected) <= tolerance, JSON.stringify({ value, expected, tolerance }));
+const expectedVolume = r => 2 * Math.PI ** 2 * railRadius * r ** 2;
+
+async function verify(label, doc, radius) {
+  const read = await f.inspect(label, doc);
+  assert.ok(read.check.valid, read.check.issues.join('\n'));
+  assert.deepEqual(read.source, { family: 'sweep-curve', id: 'n1' });
+  assert.equal(read.bodyCount, 1);
+  assert.deepEqual(read.check.counts, { bodies: 1, shells: 1, faces: 4, loops: 4, coedges: 16, edges: 8, vertices: 4 });
+  assert.equal(read.check.topology[0].genus, 1);
+  assert.equal(read.planes, 0);
+  assert.equal(read.pcurves, 16);
+  assert.equal(read.samples.length, 4);
+  let surfaceResidual = 0;
+  for (const [x, y, z] of read.samples.flat())
+    surfaceResidual = Math.max(surfaceResidual, Math.abs(Math.hypot(Math.hypot(x, y) - railRadius, z) - radius));
+  near(surfaceResidual, 0);
+  near(read.mass.volume, expectedVolume(radius));
+  near(read.quadrature, expectedVolume(radius));
+  read.mass.centroid.forEach(value => near(value, 0));
+  const { bodies } = await f.bodies();
+  assert.equal(bodies.length, 1);
+  near(bodies[0].volume, expectedVolume(radius));
+  assert.equal(read.seams.length, 8);
+  for (const seam of read.seams) {
+    assert.equal(seam.status, 'measured');
+    near(seam.maximumAngleDegrees, 0, 1e-5);
+    assert.equal(seam.curvature.status, 'measured');
+    near(seam.curvature.maximumDifference, 0);
+  }
+  f.report.observations.push({ label, radius, volume: read.mass.volume, quadrature: read.quadrature, digest: read.digest,
+    surfaceResidual, gap: read.check.maximumPcurveGap, counts: read.check.counts,
+    maximumAngle: Math.max(...read.seams.map(seam => seam.maximumAngleDegrees)),
+    maximumCurvatureDifference: Math.max(...read.seams.map(seam => seam.curvature.maximumDifference)) });
+  return read;
+}
+
+async function startSweep(path) {
+  await button('Sketch 1', browser()).click();
+  await button(path, browser()).click();
+  await f.page.evaluate(() => document.activeElement?.blur());
+  await f.command('Sweep');
+  await hud().getByLabel('Representation', { exact: true }).selectOption('exact');
+}
+
+async function measureSeams(native, railName) {
+  f.phase = 'Measure all native ring seams in the Studio inspector';
+  await button('Top', f.page.locator('.views')).click();
+  if (await button('Ortho').getAttribute('aria-pressed') !== 'true') await button('Ortho').click();
+  await f.page.getByTitle('Frame all (F)', { exact: true }).click();
+  await button(`Sweep along ${railName}`, browser()).click();
+  const panel = f.page.getByRole('region', { name: 'Edge continuity', exact: true });
+  await button('Inspect native joints', panel).click();
+  const options = panel.getByRole('combobox', { name: 'Native shared edge', exact: true });
+  const result = panel.getByRole('status', { name: 'Edge continuity result', exact: true });
+  const reading = result.locator('[data-continuity-angle]');
+  for (const seam of native.seams) {
+    await options.selectOption(seam.edgeId);
+    await button('Measure continuity', panel).click();
+    await reading.waitFor();
+    assert.equal(await reading.textContent(), '0°');
+    assert.match(await result.innerText(), /Native samples\s+8/);
+  }
+  await result.scrollIntoViewIfNeeded();
+  await f.snapshot('05-measured-native-seams');
+}
+
+await f.run(async () => {
+  const origin = new URL(f.server.resolvedUrls.local[0]).origin;
+  const newContext = f.browser.newContext.bind(f.browser);
+  f.browser.newContext = async options => {
+    const context = await newContext({ ...options, serviceWorkers: 'block' });
+    await context.route('**/*', route => {
+      const url = new URL(route.request().url());
+      if (url.hostname === 'fonts.googleapis.com') return route.fulfill({ contentType: 'text/css', body: '' });
+      return url.origin === origin ? route.continue() : route.abort();
+    });
+    return context;
+  };
+  await f.newPage();
+  const [chooser] = await Promise.all([f.page.waitForEvent('filechooser'), button('Open').click()]);
+  await chooser.setFiles({ name: 'closed-circle-sweep.bcad', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(seed)) });
+  await f.same(seed);
+
+  f.phase = 'Draw a circle and convert it to a Direct curve';
+  await button('Sketch', f.page.locator('.mode')).click();
+  await f.sketchPanel().waitFor();
+  await f.tool('Circle', 'c');
+  await f.frame([[0, 0], [railRadius, 0]]);
+  await f.worldClick([0, 0]);
+  await f.worldClick([railRadius, 0]);
+  assert.equal(Number(await f.sketchPanel().locator('#sk-diameter').inputValue()), 2 * railRadius);
+  await button('Make curves', f.sketchPanel()).click();
+  await f.sketchPanel().waitFor({ state: 'hidden' });
+  await f.changed(seed);
+  const authored = (await f.snapshot('01-circle-made-from-sketch')).doc;
+  assert.deepEqual(authored.nodes, seed.nodes);
+  const rail = authored.direct.objects.find(object => object.id !== 'ellipse');
+  assert.ok(rail && !rail.hidden);
+  const text = authored.direct.sources[rail.source];
+  const readList = name => JSON.parse(text.match(new RegExp(name + '\\s*:\\s*(.+?);'))[1]);
+  const path = { degree: 2, knots: readList('knots'), controlPoints: readList('control-points'), weights: readList('weights') };
+  assert.deepEqual(path.knots, knots);
+  assert.equal(path.controlPoints.length, 9);
+  assert.equal(path.weights.length, 9);
+  for (const [i, [x, y, z]] of path.controlPoints.entries()) {
+    near(Math.hypot(x, y), (i % 2 === 0 ? 1 : Math.SQRT2) * railRadius);
+    near(z, 0);
+  }
+
+  f.phase = 'Refuse an ellipse as a closed Exact Sweep path';
+  await startSweep('Ellipse control');
+  await status('refused').waitFor();
+  await hud().getByText('This closed Sweep needs a circle', { exact: true }).waitFor();
+  assert.ok(await button('Apply', hud()).isDisabled());
+  await f.same(authored);
+  await f.snapshot('02-ellipse-refused');
+  await button('Cancel', hud()).click();
+  await button('Ellipse control', browser()).click();
+  await button('Hide', f.page.getByRole('complementary', { name: 'Direct geometry', exact: true })).click();
+  await f.changed(authored);
+  const railDoc = await f.doc();
+  const savedRail = await f.save('closed-circle-input');
+
+  f.phase = 'Preview and apply the closed circle';
+  await startSweep(rail.name);
+  await hud().locator('.hud-step').getByText('Exact closed circle', { exact: true }).waitFor();
+  await status('preview').waitFor();
+  await f.snapshot('03-closed-circle-preview');
+  await button('Apply', hud()).click();
+  await f.changed(railDoc);
+  const applied = (await f.snapshot('04-closed-circle-applied')).doc;
+  assert.deepEqual([applied.nodes[1].kind, applied.nodes[1].mode, applied.nodes[1].path], ['sweep-curve', 'exact', path]);
+  const native = await verify('accepted-native', applied, 2);
+  await measureSeams(native, rail.name);
+
+  await f.openFeatureEditor(1, 'edit the closed Sweep diameter');
+  await f.editor().getByText('Exact closed circle', { exact: true }).waitFor();
+  const diameter = f.editor().getByLabel('Diameter', { exact: true });
+  await diameter.fill('40');
+  await button('Apply', f.editor()).click();
+  await f.editor().getByText('Choose a larger arc radius or reduce the sketch diameter.', { exact: true }).waitFor();
+  await f.same(applied);
+  await f.snapshot('06-refuse-axis-contact');
+  await diameter.fill('6');
+  const edited = (await f.applyEditor(applied, '07-history-diameter-edit')).doc;
+  assert.equal(edited.nodes[0].radius, 3);
+  assert.deepEqual(edited.nodes[1], applied.nodes[1]);
+  const expanded = await verify('edited-native', edited, 3);
+  await f.undo();
+  await f.same(applied);
+  await f.redo();
+  await f.same(edited);
+  const saved = await f.save('closed-circle-sweep');
+  const reopened = (await f.freshOpen(saved.file, edited, '08-reopened')).doc;
+  assert.equal((await verify('reopened-native', reopened, 3)).digest, expanded.digest);
+  await f.openFeatureEditor(1);
+  await f.editor().getByText('Exact closed circle', { exact: true }).waitFor();
+  assert.equal(await f.editor().getByLabel('Diameter', { exact: true }).inputValue(), '6');
+  await f.snapshot('09-reopened-history');
+
+  f.phase = 'Qualify a revision-bound local proposal on the authored circle';
+  const file = join(f.output, 'closed-circle-proposal.bcad');
+  await copyFile(savedRail.file, file);
+  await withMcpSession({ app: f.app, output: f.output, clientName: f.name }, file, 'closed-circle', async call => {
+    const expectedRevision = await currentPartRevision(call);
+    const description = await call('describe', { command: 'sweep-curve' });
+    assert.match(description.values.representation, /closed circle.*four rational quadratic quarter spans/);
+    const summary = await call('query', { action: 'summary' });
+    const source = summary.direct_curves.find(candidate => candidate.id === rail.id);
+    assert.ok(source?.revision);
+    const feature = revision => ({ tool: 'features', args: { action: 'command', command: 'sweep-curve', expectedRevision,
+      values: { sketch: 'n0', path: source.id, pathRevision: revision, representation: 'exact' } } });
+    const before = await readFile(file);
+    const bad = await call('features', { action: 'batch', dryRun: true, ops: [feature('0'.repeat(64))] }, true);
+    assert.match(bad.error, /path geometry changed/);
+    const op = feature(source.revision);
+    const dry = await call('features', { action: 'batch', dryRun: true, ops: [op] });
+    assert.ok(dry.dryRun);
+    near(dry.change.volume, expectedVolume(2), .001);
+    assert.deepEqual(await readFile(file), before);
+    const result = await call('proposals', { action: 'propose', title: 'Exact Sweep around the authored circle', ops: [op] });
+    assert.deepEqual([result.proposal, result.applied], ['P1', false]);
+  });
+  const pending = JSON.parse(await readFile(file));
+  assert.deepEqual([pending.nodes, pending.outputs], [railDoc.nodes, railDoc.outputs]);
+  await f.freshOpen(file, pending, '10-proposal-open');
+  await button('Chat').first().click();
+  await button('Preview', card('P1')).click();
+  await button('Hide', card('P1')).waitFor();
+  await f.same(pending);
+  await button('Accept', card('P1')).click();
+  await f.changed(pending);
+  await f.page.getByTitle('Frame all (F)', { exact: true }).click();
+  const approved = (await f.snapshot('11-proposal-approved')).doc;
+  assert.deepEqual([approved.nodes[1].mode, approved.nodes[1].path, approved.outputs], ['exact', path, applied.outputs]);
+  assert.equal((await verify('approved-native', approved, 2)).digest, native.digest);
+});
