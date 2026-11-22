@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D1731: [Propose one setback edit for saved Chamfers by bevel ID](notes/agent-resize-saved-sketch-chamfer-pair-2026-11-23/README.md), #21. One accepted Agent proposal reproduces both planar bevels from the manual edit after fresh Open.
+
 - D1730: [Propose one radius edit for saved Fillets by side ID](notes/agent-resize-saved-sketch-fillet-pair-2026-11-23/README.md), #21. Explicit Studio approval gives the same native solid as the manual two-Fillet edit.
 
 - D1729: [Carry a concentric bore through the spaced same-turn Sweep](notes/exact-spaced-annular-same-turn-2026-11-23/README.md), #10. Keep both mouths open, preserve all eight native joint edges and qualify the reopened bore edit.

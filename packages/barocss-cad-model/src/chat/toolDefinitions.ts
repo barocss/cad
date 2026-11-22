@@ -36,22 +36,22 @@ const cornerSidePair = { type: 'array', items: { type: 'string', minLength: 1 },
 const sketchCornerInput = (field: 'distance' | 'radius', operation: string) => {
   const chamfer = field === 'distance';
   const selector = chamfer ? 'bevel' : 'fillet';
+  const group = selector + 's';
   const name = chamfer ? 'Chamfer' : 'Fillet';
   const results = chamfer ? 'sketchChamfers' : 'sketchFillets';
   return {
     type: 'object',
-    description: `${operation} in sketch mm. Send it alone with index and expectedRevision. Use the sketch ID and side pairs from query.edit_fields with includeSketchCorners. To resize a saved ${name}, use its side ID from ${results} as the ${selector} selector.`
-      + (chamfer ? '' : ' To resize two or more saved Fillets together, send their side IDs as fillets. They must have the same current radius.'),
+    description: `${operation} in sketch mm. Send it alone with index and expectedRevision. Use the sketch ID and side pairs from query.edit_fields with includeSketchCorners. To resize a saved ${name}, use its side ID from ${results} as the ${selector} selector. To resize two or more saved ${name}s together, send their side IDs as ${group}. They must have the same current ${field}.`,
     additionalProperties: false,
     required: ['sketch', field],
-    oneOf: [{ required: ['sides'] }, { required: ['corners'] }, { required: [selector] }, ...(chamfer ? [] : [{ required: ['fillets'] }])],
+    oneOf: [{ required: ['sides'] }, { required: ['corners'] }, { required: [selector] }, { required: [group] }],
     properties: {
       sketch: { type: 'string', minLength: 1 },
       sides: { ...cornerSidePair, description: 'One pair of incident straight side IDs.' },
       corners: { type: 'array', minItems: 2, items: cornerSidePair, description: 'Two or more distinct corner pairs. One operation uses the same size for every pair.' },
       [selector]: { type: 'string', minLength: 1, description: `The side ID of one saved constrained ${name} to resize.` },
-      ...(!chamfer && { fillets: { type: 'array', minItems: 2, uniqueItems: true, items: { type: 'string', minLength: 1 },
-        description: 'Distinct saved Fillet side IDs with the same current radius.' } }),
+      [group]: { type: 'array', minItems: 2, uniqueItems: true, items: { type: 'string', minLength: 1 },
+        description: `Distinct saved ${name} side IDs with the same current ${field}.` },
       [field]: { type: 'number', exclusiveMinimum: 0 },
     },
   };

@@ -392,7 +392,7 @@ async function proposeSavedChamferResize(prior, before) {
   const { op, reviewed } = await withMcpSession(session, file, 'agent-resize-stage', async (call, request) => {
     const detail = await call('describe', { tool: 'features', action: 'edit' });
     assert.deepEqual(detail.input.properties.sketchChamfer.oneOf,
-      [{ required: ['sides'] }, { required: ['corners'] }, { required: ['bevel'] }]);
+      [{ required: ['sides'] }, { required: ['corners'] }, { required: ['bevel'] }, { required: ['bevels'] }]);
     assert.equal((await call('query', { action: 'edit_fields', index: 0 })).sketchChamfers, undefined);
     const response = await request('tools/call', { name: 'query', arguments: { action: 'edit_fields', index: 0, includeSketchCorners: true } });
     assert.equal(response.isError, false);

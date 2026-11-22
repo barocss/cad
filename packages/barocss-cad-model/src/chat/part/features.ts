@@ -507,7 +507,8 @@ async function editFeatureTool(state: ChatState, args: Record<string, unknown>, 
       ? editSketchCorner(state.doc, index, 'ROUND', args.sketchRound)
       : editSketchCorner(state.doc, index, 'CHAMFER', args.sketchChamfer);
     if ('error' in result) return fail(state, result.error, { code: result.code, kept: 'the part is unchanged' });
-    if (result.node === nodes[index]) return fail(state, round ? 'The selected Fillets already have this radius.' : 'The saved Chamfer already has this distance.', { code: 'EDIT_INPUT' });
+    if (result.node === nodes[index]) return fail(state,
+      round ? 'The selected Fillets already have this radius.' : 'The selected Chamfers already have this distance.', { code: 'EDIT_INPUT' });
     next = dropStaleMade(nodes, nodes.map((node, at) => at === index ? result.node : node));
   } else if (args.feature !== undefined) {
     const why = checkNode(args.feature, nodes.slice(0, index), state.doc.parameters, state.doc.frames?.sections, state.partOf ? null : state.doc.instances ?? []);

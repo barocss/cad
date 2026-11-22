@@ -86,11 +86,12 @@ function requestedPairs(input: Record<string, unknown>, field: 'radius' | 'dista
   return pairs.every(sidePair) ? pairs : null;
 }
 
-function requestedSavedIds(input: Record<string, unknown>, key: string, field: 'radius' | 'distance'): string[] | null {
+function requestedSavedIds(input: Record<string, unknown>, key: string, field: 'radius' | 'distance', group: boolean): string[] | null {
   if (Object.keys(input).some(name => name !== 'sketch' && name !== field && name !== key)) return null;
-  const group = key === 'fillets', value = input[key];
-  const ids: unknown[] = group ? Array.isArray(value) ? Array.from(value) : [] : [value];
-  if (ids.length < (group ? 2 : 1) || new Set(ids).size !== ids.length) return null;
+  const value = group ? input[key] : [input[key]];
+  if (!Array.isArray(value) || value.length < (group ? 2 : 1)) return null;
+  const ids: unknown[] = Array.from(value);
+  if (new Set(ids).size !== ids.length) return null;
   return ids.every((id): id is string => typeof id === 'string' && id.length > 0) ? ids : null;
 }
 
@@ -100,14 +101,15 @@ export function editSketchCorner(doc: StudioDoc, index: number, kind: 'CHAMFER' 
   const selector = round ? 'fillet' : 'bevel';
   const value = isObj(input) ? input[field] : undefined;
   const refuse = (reason: string, error: string) => ({ code: `EDIT_SKETCH_${kind}_${reason}`, error });
-  const group = round && isObj(input) && Object.hasOwn(input, 'fillets');
-  const key = group ? 'fillets' : selector;
+  const groupSelector = selector + 's';
+  const group = isObj(input) && Object.hasOwn(input, groupSelector);
+  const key = group ? groupSelector : selector;
   const saved = isObj(input) && Object.hasOwn(input, key);
   const pairs = !saved && isObj(input) ? requestedPairs(input, field) : null;
-  const ids = saved ? requestedSavedIds(input, key, field) : null;
+  const ids = saved ? requestedSavedIds(input, key, field, group) : null;
   if (!isObj(input) || typeof input.sketch !== 'string' || (!ids && !pairs) || typeof value !== 'number' || !Number.isFinite(value))
     return { code: 'EDIT_INPUT', error: group
-      ? 'Give the saved sketch ID, two or more distinct fillets and a finite radius in mm. Use fillets as the only selector.'
+      ? `Give the saved sketch ID, two or more distinct ${key} and a finite ${field} in mm. Use ${key} as the only selector.`
       : saved
       ? `Give the saved sketch ID, one ${selector} ID and a finite ${field} in mm. Use ${selector} alone; do not mix it with sides or corners.`
       : `Give the saved sketch ID and a finite ${field} in mm. Use sides for one side pair or corners for at least two side pairs.` };
@@ -131,7 +133,7 @@ export function editSketchCorner(doc: StudioDoc, index: number, kind: 'CHAMFER' 
     if (sizes.includes(undefined))
       return refuse(round ? 'FILLET' : 'BEVEL', `Use a saved ${selector} ID from query.edit_fields.`);
     if (sizes.some(size => size !== sizes[0]))
-      return refuse('GEOMETRY', 'Select Fillets with the same current radius.');
+      return refuse('GEOMETRY', `Select ${round ? 'Fillets' : 'Chamfers'} with the same current ${field}.`);
     shape = source.outline;
     for (const edge of edges) {
       const result = editSize(shape, edge, value);
