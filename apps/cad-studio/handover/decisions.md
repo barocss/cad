@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1749: [Extract placed candidate preview from Studio App](notes/studio-placed-candidate-preview-2026-11-23/README.md), #44. Eight desktop states match through preview dismissal, stale review and terminal approval.
 - D1748: [Show opposite solid views in Agent review](notes/agent-opposite-solid-views-2026-11-23/README.md), #324. Back and Left expose both duct mouths. Verify orientation-specific image pins through approval and fresh Open.
 - D1747: [Review a pending exact line-and-arc rectangular duct](notes/pending-line-arc-duct-review-2026-11-23/README.md), #324. Pin the native openings, eight seams and Agent image to the candidate, then verify explicit Studio approval and fresh Open.
 - D1746: [Sweep rectangular sections from a straight span into an arc](notes/exact-rectangular-line-arc-sweep-2026-11-23/README.md), #10. Verify four solid joins, eight duct joins, both terminal openings and editable fresh Open.

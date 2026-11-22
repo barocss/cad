@@ -141,7 +141,7 @@ import { prepareSignedFinishOpen, verifyStoredNativeOpen } from './files/documen
 import type { SectionPick } from './viewport/useSectionSelection';
 import { useViewportSelectionPresentation } from './viewport/useViewportSelectionPresentation';
 import type { PartInstance } from '@barocss/cad-model/engine/doc';
-import { withPlacedProposalBodies, WORKER_CANDIDATE_TINT } from './viewport/instanceEvaluation';
+import { usePlacedCandidatePreview } from './viewport/usePlacedCandidatePreview';
 import { usePlacedBodyEvaluation, type PlacedBodyMap } from './app/usePlacedBodyEvaluation';
 import { acceptedPlacedSketchSnaps } from './viewport/placedSketchSnaps';
 import { supportsPlacedBoxSnapRotation } from './viewport/placedBoxSnap';
@@ -2519,32 +2519,15 @@ export function App() {
     target?.focus(); target?.scrollIntoView({ block: 'nearest' });
     setMeasurementFocus(false);
   }, [measurementFocus, layout.dockSheet]);
-  const reviewView = placedPreviewEnabled && !inPlace && !variantsOpen && !bomOpen && !libraryOpen && !paramsOpen
-    && !stepAsk && !routePanelOpen && fresh && marker === null && !ghost && !workingComparison;
-  const visibleCandidate = (occurrence: string) => (!isolatedInstances || isolatedInstances.includes(occurrence))
-    && instancesStepped.some(instance => instance.id === occurrence && instance.bodies.length > 0);
-  localCandidateView.current = occurrence => reviewView && (occurrence === undefined || visibleCandidate(occurrence));
-  const candidatePart = candidateReview?.review.occurrence;
-  const candidateAvailable = versionsVisible && placedPreviewEnabled && fresh && marker === null && !ghost && !workingComparison
-    && candidatePart !== undefined && visibleCandidate(candidatePart)
-    && (!candidateReview?.review.localRun || (reviewView && (dockDocked || layout.dockSheet)));
-  const hideCandidatePreview = useCallback(() => setCandidateReview(value => value?.shown ? { ...value, shown: false } : value), []);
-  useEffect(() => { if (!candidateAvailable && candidateReview?.shown) hideCandidatePreview(); }, [candidateAvailable, candidateReview?.shown, hideCandidatePreview]);
-  const toggleCandidatePreview = () => {
-    const review = candidateReview?.review.localRun?.request;
-    if (review && !candidateReview?.shown) {
-      void reviewTaskRun(review).catch(error => setToast({
-        title: 'Could not review the worker candidate', hint: error instanceof Error ? error.message : String(error), detail: '',
-      }));
-      return;
-    }
-    setCandidateReview(value => value && { ...value, shown: !value.shown });
-  };
-  const placedCandidate = candidateAvailable && candidateReview?.shown ? candidateReview.review.preview.bodies : undefined;
-  const placedProposal = placedPreviewEnabled && ghost?.after && ghost.placed?.kind === 'ready' ? ghost.placed.bodies : placedCandidate;
-  const previewTint = placedCandidate ? WORKER_CANDIDATE_TINT : undefined;
-  const viewportInstances = useMemo(() => withPlacedProposalBodies(instancesStepped, placedProposal, previewTint), [instancesStepped, placedProposal, previewTint]);
-  const viewportPlacements = useMemo(() => withPlacedProposalBodies(instancesPlaced, placedProposal, previewTint), [instancesPlaced, placedProposal, previewTint]);
+  const candidateView = placedPreviewEnabled && fresh && marker === null && !ghost && !workingComparison;
+  const reviewView = candidateView && !inPlace && !variantsOpen && !bomOpen && !libraryOpen && !paramsOpen && !stepAsk && !routePanelOpen;
+  const { candidateAvailable, hideCandidatePreview, toggleCandidatePreview, placedProposal, viewportInstances, viewportPlacements } = usePlacedCandidatePreview({
+    candidate: candidateReview, setCandidate: setCandidateReview, reviewView, showInVersions: versionsVisible && candidateView,
+    dockVisible: dockDocked || layout.dockSheet, localCandidateView,
+    instances: instancesStepped, placements: instancesPlaced, isolatedInstances,
+    proposalBodies: placedPreviewEnabled && ghost?.after && ghost.placed?.kind === 'ready' ? ghost.placed.bodies : undefined,
+    reviewTaskRun, setToast,
+  });
   const placedSnapsEligible = sketch?.tool === 'rectangle' && sketch.editNode === undefined && !sketch.base
     && fresh && !busy && shownDoc === doc && marker === null && !inPlace && !active && !rendering && !drawing
     && !section && previewMode === 'none' && !cageEd.session && !skel.session && !bodyDrag && !ghost && !workingComparison
