@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1647: [Verify the radial wall after an upper-cap Offset](notes/agent-upper-cap-wall-approval-2026-11-22/README.md), #322 and #17. Approve the measured 2 mm wall, refuse the 1 mm wall and refresh revision-bound evidence after native Open.
 - D1646: [Offset the original upper cap of an Exact semicylinder](notes/exact-semicylinder-cap-offset-2026-11-22/README.md), #17 and #629. Move one native station and keep the supports through signed edits and native Open.
 - D1645: [Extract Studio Browser actions from App](notes/studio-browser-actions-extraction-2026-11-22/README.md). Preserve body query, exact selection reveal and isolation behavior through seven desktop flows.
 - D1644: [Cut a radial bore through an Exact semicylinder Thicken](notes/exact-cylinder-radial-bore-2026-11-22/README.md), #175 and #368. Verify the two native openings at edited diameters and after Studio Save and Open.
