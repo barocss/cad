@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D1720: [Extract viewport selection presentation from Studio App](notes/studio-viewport-selection-presentation-2026-11-23/README.md), #44. Match 57 desktop states and retain native Fillet edge placement, section picks and command preview ownership.
+
 - D1719: [Drag the setback of one saved sketch Chamfer](notes/drag-saved-sketch-chamfer-2026-11-23/README.md), #21. Verify opposite midpoint travel and retain the adjacent native bevel after fresh Open.
 
 - D1718: [Drag the radius of one saved sketch Fillet](notes/drag-saved-sketch-fillet-radius-2026-11-23/README.md), #21. Match the numeric preview, retain the sketch carriers and verify editable fresh Open.

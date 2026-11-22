@@ -111,9 +111,6 @@ import { LINKED_INSET_EXTRUDE } from './app/roundedInsetCommand';
 import { ReferenceDecisions } from './ui/ReferenceDecisions';
 import { useRobotExports } from './robot/useRobotExports';
 import { RobotInspector } from './robot/RobotInspector';
-import { shownExtrudeEndFace } from './app/extrudeEndFace';
-import { isReferencePlaneEdit } from '@barocss/cad-model/app/offsetPlanePick';
-import { isExtrudeToFace } from '@barocss/cad-model/app/extrudeEndFacePick';
 import { OFFSET_FACE_EDIT } from '@barocss/cad-model/app/offsetFaceEdit';
 import { editSavedRevolveAxisCommand, joinedRevolveStock } from '@barocss/cad-model/app/revolveAxisEdit';
 import { filletLaunchAvailability, filletType, newFilletActive, pickedFilletSelection, prepareFilletPick, replaceFilletSelection, replaceFillet, type FilletType, type RadiusMode } from './app/filletFamily';
@@ -127,7 +124,6 @@ import { ModelExportDialogs } from './files/ModelExportDialogs';
 import { StepExportPanel } from './files/StepExportPanel';
 import { changesBeyondVariability } from './app/documentChanges';
 import { sameMeshes, withMasses, samePlacement, meshVolume } from './app/bodyResults';
-import { activeBandHighlight } from './app/bandHighlight';
 import { activateDraftBezier, activateDraftOutline, draftShapeOrder, sketchCutInputs, TOOLS, sketchRegion } from './app/sketchControls';
 import { detachRoundedInsetRecipe, resizeRoundedInsetSource, roundedInsetSourceWidth, validateRoundedInsetDocument } from '@barocss/cad-model/sketch/internal/roundedInsetRecipe';
 import { roundedInsetMinimumSpan } from '@barocss/cad-model/sketch/internal/roundedRectangleInset';
@@ -143,7 +139,8 @@ import { beginWork, createWorkOwnership, finishWork, invalidateWork, reserveAcce
 import type { OpenScope } from './state/openOwnership';
 import { scheduleProjectOpenFit } from './app/projectOpenFit';
 import { prepareSignedFinishOpen, verifyStoredNativeOpen } from './files/documentFile';
-import { useSectionSelection, type SectionPick } from './viewport/useSectionSelection';
+import type { SectionPick } from './viewport/useSectionSelection';
+import { useViewportSelectionPresentation } from './viewport/useViewportSelectionPresentation';
 import { placedDoc, type PartInstance } from '@barocss/cad-model/engine/doc';
 import { placementOf } from '@barocss/cad-model/engine/placement';
 import { instanceEvaluationCurrent, instanceEvaluationSources, withPlacedProposalBodies, WORKER_CANDIDATE_TINT } from './viewport/instanceEvaluation';
@@ -2480,9 +2477,6 @@ export function App() {
       return { at: [min[0] + u * (max[0] - min[0]), min[1] + v * (max[1] - min[1]), min[2] + w * (max[2] - min[2])] as Vec3, t: w };
     }) : null);
   });
-  // (The Band surface command highlights what it has picked — A and B — while it runs, also when its preview hides the selection.)
-  const bandShown = fresh && !busy && (shownBodies === drawnBodies || shownBodies === previewBodies)
-    ? activeBandHighlight(active, commandDoc, shownBodies) : null;
   const filletPickedEdgeHighlight = readFilletPickedEdgeHighlight(filletPickedEdgeRequest, {
     active, doc, evaluated, commandDoc, bodies,
     available: fresh && !busy && ownsEvaluatedSource() && marker === null && !shownVariant.current && !inPlace
@@ -2491,12 +2485,6 @@ export function App() {
       && (shownBodies === drawnBodies || shownBodies === previewBodies)
       && !!filletPickedEdgeRequest && !!bodies[filletPickedEdgeRequest.edge.body] && !lookOf(doc, bodies[filletPickedEdgeRequest.edge.body]).hidden,
   });
-  commandPickScope.current = fresh && !busy && !section && !sketch && !inPlace && !cageEd.session && !routePreviewBodies
-    && !ghost && !rendering && !drawing && !bodyDrag && previewMode === 'none' && (shownBodies === drawnBodies || shownBodies === previewBodies)
-    ? { bodies: shownBodies, hidden: hiddenBodies, preview: shownBodies === previewBodies } : null;
-  const shownEndFace = active && commandPickScope.current && active.preview === 'ok' &&
-    (isExtrudeToFace(active.cmd.id, active.values) || isReferencePlaneEdit(active.cmd.id, active.values))
-    ? shownExtrudeEndFace(active, shownBodies) : null;
   const liveMeasurement = useLiveMeasurement({
     doc, bodies, targets: measure, current: fresh && !busy,
     placed: {
@@ -2507,20 +2495,18 @@ export function App() {
     },
   });
   measureInstances.current = liveMeasurement.placedSources;
-  const sectionSelection = useSectionSelection({
-    doc, section, cutFrom: nextSerial(evaluated), sourceBodies: bodies, shownBodies, sourceKeys: sectionExact?.from,
-    exactView: sectionExactShown && shownBodies === sectionBodies, canPick: fresh && !busy,
-    showSelection: !!(section && sectionBodies && !sketch && !previewBodies), sourceEdges: liveMeasurement.picks ?? selection.edges,
+  const viewportSelection = useViewportSelectionPresentation({
+    scene: { current: fresh && !busy, unavailable: modelUnavailable, shown: shownBodies, drawn: drawnBodies,
+      preview: previewBodies, hidden: hiddenBodies },
+    command: { active, doc: commandDoc, canPick: !section && !sketch && !inPlace && !cageEd.session && !routePreviewBodies
+      && !ghost && !rendering && !drawing && !bodyDrag && previewMode === 'none' },
+    section: { doc, section, cutFrom: nextSerial(evaluated), sourceBodies: bodies, sourceKeys: sectionExact?.from,
+      exactView: sectionExactShown && shownBodies === sectionBodies, showSelection: !!(section && sectionBodies && !sketch && !previewBodies),
+      sourceEdges: liveMeasurement.picks ?? selection.edges },
+    highlights: { replacement: finishEdgeEditor.previewEdge, hideSource: !!(routePreviewBodies || routePanelOpen || shownPreviewBodies || sketch),
+      mateFaces: mateFaces ? assembly.highlight.faces : null, source: liveMeasurement.selection ?? selection },
   });
-  const replacementEdge = finishEdgeEditor.previewEdge;
-  const replacementBody = replacementEdge ? shownBodies.findIndex(body => body.mesh === replacementEdge.mesh) : -1;
-  const shownSelection = modelUnavailable ? emptySel : sectionSelection.selection ?? (
-    replacementEdge && replacementBody >= 0 ? { ...emptySel, edges: [{ body: replacementBody, edge: replacementEdge.edge.index }] }
-      : shownEndFace ? { ...emptySel, faces: [shownEndFace] }
-      : bandShown ? bandShown
-      : routePreviewBodies || routePanelOpen || shownPreviewBodies || sketch ? emptySel
-      : mateFaces ? { faces: assembly.highlight.faces, edges: [], bodies: [] }
-      : liveMeasurement.selection ?? selection);
+  commandPickScope.current = viewportSelection.commandScope;
   // (The locked references and the keep-outs, A6.3: drawn ghosted after the part's bodies, never picked.)
   const refShown = useMemo(() => { const set = readReferences(doc.references); return [...set.references.flatMap(r => placeReference(refLocal.get(r.id) ?? [], r.at)), ...keepoutBodies]; }, [doc.references, refLocal, keepoutBodies]);
   // (An in-place edit's surroundings, roadmap 10 ⑧: ghosted the same way, after the references.)
@@ -2529,7 +2515,7 @@ export function App() {
   const sewCandidateShown = !!previewBodies?.length && shownBodies === previewBodies && !cageEd.session;
   const viewportDirect = useMemo(() => sewPreviewDirect(directShown, active?.cmd.id, active?.ctx, sewCandidateShown), [directShown, active?.cmd.id, active?.ctx, sewCandidateShown]);
   viewBodiesRef.current = viewBodies;
-  sectionPickRef.current = sectionSelection.pick;
+  sectionPickRef.current = viewportSelection.sectionPick;
   const pinView = !rendering && !drawing && !sketch;
   const massPinView = pinView && previewMode === 'none';
   const massPinSession = useMemo(() => ({}), [docGeneration, workerSession, project.view.store]);
@@ -2690,7 +2676,7 @@ export function App() {
   const steppedSelection = useMemo(() => { const own = stepsDisp ? [...litSelection(viewportInstanceSel, stepsDisp.hidden)] : viewportInstanceSel; return stepsDisp?.highlight.length ? [...new Set([...own, ...stepsDisp.highlight])] : own; }, [viewportInstanceSel, stepsDisp]);
   const modelSelection = sceneSelection({
     display: {
-      selection: cageInputActive ? emptySel : shownSelection,
+      selection: cageInputActive ? emptySel : viewportSelection.selection,
       pickedVertices: modelUnavailable || historyPreviewBodies ? undefined : selection.vertices,
       hoverBody: shownPreviewBodies ? null : rowHover,
       instanceSelection: assembly.draft ? assembly.highlight.instances : steppedSelection,

@@ -1,13 +1,13 @@
 # CAD roadmap — current status and execution order
 
-Updated 2026-11-23 · Priority authority: D520 · Latest delivery: D1719 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
+Updated 2026-11-23 · Priority authority: D520 · Latest delivery: D1720 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
 
 This is the only current status index. Detailed tracks define acceptance; the 34 stable row pages retain scope and issue navigation. Immutable decision notes retain results. Do not append chronological status paragraphs here. [D520 decision](notes/cad-roadmap-replan-2026-11-04/README.md) supersedes D445 execution order and historical next-item text, while retaining its safeguards and bounded proofs.
 
 ## Now and next
 
-- **Current position:** [D1719](notes/drag-saved-sketch-chamfer-2026-11-23/README.md), P1 sketch editing row 09. A saved orthogonal Chamfer uses the same direct size control as the [D1718 Fillet](notes/drag-saved-sketch-fillet-radius-2026-11-23/README.md). Desktop Studio previews opposite bevel directions and saves the exact C8/C6 pair. The B06 PDF group remains held.
-- **Next MAIN:** D1720, P4 Studio structure [row 22](roadmap-rows/22.md), [#44](https://github.com/barocss/cad/issues/44). Extract displayed selection and command pick scope from Studio App. Retain selection precedence for held Fillet replacement, section highlights and command previews. Compare the same desktop fixtures before and after.
+- **Current position:** [D1720](notes/studio-viewport-selection-presentation-2026-11-23/README.md), P4 Studio structure row 22. Studio App delegates viewport selection and command pick scope to one module. All 57 desktop states match. [D1719](notes/drag-saved-sketch-chamfer-2026-11-23/README.md) qualifies direct Chamfer setback drag and the saved C8/C6 pair. The B06 PDF group remains held.
+- **Next MAIN:** D1721, P5 exact Sweep [rows 07](roadmap-rows/07.md) and [30](roadmap-rows/30.md), [#10](https://github.com/barocss/cad/issues/10). Check one circular disk section along coplanar opposite tangent bends separated by a straight span. Prove native join ownership and analytic volume before editable Studio approval and fresh Open.
 - **Separate follow-ups:** Continue Studio App extraction in cohesive parts with affected desktop checks. [#608 Rendering](https://github.com/barocss/cad/issues/608) stays on HOLD. API inventory drift remains open. The issue tracker records [#126](https://github.com/barocss/cad/issues/126), [#613](https://github.com/barocss/cad/issues/613), [#152](https://github.com/barocss/cad/issues/152) and [#22](https://github.com/barocss/cad/issues/22) as closed.
 - **Active repository:** [barocss/cad](https://github.com/barocss/cad), based on `origin/main`. Fetch before work and preserve unexpected changes. The [migration record](../../../docs/migration/README.md) maps the former `local/cad-dev` history and issue numbers.
 - **Evidence correction:** D482 records2167 PASS/0 FAIL/2 existing SKIP in a later full-kernel run than D433. Neither result is a new full-suite PASS at this audit HEAD. [D482 record](notes/vertical-contact-refusal-2026-11-04/README.md).
