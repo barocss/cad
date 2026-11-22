@@ -1,12 +1,12 @@
 import { useRef, type PointerEvent } from 'react';
 import { arcOf, type P2 } from '@barocss/cad-model/sketch/profile';
 import type { Polygon } from '@barocss/cad-model/sketch/rules';
-import { prepareSavedSketchCorner, type SavedSketchCorner } from '../sketch/cornerDraft';
+import { prepareSavedSketchCorners, type SavedSketchCorners } from '../sketch/cornerDraft';
 import type { ConstraintInspection, ConstraintInspectionStore } from '../sketch/constraintInspection';
 
 type CornerDraft = Extract<ConstraintInspection, { target: 'corner' }>;
 type Press = { id: number; origin: P2; value: number; before: CornerDraft; latest: CornerDraft };
-type SizeOperation = SavedSketchCorner['operation'];
+type SizeOperation = SavedSketchCorners['operation'];
 
 function savedSize(shape: Polygon, edge: number, operation: SizeOperation): number | undefined {
   if (operation === 'resize-fillet') return shape.radii?.[edge];
@@ -43,9 +43,10 @@ export function SketchCornerSizeHandle({ draft, source, store, project, pointUnd
   pointUnderPointer(event: { clientX: number; clientY: number }): P2 | null;
 }) {
   const press = useRef<Press | null>(null);
-  const edge = draft.corners[0];
-  const operation = draft.operation;
-  if (operation !== 'resize-fillet' && operation !== 'resize-chamfer') return null;
+  const resize = draft.resize;
+  if (!resize) return null;
+  const [edge] = resize.edges;
+  const { operation } = resize;
   const size = savedSize(source, edge, operation);
   if (!size) return null;
   const frame = midpointTravel(source, edge, operation, size);
@@ -62,8 +63,7 @@ export function SketchCornerSizeHandle({ draft, source, store, project, pointUnd
   const preview = (current: CornerDraft, start: number, steps: number) => {
     const text = String(steps ? Number((start + steps / 10).toPrecision(15)) : start);
     if (current.value === text) return current;
-    const result = prepareSavedSketchCorner(current.owner, source, current.doc,
-      { edge, operation, value: size }, text);
+    const result = prepareSavedSketchCorners(current.owner, source, current.doc, resize, text);
     const update = { ...current, input: 'pointer' as const, value: text, result };
     store.set(update);
     return update;

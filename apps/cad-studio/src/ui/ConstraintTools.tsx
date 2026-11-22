@@ -13,7 +13,7 @@ import { useStoreValue } from '../state/valueStore';
 import { duplicatePointDistance } from './sketchPresentation';
 import { ConstraintList } from './ConstraintList';
 import { SketchCornerTools } from './SketchCornerTools';
-import { selectedSavedCorner, sketchCornerTargets } from '../sketch/cornerDraft';
+import { selectedSavedCorners, sketchCornerTargets } from '../sketch/cornerDraft';
 import './constraints.css';
 
 const TOOLS: { kind: ConstraintKind; sym: string; label: string; short: string }[] = [
@@ -64,7 +64,7 @@ export function ConstraintTools({ shape: s, owner, conflictIds, documentScope, i
   };
   const point = picked.find(p => p.kind === 'point'), circle = picked.find(p => p.kind === 'circle');
   const corners = sketchCornerTargets(s, picked);
-  const savedCorner = selectedSavedCorner(owner, s, documentScope, picked);
+  const savedCorners = selectedSavedCorners(owner, s, documentScope, picked);
   const twoPoints = picked.length === 2 && picked.every(p => p.kind === 'point') ? pointDimensionKeys(picked[0].i, picked[1].i)
     : picked.length === 2 && point && circle ? circleDimensionKeys(point.i, circle.i)
       : picked.length === 2 && picked.every(p => p.kind === 'circle') ? circlePairKeys(picked[0].i, picked[1].i) : null;
@@ -99,9 +99,9 @@ export function ConstraintTools({ shape: s, owner, conflictIds, documentScope, i
       <button type="button" aria-label="Horizontal distance" title="Distance along the sketch X axis" onClick={() => onEditDim(twoPoints.dx)}><b>↔</b><span>Horizontal</span></button>
       <button type="button" aria-label="Vertical distance" title="Distance along the sketch Y axis" onClick={() => onEditDim(twoPoints.dy)}><b>↕</b><span>Vertical</span></button>
     </div>}
-    {(!!corners.length || savedCorner) && <SketchCornerTools owner={owner} source={s} doc={documentScope}
-      corners={corners} resize={savedCorner}
-      inspection={inspection} onApply={shape => { onShape(shape); if (!savedCorner) onPicked([]); }} />}
+    {(!!corners.length || savedCorners) && <SketchCornerTools owner={owner} source={s} doc={documentScope}
+      corners={corners} resize={savedCorners}
+      inspection={inspection} onApply={shape => { onShape(shape); if (!savedCorners) onPicked([]); }} />}
     {refused && <div className="sk-status open" role="alert"><i />{refused}</div>}
     <ConstraintList shape={s} owner={owner} conflictIds={conflictIds} documentScope={documentScope} inspection={inspection}
       inspectedId={inspectedId} picked={picked} onShape={onShape} onEditDim={onEditDim} />

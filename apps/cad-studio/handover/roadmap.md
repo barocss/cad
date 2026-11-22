@@ -1,13 +1,13 @@
 # CAD roadmap — current status and execution order
 
-Updated 2026-11-23 · Priority authority: D520 · Latest delivery: D1725 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
+Updated 2026-11-23 · Priority authority: D520 · Latest delivery: D1726 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
 
 This is the only current status index. Detailed tracks define acceptance; the 34 stable row pages retain scope and issue navigation. Immutable decision notes retain results. Do not append chronological status paragraphs here. [D520 decision](notes/cad-roadmap-replan-2026-11-04/README.md) supersedes D445 execution order and historical next-item text, while retaining its safeguards and bounded proofs.
 
 ## Now and next
 
-- **Current position:** [D1725](notes/exact-spaced-same-turn-sweep-2026-11-23/README.md), P5 rows 07/30. Exact Sweep carries a disk through two same-turn bends and one straight span with four native tangent edges and editable fresh Open. [D1724](notes/spaced-bore-fillet-join-retention-2026-11-23/README.md) preserves both openings and eight original native joints after an inlet bore Fillet. The B06 PDF group remains held.
-- **Next MAIN:** D1726, P1 Sketch [row 09](roadmap-rows/09.md), [#21](https://github.com/barocss/cad/issues/21). Resize two saved orthogonal Fillets of the same starting radius with one Studio edit. Cover the convex and reflex pair from D1695, their shared straight carrier, oversized refusal and editable fresh Open. Reuse the D1718 radius handle and edit path.
+- **Current position:** [D1726](notes/resize-saved-sketch-fillet-pair-2026-11-23/README.md), P1 row 09. One Studio edit resizes two saved orthogonal Fillets of the same starting radius and preserves both when the shared carrier would collapse. [D1725](notes/exact-spaced-same-turn-sweep-2026-11-23/README.md) verifies an Exact same-turn Sweep across two bends and a straight span. The B06 PDF group remains held.
+- **Next MAIN:** D1727, P4 Studio composition [row 22](roadmap-rows/22.md), [#44](https://github.com/barocss/cad/issues/44). Extract placed-body evaluation and Assembly Cut preview from App. Keep the accepted bodies as the Render source and compare before and after in Studio for Cut editing, native Open and raster output.
 - **Separate follow-ups:** Continue Studio App extraction in cohesive parts with affected desktop checks. [#608 Rendering](https://github.com/barocss/cad/issues/608) stays on HOLD. API inventory drift remains open. The issue tracker records [#126](https://github.com/barocss/cad/issues/126), [#613](https://github.com/barocss/cad/issues/613), [#152](https://github.com/barocss/cad/issues/152) and [#22](https://github.com/barocss/cad/issues/22) as closed.
 - **Active repository:** [barocss/cad](https://github.com/barocss/cad), based on `origin/main`. Fetch before work and preserve unexpected changes. The [migration record](../../../docs/migration/README.md) maps the former `local/cad-dev` history and issue numbers.
 - **Evidence correction:** D482 records2167 PASS/0 FAIL/2 existing SKIP in a later full-kernel run than D433. Neither result is a new full-suite PASS at this audit HEAD. [D482 record](notes/vertical-contact-refusal-2026-11-04/README.md).

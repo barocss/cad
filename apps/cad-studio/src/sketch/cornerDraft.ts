@@ -15,7 +15,7 @@ export type SketchCornerOperation = 'fillet' | 'chamfer';
 type SketchCornerResize = 'resize-fillet' | 'resize-chamfer';
 export type SketchCornerAction = SketchCornerOperation | SketchCornerResize;
 export type SketchCornerResult = { shape: Polygon; display: Polygon } | { error: string };
-export type SavedSketchCorner = { edge: number; operation: SketchCornerResize; value: number };
+export type SavedSketchCorners = { edges: readonly [number, ...number[]]; operation: SketchCornerResize; value: number };
 
 function independentCornerOutline(owner: SketchState, source: Polygon, doc: StudioDoc): boolean {
   const stored = owner.editNode === undefined ? undefined : doc.nodes[owner.editNode];
@@ -24,33 +24,44 @@ function independentCornerOutline(owner: SketchState, source: Polygon, doc: Stud
     !owner.done?.some(item => !item.construction && item.kind !== 'bezier') && !source.construction;
 }
 
-export function selectedSavedCorner(owner: SketchState, source: Polygon, doc: StudioDoc,
-  picked: readonly SketchPick[]): SavedSketchCorner | undefined {
-  const [edge] = picked;
-  if (owner.tool !== 'select' || picked.length !== 1 || edge.kind !== 'edge' || edge.done ||
+export function selectedSavedCorners(owner: SketchState, source: Polygon, doc: StudioDoc,
+  picked: readonly SketchPick[]): SavedSketchCorners | undefined {
+  const [first, ...others] = picked;
+  if (owner.tool !== 'select' || !first || picked.some(pick => pick.kind !== 'edge' || pick.done) ||
     !independentCornerOutline(owner, source, doc)) return;
-  const fillet = !!source.bulges?.[edge.i];
-  const value = fillet ? savedFilletRadius(source, edge.i) : savedChamferSetback(source, edge.i);
-  if (value !== undefined) return { edge: edge.i, value, operation: fillet ? 'resize-fillet' : 'resize-chamfer' };
+  const edges = [first.i, ...others.map(pick => pick.i)] as const;
+  if (source.bulges?.[first.i]) {
+    const value = savedFilletRadius(source, first.i);
+    if (value !== undefined && others.every(pick => savedFilletRadius(source, pick.i) === value))
+      return { edges, value, operation: 'resize-fillet' };
+  } else if (edges.length === 1) {
+    const value = savedChamferSetback(source, first.i);
+    if (value !== undefined) return { edges, value, operation: 'resize-chamfer' };
+  }
 }
 
-export function prepareSavedSketchCorner(owner: SketchState, source: Polygon, doc: StudioDoc,
-  resize: SavedSketchCorner, input: string): SketchCornerResult {
+export function prepareSavedSketchCorners(owner: SketchState, source: Polygon, doc: StudioDoc,
+  resize: SavedSketchCorners, input: string): SketchCornerResult {
   const fillet = resize.operation === 'resize-fillet';
   const name = fillet ? 'fillet' : 'chamfer';
-  if (!independentCornerOutline(owner, source, doc)) return { error: `Edit one ${name} on an independent outline.` };
+  if (!independentCornerOutline(owner, source, doc)) return { error: `Edit the selected ${name} on an independent outline.` };
   const value = input.trim() === '' ? NaN : Number(input);
-  const edited = fillet ? editFilletRadius(source, resize.edge, value) : editChamferSetback(source, resize.edge, value);
-  if ('error' in edited) return edited;
-  if (edited.shape === source) return { shape: source, display: source };
-  const { joined, hasUnsafeId } = cornerFinishInputs(owner, edited.shape);
+  let shape = source;
+  // Each edit preserves the other geometry. Publish the draft only after all selected edges pass.
+  for (const edge of resize.edges) {
+    const edited = fillet ? editFilletRadius(shape, edge, value) : editChamferSetback(shape, edge, value);
+    if ('error' in edited) return edited;
+    shape = edited.shape;
+  }
+  if (shape === source) return { shape, display: shape };
+  const { joined, hasUnsafeId } = cornerFinishInputs(owner, shape);
   if (hasUnsafeId) return { error: 'This sketch has no available side IDs for its other shapes.' };
   const profile = profileOf(joined);
   if ('error' in profile) return profile;
   const stored = owner.editNode === undefined ? undefined : doc.nodes[owner.editNode];
   if (stored?.kind === 'sketch' && rebindDims(stored, profile.node, doc.parameters).dropped.length)
     return { error: `Editing this ${name} would remove a sketch parameter binding.` };
-  return { shape: edited.shape, display: edited.shape };
+  return { shape, display: shape };
 }
 
 /** A line pair names its shared vertex. A single selected line does not name either end. */

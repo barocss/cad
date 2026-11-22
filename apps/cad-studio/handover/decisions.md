@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D1726: [Resize two saved sketch Fillets in one edit](notes/resize-saved-sketch-fillet-pair-2026-11-23/README.md), #21. One radius input and handle update the convex/reflex pair, with no partial edit when the shared carrier would collapse.
+
 - D1725: [Sweep a circular disk through two same-turn bends with a straight span](notes/exact-spaced-same-turn-sweep-2026-11-23/README.md), #10. Verify four native tangent edges, independent mass, fresh Open edits and explicit local Agent approval.
 
 - D1724: [Retain the spaced Sweep joints after an inlet bore Fillet](notes/spaced-bore-fillet-join-retention-2026-11-23/README.md), #10. Preserve both openings and the eight original native tangent joints through a radius edit and fresh Studio Open.

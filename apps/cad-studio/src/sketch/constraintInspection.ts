@@ -2,7 +2,7 @@ import type { StudioDoc } from '@barocss/cad-model/engine/doc';
 import type { ConstraintEntry, ConstraintKind, Polygon, SketchPick } from '@barocss/cad-model/sketch/rules';
 import type { SketchState } from '@barocss/cad-model/sketch/types';
 import { createValueStore, type ValueStore } from '../state/valueStore';
-import type { SketchCornerAction, SketchCornerResult } from './cornerDraft';
+import type { SavedSketchCorners, SketchCornerAction, SketchCornerResult } from './cornerDraft';
 
 export type ConstraintComparison = { ok: true; shape: Polygon; display: Polygon } | { ok: false; reason: string };
 export type ConstraintInspection = {
@@ -12,7 +12,8 @@ export type ConstraintInspection = {
   | { target: 'row'; entry: ConstraintEntry }
   | { target: 'comparison'; kind: ConstraintKind; result: ConstraintComparison }
   | { target: 'mobility'; entity: SketchPick }
-  | { target: 'corner'; doc: StudioDoc; operation: SketchCornerAction; corners: readonly number[]; value: string; result: SketchCornerResult }
+  | { target: 'corner'; doc: StudioDoc; operation: SketchCornerAction; corners: readonly number[];
+    resize?: SavedSketchCorners; value: string; result: SketchCornerResult }
 );
 
 export type ConstraintInspectionStore = ValueStore<ConstraintInspection | null>;

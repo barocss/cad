@@ -4,7 +4,7 @@ import type { Polygon } from '@barocss/cad-model/sketch/rules';
 import type { SketchState } from '@barocss/cad-model/sketch/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { prepareSavedSketchCorner, prepareSketchCorners, type SavedSketchCorner, type SketchCornerAction } from '../sketch/cornerDraft';
+import { prepareSavedSketchCorners, prepareSketchCorners, type SavedSketchCorners, type SketchCornerAction } from '../sketch/cornerDraft';
 import type { ConstraintInspectionStore } from '../sketch/constraintInspection';
 import { useStoreValue } from '../state/valueStore';
 import { Icon } from './atoms';
@@ -24,22 +24,24 @@ const ownKeyboard = (event: KeyboardEvent<HTMLButtonElement>) => {
 };
 
 export function SketchCornerTools({ owner, source, doc, corners, resize, inspection, onApply }: {
-  owner: SketchState; source: Polygon; doc: StudioDoc; corners: readonly number[]; resize?: SavedSketchCorner;
+  owner: SketchState; source: Polygon; doc: StudioDoc; corners: readonly number[]; resize?: SavedSketchCorners;
   inspection: ConstraintInspectionStore; onApply(shape: Polygon): void;
 }) {
   const current = useStoreValue(inspection);
   const draft = current?.target === 'corner' && current.owner === owner && current.doc === doc ? current : null;
-  const choices = resize ? [resizeTools[resize.operation]] : tools;
+  const resizeTool = resize && resizeTools[resize.operation];
+  const choices = resizeTool ? [resize?.edges.length === 1 ? resizeTool : { ...resizeTool, label: 'Edit Fillets' }] : tools;
   const tool = choices.find(item => item.operation === draft?.operation);
   const result = draft?.result;
   const preview = (operation: SketchCornerAction, value: string) => {
     const next = operation === 'fillet' || operation === 'chamfer'
       ? prepareSketchCorners(owner, source, doc, operation, corners, value)
-      : resize?.operation === operation && prepareSavedSketchCorner(owner, source, doc, resize, value);
+      : resize?.operation === operation && prepareSavedSketchCorners(owner, source, doc, resize, value);
     if (!next) return;
     inspection.set({
-      target: 'corner', owner, input: 'focus', doc, operation, value,
-      corners: resize ? [resize.edge, (resize.edge + 1) % source.points.length] : corners, result: next,
+      target: 'corner', owner, input: 'focus', doc, operation, resize, value,
+      corners: resize ? resize.edges.flatMap(edge => [edge, (edge + 1) % source.points.length]) : corners,
+      result: next,
     });
   };
   const accepted = result && 'shape' in result && result.shape !== source ? result.shape : null;

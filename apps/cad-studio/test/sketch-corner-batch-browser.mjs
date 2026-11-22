@@ -6,8 +6,12 @@ import { currentPartRevision, withMcpSession } from './mcp-browser-session.mjs';
 
 const review = process.argv.includes('--review');
 const agent = review || process.argv.includes('--agent');
+const resize = process.argv.includes('--resize-fillets');
+const resizeBaseline = process.argv.includes('--expect-no-group-editor');
 const original = [[0, 0], [60, 0], [60, 40], [38, 40], [38, 15], [22, 15], [22, 40], [0, 40]];
-const result = [[0, 0], [60, 0], [60, 40], [44, 40], [38, 34], [38, 21], [32, 15], [22, 15], [22, 40], [0, 40]];
+const sizedCorners = size => [[0, 0], [60, 0], [60, 40], [38 + size, 40], [38, 40 - size],
+  [38, 15 + size], [38 - size, 15], [22, 15], [22, 40], [0, 40]];
+const result = sizedCorners(6);
 const originalIds = ['e1', 'e2', 'e3', 'e4', 'e5', 'e6', 'e7', 'e8'];
 const resultIds = ['e1', 'e2', 'e3', 'e9', 'e4', 'e10', 'e5', 'e6', 'e7', 'e8'];
 const reviewPlane = { origin: [60, 40, 0], normal: [0, 0, 1], xAxis: [-1, 0, 0] };
@@ -19,6 +23,10 @@ const pins = [
   'apps/cad-studio/src/sketch/useSketchDraftHistory.ts', 'apps/cad-studio/src/viewport/Viewport.tsx',
   'apps/cad-studio/src/viewport/sketchOverlay.tsx',
   'packages/barocss-cad-model/src/sketch/corner.ts', 'packages/barocss-cad-model/src/sketch/cornerBatch.ts',
+  ...(resize ? [
+    'apps/cad-studio/src/viewport/SketchCornerSizeHandle.tsx',
+    'packages/barocss-cad-model/src/sketch/filletEdit.ts',
+  ] : []),
   ...(agent ? [
     'apps/cad-studio/test/mcp-browser-session.mjs', 'apps/cad-studio/src/ui/ProposalBrowser.tsx',
     'apps/cad-studio/src/state/useProposalPreview.ts',
@@ -33,11 +41,12 @@ const pins = [
   ] : []),
 ];
 const f = await createFlow({
-  name: review ? 'sketch-corner-batch-review' : agent ? 'sketch-corner-batch-agent' : 'sketch-corner-batch',
-  output: process.argv[2], envFrozen: review ? 'D1697_SOURCE_FROZEN' : agent ? 'D1696_SOURCE_FROZEN' : 'D1695_SOURCE_FROZEN',
+  name: resize ? 'saved-sketch-fillet-pair' : review ? 'sketch-corner-batch-review' : agent ? 'sketch-corner-batch-agent' : 'sketch-corner-batch',
+  output: process.argv[2], envFrozen: resize ? 'D1726_SOURCE_FROZEN' : review ? 'D1697_SOURCE_FROZEN' : agent ? 'D1696_SOURCE_FROZEN' : 'D1695_SOURCE_FROZEN',
   initialFiles: pins, requiredFrozen: pins,
   qualification: review ? 'Pin a mixed-turn sketch corner proposal to the Agent image and native walls. Approve it in Studio and reopen the same geometry and image.'
-    : agent ? 'Discover and propose a whole corner edit through local MCP. Approve one proposal and reopen the editable result.'
+    : resize ? 'Resize an adjacent saved convex and reflex Fillet as one edit.'
+      : agent ? 'Discover and propose a whole corner edit through local MCP. Approve one proposal and reopen the editable result.'
       : 'Round and chamfer adjacent convex and reflex sketch corners. Refuse shared-edge consumption as a group.',
   limits: ['One notched XY outline, one 10 mm Extrude, desktop Studio WebGPU.'],
   inspectorSource: String.raw`
@@ -99,8 +108,100 @@ async function expectTargets() {
   const targets = f.page.locator('.sk-corner-target');
   assert.deepEqual(await targets.evaluateAll(items => items.map(item => item.dataset.cornerIndex)), ['3', '4']);
 }
-async function checkNative(label, doc, fillet) {
+function filletMidpoints(radius) {
+  const offset = (1 - Math.SQRT1_2) * radius;
+  return [[38 + offset, 40 - offset], [38 - offset, 15 + offset]];
+}
+async function selectSavedFillets(radius) {
+  await pick(filletMidpoints(radius));
+  const selected = f.page.locator('.vp-overlay .sk-pick-edge.on');
+  assert.deepEqual(await selected.evaluateAll(edges => edges.map(edge => edge.dataset.sketchEntity).sort()), ['edge:3', 'edge:5']);
+}
+async function resizeSavedFillets(accepted) {
+  f.phase = 'Select saved convex and reflex Fillets';
+  await edit();
+  await selectSavedFillets(6);
+  if (resizeBaseline) {
+    assert.equal(await button('Edit Fillet', group('Corner tools')).count(), 0);
+    assert.equal(await button('Edit Fillets', group('Corner tools')).count(), 0);
+    assert.equal(await button('Fillet radius handle').count(), 0);
+    await expectPoints(result);
+    await f.same(accepted);
+    await f.snapshot('08-saved-pair-without-group-editor');
+    return;
+  }
+  const name = 'Edit Fillets', editor = () => group(name);
+  const open = () => button(name, group('Corner tools')).click();
+  const field = () => editor().getByLabel('Radius', { exact: true });
+  const apply = () => button('Apply', editor());
+  const cancel = () => button('Cancel', editor()).click();
+  await open();
+  assert.equal(Number(await field().inputValue()), 6);
+  assert.equal(await apply().isDisabled(), true);
+  f.phase = 'Refuse a radius that would consume the shared straight carrier';
+  await field().fill('13');
+  await editor().getByRole('alert').getByText(/collapse|touch|cross/i).waitFor();
+  assert.equal(await apply().isDisabled(), true);
+  await preview().waitFor({ state: 'hidden' });
+  await expectPoints(result);
+  await f.same(accepted);
+  await f.snapshot('08-saved-pair-refused');
+
+  f.phase = 'Get the R8 numeric preview and cancel it';
+  await field().fill('8');
+  await preview().waitFor();
+  const numeric = await preview().getAttribute('points');
+  assert.ok(numeric);
+  await cancel();
+  await preview().waitFor({ state: 'hidden' });
+  await expectPoints(result);
+  await open();
+
+  f.phase = 'Drag the shared handle to R8 and apply both Fillets';
+  const handle = button('Fillet radius handle');
+  await handle.waitFor();
+  const box = await handle.boundingBox();
+  const from = await f.screenOf(filletMidpoints(6)[0]), to = await f.screenOf(filletMidpoints(8)[0]);
+  const at = [box.x + box.width / 2, box.y + box.height / 2];
+  assert.ok(Math.hypot(at[0] - from[0], at[1] - from[1]) < .5);
+  await f.page.mouse.move(...at);
+  await f.page.mouse.down();
+  await f.page.mouse.move(at[0] + to[0] - from[0], at[1] + to[1] - from[1], { steps: 10 });
+  await f.page.mouse.up();
+  assert.equal(Number(await field().inputValue()), 8);
+  assert.equal(await preview().getAttribute('points'), numeric);
+  assert.deepEqual(await f.page.locator('.sk-corner-target').evaluateAll(items => items.map(item => item.dataset.cornerIndex).sort()),
+    ['3', '4', '5', '6']);
+  await expectPoints(result);
+  await f.same(accepted);
+  await f.snapshot('09-saved-pair-drag-preview');
+  await apply().click();
+  const resized = sizedCorners(8);
+  await expectPoints(resized);
+  await f.same(accepted);
+  await f.page.keyboard.press('Meta+z');
+  await expectPoints(result);
+  await f.page.keyboard.press('Meta+Shift+z');
+  await expectPoints(resized);
+  const { doc } = await f.finishSketch('10-saved-pair-finished');
+  assert.deepEqual([doc.nodes[1], doc.outputs], [accepted.nodes[1], accepted.outputs]);
+  const native = await checkNative('both-R8-native', doc, true, 8);
+  await f.undo(); await f.same(accepted);
+  await f.redo(); await f.same(doc);
+  const saved = await f.save('resized-fillets');
+  await f.freshOpen(saved.file, doc, '11-saved-pair-fresh-open');
+  assert.deepEqual(await checkNative('both-R8-reopened', await f.doc(), true, 8), native);
+  await edit();
+  await expectPoints(resized);
+  await selectSavedFillets(8);
+  await open();
+  assert.equal(Number(await field().inputValue()), 8);
+  assert.equal(await apply().isDisabled(), true);
+  await f.snapshot('12-saved-pair-editable-after-open');
+}
+async function checkNative(label, doc, fillet, size = 6) {
   const native = await f.inspect(label, doc);
+  const points = sizedCorners(size);
   // The convex removal and reflex addition cancel in this fixture. Check both named walls and their endpoints too.
   assert.ok(Math.abs(native.volume - (60 * 40 - 16 * 25) * 10) < 1e-8);
   assert.equal(native.faces.length, 12);
@@ -111,7 +212,7 @@ async function checkNative(label, doc, fillet) {
   assert.deepEqual(source.outline.rules, fillet ? fixed : [...fixed,
     { kind: 'angle', a: 2, b: 3, value: 135 }, { kind: 'angle', a: 4, b: 5, value: 135 }]);
   if (fillet) {
-    assert.deepEqual(source.outline.radii, { 3: 6, 5: 6 });
+    assert.deepEqual(source.outline.radii, { 3: size, 5: size });
     assert.ok(source.outline.bulges[3] > 0 && source.outline.bulges[5] < 0);
   }
   for (const [i, id] of resultIds.entries()) {
@@ -120,12 +221,12 @@ async function checkNative(label, doc, fillet) {
     const newWall = id === 'e9' || id === 'e10';
     assert.equal(face.geometry.kind, fillet && newWall ? 'cylinder' : 'plane');
     if (fillet && newWall) {
-      const center = worldXY(id === 'e9' ? [44, 34] : [32, 21]);
+      const center = worldXY(id === 'e9' ? [38 + size, 40 - size] : [38 - size, 15 + size]);
       assert.ok(Math.hypot(face.geometry.c[0] - center[0], face.geometry.c[1] - center[1]) < 1e-8);
-      assert.ok(Math.abs(face.geometry.r - 6) < 1e-8);
+      assert.ok(Math.abs(face.geometry.r - size) < 1e-8);
       assert.equal(face.geometry.out, id === 'e9' ? 1 : -1);
     }
-    for (const [x, y] of [result[i], result[(i + 1) % result.length]].map(worldXY)) for (const z of [0, 10])
+    for (const [x, y] of [points[i], points[(i + 1) % points.length]].map(worldXY)) for (const z of [0, 10])
       assert.ok(face.vertices.some(p => Math.hypot(p[0] - x, p[1] - y, p[2] - z) < 1e-8), `${id} at ${[x, y, z]}`);
   }
   return native;
@@ -336,6 +437,11 @@ await f.run(async () => {
       ? await approveAgentEdit(seed, tag, fillet)
       : await applySketchEdit(seed, name, field, selection, tag, fillet);
     const native = await checkNative(`${tag}-native`, accepted, fillet);
+    if (resize) {
+      assert.equal(await readFile(file, 'utf8'), bytes);
+      await resizeSavedFillets(accepted);
+      return;
+    }
     if (reviewed) assert.equal(native.bodySha256, reviewed.meta.candidate.bodySha256);
     await f.undo();
     await f.same(previous);
