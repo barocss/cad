@@ -6,7 +6,6 @@ import { createFlow } from './flow-helper.mjs';
 
 const annular = process.argv.includes('--annular');
 const sameTurn = process.argv.includes('--same-turn');
-assert.ok(!sameTurn || !annular, 'The same-turn flow uses a solid disk.');
 const weight = Math.SQRT1_2;
 const clamp = [0, 0, 0, 1, 1, 1];
 const first = [[0, 0, 0], [12, 0, 0], [12, 12, 0]];
@@ -37,10 +36,11 @@ const pins = ['packages/barocss-cad/src/brep/exact-sweep.ts',
 const baseline = process.argv.includes('--expect-refused');
 const f = await createFlow({
   name: sameTurn ? 'exact-same-turn-sweep' : 'exact-s-bend-sweep', output: process.argv[2],
-  envFrozen: sameTurn ? 'D1706_SOURCE_FROZEN' : annular ? 'D1682_SOURCE_FROZEN' : 'D1681_SOURCE_FROZEN',
+  envFrozen: sameTurn && annular ? 'D1708_SOURCE_FROZEN'
+    : sameTurn ? 'D1706_SOURCE_FROZEN' : annular ? 'D1682_SOURCE_FROZEN' : 'D1681_SOURCE_FROZEN',
   initialFiles: pins, requiredFrozen: pins,
-  qualification: sameTurn ? 'Sweep an editable exact disk along two same-turn tangent arcs of unequal radii.'
-    : annular ? 'Sweep a concentric annulus through the S-bend and verify both editable bore openings.'
+  qualification: annular ? 'Sweep a concentric annulus through two tangent bends and verify both editable bore openings.'
+    : sameTurn ? 'Sweep an editable exact disk along two same-turn tangent arcs of unequal radii.'
     : 'Join opposite circular arcs, Sweep an editable exact disk and inspect the native tangent joint.',
   limits: [`Desktop WebGPU and local MCP, two 90° arcs with radii 12 and 18 mm, ${annular ? 'one concentric annulus' : 'one circular disk'}.`],
   ...(!baseline && { inspectorSource: `
@@ -211,25 +211,29 @@ async function inspectJoint(shape, label) {
 async function inspectBoreMouths(inner, outer) {
   const cube = f.page.getByRole('group', { name: 'View cube', exact: true });
   const middle = (inner + outer) / 2;
-  for (const [view, at] of [['Left', 0], ['Right', 30]]) {
-    f.phase = 'Inspect the ' + view.toLowerCase() + ' bore opening';
+  const mouths = [
+    { name: 'start', view: 'Left', x: 0, y: 0 },
+    { name: 'end', view: sameTurn ? 'Left' : 'Right', x: secondEndX, y: 30 },
+  ];
+  for (const { name, view, x, y } of mouths) {
+    f.phase = `Inspect the ${name} bore opening`;
     await button('View cube directions', cube).click();
     await f.page.getByRole('menuitem', { name: view, exact: true }).click();
     if (await button('Ortho').getAttribute('aria-pressed') !== 'true') await button('Ortho').click();
     await f.page.getByTitle('Frame all (F)', { exact: true }).click();
-    await f.page.waitForFunction(([at, direction]) => {
-      const a = window.__studioScreenOf([at,at,0]), b = window.__studioScreenOf([at+1,at,0]);
+    await f.page.waitForFunction(([x, y, direction]) => {
+      const a = window.__studioScreenOf([x,y,0]), b = window.__studioScreenOf([x+1,y,0]);
       return document.querySelector('.view-cube .vc-label')?.textContent === direction
         && Math.hypot(a[0]-b[0],a[1]-b[1]) < .01;
-    }, [at, view.toUpperCase()]);
-    const {opening,land} = await f.page.evaluate(([at, middle]) => ({
-      opening:window.__studioSurfacePoint([at,at,0]), land:window.__studioSurfacePoint([at,at,middle]),
-    }), [at, middle]);
+    }, [x, y, view.toUpperCase()]);
+    const {opening,land} = await f.page.evaluate(([x, y, middle]) => ({
+      opening:window.__studioSurfacePoint([x,y,0]), land:window.__studioSurfacePoint([x,y,middle]),
+    }), [x, y, middle]);
     assert.ok(land, JSON.stringify({view,opening,land}));
-    near(land[0], at, 1e-4);
-    assert.ok(!opening || (view === 'Left' ? opening[0]-at : at-opening[0]) > .25,
+    near(land[0], x, 1e-4);
+    assert.ok(!opening || (view === 'Left' ? opening[0]-x : x-opening[0]) > .25,
       JSON.stringify({view,opening,land}));
-    const label = '10-' + view.toLowerCase() + '-bore-opening';
+    const label = `10-${sameTurn ? name : view.toLowerCase()}-bore-opening`;
     f.report.observations.push({label,opening,land});
     await f.snapshot(label);
   }
@@ -270,7 +274,9 @@ await f.run(async () => {
   await hud().getByLabel('Representation', { exact: true }).selectOption('exact');
   if (baseline) {
     await status('refused').waitFor();
-    await hud().getByText(annular ? 'This Sweep needs a circular disk' : 'Path is outside the exact Sweep range', { exact: true }).waitFor();
+    const refusal = sameTurn && annular ? 'The same-turn Sweep needs a circular disk'
+      : annular ? 'This Sweep needs a circular disk' : 'Path is outside the exact Sweep range';
+    await hud().getByText(refusal, { exact: true }).waitFor();
     assert.ok(await button('Apply', hud()).isDisabled());
     await f.same(joined);
     f.report.observations.push({ label: 'baseline-exact-refused', text: await hud().innerText() });
