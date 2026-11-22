@@ -303,7 +303,7 @@ Ref = {"node": index of the feature that made a visible body, "side": "solid"} (
   },
   {
     name: 'list_proposals',
-    description: 'The open proposals (all: true for accepted and rejected ones too, with who decided, when and why): id, title, summary, risk, and stale when the part changed since. Open Direct Ruled and Exact Thicken proposals include directReviewRevision for query.render. A supported bored-wall Offset proposal includes modelReviewRevision.',
+    description: 'The open proposals (all: true for accepted and rejected ones too, with who decided, when and why): id, title, summary, risk, and stale when the part changed since. Open Direct Ruled and Exact Thicken proposals include directReviewRevision for query.render. A supported bored-wall Offset proposal includes modelReviewRevision. Open proposals include proposalRevision for drawing review.',
     input_schema: { type: 'object', properties: { all: { type: 'boolean' } }, additionalProperties: false },
   },
   {

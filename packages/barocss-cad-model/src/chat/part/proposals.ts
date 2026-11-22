@@ -8,7 +8,7 @@ import { changesFixedSpanCountAndLength } from '../../app/patternHoleSpacing';
 import { deleteFeatures, featureDependents, renumber } from '../features';
 import { factsOf } from '../observe';
 import { treeDiff } from '../transactions';
-import { approvalOf, diffLine, DIRECT_GEOMETRY_APPROVAL, nextProposalId, PLAN_CHARS, PROMPT_CHARS, proposalIsStale, riskOf, riskRank, withHistory } from '../proposals';
+import { approvalOf, diffLine, DIRECT_GEOMETRY_APPROVAL, nextProposalId, PLAN_CHARS, PROMPT_CHARS, proposalIsStale, proposalRevisionOf, riskOf, riskRank, withHistory } from '../proposals';
 import { isDirectRuledOperation } from '../directRuledProposal';
 import { directReviewRevision } from '../directProposalReview';
 import { boredWallProposal } from '../modelProposalReview';
@@ -401,7 +401,9 @@ async function listProposalsTool(state: ChatState, args: Record<string, unknown>
   return { state, content: json({ proposals: list.map(p => {
     const { ops, ...details } = p;
     const direct = directReviewRevision(p), model = state.partOf ? undefined : boredWallProposal(state.doc, p)?.revision;
-    return { ...details, ops: ops.length, stale: proposalIsStale(p, revision), ...(direct ? { directReviewRevision: direct } : {}),
+    return { ...details, ops: ops.length, stale: proposalIsStale(p, revision),
+      ...(p.status === 'open' ? { proposalRevision: proposalRevisionOf(p) } : {}),
+      ...(direct ? { directReviewRevision: direct } : {}),
       ...(model ? { modelReviewRevision: model } : {}) };
   }) }), isError: false, changed: false, summary: `${list.length} proposal${list.length === 1 ? '' : 's'}` };
 }

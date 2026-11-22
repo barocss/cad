@@ -34,8 +34,8 @@ Reads the part without changing it.
 
 | Action | Handler | Arguments and notes |
 |---|---|---|
-| `query.summary` | `get_part_summary` | body?, page? — features, parameters, bodies, faces and edges by name |
-| `query.inspect` | `inspect` | faces?, edges?, curve?, surface? — native detail |
+| `query.summary` | `get_part_summary` | body?, page? — features and persistent geometry names |
+| `query.inspect` | `inspect` | faces?, edges?, curve?, surface? — native detail and review pins |
 | `query.measure` | `measure` | a, b? — a face or edge, or the distance and angle between two |
 | `query.mass` | `mass_properties` | bodies? |
 | `query.interference` | `interference` | bodies? — overlap and clearance |
@@ -46,14 +46,15 @@ Reads the part without changing it.
 | `query.wall` | `wall_thickness` | body?, below? |
 | `query.draft` | `draft` | body?, pull?, draftMin? |
 | `query.fit_clearance` | `fit_clearance` | hole?, shaft?, hole_class?, shaft_class?, size? — a hole–shaft fit’s limits and clearance from your fit tables |
-| `query.rebuild` | `rebuild_report` | — each feature's build time and kernel calls; mate loops |
+| `query.edit_fields` | `list_feature_edit_fields` | index — edit fields and revision |
+| `query.rebuild` | `rebuild_report` | feature timings, kernel calls and mate loops |
 | `query.welds` | `weld_list` | — the frame's weld joints, seams from the geometry, sizes yours or estimated |
 | `query.cutlist` | `cut_list` | csv? — a frame’s members to cut: rows of identical ones, lengths, end cuts, mass; nested into the stock lengths |
 | `query.bom` | `output_bom` | expectedRevision? — BOM files |
 | `query.purchase_csv` | `output_purchase_csv` | withMade?, expectedRevision? |
 | `query.clearance` | `output_clearance` | near?, expectedRevision? — current assembly map |
 | `query.cam` | `output_cam_package` | part?, toolDiameter?, expectedRevision? — NOT FOR PRODUCTION |
-| `query.render` | `render_views` | highlight?, section?, expectedRevision? or expectedDirectRevision with proposal?, expectedProposalRevision? |
+| `query.render` | `render_views` | highlight?, section?, expectedRevision? or expectedDirectRevision, proposal?, expectedProposalRevision? |
 | `query.select` | `select` | faces?, edges?, bodies? — shows them selected in the studio |
 | `query.manufacturability` | `check_printability` | direction?, finish?, sides? — the report for the part's process: printing, injection moulding (pull, finish, halves), machining, casting (pull) |
 
@@ -177,7 +178,7 @@ The part's 2D drawing; a drawing change is always the user's, so make it as ops 
 |---|---|---|
 | `drawing.issues` | `drawing_issues` | include_targets? — opaque dimension IDs and view for this snapshot only |
 | `drawing.tolerances` | `tolerance_suggestions` | mode? |
-| `drawing.dimensions` | `get_drawing_dimensions` | sheet?, include_diameters?, include_radii? |
+| `drawing.dimensions` | `get_drawing_dimensions` | sheet?, include_diameters?, include_radii?, include_callouts?, review? |
 | `drawing.stack` | `calculate_drawing_tolerance_stack` | sheet?, expectedRevision from dimensions, terms: [{id, sign: 1 or -1}] |
 | `drawing.auto` | `auto_dimension` | layout? |
 | `drawing.fix` | `fix_drawing` | codes? |

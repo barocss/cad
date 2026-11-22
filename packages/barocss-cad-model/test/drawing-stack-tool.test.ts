@@ -58,6 +58,40 @@ test('printable callouts are opt-in and keep linear dimensions and stacks unchan
   assert.match(stack.result.error, /include_callouts/);
 });
 
+test('proposal review follows the selected sheet ID and refuses a replacement sheet at its old number', async () => {
+  const doc = stackStock();
+  const top = { id: 'Top', name: 'Top dimensions', views: ['top'] };
+  const right = { id: 'Right', name: 'Right view', views: ['right'] };
+  doc.drawing!.sheets = [top, right];
+  const working = await read(doc, 'dimensions', { sheet: 2, include_callouts: true });
+  for (const [sheets, removed] of [[[right, top], false], [[right], true]] as const) {
+    const staged = await runTool({ doc, bodies: [], approvalRequired: true }, 'proposals', {
+      action: 'propose', title: 'Revise the sheet order',
+      ops: [{ tool: 'drawing', args: { action: 'set', sheets } }],
+    }, async () => { throw new Error('A sheet order change must not evaluate a part commit.'); });
+    assert.equal(staged.isError, false, staged.content);
+    const pending = staged.state.doc;
+    const listed = await runTool(staged.state, 'proposals', { action: 'list' }, async () => {
+      throw new Error('Listing proposals must not evaluate a part commit.');
+    });
+    const { id, proposalRevision } = JSON.parse(listed.content).proposals[0];
+    const outcome = await read(pending, 'dimensions', { sheet: 2, review: { proposal: id,
+      expectedRevision: working.result.revision, expectedProposalRevision: proposalRevision } });
+    if (removed) {
+      assert.equal(outcome.isError, true);
+      assert.equal(outcome.result.code, 'DRAWING_REVIEW_SHEET');
+      assert.equal(outcome.result.candidate, undefined);
+    } else {
+      assert.equal(outcome.isError, false, outcome.content);
+      const { candidate, ...original } = outcome.result;
+      assert.deepEqual(original, working.result);
+      assert.deepEqual([original.sheet, candidate.sheet, candidate.sheetName], [2, 3, top.name]);
+      assert.deepEqual(candidate.dimensions, original.dimensions);
+      assert.deepEqual(validate(outputSchemaOf('get_drawing_dimensions')!, outcome.result), []);
+    }
+  }
+});
+
 test('a revision binds the authored document and selected sheet', async () => {
   const doc = stackStock();
   doc.drawing!.sheets = [{ id: 'Top', name: 'Top dimensions', views: ['top'] }];

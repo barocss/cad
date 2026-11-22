@@ -6,6 +6,8 @@ import { type DocPlane, type PartInstance } from '../engine/doc';
 type Vec3T = [number, number, number];
 import { CAGE_TOOL_NAMES, runCageTool } from './cageTools';
 import { DRAWING_TOOL_NAMES, runDrawingTool } from './drawing';
+import { DRAWING_DIMENSIONS } from './drawingToleranceStack';
+import { reviewDrawingProposal } from './part/drawingReview';
 import { OUTPUT_TOOL_NAMES } from './outputDefinitions';
 import { resolveShopRows, resolveShopTree, restoreAuthoredShopRows } from '../engine/shopRows';
 import { friendly } from '../engine/errors';
@@ -250,6 +252,8 @@ async function runToolUnchecked(state: ChatState, name: string, input: unknown, 
 
 async function runPartTool(state: ChatState, name: string, args: Record<string, unknown>, evaluate: Evaluate, options: CallOptions): Promise<ToolOutcome> {
   if ('__invalid_json' in args) return fail(state, 'The tool input was not valid JSON; send it again.');
+  if (name === DRAWING_DIMENSIONS && Object.hasOwn(args, 'review'))
+    return reviewDrawingProposal(state, args, evaluate, runProposalTool);
   if (DRAWING_TOOL_NAMES.has(name)) {
     // The drawing (R14.5): reading tools, and changes that only a proposal makes (the approval gate, D41).
     const out = runDrawingTool(state.doc, name, args);

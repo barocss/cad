@@ -18,6 +18,10 @@ const pins = [
   'apps/cad-studio/src/ui/DrawingWorkspace.tsx',
   'apps/cad-studio/src/state/useProposalPreview.ts',
   'packages/barocss-cad-model/src/chat/part/features.ts',
+  'packages/barocss-cad-model/src/chat/part/drawingReview.ts',
+  'packages/barocss-cad-model/src/chat/part/proposals.ts',
+  'packages/barocss-cad-model/src/chat/proposals.ts',
+  'packages/barocss-cad-model/src/chat/tools.ts',
   'packages/barocss-cad-model/src/chat/drawingToleranceStack.ts',
   'packages/barocss-cad-model/src/chat/contract.ts',
   'packages/barocss-cad-model/src/chat/groups.ts',
@@ -25,9 +29,9 @@ const pins = [
   'packages/barocss-cad-model/src/io/svg.ts',
 ];
 const f = await createFlow({
-  name: 'counterbore-drawing-agent-revision', envFrozen: 'D1688_SOURCE_FROZEN', output: process.argv[2],
+  name: 'counterbore-drawing-agent-revision', envFrozen: 'D1689_SOURCE_FROZEN', output: process.argv[2],
   initialFiles: pins, requiredFrozen: pins, oracleSource,
-  qualification: 'Approve a local counterbore depth revision, preserve the two-sheet drawing and match the printable MCP callouts to the exported SVGs before and after native Open.',
+  qualification: 'Review two isolated proposal pins, compare the working and candidate drawings before approval, and verify the approved callout against exact SVG after native Open.',
   limits: ['One D675 counterbore and Top callout, two A4 sheets, desktop Studio WebGPU, scripted local L1 MCP.'],
 });
 const button = (name, scope = f.page) => scope.getByRole('button', { name, exact: true });
@@ -78,7 +82,7 @@ await f.run(async () => {
   await f.same(seed);
 
   f.phase = 'Discover the depth field and stage the revision';
-  const initialPrint = await withMcpSession(mcp, stagedFile, 'counterbore', async call => {
+  const { initialPrint, comparisons, pins } = await withMcpSession(mcp, stagedFile, 'counterbore', async call => {
     const printed = await matchPrintableCallouts(call, initialFront, initialTop);
     assert.equal(sha256(await readFile(stagedFile)), seedHash);
     const fields = await call('query', { action: 'edit_fields', index: 3 });
@@ -95,10 +99,35 @@ await f.run(async () => {
     assert.equal(sha256(await readFile(stagedFile)), seedHash);
     const proposal = await call('proposals', { action: 'propose', title: 'Set the counterbore depth to 2 mm', ops: [op] });
     assert.deepEqual([proposal.proposal, proposal.applied], ['P1', false]);
+    const other = await call('proposals', { action: 'propose', title: 'Alternative counterbore depth of 3 mm',
+      ops: [{ ...op, args: { ...op.args, values: { [depth.key]: 3 } } }] });
+    assert.deepEqual([other.proposal, other.applied], ['P2', false]);
     const staged = await readFile(stagedFile);
+    const { proposals } = await call('proposals', { action: 'list' });
+    const [p1, p2] = proposals;
+    assert.deepEqual(proposals.map(p => [p.id, p.status, p.stale]), [['P1', 'open', false], ['P2', 'open', false]]);
+    assert.match(p1.proposalRevision, /^[a-f0-9]{64}$/);
+    assert.match(p2.proposalRevision, /^[a-f0-9]{64}$/);
+    assert.notEqual(p1.proposalRevision, p2.proposalRevision);
+    const readReview = (sheet, expectedRevision, proposal, expectedProposalRevision, refused = false) =>
+      call('drawing', { action: 'dimensions', sheet, review: { proposal, expectedRevision, expectedProposalRevision } }, refused);
+    const first = await readReview(1, printed.firstRevision, 'P1', p1.proposalRevision);
+    const second = await readReview(2, printed.secondRevision, 'P1', p1.proposalRevision);
+    assert.deepEqual([first.callouts, first.candidate.callouts], [[], []]);
+    assert.deepEqual(second.callouts, printed.callouts);
+    assert.deepEqual([first.sheet, first.candidate.sheet, second.sheet, second.candidate.sheet], [1, 1, 2, 2]);
+    assert.deepEqual([first.source, second.source], [printed.source, printed.source]);
+    assert.equal(first.candidate.source, second.candidate.source);
+    assert.notEqual(second.candidate.source, second.source);
+    assert.notEqual(first.candidate.revision, second.candidate.revision);
+    assert.deepEqual(second.candidate.callouts, [{ id: 'd4', view: 'top', kind: 'diameter', lines: ['Ø4 THRU  CBORE Ø8 × 2 DEEP'] }]);
+    assert.deepEqual([second.candidate.proposal, second.candidate.proposalRevision], ['P1', p1.proposalRevision]);
+    assert.equal((await readReview(2, printed.secondRevision, 'P1', p2.proposalRevision, true)).code, 'DRAWING_REVIEW_STALE');
+    assert.equal((await readReview(1, printed.secondRevision, 'P1', p1.proposalRevision, true)).code, 'DRAWING_REVIEW_BASE');
+    assert.equal((await readReview(2, printed.secondRevision, 'P3', p1.proposalRevision, true)).code, 'DRAWING_REVIEW_PROPOSAL');
     assert.match((await call('proposals', { action: 'accept', id: 'P1' }, true)).error, /user accepts.*studio/i);
     assert.deepEqual(await readFile(stagedFile), staged);
-    return printed;
+    return { initialPrint: printed, comparisons: [first, second], pins: [p1.proposalRevision, p2.proposalRevision] };
   });
 
   const staged = await readFile(stagedFile);
@@ -119,7 +148,8 @@ await f.run(async () => {
   await f.changed(pending);
   const accepted = await f.doc();
   checkModel(accepted, 2);
-  assert.deepEqual(accepted.proposals.map(proposal => proposal.status), ['accepted']);
+  assert.deepEqual(accepted.proposals.map(proposal => proposal.status), ['accepted', 'open']);
+  assert.deepEqual(accepted.proposals[1], pending.proposals[1]);
   const decision = accepted.history.at(-1);
   assert.deepEqual([decision.kind, decision.proposal, decision.by.agent], ['accept', 'P1', 'user']);
 
@@ -145,13 +175,33 @@ await f.run(async () => {
   assert.equal(top.id, initialTop.id);
   await f.same(reopened);
   const savedBytes = await readFile(saved.file);
-  const currentPrint = await withMcpSession(mcp, saved.file, 'reopened-print',
-    call => matchPrintableCallouts(call, front, top));
+  const currentPrint = await withMcpSession(mcp, saved.file, 'reopened-print', async call => {
+    const printed = await matchPrintableCallouts(call, front, top);
+    const { proposals } = await call('proposals', { action: 'list' });
+    assert.deepEqual(proposals.map(p => [p.id, p.status, p.stale]), [['P2', 'open', true]]);
+    const offered = await call('drawing', { action: 'dimensions', sheet: 2, review: {
+      proposal: 'P2', expectedRevision: printed.secondRevision, expectedProposalRevision: pins[1],
+    } }, true);
+    assert.equal(offered.code, 'DRAWING_REVIEW_STALE');
+    assert.equal(offered.candidate, undefined);
+    const acceptedReview = await call('drawing', { action: 'dimensions', sheet: 2, review: {
+      proposal: 'P1', expectedRevision: printed.secondRevision, expectedProposalRevision: pins[0],
+    } }, true);
+    assert.equal(acceptedReview.code, 'DRAWING_REVIEW_PROPOSAL');
+    return printed;
+  });
   assert.deepEqual(await readFile(saved.file), savedBytes);
   assert.notEqual(currentPrint.source, initialPrint.source);
   assert.notEqual(currentPrint.firstRevision, initialPrint.firstRevision);
   assert.notEqual(currentPrint.secondRevision, initialPrint.secondRevision);
-  await writeFile(join(f.output, 'printable-callouts.json'), JSON.stringify({ initialPrint, currentPrint }, null, 2));
+  const [candidateFront, candidateTop] = comparisons.map(comparison => comparison.candidate);
+  assert.deepEqual([candidateFront.revision, candidateTop.revision], [currentPrint.firstRevision, currentPrint.secondRevision]);
+  assert.equal(candidateTop.source, currentPrint.source);
+  assert.deepEqual(candidateTop.callouts, currentPrint.callouts);
+  await button('Chat').first().click();
+  await button('Rebase & preview', f.page.getByRole('listitem', { name: 'Proposal P2', exact: true })).waitFor();
+  await f.snapshot('09b-reopened-alternative-is-stale');
+  await writeFile(join(f.output, 'printable-callouts.json'), JSON.stringify({ initialPrint, comparisons, currentPrint }, null, 2));
 
   f.phase = 'Edit the same depth after Open and restore the first callout';
   await button('Model').click();

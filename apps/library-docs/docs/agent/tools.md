@@ -92,6 +92,21 @@ At autonomy L3 the same hole applies, and `cad-mcp` saves the file at once:
 
 <<< @/../samples/agent-mcp.test.mjs#l3
 
+## Review a proposal's drawing
+
+Read the working sheet with `drawing.dimensions`. For printed diameter and radius annotations, pass
+`include_callouts: true` to get the visible text and the drawing source printed in the title block.
+
+To review an open proposal, read its ID and `proposalRevision` with `proposals.list`. Call `drawing.dimensions`
+again with the same `sheet` and a `review` object. Pass the ID as `proposal`, the working sheet's revision as
+`expectedRevision`, and the proposal revision as `expectedProposalRevision`.
+
+The result contains the working sheet at the top level and the replayed sheet in `candidate`. Both include their
+own source, revision, dimensions and printable callouts. Omit `include_callouts` or set it to `true` during review.
+If a proposal reorders the sheets, the candidate reports
+the new number of the selected sheet. A removed sheet or a stale proposal returns a refusal. The comparison
+leaves the working file and the proposal decision unchanged.
+
 ## The per-turn budget
 
 Everything a model reads every turn is held to 25,000 characters at most: the tool list as MCP lists it, and the

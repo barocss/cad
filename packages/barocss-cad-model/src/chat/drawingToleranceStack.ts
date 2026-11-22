@@ -15,12 +15,19 @@ export const DRAWING_TOLERANCE_STACK = 'calculate_drawing_tolerance_stack';
 export const STACK_READ_TOOLS: { name: string; description: string; input_schema: JsonSchema }[] = [
   {
     name: DRAWING_DIMENSIONS,
-    description: 'Lists linear dimensions by default on one sheet of the tool session’s drawing snapshot, with their IDs, views, model lengths in mm, authored tolerances and any unresolved references. Printed annotations are separate. With include_diameters or include_radii true, also lists the respective geometric diameters or radii in model mm, without annotations or manufacturing meaning. With include_callouts true, returns the visible diameter/radius annotation text marks separately, with the current drawing source. Tolerance stacks remain linear-only. Use this revision and linear IDs to calculate a tolerance stack. Read only.',
+    description: 'Lists linear dimensions by default on one sheet of the tool session’s drawing snapshot, with their IDs, views, model lengths in mm, authored tolerances and any unresolved references. Printed annotations are separate. With include_diameters or include_radii true, also lists the respective geometric diameters or radii in model mm, without annotations or manufacturing meaning. With include_callouts true, returns the visible diameter/radius annotation text marks separately, with the current drawing source. For a read-only comparison with an open proposal, pass review. Tolerance stacks remain linear-only. Use this revision and linear IDs to calculate a tolerance stack. Read only.',
     input_schema: { type: 'object', properties: {
       sheet: sheetArg,
       include_diameters: { type: 'boolean', description: 'Include geometric diameters, without annotations or manufacturing meaning. Defaults to false; tolerance stacks remain linear-only.' },
       include_radii: { type: 'boolean', description: 'Include geometric radii, without annotations or manufacturing meaning. Defaults to false; independent of include_diameters; tolerance stacks remain linear-only.' },
       include_callouts: { type: 'boolean', description: 'Include the visible diameter and radius annotation text marks and the drawing source. Defaults to false.' },
+      review: { type: 'object',
+        description: 'Compare the current and candidate drawing on this sheet. Includes printable callouts for both. Use the revision from a current read of the same sheet and the proposalRevision from proposals.list.',
+        properties: {
+          proposal: { type: 'string', minLength: 1 },
+          expectedRevision: { type: 'string', pattern: '^[a-f0-9]{64}$' },
+          expectedProposalRevision: { type: 'string', pattern: '^[a-f0-9]{64}$' },
+        }, required: ['proposal', 'expectedRevision', 'expectedProposalRevision'], additionalProperties: false },
     }, additionalProperties: false },
   },
   {

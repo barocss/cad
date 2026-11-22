@@ -10,12 +10,16 @@
 // when it is exceeded, and that is recorded. It is saved with the part — the studio says so and can strip it.
 import type { StudioDoc } from '../engine/doc';
 import type { TreeDiff } from './transactions';
+import { digestOf } from '../util/digest';
 import type { Risk, HistoryEntry, Proposal } from '../engine/schema/proposals';
 
 export const DIRECT_GEOMETRY_APPROVAL = 'Direct geometry';
 
 /** Older or unworked proposals must be rebased to evaluate their risk against known inputs. */
 export const proposalIsStale = (proposal: Proposal, revision: string) => proposal.status === 'open' && proposal.base_evidence_revision !== revision;
+
+/** Pin the exact proposal, including its replay operations and the revision it was authored on. */
+export const proposalRevisionOf = (proposal: Proposal) => digestOf(proposal);
 
 export const PROMPT_CHARS = 2000, PLAN_CHARS = 500, SUMMARY_CHARS = 240;
 /** The history's share of the file limit (4 MiB, CadPartLimits.fileBytes): about 400 kB. */

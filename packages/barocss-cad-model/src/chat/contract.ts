@@ -31,6 +31,10 @@ const savedStepState = o({ index: { type: 'integer', minimum: 0 }, step_id: str,
 const savedInstructions = o({ scope: { type: 'string', const: 'saved-top-level-instructions' }, steps: { type: 'array', items: o({ index: { type: 'integer', minimum: 0 }, id: str, name: str, parts: stepIds }, ['index', 'id', 'name', 'parts']) }, unassigned: stepIds, problems: { type: 'array', items: o({ step: str, part: str, kind: { type: 'string', enum: ['missing-part', 'unlistable-part', 'unassigned'] }, message: str }, ['kind', 'message']) }, state: savedStepState }, ['scope', 'steps', 'unassigned', 'problems']);
 const drawingRead = { revision: str, sheet: num, sheetName: str, scope: obj, unit: { type: 'string', const: 'mm' }, printUnit: { type: 'string', enum: ['mm', 'inch'] } };
 const drawingReadRequired = Object.keys(drawingRead);
+const drawingCalloutFields = { source: str, callouts: { type: 'array',
+  items: o({ id: str, view: str, kind: { type: 'string', enum: ['diameter', 'radius'] },
+    lines: { type: 'array', items: str, minItems: 1 } }, ['id', 'view', 'kind', 'lines']) },
+} satisfies Record<string, JsonSchema>;
 const nativeJointRead = { body: str, revision: str };
 const nativePoint = { type: 'array', items: num, minItems: 3, maxItems: 3 };
 const curveSample = o({ parameter: num, magnitude: num, point: nativePoint, vector: nativePoint },
@@ -57,9 +61,9 @@ const READ: Record<string, JsonSchema | null> = {
       o({ status: { type: 'string', const: 'unavailable' }, reason: { type: 'string', enum: ['non-tangent', 'derivative-unavailable'] } }, ['status', 'reason']),
     ] },
   }, ['body', 'revision', 'unit', 'status', 'edgeId', 'faces', 'sampleCount', 'minimumAngleDegrees', 'maximumAngleDegrees', 'samples']),
-  get_drawing_dimensions: o({ ...drawingRead, dimensions: arr, source: str, callouts: { type: 'array',
-    items: o({ id: str, view: str, kind: { type: 'string', enum: ['diameter', 'radius'] },
-      lines: { type: 'array', items: str, minItems: 1 } }, ['id', 'view', 'kind', 'lines']) },
+  get_drawing_dimensions: o({ ...drawingRead, dimensions: arr, ...drawingCalloutFields,
+    candidate: o({ ...drawingRead, dimensions: arr, ...drawingCalloutFields, proposal: str, proposalRevision: str },
+      [...drawingReadRequired, 'dimensions', 'source', 'callouts', 'proposal', 'proposalRevision']),
   }, [...drawingReadRequired, 'dimensions']),
   calculate_drawing_tolerance_stack: o({ ...drawingRead, method: { type: 'string', const: 'worst-case' }, nominal: str, minimum: str, maximum: str, terms: arr },
     [...drawingReadRequired, 'method', 'nominal', 'minimum', 'maximum', 'terms']),
