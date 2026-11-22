@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1644: [Cut a radial bore through an Exact semicylinder Thicken](notes/exact-cylinder-radial-bore-2026-11-22/README.md), #175 and #368. Verify the two native openings at edited diameters and after Studio Save and Open.
 - D1643: [Extract Studio sketch draft history from App](notes/studio-sketch-draft-history-extraction-2026-11-22/README.md). Move settlement, placement and local history into one hook and verify desktop edits and exact before/after Rectangle checkpoints.
 - D1642: [Verify the radial wall after an axial Subtract](notes/agent-axial-cut-wall-approval-2026-11-22/README.md), #175 and #322. Check full axial coverage, refuse a partial cutter at approval and reproduce current radial wall evidence on Open.
 - D1641: [Cut the axial end of an Exact semicylinder Thicken](notes/exact-cylinder-axial-cut-2026-11-22/README.md), #175 and #368. Use native Subtract, edit the cutter plane in History and reproduce the two cylindrical skins and closed cap after Open.
