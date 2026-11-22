@@ -322,7 +322,7 @@ async function approveSavedRadius(source) {
   const args = await withMcpSession(session, file, 'fillet-agent-stage', async (call, request) => {
     const detail = await call('describe', { tool: 'features', action: 'edit' });
     assert.deepEqual(detail.input.properties.sketchRound.oneOf, [
-      { required: ['sides'] }, { required: ['corners'] }, { required: ['fillet'] },
+      { required: ['sides'] }, { required: ['corners'] }, { required: ['fillet'] }, { required: ['fillets'] },
     ]);
     assert.equal((await call('query', { action: 'edit_fields', index: 0 })).sketchFillets, undefined);
     const response = await request('tools/call', { name: 'query', arguments: { action: 'edit_fields', index: 0, includeSketchCorners: true } });

@@ -8,6 +8,8 @@ const review = process.argv.includes('--review');
 const agent = review || process.argv.includes('--agent');
 const resizeFillets = process.argv.includes('--resize-fillets');
 const resizeChamfers = process.argv.includes('--resize-chamfers');
+const agentResizeFillets = process.argv.includes('--agent-resize-fillets');
+const agentResizeBaseline = process.argv.includes('--expect-no-group-proposal');
 const resize = resizeFillets || resizeChamfers;
 const resizeName = resizeFillets ? 'Fillet' : 'Chamfer';
 const resizeBaseline = process.argv.includes('--expect-no-group-editor');
@@ -30,6 +32,10 @@ const pins = [
     'apps/cad-studio/src/viewport/SketchCornerSizeHandle.tsx',
     `packages/barocss-cad-model/src/sketch/${resizeName.toLowerCase()}Edit.ts`,
   ] : []),
+  ...(agentResizeFillets ? [
+    'packages/barocss-cad-model/src/chat/part/sketchCorner.ts',
+    'packages/barocss-cad-model/src/chat/toolDefinitions.ts',
+  ] : []),
   ...(agent ? [
     'apps/cad-studio/test/mcp-browser-session.mjs', 'apps/cad-studio/src/ui/ProposalBrowser.tsx',
     'apps/cad-studio/src/state/useProposalPreview.ts',
@@ -44,12 +50,15 @@ const pins = [
   ] : []),
 ];
 const f = await createFlow({
-  name: resize ? `saved-sketch-${resizeName.toLowerCase()}-pair` : review ? 'sketch-corner-batch-review' : agent ? 'sketch-corner-batch-agent' : 'sketch-corner-batch',
-  output: process.argv[2], envFrozen: resizeChamfers ? 'D1728_SOURCE_FROZEN' : resizeFillets ? 'D1726_SOURCE_FROZEN'
+  name: agentResizeFillets ? 'saved-sketch-fillet-pair-proposal' : resize ? `saved-sketch-${resizeName.toLowerCase()}-pair`
+    : review ? 'sketch-corner-batch-review' : agent ? 'sketch-corner-batch-agent' : 'sketch-corner-batch',
+  output: process.argv[2], envFrozen: agentResizeFillets ? 'D1730_SOURCE_FROZEN'
+    : resizeChamfers ? 'D1728_SOURCE_FROZEN' : resizeFillets ? 'D1726_SOURCE_FROZEN'
     : review ? 'D1697_SOURCE_FROZEN' : agent ? 'D1696_SOURCE_FROZEN' : 'D1695_SOURCE_FROZEN',
   initialFiles: pins, requiredFrozen: pins,
   qualification: review ? 'Pin a mixed-turn sketch corner proposal to the Agent image and native walls. Approve it in Studio and reopen the same geometry and image.'
-    : resize ? `Resize adjacent saved convex and reflex ${resizeName}s as one edit.`
+    : agentResizeFillets ? 'Propose an atomic resize of a saved convex and reflex Fillet through local MCP and approve it in Studio.'
+      : resize ? `Resize adjacent saved convex and reflex ${resizeName}s as one edit.`
       : agent ? 'Discover and propose a whole corner edit through local MCP. Approve one proposal and reopen the editable result.'
       : 'Round and chamfer adjacent convex and reflex sketch corners. Refuse shared-edge consumption as a group.',
   limits: ['One notched XY outline, one 10 mm Extrude, desktop Studio WebGPU.'],
@@ -237,6 +246,87 @@ async function checkNative(label, doc, fillet, size = 6) {
       assert.ok(face.vertices.some(p => Math.hypot(p[0] - x, p[1] - y, p[2] - z) < 1e-8), `${id} at ${[x, y, z]}`);
   }
   return native;
+}
+
+async function proposeSavedFilletPair(accepted) {
+  f.phase = 'Discover and propose both saved Fillets in one revision-bound edit';
+  const file = join(f.output, 'resize-pair-proposal.bcad');
+  const bytes = JSON.stringify(accepted);
+  await writeFile(file, bytes);
+  await withMcpSession(session, file, 'resize-fillet-pair', async call => {
+    const fields = await call('query', { action: 'edit_fields', index: 0, includeSketchCorners: true });
+    assert.deepEqual(fields.sketchFillets, [{ fillet: 'e9', radius: 6 }, { fillet: 'e10', radius: 6 }]);
+    const revision = await currentPartRevision(call);
+    assert.equal(fields.revision, revision);
+    const resize = { sketch: fields.id, fillets: ['e10', 'e9'], radius: 8 };
+    const makeOp = (args = {}) => ({ tool: 'features', args: {
+      action: 'edit', index: 0, expectedRevision: revision, sketchRound: resize, ...args,
+    } });
+    const propose = (op, denied = false) => call('proposals', {
+      action: 'propose', title: 'Resize both saved Fillets to R8', ops: [op],
+    }, denied);
+    if (agentResizeBaseline) {
+      assert.match((await propose(makeOp(), true)).error, /use sides|corners|fillets|invalid/i);
+      assert.equal(await readFile(file, 'utf8'), bytes);
+      return;
+    }
+    const detail = await call('describe', { tool: 'features', action: 'edit' });
+    const schema = detail.input.properties.sketchRound;
+    assert.ok(schema.oneOf.some(choice => choice.required[0] === 'fillets'));
+    assert.equal(schema.properties.fillets.minItems, 2);
+    assert.equal(schema.properties.fillets.uniqueItems, true);
+    for (const [args, message] of [
+      [{ expectedRevision: undefined }, /expectedRevision/i],
+      [{ expectedRevision: '0000000000000000' }, /part changed/i],
+      [{ sketchRound: { ...resize, fillet: 'e9' } }, /fillets|mix/i],
+      [{ sketchRound: { ...resize, fillets: ['e9', 'e9'] } }, /fillets|once|distinct/i],
+      [{ sketchRound: { ...resize, fillets: ['e9', 'e4'] } }, /saved fillet/i],
+      [{ sketchRound: { ...resize, radius: 6 } }, /already have this radius/i],
+      [{ sketchRound: { ...resize, radius: 13 } }, /collapse|touch|cross/i],
+    ]) {
+      assert.match((await propose(makeOp(args), true)).error, message);
+      assert.equal(await readFile(file, 'utf8'), bytes);
+    }
+    const dry = await call('features', { action: 'batch', dryRun: true, ops: [makeOp()] });
+    assert.ok(dry.dryRun);
+    assert.deepEqual(dry.diff.changed.map(feature => feature.id), [fields.id]);
+    assert.equal(await readFile(file, 'utf8'), bytes);
+    const proposal = await propose(makeOp());
+    assert.deepEqual([proposal.proposal, proposal.applied], ['P1', false]);
+    const staged = await readFile(file);
+    assert.match((await call('proposals', { action: 'accept', id: 'P1' }, true)).error, /user accepts.*studio/i);
+    assert.deepEqual(await readFile(file), staged);
+  });
+  if (agentResizeBaseline) {
+    await f.same(accepted);
+    await f.snapshot('08-agent-group-resize-refused-on-base');
+    return;
+  }
+  const pending = JSON.parse(await readFile(file, 'utf8'));
+  assert.deepEqual([pending.nodes, pending.outputs], [accepted.nodes, accepted.outputs]);
+  assert.deepEqual(pending.proposals[0].ops[0].args.sketchRound.fillets, ['e10', 'e9']);
+  await f.freshOpen(file, pending, '08-agent-group-resize-open');
+  await button('Chat').first().click();
+  const card = f.page.getByRole('listitem', { name: 'Proposal P1', exact: true });
+  await button('Preview', card).click();
+  await button('Hide', card).waitFor();
+  await f.same(pending);
+  await f.snapshot('09-agent-group-resize-preview');
+  await button('Accept', card).click();
+  await f.changed(pending);
+  const { doc } = await f.snapshot('10-agent-group-resize-accepted');
+  assert.equal(doc.proposals[0].status, 'accepted');
+  assert.deepEqual([doc.nodes[1], doc.outputs], [accepted.nodes[1], accepted.outputs]);
+  const native = await checkNative('agent-R8-native', doc, true, 8);
+  await f.undo(); await f.same(pending);
+  await f.redo(); await f.same(doc);
+  const saved = await f.save('agent-resized-fillets');
+  await f.freshOpen(saved.file, doc, '11-agent-group-resize-reopened');
+  assert.deepEqual(await checkNative('agent-R8-reopened', await f.doc(), true, 8), native);
+  await withMcpSession(session, saved.file, 'read-resized-fillet-pair', async call => {
+    const fields = await call('query', { action: 'edit_fields', index: 0, includeSketchCorners: true });
+    assert.deepEqual(fields.sketchFillets, [{ fillet: 'e9', radius: 8 }, { fillet: 'e10', radius: 8 }]);
+  });
 }
 
 async function render(request, args) {
@@ -440,11 +530,16 @@ await f.run(async () => {
     { name: 'Chamfer', field: 'Distance', selection: [original[3], original[4]] },
   ]) {
     const fillet = name === 'Fillet', tag = name.toLowerCase();
-    if (resize && fillet !== resizeFillets) continue;
+    if ((resize && fillet !== resizeFillets) || (agentResizeFillets && !fillet)) continue;
     const { previous, accepted, reviewed, readReopened } = agent
       ? await approveAgentEdit(seed, tag, fillet)
       : await applySketchEdit(seed, name, field, selection, tag, fillet);
     const native = await checkNative(`${tag}-native`, accepted, fillet);
+    if (agentResizeFillets) {
+      await proposeSavedFilletPair(accepted);
+      assert.equal(await readFile(file, 'utf8'), bytes);
+      return;
+    }
     if (resize) {
       assert.equal(await readFile(file, 'utf8'), bytes);
       await resizeSavedCorners(accepted);

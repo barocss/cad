@@ -1,13 +1,13 @@
 # CAD roadmap — current status and execution order
 
-Updated 2026-11-23 · Priority authority: D520 · Latest delivery: D1729 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
+Updated 2026-11-23 · Priority authority: D520 · Latest delivery: D1730 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
 
 This is the only current status index. Detailed tracks define acceptance; the 34 stable row pages retain scope and issue navigation. Immutable decision notes retain results. Do not append chronological status paragraphs here. [D520 decision](notes/cad-roadmap-replan-2026-11-04/README.md) supersedes D445 execution order and historical next-item text, while retaining its safeguards and bounded proofs.
 
 ## Now and next
 
-- **Current position:** [D1729](notes/exact-spaced-annular-same-turn-2026-11-23/README.md), P5 rows 07/30. The spaced same-turn Sweep supports one concentric bore with eight native tangent joints, both mouths open and editable fresh Open. [D1728](notes/resize-saved-sketch-chamfer-pair-2026-11-23/README.md) adds shared setback edit and drag for saved Chamfers. The B06 PDF group remains held.
-- **Next MAIN:** D1730, P1 local Agent Sketch [rows 04](roadmap-rows/04.md) and [09](roadmap-rows/09.md), [#21](https://github.com/barocss/cad/issues/21). Let the Agent stage one shared radius edit for the D1726 saved Fillet pair by stable side IDs. Require the current revision and explicit Studio approval. Compare both native walls with the manual result and reopen the approved file.
+- **Current position:** [D1730](notes/agent-resize-saved-sketch-fillet-pair-2026-11-23/README.md), P1 rows 04/09. The local Agent proposes one radius edit for two saved Fillets, and explicit Studio approval matches the manual native result. [D1729](notes/exact-spaced-annular-same-turn-2026-11-23/README.md) supports a concentric bore through the spaced same-turn Sweep. The B06 PDF group remains held.
+- **Next MAIN:** D1731, P1 local Agent Sketch [rows 04](roadmap-rows/04.md) and [09](roadmap-rows/09.md), [#21](https://github.com/barocss/cad/issues/21). Propose one shared setback edit for the D1728 saved Chamfer pair by stable bevel IDs. Require the current revision, explicit Studio approval, exact native parity and fresh Open.
 - **Separate follow-ups:** Continue Studio App extraction in cohesive parts with affected desktop checks. [#608 Rendering](https://github.com/barocss/cad/issues/608) stays on HOLD. API inventory drift remains open. The issue tracker records [#126](https://github.com/barocss/cad/issues/126), [#613](https://github.com/barocss/cad/issues/613), [#152](https://github.com/barocss/cad/issues/152) and [#22](https://github.com/barocss/cad/issues/22) as closed.
 - **Active repository:** [barocss/cad](https://github.com/barocss/cad), based on `origin/main`. Fetch before work and preserve unexpected changes. The [migration record](../../../docs/migration/README.md) maps the former `local/cad-dev` history and issue numbers.
 - **Evidence correction:** D482 records2167 PASS/0 FAIL/2 existing SKIP in a later full-kernel run than D433. Neither result is a new full-suite PASS at this audit HEAD. [D482 record](notes/vertical-contact-refusal-2026-11-04/README.md).

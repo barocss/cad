@@ -86,18 +86,29 @@ function requestedPairs(input: Record<string, unknown>, field: 'radius' | 'dista
   return pairs.every(sidePair) ? pairs : null;
 }
 
+function requestedSavedIds(input: Record<string, unknown>, key: string, field: 'radius' | 'distance'): string[] | null {
+  if (Object.keys(input).some(name => name !== 'sketch' && name !== field && name !== key)) return null;
+  const group = key === 'fillets', value = input[key];
+  const ids: unknown[] = group ? Array.isArray(value) ? Array.from(value) : [] : [value];
+  if (ids.length < (group ? 2 : 1) || new Set(ids).size !== ids.length) return null;
+  return ids.every((id): id is string => typeof id === 'string' && id.length > 0) ? ids : null;
+}
+
 export function editSketchCorner(doc: StudioDoc, index: number, kind: 'CHAMFER' | 'ROUND', input: unknown): { node: ModelNode } | { code: string; error: string } {
   const round = kind === 'ROUND';
   const field = round ? 'radius' : 'distance';
   const selector = round ? 'fillet' : 'bevel';
   const value = isObj(input) ? input[field] : undefined;
   const refuse = (reason: string, error: string) => ({ code: `EDIT_SKETCH_${kind}_${reason}`, error });
-  const saved = isObj(input) && Object.hasOwn(input, selector);
-  const pairs = isObj(input) ? requestedPairs(input, field) : null;
-  const validSaved = saved && typeof input[selector] === 'string' && input[selector].length > 0
-    && Object.keys(input).every(key => key === 'sketch' || key === selector || key === field);
-  if (!isObj(input) || typeof input.sketch !== 'string' || (saved ? !validSaved : !pairs) || typeof value !== 'number' || !Number.isFinite(value))
-    return { code: 'EDIT_INPUT', error: saved
+  const group = round && isObj(input) && Object.hasOwn(input, 'fillets');
+  const key = group ? 'fillets' : selector;
+  const saved = isObj(input) && Object.hasOwn(input, key);
+  const pairs = !saved && isObj(input) ? requestedPairs(input, field) : null;
+  const ids = saved ? requestedSavedIds(input, key, field) : null;
+  if (!isObj(input) || typeof input.sketch !== 'string' || (!ids && !pairs) || typeof value !== 'number' || !Number.isFinite(value))
+    return { code: 'EDIT_INPUT', error: group
+      ? 'Give the saved sketch ID, two or more distinct fillets and a finite radius in mm. Use fillets as the only selector.'
+      : saved
       ? `Give the saved sketch ID, one ${selector} ID and a finite ${field} in mm. Use ${selector} alone; do not mix it with sides or corners.`
       : `Give the saved sketch ID and a finite ${field} in mm. Use sides for one side pair or corners for at least two side pairs.` };
   const source = cornerSource(doc, index);
@@ -112,15 +123,22 @@ export function editSketchCorner(doc: StudioDoc, index: number, kind: 'CHAMFER' 
   }
 
   let shape: Polygon;
-  if (saved) {
-    const at = source.ids.indexOf(input[selector] as string);
-    const current = round ? savedFilletRadius(source.outline, at) : savedChamferSetback(source.outline, at);
-    if (current === undefined)
+  if (ids) {
+    const edges = ids.map(id => source.ids.indexOf(id));
+    const sizeOf = round ? savedFilletRadius : savedChamferSetback;
+    const editSize = round ? editFilletRadius : editChamferSetback;
+    const sizes = edges.map(edge => sizeOf(source.outline, edge));
+    if (sizes.includes(undefined))
       return refuse(round ? 'FILLET' : 'BEVEL', `Use a saved ${selector} ID from query.edit_fields.`);
-    const result = round ? editFilletRadius(source.outline, at, value) : editChamferSetback(source.outline, at, value);
-    if ('error' in result) return refuse('GEOMETRY', result.error);
-    if (result.shape === source.outline) return { node: source.node };
-    shape = result.shape;
+    if (sizes.some(size => size !== sizes[0]))
+      return refuse('GEOMETRY', 'Select Fillets with the same current radius.');
+    shape = source.outline;
+    for (const edge of edges) {
+      const result = editSize(shape, edge, value);
+      if ('error' in result) return refuse('GEOMETRY', result.error);
+      shape = result.shape;
+    }
+    if (shape === source.outline) return { node: source.node };
   } else if (targets.size > 1) {
     const result = prepareStraightCornerBatch(source.outline, kind === 'ROUND' ? 'fillet' : 'chamfer', [...targets], value, source.nextId);
     if ('error' in result) return refuse('GEOMETRY', result.error);

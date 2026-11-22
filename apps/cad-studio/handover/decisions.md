@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D1730: [Propose one radius edit for saved Fillets by side ID](notes/agent-resize-saved-sketch-fillet-pair-2026-11-23/README.md), #21. Explicit Studio approval gives the same native solid as the manual two-Fillet edit.
+
 - D1729: [Carry a concentric bore through the spaced same-turn Sweep](notes/exact-spaced-annular-same-turn-2026-11-23/README.md), #10. Keep both mouths open, preserve all eight native joint edges and qualify the reopened bore edit.
 
 - D1728: [Resize two saved sketch Chamfers in one edit](notes/resize-saved-sketch-chamfer-pair-2026-11-23/README.md), #21. Verify one shared setback edit for the convex/reflex pair and retain both native bevel walls after fresh Open.
