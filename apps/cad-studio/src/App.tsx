@@ -43,7 +43,7 @@ import { createReferenceDecisions, createReferencePreview, type ReferenceChoices
 import { bodyTopologyCounts } from './ui/bodyTopologyLabel';
 import { viewportRecoveryToast } from './viewport/viewportRecovery';
 import { useSpecificationActions } from './state/useSpecificationActions';
-import { type SectionPick, useViewportPicking, type ViewportMenu } from './viewport/useViewportPicking';
+import { useViewportPicking, type ViewportMenu } from './viewport/useViewportPicking';
 import { isOutlinePickIssue, ownsPanelDrivingLength, studioSketchViewportActions } from './viewport/studioSketchViewportActions';
 import { sewPreviewDirect } from './viewport/sewPreviewDirect';
 import { useSectionState } from './viewport/useSectionState';
@@ -141,7 +141,7 @@ import { beginWork, createWorkOwnership, finishWork, invalidateWork, reserveAcce
 import type { OpenScope } from './state/openOwnership';
 import { scheduleProjectOpenFit } from './app/projectOpenFit';
 import { prepareSignedFinishOpen, verifyStoredNativeOpen } from './files/documentFile';
-import { retainedSectionEdges } from './viewport/sectionEdgePick';
+import { useSectionSelection, type SectionPick } from './viewport/useSectionSelection';
 import { placedDoc, type PartInstance } from '@barocss/cad-model/engine/doc';
 import { placementOf } from '@barocss/cad-model/engine/placement';
 import { instanceEvaluationCurrent, instanceEvaluationSources, withPlacedProposalBodies, WORKER_CANDIDATE_TINT } from './viewport/instanceEvaluation';
@@ -151,7 +151,7 @@ import { contentKey, evaluationKey } from '@barocss/cad-model/engine/evalMemo';
 import { bearingEditCurrent, bearingFaceInput, captureBearingEditSession, prepareBearingEdit, type BearingEditSession } from './app/bearingEdit';
 import { resolveSkeletons, SKELETON_CODES } from '@barocss/cad-model/frames/skeleton';
 import { offsetFaceGroup, carryOver, emptyDoc, featureLabel, fmt, prefixDoc, starterDoc, withNode, type ModelNode, type SketchNode, type StudioDoc } from '@barocss/cad-model/engine/doc';
-import { bodyKeyFor, cutAfter, featureId, nextSerial } from '@barocss/cad-model/engine/ids';
+import { bodyKeyFor, featureId, nextSerial } from '@barocss/cad-model/engine/ids';
 import { modelHash } from '@barocss/cad-model/chat/spec';
 import { captureSignatures, markedReferences, type Problem as RefProblem } from '@barocss/cad-model/engine/references';
 import { type BodyResult, type EvalResult } from '@barocss/cad-model/engine/evaluate';
@@ -2537,7 +2537,6 @@ export function App() {
   const { drawnBodies, shownBodies, animatedOffsets, bodyColors, hiddenBodies, faceColors, proposalTint, placeSkip } = appearance;
   // Mate faces show while a mate is being added, or while one is selected in the shown mates list.
   const mateFaces = !!assembly.draft || (!!assembly.selected && !!singleTop(instanceSel));
-  const sectioned = !!(section && sectionBodies && !sketch && !previewBodies);
   // (G2: the viewer's clip plane while the section is open on WebGPU — on the bodies until their exact section is shown,
   // on the placed parts always; none in a sketch, where the section is not shown.)
   const { scalarMaps, isoclines, mouldShown, mapLegend } = useAnalysisMaps({ doc, evaluated, shownBodies, mapKind, rendering, sketch,
@@ -2583,7 +2582,6 @@ export function App() {
       return { at: [min[0] + u * (max[0] - min[0]), min[1] + v * (max[1] - min[1]), min[2] + w * (max[2] - min[2])] as Vec3, t: w };
     }) : null);
   });
-  const sectionFrom = nextSerial(evaluated);
   // (The Band surface command highlights what it has picked — A and B — while it runs, also when its preview hides the selection.)
   const bandShown = fresh && !busy && (shownBodies === drawnBodies || shownBodies === previewBodies)
     ? activeBandHighlight(active, commandDoc, shownBodies) : null;
@@ -2601,13 +2599,6 @@ export function App() {
   const shownEndFace = active && commandPickScope.current && active.preview === 'ok' &&
     (isExtrudeToFace(active.cmd.id, active.values) || isReferencePlaneEdit(active.cmd.id, active.values))
     ? shownExtrudeEndFace(active, shownBodies) : null;
-  const sectionEdgeSources = useMemo(() => {
-    if (!sectionExactShown || shownBodies !== sectionBodies || section?.mode !== 'plane' || section.planes.length !== 1) return [];
-    return shownBodies.map(shown => {
-      const key = sectionExact?.from.get(shown.key), body = bodies.findIndex(source => source.key === key);
-      return body < 0 ? null : { body, edges: retainedSectionEdges(bodies[body].mesh, shown.mesh, section.planes[0], sectionFrom) };
-    });
-  }, [sectionExactShown, sectionExact, section, sectionBodies, shownBodies, bodies, sectionFrom]);
   const placedMeasureSources = useMemo(() => {
     const entries = new Map<string, PlacedMeasureSource>();
     if ((!measure && !placedMeasureContext) || !fresh || busy || shownDoc !== doc || section || exploded || jointTree || instDrag || cutDraft || stepsDisp || isolatedInstances
@@ -2632,15 +2623,15 @@ export function App() {
   const liveMeasurePicks = measurementItems?.flatMap(item => item && !item.instance ? [item.pick] : []);
   const measuredInstanceFaces = measurementItems?.flatMap(item =>
     item?.instance && item.pick.face !== undefined ? [{ id: item.instance, body: item.pick.body, face: item.pick.face }] : []);
-  const shownSectionEdges = sectioned ? (liveMeasurePicks ?? selection.edges).flatMap(pick =>
-    sectionEdgeSources.flatMap((source, body) => {
-      if (!source || source.body !== pick.body || pick.edge === undefined) return [];
-      return [...source.edges].flatMap(([shown, original]) => original === pick.edge ? [{ body, edge: shown }] : []);
-    })) : [];
-  const shownSelection = modelUnavailable ? emptySel : sectioned ? { faces: shownBodies.flatMap((b, bi) => b.mesh.faces.filter(f => cutAfter(f.name, sectionFrom)).map(f => ({ body: bi, face: f.index }))), edges: shownSectionEdges, bodies: [] }
-    : shownEndFace ? { ...emptySel, faces: [shownEndFace] }
-    : bandShown ? bandShown
-    : routePreviewBodies || routePanelOpen || shownPreviewBodies || sketch ? emptySel : mateFaces ? { faces: assembly.highlight.faces, edges: [], bodies: [] } : liveMeasurePicks ? { faces: liveMeasurePicks.flatMap(m => m.face !== undefined ? [{ body: m.body, face: m.face }] : []), edges: liveMeasurePicks.flatMap(m => m.edge !== undefined ? [{ body: m.body, edge: m.edge }] : []), bodies: [] } : selection;
+  const sectionSelection = useSectionSelection({
+    doc, section, cutFrom: nextSerial(evaluated), sourceBodies: bodies, shownBodies, sourceKeys: sectionExact?.from,
+    exactView: sectionExactShown && shownBodies === sectionBodies, canPick: fresh && !busy,
+    showSelection: !!(section && sectionBodies && !sketch && !previewBodies), sourceEdges: liveMeasurePicks ?? selection.edges,
+  });
+  const shownSelection = modelUnavailable ? emptySel : sectionSelection.selection ?? (
+    shownEndFace ? { ...emptySel, faces: [shownEndFace] }
+      : bandShown ? bandShown
+      : routePreviewBodies || routePanelOpen || shownPreviewBodies || sketch ? emptySel : mateFaces ? { faces: assembly.highlight.faces, edges: [], bodies: [] } : liveMeasurePicks ? { faces: liveMeasurePicks.flatMap(m => m.face !== undefined ? [{ body: m.body, face: m.face }] : []), edges: liveMeasurePicks.flatMap(m => m.edge !== undefined ? [{ body: m.body, edge: m.edge }] : []), bodies: [] } : selection);
   const [measureFrom, measureTo] = measurementItems ?? [];
   const measured = measureFrom && measureTo ? measureBetween(measureFrom.mesh, measureFrom.pick, measureTo.mesh, measureTo.pick) : null;
   const approximateMeasure = !!measureFrom && !!measureTo && (usesCurvedMeshDistance(measureFrom) || usesCurvedMeshDistance(measureTo));
@@ -2652,26 +2643,7 @@ export function App() {
   const sewCandidateShown = !!previewBodies?.length && shownBodies === previewBodies && !cageEd.session;
   const viewportDirect = useMemo(() => sewPreviewDirect(directShown, active?.cmd.id, active?.ctx, sewCandidateShown), [directShown, active?.cmd.id, active?.ctx, sewCandidateShown]);
   viewBodiesRef.current = viewBodies;
-  sectionPickRef.current = hit => {
-    const none = { face: null, edge: null, cap: false };
-    if (!fresh || busy || !sectionExactShown || shownBodies !== sectionBodies) return none;
-    if (hit.edge) {
-      const shown = shownBodies[hit.edge.body]?.mesh, edge = shown?.edges[hit.edge.edge];
-      if (edge?.faces.some(index => cutAfter(shown?.faces[index]?.name ?? '', sectionFrom))) return { ...none, cap: true };
-      const source = sectionEdgeSources[hit.edge.body], original = source?.edges.get(hit.edge.edge);
-      return source && original !== undefined && !lookOf(doc, bodies[source.body]).hidden
-        ? { ...none, edge: { body: source.body, edge: original } } : none;
-    }
-    if (!hit.face) return none;
-    const shown = shownBodies[hit.face.body], face = shown?.mesh.faces[hit.face.face];
-    if (!face) return none;
-    if (cutAfter(face.name, sectionFrom)) return { ...none, cap: true };
-    const source = sectionExact?.from.get(shown.key);
-    const body = bodies.findIndex(candidate => candidate.key === source);
-    if (body < 0 || lookOf(doc, bodies[body]).hidden) return none;
-    const matches = bodies[body].mesh.faces.filter(candidate => candidate.name === face.name);
-    return matches.length === 1 ? { ...none, face: { body, face: matches[0].index } } : none;
-  };
+  sectionPickRef.current = sectionSelection.pick;
   const pinView = !rendering && !drawing && !sketch;
   const massPinView = pinView && previewMode === 'none';
   const massPinSession = useMemo(() => ({}), [docGeneration, workerSession, project.view.store]);

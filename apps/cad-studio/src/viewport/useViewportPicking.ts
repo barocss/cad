@@ -18,7 +18,7 @@ import { planeFromFace, type Section } from './sectionView';
 import { bindMidpointPick } from '../app/midpointSketch';
 import { captureMeasureTarget, capturePlacedMeasureFace, readMeasureTarget, sameMeasureOccurrence, type MeasureTarget, type PlacedMeasureSource } from '../app/measureTargets';
 import { bindNativeVertexPick } from './vertexPick';
-import type { EdgeRef, FaceRef } from './renderer';
+import type { SectionPick } from './useSectionSelection';
 import type { ScenePickingActions } from './sceneSelection';
 
 export interface ViewportMenu {
@@ -28,8 +28,6 @@ export interface ViewportMenu {
   viewOnly?: true;
   measureSource?: { doc: StudioDoc; target: MeasureTarget };
 }
-
-export type SectionPick = (hit: { face: FaceRef | null; edge: EdgeRef | null }) => { face: FaceRef | null; edge: EdgeRef | null; cap: boolean };
 
 export function useViewportPicking({ meshCirclePick, doc, modelUnavailable, nativeVertexReady, nativePlanePickState, sectionPickRef, activeStore, setActive, measure, assembly, sectionRef, sectionFacePickRef, viewBodiesRef,
   sectionBoxRef, setSection, setSectionFacePick, setToast, activeRef, halvesShownRef, setPick, setInstanceSel, setSelection,

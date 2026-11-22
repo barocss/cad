@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1655: [Extract Studio section selection mapping](notes/studio-section-selection-extraction-2026-11-22/README.md). Verify original face and edge picks, cap exclusion and unchanged measurement in desktop Studio.
 - D1654: [Verify the radial wall after inclined cap replacement](notes/exact-semicylinder-replaced-cap-wall-evidence-2026-11-22/README.md), #17 and #629. Recompute revision-bound 2 mm evidence in Studio and local Agent after Open.
 - D1653: [Replace the Exact semicylinder upper cap with an inclined plane](notes/exact-semicylinder-inclined-cap-replacement-2026-11-22/README.md), #17 and #629. Verify both exact rims, fixed supports, linked motion and native Open in Studio and local Agent parity.
 - D1652: [Link the Exact semicylinder lower cap to a reference plane](notes/exact-semicylinder-lower-cap-to-plane-2026-11-22/README.md), #17 and #629. Verify linked motion, refusal and current wall evidence through Studio Open.
