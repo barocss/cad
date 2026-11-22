@@ -151,8 +151,8 @@ test('quarter-knot measurement needs the qualified half-ring geometry and matchi
   assert.equal(measureBrepEdgeContinuity({ ...brep, faces }, use.edge).reason, 'derivative-unavailable');
 });
 
-test('an offset box does not acquire a transverse half-ring chart certificate', () => {
-  const [{ brep }] = evaluateCadPart(doc(features({ minX: 1, angle: 29 }))).outputs;
+test('a box tangent to the inner orbit does not acquire a transverse chart certificate', () => {
+  const [{ brep }] = evaluateCadPart(doc(features({ minX: 17, radius: 3 }))).outputs;
   assert.ok(checkBrep(brep, { strict: true }).valid);
   assert.ok(brep.coedges.every(use => !use.pcurve));
 });

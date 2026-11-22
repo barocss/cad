@@ -1,5 +1,5 @@
 import { surfaceD1Evaluator } from '../core/derivatives.js';
-import { basis, evaluateSurface, surfaceDomain } from '../core/math.js';
+import { basis, curveDomain, curveEvaluator, evaluateSurface, surfaceDomain } from '../core/math.js';
 import { same } from '../core/structural-equality.js';
 import { add, cross, dot, len, scale, sub, unit } from '../core/vec3.js';
 import { curvePiece, curveReversed } from '../nurbs/curves/curve-segment.js';
@@ -8,6 +8,7 @@ import { geometryScaleMM } from '../numeric-policy.js';
 import type { Curve, Point, Surface } from '../types.js';
 import { BrepError, checkBrep, type Brep, type BrepCoedge, type BrepEdge, type BrepFace } from './brep-core.js';
 import { circleOf, planar } from './brep-tessellate.js';
+import { fitOffsetRingTrim, offsetRingTrim, type OffsetRingFrame } from './offset-ring-trim.js';
 
 interface Plane { point: Point; normal: Point }
 interface Ring {
@@ -88,7 +89,7 @@ function readRing(brep: Brep, tolerance: number): Ring | undefined {
   return { center, axis, R, r, roundoff, supports };
 }
 
-function clippingPlane(box: Brep, ring: Ring, tolerance: number): Plane | undefined {
+function clippingPlane(box: Brep, ring: Ring, tolerance: number): { plane: Plane; offset: number } | undefined {
   if (box.vertices.length !== 8 || box.faces.length !== 6 || box.edges.length !== 12 || box.loops.length !== 6) return;
   const planes: Plane[] = [];
   for (const face of box.faces) {
@@ -97,7 +98,7 @@ function clippingPlane(box: Brep, ring: Ring, tolerance: number): Plane | undefi
     planes.push(plane);
   }
   const roundoff = Math.max(ring.roundoff, 512 * Number.EPSILON * geometryScaleMM(box.vertices.map(vertex => vertex.point)));
-  const throughAxis: Plane[] = [];
+  const active: { plane: Plane; offset: number }[] = [];
   for (const plane of planes) {
     const directions = planes.filter(other => other !== plane).map(other => dot(plane.normal, other.normal));
     if (directions.filter(value => Math.abs(value + 1) <= ANGULAR_ROUNDOFF).length !== 1
@@ -105,11 +106,17 @@ function clippingPlane(box: Brep, ring: Ring, tolerance: number): Plane | undefi
     const distances = box.vertices.map(vertex => signedDistance(plane, vertex.point));
     if (distances.some(d => d > roundoff) || distances.filter(d => Math.abs(d) <= roundoff).length !== 4) return;
     const angle = dot(plane.normal, ring.axis), atCenter = signedDistance(plane, ring.center);
-    if (Math.abs(angle) * (ring.R + ring.r) <= roundoff && Math.abs(atCenter) <= roundoff) throughAxis.push(plane);
+    if (Math.abs(angle) * (ring.R + ring.r) <= roundoff) {
+      if (Math.abs(atCenter) <= roundoff) { active.push({ plane, offset: 0 }); continue; }
+      if (atCenter > tolerance && atCenter < ring.R - ring.r - tolerance) {
+        active.push({ plane, offset: atCenter });
+        continue;
+      }
+    }
     // The torus is the tube of radius r about a circle of radius R. This is its full support against the plane.
-    else if (!(atCenter + ring.R * len(sub(plane.normal, scale(ring.axis, angle))) + ring.r < -tolerance)) return;
+    if (!(atCenter + ring.R * len(sub(plane.normal, scale(ring.axis, angle))) + ring.r < -tolerance)) return;
   }
-  if (throughAxis.length === 1 && checkBrep(box, { strict: true }).valid) return throughAxis[0];
+  if (active.length === 1 && checkBrep(box, { strict: true }).valid) return active[0];
 }
 
 /** Candidate corners of a retained support. A transverse plane cuts a non-seam half-turn once. */
@@ -287,13 +294,147 @@ function repair(result: Brep, ring: Ring, plane: Plane, tolerance: number): Brep
   if (report.valid && report.topology.length === 1 && report.topology[0].genus === 0 && report.maximumPcurveGap <= ring.roundoff) return brep;
 }
 
-/** Keep native charts on an already-computed Boolean cut of an Exact Sweep ring by one transverse box face. */
+interface OffsetRimEdge { edge: BrepEdge; cap: BrepCoedge; wall: BrepCoedge }
+interface OffsetSeam { edge: BrepEdge; uses: readonly BrepCoedge[] }
+interface OffsetWall {
+  cap: string;
+  trim: NonNullable<ReturnType<typeof offsetRingTrim>>;
+  intervals: [number, number][];
+}
+
+function offsetEdgeOwners(result: Brep, ring: Ring, plane: Plane, tolerance: number) {
+  if (result.faces.length !== 6 || result.loops.length !== 6 || result.edges.length > 128 || result.coedges.length !== 2 * result.edges.length) return;
+  const faces = loopOwners(result), caps = new Set<BrepFace>(), surfaces = new Set<Surface>();
+  for (const face of result.faces) {
+    if (face.surface.kind !== 'surface' || face.loops.length !== 1) return;
+    const original = ring.supports.get(face.surface);
+    if (original) {
+      if (original.sense !== face.sense || surfaces.has(face.surface)) return;
+      surfaces.add(face.surface);
+    } else {
+      const cap = facePlane(face);
+      if (!cap || dist(cap.normal, plane.normal) > ANGULAR_ROUNDOFF || Math.abs(signedDistance(plane, cap.point)) > tolerance) return;
+      caps.add(face);
+    }
+  }
+  if (caps.size !== 2 || surfaces.size !== 4) return;
+  const seams: OffsetSeam[] = [], rims: OffsetRimEdge[] = [];
+  for (const edge of result.edges) {
+    const uses = result.coedges.filter(use => use.edge === edge.id);
+    if (uses.length !== 2 || uses[0].sense === uses[1].sense) return;
+    const [a, b] = uses, first = caps.has(faces.get(a.loop)!), second = caps.has(faces.get(b.loop)!);
+    if (first && second) return;
+    if (!first && !second) seams.push({ edge, uses });
+    else rims.push({ edge, cap: first ? a : b, wall: first ? b : a });
+  }
+  if (seams.length === 6 && rims.length >= 4) return { seams, rims, faces };
+}
+
+function offsetSeamCorners(surface: Surface, trim: OffsetWall['trim']): Corner[] {
+  const corners: Corner[] = [];
+  for (const v of [0, 1]) {
+    const cut = trim.at(v);
+    corners.push({ u: cut.uv[0], v, point: cut.point });
+    for (const u of [0, 1]) corners.push({ u, v, point: evaluateSurface(surface, u, v) });
+  }
+  return corners;
+}
+
+function rimFollowsInterval(edge: Curve, trim: OffsetWall['trim'], start: number, end: number, tolerance: number) {
+  const [a, b] = curveDomain(edge), at = curveEvaluator(edge), sign = Math.sign(end - start);
+  let previous = start;
+  for (const fraction of [.2, .5, .8]) {
+    const v = trim.profileParameter(at(a + (b - a) * fraction), false, tolerance);
+    if (v === undefined || !(sign * (v - previous) > 0 && sign * (end - v) > 0)) return false;
+    previous = v;
+  }
+  return true;
+}
+
+function repairOffset(result: Brep, ring: Ring, plane: Plane, offset: number, tolerance: number): Brep | undefined {
+  const owners = offsetEdgeOwners(result, ring, plane, tolerance);
+  if (!owners) return;
+  const { seams, rims, faces } = owners, inward = scale(plane.normal, -1), across = cross(ring.axis, inward);
+  const frame: OffsetRingFrame = { center: ring.center, axis: ring.axis, R: ring.R, r: ring.r, inward, station: offset };
+  const points = new Map(result.vertices.map(vertex => [vertex.id, vertex.point])), seamVertices = new Set(seams.flatMap(seam => seam.edge.vertices));
+  const walls = new Map<BrepFace, OffsetWall>(), capSides = new Map<string, number>();
+  const edges = new Map<string, BrepEdge>(), bindings = new Map<string, Curve>(), exactPoints = new Map<string, Point>();
+  const keep = (edge: BrepEdge, exact: Curve) => {
+    const poles = exact.controlPoints;
+    for (const [i, id] of edge.vertices.entries()) {
+      const point = poles[i === 0 ? 0 : poles.length - 1], other = exactPoints.get(id);
+      if (other && dist(point, other) > ring.roundoff) return false;
+      exactPoints.set(id, point);
+    }
+    edges.set(edge.id, carriedEdge(edge, exact));
+    return true;
+  };
+  for (const { edge, wall, cap } of rims) {
+    const face = faces.get(wall.loop)!, capFace = faces.get(cap.loop)!;
+    if (face.surface.kind !== 'surface' || capFace.surface.kind !== 'surface' || edge.curve.degree !== 3) return;
+    const [start, end] = edge.vertices.map(id => points.get(id)!);
+    const y = dot(sub(start, ring.center), across), side = y > 0 ? 1 : -1;
+    if (Math.abs(y) <= tolerance || side * dot(sub(end, ring.center), across) <= tolerance) return;
+    const previousSide = capSides.get(capFace.id);
+    if (previousSide !== undefined && previousSide !== side) return;
+    capSides.set(capFace.id, side);
+    let chart = walls.get(face);
+    if (!chart) {
+      const trim = offsetRingTrim(frame, face.surface, side);
+      if (!trim) return;
+      chart = { cap: capFace.id, trim, intervals: [] };
+      walls.set(face, chart);
+    }
+    if (chart.cap !== capFace.id) return;
+    const { trim } = chart;
+    const [a, b] = edge.vertices.map(id => trim.profileParameter(points.get(id)!, seamVertices.has(id), 4 * tolerance));
+    if (a === undefined || b === undefined || !rimFollowsInterval(edge.curve, trim, a, b, 4 * tolerance)) return;
+    chart.intervals.push([Math.min(a, b), Math.max(a, b)]);
+    const fit = fitOffsetRingTrim(trim, face.surface, edge.id, a, b);
+    if (!fit) return;
+    const capUV = capBinding(capFace.surface, fit.edge, ring.roundoff);
+    if (!capUV || !keep(edge, fit.edge)) return;
+    bindings.set(wall.id, fit.uv);
+    bindings.set(cap.id, capUV);
+  }
+  if (capSides.size !== 2 || new Set(capSides.values()).size !== 2 || walls.size !== 4) return;
+  const charts = [...walls.values()];
+  for (const cap of capSides.keys()) if (charts.filter(wall => wall.cap === cap).length !== 2) return;
+  for (const { intervals } of walls.values()) {
+    intervals.sort(([a], [b]) => a - b);
+    if (intervals[0][0] !== 0 || intervals[intervals.length - 1][1] !== 1
+      || intervals.some(([a], i) => i > 0 && a !== intervals[i - 1][1])) return;
+  }
+  for (const { edge, uses } of seams) {
+    let exact: Curve | undefined;
+    for (const use of uses) {
+      const face = faces.get(use.loop)!, chart = walls.get(face);
+      if (face.surface.kind !== 'surface' || !chart) return;
+      const corners = offsetSeamCorners(face.surface, chart.trim);
+      const [a, b] = edge.vertices.map(id => corners.filter(candidate => dist(candidate.point, points.get(id)!) <= tolerance));
+      if (a.length !== 1 || b.length !== 1) return;
+      const trim = chartTrim(face.surface, a[0], b[0], edge.id);
+      if (!trim || exact && !agrees(exact, trim.edge, ring.roundoff)) return;
+      exact ??= trim.edge;
+      bindings.set(use.id, trim.uv);
+    }
+    if (!exact || !sameArc(edge, exact, tolerance) || !keep(edge, exact)) return;
+  }
+  if (exactPoints.size !== result.vertices.length || bindings.size !== result.coedges.length || edges.size !== result.edges.length) return;
+  const vertices = result.vertices.map(({ id, tolerance }) => ({ id, tolerance, point: exactPoints.get(id)! }));
+  const coedges = result.coedges.map(use => withPcurve(use, bindings.get(use.id)!));
+  const brep = { ...result, vertices, coedges, edges: result.edges.map(edge => edges.get(edge.id)!) };
+  const report = checkBrep(brep, { strict: true });
+  if (report.valid && report.topology.length === 1 && report.topology[0].genus === 0 && report.maximumPcurveGap <= tolerance / 20) return brep;
+}
+
+/** Keep native charts on an already-computed Boolean cut of an Exact Sweep ring by one box face. */
 export function bindHalfRingIntersection(a: Brep, b: Brep, result: Brep, tolerance: number): Brep | undefined {
   try {
     const left = readRing(a, tolerance), ring = left ?? readRing(b, tolerance);
     if (!ring) return;
-    const plane = clippingPlane(left ? b : a, ring, tolerance);
-    if (plane) return repair(result, ring, plane, tolerance);
+    const cut = clippingPlane(left ? b : a, ring, tolerance);
+    if (cut) return cut.offset === 0 ? repair(result, ring, cut.plane, tolerance) : repairOffset(result, ring, cut.plane, cut.offset, tolerance);
   } catch (error) {
     if (error instanceof RangeError || (error instanceof BrepError && error.code !== 'INPUT')) return;
     throw error;

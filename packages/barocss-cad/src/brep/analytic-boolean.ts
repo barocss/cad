@@ -1562,6 +1562,11 @@ function analyticBoolean(a: Brep, b: Brep, operation: AnalyticBooleanOperation, 
   const stitched = stitch(mergePieces(kept, tol, trace), id, tol, options.exactEdges !== false, inputTol, undefined, edgeFit, frozen, trace);
   const result = operation === 'intersection' && options.exactEdges !== false
     ? bindHalfRingIntersection(a, b, stitched, tol) ?? stitched : stitched;
+  if (trace && result !== stitched) {
+    // The qualified rebind preserves all stitched face IDs, including each face's source attribution.
+    const sources = trace.results.get(stitched);
+    if (sources) trace.results.set(result, sources);
+  }
   if (!touches.length) return touchChecked(result, touchedAt);
   // (A piece re-judged where a surface only touches it leaves the result's boundary touching there. Two lumps meeting
   // there are two bodies, as D204 has them; one lump touching itself — empty on both sides of the touch, or the same
