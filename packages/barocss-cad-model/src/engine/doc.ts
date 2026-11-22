@@ -418,7 +418,7 @@ function isExactCylinderThicken(node: unknown): boolean {
   return textRecord(node) && node.kind === 'thicken' && node.mode === 'exact-cylinder';
 }
 
-/** Identify the two authored axial caps. Kernel evaluation certifies the two quarter spans and native trims. */
+/** Identify the named axial caps and skins. Kernel evaluation certifies their support and orientation. */
 export function exactSemicylinderCapSource(nodes: readonly unknown[], index: number, parameters: Readonly<Record<string, number>>) {
   const node = nodes[index];
   if (!textRecord(node) || !isExactCylinderThicken(node) || node.suppressed || node.held !== undefined ||
@@ -431,7 +431,8 @@ export function exactSemicylinderCapSource(nodes: readonly unknown[], index: num
   const thickness = textDimension(node.thickness, parameters);
   if (thickness === null || thickness <= 0) return;
   const faces = [`${node.id}.v-min`, `${node.id}.v-max`];
-  return { id: node.id, thickness, faces, upperFace: faces[first[0][2] < first[1][2] ? 1 : 0] };
+  return { id: node.id, thickness, faces, upperFace: faces[first[0][2] < first[1][2] ? 1 : 0],
+    skins: [`${node.id}.normal`, `${node.id}.reverse`] };
 }
 
 function offsetSourceBase(nodes: readonly unknown[], index: number): number | undefined {
@@ -698,12 +699,15 @@ export function directFaceDocumentProblem(input: unknown): string | null {
       if (isExactCylinderThicken(parent)) {
         const parameters = textRecord(value.parameters) ? value.parameters as Record<string, number> : {};
         const source = exactSemicylinderCapSource(value.nodes, parentIndex, parameters);
-        if (!source?.faces.includes(face) || signature.k !== 'plane')
-          return 'Offset face: pick an original axial cap of an Exact semicylinder.';
+        const axial = signature.k === 'plane' && source?.faces.includes(face);
+        const radial = signature.k === 'curved' && source?.skins.includes(face);
+        if (!axial && !radial)
+          return 'Offset face: pick an original axial cap or the outer wall of an Exact semicylinder.';
+        if (radial && node.target !== undefined) return 'Offset face: an original Exact semicylinder wall needs a signed distance.';
         continue;
       }
       if (isExactCylinderOffsetChain(value.nodes, parentIndex))
-        return 'Offset face: use the original Exact semicylinder Thicken parent. Chained cap offsets are unsupported.';
+        return 'Offset face: use the original Exact semicylinder Thicken parent. Chained offsets are unsupported.';
       if (signature.k === 'curved') {
         if (!isCylinderReplacementSource(value.nodes, parentIndex) && !isBoredPlateHole(value.nodes, parentIndex)
           && !isAnnularReplacementSource(value.nodes, parentIndex))

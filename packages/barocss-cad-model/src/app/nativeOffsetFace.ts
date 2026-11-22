@@ -2,7 +2,7 @@
 import { CadNumericPolicy, CadPartLimits, brepFromPrismatic, checkBrep, prismaticFromProfile, prismaticMassProperties, transformBrep, type Brep, type BrepFace, type Curve, type Surface } from '@barocss/cad';
 import { boxCapOffsetFrame, draftedFaceOffsetFrame } from '@barocss/cad/internal/drafted-cap-offset';
 import { annularCapReplacementFrame, boredCapOffsetFrame, boredPlateWallOffsetFrame, boreWallOffsetFrame, circularWallOffsetFrame } from '@barocss/cad/internal/bored-cap-offset';
-import { exactSemicylinderCapOffsetFrame } from '@barocss/cad/internal/exact-cylinder-cap-offset';
+import { exactSemicylinderCapOffsetFrame, exactSemicylinderOuterWallOffsetFrame } from '@barocss/cad/internal/exact-cylinder-cap-offset';
 import { prismWallOffsetFrame } from '@barocss/cad/internal/prism-wall-offset';
 import { fillFeaturePatternSpec } from '@barocss/cad/api';
 import { finiteBinary64Integer } from '../engine/binary64';
@@ -344,12 +344,42 @@ function nativeOffsetBody(ctx: Ctx, body: BodyResult, display: ReturnType<typeof
   return { brep, selected: faces[0] };
 }
 
+function radialOffsetPick(parent: ReturnType<typeof refOf>, face: string, current: BodyResult, frame: { anchor: XYZ; normal: XYZ }) {
+  const signature = signaturesOf(current, 'individual').faces.get(face);
+  if (signature?.kind !== 'curved' || !(signature.radius && signature.radius > 0))
+    return unsupported('the radial offset needs an original cylindrical face signature.');
+  const stored = toSig(signature), [x, y, z] = stored.p;
+  return { parent, face, anchor: frame.anchor, normal: frame.normal, allowsPlane: false,
+    signature: { ...stored, p: [zero(x), zero(y), zero(z)] as XYZ } };
+}
+
 /** Check the same native profile the direct offset evaluates. The old snapshot recipe remains separate. */
 export function resolveDirectOffsetFace(ctx: Ctx): {
   parent: ReturnType<typeof refOf>; face: string; anchor: XYZ; normal: XYZ; allowsPlane: boolean; signature?: Sig;
 } | undefined {
   const { body, display, ref } = offsetPick(ctx, true);
   if (ref.side !== 'solid') return undefined;
+  const node = ctx.doc.nodes[ref.node];
+  if (isExactCylinderOffsetChain(ctx.doc.nodes, ref.node))
+    return unsupported('use the original Exact semicylinder Thicken parent. Chained offsets are unsupported.');
+  if (node.kind === 'thicken' && node.mode === 'exact-cylinder') {
+    const source = exactSemicylinderCapSource(ctx.doc.nodes, ref.node, ctx.doc.parameters);
+    const radial = display.exact?.kind === 'cylinder';
+    if (!source || !(radial ? source.skins : source.faces).includes(display.name))
+      return unsupported('select an original axial cap or the outer wall of an Exact semicylinder.');
+    const current = currentOffsetBody(ctx, body);
+    const { brep } = nativeOffsetBody(ctx, body, display);
+    const authored = { id: source.id, surface: { ...node.surface, kind: 'surface', id: 'surface' } as Surface,
+      thickness: source.thickness, side: node.side };
+    if (radial) {
+      const frame = exactSemicylinderOuterWallOffsetFrame(brep, display.name, authored);
+      if (!frame) return unsupported('only the original outer cylindrical wall supports this radial offset.');
+      return radialOffsetPick(ref, display.name, current, frame);
+    }
+    const frame = exactSemicylinderCapOffsetFrame(brep, display.name, authored);
+    if (!frame) return unsupported('the original axial cap of the Exact semicylinder could not be certified.');
+    return { parent: ref, face: display.name, ...frame, allowsPlane: true };
+  }
   if (display.exact?.kind === 'cylinder') {
     const plate = isBoredPlateHole(ctx.doc.nodes, ref.node), tube = isAnnularReplacementSource(ctx.doc.nodes, ref.node);
     if (!plate && !tube && !isCylinderReplacementSource(ctx.doc.nodes, ref.node))
@@ -363,29 +393,11 @@ export function resolveDirectOffsetFace(ctx: Ctx): {
     const [face] = members;
     const bore = plate || (tube && acceptedFace.nativeBoreDiameter !== undefined);
     const frame = (bore ? boreWallOffsetFrame : circularWallOffsetFrame)(natives[0].brep, face);
-    const signature = signaturesOf(current, 'individual').faces.get(face);
-    if (!frame || frame.faces.length !== members.length || !frame.faces.every(name => members.includes(name))
-      || signature?.kind !== 'curved' || !(signature.radius && signature.radius > 0))
+    if (!frame || frame.faces.length !== members.length || !frame.faces.every(name => members.includes(name)))
       return unsupported('the radial offset needs two native faces on one complete cylindrical wall.');
-    const { anchor, normal } = frame;
-    const stored = toSig(signature), [x, y, z] = stored.p;
-    return { parent: ref, face, anchor, normal, allowsPlane: false, signature: { ...stored, p: [zero(x), zero(y), zero(z)] } };
+    return radialOffsetPick(ref, face, current, frame);
   }
   if (display.exact?.kind !== 'plane') return undefined;
-  const node = ctx.doc.nodes[ref.node];
-  if (node.kind === 'thicken' && node.mode === 'exact-cylinder') {
-    const source = exactSemicylinderCapSource(ctx.doc.nodes, ref.node, ctx.doc.parameters);
-    if (!source?.faces.includes(display.name))
-      return unsupported('select an original axial cap of an Exact semicylinder.');
-    currentOffsetBody(ctx, body);
-    const { brep } = nativeOffsetBody(ctx, body, display);
-    const frame = exactSemicylinderCapOffsetFrame(brep, display.name, { id: source.id,
-      surface: { kind: 'surface', id: 'surface', ...node.surface }, thickness: source.thickness, side: node.side });
-    if (!frame) return unsupported('the original axial cap of the Exact semicylinder could not be certified.');
-    return { parent: ref, face: display.name, ...frame, allowsPlane: true };
-  }
-  if (isExactCylinderOffsetChain(ctx.doc.nodes, ref.node))
-    return unsupported('use the original Exact semicylinder Thicken parent. Chained cap offsets are unsupported.');
   if (isAnnularReplacementSource(ctx.doc.nodes, ref.node)) {
     if (!isAnnularCapOffsetSource(ctx.doc.nodes, ref.node, ctx.doc.parameters) || node.kind !== 'hole')
       return unsupported('the annular cap needs one original upright coaxial through Hole in a forward circular Extrude.');

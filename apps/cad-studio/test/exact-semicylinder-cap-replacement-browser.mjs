@@ -29,7 +29,7 @@ const seed = {
 const pins = [
   'apps/cad-studio/test/exact-semicylinder-cap-replacement-browser.mjs',
   'apps/cad-studio/test/mcp-browser-session.mjs',
-  ...['app/replaceFaceCommand', 'chat/part/features', 'chat/thickenWall', 'engine/doc', 'engine/exactThickenCapEdit', 'engine/offsetPlane']
+  ...['app/replaceFaceCommand', 'chat/part/features', 'chat/thickenWall', 'engine/doc', 'engine/exactThickenEdit', 'engine/offsetPlane']
     .map(name => 'packages/barocss-cad-model/src/' + name + '.ts'),
   ...['features/exact-cylinder-cap-offset', 'features/bored-cap-offset', 'part/part-model']
     .map(name => 'packages/barocss-cad/src/' + name + '.ts'),

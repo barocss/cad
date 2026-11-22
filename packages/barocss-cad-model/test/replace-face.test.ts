@@ -6,7 +6,7 @@ import { runCheck } from '../src/chat/spec';
 import { dispatchTool, type ChatState } from '../src/chat/tools';
 import { directFaceDocumentProblem, emptyDoc, parentsOf, usesOf, withNode, type StudioDoc } from '../src/engine/doc';
 import { evaluatePart, partBreps } from '../src/engine/evaluate';
-import { isExactThickenCapEdit } from '../src/engine/exactThickenCapEdit';
+import { isExactThickenEdit } from '../src/engine/exactThickenEdit';
 import { partSnapshot } from '../src/engine/part';
 import { readStudioDoc } from '../src/engine/migrate';
 import { revisionOf } from '../src/util/revision';
@@ -155,13 +155,13 @@ test('Replace face links an inclined exact plane to the original semicylinder up
   const current = partSnapshot(moved), prior = partSnapshot(result);
   const oldEdit = prior.document.features.find(feature => feature.id === node.id);
   assert.ok(oldEdit?.kind === 'replace-face');
-  assert.equal(isExactThickenCapEdit(moved, current, 4, expected, names), true);
-  assert.equal(isExactThickenCapEdit(moved, current, 4, originalResult, names), false);
+  assert.equal(isExactThickenEdit(moved, current, 4, expected, names), true);
+  assert.equal(isExactThickenEdit(moved, current, 4, originalResult, names), false);
   const stalePlane = { ...current, document: { ...current.document,
     features: current.document.features.map(feature => feature.id === node.id ? oldEdit : feature) } };
-  assert.equal(isExactThickenCapEdit(moved, stalePlane, 4, expected, names), false);
+  assert.equal(isExactThickenEdit(moved, stalePlane, 4, expected, names), false);
   const noReference = { ...moved, nodes: moved.nodes.map((item, i) => i === 3 ? { ...item, suppressed: true as const } : item) };
-  assert.equal(isExactThickenCapEdit(noReference, current, 4, expected, names), false);
+  assert.equal(isExactThickenEdit(noReference, current, 4, expected, names), false);
 
   for (const unsupported of [await apply('n0.v-min'), await apply('n0.v-max', 'n2.side0')]) {
     assert.ok(unsupported.isError && !unsupported.changed);

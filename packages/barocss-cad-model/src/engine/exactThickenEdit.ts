@@ -1,12 +1,12 @@
 import { reevaluate, type Brep, type CadPartSnapshot, type Surface } from '@barocss/cad';
-import { offsetExactSemicylinderCapIfAdmitted, replaceExactSemicylinderCapIfAdmitted } from '@barocss/cad/internal/exact-cylinder-cap-offset';
+import { offsetExactSemicylinderCapIfAdmitted, offsetExactSemicylinderOuterWallIfAdmitted, replaceExactSemicylinderCapIfAdmitted } from '@barocss/cad/internal/exact-cylinder-cap-offset';
 import { canonical } from '../util/revision';
 import { exactSemicylinderCapSource, type StudioDoc } from './doc';
 import { featureId } from './ids';
 import { resolveOffsetPlaneDistance, resolveReplacementPlane } from './offsetPlane';
 
 /** Bind the two skin names to an exact replay in the current document's native snapshot. */
-export function isExactThickenCapEdit(doc: StudioDoc, snapshot: CadPartSnapshot, index: number, brep: Brep,
+export function isExactThickenEdit(doc: StudioDoc, snapshot: CadPartSnapshot, index: number, brep: Brep,
   names: readonly [string, string]): boolean {
   const { nodes } = doc, node = nodes[index];
   if ((node?.kind !== 'offset-face' && node?.kind !== 'replace-face') || node.suppressed || node.held !== undefined ||
@@ -15,8 +15,9 @@ export function isExactThickenCapEdit(doc: StudioDoc, snapshot: CadPartSnapshot,
   const { document } = snapshot, { features, parameters } = document;
   const parent = exactSemicylinderCapSource(nodes, node.parent.node, doc.parameters);
   const [face] = node.faces;
-  if (!parent?.faces.includes(face) ||
-      !names.includes(`${parent.id}.normal`) || !names.includes(`${parent.id}.reverse`)) return false;
+  if (!parent || !parent.skins.every(name => names.includes(name))) return false;
+  const radial = node.kind === 'offset-face' && node.target === undefined && parent.skins.includes(face);
+  if (!radial && !parent.faces.includes(face)) return false;
 
   const id = featureId(nodes, index), editIndex = features.findIndex(feature => feature.id === id);
   const edit = features[editIndex], parentIndex = features.findIndex(feature => feature.id === parent.id);
@@ -43,7 +44,8 @@ export function isExactThickenCapEdit(doc: StudioDoc, snapshot: CadPartSnapshot,
     } else if (node.kind === 'offset-face' && edit.kind === 'offset-face') {
       const distance = node.target ? resolveOffsetPlaneDistance(doc, node.target, node, prefix, build) : node.distance;
       if (distance !== edit.distance) return false;
-      expected = offsetExactSemicylinderCapIfAdmitted(original.brep, face, source, edit.distance);
+      const offset = radial ? offsetExactSemicylinderOuterWallIfAdmitted : offsetExactSemicylinderCapIfAdmitted;
+      expected = offset(original.brep, face, source, edit.distance);
     }
     return expected !== undefined && canonical(expected) === canonical(brep);
   } catch {

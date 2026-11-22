@@ -374,15 +374,20 @@ export const offsetFaceCommand: Command = {
     const picked = selection.faces[0], body = ctx.bodies[picked.body], face = body?.mesh.faces[picked.face];
     if (!Number.isInteger(picked.body) || !Number.isInteger(picked.face) || !body || !face || face.facet || !face.name) return no(unsupportedFace);
     const ref = body.ref, source = ref && ctx.doc.nodes[ref.node];
+    let exactOuter = false;
     if (source?.kind === 'thicken' && source.mode === 'exact-cylinder') {
       const caps = ref?.side === 'solid' && exactSemicylinderCapSource(ctx.doc.nodes, ref.node, ctx.doc.parameters);
-      if (!caps || face.exact?.kind !== 'plane' || !caps.faces.includes(face.name))
-        return no('Pick an original axial cap of an Exact semicylinder.');
+      const exact = face.exact;
+      exactOuter = !!caps && exact?.kind === 'cylinder' && caps.skins.includes(face.name) &&
+        body.mesh.faces.some(other => other.name !== face.name && caps.skins.includes(other.name) &&
+          other.exact?.kind === 'cylinder' && other.exact.r < exact.r);
+      const axial = caps && exact?.kind === 'plane' && caps.faces.includes(face.name);
+      if (!exactOuter && !axial) return no('Pick an original axial cap or the outer wall of an Exact semicylinder.');
     }
     if (ref && isExactCylinderOffsetChain(ctx.doc.nodes, ref.node))
-      return no('Edit the existing Offset face in History. Chained cap offsets are unsupported.');
+      return no('Edit the existing Offset face in History. Chained offsets are unsupported.');
     const cylinder = face.exact?.kind === 'cylinder' && body.ref?.side === 'solid'
-      && (isCylinderReplacementSource(ctx.doc.nodes, body.ref.node) || isBoredPlateHole(ctx.doc.nodes, body.ref.node)
+      && (exactOuter || isCylinderReplacementSource(ctx.doc.nodes, body.ref.node) || isBoredPlateHole(ctx.doc.nodes, body.ref.node)
         || isAnnularReplacementSource(ctx.doc.nodes, body.ref.node));
     if (!cylinder && face.kind !== 'plane' && face.exact?.kind !== 'plane') return no(unsupportedFace);
     let matches = 0;

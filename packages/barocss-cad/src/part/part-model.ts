@@ -67,7 +67,7 @@ import type { EndpointBead } from './part-frame.js';
 import { checkExpected, expectOf } from './part-expect.js';
 import { KernelError } from '../core/barocss-error.js';
 import { offsetBoxCapIfAdmitted, offsetDraftedFace, replaceRectangularSolidFace } from '../features/drafted-cap-offset.js';
-import { offsetExactSemicylinderCapIfAdmitted, replaceExactSemicylinderCapIfAdmitted } from '../features/exact-cylinder-cap-offset.js';
+import { offsetExactSemicylinderCapIfAdmitted, offsetExactSemicylinderOuterWallIfAdmitted, replaceExactSemicylinderCapIfAdmitted } from '../features/exact-cylinder-cap-offset.js';
 import { offsetPrismWallIfAdmitted, replacePrismCapIfAdmitted, replacePrismWallIfAdmitted } from '../features/prism-wall-offset.js';
 import { annularCapReplacementFrame, offsetBoredCapIfAdmitted, offsetBoredPlateWallIfAdmitted, offsetBoreWallIfAdmitted, offsetCircularWallIfAdmitted,
   replaceAnnularCapIfAdmitted, replaceBoredCapIfAdmitted, replaceCircularCapIfAdmitted } from '../features/bored-cap-offset.js';
@@ -652,8 +652,9 @@ function operation(f: CadPartFeature & Record<string, unknown>, t: Tools): () =>
       return () => {
         const brep = namedFaceTargetBrep(t, f.target, target[0]);
         if (exactCylinder) {
-          const offset = offsetExactSemicylinderCapIfAdmitted(brep, face, exactCylinder, distance);
-          if (!offset) return fail('CAPABILITY', 'Offset face needs an original axial cap of one clean two-quarter Exact cylinder Thicken.');
+          const offset = offsetExactSemicylinderCapIfAdmitted(brep, face, exactCylinder, distance)
+            ?? offsetExactSemicylinderOuterWallIfAdmitted(brep, face, exactCylinder, distance);
+          if (!offset) return fail('CAPABILITY', 'Offset face needs an original axial cap or physical outer wall of one clean two-quarter Exact cylinder Thicken.');
           return one({ kind: 'brep', brep: offset });
         }
         if (annularCapReplacementFrame(brep, face)) {

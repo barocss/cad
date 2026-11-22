@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { brepMassProperties, checkBrep, evaluateCadPart, evaluateCurve, faceGeometry } from '../dist/index.js';
 import { exactSemicylinderCapOffsetFrame, exactSemicylinderCapReplacementFrame, offsetExactSemicylinderCapIfAdmitted,
+  exactSemicylinderOuterWallOffsetFrame, offsetExactSemicylinderOuterWallIfAdmitted,
   replaceExactSemicylinderCapIfAdmitted } from '../dist/features/exact-cylinder-cap-offset.js';
 
 const raw = () => ({
@@ -92,7 +93,7 @@ for (const sign of [1, -1]) for (const distance of [2, -3]) test(`original Exact
 
 test('axial-cap admission rejects side faces, a stale source, changed geometry and a quarter source', () => {
   const base = doc(), source = body(base), input = sourceOf(base);
-  for (const face of ['h.normal', 'h.reverse', 'h.u-min', 'h.u-max', 'h.v-max#1', 'h.v-min#1', 'missing']) {
+  for (const face of ['h.reverse', 'h.u-min', 'h.u-max', 'h.v-max#1', 'h.v-min#1', 'missing']) {
     assert.equal(exactSemicylinderCapOffsetFrame(source, face, input), undefined);
     assert.throws(() => body(withOffset(base, 2, face)));
   }
@@ -106,6 +107,73 @@ test('axial-cap admission rejects side faces, a stale source, changed geometry a
   const quarterDoc = doc(quarter), quarterBody = body(quarterDoc);
   assert.equal(exactSemicylinderCapOffsetFrame(quarterBody, 'h.v-max', sourceOf(quarterDoc)), undefined);
   assert.throws(() => body(withOffset(quarterDoc, 2)), /original axial cap/);
+});
+
+for (const reverseV of [false, true]) for (const distance of [1.25, -.75, .3]) test(`original physical outer wall Offset ${distance}, reverse V ${reverseV}, preserves inner support and native identity`, () => {
+  const surface = raw(); if (reverseV) surface.controlPoints.forEach(row => row.reverse());
+  const base = doc(surface), source = freeze(body(base)), input = sourceOf(base), saved = structuredClone(source);
+  const outerName = reverseV ? 'h.reverse' : 'h.normal', innerName = reverseV ? 'h.normal' : 'h.reverse';
+  const oldRadius = reverseV ? 12 : 10, innerRadius = reverseV ? 10 : 8, radius = oldRadius + distance;
+  assert.deepEqual(exactSemicylinderOuterWallOffsetFrame(source, outerName, input), {
+    anchor: [20, 20 + oldRadius, 6], normal: [0, 1, 0],
+  });
+  const result = body(withOffset(base, distance, outerName), 'move'), report = checkBrep(result, { strict: true });
+  assert.ok(report.valid, report.issues.join('\n'));
+  assert.deepEqual(report.counts, { bodies: 1, shells: 1, faces: 6, loops: 6, coedges: 24, edges: 12, vertices: 8 });
+  assert.equal(report.topology[0].genus, 0);
+  assert.ok(report.maximumPcurveGap < 1e-8 && report.maximumEdgeSurfaceGap < 1e-8);
+  const identity = brep => ({ ...incidence(brep), coedges: brep.coedges.map(({ pcurve, ...use }) => [use, pcurve?.id]) });
+  assert.deepEqual(identity(result), identity(source));
+  const inner = source.faces.find(face => face.name === innerName);
+  assert.deepEqual(result.faces.find(face => face.id === inner.id), inner);
+  const innerUses = source.coedges.filter(use => inner.loops.includes(use.loop));
+  const innerEdgeIds = new Set(innerUses.map(use => use.edge));
+  const innerVertexIds = new Set(source.edges.filter(edge => innerEdgeIds.has(edge.id)).flatMap(edge => edge.vertices));
+  for (const edge of source.edges.filter(edge => innerEdgeIds.has(edge.id))) assert.deepEqual(result.edges.find(value => value.id === edge.id), edge);
+  for (const vertex of source.vertices.filter(vertex => innerVertexIds.has(vertex.id))) assert.deepEqual(result.vertices.find(value => value.id === vertex.id), vertex);
+  for (const face of result.faces) {
+    const geometry = faceGeometry(face), before = faceGeometry(source.faces.find(value => value.id === face.id));
+    assert.equal(geometry.kind, before.kind);
+    if (geometry.kind === 'cylinder') {
+      near(geometry.r, face.name === outerName ? radius : innerRadius);
+      assert.deepEqual(geometry.a, before.a); assert.equal(geometry.out, before.out);
+      geometry.c.forEach((value, axis) => near(value, before.c[axis]));
+    } else {
+      geometry.n.forEach((value, axis) => near(value, before.n[axis]));
+      near(geometry.o.reduce((sum, value, axis) => sum + (value - before.o[axis]) * before.n[axis], 0), 0);
+    }
+  }
+  assert.deepEqual([...new Set(result.vertices.map(vertex => vertex.point[2]))].sort((a, b) => a - b), [0, 12]);
+  const outer = result.faces.find(face => face.name === outerName), outerLoops = new Set(outer.loops);
+  const outerEdges = new Set(result.coedges.filter(use => outerLoops.has(use.loop)).map(use => use.edge));
+  for (const edge of result.edges.filter(edge => outerEdges.has(edge.id))) for (const t of [0, .17, .5, .83, 1]) {
+    const [x, y] = evaluateCurve(edge.curve, t);
+    near(Math.hypot(x - 20, y - 20), radius);
+  }
+  // Independent half-annulus volume and first moments; no production frame supplies the oracle.
+  const area = Math.PI * (radius ** 2 - innerRadius ** 2) / 2, mass = brepMassProperties(result, 1);
+  const meanY = 4 * (radius ** 3 - innerRadius ** 3) / (3 * Math.PI * (radius ** 2 - innerRadius ** 2));
+  near(mass.volume, 12 * area, 1e-7);
+  mass.centroid.forEach((value, axis) => near(value, [20, 20 + meanY, 6][axis]));
+  assert.deepEqual(source, saved);
+});
+
+test('outer wall Offset rejects retained inner skin, stale ownership, contact, range and chained operations', () => {
+  const base = doc(), source = body(base), input = sourceOf(base);
+  for (const face of ['h.reverse', 'h.u-min', 'h.u-max', 'h.v-min', 'h.v-max', 'h.normal#1', 'missing']) {
+    assert.equal(exactSemicylinderOuterWallOffsetFrame(source, face, input), undefined);
+    assert.equal(offsetExactSemicylinderOuterWallIfAdmitted(source, face, input, 1), undefined);
+  }
+  assert.equal(exactSemicylinderOuterWallOffsetFrame(source, 'h.normal', { ...input, thickness: 3 }), undefined);
+  for (const distance of [-2, -3, -2 + 1e-8]) assert.throws(() => body(withOffset(base, distance, 'h.normal')), /retained inner wall/);
+  assert.throws(() => body(withOffset(base, Number.MIN_VALUE, 'h.normal')), /too small to move/);
+  assert.throws(() => body(withOffset(base, 10000, 'h.normal')), /modeling range/);
+  const chain = withOffset(base, 1, 'h.normal');
+  chain.features.push({ id: 'again', kind: 'offset-face', target: 'move', face: 'h.normal', distance: 1 });
+  assert.throws(() => body(chain));
+  const axial = withOffset(base, 2);
+  axial.features.push({ id: 'radial', kind: 'offset-face', target: 'move', face: 'h.normal', distance: 1 });
+  assert.throws(() => body(axial));
 });
 
 test('signed axial Offset refuses collapse, an unchanged station, range overflow, transforms and chains', () => {
