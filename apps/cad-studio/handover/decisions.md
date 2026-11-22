@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D1712: [Extract viewport Hole regions from Studio App](notes/studio-viewport-hole-regions-2026-11-23/README.md), #44. Match 18 desktop states across placement, refusal recovery and saved Hole edits.
+
 - D1711: [Propose a saved sketch Fillet radius edit by side ID](notes/agent-saved-sketch-fillet-edit-2026-11-23/README.md), #21. Discover the current radius, enforce revision and explicit approval, and match the direct Studio edit.
 
 - D1710: [Edit a saved sketch Fillet without moving its carriers](notes/edit-saved-sketch-fillet-2026-11-23/README.md), #21. Verify local R6 to R8 preview, straight carrier and ID retention, refusal, Undo, Redo and fresh Open.

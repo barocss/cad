@@ -45,6 +45,7 @@ import { bodyTopologyCounts } from './ui/bodyTopologyLabel';
 import { viewportRecoveryToast } from './viewport/viewportRecovery';
 import { useSpecificationActions } from './state/useSpecificationActions';
 import { useViewportPicking, type ViewportMenu } from './viewport/useViewportPicking';
+import { useViewportHoleRegions } from './viewport/useViewportHoleRegions';
 import { isOutlinePickIssue, ownsPanelDrivingLength, studioSketchViewportActions } from './viewport/studioSketchViewportActions';
 import { sewPreviewDirect } from './viewport/sewPreviewDirect';
 import { useSectionState } from './viewport/useSectionState';
@@ -250,7 +251,6 @@ import { sweepTimed } from '@barocss/cad-model/robot/ccd';
 import { Lanes } from './engine/lanes';
 import { useAssembly } from './assembly/useAssembly';
 import { pickedSketches, planeOf, unusedSketches } from '@barocss/cad-model/app/profiles';
-import { addedHoles, holeGroup, holeRegions, type ToolRegion } from '@barocss/cad-model/app/holeRegion';
 import type { Analysis } from './viewport/analysis';
 import { asSection, type AxisSection, type Section } from './viewport/sectionView';
 import { type MapKind } from './viewport/scalarMaps';
@@ -2699,21 +2699,9 @@ export function App() {
     bandRailsAvailable: !section && !measure && !assembly.draft, meshBoxCrossing,
   });
 
-  // A hole's whole region, see-through, while it is placed or edited: where it runs off the part's edge
-  // only a notch shows of it otherwise.
-  const regions = useMemo((): ToolRegion[] => {
-    if (rendering || drawing || sketch) return [];
-    if (active?.cmd.id === 'hole' && active.cmd.build && active.ctx.selection.faces[0]) {
-      try {
-        const next = active.cmd.build(active.ctx, active.values), b = active.ctx.bodies[active.ctx.selection.faces[0].body];
-        return b ? holeRegions(next.nodes, addedHoles(next.nodes, active.ctx.doc.nodes.length), b.mesh.bounds) : [];
-      } catch { return []; }
-    }
-    if (active || editNode === null || doc.nodes[editNode]?.kind !== 'hole') return [];
-    const group = holeGroup(doc.nodes, editNode), cut = new RegExp(`\\bn(${group.join('|')})\\.side`);
-    const b = bodies.find(x => x.mesh.faces.some(f => cut.test(f.name))) ?? bodies[selection.bodies[0] ?? -1];
-    return b ? holeRegions(doc.nodes, group, b.mesh.bounds) : [];
-  }, [active, editNode, doc.nodes, bodies, selection.bodies, rendering, drawing, sketch]);
+  const regions = useViewportHoleRegions({
+    active, editNode, nodes: doc.nodes, bodies, selectedBodies: selection.bodies, rendering, drawing, sketch,
+  });
 
   const routeGizmo = routeEditor.makeGizmo();
   const routeGuideUnderlays = useMemo(() => routeEditor.makeGuides(D, underlaysShown), [routePanelOpen, routeVisualDoc, routeViewDoc, routePhase, routeMove, doc, D, underlaysShown, busy, fresh, marker, active, sketch, rendering, drawing, measure, assembly.draft, cageEd.session, skel.session, ghost]);
