@@ -7,7 +7,7 @@ import type { BodyResult, VolumeEvaluation } from '../engine/evaluate';
 // (a picked profile pulled along its normal), Revolve (turned about a sketch axis), Pipe (carried along
 // runs and bends) and Loft (through two or more picked sections). A profile drawn on a body's face joins
 // that body by default; Operation can make a new body or cut it instead.
-import { exactSemicylinderCapSource, exactSemicylinderSecondOffset, featureLabel, isExactCylinderOffsetChain, offsetFaceEndLabel, isAnnularReplacementSource, isBoredPlateHole, isBoredPlateOffsetSource, isBoxCapOffsetSource, isCylinderReplacementSource, isStraightHexagonalExtrusion, prefixDoc, withNode, type BodyRef, type ModelNode, type SketchNode, type StudioDoc } from '../engine/doc';
+import { exactSemicylinderCapSource, exactSemicylinderSecondOffset, exactSemicylinderWallAfterReplacement, featureLabel, isExactCylinderFaceEditChain, offsetFaceEndLabel, isAnnularReplacementSource, isBoredPlateHole, isBoredPlateOffsetSource, isBoxCapOffsetSource, isCylinderReplacementSource, isStraightHexagonalExtrusion, prefixDoc, withNode, type BodyRef, type ModelNode, type SketchNode, type StudioDoc } from '../engine/doc';
 import type { Vec3 } from '../engine/mesh';
 import { toLocal, toWorld } from '../sketch/plane';
 import { boundParameters, framedLoftSections, loftSections, pickedSketches, planeOf, profileMiddle, twoGuideLoftSections } from './profiles';
@@ -343,7 +343,7 @@ export function checkDirectOffsetDistance(distance: number): void {
 function offsetPlaneAvailable(ctx: Ctx): boolean {
   const pick = ctx.selection.faces[0], body = pick && ctx.bodies[pick.body], ref = body?.ref;
   const node = ref && ctx.doc.nodes[ref.node], face = body?.mesh.faces[pick.face];
-  if (!node || !face?.exact || ref.side !== 'solid' || isExactCylinderOffsetChain(ctx.doc.nodes, ref.node)) return false;
+  if (!node || !face?.exact || ref.side !== 'solid' || isExactCylinderFaceEditChain(ctx.doc.nodes, ref.node)) return false;
   if (node.kind === 'thicken' && node.mode === 'exact-cylinder')
     return face.exact.kind === 'plane' && !!exactSemicylinderCapSource(ctx.doc.nodes, ref.node, ctx.doc.parameters)?.faces.includes(face.name);
   return node.kind === 'draft' || (node.kind === 'offset-face' && !isBoredPlateOffsetSource(ctx.doc.nodes, ref.node) &&
@@ -382,11 +382,13 @@ export const offsetFaceCommand: Command = {
       const axial = caps && exact?.kind === 'plane' && caps.faces.includes(face.name);
       if (!exactWall && !axial) return no('Pick an original axial cap or cylindrical wall of an Exact semicylinder.');
     }
-    if (ref && isExactCylinderOffsetChain(ctx.doc.nodes, ref.node)) {
+    if (ref && isExactCylinderFaceEditChain(ctx.doc.nodes, ref.node)) {
       const second = exactSemicylinderSecondOffset(ctx.doc.nodes, ref.node, ctx.doc.parameters, face.name);
-      if (ref.side !== 'solid' || !second || face.exact?.kind !== second.nextKind)
+      const replaced = exactSemicylinderWallAfterReplacement(ctx.doc.nodes, ref.node, ctx.doc.parameters, face.name);
+      const expected = replaced ? 'cylinder' : second?.nextKind;
+      if (ref.side !== 'solid' || !expected || face.exact?.kind !== expected)
         return no('Pick the other original wall, or pair an original wall with the upper cap.');
-      exactWall = second.nextKind === 'cylinder';
+      exactWall = expected === 'cylinder';
     }
     const cylinder = face.exact?.kind === 'cylinder' && body.ref?.side === 'solid'
       && (exactWall || isCylinderReplacementSource(ctx.doc.nodes, body.ref.node) || isBoredPlateHole(ctx.doc.nodes, body.ref.node)

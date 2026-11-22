@@ -67,7 +67,7 @@ import type { EndpointBead } from './part-frame.js';
 import { checkExpected, expectOf } from './part-expect.js';
 import { KernelError } from '../core/barocss-error.js';
 import { offsetBoxCapIfAdmitted, offsetDraftedFace, replaceRectangularSolidFace } from '../features/drafted-cap-offset.js';
-import { offsetExactSemicylinderCapIfAdmitted, offsetExactSemicylinderWallIfAdmitted, offsetExactSemicylinderSecondWallIfAdmitted, offsetExactSemicylinderMixedOffsetIfAdmitted, replaceExactSemicylinderCapIfAdmitted } from '../features/exact-cylinder-cap-offset.js';
+import { offsetExactSemicylinderCapIfAdmitted, offsetExactSemicylinderWallIfAdmitted, offsetExactSemicylinderSecondWallIfAdmitted, offsetExactSemicylinderMixedOffsetIfAdmitted, offsetExactSemicylinderWallAfterReplacementIfAdmitted, replaceExactSemicylinderCapIfAdmitted, replaceExactSemicylinderCapAfterWallIfAdmitted } from '../features/exact-cylinder-cap-offset.js';
 import { offsetPrismWallIfAdmitted, replacePrismCapIfAdmitted, replacePrismWallIfAdmitted } from '../features/prism-wall-offset.js';
 import { annularCapReplacementFrame, offsetBoredCapIfAdmitted, offsetBoredPlateWallIfAdmitted, offsetBoreWallIfAdmitted, offsetCircularWallIfAdmitted,
   replaceAnnularCapIfAdmitted, replaceBoredCapIfAdmitted, replaceCircularCapIfAdmitted } from '../features/bored-cap-offset.js';
@@ -655,6 +655,12 @@ function operation(f: CadPartFeature & Record<string, unknown>, t: Tools): () =>
         id: original.id, surface: { ...structuredClone(original.surface), kind: 'surface', id: 'surface' } as Surface,
         thickness: dim(original.thickness, 'Thicken thickness', true), side: original.side,
       } : undefined;
+      const firstReplacement = hole?.kind === 'replace-face' ? hole : undefined;
+      const replacementSource = firstReplacement ? ref(firstReplacement.target, 'original replacement source').author : undefined;
+      const replacementCylinder = replacementSource?.kind === 'thicken' && replacementSource.mode === 'exact-cylinder' ? {
+        id: replacementSource.id, surface: { ...structuredClone(replacementSource.surface), kind: 'surface', id: 'surface' } as Surface,
+        thickness: dim(replacementSource.thickness, 'Thicken thickness', true), side: replacementSource.side,
+      } : undefined;
       return () => {
         const brep = namedFaceTargetBrep(t, f.target, target[0]);
         if (exactCylinder) {
@@ -669,6 +675,12 @@ function operation(f: CadPartFeature & Record<string, unknown>, t: Tools): () =>
             ?? offsetExactSemicylinderMixedOffsetIfAdmitted(brep, face, secondCylinder,
               { face: firstOffset.face, distance: firstOffset.distance }, distance);
           if (!offset) return fail('CAPABILITY', 'Second Offset needs the other original physical wall or one radial wall with the original upper cap of an Exact semicylinder.');
+          return one({ kind: 'brep', brep: offset });
+        }
+        if (replacementCylinder && firstReplacement) {
+          const offset = offsetExactSemicylinderWallAfterReplacementIfAdmitted(brep, face, replacementCylinder,
+            { face: firstReplacement.face, plane: firstReplacement.plane }, distance);
+          if (!offset) return fail('CAPABILITY', 'Offset needs an original radial wall after exactly one original upper-cap replacement of an Exact semicylinder.');
           return one({ kind: 'brep', brep: offset });
         }
         if (annularCapReplacementFrame(brep, face)) {
@@ -699,6 +711,12 @@ function operation(f: CadPartFeature & Record<string, unknown>, t: Tools): () =>
         id: author.id, surface: { ...structuredClone(author.surface), kind: 'surface', id: 'surface' } as Surface,
         thickness: dim(author.thickness, 'Thicken thickness', true), side: author.side,
       } : undefined;
+      const firstOffset = author?.kind === 'offset-face' ? author : undefined;
+      const original = firstOffset ? ref(firstOffset.target, 'original radial source').author : undefined;
+      const radialCylinder = original?.kind === 'thicken' && original.mode === 'exact-cylinder' ? {
+        id: original.id, surface: { ...structuredClone(original.surface), kind: 'surface', id: 'surface' } as Surface,
+        thickness: dim(original.thickness, 'Thicken thickness', true), side: original.side,
+      } : undefined;
       return () => {
         const brep = namedFaceTargetBrep(t, f.target, target[0]);
         if (brep.faces.filter(candidate => candidate.name === face).length !== 1)
@@ -707,6 +725,12 @@ function operation(f: CadPartFeature & Record<string, unknown>, t: Tools): () =>
           if (exactCylinder) {
             const replaced = replaceExactSemicylinderCapIfAdmitted(brep, face, exactCylinder, plane);
             if (!replaced) return fail('CAPABILITY', 'Replace face needs the original upper cap of one clean two-quarter Exact cylinder Thicken.');
+            return one({ kind: 'brep', brep: replaced });
+          }
+          if (radialCylinder && firstOffset) {
+            const replaced = replaceExactSemicylinderCapAfterWallIfAdmitted(brep, face, radialCylinder,
+              { face: firstOffset.face, distance: firstOffset.distance }, plane);
+            if (!replaced) return fail('CAPABILITY', 'Replace face needs the original upper cap after exactly one signed radial Offset of an Exact semicylinder.');
             return one({ kind: 'brep', brep: replaced });
           }
           const replaced = replaceBoredCapIfAdmitted(brep, face, plane) ?? replaceCircularCapIfAdmitted(brep, face, plane)

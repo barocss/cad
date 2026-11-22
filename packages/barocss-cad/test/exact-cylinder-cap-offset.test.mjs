@@ -6,6 +6,8 @@ import { exactSemicylinderCapOffsetFrame, exactSemicylinderCapReplacementFrame, 
   exactSemicylinderWallOffsetFrame, offsetExactSemicylinderWallIfAdmitted,
   exactSemicylinderSecondWallOffsetFrame, offsetExactSemicylinderSecondWallIfAdmitted,
   exactSemicylinderMixedOffsetFrame, offsetExactSemicylinderMixedOffsetIfAdmitted,
+  exactSemicylinderCapReplacementAfterWallFrame, replaceExactSemicylinderCapAfterWallIfAdmitted,
+  exactSemicylinderWallOffsetAfterReplacementFrame, offsetExactSemicylinderWallAfterReplacementIfAdmitted,
   replaceExactSemicylinderCapIfAdmitted } from '../dist/features/exact-cylinder-cap-offset.js';
 
 const raw = () => ({
@@ -13,6 +15,7 @@ const raw = () => ({
   controlPoints: [[30, 20], [30, 30], [20, 30], [10, 30], [10, 20]].map(([x, y]) => [[x, y, 0], [x, y, 12]]),
   weights: [1, Math.SQRT1_2, 1, Math.SQRT1_2, 1].map(weight => [weight, weight]),
 });
+
 const doc = surface => ({ format: 'barocss-cad-part', version: 1, units: 'mm', parameters: {}, features: [
   { id: 'h', kind: 'thicken', surface: surface ?? raw(), thickness: 2, side: 'reverse', mode: 'exact-cylinder' },
 ] });
@@ -523,4 +526,125 @@ test('upper Replace face refuses lower/side caps, stale sources, collapse, paral
   assert.throws(() => body(withReplacement(placed, plane, 'h.v-max', 'placed')));
   const afterOffset = withOffset(base, 2);
   assert.throws(() => body(withReplacement(afterOffset, plane, 'h.v-max', 'move')));
+});
+
+const radialReplacement = (base, wall, distance, cap, plane, radialFirst) => ({ ...base,
+  features: radialFirst
+    ? [...withOffset(base, distance, wall).features, { id: 'paired', kind: 'replace-face', target: 'move', face: cap, plane }]
+    : [...withReplacement(base, plane, cap).features, { id: 'paired', kind: 'offset-face', target: 'replace', face: wall, distance }],
+});
+
+for (const skin of ['outer', 'inner']) for (const reverseV of [false, true]) for (const distance of [2, -.5, .3])
+  test(`${skin} radial ${distance} and inclined upper replacement have one native normal form, reverse V ${reverseV}`, () => {
+    const surface = raw(); if (reverseV) surface.controlPoints.forEach(row => row.reverse());
+    const base = doc(surface), input = sourceOf(base), original = freeze(body(base));
+    const upper = reverseV ? 'h.v-min' : 'h.v-max', lower = reverseV ? 'h.v-max' : 'h.v-min';
+    const outerName = reverseV ? 'h.reverse' : 'h.normal', innerName = reverseV ? 'h.normal' : 'h.reverse';
+    const wall = skin === 'outer' ? outerName : innerName, fixedName = skin === 'outer' ? innerName : outerName;
+    const oldOuter = reverseV ? 12 : 10, oldInner = reverseV ? 10 : 8;
+    const outerRadius = skin === 'outer' ? oldOuter + distance : oldOuter, innerRadius = skin === 'inner' ? oldInner - distance : oldInner;
+    const plane = { origin: [20, 20, 13], normal: [0, .5, 1] }, results = [];
+    const boundary = (brep, name, surface = true) => {
+      const face = brep.faces.find(face => face.name === name), { surface: support, ...identity } = face;
+      const edgeIds = new Set(brep.coedges.filter(use => face.loops.includes(use.loop)).map(use => use.edge));
+      const vertexIds = new Set(brep.edges.filter(edge => edgeIds.has(edge.id)).flatMap(edge => edge.vertices));
+      return { face: surface ? face : { ...identity, surface: support.id },
+        edges: brep.edges.filter(edge => edgeIds.has(edge.id)), vertices: brep.vertices.filter(vertex => vertexIds.has(vertex.id)) };
+    };
+    for (const radialFirst of [true, false]) {
+      const current = freeze(body(radialFirst ? withOffset(base, distance, wall) : withReplacement(base, plane, upper)));
+      const saved = structuredClone(current);
+      const prior = radialFirst ? { face: wall, distance } : { face: upper, plane };
+      const frame = radialFirst ? exactSemicylinderCapReplacementAfterWallFrame(current, upper, input, prior)
+        : exactSemicylinderWallOffsetAfterReplacementFrame(current, wall, input, prior);
+      assert.ok(frame);
+      if (radialFirst) frame.anchor.forEach((value, axis) => near(value, [20, 20 + (outerRadius + innerRadius) / 2, 12][axis]));
+      else {
+        const movingRadius = skin === 'outer' ? oldOuter : oldInner;
+        frame.anchor.forEach((value, axis) => near(value, [20, 20 + movingRadius, (13 - .5 * movingRadius) / 2][axis]));
+      }
+      assert.deepEqual(frame.normal, radialFirst ? [0, 0, 1] : [0, skin === 'outer' ? 1 : -1, 0]);
+      const result = body(radialReplacement(base, wall, distance, upper, plane, radialFirst), 'paired');
+      const replay = radialFirst ? replaceExactSemicylinderCapAfterWallIfAdmitted(current, upper, input, prior, plane)
+        : offsetExactSemicylinderWallAfterReplacementIfAdmitted(current, wall, input, prior, distance);
+      assert.deepEqual(replay, result);
+      const report = checkBrep(result, { strict: true });
+      assert.ok(report.valid, report.issues.join('\n'));
+      assert.deepEqual(report.counts, { bodies: 1, shells: 1, faces: 6, loops: 6, coedges: 24, edges: 12, vertices: 8 });
+      assert.equal(report.topology[0].genus, 0);
+      assert.ok(report.maximumPcurveGap < 1e-8 && report.maximumEdgeSurfaceGap < 1e-8);
+      const identity = brep => ({ ...incidence(brep), coedges: brep.coedges.map(({ pcurve, ...use }) => [use, pcurve?.id]) });
+      assert.deepEqual(identity(result), identity(original));
+      if (radialFirst) assert.deepEqual(boundary(result, lower), boundary(current, lower));
+      else assert.deepEqual(boundary(result, fixedName, false), boundary(current, fixedName, false));
+      for (const [name, radius, out] of [[outerName, outerRadius, 1], [innerName, innerRadius, -1]]) {
+        const support = faceGeometry(result.faces.find(face => face.name === name));
+        assert.equal(support.kind, 'cylinder'); near(support.r, radius); assert.equal(support.out, out);
+        assert.deepEqual(support.a, [0, 0, 1]); near(support.c[0], 20); near(support.c[1], 20);
+      }
+      for (const name of ['h.u-min', 'h.u-max']) {
+        const support = faceGeometry(result.faces.find(face => face.name === name));
+        assert.equal(support.kind, 'plane'); near(support.o[1], 20);
+      }
+      const cap = result.faces.find(face => face.name === upper), capGeometry = faceGeometry(cap);
+      assert.equal(capGeometry.kind, 'plane');
+      capGeometry.n.forEach((value, axis) => near(value, plane.normal[axis] / Math.hypot(...plane.normal)));
+      const loop = result.loops.find(loop => loop.id === cap.loops[0]), heights = [];
+      for (const id of loop.coedges) {
+        const use = result.coedges.find(use => use.id === id), edge = result.edges.find(edge => edge.id === use.edge);
+        for (const t of [0, .17, .5, .83, 1]) {
+          const point = evaluateCurve(edge.curve, t); near(point[2], 13 - .5 * (point[1] - 20)); heights.push(point[2]);
+        }
+      }
+      near(Math.min(...heights), 13 - .5 * outerRadius); near(Math.max(...heights), 13);
+      // Independent half-annulus area and moments for h(y)=13-.5(y-20).
+      const area = Math.PI * (outerRadius ** 2 - innerRadius ** 2) / 2;
+      const firstY = 2 * (outerRadius ** 3 - innerRadius ** 3) / 3, secondY = Math.PI * (outerRadius ** 4 - innerRadius ** 4) / 8;
+      // Inclined rational trims use quadrature. Refining 8 to 16 segments reduces the
+      // reverse-V +0.3 centroid error from 1.48e-8 to 1.06e-9 mm; keep the 1e-8 oracle.
+      const volume = 13 * area - .5 * firstY, mass = brepMassProperties(result, 1, { quadratureSegments: 16 });
+      near(mass.volume, volume, 1e-7); near(mass.centroid[0], 20);
+      near(mass.centroid[1], 20 + (13 * firstY - .5 * secondY) / volume);
+      near(mass.centroid[2], (13 ** 2 * area - 13 * firstY + .25 * secondY) / (2 * volume));
+      if (skin === 'outer' && !reverseV && distance === 2) near(mass.volume, 1228.294846533359, 1e-7);
+      assert.deepEqual(current, saved); results.push(result);
+    }
+    assert.equal(JSON.stringify(results[0]), JSON.stringify(results[1]));
+  });
+
+test('radial growth refuses a tilted cap contact which neither original single edit caused', () => {
+  const base = doc(), input = sourceOf(base), upper = 'h.v-max', wall = 'h.normal', distance = 2;
+  for (const height of [6, 6 + 1e-8]) {
+    const plane = { origin: [20, 20, height], normal: [0, .5, 1] };
+    const radial = body(withOffset(base, distance, wall)), replacement = body(withReplacement(base, plane, upper));
+    assert.ok(checkBrep(radial, { strict: true }).valid); assert.ok(checkBrep(replacement, { strict: true }).valid);
+    const frame = exactSemicylinderWallOffsetAfterReplacementFrame(replacement, wall, input, { face: upper, plane });
+    assert.ok(frame); near(frame.anchor[2], (height - 5) / 2);
+    assert.ok(frame.anchor[2] > 0 && frame.anchor[2] < height - 5, 'handle is inside the local crown trim');
+    for (const radialFirst of [true, false]) assert.throws(() => body(radialReplacement(base, wall, distance, upper, plane, radialFirst)), /opposite cap/);
+  }
+});
+
+test('radial replacement adapters refuse stale replay, wrong faces, raw extra recipes and a third edit', () => {
+  const base = doc(), input = sourceOf(base), plane = { origin: [20, 20, 13], normal: [0, .5, 1] };
+  const radial = body(withOffset(base, 2, 'h.normal')), replaced = body(withReplacement(base, plane));
+  for (const prior of [{ face: 'h.normal', distance: 1 }, { face: 'h.v-max', distance: 2 }, { face: 'h.normal', distance: 2, target: {} }])
+    assert.equal(exactSemicylinderCapReplacementAfterWallFrame(radial, 'h.v-max', input, prior), undefined);
+  for (const prior of [{ face: 'h.v-min', plane }, { face: 'h.v-max', plane: { ...plane, origin: [20, 20, 14] } },
+    { face: 'h.v-max', plane, target: {} }])
+    assert.equal(exactSemicylinderWallOffsetAfterReplacementFrame(replaced, 'h.normal', input, prior), undefined);
+  assert.equal(exactSemicylinderCapReplacementAfterWallFrame(radial, 'h.v-min', input, { face: 'h.normal', distance: 2 }), undefined);
+  assert.equal(exactSemicylinderWallOffsetAfterReplacementFrame(replaced, 'h.u-min', input, { face: 'h.v-max', plane }), undefined);
+  for (const wrongSource of [{ ...input, thickness: 3 }, { ...input, id: 'other' }]) {
+    assert.equal(exactSemicylinderCapReplacementAfterWallFrame(radial, 'h.v-max', wrongSource, { face: 'h.normal', distance: 2 }), undefined);
+    assert.equal(exactSemicylinderWallOffsetAfterReplacementFrame(replaced, 'h.normal', wrongSource, { face: 'h.v-max', plane }), undefined);
+  }
+  const altered = structuredClone(replaced); altered.edges[0].curve.controlPoints[0][0] += .01;
+  assert.equal(exactSemicylinderWallOffsetAfterReplacementFrame(altered, 'h.normal', input, { face: 'h.v-max', plane }), undefined);
+  for (const radialFirst of [true, false]) {
+    const paired = radialReplacement(base, 'h.normal', 2, 'h.v-max', plane, radialFirst);
+    const thirdWall = { ...paired, features: [...paired.features, { id: 'third', kind: 'offset-face', target: 'paired', face: 'h.reverse', distance: 1 }] };
+    const thirdCap = { ...paired, features: [...paired.features, { id: 'third', kind: 'replace-face', target: 'paired', face: 'h.v-max', plane }] };
+    assert.throws(() => body(thirdWall)); assert.throws(() => body(thirdCap));
+  }
 });

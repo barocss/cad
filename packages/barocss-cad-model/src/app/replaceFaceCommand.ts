@@ -1,5 +1,5 @@
 import {
-  exactSemicylinderCapSource, isAnnularReplacementSource, isBoredPlateReplacementSource, isBoxReplacementSource, isCylinderReplacementSource, isDraftedFaceReplacementSource,
+  exactSemicylinderCapAfterWall, exactSemicylinderCapSource, isAnnularReplacementSource, isBoredPlateReplacementSource, isBoxReplacementSource, isCylinderReplacementSource, isDraftedFaceReplacementSource,
   isStraightPolygonReplacementSource, withNode, type StudioDoc,
 } from '../engine/doc';
 import { captureSignatures } from '../engine/references';
@@ -22,7 +22,8 @@ function pickedFace(ctx: Ctx) {
   const circularCap = face.nativeAxisPlane?.axis === 'z' &&
     (isBoredPlateReplacementSource(ctx.doc.nodes, parent.node) || isCylinderReplacementSource(ctx.doc.nodes, parent.node) ||
      isAnnularReplacementSource(ctx.doc.nodes, parent.node));
-  const semicylinderCap = exactSemicylinderCapSource(ctx.doc.nodes, parent.node, ctx.doc.parameters)?.upperFace === face.name;
+  const semicylinderCap = exactSemicylinderCapSource(ctx.doc.nodes, parent.node, ctx.doc.parameters)?.upperFace === face.name
+    || exactSemicylinderCapAfterWall(ctx.doc.nodes, parent.node, ctx.doc.parameters, face.name) !== undefined;
   if (!boxFace && !polygonFace && !circularCap && !semicylinderCap && !isDraftedFaceReplacementSource(ctx.doc.nodes, parent.node)) return;
   return { parent, face: face.name };
 }

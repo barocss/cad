@@ -172,3 +172,80 @@ test('Replace face links an inclined exact plane to the original semicylinder up
   assert.match(collapsed.error.detail, /opposite cap/i);
   assert.deepEqual(doc, before);
 });
+
+test('a signed radial Offset and a linked inclined upper cap compose in both History orders', async () => {
+  const cap = 'n0.v-max', wall = 'n0.normal', reference = 'n2.bottom', n = Math.sqrt(5);
+  const source = withNode(emptyDoc(), { kind: 'thicken', mode: 'exact-cylinder', name: 'Semicylinder', thickness: 2, side: 'reverse',
+    surface: {
+      degreeU: 2, degreeV: 1, knotsU: [0, 0, 0, 1, 1, 2, 2, 2], knotsV: [0, 0, 1, 1],
+      controlPoints: [[30, 20], [30, 30], [20, 30], [10, 30], [10, 20]].map(([x, y]) => [[x, y, 0], [x, y, 12]]),
+      weights: [1, Math.SQRT1_2, 1, Math.SQRT1_2, 1].map(weight => [weight, weight]),
+    } });
+  const sketch = withNode(source, { kind: 'sketch', profile: 'rectangle', min: [0, 0], max: [8, 8],
+    plane: { origin: [44, 20, 13], normal: [0, 1 / n, 2 / n], xAxis: [1, 0, 0] } });
+  const donor = withNode(sketch, { kind: 'extrude', sketch: 1, height: 3 });
+  const base = withNode(donor, { kind: 'translate', parent: { node: 2, side: 'solid' }, offset: [0, 0, 0] });
+  const offset = { action: 'command', command: 'offset-face', faces: [wall], values: { d: 2 } };
+  const replace = { action: 'command', command: 'replace-face', faces: [cap, reference] };
+  const apply = async (doc: StudioDoc, command: typeof offset | typeof replace) => {
+    const result = await dispatchTool(await stateOf(doc), 'features', { ...command, expectedRevision: revisionOf(doc) }, evaluate);
+    assert.ok(result.changed && !result.isError, result.content);
+    return result.state.doc;
+  };
+  const move = (doc: StudioDoc, z: number): StudioDoc => ({ ...doc, nodes: doc.nodes.map((node, index) =>
+    index === 3 && node.kind === 'translate' ? { ...node, offset: [0, 0, z] } : node) });
+  const acceptedBreps = [];
+  const names = [wall, 'n0.reverse'] as const;
+  for (const [first, second] of [[offset, replace], [replace, offset]]) {
+    const initial = await apply(base, first), accepted = await apply(initial, second);
+    assert.deepEqual(accepted.nodes.slice(0, 5), initial.nodes);
+    const binding = accepted.nodes.find(node => node.kind === 'replace-face');
+    assert.ok(binding?.kind === 'replace-face');
+    assert.deepEqual([binding.target.feature, binding.target.face], ['n3', reference]);
+    const pair = accepted.nodes[5];
+    assert.ok(pair.kind === 'replace-face' || pair.kind === 'offset-face');
+    assert.deepEqual(pair.parent, { node: 4, side: 'solid' });
+    const measure = (doc: StudioDoc, height: number) => {
+      const { brep } = partBreps(doc).find(item => item.key === 'b5')!;
+      const report = checkBrep(brep, { strict: true });
+      assert.ok(report.valid, report.issues.join('\n'));
+      assert.deepEqual(report.counts, { bodies: 1, shells: 1, faces: 6, loops: 6, coedges: 24, edges: 12, vertices: 8 });
+      const top = faceGeometry(brep.faces.find(face => face.name === cap)!);
+      assert.ok(top.kind === 'plane');
+      near(top.n[1] / top.n[2], .5);
+      near(top.o[2] + .5 * (top.o[1] - 20), height);
+      near(brepMassProperties(brep, 1).volume, 40 * Math.PI * height - (12 ** 3 - 8 ** 3) / 3);
+      return brep;
+    };
+    const before = measure(accepted, 13);
+    acceptedBreps.push(before);
+    const moved = move(accepted, -2), current = measure(moved, 11);
+    assert.deepEqual(moved.nodes.slice(4), accepted.nodes.slice(4));
+    const opened = await readStudioFile(encodeStudioFile(moved));
+    assert.ok('doc' in opened);
+    assert.deepEqual(opened.doc, moved);
+    assert.deepEqual(measure(opened.doc, 11), current);
+    const snapshot = partSnapshot(moved);
+    assert.equal(isExactThickenEdit(moved, snapshot, 5, current, names), true);
+    assert.equal(isExactThickenEdit(moved, snapshot, 5, before, names), false);
+    const proof = await runCheck(moved, (await stateOf(moved)).bodies, evaluate, {
+      query: { fn: 'radial_wall', a: names[0], b: names[1] }, op: '==', value: 4, tol: 0.01, unit: 'mm',
+    });
+    assert.equal(proof.status, 'pass');
+    near(typeof proof.measured === 'number' ? proof.measured : undefined, 4);
+    const collapsed = await evaluate(move(accepted, -7));
+    assert.ok(!collapsed.ok);
+    assert.match(collapsed.error.detail, /opposite cap/i);
+    const third = await dispatchTool(await stateOf(accepted), 'features', {
+      action: 'command', command: 'offset-face', faces: [names[1]], values: { d: 1 },
+    }, evaluate);
+    assert.ok(third.isError && !third.changed);
+    assert.equal(third.state.doc, accepted);
+  }
+  assert.deepEqual(acceptedBreps[0], acceptedBreps[1]);
+  const tiltBeforeRadial = await apply(move(base, -7), replace);
+  assert.ok((await evaluate(tiltBeforeRadial)).ok);
+  const expanded = await dispatchTool(await stateOf(tiltBeforeRadial), 'features', offset, evaluate);
+  assert.ok(expanded.isError && !expanded.changed);
+  assert.match(expanded.content, /opposite cap/i);
+});

@@ -2,13 +2,13 @@
 import { CadNumericPolicy, CadPartLimits, brepFromPrismatic, checkBrep, prismaticFromProfile, prismaticMassProperties, transformBrep, type Brep, type BrepFace, type Curve, type Surface } from '@barocss/cad';
 import { boxCapOffsetFrame, draftedFaceOffsetFrame } from '@barocss/cad/internal/drafted-cap-offset';
 import { annularCapReplacementFrame, boredCapOffsetFrame, boredPlateWallOffsetFrame, boreWallOffsetFrame, circularWallOffsetFrame } from '@barocss/cad/internal/bored-cap-offset';
-import { exactSemicylinderCapOffsetFrame, exactSemicylinderMixedOffsetFrame, exactSemicylinderSecondWallOffsetFrame, exactSemicylinderWallOffsetFrame } from '@barocss/cad/internal/exact-cylinder-cap-offset';
+import { exactSemicylinderCapOffsetFrame, exactSemicylinderMixedOffsetFrame, exactSemicylinderSecondWallOffsetFrame, exactSemicylinderWallOffsetAfterReplacementFrame, exactSemicylinderWallOffsetFrame } from '@barocss/cad/internal/exact-cylinder-cap-offset';
 import { prismWallOffsetFrame } from '@barocss/cad/internal/prism-wall-offset';
 import { fillFeaturePatternSpec } from '@barocss/cad/api';
 import { finiteBinary64Integer } from '../engine/binary64';
-import { exactSemicylinderCapSource, exactSemicylinderSecondOffset, isExactCylinderOffsetChain, isAnnularCapOffsetSource, isAnnularReplacementSource, isBoredPlateHole, isBoredPlateOffsetSource, isBoxCapOffsetSource, isCylinderReplacementSource, isStraightHexagonalExtrusion, leafBodies, type SketchNode, type StudioDoc } from '../engine/doc';
-import { evaluateDoc, massOfRef, partBreps, type BodyResult } from '../engine/evaluate';
-import { bodyKeyFor, withIds } from '../engine/ids';
+import { exactSemicylinderCapSource, exactSemicylinderSecondOffset, exactSemicylinderWallAfterReplacement, isExactCylinderFaceEditChain, isAnnularCapOffsetSource, isAnnularReplacementSource, isBoredPlateHole, isBoredPlateOffsetSource, isBoxCapOffsetSource, isCylinderReplacementSource, isStraightHexagonalExtrusion, leafBodies, type SketchNode, type StudioDoc } from '../engine/doc';
+import { evaluateDoc, massOfRef, partBreps, snapshotOf, type BodyResult } from '../engine/evaluate';
+import { bodyKeyFor, featureId, withIds } from '../engine/ids';
 import { refusal } from '../engine/refusal';
 import { toSig, type Sig } from '../engine/references';
 import { signaturesOf } from '../engine/rematch';
@@ -360,13 +360,15 @@ export function resolveDirectOffsetFace(ctx: Ctx): {
   const { body, display, ref } = offsetPick(ctx, true);
   if (ref.side !== 'solid') return undefined;
   const node = ctx.doc.nodes[ref.node];
-  const chain = isExactCylinderOffsetChain(ctx.doc.nodes, ref.node);
+  const chain = isExactCylinderFaceEditChain(ctx.doc.nodes, ref.node);
   const second = chain ? exactSemicylinderSecondOffset(ctx.doc.nodes, ref.node, ctx.doc.parameters, display.name) : undefined;
-  if (chain && (!second || display.exact?.kind !== second.nextKind))
+  const replaced = chain ? exactSemicylinderWallAfterReplacement(ctx.doc.nodes, ref.node, ctx.doc.parameters, display.name) : undefined;
+  const expected = replaced ? 'cylinder' : second?.nextKind;
+  if (chain && (!expected || display.exact?.kind !== expected))
     return unsupported('select the other original wall, or pair an original wall with the upper cap.');
-  const stock = second ? ctx.doc.nodes[second.sourceIndex] : node;
+  const stock = ctx.doc.nodes[replaced?.sourceIndex ?? second?.sourceIndex ?? ref.node];
   if (stock.kind === 'thicken' && stock.mode === 'exact-cylinder') {
-    const source = second?.source ?? exactSemicylinderCapSource(ctx.doc.nodes, ref.node, ctx.doc.parameters);
+    const source = replaced?.source ?? second?.source ?? exactSemicylinderCapSource(ctx.doc.nodes, ref.node, ctx.doc.parameters);
     const radial = display.exact?.kind === 'cylinder';
     if (!source || !(radial ? source.skins : source.faces).includes(display.name))
       return unsupported('select an original axial cap or cylindrical wall of an Exact semicylinder.');
@@ -374,6 +376,14 @@ export function resolveDirectOffsetFace(ctx: Ctx): {
     const { brep } = nativeOffsetBody(ctx, body, display);
     const authored = { id: source.id, surface: { ...stock.surface, kind: 'surface', id: 'surface' } as Surface,
       thickness: source.thickness, side: stock.side };
+    if (replaced) {
+      const id = featureId(ctx.doc.nodes, ref.node), prior = snapshotOf(ctx.doc).document.features.find(feature => feature.id === id);
+      if (prior?.kind !== 'replace-face' || prior.target !== source.id || prior.face !== replaced.prior.faces[0])
+        return missing('the linked upper-cap replacement is missing or changed.');
+      const frame = exactSemicylinderWallOffsetAfterReplacementFrame(brep, display.name, authored, { face: prior.face, plane: prior.plane });
+      return frame ? radialOffsetPick(ref, display.name, current, frame)
+        : unsupported('the original wall after upper-cap replacement could not be certified.');
+    }
     const pairedFrame = second?.mixed ? exactSemicylinderMixedOffsetFrame : exactSemicylinderSecondWallOffsetFrame;
     const frame = second ? pairedFrame(brep, display.name, authored, second.prior)
       : (radial ? exactSemicylinderWallOffsetFrame : exactSemicylinderCapOffsetFrame)(brep, display.name, authored);

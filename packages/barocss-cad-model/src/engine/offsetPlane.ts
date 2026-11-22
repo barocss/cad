@@ -4,9 +4,9 @@ import {
 } from '@barocss/cad';
 import { boxFaceReplacementFrame, draftedCapReplacementFrame, draftedFaceOffsetFrame, draftedWallReplacementFrame } from '@barocss/cad/internal/drafted-cap-offset';
 import { annularCapReplacementFrame, boredCapReplacementFrame, circularCapReplacementFrame } from '@barocss/cad/internal/bored-cap-offset';
-import { exactSemicylinderCapOffsetFrame, exactSemicylinderCapReplacementFrame } from '@barocss/cad/internal/exact-cylinder-cap-offset';
+import { exactSemicylinderCapOffsetFrame, exactSemicylinderCapReplacementAfterWallFrame, exactSemicylinderCapReplacementFrame } from '@barocss/cad/internal/exact-cylinder-cap-offset';
 import { prismCapReplacementFrame, prismWallOffsetFrame, prismWallReplacementFrame } from '@barocss/cad/internal/prism-wall-offset';
-import { exactSemicylinderCapSource, type OffsetFaceNode, type OffsetPlaneRef, type ReplaceFaceNode, type StudioDoc } from './doc';
+import { exactSemicylinderCapAfterWall, exactSemicylinderCapSource, type OffsetFaceNode, type OffsetPlaneRef, type ReplaceFaceNode, type StudioDoc } from './doc';
 import { featureId } from './ids';
 import { refusal } from './refusal';
 import { cross, dot, len, sub, type Vec3 } from './vec3';
@@ -93,12 +93,14 @@ export function resolveOffsetPlaneDistance(doc: StudioDoc, binding: OffsetPlaneR
 export function resolveReplacementPlane(doc: StudioDoc, node: ReplaceFaceNode, prefix: CadPartFeature[], build?: BuildPart) {
   const missing = (reason: string) => refusal('BAD_REFERENCE', `Replace face: ${reason}`);
   const { source, target } = boundSolids(doc, node.target, node.parent, prefix, missing, build);
-  const owner = doc.nodes[node.parent.node], face = node.faces[0];
+  const face = node.faces[0], paired = exactSemicylinderCapAfterWall(doc.nodes, node.parent.node, doc.parameters, face);
+  const owner = doc.nodes[paired?.sourceIndex ?? node.parent.node];
   if (owner?.kind === 'thicken' && owner.mode === 'exact-cylinder') {
-    const cap = exactSemicylinderCapSource(doc.nodes, node.parent.node, doc.parameters);
-    if (!cap || !exactSemicylinderCapReplacementFrame(source, face, {
-      id: cap.id, surface: { ...owner.surface, kind: 'surface', id: 'surface' }, thickness: cap.thickness, side: owner.side,
-    })) throw missing('pick the original upper cap of an Exact semicylinder.');
+    const cap = paired?.source ?? exactSemicylinderCapSource(doc.nodes, node.parent.node, doc.parameters);
+    const authored = cap && { id: cap.id, surface: { ...owner.surface, kind: 'surface' as const, id: 'surface' }, thickness: cap.thickness, side: owner.side };
+    const frame = authored && (paired ? exactSemicylinderCapReplacementAfterWallFrame(source, face, authored, paired.prior)
+      : exactSemicylinderCapReplacementFrame(source, face, authored));
+    if (!frame) throw missing('pick the original upper cap of an Exact semicylinder.');
   } else if (!boxFaceReplacementFrame(source, face) && !draftedCapReplacementFrame(source, face) &&
       !draftedWallReplacementFrame(source, face) && !prismCapReplacementFrame(source, face) && !prismWallReplacementFrame(source, face) &&
       !boredCapReplacementFrame(source, face) && !circularCapReplacementFrame(source, face) && !annularCapReplacementFrame(source, face)) {

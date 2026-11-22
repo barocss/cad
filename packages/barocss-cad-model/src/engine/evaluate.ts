@@ -286,7 +286,7 @@ function bodyOf(o: CadPartSnapshot['outputs'][number], doc: StudioDoc, revision:
 
 /** The main part's evaluation profiles its features (O10; a reused snapshot keeps the option). */
 const PROFILED = { profile: true } as const;
-function snapshotOf(doc: StudioDoc): CadPartSnapshot {
+export function snapshotOf(doc: StudioDoc): CadPartSnapshot {
   return partSnapshot(doc, part => last ? reevaluate(last, { document: part }) : evaluateCadPart(part, undefined, PROFILED));
 }
 const rebuildOf = (s: CadPartSnapshot): RebuildData | undefined => s.profile && { evaluated: s.recomputation.evaluated, reused: s.recomputation.reused, profile: s.profile };

@@ -450,13 +450,30 @@ export function exactSemicylinderSecondOffset(nodes: readonly unknown[], index: 
     : signature.k === 'plane' && priorFace === source.upperFace ? 'plane' : undefined;
   const nextKind = source.skins.includes(face) ? 'cylinder' : face === source.upperFace ? 'plane' : undefined;
   if (!priorKind || !nextKind) return;
-  return { source, sourceIndex, prior: { face: priorFace, distance: node.distance }, priorKind, nextKind, mixed: priorKind !== nextKind };
+  return { source, sourceIndex, prior: { face: priorFace, distance: node.distance }, priorKind, nextKind, mixed: priorKind !== nextKind } as const;
 }
 
-function offsetSourceBase(nodes: readonly unknown[], index: number): number | undefined {
+export function exactSemicylinderCapAfterWall(nodes: readonly unknown[], index: number, parameters: Readonly<Record<string, number>>, face: string) {
+  const edit = exactSemicylinderSecondOffset(nodes, index, parameters, face);
+  return edit?.priorKind === 'cylinder' && edit.nextKind === 'plane' ? edit : undefined;
+}
+
+export function exactSemicylinderWallAfterReplacement(nodes: readonly unknown[], index: number, parameters: Readonly<Record<string, number>>, face: string) {
+  const node = nodes[index];
+  if (!textRecord(node) || node.suppressed || node.held !== undefined || faceEditNodeProblem(node, index, 'replace-face')) return;
+  const sourceIndex = precedingSolidParent(node, index);
+  if (sourceIndex === undefined) return;
+  const source = exactSemicylinderCapSource(nodes, sourceIndex, parameters);
+  const [priorFace] = node.faces as [string];
+  const signature = textRecord(node.sigs) ? node.sigs[priorFace] : undefined;
+  if (!source || priorFace !== source.upperFace || !source.skins.includes(face) || !textRecord(signature) || signature.k !== 'plane') return;
+  return { source, sourceIndex, prior: node as ReplaceFaceNode };
+}
+
+function offsetSourceBase(nodes: readonly unknown[], index: number, includeReplacement = false): number | undefined {
   for (;;) {
     const node = nodes[index];
-    if (!textRecord(node) || node.kind !== 'offset-face') return index;
+    if (!textRecord(node) || (node.kind !== 'offset-face' && !(includeReplacement && node.kind === 'replace-face'))) return index;
     const parent = precedingSolidParent(node, index);
     if (parent === undefined) return;
     index = parent;
@@ -465,6 +482,11 @@ function offsetSourceBase(nodes: readonly unknown[], index: number): number | un
 
 export function isExactCylinderOffsetChain(nodes: readonly unknown[], index: number): boolean {
   const base = offsetSourceBase(nodes, index);
+  return base !== undefined && base !== index && isExactCylinderThicken(nodes[base]);
+}
+
+export function isExactCylinderFaceEditChain(nodes: readonly unknown[], index: number): boolean {
+  const base = offsetSourceBase(nodes, index, true);
   return base !== undefined && base !== index && isExactCylinderThicken(nodes[base]);
 }
 
@@ -700,10 +722,11 @@ export function directFaceDocumentProblem(input: unknown): string | null {
       const [face] = node.faces as [string];
       const signature = (node.sigs as Record<string, Sig>)[face];
       if (node.kind === 'replace-face') {
-        if (isExactCylinderThicken(value.nodes[parentIndex])) {
+        if (isExactCylinderThicken(value.nodes[parentIndex]) || isExactCylinderFaceEditChain(value.nodes, parentIndex)) {
           const parameters = textRecord(value.parameters) ? value.parameters as Record<string, number> : {};
-          if (exactSemicylinderCapSource(value.nodes, parentIndex, parameters)?.upperFace !== face || signature.k !== 'plane')
-            return 'Replace face: pick the original upper cap of an Exact semicylinder.';
+          const originalCap = exactSemicylinderCapSource(value.nodes, parentIndex, parameters)?.upperFace === face;
+          if (signature.k !== 'plane' || (!originalCap && !exactSemicylinderCapAfterWall(value.nodes, parentIndex, parameters, face)))
+            return 'Replace face: pick the original upper cap of an Exact semicylinder, with at most one original wall Offset.';
           continue;
         }
         if (!isBoxReplacementSource(value.nodes, parentIndex) && !isDraftedFaceReplacementSource(value.nodes, parentIndex) &&
@@ -724,10 +747,12 @@ export function directFaceDocumentProblem(input: unknown): string | null {
         if (radial && node.target !== undefined) return 'Offset face: an original Exact semicylinder wall needs a signed distance.';
         continue;
       }
-      if (isExactCylinderOffsetChain(value.nodes, parentIndex)) {
+      if (isExactCylinderFaceEditChain(value.nodes, parentIndex)) {
         const parameters = textRecord(value.parameters) ? value.parameters as Record<string, number> : {};
         const second = exactSemicylinderSecondOffset(value.nodes, parentIndex, parameters, face);
-        if (!second || signature.k !== (second.nextKind === 'cylinder' ? 'curved' : 'plane') || node.target !== undefined)
+        const afterReplace = exactSemicylinderWallAfterReplacement(value.nodes, parentIndex, parameters, face);
+        const expected = afterReplace || second?.nextKind === 'cylinder' ? 'curved' : 'plane';
+        if ((!second && !afterReplace) || signature.k !== expected || node.target !== undefined)
           return 'Offset face: follow one signed Offset of the original Exact semicylinder with the other wall, or pair an original wall with the original upper cap.';
         continue;
       }

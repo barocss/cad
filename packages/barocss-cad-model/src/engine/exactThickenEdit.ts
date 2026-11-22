@@ -1,7 +1,7 @@
 import { reevaluate, type Brep, type CadPartSnapshot, type Surface } from '@barocss/cad';
-import { offsetExactSemicylinderCapIfAdmitted, offsetExactSemicylinderMixedOffsetIfAdmitted, offsetExactSemicylinderSecondWallIfAdmitted, offsetExactSemicylinderWallIfAdmitted, replaceExactSemicylinderCapIfAdmitted } from '@barocss/cad/internal/exact-cylinder-cap-offset';
+import { offsetExactSemicylinderCapIfAdmitted, offsetExactSemicylinderMixedOffsetIfAdmitted, offsetExactSemicylinderSecondWallIfAdmitted, offsetExactSemicylinderWallAfterReplacementIfAdmitted, offsetExactSemicylinderWallIfAdmitted, replaceExactSemicylinderCapAfterWallIfAdmitted, replaceExactSemicylinderCapIfAdmitted } from '@barocss/cad/internal/exact-cylinder-cap-offset';
 import { canonical } from '../util/revision';
-import { exactSemicylinderCapSource, exactSemicylinderSecondOffset, type StudioDoc } from './doc';
+import { exactSemicylinderCapAfterWall, exactSemicylinderCapSource, exactSemicylinderSecondOffset, exactSemicylinderWallAfterReplacement, type StudioDoc } from './doc';
 import { featureId } from './ids';
 import { resolveOffsetPlaneDistance, resolveReplacementPlane } from './offsetPlane';
 
@@ -16,7 +16,10 @@ export function isExactThickenEdit(doc: StudioDoc, snapshot: CadPartSnapshot, in
   const [face] = node.faces;
   const second = node.kind === 'offset-face' && node.target === undefined
     ? exactSemicylinderSecondOffset(nodes, node.parent.node, doc.parameters, face) : undefined;
-  const parent = second?.source ?? exactSemicylinderCapSource(nodes, node.parent.node, doc.parameters);
+  const beforeWall = node.kind === 'replace-face' ? exactSemicylinderCapAfterWall(nodes, node.parent.node, doc.parameters, face) : undefined;
+  const beforeReplace = node.kind === 'offset-face' && node.target === undefined
+    ? exactSemicylinderWallAfterReplacement(nodes, node.parent.node, doc.parameters, face) : undefined;
+  const parent = second?.source ?? beforeWall?.source ?? beforeReplace?.source ?? exactSemicylinderCapSource(nodes, node.parent.node, doc.parameters);
   if (!parent || !parent.skins.every(name => names.includes(name))) return false;
   const radial = node.kind === 'offset-face' && node.target === undefined && parent.skins.includes(face);
   if (!radial && !parent.faces.includes(face)) return false;
@@ -39,24 +42,40 @@ export function isExactThickenEdit(doc: StudioDoc, snapshot: CadPartSnapshot, in
     if (original?.id !== parent.id || original.feature !== parent.id) return false;
     const surface = { ...structuredClone(stock.surface), kind: 'surface', id: 'surface' } as Surface;
     const source = { id: parent.id, surface, thickness, side: stock.side };
+    const priorIndex = prefix.findIndex(feature => feature.id === target), first = prefix[priorIndex];
+    const replayOffset = (prior: { face: string; distance: number }, kind: 'cylinder' | 'plane') => {
+      if (first?.kind !== 'offset-face' || first.target !== parent.id || first.face !== prior.face || first.distance !== prior.distance) return;
+      const offset = kind === 'cylinder' ? offsetExactSemicylinderWallIfAdmitted : offsetExactSemicylinderCapIfAdmitted;
+      return offset(original.brep, prior.face, source, prior.distance);
+    };
     let expected: Brep | undefined;
     if (node.kind === 'replace-face' && edit.kind === 'replace-face') {
       const plane = resolveReplacementPlane(doc, node, prefix, build);
       if (canonical(plane) !== canonical(edit.plane)) return false;
-      expected = replaceExactSemicylinderCapIfAdmitted(original.brep, face, source, plane);
+      if (beforeWall) {
+        const before = replayOffset(beforeWall.prior, 'cylinder');
+        if (!before) return false;
+        expected = replaceExactSemicylinderCapAfterWallIfAdmitted(before, face, source, beforeWall.prior, plane);
+      } else {
+        expected = replaceExactSemicylinderCapIfAdmitted(original.brep, face, source, plane);
+      }
     } else if (node.kind === 'offset-face' && edit.kind === 'offset-face') {
       const distance = node.target ? resolveOffsetPlaneDistance(doc, node.target, node, prefix, build) : node.distance;
       if (distance !== edit.distance) return false;
       if (second) {
         const { prior } = second;
-        const nativeFirst = prefix.find(feature => feature.id === target);
-        if (nativeFirst?.kind !== 'offset-face' || nativeFirst.target !== parent.id ||
-            nativeFirst.face !== prior.face || nativeFirst.distance !== prior.distance) return false;
-        const replay = second.priorKind === 'cylinder' ? offsetExactSemicylinderWallIfAdmitted : offsetExactSemicylinderCapIfAdmitted;
-        const before = replay(original.brep, prior.face, source, prior.distance);
+        const before = replayOffset(prior, second.priorKind);
         if (!before) return false;
         const apply = second.mixed ? offsetExactSemicylinderMixedOffsetIfAdmitted : offsetExactSemicylinderSecondWallIfAdmitted;
         expected = apply(before, face, source, prior, edit.distance);
+      } else if (beforeReplace) {
+        const priorFace = beforeReplace.prior.faces[0];
+        if (first?.kind !== 'replace-face' || first.target !== parent.id || first.face !== priorFace) return false;
+        const plane = resolveReplacementPlane(doc, beforeReplace.prior, prefix.slice(0, priorIndex), build);
+        if (canonical(plane) !== canonical(first.plane)) return false;
+        const before = replaceExactSemicylinderCapIfAdmitted(original.brep, priorFace, source, plane);
+        if (!before) return false;
+        expected = offsetExactSemicylinderWallAfterReplacementIfAdmitted(before, face, source, { face: priorFace, plane }, edit.distance);
       } else {
         const offset = radial ? offsetExactSemicylinderWallIfAdmitted : offsetExactSemicylinderCapIfAdmitted;
         expected = offset(original.brep, face, source, edit.distance);

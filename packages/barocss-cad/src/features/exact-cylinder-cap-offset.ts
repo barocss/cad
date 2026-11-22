@@ -11,14 +11,34 @@ import { encloseAxialSideTrims, mapCapStation } from './bored-cap-offset.js';
 type Source = { id: string; surface: Surface; thickness: number; side?: 'normal' | 'reverse' | 'both' };
 type ReplacementPlane = { origin: Point; normal: Point };
 type PriorWallOffset = { face: string; distance: number };
+type PriorCapReplacement = { face: string; plane: ReplacementPlane };
 
 function retainedBoundary(before: Brep, after: Brep, fixed: Brep['faces'][number]): boolean {
+  return JSON.stringify(fixed) === JSON.stringify(after.faces.find(face => face.id === fixed.id)) && retainedTrims(before, after, fixed);
+}
+
+function retainedTrims(before: Brep, after: Brep, fixed: Brep['faces'][number]): boolean {
   const loops = new Set(fixed.loops), edges = new Set(before.coedges.filter(use => loops.has(use.loop)).map(use => use.edge));
   const vertices = new Set(before.edges.filter(edge => edges.has(edge.id)).flatMap(edge => edge.vertices));
   const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
-  return same(fixed, after.faces.find(face => face.id === fixed.id))
+  const next = after.faces.find(face => face.id === fixed.id);
+  const { surface: oldSurface, ...oldFace } = fixed;
+  const { surface: newSurface, ...newFace } = next ?? fixed;
+  return next !== undefined && same(oldFace, newFace) && oldSurface.id === newSurface.id
     && before.edges.every(edge => !edges.has(edge.id) || same(edge, after.edges.find(value => value.id === edge.id)))
     && before.vertices.every(vertex => !vertices.has(vertex.id) || same(vertex, after.vertices.find(value => value.id === vertex.id)));
+}
+
+function sameSupport(before: Brep['faces'][number], after: Brep['faces'][number], extent: number): boolean {
+  const a = faceGeometry(before), b = faceGeometry(after), roundoff = 128 * Number.EPSILON * Math.max(1, extent);
+  if (a.kind === 'cylinder' && b.kind === 'cylinder') return a.out === b.out && Math.abs(a.r - b.r) <= roundoff
+    && a.c.every((value, axis) => Math.abs(value - b.c[axis]) <= roundoff) && a.a.every((value, axis) => Math.abs(value - b.a[axis]) <= roundoff);
+  return a.kind === 'plane' && b.kind === 'plane' && a.n.every((value, axis) => Math.abs(value - b.n[axis]) <= 128 * Number.EPSILON)
+    && Math.abs(a.n.reduce((sum, value, axis) => sum + value * (a.o[axis] - b.o[axis]), 0)) <= roundoff;
+}
+
+function currentCap(brep: Brep, cap: NonNullable<ReturnType<typeof admitted>>) {
+  return { ...cap, skins: cap.skins.map(skin => brep.faces.find(face => face.surface.id === skin.id)!.surface as Surface) };
 }
 
 function admitted(brep: Brep, faceName: string, source: Source) {
@@ -266,6 +286,10 @@ export function offsetExactSemicylinderMixedOffsetIfAdmitted(brep: Brep, faceNam
 export function replaceExactSemicylinderCapIfAdmitted(brep: Brep, faceName: string, source: Source, plane: ReplacementPlane): Brep | undefined {
   const cap = admitted(brep, faceName, source);
   if (!cap || cap.sign !== 1) return;
+  return replaceCap(brep, cap, plane);
+}
+
+function replaceCap(brep: Brep, cap: NonNullable<ReturnType<typeof admitted>>, plane: ReplacementPlane): Brep {
   const finitePoint = (point: unknown): point is Point => Array.isArray(point) && point.length === 3 && point.every(Number.isFinite);
   if (!plane || typeof plane !== 'object' || Array.isArray(plane) || Object.keys(plane).sort().join(',') !== 'normal,origin'
     || !finitePoint(plane.origin) || !finitePoint(plane.normal))
@@ -311,5 +335,66 @@ export function replaceExactSemicylinderCapIfAdmitted(brep: Brep, faceName: stri
   const sideIds = new Set(brep.faces.filter(face => !face.name?.endsWith('.v-min') && !face.name?.endsWith('.v-max')).map(face => face.id));
   const candidate = encloseAxialSideTrims(moved, cap.lo, max + arithmetic, sideIds), report = checkBrep(candidate, { strict: true });
   if (!report.valid) throw new BrepError('GEOMETRY', `Replace face: the replacement solid is invalid: ${report.issues[0]}`, report);
+  return candidate;
+}
+
+/** Original upper-cap replacement after exact replay of one signed radial wall edit. */
+export function exactSemicylinderCapReplacementAfterWallFrame(brep: Brep, faceName: string, source: Source, prior: PriorWallOffset): { anchor: Point; normal: Point } | undefined {
+  const mixed = admittedMixed(brep, faceName, source, prior);
+  if (!mixed?.radialFirst) return;
+  const cap = currentCap(brep, mixed.cap), poles = cap.skins.map(skin => skin.controlPoints[2][1]);
+  return { anchor: [poles[0][0] + (poles[1][0] - poles[0][0]) / 2, poles[0][1] + (poles[1][1] - poles[0][1]) / 2, cap.hi], normal: [0, 0, 1] };
+}
+
+/** Canonical radial-then-inclined result, with extrema taken from the post-radial skins. */
+export function replaceExactSemicylinderCapAfterWallIfAdmitted(brep: Brep, faceName: string, source: Source, prior: PriorWallOffset, plane: ReplacementPlane): Brep | undefined {
+  const mixed = admittedMixed(brep, faceName, source, prior);
+  if (!mixed?.radialFirst) return;
+  const candidate = replaceCap(brep, currentCap(brep, mixed.cap), plane);
+  const extent = geometryScaleMM(candidate.edges.flatMap(edge => edge.curve.controlPoints));
+  const bottom = brep.faces.find(face => face.surface.kind === 'surface' && face.surface.controlPoints.flat().every(point => point[2] === mixed.cap.lo));
+  const sides = brep.faces.filter(face => face.name !== faceName && face !== bottom);
+  if (!bottom || !retainedBoundary(brep, candidate, bottom)
+    || sides.some(face => !sameSupport(face, candidate.faces.find(value => value.id === face.id)!, extent)))
+    throw new BrepError('GEOMETRY', 'Exact semicylinder radial replacement: the fixed bottom or side supports changed');
+  return candidate;
+}
+
+function admittedWallAfterReplacement(brep: Brep, faceName: string, source: Source, prior: PriorCapReplacement) {
+  try {
+    if (!prior || typeof prior !== 'object' || Array.isArray(prior) || Object.keys(prior).sort().join(',') !== 'face,plane') return;
+    const original = thickenCylinderSolid(source), cap = admitted(original, prior.face, source), wall = admittedWall(original, faceName, source);
+    if (!cap || cap.sign !== 1 || !wall) return;
+    const replay = replaceCap(original, cap, prior.plane);
+    if (JSON.stringify(brep) !== JSON.stringify(replay)) return;
+    return { original, cap, wall };
+  } catch { return; }
+}
+
+/** Radial crown handle at half its local trimmed height, after exact replacement replay. */
+export function exactSemicylinderWallOffsetAfterReplacementFrame(brep: Brep, faceName: string, source: Source, prior: PriorCapReplacement): { anchor: Point; normal: Point } | undefined {
+  const mixed = admittedWallAfterReplacement(brep, faceName, source, prior);
+  if (!mixed) return;
+  const capFace = brep.faces.find(face => face.name === prior.face)!, moving = brep.faces.find(face => face.id === mixed.wall.moving.id)!;
+  const capEdges = new Set(brep.coedges.filter(use => capFace.loops.includes(use.loop)).map(use => use.edge));
+  const shared = brep.coedges.filter(use => moving.loops.includes(use.loop) && capEdges.has(use.edge));
+  const edge = shared.length === 1 ? brep.edges.find(edge => edge.id === shared[0].edge) : undefined;
+  if (edge?.curve.degree !== 2 || edge.curve.controlPoints.length !== 5) return;
+  const top = edge.curve.controlPoints[2][2];
+  return wallFrame({ ...mixed.wall, moving, cap: { ...mixed.wall.cap, hi: top } });
+}
+
+/** Continue one original radial wall while its saved inclined cap plane stays linked. */
+export function offsetExactSemicylinderWallAfterReplacementIfAdmitted(brep: Brep, faceName: string, source: Source, prior: PriorCapReplacement, distance: number): Brep | undefined {
+  const mixed = admittedWallAfterReplacement(brep, faceName, source, prior);
+  if (!mixed) return;
+  const radial = offsetWall(mixed.original, source, mixed.wall, distance);
+  const candidate = replaceCap(radial, currentCap(radial, mixed.cap), prior.plane);
+  const fixed = brep.faces.find(face => face.id === mixed.wall.fixed.id)!, top = brep.faces.find(face => face.name === prior.face)!;
+  const extent = geometryScaleMM(candidate.edges.flatMap(edge => edge.curve.controlPoints));
+  const newFixed = candidate.faces.find(face => face.id === fixed.id)!, newTop = candidate.faces.find(face => face.id === top.id)!;
+  // Global chart bounds and UVs can change. Preserve the actual unselected 3D trims and supports.
+  if (!retainedTrims(brep, candidate, fixed) || !sameSupport(fixed, newFixed, extent) || !sameSupport(top, newTop, extent))
+    throw new BrepError('GEOMETRY', 'Exact semicylinder replacement offset: the retained wall boundary or inclined plane changed');
   return candidate;
 }
