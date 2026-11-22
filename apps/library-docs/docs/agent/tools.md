@@ -73,6 +73,29 @@ list does not mean the body has no faces. Read the part summary before using a f
 
 To work on the version you reviewed, pass the `revision` from `query.render` or `query.rebuild` as
 `expectedRevision` on `features.edit`, `features.command` or `features.delete`. Use the same part scope for both calls.
+
+### Chamfer a sketch corner
+
+Call `query.edit_fields` with the sketch's `index` and `includeSketchCorners: true`. Each
+`sketchCorners` entry gives a point in sketch mm and the two saved side IDs that meet there.
+Copy the read's `id` into `sketchChamfer.sketch` and its `revision` into `expectedRevision`.
+For example, use this as an operation in `proposals.propose` and approve it in Studio.
+
+```json
+{
+  "tool": "features",
+  "args": {
+    "action": "edit",
+    "index": 0,
+    "expectedRevision": "0123456789abcdef",
+    "sketchChamfer": { "sketch": "n0", "sides": ["e1", "e2"], "distance": 6 }
+  }
+}
+```
+
+The distance is the setback in mm along each of the two straight sides. This edit supports one
+independent material outline with saved side IDs and no holes. The edit is refused if the corner
+cannot fit, a constraint or binding would be lost, or the part revision has changed.
 If the model has changed, `EDIT_STALE`, `COMMAND_STALE` or `DELETE_STALE` returns the requested and current revisions.
 Review the current part before resubmitting. For delete, read the current feature tree to find the new index.
 In a batch, the pin applies to the document at the operation's position.

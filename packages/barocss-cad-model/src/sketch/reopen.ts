@@ -1,6 +1,7 @@
 // A finished sketch node back as sketcher shapes, to edit it in place: the main profile as the current
 // shape (its kept outline with all constraints when it has one), more regions and holes beside it.
 import type { LoopSegment, SketchBand, SketchNode, SketchOutline } from '../engine/doc';
+import { NODE_EXTRA_FIELDS } from '../engine/doc';
 import type { SketchShape } from './types';
 import { slotSegments, type P2 } from './profile';
 import { rulesWithoutCircle, type Polygon } from './rules';
@@ -14,6 +15,17 @@ import { matchesRegionLengths } from './internal/regionLengths';
 import { matchesHoleOutline } from './internal/holeOutline';
 
 type Params = Readonly<Record<string, number>>;
+
+/** Replace the profile and its editing hints while preserving sketch placement and metadata. */
+export function replaceSketchProfile(old: SketchNode, next: SketchNode): SketchNode {
+  const out: Record<string, unknown> = { ...next };
+  // Legacy sketches retain their positional wall names.
+  if (!old.sideTags) delete out.sideTags;
+  const from = old as unknown as Record<string, unknown>;
+  for (const key of ['plane', 'on', 'construction', ...NODE_EXTRA_FIELDS])
+    if (from[key] !== undefined) out[key] = from[key];
+  return out as unknown as SketchNode;
+}
 const isRef = (v: unknown): v is { parameter: string } => !!v && typeof v === 'object' && !Array.isArray(v) && Object.keys(v).length === 1 && typeof (v as { parameter?: unknown }).parameter === 'string';
 
 function withoutOutlineHints(node: SketchNode): SketchNode {

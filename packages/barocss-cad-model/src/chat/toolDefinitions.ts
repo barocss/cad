@@ -84,8 +84,8 @@ const PART_TOOLS: ToolDefinition[] = [
   },
   {
     name: 'list_feature_edit_fields',
-    description: 'Read the current fields of one feature by index from get_part_summary. Returns field keys, values, units or options, and the current part revision. Use the key in edit_feature values and pass the revision as expectedRevision. A null numeric value is unavailable. A named parameter is the current binding. Edits and proposals still validate the value and geometry.',
-    input_schema: { type: 'object', properties: { index: { type: 'integer', minimum: 0 } }, required: ['index'], additionalProperties: false },
+    description: 'Read the current fields of one feature by index from get_part_summary. Returns field keys, values, units or options, and the current part revision. Use the key in edit_feature values and pass the revision as expectedRevision. A null numeric value is unavailable. A named parameter is the current binding. With includeSketchCorners, sketchCorners lists straight incident side pairs and points in sketch mm for a supported outline. Edits and proposals still validate the value and geometry.',
+    input_schema: { type: 'object', properties: { index: { type: 'integer', minimum: 0 }, includeSketchCorners: { type: 'boolean' } }, required: ['index'], additionalProperties: false },
   },
   {
     name: 'run_command',
@@ -131,7 +131,11 @@ Ref = {"node": index of the feature that made a visible body, "side": "solid"} (
   {
     name: 'edit_feature',
     description: 'Changes an existing feature, as the feature editor does: "values" sets its editable dimensions by key (an extrude also edits its sketch: w, d, c0, c1 for a rectangle; dia, cc0, cc1 for a circle; h height; from; draft — a hole: dia, c0, c1, depth; fillet r; chamfer d; shell t; …). Read list_feature_edit_fields with the index for current keys and values. Or pass a whole replacement "feature" node (same rules as add_features). Use "retainBoxCommand": true to replace one or both extents of a standard Box sketch and retain the editable Box command. Later features follow the edit. Pass expectedRevision from list_feature_edit_fields, query.render or query.rebuild in the same part scope to refuse a stale edit. For a Smooth Turn edit, send only values.smoothTurnAngle in degrees or only values.smoothTurnWidth in mm, with the required expectedRevision. For a terminal Screw, send only values.smoothScrewPitch (mm per revolution) or only values.smoothScrewAngle (degrees), with required expectedRevision. For a supported terminal right drafted wall Offset, coaxial tube wall Offset, or Exact semicylinder wall Offset after a linked inclined upper-cap replacement (including one certified radial through bore), send only values.offsetDistance in signed mm with the required expectedRevision.',
-    input_schema: { type: 'object', properties: { index: { type: 'integer' }, values: { type: 'object', additionalProperties: { type: ['number', 'string', 'boolean'] } }, feature: { type: 'object' }, retainBoxCommand: { type: 'boolean', const: true }, expectedRevision: { type: 'string', pattern: '^[a-f0-9]{16}$' } }, required: ['index'], additionalProperties: false },
+    input_schema: { type: 'object', properties: { index: { type: 'integer' }, values: { type: 'object', additionalProperties: { type: ['number', 'string', 'boolean'] } }, feature: { type: 'object' }, retainBoxCommand: { type: 'boolean', const: true }, expectedRevision: { type: 'string', pattern: '^[a-f0-9]{16}$' },
+      sketchChamfer: { type: 'object', description: 'An equal-distance corner edit in sketch mm. Send it alone with the index and expectedRevision. Use the sketch ID and one pair from query.edit_fields with includeSketchCorners.', additionalProperties: false, required: ['sketch', 'sides', 'distance'], properties: {
+        sketch: { type: 'string', minLength: 1 }, sides: { type: 'array', items: { type: 'string', minLength: 1 }, minItems: 2, maxItems: 2 }, distance: { type: 'number', exclusiveMinimum: 0 },
+      } },
+    }, required: ['index'], additionalProperties: false },
   },
   {
     name: 'delete_feature',

@@ -2,12 +2,12 @@ import { refusal } from '../engine/refusal';
 // The feature editor's fields for a sketch drawn as a constrained outline: one per driving dimension kept
 // in the sketch node. Changing one re-solves the outline with all its constraints and rewrites the
 // profile; a value the constraints cannot take leaves the nodes unchanged.
-import { NODE_EXTRA_FIELDS, type ModelNode, type SketchNode, type SketchOutline } from '../engine/doc';
+import type { ModelNode, SketchNode, SketchOutline } from '../engine/doc';
 import { bindSketchLengthNode, unbindSketchLengthNode, resolveDrivenSketch } from './driven';
 import type { BindableField, EditField } from '../app/editFields';
 import { outlineOf, profileOf } from './loops';
 import { commitDimension, dimensionLabel, dimensionValue } from './rules';
-import { mainShape, outlinePolygon, rebindDims, resolveSketchDims, sketchShapes } from './reopen';
+import { mainShape, outlinePolygon, rebindDims, replaceSketchProfile, resolveSketchDims, sketchShapes } from './reopen';
 export { outlinePolygon };
 
 type Nodes = readonly ModelNode[];
@@ -36,20 +36,6 @@ export function drivingValue(o: SketchOutline, key: string): number | null {
   const kind = ({ dist: 'distance', dx: 'dx', dy: 'dy', ang: 'angle' } as const)[d[1] as 'dist' | 'dx' | 'dy' | 'ang'];
   const r = (o.rules ?? []).find(x => x.kind === kind && 'b' in x && x.a === Number(d[2]) && x.b === Number(d[3]));
   return r && 'value' in r ? r.value : null;
-}
-
-/**
- * The node after a dimension edit: the re-solved geometry (profile kind, points, regions, holes, outline, side ids) with
- * what is not geometry kept from the old node — its plane, body target, construction shapes and the generic node fields
- * (id, suppressed, …). A node from before side ids gets none from the edit, so its positional names are not renamed (D348:
- * profileOf orders an outline's attached circles before loops drawn earlier, so such an old node's hole numbers can still shift).
- */
-function replaced(old: SketchNode, next: SketchNode): SketchNode {
-  const out: Record<string, unknown> = { ...next };
-  if (!old.sideTags) delete out.sideTags;
-  const from = old as unknown as Record<string, unknown>;
-  for (const key of ['plane', 'on', 'construction', ...NODE_EXTRA_FIELDS]) if (from[key] !== undefined) out[key] = from[key];
-  return out as unknown as SketchNode;
 }
 
 export function outlineFields(nodes: Nodes, s: number, prefix: string, params: Readonly<Record<string, number>> = {}): EditField[] {
@@ -98,7 +84,7 @@ export function outlineFields(nodes: Nodes, s: number, prefix: string, params: R
         // The whole profile again: the re-solved outline (its circles with it) and the sketch's other loops.
         const next = profileOf([r.shape, ...done]);
         if ('error' in next) return n as ModelNode[];
-        return n.map((x, k) => k === s ? replaced(old, rebindDims(old, next.node, params).node) : x);
+        return n.map((x, k) => k === s ? replaceSketchProfile(old, rebindDims(old, next.node, params).node) : x);
       },
     };
     const match = /^len(\d+)$/.exec(key), index = match ? Number(match[1]) : -1, entity = sk.sideTags?.outer[index];

@@ -116,6 +116,8 @@ const READ: Record<string, JsonSchema | null> = {
     items: o({ key: str, label: str, kind: { type: 'string', enum: ['number', 'choice', 'toggle'] }, value: { type: ['number', 'string', 'boolean', 'null'] },
       unit: str, options: { type: 'array', items: o({ value: str, label: str }, ['value', 'label']) }, parameter: str,
       integerRange: o({ min: num, max: num }, ['min', 'max']) }, ['key', 'label', 'kind', 'value']) },
+    sketchCorners: { type: 'array', items: o({ point: { type: 'array', items: num, minItems: 2, maxItems: 2 },
+      sides: { type: 'array', items: str, minItems: 2, maxItems: 2 } }, ['point', 'sides']) },
   }, ['index', 'id', 'label', 'revision', 'fields']),
   rebuild_report: o({ revision: str, evaluation: num, basis: str, evaluationTime: num, features: arr, built: num, builtTime: num, slowest: { type: ['string', 'null'] }, reused: num, mates: arr, loops: arr, limits: str }, ['revision', 'basis', 'evaluationTime', 'features', 'built', 'builtTime', 'slowest', 'reused', 'mates', 'loops', 'limits']),
   diff: o({ from: str, to: str, diff: obj }, ['diff']),

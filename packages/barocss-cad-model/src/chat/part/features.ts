@@ -9,7 +9,7 @@ import { currentOffsetBody } from '../../app/nativeOffsetFace';
 import { extrudeCommand } from '../../app/profileCommands';
 import { smoothScrewAngleField, smoothScrewAngleKey, smoothScrewWindingRule, smoothScrewPitchAdvance, smoothScrewPitchField, smoothScrewPitchKey, smoothScrewTurns, smoothTurnAngleKey, smoothTurnAngleLimit, smoothTurnWidthBounds, smoothTurnWidthInvalid, smoothTurnWidthKey } from '../../app/smoothLoftTurn';
 import { hasLineArcScrewSections, hasLineArcTurnSections } from '../../app/lineArcScrew';
-import { exactSemicylinderRadialBoreSource, exactSemicylinderWallAfterReplacement, featureLabel, isAnnularReplacementSource, prefixDoc, withNode, type ModelNode, type StudioDoc } from '../../engine/doc';
+import { dropStaleMade, exactSemicylinderRadialBoreSource, exactSemicylinderWallAfterReplacement, featureLabel, isAnnularReplacementSource, prefixDoc, withNode, type ModelNode, type StudioDoc } from '../../engine/doc';
 import { snapshotOf } from '../../engine/evaluate';
 import { isExactThickenEdit } from '../../engine/exactThickenEdit';
 import { DIRECT_RULED_COMMAND, proposeDirectRuledCommand } from '../directRuledProposal';
@@ -40,6 +40,7 @@ import { bodyKeyFor, featureId } from '../../engine/ids';
 import { sweepSourceRevision } from '../sweepSource';
 import { isReferencePlaneEdit } from '../../app/offsetPlanePick';
 import { preparePairedFixedSpanHoleEdit } from '../../app/patternHoleSpacing';
+import { editSketchChamfer, sketchChamferCorners } from './sketchChamfer';
 
 /** Commands the chat can run (the ones that build; sketch-mode and measure UI actions are tools of their own). */
 // (Loft takes sketches picked in the studio, Align a face clicked there; chat writes a loft node with
@@ -465,7 +466,8 @@ async function listFeatureEditFields(state: ChatState, args: Record<string, unkn
   });
   if (wall) fields.push({ key: savedWallDistanceKey, label: 'Offset distance', kind: 'number', unit: 'mm', value: wall.distance });
   const label = featureLabel(nodes[index], index, nodes);
-  return { state, content: json({ index, id: featureId(nodes, index), label, revision: revisionOf(doc), fields }),
+  const corners = args.includeSketchCorners === true ? { sketchCorners: sketchChamferCorners(doc, index) } : {};
+  return { state, content: json({ index, id: featureId(nodes, index), label, revision: revisionOf(doc), fields, ...corners }),
     isError: false, changed: false, summary: `${fields.length} edit fields for ${label}` };
 }
 
@@ -487,12 +489,19 @@ async function editFeatureTool(state: ChatState, args: Record<string, unknown>, 
       { code: 'EDIT_INPUT' });
   const index = Number(args.index), nodes = state.doc.nodes;
   if (!Number.isInteger(index) || !nodes[index]) return fail(state, `There is no feature ${String(args.index)} (features 0–${nodes.length - 1}).`);
+  const chamfer = args.sketchChamfer !== undefined;
+  if (chamfer && (args.expectedRevision === undefined || args.feature !== undefined || args.values !== undefined || args.retainBoxCommand !== undefined))
+    return fail(state, 'Pass only index, expectedRevision and sketchChamfer for a sketch corner edit.', { code: 'EDIT_INPUT' });
   const retainBox = args.retainBoxCommand === true;
   if (args.retainBoxCommand !== undefined && (!retainBox || args.feature === undefined || args.values !== undefined || nodes.length !== 2 || index !== 0))
     return fail(state, 'Retaining the Box command requires a replacement sketch for one standard Box.');
   if (editWallDistance) return editReviewedWallDistance(state, index, given[savedWallDistanceKey], evaluate, options);
   let next: ModelNode[];
-  if (args.feature !== undefined) {
+  if (chamfer) {
+    const result = editSketchChamfer(state.doc, index, args.sketchChamfer);
+    if ('error' in result) return fail(state, result.error, { code: result.code, kept: 'the part is unchanged' });
+    next = dropStaleMade(nodes, nodes.map((node, at) => at === index ? result.node : node));
+  } else if (args.feature !== undefined) {
     const why = checkNode(args.feature, nodes.slice(0, index), state.doc.parameters, state.doc.frames?.sections, state.partOf ? null : state.doc.instances ?? []);
     if (why) return fail(state, `Feature ${index}: ${why}`);
     // (The replacement is the same feature: it keeps its id, so the names of its faces stay.)

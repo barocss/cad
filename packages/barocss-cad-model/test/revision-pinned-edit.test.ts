@@ -4,6 +4,7 @@ import { dispatchTool, type ChatState } from '../src/chat/tools';
 import { emptyDoc, withNode, type StudioDoc } from '../src/engine/doc';
 import { evaluatePart } from '../src/engine/evaluate';
 import { revisionOf } from '../src/util/revision';
+import { outputSchemaOf, validate } from '../src/chat/contract';
 
 function stock(height = 8) {
   const sketch = withNode(emptyDoc(), { kind: 'sketch', profile: 'rectangle', min: [0, 0], max: [40, 20] });
@@ -79,4 +80,66 @@ test('a pin at a stale batch position leaves earlier staged edits unapplied', as
   assert.ok(rejected.isError && !rejected.changed, rejected.content);
   assert.equal(rejected.state, before);
   assert.equal(JSON.parse(rejected.content).failed_op, 1);
+});
+
+test('sketch chamfer discovers saved side IDs and makes an atomic revision-pinned edit', async () => {
+  const original = stock();
+  const base = original.nodes[0];
+  assert.ok(base.kind === 'sketch' && base.profile === 'rectangle');
+  const plane = { origin: [0, 0, 4], normal: [0, 0, 1], xAxis: [1, 0, 0] } as const;
+  const doc: StudioDoc = { ...original, nodes: [
+    { ...base, plane: { origin: [...plane.origin], normal: [...plane.normal], xAxis: [...plane.xAxis] },
+      sideTags: { outer: ['e1', 'e2', 'e3', 'e4'] },
+      construction: [{ kind: 'circle', c: [12, 8], r: 2, construction: true, ids: ['e9'] }] },
+    original.nodes[1],
+  ] };
+  const before = await stateOf(doc);
+  const neverEvaluate = async (): Promise<never> => assert.fail('A read or refused chamfer must not evaluate.');
+  const read = await dispatchTool(before, 'query', { action: 'edit_fields', index: 0, includeSketchCorners: true }, neverEvaluate);
+  assert.ok(!read.isError && !read.changed, read.content);
+  assert.equal(read.state, before);
+  const result = JSON.parse(read.content);
+  assert.deepEqual(validate(outputSchemaOf('list_feature_edit_fields')!, result), []);
+  assert.equal(result.id, 'n0');
+  assert.deepEqual(result.sketchCorners[1], { point: [40, 0], sides: ['e1', 'e2'] });
+  const expectedRevision = revisionOf(doc);
+  assert.equal(result.revision, expectedRevision);
+  const sketchChamfer = { sketch: 'n0', sides: ['e2', 'e1'], distance: 6 };
+  const args = { action: 'edit', index: 0, expectedRevision, sketchChamfer };
+  for (const [patch, code] of [
+    [{ expectedRevision: '0000000000000000' }, 'EDIT_STALE'],
+    [{ expectedRevision: undefined }, 'EDIT_INPUT'],
+    [{ values: {} }, 'EDIT_INPUT'],
+    [{ sketchChamfer: { ...sketchChamfer, sketch: 'n1' } }, 'EDIT_SKETCH_CHAMFER_SOURCE'],
+    [{ sketchChamfer: { ...sketchChamfer, sides: ['e1', 'e3'] } }, 'EDIT_SKETCH_CHAMFER_CORNER'],
+    [{ sketchChamfer: { ...sketchChamfer, distance: 21 } }, 'EDIT_SKETCH_CHAMFER_GEOMETRY'],
+  ] as const) {
+    const denied = await dispatchTool(before, 'features', { ...args, ...patch }, neverEvaluate);
+    assert.ok(denied.isError && !denied.changed, denied.content);
+    assert.equal(denied.state, before);
+    assert.equal(JSON.parse(denied.content).code, code, denied.content);
+  }
+  const changed = await dispatchTool(before, 'features', args, evaluate);
+  assert.ok(changed.changed && !changed.isError, changed.content);
+  const sketch = changed.state.doc.nodes[0];
+  assert.ok(sketch.kind === 'sketch' && sketch.profile === 'polygon');
+  assert.deepEqual(sketch, {
+    kind: 'sketch', profile: 'polygon', id: 'n0',
+    points: [[0, 0], [34, 0], [40, 6], [40, 20], [0, 20]],
+    outline: { points: [[0, 0], [34, 0], [40, 6], [40, 20], [0, 20]], hv: { h: [0, 3], v: [2, 4] } },
+    sideTags: { outer: ['e1', 'e10', 'e2', 'e3', 'e4'] }, plane,
+    construction: [{ kind: 'circle', c: [12, 8], r: 2, construction: true, ids: ['e9'] }],
+  });
+  assert.ok(Math.abs(changed.state.bodies[0].volume! - (40 * 20 - 18) * 8) < 1e-8);
+  assert.deepEqual(changed.state.doc.nodes[1], doc.nodes[1]);
+
+  const tagged = doc.nodes[0];
+  assert.ok(tagged.kind === 'sketch' && tagged.profile === 'rectangle');
+  const bound = await stateOf({ ...doc, parameters: { W: 40 }, nodes: [
+    { ...tagged, max: [{ parameter: 'W' }, 20] }, doc.nodes[1],
+  ] });
+  const denied = await dispatchTool(bound, 'features', { ...args, expectedRevision: revisionOf(bound.doc) }, neverEvaluate);
+  assert.ok(denied.isError && !denied.changed, denied.content);
+  assert.equal(denied.state, bound);
+  assert.equal(JSON.parse(denied.content).code, 'EDIT_SKETCH_CHAMFER_BINDING');
 });
