@@ -12,6 +12,7 @@ const resizeChamfers = process.argv.includes('--resize-chamfers');
 const agentResizeFillets = process.argv.includes('--agent-resize-fillets');
 const agentResizeChamfers = process.argv.includes('--agent-resize-chamfers');
 const agentResize = agentResizeFillets || agentResizeChamfers;
+const mixedAgentResize = mixedRadii && agentResizeFillets;
 const agentResizeName = agentResizeFillets ? 'Fillet' : 'Chamfer';
 const agentResizeBaseline = process.argv.includes('--expect-no-group-proposal');
 const resize = resizeFillets || resizeChamfers;
@@ -56,7 +57,8 @@ const pins = [
 const f = await createFlow({
   name: agentResize ? `saved-sketch-${agentResizeName.toLowerCase()}-pair-proposal` : resize ? `saved-sketch-${resizeName.toLowerCase()}-pair`
     : review ? 'sketch-corner-batch-review' : agent ? 'sketch-corner-batch-agent' : 'sketch-corner-batch',
-  output: process.argv[2], envFrozen: mixedRadii ? 'D1737_SOURCE_FROZEN' : agentResizeChamfers ? 'D1731_SOURCE_FROZEN' : agentResizeFillets ? 'D1730_SOURCE_FROZEN'
+  output: process.argv[2], envFrozen: mixedAgentResize ? 'D1738_SOURCE_FROZEN' : mixedRadii ? 'D1737_SOURCE_FROZEN'
+    : agentResizeChamfers ? 'D1731_SOURCE_FROZEN' : agentResizeFillets ? 'D1730_SOURCE_FROZEN'
     : resizeChamfers ? 'D1728_SOURCE_FROZEN' : resizeFillets ? 'D1726_SOURCE_FROZEN'
     : review ? 'D1697_SOURCE_FROZEN' : agent ? 'D1696_SOURCE_FROZEN' : 'D1695_SOURCE_FROZEN',
   initialFiles: pins, requiredFrozen: pins,
@@ -299,25 +301,28 @@ async function proposeSavedCornerPair(accepted, fillet) {
   const selector = fillet ? 'fillet' : 'bevel', groupSelector = selector + 's';
   const field = fillet ? 'radius' : 'distance', editKey = fillet ? 'sketchRound' : 'sketchChamfer';
   const discovery = fillet ? 'sketchFillets' : 'sketchChamfers';
-  const expectedSizes = size => ['e9', 'e10'].map(id => ({ [selector]: id, [field]: size }));
+  const initial = mixedAgentResize ? [4, 14] : [6, 6], target = mixedAgentResize ? 12 : 8;
+  const requestedEdges = mixedAgentResize ? ['e9', 'e10'] : ['e10', 'e9'];
+  const expectedSizes = (size, reflex = size) => ['e9', 'e10'].map((id, index) => ({ [selector]: id, [field]: index ? reflex : size }));
   f.phase = `Discover and propose both saved ${name}s in one revision-bound edit`;
   const file = join(f.output, 'resize-pair-proposal.bcad');
   const bytes = JSON.stringify(accepted);
   await writeFile(file, bytes);
   await withMcpSession(session, file, `resize-${tag}-pair`, async call => {
     const fields = await call('query', { action: 'edit_fields', index: 0, includeSketchCorners: true });
-    assert.deepEqual(fields[discovery], expectedSizes(6));
+    assert.deepEqual(fields[discovery], expectedSizes(...initial));
     const revision = await currentPartRevision(call);
     assert.equal(fields.revision, revision);
-    const resize = { sketch: fields.id, [groupSelector]: ['e10', 'e9'], [field]: 8 };
+    const resize = { sketch: fields.id, [groupSelector]: requestedEdges, [field]: target };
     const makeOp = (args = {}) => ({ tool: 'features', args: {
       action: 'edit', index: 0, expectedRevision: revision, [editKey]: resize, ...args,
     } });
     const propose = (op, denied = false) => call('proposals', {
-      action: 'propose', title: `Resize both saved ${name}s to ${fillet ? 'R8' : 'C8'}`, ops: [op],
+      action: 'propose', title: `Resize both saved ${name}s to ${fillet ? 'R' : 'C'}${target}`, ops: [op],
     }, denied);
     if (agentResizeBaseline) {
-      assert.match((await propose(makeOp(), true)).error, /use sides|corners|fillets|bevels|invalid/i);
+      const message = mixedAgentResize ? /same current radius/i : /use sides|corners|fillets|bevels|invalid/i;
+      assert.match((await propose(makeOp(), true)).error, message);
       assert.equal(await readFile(file, 'utf8'), bytes);
       return;
     }
@@ -326,13 +331,14 @@ async function proposeSavedCornerPair(accepted, fillet) {
     assert.ok(schema.oneOf.some(choice => choice.required[0] === groupSelector));
     assert.equal(schema.properties[groupSelector].minItems, 2);
     assert.equal(schema.properties[groupSelector].uniqueItems, true);
+    if (mixedAgentResize) assert.match(schema.properties[groupSelector].description, /different starting radii/i);
     for (const [args, message] of [
       [{ expectedRevision: undefined }, /expectedRevision/i],
       [{ expectedRevision: '0000000000000000' }, /part changed/i],
       [{ [editKey]: { ...resize, [selector]: 'e9' } }, /only selector|mix/i],
       [{ [editKey]: { ...resize, [groupSelector]: ['e9', 'e9'] } }, /once|distinct/i],
       [{ [editKey]: { ...resize, [groupSelector]: ['e9', 'e4'] } }, new RegExp('saved ' + selector, 'i')],
-      [{ [editKey]: { ...resize, [field]: 6 } }, /already ha(?:s|ve) this (?:distance|radius)/i],
+      ...(mixedAgentResize ? [] : [[{ [editKey]: { ...resize, [field]: 6 } }, /already ha(?:s|ve) this (?:distance|radius)/i]]),
       [{ [editKey]: { ...resize, [field]: 13 } }, /collapse|touch|cross/i],
     ]) {
       assert.match((await propose(makeOp(args), true)).error, message);
@@ -341,6 +347,11 @@ async function proposeSavedCornerPair(accepted, fillet) {
     const dry = await call('features', { action: 'batch', dryRun: true, ops: [makeOp()] });
     assert.ok(dry.dryRun);
     assert.deepEqual(dry.diff.changed.map(feature => feature.id), [fields.id]);
+    if (mixedAgentResize) {
+      const reversed = makeOp({ [editKey]: { ...resize, [groupSelector]: requestedEdges.toReversed() } });
+      const reverseDry = await call('features', { action: 'batch', dryRun: true, ops: [reversed] });
+      assert.deepEqual(reverseDry.diff, dry.diff);
+    }
     assert.equal(await readFile(file, 'utf8'), bytes);
     const proposal = await propose(makeOp());
     assert.deepEqual([proposal.proposal, proposal.applied], ['P1', false]);
@@ -355,7 +366,7 @@ async function proposeSavedCornerPair(accepted, fillet) {
   }
   const pending = JSON.parse(await readFile(file, 'utf8'));
   assert.deepEqual([pending.nodes, pending.outputs], [accepted.nodes, accepted.outputs]);
-  assert.deepEqual(pending.proposals[0].ops[0].args[editKey][groupSelector], ['e10', 'e9']);
+  assert.deepEqual(pending.proposals[0].ops[0].args[editKey][groupSelector], requestedEdges);
   await f.freshOpen(file, pending, '08-agent-group-resize-open');
   await button('Chat').first().click();
   const card = f.page.getByRole('listitem', { name: 'Proposal P1', exact: true });
@@ -368,16 +379,25 @@ async function proposeSavedCornerPair(accepted, fillet) {
   const { doc } = await f.snapshot('10-agent-group-resize-accepted');
   assert.equal(doc.proposals[0].status, 'accepted');
   assert.deepEqual([doc.nodes[1], doc.outputs], [accepted.nodes[1], accepted.outputs]);
-  const label = fillet ? 'agent-R8' : 'agent-C8';
-  const native = await checkNative(label + '-native', doc, fillet, 8);
+  const label = `agent-${fillet ? 'R' : 'C'}${target}`;
+  const native = await checkNative(label + '-native', doc, fillet, target);
   await f.undo(); await f.same(pending);
   await f.redo(); await f.same(doc);
   const saved = await f.save(`agent-resized-${tag}s`);
   await f.freshOpen(saved.file, doc, '11-agent-group-resize-reopened');
-  assert.deepEqual(await checkNative(label + '-reopened', await f.doc(), fillet, 8), native);
+  assert.deepEqual(await checkNative(label + '-reopened', await f.doc(), fillet, target), native);
   await withMcpSession(session, saved.file, `read-resized-${tag}-pair`, async call => {
     const fields = await call('query', { action: 'edit_fields', index: 0, includeSketchCorners: true });
-    assert.deepEqual(fields[discovery], expectedSizes(8));
+    assert.deepEqual(fields[discovery], expectedSizes(target));
+    if (mixedAgentResize) {
+      const bytes = await readFile(saved.file);
+      const [staged] = pending.proposals[0].ops;
+      const dryRun = op => call('features', { action: 'batch', dryRun: true, ops: [op] }, true);
+      assert.match((await dryRun(staged)).error, /part changed/i);
+      assert.match((await dryRun({ ...staged, args: { ...staged.args, expectedRevision: fields.revision } })).error,
+        /already ha(?:s|ve) this radius/i);
+      assert.deepEqual(await readFile(saved.file), bytes);
+    }
   });
 }
 
@@ -588,7 +608,7 @@ await f.run(async () => {
       : await applySketchEdit(seed, name, field, selection, tag, fillet);
     const native = await checkNative(`${tag}-native`, accepted, fillet);
     if (agentResize) {
-      await proposeSavedCornerPair(accepted, fillet);
+      await proposeSavedCornerPair(mixedAgentResize ? await prepareMixedFillets(accepted) : accepted, fillet);
       assert.equal(await readFile(file, 'utf8'), bytes);
       return;
     }

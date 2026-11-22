@@ -4,7 +4,7 @@ import { chamferCorner, roundStraightCornerForEdit } from '../../sketch/corner';
 import { editChamferSetback, savedChamferSetback } from '../../sketch/chamferEdit';
 import { prepareStraightCornerBatch } from '../../sketch/cornerBatch';
 import { nextIdOf } from '../../sketch/entityIds';
-import { editFilletRadius, savedFilletRadius } from '../../sketch/filletEdit';
+import { editFilletRadii, savedFilletRadius } from '../../sketch/filletEdit';
 import { profileOf } from '../../sketch/loops';
 import { rebindDims, replaceSketchProfile, sketchShapes } from '../../sketch/reopen';
 import { rectangleOutline } from '../../sketch/select';
@@ -128,17 +128,22 @@ export function editSketchCorner(doc: StudioDoc, index: number, kind: 'CHAMFER' 
   if (ids) {
     const edges = ids.map(id => source.ids.indexOf(id));
     const sizeOf = round ? savedFilletRadius : savedChamferSetback;
-    const editSize = round ? editFilletRadius : editChamferSetback;
     const sizes = edges.map(edge => sizeOf(source.outline, edge));
     if (sizes.includes(undefined))
       return refuse(round ? 'FILLET' : 'BEVEL', `Use a saved ${selector} ID from query.edit_fields.`);
-    if (sizes.some(size => size !== sizes[0]))
-      return refuse('GEOMETRY', `Select ${round ? 'Fillets' : 'Chamfers'} with the same current ${field}.`);
-    shape = source.outline;
-    for (const edge of edges) {
-      const result = editSize(shape, edge, value);
+    if (round) {
+      const result = editFilletRadii(source.outline, edges, value);
       if ('error' in result) return refuse('GEOMETRY', result.error);
       shape = result.shape;
+    } else {
+      if (sizes.some(size => size !== sizes[0]))
+        return refuse('GEOMETRY', 'Select Chamfers with the same current distance.');
+      shape = source.outline;
+      for (const edge of edges) {
+        const result = editChamferSetback(shape, edge, value);
+        if ('error' in result) return refuse('GEOMETRY', result.error);
+        shape = result.shape;
+      }
     }
     if (shape === source.outline) return { node: source.node };
   } else if (targets.size > 1) {

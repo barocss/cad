@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1738: [Propose one common radius for mixed-size saved sketch Fillets](notes/agent-resize-mixed-sketch-fillets-2026-11-23/README.md), #21. Verify current revision and explicit Studio approval with exact manual and Agent parity through fresh Open.
 - D1737: [Set a common radius on saved sketch Fillets with different sizes](notes/resize-mixed-saved-sketch-fillets-2026-11-23/README.md), #21. Preserve the mixed source through refusal and finish both resize paths with the same native result.
 - D1736: [Sweep rectangular sections through a spaced S-bend](notes/exact-spaced-rectangular-s-bend-2026-11-23/README.md), #10. Verify solid and hollow rectangular sections, native joints, both open ends and editable fresh Open.
 - D1735: [Retire a held Fillet replacement failure when its picks change](notes/held-fillet-pair-refusal-notice-2026-11-23/README.md), #20. Preserve both held references through native refusal, retire the notice and recover in the same desktop review.

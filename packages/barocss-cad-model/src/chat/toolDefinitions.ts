@@ -39,9 +39,11 @@ const sketchCornerInput = (field: 'distance' | 'radius', operation: string) => {
   const group = selector + 's';
   const name = chamfer ? 'Chamfer' : 'Fillet';
   const results = chamfer ? 'sketchChamfers' : 'sketchFillets';
+  const groupDescription = chamfer ? 'Distinct saved Chamfer side IDs with the same current distance.'
+    : 'Distinct saved Fillet side IDs. Different starting radii can share one new radius.';
   return {
     type: 'object',
-    description: `${operation} in sketch mm. Send it alone with index and expectedRevision. Use the sketch ID and side pairs from query.edit_fields with includeSketchCorners. To resize a saved ${name}, use its side ID from ${results} as the ${selector} selector. To resize two or more saved ${name}s together, send their side IDs as ${group}. They must have the same current ${field}.`,
+    description: `${operation} in sketch mm. Send it alone with index and expectedRevision. Use the sketch ID and side pairs from query.edit_fields with includeSketchCorners. To resize a saved ${name}, use its side ID from ${results} as the ${selector} selector. To resize two or more saved ${name}s together, send their side IDs as ${group}. ${groupDescription}`,
     additionalProperties: false,
     required: ['sketch', field],
     oneOf: [{ required: ['sides'] }, { required: ['corners'] }, { required: [selector] }, { required: [group] }],
@@ -51,7 +53,7 @@ const sketchCornerInput = (field: 'distance' | 'radius', operation: string) => {
       corners: { type: 'array', minItems: 2, items: cornerSidePair, description: 'Two or more distinct corner pairs. One operation uses the same size for every pair.' },
       [selector]: { type: 'string', minLength: 1, description: `The side ID of one saved constrained ${name} to resize.` },
       [group]: { type: 'array', minItems: 2, uniqueItems: true, items: { type: 'string', minLength: 1 },
-        description: `Distinct saved ${name} side IDs with the same current ${field}.` },
+        description: groupDescription },
       [field]: { type: 'number', exclusiveMinimum: 0 },
     },
   };
