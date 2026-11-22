@@ -11,8 +11,7 @@ import { revisionOf } from '../../util/revision';
 import { loadDirect } from '../../engine/directModule';
 import { directInspectionRevision } from '../sweepSource';
 import { isDirectPin, pinnedDirectCandidate, type DirectCandidatePin } from './directCandidate';
-import { reviewBoredWallCandidate } from './modelCandidate';
-import type { ModelCandidatePin, reviewedBoreEvidence } from '../modelProposalReview';
+import { reviewModelCandidate } from './modelCandidate';
 import { evaluateCurve, faceGeometry, surfaceDomain } from '@barocss/cad';
 
 async function renderDirectReview(state: ChatState, args: Record<string, unknown>, evaluate: Evaluate, dispatch: PartRun): Promise<ToolOutcome> {
@@ -56,11 +55,12 @@ async function renderDirectReview(state: ChatState, args: Record<string, unknown
 const renderViewsTool: PartHandler = async (state, args, evaluate, _options, dispatch) => {
   if (args.expectedDirectRevision === undefined && args.expectedRevision !== undefined &&
     (args.proposal !== undefined || args.expectedProposalRevision !== undefined)) {
-    const review = await reviewBoredWallCandidate(state, args, evaluate, dispatch, false);
+    const review = await reviewModelCandidate(state, args, evaluate, dispatch, false);
     if ('refusal' in review) return review.refusal;
     const { image, ...views } = review.result;
-    return { state, content: json({ revision: review.revision, ...views, candidate: review.candidate, bore: review.bore }),
-      isError: false, changed: false, summary: `Bored wall proposal ${review.candidate.proposal}`, images: [{ data: image, mediaType: 'image/png' }] };
+    const label = 'cornerBatch' in review.geometry ? 'Sketch corner proposal' : 'Bored wall proposal';
+    return { state, content: json({ revision: review.revision, ...views, candidate: review.candidate, ...review.geometry }),
+      isError: false, changed: false, summary: `${label} ${review.candidate.proposal}`, images: [{ data: image, mediaType: 'image/png' }] };
   }
   if (args.expectedDirectRevision !== undefined || args.proposal !== undefined || args.expectedProposalRevision !== undefined)
     return renderDirectReview(state, args, evaluate, dispatch);
@@ -139,8 +139,9 @@ async function inspectSurfacePoint(state: ChatState, args: Record<string, unknow
   }
 }
 
+type ModelReview = Extract<Awaited<ReturnType<typeof reviewModelCandidate>>, { result: unknown }>;
 type NativeReviewEvidence = { candidate: DirectCandidatePin & { directRevision: string } } |
-  { candidate: ModelCandidatePin; bore: NonNullable<ReturnType<typeof reviewedBoreEvidence>>; imageSha256: string };
+  ({ candidate: ModelReview['candidate']; imageSha256: string } & ModelReview['geometry']);
 
 function nativeFaceReview(state: ChatState, doc: StudioDoc, bodies: readonly BodyResult[], names: readonly string[],
   review?: NativeReviewEvidence): ToolOutcome {
@@ -171,10 +172,10 @@ async function inspectNativeFaces(state: ChatState, args: Record<string, unknown
     return fail(state, 'For pinned native inspection, supply exact face names in faces.', { code: 'NATIVE_FACE_INPUT' });
   if (expectedDirectRevision === undefined && (args.expectedReviewRevision !== undefined ||
     (expectedRevision !== undefined && (proposal !== undefined || expectedProposalRevision !== undefined)))) {
-    const review = await reviewBoredWallCandidate(state, args, evaluate, dispatch, true);
+    const review = await reviewModelCandidate(state, args, evaluate, dispatch, true);
     if ('refusal' in review) return review.refusal;
     return nativeFaceReview(state, review.preview.doc, review.preview.bodies, faces, {
-      candidate: review.candidate, bore: review.bore, imageSha256: review.result.imageSha256,
+      candidate: review.candidate, ...review.geometry, imageSha256: review.result.imageSha256,
     });
   }
   if (proposal === undefined && expectedProposalRevision === undefined) {

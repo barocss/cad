@@ -123,6 +123,15 @@ For a bevel, use `sketchChamfer` with `distance` and the same list of pairs. Sta
 one operation in `proposals.propose` and approve it in Studio. Each pair must identify a distinct
 corner. If any pair fails or the edits consume a shared side, the sketch stays as it was.
 
+For visual review of a group on a standalone sketch with one straight extrusion, read the
+`modelReviewRevision` from `proposals.list`. Call `query.render` with the proposal ID, the base
+`expectedRevision` from `query.rebuild`, and that proposal pin as `expectedProposalRevision`.
+The response includes the four-view PNG, its `imageSha256`, the native body hash, and the new
+wall names and their input side pairs in `cornerBatch.faces`. Pass those names as `faces` to
+`query.inspect` with the same pins and the returned `candidate.reviewRevision` as
+`expectedReviewRevision`. Inspection returns the native plane or cylinder for each face.
+Both calls read the proposal on a copy. Approve the group in Studio after review.
+
 If the model has changed, `EDIT_STALE`, `COMMAND_STALE` or `DELETE_STALE` returns the requested and current revisions.
 Review the current part before resubmitting. For delete, read the current feature tree to find the new index.
 In `features.batch`, the pin applies to the document at the operation's position.

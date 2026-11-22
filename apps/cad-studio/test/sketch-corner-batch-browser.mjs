@@ -1,14 +1,17 @@
 import assert from 'node:assert/strict';
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { createFlow } from './flow-helper.mjs';
+import { createFlow, sha256 } from './flow-helper.mjs';
 import { currentPartRevision, withMcpSession } from './mcp-browser-session.mjs';
 
-const agent = process.argv.includes('--agent');
+const review = process.argv.includes('--review');
+const agent = review || process.argv.includes('--agent');
 const original = [[0, 0], [60, 0], [60, 40], [38, 40], [38, 15], [22, 15], [22, 40], [0, 40]];
 const result = [[0, 0], [60, 0], [60, 40], [44, 40], [38, 34], [38, 21], [32, 15], [22, 15], [22, 40], [0, 40]];
 const originalIds = ['e1', 'e2', 'e3', 'e4', 'e5', 'e6', 'e7', 'e8'];
 const resultIds = ['e1', 'e2', 'e3', 'e9', 'e4', 'e10', 'e5', 'e6', 'e7', 'e8'];
+const reviewPlane = { origin: [60, 40, 0], normal: [0, 0, 1], xAxis: [-1, 0, 0] };
+const worldXY = ([x, y]) => review ? [60 - x, 40 - y] : [x, y];
 const pins = [
   'apps/cad-studio/test/sketch-corner-batch-browser.mjs',
   'apps/cad-studio/src/sketch/cornerDraft.ts', 'apps/cad-studio/src/sketch/constraintInspection.ts',
@@ -22,13 +25,20 @@ const pins = [
     'packages/barocss-cad-model/src/chat/part/sketchCorner.ts', 'packages/barocss-cad-model/src/chat/part/features.ts',
     'packages/barocss-cad-model/src/chat/toolDefinitions.ts',
   ] : []),
+  ...(review ? [
+    'packages/barocss-cad-model/src/chat/cornerProposalReview.ts',
+    'packages/barocss-cad-model/src/chat/part/modelCandidate.ts',
+    'packages/barocss-cad-model/src/chat/part/proposals.ts',
+    'packages/barocss-cad-model/src/chat/part/views.ts',
+  ] : []),
 ];
 const f = await createFlow({
-  name: agent ? 'sketch-corner-batch-agent' : 'sketch-corner-batch',
-  output: process.argv[2], envFrozen: agent ? 'D1696_SOURCE_FROZEN' : 'D1695_SOURCE_FROZEN',
+  name: review ? 'sketch-corner-batch-review' : agent ? 'sketch-corner-batch-agent' : 'sketch-corner-batch',
+  output: process.argv[2], envFrozen: review ? 'D1697_SOURCE_FROZEN' : agent ? 'D1696_SOURCE_FROZEN' : 'D1695_SOURCE_FROZEN',
   initialFiles: pins, requiredFrozen: pins,
-  qualification: agent ? 'Discover and propose a whole corner edit through local MCP. Approve one proposal and reopen the editable result.'
-    : 'Round and chamfer adjacent convex and reflex sketch corners. Refuse shared-edge consumption as a group.',
+  qualification: review ? 'Pin a mixed-turn sketch corner proposal to the Agent image and native walls. Approve it in Studio and reopen the same geometry and image.'
+    : agent ? 'Discover and propose a whole corner edit through local MCP. Approve one proposal and reopen the editable result.'
+      : 'Round and chamfer adjacent convex and reflex sketch corners. Refuse shared-edge consumption as a group.',
   limits: ['One notched XY outline, one 10 mm Extrude, desktop Studio WebGPU.'],
   inspectorSource: String.raw`
 import assert from 'node:assert/strict';
@@ -37,6 +47,7 @@ import { checkBrep, faceGeometry, massPropertiesOf } from '@barocss/cad';
 import { emptyDoc, withNode } from '@barocss/cad-model/engine/doc';
 import { partSnapshot } from '@barocss/cad-model/engine/part';
 import { profileOf } from '@barocss/cad-model/sketch/loops';
+import { digestOf } from '@barocss/cad-model/util/digest';
 const input = JSON.parse(readFileSync(process.argv[2], 'utf8'));
 if (process.argv[3] === '"seed"') {
   const profile = profileOf([{ kind: 'polygon', closed: true, points: input.points, ids: input.ids,
@@ -44,7 +55,8 @@ if (process.argv[3] === '"seed"') {
     lengths: { 0: 60 }, rules: [{ kind: 'fix', point: 0, at: [0, 0] }],
   }]);
   assert.ok('node' in profile);
-  console.log(JSON.stringify(withNode(withNode(emptyDoc(), profile.node), { kind: 'extrude', sketch: 0, height: 10 })));
+  const sketch = input.plane ? { ...profile.node, plane: input.plane } : profile.node;
+  console.log(JSON.stringify(withNode(withNode(emptyDoc(), sketch), { kind: 'extrude', sketch: 0, height: 10 })));
 } else {
   const [body] = partSnapshot(input).outputs;
   const b = body.brep;
@@ -55,7 +67,7 @@ if (process.argv[3] === '"seed"') {
   const loops = new Map(b.loops.map(loop => [loop.id, loop]));
   const faces = b.faces.map(face => ({ name: face.name, geometry: faceGeometry(face),
     vertices: face.loops.flatMap(id => loops.get(id).coedges.flatMap(key => edges.get(coedges.get(key).edge).vertices.map(v => vertices.get(v)))) }));
-  console.log(JSON.stringify({ volume: massPropertiesOf(body).volume, faces }));
+  console.log(JSON.stringify({ volume: massPropertiesOf(body).volume, faces, bodySha256: digestOf(b) }));
 }
 `,
 });
@@ -69,7 +81,7 @@ async function edit() {
   await button('Edit sketch', f.editor()).click();
   await f.sketchPanel().waitFor();
   await f.tool('Select', 's');
-  await f.frame(original);
+  await f.frame(original.map(worldXY));
 }
 async function expectPoints(points) {
   const outline = group('Outline points');
@@ -106,15 +118,73 @@ async function checkNative(label, doc, fillet) {
     const newWall = id === 'e9' || id === 'e10';
     assert.equal(face.geometry.kind, fillet && newWall ? 'cylinder' : 'plane');
     if (fillet && newWall) {
-      const center = id === 'e9' ? [44, 34] : [32, 21];
+      const center = worldXY(id === 'e9' ? [44, 34] : [32, 21]);
       assert.ok(Math.hypot(face.geometry.c[0] - center[0], face.geometry.c[1] - center[1]) < 1e-8);
       assert.ok(Math.abs(face.geometry.r - 6) < 1e-8);
       assert.equal(face.geometry.out, id === 'e9' ? 1 : -1);
     }
-    for (const [x, y] of [result[i], result[(i + 1) % result.length]]) for (const z of [0, 10])
+    for (const [x, y] of [result[i], result[(i + 1) % result.length]].map(worldXY)) for (const z of [0, 10])
       assert.ok(face.vertices.some(p => Math.hypot(p[0] - x, p[1] - y, p[2] - z) < 1e-8), `${id} at ${[x, y, z]}`);
   }
   return native;
+}
+
+async function render(request, args) {
+  const reply = await request('tools/call', { name: 'query', arguments: { action: 'render', ...args } });
+  assert.equal(reply.isError, false, JSON.stringify(reply.content[0]));
+  const meta = JSON.parse(reply.content[0].text);
+  const png = Buffer.from(reply.content.find(item => item.type === 'image').data, 'base64');
+  assert.equal(png.subarray(0, 8).toString('hex'), '89504e470d0a1a0a');
+  assert.equal(meta.imageSha256, sha256(png));
+  assert.equal(Object.keys(meta.views).length, 4);
+  return { meta, png };
+}
+
+async function reviewAgentEdit(call, request, tag, fillet, expectedRevision) {
+  f.phase = `Review both ${tag} walls from the pinned Agent image`;
+  const { proposals: [pending, twin] } = await call('proposals', { action: 'list' });
+  assert.deepEqual([pending.id, twin.id], ['P1', 'P2']);
+  assert.match(pending.modelReviewRevision, /^[a-f0-9]{64}$/);
+  assert.match(twin.modelReviewRevision, /^[a-f0-9]{64}$/);
+  assert.notEqual(pending.modelReviewRevision, twin.modelReviewRevision);
+  const options = { expectedRevision, proposal: pending.id, expectedProposalRevision: pending.modelReviewRevision };
+  const twinOptions = { ...options, proposal: twin.id, expectedProposalRevision: twin.modelReviewRevision };
+  for (const [overrides, code] of [
+    [{ expectedRevision: '0000000000000000' }, 'MODEL_REVIEW_BASE_STALE'],
+    [{ expectedProposalRevision: twin.modelReviewRevision }, 'MODEL_REVIEW_PROPOSAL_STALE'],
+  ]) assert.equal((await call('query', { action: 'render', ...options, ...overrides }, true)).code, code);
+  const base = await render(request, { expectedRevision });
+  const { meta, png } = await render(request, options);
+  assert.notEqual(meta.imageSha256, base.meta.imageSha256);
+  assert.notEqual(meta.revision, expectedRevision);
+  assert.deepEqual([meta.candidate.proposal, meta.candidate.proposalRevision, meta.candidate.baseRevision],
+    [pending.id, pending.modelReviewRevision, expectedRevision]);
+  assert.match(meta.candidate.bodySha256, /^[a-f0-9]{64}$/);
+  assert.match(meta.candidate.reviewRevision, /^[a-f0-9]{64}$/);
+  const twinImage = await render(request, twinOptions);
+  assert.deepEqual(twinImage.png, png);
+  assert.notEqual(twinImage.meta.candidate.reviewRevision, meta.candidate.reviewRevision);
+  const faces = ['n1.side[e9]', 'n1.side[e10]'];
+  const { cornerBatch } = meta;
+  assert.deepEqual([cornerBatch.sketch, cornerBatch.operation, cornerBatch.size], ['n0', tag, 6]);
+  assert.deepEqual(cornerBatch.faces.map(face => [face.name, face.sides]).sort(),
+    [[faces[1], ['e4', 'e5']], [faces[0], ['e3', 'e4']]]);
+  for (const face of faces) assert.ok(Object.values(meta.legend).includes(face), face);
+  const inspect = { action: 'inspect', ...options, faces, expectedReviewRevision: meta.candidate.reviewRevision };
+  const rejected = await call('query', { ...inspect, ...twinOptions }, true);
+  assert.equal(rejected.code, 'MODEL_REVIEW_IMAGE_STALE');
+  const native = await call('query', inspect);
+  assert.deepEqual([native.revision, native.candidate, native.imageSha256, native.cornerBatch],
+    [meta.revision, meta.candidate, meta.imageSha256, cornerBatch]);
+  assert.deepEqual(native.faces.map(face => [face.name, face.body, face.geometry.kind]),
+    faces.map(name => [name, cornerBatch.body, fillet ? 'cylinder' : 'plane']));
+  if (fillet) {
+    assert.deepEqual(native.faces.map(face => face.geometry.outwardNormal), ['away-from-axis', 'toward-axis']);
+    for (const face of native.faces) assert.ok(Math.abs(face.geometry.radius - 6) < 1e-8);
+  }
+  await writeFile(join(f.output, `${tag}-agent-review.png`), png);
+  f.report.observations.push({ label: `${tag}-candidate`, ...meta.candidate, revision: meta.revision, imageSha256: meta.imageSha256, cornerBatch });
+  return { meta, png, native, inspect, faces };
 }
 
 async function approveAgentEdit(seed, tag, fillet) {
@@ -127,7 +197,7 @@ async function approveAgentEdit(seed, tag, fillet) {
   }, denied);
   await writeFile(file, source);
   f.phase = `Discover, reject invalid pairs and propose the ${tag} batch`;
-  const op = await withMcpSession(session, file, `${tag}-proposal`, async call => {
+  const { op, reviewed } = await withMcpSession(session, file, `${tag}-proposal`, async (call, request) => {
     const fields = await call('query', { action: 'edit_fields', index: 0, includeSketchCorners: true });
     assert.deepEqual([fields.index, fields.id, fields.revision], [0, 'n0', await currentPartRevision(call)]);
     const corners = fields.sketchCorners.filter(({ point }) => point[0] === 38 && [40, 15].includes(point[1])).map(item => item.sides);
@@ -152,15 +222,20 @@ async function approveAgentEdit(seed, tag, fillet) {
     assert.equal(await readFile(file, 'utf8'), source);
     const proposal = await propose(call, args);
     assert.deepEqual([proposal.proposal, proposal.applied], ['P1', false]);
+    if (review) {
+      const twin = await propose(call, args);
+      assert.deepEqual([twin.proposal, twin.applied], ['P2', false]);
+    }
     const staged = await readFile(file);
+    const reviewed = review ? await reviewAgentEdit(call, request, tag, fillet, fields.revision) : undefined;
     assert.match((await call('proposals', { action: 'accept', id: 'P1' }, true)).error, /user accepts.*studio/i);
     assert.deepEqual(await readFile(file), staged);
-    return args;
+    return { op: args, reviewed };
   });
   const bytes = await readFile(file);
   const previous = JSON.parse(bytes);
   assert.deepEqual([previous.nodes, previous.outputs], [seed.nodes, seed.outputs]);
-  assert.equal(previous.proposals.length, 1);
+  assert.equal(previous.proposals.length, review ? 2 : 1);
   assert.equal(previous.proposals[0].ops.length, 1);
   assert.deepEqual(previous.proposals[0].ops[0].args[editKey], op[editKey]);
 
@@ -180,11 +255,20 @@ async function approveAgentEdit(seed, tag, fillet) {
   assert.deepEqual([approval.kind, approval.proposal, approval.by.agent], ['accept', 'P1', 'user']);
   assert.deepEqual([accepted.nodes[1], accepted.outputs], [seed.nodes[1], seed.outputs]);
   assert.deepEqual(await readFile(file), bytes);
-  return { previous, accepted, readReopened: async saved => {
-    await withMcpSession(session, saved.file, `${tag}-reopened`, async call => {
+  return { previous, accepted, reviewed, readReopened: async saved => {
+    await withMcpSession(session, saved.file, `${tag}-reopened`, async (call, request) => {
       const after = await readFile(saved.file);
-      assert.notEqual(await currentPartRevision(call), op.expectedRevision);
+      const expectedRevision = await currentPartRevision(call);
+      assert.notEqual(expectedRevision, op.expectedRevision);
       assert.match((await propose(call, op, true)).error, /part changed/i);
+      if (reviewed) {
+        assert.equal(expectedRevision, reviewed.meta.revision);
+        assert.deepEqual((await render(request, { expectedRevision })).png, reviewed.png);
+        const native = await call('query', { action: 'inspect', expectedRevision, faces: reviewed.faces });
+        assert.deepEqual(native.faces, reviewed.native.faces);
+        const retired = await call('query', { ...reviewed.inspect, expectedRevision }, true);
+        assert.equal(retired.code, 'MODEL_REVIEW_UNAVAILABLE');
+      }
       assert.deepEqual(await readFile(saved.file), after);
     });
   } };
@@ -236,7 +320,7 @@ async function applySketchEdit(seed, name, field, selection, tag, fillet) {
 }
 
 await f.run(async () => {
-  const seed = await f.inspect('seed', { points: original, ids: originalIds }, 'seed');
+  const seed = await f.inspect('seed', { points: original, ids: originalIds, ...(review ? { plane: reviewPlane } : {}) }, 'seed');
   const file = join(f.output, 'notched-source.bcad');
   const bytes = JSON.stringify(seed);
   await writeFile(file, bytes);
@@ -246,10 +330,11 @@ await f.run(async () => {
     { name: 'Chamfer', field: 'Distance', selection: [original[3], original[4]] },
   ]) {
     const fillet = name === 'Fillet', tag = name.toLowerCase();
-    const { previous, accepted, readReopened } = agent
+    const { previous, accepted, reviewed, readReopened } = agent
       ? await approveAgentEdit(seed, tag, fillet)
       : await applySketchEdit(seed, name, field, selection, tag, fillet);
     const native = await checkNative(`${tag}-native`, accepted, fillet);
+    if (reviewed) assert.equal(native.bodySha256, reviewed.meta.candidate.bodySha256);
     await f.undo();
     await f.same(previous);
     await f.redo();
