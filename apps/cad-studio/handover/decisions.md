@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D1723: [Carry a concentric bore through the spaced S-bend](notes/exact-spaced-annular-s-bend-2026-11-23/README.md), #10. Qualify both open mouths, eight inner and outer joins, the editable bore, and explicit local Agent approval.
+
 - D1722: [Replace both held edges of one saved Constant Fillet](notes/dual-held-fillet-history-replacement-2026-11-23/README.md), #20. Stage two distinct picks, commit the pair and restore both reference problems with Undo.
 
 - D1721: [Sweep a circular disk through two bends separated by a straight span](notes/exact-spaced-s-bend-2026-11-23/README.md), #10. Verify four bound native joins, the diameter edit, fresh Open and explicit Agent approval.

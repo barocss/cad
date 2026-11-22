@@ -5,6 +5,7 @@ import { createFlow } from './flow-helper.mjs';
 import { currentPartRevision, withMcpSession } from './mcp-browser-session.mjs';
 
 const baseline = process.argv.includes('--expect-refused');
+const annular = process.argv.includes('--annular');
 const path = { degree: 2, knots: [0, 0, 0, 1, 1, 2, 2, 3, 3, 3],
   controlPoints: [[0, 0, 0], [0, 12, 0], [12, 12, 0], [16, 12, 0], [20, 12, 0], [38, 12, 0], [38, 30, 0]],
   weights: [1, Math.SQRT1_2, 1, 1, 1, Math.SQRT1_2, 1] };
@@ -13,19 +14,22 @@ const mark = (id, points) => `@curve #${id} { type:nurbs; degree:2; knots:${JSON
   control-points:${JSON.stringify(points)}; weights:${JSON.stringify(path.weights)}; }`;
 const rail = 'Spaced S-bend rail';
 const representation = 'Exact arc–line–arc';
-const seed = { format: 'barocss-cad-model', schema: 3, units: 'mm', parameters: {},
-  nextId: 1, nodes: [{ id: 'n0', kind: 'sketch', profile: 'circle', center: [0, 0], radius: 2,
-    sideTags: { outer: ['e0'] } }], outputs: {},
+const disk = { id: 'n0', kind: 'sketch', profile: 'circle', center: [0, 0], radius: 2, sideTags: { outer: ['e0'] } };
+const bore = { kind: 'arc', start: [{ parameter: 'BoreRadius' }, 0], center: [0, 0], direction: 'cw' };
+const profile = annular ? { ...disk, holes: [[bore]], sideTags: { ...disk.sideTags, holes: [['bore']] } } : disk;
+const seed = { format: 'barocss-cad-model', schema: 3, units: 'mm', parameters: annular ? { BoreRadius: 1 } : {},
+  nextId: 1, nodes: [profile], outputs: {},
   direct: { sources: { rail: `@model rail { version:0; length-unit:mm; ${mark('spaced', path.controlPoints)} ${mark('kink', kink)} }` },
     objects: [{ id: 'spaced', name: rail, source: 'rail', geometry: 'spaced' },
       { id: 'kink', name: 'Kinked spaced rail', source: 'rail', geometry: 'kink' }] } };
 const pins = ['packages/barocss-cad/src/brep/exact-sweep.ts', 'packages/barocss-cad-model/src/app/profileCommands.ts',
   'packages/barocss-cad-model/src/engine/errors.ts', 'packages/barocss-cad-model/src/chat/part/features.ts'];
 const f = await createFlow({
-  name: 'exact-spaced-s-bend', output: process.argv[2], envFrozen: 'D1721_SOURCE_FROZEN',
+  name: annular ? 'exact-spaced-annular-s-bend' : 'exact-spaced-s-bend', output: process.argv[2],
+  envFrozen: annular ? 'D1723_SOURCE_FROZEN' : 'D1721_SOURCE_FROZEN',
   initialFiles: pins, requiredFrozen: pins,
-  qualification: 'Sweep a disk along two tangent bends separated by a native straight span.',
-  limits: ['Coplanar R12/R18 opposite quarter circles and 8 mm straight. One circular disk. Desktop WebGPU and local MCP.'],
+  qualification: `Sweep a ${annular ? 'concentric annulus' : 'disk'} along two tangent bends separated by a native straight span.`,
+  limits: [`Coplanar R12/R18 opposite quarter circles and 8 mm straight. One circular ${annular ? 'concentric bore' : 'disk'}. Desktop WebGPU and local MCP.`],
   ...(!baseline && { inspectorSource: `
 import { readFileSync } from 'node:fs';
 import { brepMassProperties, checkBrep, curveDomain, evaluateCurve, faceGeometry, massPropertiesOf, measureBrepEdgeContinuity } from '@barocss/cad';
@@ -37,6 +41,7 @@ const { brep } = output;
 const uses = new Map(brep.coedges.map(use => [use.id, use]));
 const faces = new Map(brep.faces.flatMap(face => face.loops.map(loop => [loop, face])));
 const edges = new Map(brep.edges.map(edge => [edge.id, edge]));
+const isBore = face => face.name.includes('.side[bore]');
 const samples = curve => {
   const [a,b] = curveDomain(curve);
   return [0,.15,.37,.5,.64,.85,1].map(t => evaluateCurve(curve, a + (b-a)*t));
@@ -47,6 +52,7 @@ const joints = [12, 20].map(x => brep.edges.filter(edge =>
   return { id: edge.id, degree: edge.curve.degree, bindings: edgeUses.map(use => !!use.pcurve),
     reciprocal: edgeUses.every(use => uses.get(use.twin)?.twin === use.id && uses.get(use.twin)?.sense !== use.sense),
     geometry: edgeUses.map(use => faceGeometry(faces.get(use.loop)).kind),
+    bore: edgeUses.map(use => isBore(faces.get(use.loop))),
     points: samples(edge.curve),
     result: measureBrepEdgeContinuity(brep,edge.id,{curvature:true}) };
 }));
@@ -57,7 +63,9 @@ const caps = brep.faces.flatMap(face => {
   return [{name:face.name, geometry, loops:loops.map(loop => ({kind:loop.kind, rims:loop.coedges.map(id =>
     samples(edges.get(uses.get(id).edge).curve))}))}];
 });
-console.log(JSON.stringify({ check: checkBrep(brep,{strict:true}), joints, caps,
+const outerSurfaces = brep.faces.filter(face => !isBore(face) && faceGeometry(face).kind !== 'plane')
+  .map(face => [face.name, digestOf(face.surface)]);
+console.log(JSON.stringify({ check: checkBrep(brep,{strict:true}), joints, caps, outerSurfaces,
   mass: massPropertiesOf(output), independent: brepMassProperties(brep,1), digest: digestOf(brep) }));
 ` }),
 });
@@ -68,9 +76,9 @@ const hud = () => f.page.getByRole('dialog', { name: 'Sweep', exact: true });
 const status = value => hud().locator('.status').filter({ hasText: new RegExp(`^${value}$`) });
 const firstLength = 6 * Math.PI, secondLength = 9 * Math.PI, run = 8;
 const pathLength = firstLength + run + secondLength;
-const volume = radius => Math.PI * radius ** 2 * pathLength;
-const centroid = radius => {
-  const innerMoment = bend => 2 * (bend + radius ** 2 / (4 * bend)) / Math.PI;
+const volume = (radius, inner = 0) => Math.PI * (radius ** 2 - inner ** 2) * pathLength;
+const centroid = (radius, inner) => {
+  const innerMoment = bend => 2 * (bend + (radius ** 2 + inner ** 2) / (4 * bend)) / Math.PI;
   const first = innerMoment(12), second = innerMoment(18);
   return [(firstLength * (12 - first) + run * 16 + secondLength * (20 + second)) / pathLength,
     (firstLength * first + run * 12 + secondLength * (30 - second)) / pathLength, 0];
@@ -80,46 +88,53 @@ const near = (value, target, tolerance = 1e-7) =>
 
 async function verify(label, doc, radius) {
   const native = await f.inspect(label, doc);
+  const inner = annular ? doc.parameters.BoreRadius : 0;
   assert.ok(native.check.valid, native.check.issues.join('\n'));
-  assert.deepEqual(native.check.topology.map(body => body.genus), [0]);
-  assert.deepEqual(native.check.counts, { bodies: 1, shells: 1, faces: 8, loops: 8, coedges: 28, edges: 14, vertices: 8 });
+  assert.deepEqual(native.check.topology.map(body => body.genus), [annular ? 1 : 0]);
+  assert.deepEqual(native.check.counts, annular
+    ? { bodies: 1, shells: 1, faces: 14, loops: 16, coedges: 56, edges: 28, vertices: 16 }
+    : { bodies: 1, shells: 1, faces: 8, loops: 8, coedges: 28, edges: 14, vertices: 8 });
   assert.equal(native.caps.length, 2);
   for (const [name, x0, y0, sense] of [['n1.start', 0, 0, -1], ['n1.end', 38, 30, 1]]) {
     const cap = native.caps.find(face => face.name === name);
     assert.ok(cap, name);
     cap.geometry.n.forEach((value, axis) => near(value, axis === 1 ? sense : 0));
-    assert.deepEqual(cap.loops.map(loop => loop.kind), ['outer']);
-    assert.equal(cap.loops[0].rims.length, 2);
-    for (const rim of cap.loops[0].rims) for (const [x, y, z] of rim) {
-      near(y, y0);
-      near(Math.hypot(x - x0, z), radius);
+    assert.deepEqual(cap.loops.map(loop => loop.kind), annular ? ['outer', 'inner'] : ['outer']);
+    for (const loop of cap.loops) {
+      assert.equal(loop.rims.length, 2);
+      for (const rim of loop.rims) for (const [x, y, z] of rim) {
+        near(y, y0);
+        near(Math.hypot(x - x0, z), loop.kind === 'outer' ? radius : inner);
+      }
     }
   }
-  assert.deepEqual(native.joints.map(joint => joint.length), [2, 2]);
+  assert.deepEqual(native.joints.map(joint => joint.length), annular ? [4, 4] : [2, 2]);
   native.joints.forEach((joint, index) => {
+    assert.equal(joint.filter(edge => edge.bore[0]).length, annular ? 2 : 0);
     for (const edge of joint) {
       assert.equal(edge.degree, 2);
       assert.deepEqual(edge.bindings, [true, true]);
       assert.equal(edge.reciprocal, true);
       assert.ok(edge.geometry.every(kind => kind !== 'plane'));
+      assert.equal(edge.bore[0], edge.bore[1]);
       assert.equal(edge.result.status, 'measured');
       assert.equal(edge.result.curvature.status, 'measured');
       assert.ok(edge.result.curvature.maximumDifference > 0);
       near(edge.result.maximumAngleDegrees, 0, 1e-6);
       for (const [x, y, z] of edge.points) {
         near(x, index ? 20 : 12);
-        near(Math.hypot(y - 12, z), radius);
+        near(Math.hypot(y - 12, z), edge.bore[0] ? inner : radius);
       }
     }
   });
   const { bodies } = await f.bodies();
   assert.equal(bodies.length, 1);
-  const centre = centroid(radius);
+  const centre = centroid(radius, inner);
   for (const result of [native.mass, native.independent, bodies[0]]) {
-    near(result.volume, volume(radius), 2e-6);
+    near(result.volume, volume(radius, inner), 2e-6);
     result.centroid.forEach((value, axis) => near(value, centre[axis], 2e-6));
   }
-  f.report.observations.push({ label, radius, volume: native.mass.volume, digest: native.digest,
+  f.report.observations.push({ label, radius, inner, wall: annular ? radius - inner : null, volume: native.mass.volume, digest: native.digest,
     centre, gap: native.check.maximumPcurveGap, angles: native.joints.map(edges => edges.map(edge => edge.result.maximumAngleDegrees)) });
   return native;
 }
@@ -142,6 +157,32 @@ async function studyJoints(native, label) {
   }
   await result.scrollIntoViewIfNeeded();
   await f.snapshot(label);
+}
+
+async function inspectBoreMouths(inner) {
+  const cube = f.page.getByRole('group', { name: 'View cube', exact: true });
+  const middle = (inner + 2) / 2;
+  const mouths = [{ name: 'start', view: 'Front', x: 0, y: 0 }, { name: 'end', view: 'Back', x: 38, y: 30 }];
+  for (const { name, view, x, y } of mouths) {
+    f.phase = 'Inspect the open ' + name + ' bore mouth';
+    await button('View cube directions', cube).click();
+    await f.page.getByRole('menuitem', { name: view, exact: true }).click();
+    if (await button('Ortho').getAttribute('aria-pressed') !== 'true') await button('Ortho').click();
+    await f.page.getByTitle('Frame all (F)', { exact: true }).click();
+    await f.page.waitForFunction(([x, y, direction]) => {
+      const a = window.__studioScreenOf([x, y, 0]), b = window.__studioScreenOf([x, y + 1, 0]);
+      return document.querySelector('.view-cube .vc-label')?.textContent === direction && Math.hypot(a[0] - b[0], a[1] - b[1]) < .01;
+    }, [x, y, view.toUpperCase()]);
+    const hits = await f.page.evaluate(([x, y, middle]) => ({
+      opening: window.__studioSurfacePoint([x, y, 0]), land: window.__studioSurfacePoint([x, y, middle]),
+    }), [x, y, middle]);
+    assert.ok(hits.land, JSON.stringify(hits));
+    near(hits.land[1], y, 1e-4);
+    assert.ok(!hits.opening || (view === 'Front' ? hits.opening[1] - y : y - hits.opening[1]) > .25, JSON.stringify(hits));
+    const label = `09-${name}-bore-opening`;
+    f.report.observations.push({ label, ...hits });
+    await f.snapshot(label);
+  }
 }
 
 await f.run(async () => {
@@ -171,7 +212,7 @@ await f.run(async () => {
   assert.ok(await button('Apply', hud()).isDisabled());
   await f.same(seed);
   const refusal = await hud().innerText();
-  assert.match(refusal, baseline ? /outside the exact Sweep range/i : /tangent/i);
+  assert.match(refusal, baseline ? annular ? /needs a circular disk/i : /outside the exact Sweep range/i : /tangent/i);
   await f.snapshot(baseline ? '02-baseline-spaced-refused' : '02-kink-refused');
   if (baseline) return;
 
@@ -187,26 +228,50 @@ await f.run(async () => {
   const original = await verify('diameter-four-native', accepted, 2);
   await studyJoints(original, '05-both-spaced-joints');
 
-  f.phase = 'Refuse axis contact and edit the saved diameter';
-  await f.openFeatureEditor(1, 'spaced Sweep');
-  const diameter = f.editor().getByLabel('Diameter', { exact: true });
-  await diameter.fill('24'); await button('Apply', f.editor()).click();
-  await f.editor().getByText('Choose a larger arc radius or reduce the sketch diameter.', { exact: true }).waitFor();
-  await f.same(accepted);
-  await diameter.fill('6');
-  const edited = (await f.applyEditor(accepted, '06-spaced-diameter-six')).doc;
-  assert.equal(edited.nodes[0].radius, 3);
-  assert.deepEqual(edited.nodes.slice(1), accepted.nodes.slice(1));
-  const native = await verify('diameter-six-native', edited, 3);
+  let edited;
+  const radius = annular ? 2 : 3;
+  if (annular) {
+    f.phase = 'Refuse wall contact and edit the concentric bore';
+    const panel = await f.openParameters();
+    const input = panel.getByLabel('Value of BoreRadius', { exact: true });
+    await input.fill('2'); await input.press('Enter');
+    const refusal = await f.waitToast(/Parameters not changed/);
+    assert.match(refusal, /strictly positive wall clearance around the bore/);
+    await f.same(accepted);
+    await f.snapshot('06-spaced-bore-wall-contact-refused');
+    await f.closeParameters(panel);
+    edited = (await f.setParameter('BoreRadius', 1.5, '06-spaced-bore-three')).doc;
+    assert.deepEqual(edited.nodes, accepted.nodes);
+    assert.equal(edited.parameters.BoreRadius, 1.5);
+  } else {
+    f.phase = 'Refuse axis contact and edit the saved diameter';
+    await f.openFeatureEditor(1, 'spaced Sweep');
+    const diameter = f.editor().getByLabel('Diameter', { exact: true });
+    await diameter.fill('24'); await button('Apply', f.editor()).click();
+    await f.editor().getByText('Choose a larger arc radius or reduce the sketch diameter.', { exact: true }).waitFor();
+    await f.same(accepted);
+    await diameter.fill('6');
+    edited = (await f.applyEditor(accepted, '06-spaced-diameter-six')).doc;
+    assert.equal(edited.nodes[0].radius, 3);
+    assert.deepEqual(edited.nodes.slice(1), accepted.nodes.slice(1));
+  }
+  const native = await verify('edited-native', edited, radius);
+  if (annular) assert.deepEqual(native.outerSurfaces, original.outerSurfaces);
   await f.undo(); await f.same(accepted);
   await f.redo(); await f.same(edited);
   const saved = await f.save('spaced-s-bend');
   await f.freshOpen(saved.file, edited, '07-spaced-s-bend-reopened');
-  const reopened = await verify('reopened-native', await f.doc(), 3);
+  const reopened = await verify('reopened-native', await f.doc(), radius);
   assert.equal(reopened.digest, native.digest);
   await studyJoints(reopened, '08-both-reopened-joints');
+  if (annular) {
+    await inspectBoreMouths(1.5);
+    const restored = (await f.setParameter('BoreRadius', 1, '09-spaced-bore-restored')).doc;
+    assert.equal((await verify('post-open-original-bore', restored, radius)).digest, original.digest);
+    await f.undo(); await f.same(edited);
+  }
   await f.openFeatureEditor(1, 'reopened spaced Sweep');
-  assert.equal(Number(await f.editor().getByLabel('Diameter', { exact: true }).inputValue()), 6);
+  assert.equal(Number(await f.editor().getByLabel('Diameter', { exact: true }).inputValue()), 2 * radius);
   await f.editor().getByText(representation, { exact: true }).waitFor();
   await f.snapshot('09-spaced-history');
 
@@ -215,6 +280,10 @@ await f.run(async () => {
   await copyFile(source.file, proposalFile);
   await withMcpSession({ app: f.app, output: f.output, clientName: f.name }, proposalFile, 'spaced-s-bend', async call => {
     const expectedRevision = await currentPartRevision(call);
+    if (annular) {
+      const description = await call('describe', { command: 'sweep-curve' });
+      assert.match(description.values.sketch, /arc–line–arc path accepts a circular outer section with an optional concentric circular hole/);
+    }
     const { direct_curves: curves } = await call('query', { action: 'summary' });
     const picked = curves.find(curve => curve.id === 'spaced'), other = curves.find(curve => curve.id === 'kink');
     assert.ok(picked?.revision && other?.revision);
@@ -225,7 +294,7 @@ await f.run(async () => {
     assert.match(stale.error, /path geometry changed/);
     const dry = await call('features', { action: 'batch', dryRun: true, ops: [op(picked.revision)] });
     assert.ok(dry.dryRun);
-    near(dry.change.volume, volume(2), 0.001);
+    near(dry.change.volume, volume(2, annular ? 1 : 0), 0.001);
     assert.deepEqual(await readFile(proposalFile), before);
     const proposal = await call('proposals', { action: 'propose', title: 'Exact spaced S-bend Sweep', ops: [op(picked.revision)] });
     assert.deepEqual([proposal.proposal, proposal.applied], ['P1', false]);

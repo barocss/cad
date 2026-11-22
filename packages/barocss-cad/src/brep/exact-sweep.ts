@@ -686,7 +686,8 @@ function tangentArcPair(path: Curve, refuse: Refuse) {
 /** Read only a planar S-bend with one quadratic straight span between its two circular spans. */
 function tangentArcLineArc(path: Curve, refuse: Refuse) {
   const { degree, controlPoints: poles, weights, knots } = path;
-  if (degree !== 2 || poles.length !== 7 || weights[0] === weights[1] || weights[5] === weights[6]) return;
+  if (degree !== 2 || poles.length !== 7 || weights[0] === weights[1] || weights[5] === weights[6]
+    || weights[2] !== weights[3] || weights[3] !== weights[4]) return;
   const unsupported = () => refuse('CAPABILITY',
     'Exact arc-line-arc sweep needs two coplanar circular arcs of opposite curvature separated by one straight segment.');
   const weight = weights[0];
@@ -758,12 +759,12 @@ function bindArcPairJoin(brep: Brep, id: string, tolerance: number, hasBore: boo
   if (outer === 2 * edgeCount && inner === (hasBore ? 2 * edgeCount : 0)) return { ...brep, coedges };
 }
 
-/** Rebind all four half-circle seam edges on both their torus and cylinder charts after both glues. */
-function bindArcLineArcJoins(brep: Brep, id: string, tolerance: number): Brep | undefined {
+/** Rebind both wall families on their native torus and cylinder charts after both glues. */
+function bindArcLineArcJoins(brep: Brep, id: string, tolerance: number, hasBore: boolean): Brep | undefined {
   const facesByLoop = new Map(brep.faces.flatMap(face => face.loops.map(loop => [loop, face] as const)));
   const edges = new Map(brep.edges.map(edge => [edge.id, edge])), uses = new Map(brep.coedges.map(use => [use.id, use]));
   const coedges: BrepCoedge[] = [];
-  let first = 0, second = 0;
+  const first = [0, 0], second = [0, 0];
   for (const use of brep.coedges) {
     const face = facesByLoop.get(use.loop), twin = use.twin ? uses.get(use.twin) : undefined;
     const other = twin && facesByLoop.get(twin.loop);
@@ -771,17 +772,22 @@ function bindArcLineArcJoins(brep: Brep, id: string, tolerance: number): Brep | 
     const atFirst = onLine && other?.name?.startsWith(`${id}.first.`) || peerLine && face?.name?.startsWith(`${id}.first.`);
     const atSecond = onLine && other?.name?.startsWith(`${id}.second.`) || peerLine && face?.name?.startsWith(`${id}.second.`);
     if (!atFirst && !atSecond) { coedges.push(use); continue; }
-    const surface = face?.surface, edge = edges.get(use.edge);
-    if (surface?.kind !== 'surface' || !edge) return;
+    const surface = face?.surface, peer = other?.surface, edge = edges.get(use.edge);
+    if (surface?.kind !== 'surface' || peer?.kind !== 'surface' || !edge) return;
+    // The certified prism has one slab and one annular region: ring 0 is outer, ring 1 is the bore.
+    // Native producer IDs retain this ownership even when authored tags replace the display names.
+    const bendPrefix = `${id}_${atFirst ? 'first' : 'second'}_hole0_`;
+    const bore = surface.id.startsWith(onLine ? `${id}_line_w0_0_1_` : bendPrefix);
+    if (bore !== peer.id.startsWith(peerLine ? `${id}_line_w0_0_1_` : bendPrefix)) return;
     const match = ringChartEdge(edge.curve, surface, tolerance);
     const expected = onLine ? atFirst ? 'v0' : 'v1' : atFirst ? 'u1' : 'u0';
     if (match?.side !== expected) return;
     const { id: useId, edge: edgeId, sense, loop, next, prev, twin: twinId } = use;
     coedges.push({ id: useId, edge: edgeId, sense, loop, next, prev, twin: twinId, pcurve: match.pcurve });
-    if (atFirst) first++;
-    else second++;
+    (atFirst ? first : second)[bore ? 1 : 0]++;
   }
-  if (first === 4 && second === 4) return { ...brep, coedges };
+  if (first[0] === 4 && second[0] === 4 && first[1] === (hasBore ? 4 : 0) && second[1] === (hasBore ? 4 : 0))
+    return { ...brep, coedges };
 }
 
 function arcPairSweep(id: string, arcs: NonNullable<ReturnType<typeof tangentArcPair>> & { length?: number }, section: JoinedSection,
@@ -824,24 +830,28 @@ function arcPairSweep(id: string, arcs: NonNullable<ReturnType<typeof tangentArc
   let lead: Brep = a.brep;
   let lineMass: ((density: number) => MassProperties) | undefined;
   if (hasLine) {
-    const prism = prismaticFromProfile({ outer: profile, height: length, tag: `${id}.line`, sideTags: tags,
+    const prism = prismaticFromProfile({ outer: profile, holes: bore ? [[bore]] : undefined,
+      height: length, tag: `${id}.line`, sideTags: tags,
       names: { bottom: `${id}.line.start`, top: `${id}.line.end` } });
     const straight = transformBrep(brepFromPrismatic(prism, { id: `${id}_line` }),
       { matrix: sweepMatrix(join.axes), offset: join.offset });
+    if (wall !== undefined && !jointWallClear(lead, straight, wall, roundoff)) return wallError();
     // The first bend stays behind its exit tangent plane; the straight occupies the slab between both joins.
     const glued = glueSection(lead, `${id}.first.end`, straight, `${id}.line.start`, join.offset, join.axes[2], roundoff, sharedSection, id);
-    if (!glued) return refuse('GEOMETRY', 'The exact arc-line-arc sweep sections do not share the same disk.');
+    if (!glued) return refuse('GEOMETRY', `The exact arc-line-arc sweep sections do not share the same ${bore ? 'annulus' : 'disk'}.`);
     lead = glued;
     lineMass = density => prismaticMassProperties(prism, density);
   }
+  if (hasLine && wall !== undefined && !jointWallClear(lead, placed, wall, roundoff)) return wallError();
   // With a straight span, the second bend is wholly ahead of its start plane, apart from its shared cap.
   const glued = glueSection(lead, hasLine ? `${id}.line.end` : `${id}.first.end`, placed, `${id}.second.start`,
     secondFrame.offset, secondFrame.axes[2], roundoff, sharedSection, id);
   if (!glued) return refuse('GEOMETRY', `The exact ${style} sweep sections do not share the same ${opening ? 'outer rectangle and opening' : rectangle ? 'rectangle' : bore ? 'annulus' : 'disk'}.`);
-  const brep = hasLine ? bindArcLineArcJoins(glued, id, roundoff) : bindArcPairJoin(glued, id, roundoff, hasOpening, rectangle ? 4 : 2);
+  const brep = hasLine ? bindArcLineArcJoins(glued, id, roundoff, bore !== undefined)
+    : bindArcPairJoin(glued, id, roundoff, hasOpening, rectangle ? 4 : 2);
   const hasCap = (end: 'start' | 'end') =>
     brep?.faces.some(face => face.name === `${id}.${end}` && face.loops.length === (hasOpening ? 2 : 1));
-  if (!brep || brep.faces.length !== 2 * (rectangle ? edgeCount : bore ? 4 : 2) + (hasLine ? 4 : 2) || !hasCap('start') || !hasCap('end'))
+  if (!brep || brep.faces.length !== (hasLine ? 3 : 2) * (rectangle ? edgeCount : bore ? 4 : 2) + 2 || !hasCap('start') || !hasCap('end'))
     return refuse('GEOMETRY', hasLine ? 'The exact arc-line-arc sweep could not preserve the end caps and both tangent joins.'
       : 'The exact two-arc sweep could not preserve the end caps and the tangent join.');
   return { brep, mass: density => {
@@ -936,15 +946,17 @@ export function exactSweep(input: ExactSweepInput, refuse: Refuse): SweepSolid {
 
   const spaced = tangentArcLineArc(path, refuse);
   if (spaced) {
-    if (profileRadius === undefined || holes.length)
-      return refuse('CAPABILITY', 'Exact arc-line-arc sweep needs one circular disk section without holes.');
+    if (!disk || profileRadius === undefined)
+      return refuse('CAPABILITY', 'Exact arc-line-arc sweep needs one circular outer section.');
+    const hole = circularHole(holes, 'arc-line-arc', refuse);
+    const bore = hole && concentricBore(disk, hole, refuse);
     const initial = frame(spaced.first.tangent), [x, y] = initial;
     const section: JoinedSection = { profile: [originDisk(profileRadius)],
       bendCentre: [dot(spaced.first.toCentre, x), dot(spaced.first.toCentre, y)],
       radialReach: profileRadius, extent: profileRadius, edgeCount: 2 };
-    const result = place(arcPairSweep(id, spaced, section, undefined, sideTags, refuse), initial, spaced.first.start);
+    const result = place(arcPairSweep(id, spaced, section, bore, sideTags, refuse), initial, spaced.first.start);
     const report = checkBrep(result.brep, { strict: true });
-    if (!report.valid || report.topology.length !== 1 || report.topology[0].genus !== 0)
+    if (!report.valid || report.topology.length !== 1 || report.topology[0].genus !== (bore ? 1 : 0))
       return refuse('GEOMETRY', 'The exact arc-line-arc sweep did not produce a valid closed solid.');
     return result;
   }
