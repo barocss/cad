@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createFlow } from './flow-helper.mjs';
-import { withMcpSession } from './mcp-browser-session.mjs';
+import { currentPartRevision, withMcpSession } from './mcp-browser-session.mjs';
 
 const outer = 'n0.normal', inner = 'n0.reverse', height = 12;
 const isInner = process.argv.includes('--inner');
@@ -117,8 +117,8 @@ await f.run(async () => {
   const agentFile = join(f.output, `${role}-wall-agent.bcad`);
   await writeFile(agentFile, JSON.stringify(seed));
   const agentDoc = await mcp(agentFile, `${role}-wall-agent`, async call => {
-    const pin = await call('query', { action: 'summary' });
-    await call('features', { action: 'command', command: 'offset-face', faces: [face], values: { d: 2 }, expectedRevision: pin.revision });
+    const expectedRevision = await currentPartRevision(call);
+    await call('features', { action: 'command', command: 'offset-face', faces: [face], values: { d: 2 }, expectedRevision });
     return JSON.parse(await readFile(agentFile, 'utf8'));
   });
   await f.newPage();

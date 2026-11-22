@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createFlow } from './flow-helper.mjs';
-import { withMcpSession } from './mcp-browser-session.mjs';
+import { currentPartRevision, withMcpSession } from './mcp-browser-session.mjs';
 
 const outer = 'n0.normal', inner = 'n0.reverse', cap = 'n0.v-max', reference = 'n2.bottom', n = Math.sqrt(5);
 const replaceFirst = process.argv.includes('--replace-first');
@@ -181,9 +181,9 @@ await f.run(async () => {
   await writeFile(agentFile, JSON.stringify(seed));
   const agentDoc = await mcp(agentFile, 'paired-agent', async call => {
     for (const command of replaceFirst ? ['replace-face', 'offset-face'] : ['offset-face', 'replace-face']) {
-      const pin = await call('query', { action: 'summary' });
+      const expectedRevision = await currentPartRevision(call);
       const args = command === 'replace-face' ? { faces: [cap, reference] } : { faces: [outer], values: { d: 2 } };
-      await call('features', { action: 'command', command, ...args, expectedRevision: pin.revision });
+      await call('features', { action: 'command', command, ...args, expectedRevision });
     }
     return JSON.parse(await readFile(agentFile, 'utf8'));
   });

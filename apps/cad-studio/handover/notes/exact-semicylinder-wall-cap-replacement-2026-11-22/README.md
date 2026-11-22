@@ -10,6 +10,10 @@ An upright two-quarter Exact cylinder Thicken accepts one signed radial Offset a
 - **PASS, refusal, History and native Open.** A +16 mm radial edit or a −7 mm change to donor Z would touch the bottom. Both inputs were refused, keeping the accepted document and Undo entry in both orders. A −2 mm donor move retains both authored features and makes the upper rim 5–11 mm. Undo, Redo, Save and fresh Open reproduce the expected geometry and saved reference. The reopened volume is 976.967434253626 mm³ and its digest is `042a8a3dcb343913ccfcfe5599a691383adad526403abb19dd47e2cc55667316`. Studio and local MCP pass the current 4 mm radial wall check. The proof read preserves saved bytes. Two runs record 14 captures, 1,175 frozen files each and zero source changes and zero page or console errors. The maximum sampled pcurve gap is below 8.15e−15 mm.
 - **NOT_RUN.** Full local suites, the inner-skin pair in desktop Studio, WebGL2, mobile, exchange and paid live models. The supported profile includes one signed wall edit and one linked inclined upper cap. Third edits remain outside the profile. Both issues stay open.
 
+## MCP revision proof
+
+The first parity runs used `query.summary`, which has no part revision. Those runs established native and document equality. The requests from those runs carried no revision pin. The shared test helper now requires a 16-digit revision from `query.rebuild`. The follow-up reran both D1661 orders and six earlier desktop controls from D1654, D1656–D1658 and D1660. All eight runs passed. The emitted MCP frames verify 13 authoring requests, each carrying exactly the revision from the immediately preceding rebuild read. The corrected D1661 runs reproduce the same accepted and reopened native digests. This follow-up supplies the revision evidence for the related earlier Studio and Agent parity claims.
+
 Use Node 22.19.0, the heavy gate, installed Chrome and Playwright (`CHROME`, `PW_DIR`), and output directories outside Git.
 
 ```sh

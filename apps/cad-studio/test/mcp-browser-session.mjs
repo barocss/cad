@@ -5,6 +5,12 @@ import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createInterface } from 'node:readline';
 
+export async function currentPartRevision(call) {
+  const { revision } = await call('query', { action: 'rebuild' });
+  assert.match(revision, /^[a-f0-9]{16}$/, 'query.rebuild must return the current part revision');
+  return revision;
+}
+
 export async function withMcpSession({ app, output, clientName, autonomy = 1, telemetry }, path, label, run) {
   const child = spawn(process.execPath, [join(app, 'scripts/cad-mcp.mjs'), '--doc', path, '--autonomy', String(autonomy)],
     { stdio: ['pipe', 'pipe', 'inherit'] });

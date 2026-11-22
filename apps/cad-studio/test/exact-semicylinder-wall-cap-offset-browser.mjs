@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createFlow } from './flow-helper.mjs';
-import { withMcpSession } from './mcp-browser-session.mjs';
+import { currentPartRevision, withMcpSession } from './mcp-browser-session.mjs';
 
 const outer = 'n0.normal', inner = 'n0.reverse', cap = 'n0.v-max';
 const capFirst = process.argv.includes('--cap-first');
@@ -149,9 +149,9 @@ await f.run(async () => {
   await writeFile(agentFile, JSON.stringify(seed));
   const agent = await mcp(agentFile, 'mixed-agent', async call => {
     for (const face of order) {
-      const pin = await call('query', { action: 'summary' });
+      const expectedRevision = await currentPartRevision(call);
       await call('features', { action: 'command', command: 'offset-face', faces: [face],
-        values: { d: face === cap ? 3 : 2 }, expectedRevision: pin.revision });
+        values: { d: face === cap ? 3 : 2 }, expectedRevision });
     }
     return JSON.parse(await readFile(agentFile, 'utf8'));
   });

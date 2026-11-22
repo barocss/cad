@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createFlow } from './flow-helper.mjs';
-import { withMcpSession } from './mcp-browser-session.mjs';
+import { currentPartRevision, withMcpSession } from './mcp-browser-session.mjs';
 
 const cap = 'n0.v-max', reference = 'n2.bottom';
 const skins = ['n0.normal', 'n0.reverse'];
@@ -174,8 +174,8 @@ await f.run(async () => {
   await writeFile(agentFile, JSON.stringify(seed));
   const authoredByAgent = await withMcpSession({ app: f.app, output: f.output, clientName: f.name, autonomy: 3 },
     agentFile, 'replace-agent', async call => {
-      const pin = await call('query', { action: 'summary' });
-      await call('features', { action: 'command', command: 'replace-face', faces: [cap, reference], expectedRevision: pin.revision });
+      const expectedRevision = await currentPartRevision(call);
+      await call('features', { action: 'command', command: 'replace-face', faces: [cap, reference], expectedRevision });
       const bytes = await readFile(agentFile);
       const proof = await wallEvidence(call);
       assert.deepEqual(await readFile(agentFile), bytes);

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createFlow } from './flow-helper.mjs';
-import { withMcpSession } from './mcp-browser-session.mjs';
+import { currentPartRevision, withMcpSession } from './mcp-browser-session.mjs';
 
 const outer = 'n0.normal', inner = 'n0.reverse', height = 12;
 const wall = { id: 'WALL-2', source: 'Keep at least 2 mm of radial wall.', hard: true,
@@ -137,8 +137,8 @@ await f.run(async () => {
   await writeFile(agentFile, JSON.stringify(seed));
   const agentDoc = await mcp(agentFile, 'paired-agent', async call => {
     for (const [face, d] of [[outer, 2], [inner, -1]]) {
-      const pin = await call('query', { action: 'summary' });
-      await call('features', { action: 'command', command: 'offset-face', faces: [face], values: { d }, expectedRevision: pin.revision });
+      const expectedRevision = await currentPartRevision(call);
+      await call('features', { action: 'command', command: 'offset-face', faces: [face], values: { d }, expectedRevision });
     }
     return JSON.parse(await readFile(agentFile, 'utf8'));
   });
