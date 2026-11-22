@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D1734: [Extract Assembly Cut draft editing from Studio App](notes/studio-assembly-cut-editor-2026-11-23/README.md), #44. Preserve draft timing and authoring while 15 desktop states, the native save and six raster exports match.
+
 - D1733: [Carry a centered rectangular opening through spaced same-turn bends](notes/exact-spaced-rectangular-duct-2026-11-23/README.md), #10. Verify both open mouths, 16 native tangent joins and aperture edits through fresh Open.
 
 - D1732: [Sweep an aligned solid rectangle through spaced same-turn bends](notes/exact-spaced-rectangular-sweep-2026-11-23/README.md), #10. Verify both planar caps, eight native tangent joints and an editable width after fresh Open.

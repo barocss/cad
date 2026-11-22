@@ -174,8 +174,9 @@ import { nextInstanceId } from '@barocss/cad-model/assembly/takenIds';
 import { AssemblyStepsPanel } from './ui/AssemblyStepsPanel';
 import { STEPS_COMMAND, shownSelection as litSelection } from './app/assemblySteps';
 import { useAssemblyStepReview } from './app/useAssemblyStepReview';
-import { cutOfDraft, cuttableOf, defaultCutAt, draftOfCut, draftProblem, draftTrialProblem, newCutDraft, withAddedTargets, type CutDraft } from './app/assemblyCutDraft';
-import { addAssemblyCut, deleteAssemblyCut, editAssemblyCut } from '@barocss/cad-model/assembly/cuts';
+import type { CutDraft } from './app/assemblyCutDraft';
+import { useAssemblyCutEditor } from './app/useAssemblyCutEditor';
+import { deleteAssemblyCut } from '@barocss/cad-model/assembly/cuts';
 import { useJoints } from './state/useJoints';
 import { refuseMotionSweep, timedMotion } from './state/motion';
 import { timedPathOf } from '@barocss/cad-model/robot/motion';
@@ -1218,25 +1219,12 @@ export function App() {
     }
     return commit(next) ? undefined : 'The change was not accepted. Review the document notice before trying again.';
   };
-  // Roadmap 10 ⑤: Apply makes (or changes) the cut through the model, one undo step; a cut deleted, or undone, closes its HUD.
-  const applyCut = () => {
-    if (!cutDraft) return;
-    const o = cutOfDraft(cutDraft), why = draftProblem(doc, cutDraft);
-    if (typeof o === 'string' || why) { setToast({ title: 'Cut not made', hint: why ?? String(o), detail: '' }); return; }
-    let next: StudioDoc;
-    try { next = (cutDraft.editing ? editAssemblyCut(doc, { id: cutDraft.editing, ...o, name: o.name ?? null }) : addAssemblyCut(doc, o)).doc; }
-    catch (e) { setToast({ title: 'Cut not made', hint: e instanceof Error ? e.message : String(e), detail: '' }); return; }
-    if (commit(next)) setCutDraft(null);
-  };
-  // (The build trial of the draft — whether every cut part still builds — a pause after the last change, never on the typing path; Apply runs it again and refuses in words.)
-  const cutKey = cutDraft ? JSON.stringify(cutDraft) : '', [cutTrial, setCutTrial] = useState<{ key: string; problem: string | undefined } | null>(null);
-  useEffect(() => {
-    if (!cutDraft || draftProblem(doc, cutDraft)) { setCutTrial(null); return; }
-    const timer = setTimeout(() => setCutTrial({ key: cutKey, problem: draftTrialProblem(doc, cutDraft) }), 250);
-    return () => clearTimeout(timer);
-  }, [doc, cutKey]);
+  const cutEditor = useAssemblyCutEditor({
+    doc, draft: cutDraft, setDraft: setCutDraft, instanceSelection: instanceSel, instanceBodies,
+    setInstanceEdit, commit, onNotice: setToast,
+  });
+  const { open: openCut } = cutEditor;
   const deleteCut = (id: string) => patternEdit(() => deleteAssemblyCut(doc, id), 'Cut not deleted');
-  useEffect(() => { if (cutDraft?.editing && !doc.assemblyCuts?.some(c => c.id === cutDraft.editing)) setCutDraft(null); }, [doc.assemblyCuts, cutDraft?.editing]);
   const readLinkedFaces = useCallback(async (owner: string, input: StudioDoc) => {
     const result = await engine.part(bearingFaceInput(doc, owner, input), revision.current++, 'read');
     return result.ok ? result.faceTable ?? null : null;
@@ -1468,13 +1456,6 @@ export function App() {
   }, [activeStore, commandApply, fontUpload]);
   useEffect(() => commandApply.watch(activeStore, apply), [commandApply, previewBodies, active?.cmd, apply, activeStore]);
 
-  // Roadmap 10 ⑤: the Assembly cut HUD — new (on the selected parts, at the middle of their top, going down) or editing a cut of the Browser.
-  const openCut = useCallback((id: string | null) => {
-    const cut = id ? doc.assemblyCuts?.find(c => c.id === id) : undefined;
-    if (id && !cut) return;
-    const targets = cuttableOf(doc, instanceSel), boxes = targets.flatMap(t => (instanceBodies.get(t)?.bodies ?? []).map(b => b.mesh.bounds));
-    setInstanceEdit(null); setCutDraft(cut ? draftOfCut(cut) : newCutDraft(targets, defaultCutAt(boxes)));
-  }, [doc, instanceSel, instanceBodies]);
   const nativeVertexReady = fresh && !busy && marker === null && !inPlace && !doc.instances?.length &&
     !active && !rendering && !drawing && !section && previewMode === 'none';
   const start = useCallback((cmd: Command, initial?: Values) => {
@@ -2880,9 +2861,8 @@ export function App() {
       {fresh && !rendering && !sketch && measure && !meshCircle.mode && <MeasurementInspector onMeshCircle={() => { meshCircle.choose(true); setMeasure([]); }} pickFilter={pickFilter} targets={measure} items={liveMeasurement.items ?? []} measured={liveMeasurement.result} approximateDistance={liveMeasurement.approximateDistance} onClose={() => setMeasure(null)} onPin={pinnedReadout.pin} />}
       {massPinView && (massPin.pinned || (!active && !measure && !directSel.length && !instanceSel.length)) && <PinnedMassControls pinned={massPin.pinned} result={massPin.result} canPin={massPin.canPin} onPin={massPin.pin} onClear={massPin.clear} />}
       {pinView && pinnedFaces.pair && !measure && <PinnedMeasurement distance={pinnedReadout.result?.normalDistance ?? null} onClear={clearPinnedFaces} />}
-      {cutDraft && !rendering && !sketch && !measure && <AssemblyCutHud draft={cutDraft} instances={doc.instances ?? NO_INSTANCES} problem={draftProblem(doc, cutDraft) ?? (cutTrial?.key === cutKey ? cutTrial.problem : undefined)}
-        onChange={patch => setCutDraft(d => d && { ...d, ...patch })} onAddSelected={() => setCutDraft(d => d && { ...d, targets: withAddedTargets(d.targets, cuttableOf(doc, instanceSel)) })}
-        onApply={applyCut} onCancel={() => setCutDraft(null)} />}
+      {cutDraft && !rendering && !sketch && !measure && <AssemblyCutHud draft={cutDraft} instances={doc.instances ?? NO_INSTANCES} problem={cutEditor.problem()}
+        onChange={cutEditor.change} onAddSelected={cutEditor.addSelected} onApply={cutEditor.apply} onCancel={cutEditor.cancel} />}
       {!rendering && !sketch && !measure && !!nestedSelected && (() => {
         const host = hostsOf(instanceSel)[0], entry = instanceBodies.get(host);
         // The card describes the displayed variant/context, just like its evaluated bodies.
