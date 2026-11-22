@@ -40,7 +40,7 @@ export function ProposalBrowser({ controller, reviewRecovery = 'Finish or cancel
             {shown && fresh && !sheetOnly && (problem ? <div className="muted proposal-dv">{problem}</div>
               : <div className="mono proposal-dv">{ghost.after ? 'after' : 'before'} · Volume change <span aria-label="Volume change">{!massReady ? '…' : dv === null ? 'unavailable'
                 : `${dv >= 0 ? '+' : '−'}${fmt(Math.abs(dv))} mm³${!placed && base ? ` (${dv >= 0 ? '+' : '−'}${fmt(Math.abs(dv) / base * 100)}%)` : ''}`}</span></div>)}
-            {shown && ghost.parts.length > 1 && <div className="proposal-parts" role="group" aria-label={`${p.id} features`}>{ghost.parts.map(q => <label key={q.id} className={'proposal-part ' + q.kind}>
+            {shown && !ghost.atomic && ghost.parts.length > 1 && <div className="proposal-parts" role="group" aria-label={`${p.id} features`}>{ghost.parts.map(q => <label key={q.id} className={'proposal-part ' + q.kind}>
               <input type="checkbox" aria-label={`Keep ${q.id}`} disabled={q.kind === 'deleted' || proposalBusy} checked={!ghost.leaveOut.includes(q.id)} onChange={e => void tickPart(q.id, e.currentTarget.checked)} />
               <span className="mono">{q.id}</span> {q.kind === 'added' ? '+' : q.kind === 'changed' ? '~' : '−'} {q.label}</label>)}</div>}
             {p.status === 'open' ? <div className="proposal-actions">

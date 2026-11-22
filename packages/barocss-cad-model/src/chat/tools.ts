@@ -51,6 +51,7 @@ export { INFLATE, layerSketches, surfaceAt } from './part/image';
 export { CHAT_COMMANDS, COMMAND_DOCS } from './part/features';
 export { BATCHABLE_TOOLS, isMutator, featureKinds, takesArgument, unknownArguments, TOOLS, SYSTEM_PROMPT } from './toolDefinitions';
 export { agentMayNotAccept, autonomy, leaveOutClosure, partialDoc, proposalParts, toggledLeaveOut, type Decider, type ProposalPart } from './part/proposals';
+export { isRuledThickenOperation } from './directThickenProposal';
 /** Every moved handler, by v1 tool name (R3): built once, at load. */
 const PART_HANDLERS: Readonly<Record<string, PartHandler>> = { ...QUERY_HANDLERS, ...NATIVE_CONTINUITY_HANDLERS, ...IMAGE_HANDLERS, ...FEATURE_HANDLERS, ...REQUIREMENT_HANDLERS, ...VIEW_HANDLERS, ...HISTORY_HANDLERS, ...VERSION_HANDLERS, ...PROPOSAL_HANDLERS };
 const runProposalTool = (state: ChatState, name: string, input: unknown, evaluate: Evaluate) => runToolCounted(state, name, input, evaluate, false, true);

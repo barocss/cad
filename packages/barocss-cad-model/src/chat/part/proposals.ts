@@ -10,7 +10,7 @@ import { factsOf } from '../observe';
 import { treeDiff } from '../transactions';
 import { approvalOf, diffLine, DIRECT_GEOMETRY_APPROVAL, nextProposalId, PLAN_CHARS, PROMPT_CHARS, proposalIsStale, riskOf, riskRank, withHistory } from '../proposals';
 import { directReviewRevision, isDirectRuledOperation } from '../directRuledProposal';
-import { DIRECT_SNAPSHOT_APPROVAL, isDirectThickenOperation } from '../directThickenProposal';
+import { DIRECT_SNAPSHOT_APPROVAL, isDirectThickenOperation, isRuledThickenOperation } from '../directThickenProposal';
 import type { ChecksDelta, FollowUpRepairSource, Proposal, Risk } from '../../engine/schema/proposals';
 import { checkSpec, modelHash } from '../spec';
 import { MUTATORS } from '../toolDefinitions';
@@ -135,7 +135,7 @@ export async function proposalOfWith(dispatch: PartRun, state: ChatState, ops: u
   // run.results also contains skipped opIds; run.ops retains only executed operations.
   const executedResults = run.results.filter(result => result.skipped === undefined);
   const stepChanges = run.ops.flatMap((op, index) => op.tool === 'add_assembly_step' && typeof executedResults[index]?.did === 'string' ? [executedResults[index].did as string] : []);
-  const sheets = run.ops.flatMap((op, index) => isDirectRuledOperation(op)
+  const sheets = run.ops.flatMap((op, index) => (isDirectRuledOperation(op) || isRuledThickenOperation(op))
     && typeof executedResults[index]?.did === 'string' ? [executedResults[index].did as string] : []);
   const checkLabel = nested !== undefined ? 'root checks' : 'checks';
   const rootChecks = checks && `${checkLabel} ${checks.before.pass}/${checks.before.fail}/${checks.before.unknown} → ${checks.after.pass}/${checks.after.fail}/${checks.after.unknown}`;
@@ -275,6 +275,8 @@ export function toggledLeaveOut(parts: readonly ProposalPart[], leaveOut: readon
  */
 export function partialDoc(base: StudioDoc, after: StudioDoc, parts: readonly ProposalPart[], leaveOut: readonly string[],
   proposal?: Pick<Proposal, 'ops' | 'orders'>): { doc: StudioDoc } | { error: string } {
+  if (leaveOut.length && proposal?.ops.some(isRuledThickenOperation))
+    return { error: 'The Ruled surface and its Thicken must be accepted together.' };
   const out = new Set(leaveOut), nodes = [...after.nodes], boxSketches = new Set<string>();
   if (out.size && proposal) for (const [i, op] of proposal.ops.entries()) {
     if (op.tool !== 'edit_feature' || op.args?.retainBoxCommand !== true || (op.args.part !== undefined && op.args.part !== 'base')) continue;

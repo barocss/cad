@@ -1,4 +1,5 @@
 import { loadDirect } from '../engine/directModule';
+import type { DirectGeometry } from '../engine/direct';
 import type { Op, Proposal } from '../engine/schema/proposals';
 import { digestOf } from '../util/digest';
 import { isObj } from '../util/guards';
@@ -17,6 +18,18 @@ export const isDirectRuledOperation = (op: Op) => op.tool === 'run_command' && o
 
 export function directReviewRevision(proposal: Proposal): string | undefined {
   if (proposal.status === 'open' && proposal.ops.length && proposal.ops.every(isDirectRuledOperation)) return digestOf(proposal);
+}
+
+/** Build privately from two uniquely identified visible curves. */
+export async function ruledFromVisibleRails(direct: DirectGeometry | undefined, first: string, second: string): Promise<DirectGeometry | undefined> {
+  if (!direct) return;
+  const rails = [first, second].map(id => direct.objects.filter(object => object.id === id));
+  if (rails.some(matches => matches.length !== 1 || matches[0].hidden)) return;
+  const { directOps, geometryOf } = await loadDirect();
+  try {
+    if (rails.some(([object]) => geometryOf(direct, object).kind !== 'curve')) return;
+  } catch { return; }
+  return directOps.ruledSurface(direct, first, second);
 }
 
 export async function proposeDirectRuledCommand(state: ChatState, args: Record<string, unknown>, evaluate: Evaluate, options: CallOptions) {
@@ -38,17 +51,11 @@ export async function proposeDirectRuledCommand(state: ChatState, args: Record<s
   const { direct } = state.doc, { first, second } = values;
   const sourceError = () => fail(state, 'Each rail must be a unique visible Direct curve from query.summary.', { code: 'DIRECT_RULED_SOURCE' });
   if (!direct) return sourceError();
-  const rails = [first, second].map(id => direct.objects.filter(object => object.id === id));
-  if (rails.some(matches => matches.length !== 1 || matches[0].hidden)) return sourceError();
-  const { directOps, geometryOf } = await loadDirect();
-  try {
-    if (rails.some(([object]) => geometryOf(direct, object).kind !== 'curve')) return sourceError();
-  } catch { return sourceError(); }
-
   let ruled;
-  try { ruled = directOps.ruledSurface(direct, first, second); }
+  try { ruled = await ruledFromVisibleRails(direct, first, second); }
   catch (error) {
     return fail(state, error instanceof Error ? error.message : 'These rails could not form an exact Ruled surface.', { code: 'DIRECT_RULED_GEOMETRY' });
   }
+  if (!ruled) return sourceError();
   return accept(state, { ...state.doc, direct: ruled }, evaluate, options, `Add a Ruled surface between ${first} and ${second}`);
 }

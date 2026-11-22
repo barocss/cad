@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1636: [Propose a Ruled surface and its exact Thicken together](notes/agent-ruled-exact-thicken-2026-11-22/README.md), #322 and #368. Use two pinned Direct rails, one private candidate and one Studio approval, with atomic refusal and native Open.
 - D1635: [Exact Thicken for an authored semicylinder](notes/exact-semicylinder-thicken-2026-11-22/README.md), #11 and #368. Certify two coaxial quarter spans and verify a six-face solid from a Studio-drawn 180° arc through thickness edit and native Open.
 - D1634: [Exact cylinder Thicken from a Studio sketch](notes/sketch-arc-exact-thicken-2026-11-22/README.md), #11 and #368. Preserve a newly authored quarter circle through Make curves, Duplicate, vertical Move and Ruled, then verify exact Thicken and native Open.
 - D1633: [Exact Thicken for upright circular sectors](notes/exact-cylinder-sector-thicken-2026-11-22/README.md), #11 and #368. Extend certified arcs beyond 90° and verify one native Studio edit and Open, local agent approval and quarter-cylinder compatibility.

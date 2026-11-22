@@ -31,7 +31,7 @@ export function useProposalPreview({ model, worker, changes, chatRowFiles, displ
   // before/after toggle and the volume it adds or takes off; accepted (its ops replayed) or rejected (kept).
   // (`full`: the part the whole proposal leaves; `parts`: its features, `leaveOut` those unticked, A4.3.)
   // (`shown`: the part as previewed — the whole proposal's, or without what is left out; G12 diffs it with the part.)
-  const [ghost, setGhost] = useState<{ id: string; bodies: BodyResult[]; placed: PlacedProposalPreview | null; after: boolean; changesShown?: boolean; full: StudioDoc; shown: StudioDoc; parts: ProposalPart[]; leaveOut: string[] } | null>(null);
+  const [ghost, setGhost] = useState<{ id: string; bodies: BodyResult[]; placed: PlacedProposalPreview | null; after: boolean; changesShown?: boolean; full: StudioDoc; shown: StudioDoc; parts: ProposalPart[]; leaveOut: string[]; atomic?: boolean } | null>(null);
   /** G12: what the shown proposal adds and takes away (worked out in the engine worker), for the viewport's overlay. */
   const [proposalOverlay, setProposalOverlay] = useState<ProposalOverlay | null>(null);
   const [proposalBusy, setProposalBusy] = useState(false);
@@ -70,7 +70,8 @@ export function useProposalPreview({ model, worker, changes, chatRowFiles, displ
     setProposalBusy(false);
     if (from !== currentDoc()) return;
     if ('error' in r) { setToast({ title: `${p.id} does not apply to the part as it is`, hint: r.error, detail: '' }); return; }
-    setGhost({ id: p.id, bodies: r.bodies, placed, after: true, changesShown: false, full: r.doc, shown: r.doc, parts: tools.proposalParts(from, r.doc), leaveOut: [] }); setPreviewBodies(r.bodies);
+    setGhost({ id: p.id, bodies: r.bodies, placed, after: true, changesShown: false, full: r.doc, shown: r.doc,
+      parts: tools.proposalParts(from, r.doc), leaveOut: [], atomic: p.ops.some(tools.isRuledThickenOperation) }); setPreviewBodies(r.bodies);
   };
   /** A stale proposal made again on the part as it is, then shown (D41): only the rebased one can be accepted. */
   const rebaseIt = async (p: Proposal) => {
