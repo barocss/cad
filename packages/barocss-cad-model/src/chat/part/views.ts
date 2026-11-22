@@ -58,8 +58,9 @@ const renderViewsTool: PartHandler = async (state, args, evaluate, _options, dis
     const review = await reviewModelCandidate(state, args, evaluate, dispatch, false);
     if ('refusal' in review) return review.refusal;
     const { image, ...views } = review.result;
-    const label = 'chamferResize' in review.geometry ? 'Saved Chamfer resize'
-      : 'cornerBatch' in review.geometry ? 'Sketch corner proposal' : 'Bored wall proposal';
+    const label = 'rectangularDuct' in review.geometry ? 'Rectangular S-bend duct'
+      : 'chamferResize' in review.geometry ? 'Saved Chamfer resize'
+        : 'cornerBatch' in review.geometry ? 'Sketch corner proposal' : 'Bored wall proposal';
     return { state, content: json({ revision: review.revision, ...views, candidate: review.candidate, ...review.geometry }),
       isError: false, changed: false, summary: `${label} ${review.candidate.proposal}`, images: [{ data: image, mediaType: 'image/png' }] };
   }

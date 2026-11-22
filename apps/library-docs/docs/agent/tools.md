@@ -156,6 +156,15 @@ wall names and their input side pairs in `cornerBatch.faces`. Pass those names a
 `expectedReviewRevision`. Inspection returns the native plane or cylinder for each face.
 Both calls read the proposal on a copy. Approve the group in Studio after review.
 
+### Review a rectangular S-bend duct
+
+For one pending Exact Sweep from a standalone tagged XY rectangle with one centered rectangular
+opening and one visible Direct S-bend path, read the `modelReviewRevision` from `proposals.list`.
+Use the same `query.render` and `query.inspect` pins as for a sketch corner group. The render identifies
+the selected path and its revision in `rectangularDuct`. It also lists both open end-cap faces with their
+outer and inner edge IDs and the eight joined edge IDs. Use the cap face names and the image's
+`candidate.reviewRevision` to inspect the two native cap planes. Approve the reviewed proposal in Studio.
+
 If the model has changed, `EDIT_STALE`, `COMMAND_STALE` or `DELETE_STALE` returns the requested and current revisions.
 Review the current part before resubmitting. For delete, read the current feature tree to find the new index.
 In `features.batch`, the pin applies to the document at the operation's position.

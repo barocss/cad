@@ -2,10 +2,13 @@ import assert from 'node:assert/strict';
 import { copyFile, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createFlow } from './flow-helper.mjs';
+import { checkApprovedDuctReview, checkChangedDuctPath, reviewPendingDuct } from './duct-proposal-review-browser-steps.mjs';
 import { currentPartRevision, withMcpSession } from './mcp-browser-session.mjs';
 
 const opposite = process.argv.includes('--opposite-arcs');
 const baseline = process.argv.includes('--expect-refused');
+const review = process.argv.includes('--review');
+assert.ok(!review || (opposite && !baseline), 'Review needs an active opposite-arc duct flow.');
 const railId = opposite ? 's-bend' : 'elbow';
 const railName = opposite ? 'S-bend rail' : 'Elbow rail';
 const ends = opposite ? [
@@ -32,10 +35,14 @@ const pins = ['packages/barocss-cad/src/brep/exact-sweep.ts', 'packages/barocss-
   'packages/barocss-cad/src/features/revolve.ts', 'packages/barocss-cad/src/brep/edge-continuity.ts',
   'packages/barocss-cad-model/src/chat/part/features.ts', 'packages/barocss-cad-model/src/engine/errors.ts',
   'apps/cad-studio/src/sketch/useSketchActions.ts', 'apps/cad-studio/src/ui/SketchPanel.tsx'];
+if (review) pins.push('apps/cad-studio/test/duct-proposal-review-browser-steps.mjs',
+  'packages/barocss-cad-model/src/chat/rectangularDuctProposalReview.ts',
+  'packages/barocss-cad-model/src/chat/part/modelCandidate.ts', 'packages/barocss-cad-model/src/chat/part/views.ts',
+  'packages/barocss-cad-model/src/chat/part/proposals.ts');
 
 const f = await createFlow({
   name: opposite ? 'exact-rectangular-s-bend-duct' : 'exact-rectangular-duct-sweep', output: process.argv[2],
-  envFrozen: opposite ? 'D1704_SOURCE_FROZEN' : 'D1675_SOURCE_FROZEN',
+  envFrozen: review ? 'D1705_SOURCE_FROZEN' : opposite ? 'D1704_SOURCE_FROZEN' : 'D1675_SOURCE_FROZEN',
   initialFiles: pins, requiredFrozen: pins,
   qualification: 'Sweep a centered rectangular duct, inspect both openings and edit the aperture through Studio History.',
   limits: [`One bend-aligned 4 × 6 mm section with one centered rectangular opening, ${opposite ? 'R12/R18 mm quarter arcs' : 'R20 mm quarter elbow'}, desktop WebGPU and local L1 MCP.`],
@@ -291,7 +298,8 @@ await f.run(async () => {
   f.phase = 'Approve a revision-bound local duct proposal';
   const file = join(f.output, 'duct-proposal.bcad');
   await copyFile(savedSource.file, file);
-  await withMcpSession({ app: f.app, output: f.output, clientName: f.name }, file, 'rectangular-duct', async call => {
+  const session = { app: f.app, output: f.output, clientName: f.name };
+  const reviewed = await withMcpSession(session, file, 'rectangular-duct', async (call, request) => {
     const expectedRevision = await currentPartRevision(call);
     const description = await call('describe', { command: 'sweep-curve' });
     assert.match(description.values.sketch, /one centered rectangular opening/);
@@ -307,18 +315,47 @@ await f.run(async () => {
     assert.deepEqual(await readFile(file), before);
     const result = await call('proposals', { action: 'propose', title: 'Exact rectangular duct', ops: [op] });
     assert.deepEqual([result.proposal, result.applied], ['P1', false]);
+    if (!review) return;
+    const twin = await call('proposals', { action: 'propose', title: 'Same duct in a second proposal', ops: [op] });
+    assert.deepEqual([twin.proposal, twin.applied], ['P2', false]);
+    const staged = await readFile(file);
+    f.phase = 'Review the pending duct and both native caps before Studio approval';
+    const evidence = await reviewPendingDuct(f, call, request, expectedRevision, op.args.values);
+    assert.match((await call('proposals', { action: 'accept', id: 'P1' }, true)).error, /user accepts.*Studio/i);
+    assert.deepEqual(await readFile(file), staged);
+    return evidence;
   });
   const pending = JSON.parse(await readFile(file));
   assert.deepEqual([pending.nodes, pending.outputs], [seed.nodes, seed.outputs]);
+  if (reviewed) await checkChangedDuctPath(session, pending, reviewed, path.controlPoints);
   await f.freshOpen(file, pending, '09-duct-proposal-open');
   await button('Chat').first().click();
   await button('Preview', card('P1')).click();
   await button('Hide', card('P1')).waitFor();
   await f.same(pending);
+  if (reviewed) await f.snapshot('09-duct-preview-before-approval');
   await button('Accept', card('P1')).click();
   await f.changed(pending);
   await f.page.getByTitle('Frame all (F)', { exact: true }).click();
   const approved = (await f.snapshot('10-duct-proposal-approved')).doc;
   assert.deepEqual([approved.nodes[1].mode, approved.nodes[1].path, approved.outputs], ['exact', path, part.outputs]);
   assert.equal((await verify('approved-native', approved, 4)).digest, native.digest);
+  if (reviewed) {
+    assert.equal(approved.proposals[0].status, 'accepted');
+    const approval = approved.history.at(-1);
+    assert.deepEqual([approval.kind, approval.proposal, approval.by.agent], ['accept', 'P1', 'user']);
+    assert.equal(native.digest, reviewed.meta.candidate.bodySha256);
+    await f.undo();
+    await f.same(pending);
+    await f.redo();
+    await f.same(approved);
+    const saved = await f.save('reviewed-rectangular-duct');
+    await f.freshOpen(saved.file, approved, '11-reviewed-duct-fresh-open');
+    assert.equal((await verify('approved-draft-reopened', await f.doc(), 4)).digest, native.digest);
+    await withMcpSession(session, saved.file, 'reviewed-duct-reopened', async (call, request) => {
+      const bytes = await readFile(saved.file);
+      await checkApprovedDuctReview(call, request, reviewed);
+      assert.deepEqual(await readFile(saved.file), bytes);
+    });
+  }
 });

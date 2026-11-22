@@ -13,6 +13,7 @@ import { isDirectRuledOperation } from '../directRuledProposal';
 import { directReviewRevision } from '../directProposalReview';
 import { cornerBatchProposal, savedChamferResizeProposal } from '../cornerProposalReview';
 import { boredWallProposal } from '../modelProposalReview';
+import { rectangularDuctProposal } from '../rectangularDuctProposalReview';
 import { DIRECT_SNAPSHOT_APPROVAL, isDirectThickenOperation, isRuledThickenOperation } from '../directThickenProposal';
 import type { ChecksDelta, FollowUpRepairSource, Proposal, Risk } from '../../engine/schema/proposals';
 import { checkSpec, expectedOf, meets, modelHash, runCheck } from '../spec';
@@ -403,7 +404,8 @@ async function listProposalsTool(state: ChatState, args: Record<string, unknown>
     const { ops, ...details } = p;
     const direct = directReviewRevision(p);
     const model = state.partOf ? undefined
-      : boredWallProposal(state.doc, p)?.revision ?? cornerBatchProposal(state.doc, p)?.revision ?? savedChamferResizeProposal(state.doc, p)?.revision;
+      : boredWallProposal(state.doc, p)?.revision ?? cornerBatchProposal(state.doc, p)?.revision
+        ?? savedChamferResizeProposal(state.doc, p)?.revision ?? rectangularDuctProposal(state.doc, p)?.revision;
     return { ...details, ops: ops.length, stale: proposalIsStale(p, revision),
       ...(p.status === 'open' ? { proposalRevision: proposalRevisionOf(p) } : {}),
       ...(direct ? { directReviewRevision: direct } : {}),
