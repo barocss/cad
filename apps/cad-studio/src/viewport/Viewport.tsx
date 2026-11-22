@@ -1,14 +1,13 @@
 import { pmiGpuTextBounds, type PmiGpuCommit } from './pmiGpuBounds';
 import type { FilletEndpoints } from '../app/filletEndpoints';
 import type { FilletPickedEdgeHighlight } from '../app/filletPickedEdgeHighlight';
-import { applySketchCameraFrame, ownsSketchCameraFrame, type SketchCameraFrame } from './sketchCameraFrame';
+import { useViewportSketchFraming } from './useViewportSketchFraming';
 import { ContinuityLocation } from './ContinuityLocation';
 import type { EdgeCurvatureMeasurement } from '@barocss/cad-model/engine/edgeCurvature';
 import { CurvatureComb } from './CurvatureComb';
 import { projectOverlaySegment } from './curvatureCombSegments';
 import type { CurvatureOverlay } from '../app/useEdgeCurvature';
 import type { MarkHandlers } from '../ui/SketchMarks';
-import type { ScreenBox } from '../ui/sketchConstraintMarkLayout';
 import { viewportRecoveryHost, type ViewportRecoveryNotice } from './viewportRecovery';
 import type { ClearanceDisplay } from './clearanceDisplay';
 import { useCallback, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, forwardRef } from 'react';
@@ -903,32 +902,9 @@ export const Viewport = forwardRef<ViewportHandle, Props>(function Viewport(sour
   const instanceFaces = instanceFacesRef.current;
   useEffect(() => { renderer.current?.setInstanceFaces?.([...instanceFaces]); request(); }, [instanceFaces, props.instances, backend]);
 
-  const sketchRail = useRef<ScreenBox | undefined>(undefined);
-  useLayoutEffect(() => {
-    const view = canvas.current, rail = view?.closest('.stage')?.querySelector('nav.toolbar');
-    if (!sketching || !view || !rail) return;
-    const read = () => {
-      const canvasBox = view.getBoundingClientRect(), railBox = rail.getBoundingClientRect();
-      sketchRail.current = { x: railBox.left - canvasBox.left, y: railBox.top - canvasBox.top,
-        width: railBox.width, height: railBox.height };
-      requestRef.current();
-    };
-    const observer = new ResizeObserver(read);
-    observer.observe(view);
-    observer.observe(rail);
-    read();
-    return () => { observer.disconnect(); sketchRail.current = undefined; };
-  }, [sketching]);
-
-  // The sketch rail replaces the Model rail in the same commit as the sketch.
-  const pendingSketchFrame = useRef<SketchCameraFrame | null>(null);
-  useLayoutEffect(() => {
-    const frame = pendingSketchFrame.current, view = canvas.current;
-    pendingSketchFrame.current = null;
-    if (!view || !ownsSketchCameraFrame(frame, props.sketch?.plane)) return;
-    applySketchCameraFrame(camera.current, frame, view.clientWidth, view.clientHeight, modelFitArea(view));
-    request();
-  }, [props.sketch?.plane]);
+  const { sketchRail, frameSketch, frameActiveSketch, faceActiveSketch } = useViewportSketchFraming(
+    canvas, camera, sketching, props.sketch?.plane, () => propsRef.current.sketch?.plane, requestRef,
+  );
 
   const boundsForFit = () => sourceProps.printActive
     ? sourceProps.printDisplay && printSceneBounds(sourceProps.bodies, sourceProps.printDisplay.summary.modelToBed, sourceProps.hiddenBodies)
@@ -946,21 +922,9 @@ export const Viewport = forwardRef<ViewportHandle, Props>(function Viewport(sour
       if (bounds) fitBounds(bounds);
       request();
     },
-    frameSketch(min, max, plane) { pendingSketchFrame.current = { min, max, plane }; },
-    frameActiveSketch(min, max, plane) {
-      const frame = { min, max, plane }, view = canvas.current;
-      if (!view || !ownsSketchCameraFrame(frame, propsRef.current.sketch?.plane)) return false;
-      pendingSketchFrame.current = null;
-      applySketchCameraFrame(camera.current, frame, view.clientWidth, view.clientHeight, modelFitArea(view));
-      request();
-      return true;
-    },
-    faceActiveSketch() {
-      const plane = propsRef.current.sketch?.plane;
-      if (!plane) return;
-      camera.current.faceNormal(plane.normal);
-      request();
-    },
+    frameSketch,
+    frameActiveSketch,
+    faceActiveSketch,
     toggleOrtho() { setOrthographic(!camera.current.ortho); request(); return camera.current.ortho; },
     getDisplayModeStatus() {
       const status = renderer.current?.getDisplayModeStatus?.() ?? null;
