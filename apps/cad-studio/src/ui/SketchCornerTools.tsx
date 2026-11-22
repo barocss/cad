@@ -4,7 +4,7 @@ import type { Polygon } from '@barocss/cad-model/sketch/rules';
 import type { SketchState } from '@barocss/cad-model/sketch/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { prepareSketchCorner, type SketchCornerOperation } from '../sketch/cornerDraft';
+import { prepareSketchCorners, type SketchCornerOperation } from '../sketch/cornerDraft';
 import type { ConstraintInspectionStore } from '../sketch/constraintInspection';
 import { useStoreValue } from '../state/valueStore';
 import { Icon } from './atoms';
@@ -19,8 +19,8 @@ const ownKeyboard = (event: KeyboardEvent<HTMLButtonElement>) => {
   if (event.key === 'Enter' || event.key === ' ') event.stopPropagation();
 };
 
-export function SketchCornerTools({ owner, source, doc, corner, inspection, onApply }: {
-  owner: SketchState; source: Polygon; doc: StudioDoc; corner: number;
+export function SketchCornerTools({ owner, source, doc, corners, inspection, onApply }: {
+  owner: SketchState; source: Polygon; doc: StudioDoc; corners: readonly number[];
   inspection: ConstraintInspectionStore; onApply(shape: Polygon): void;
 }) {
   const current = useStoreValue(inspection);
@@ -29,8 +29,8 @@ export function SketchCornerTools({ owner, source, doc, corner, inspection, onAp
   const result = draft?.result;
   const preview = (operation: SketchCornerOperation, value: string) => {
     inspection.set({
-      target: 'corner', owner, input: 'focus', doc, operation, value,
-      result: prepareSketchCorner(owner, source, doc, operation, corner, value),
+      target: 'corner', owner, input: 'focus', doc, operation, corners, value,
+      result: prepareSketchCorners(owner, source, doc, operation, corners, value),
     });
   };
   const apply = () => {

@@ -12,7 +12,7 @@ export type ConstraintInspection = {
   | { target: 'row'; entry: ConstraintEntry }
   | { target: 'comparison'; kind: ConstraintKind; result: ConstraintComparison }
   | { target: 'mobility'; entity: SketchPick }
-  | { target: 'corner'; doc: StudioDoc; operation: SketchCornerOperation; value: string; result: SketchCornerResult }
+  | { target: 'corner'; doc: StudioDoc; operation: SketchCornerOperation; corners: readonly number[]; value: string; result: SketchCornerResult }
 );
 
 export type ConstraintInspectionStore = ValueStore<ConstraintInspection | null>;

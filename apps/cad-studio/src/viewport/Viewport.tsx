@@ -1076,7 +1076,9 @@ export const Viewport = forwardRef<ViewportHandle, Props>(function Viewport(sour
       inspected: inspection?.target === 'row' ? inspection.entry.involves
         : inspection?.target === 'mobility' ? [inspection.entity] : undefined,
       constraintComparison: inspection?.target === 'comparison' && inspection.result.ok ? inspection.result.display : undefined,
-      cornerPreview: inspection?.target === 'corner' && 'display' in inspection.result ? inspection.result.display : undefined,
+      cornerPreview: inspection?.target === 'corner' ? {
+        corners: inspection.corners, shape: 'display' in inspection.result ? inspection.result.display : undefined,
+      } : undefined,
       bandCache, picking: picking(sk), cutting: cutting(sk), banding: banding(sk), lengthLabelLayout, items,
       dimensions: { onDimClick: props.onDimClick, onDimEdit: props.onDimEdit, onDimCommit: props.onDimCommit },
     }) : null;

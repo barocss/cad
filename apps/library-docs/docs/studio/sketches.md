@@ -91,14 +91,18 @@ What holds for a Bézier curve:
 A closed shape inside a hole is not supported in the same sketch. **Finish sketch** refuses it;
 draw that shape in a separate sketch.
 
-## Chamfer a sketch corner
+## Fillet and chamfer sketch corners {#chamfer-a-sketch-corner}
 
-With **Select**, pick the point where two straight sides meet on one independent closed outline. Enter a
-**Chamfer distance** in millimeters and choose **Chamfer** or press <kbd>Enter</kbd>. The two sides shorten by
-that distance and a straight edge joins their new ends. The original sides keep their IDs.
+With **Select**, pick a corner on an independent closed outline. Choose **Fillet** for a tangent arc or
+**Chamfer** for a straight bevel. Set the radius or distance in mm. Check the preview and choose **Apply**.
 
-If the distance cannot fit or the edit would remove a constraint or a parameter binding, Studio keeps the
-current outline and shows the reason. After **Finish sketch**, the chamfer reopens as part of the editable outline.
+Use <kbd>Shift</kbd> to add corners or select a chain of straight sides. A pair of selected sides targets the
+vertex where they meet. The preview marks every target. Each corner follows the local turn of the outline,
+including convex and reflex corners in the same selection.
+
+One **Apply** changes the whole group and one **Undo** restores the previous outline. If the edits would consume
+a shared side, overlap or remove a protected constraint or parameter binding, the outline stays intact.
+After **Finish sketch**, the edited corners and retained side IDs reopen with the native document.
 
 ## Reusing a face and offsetting a shape
 

@@ -1,9 +1,10 @@
 import type { StudioDoc } from '@barocss/cad-model/engine/doc';
 import { chamferCorner, roundCorner } from '@barocss/cad-model/sketch/corner';
+import { prepareStraightCornerBatch } from '@barocss/cad-model/sketch/cornerBatch';
 import { nextIdOf, withIds } from '@barocss/cad-model/sketch/entityIds';
 import { profileOf } from '@barocss/cad-model/sketch/loops';
 import { rebindDims } from '@barocss/cad-model/sketch/reopen';
-import { isSettled, type Polygon } from '@barocss/cad-model/sketch/rules';
+import { isSettled, type Polygon, type SketchPick } from '@barocss/cad-model/sketch/rules';
 import { settleShape } from '@barocss/cad-model/sketch/settle';
 import type { SketchState } from '@barocss/cad-model/sketch/types';
 import { sketchFinishInputs } from '../app/sketchControls';
@@ -11,15 +12,51 @@ import { sketchFinishInputs } from '../app/sketchControls';
 export type SketchCornerOperation = 'fillet' | 'chamfer';
 export type SketchCornerResult = { shape: Polygon; display: Polygon } | { error: string };
 
+/** A line pair names its shared vertex. A single selected line does not name either end. */
+export function sketchCornerTargets(source: Polygon, picked: readonly SketchPick[]): number[] {
+  const n = source.points.length;
+  if (picked.some(pick => pick.kind === 'circle' || pick.done || pick.i < 0 || pick.i >= n
+    || !Number.isInteger(pick.i) || (pick.kind === 'edge' && source.bulges?.[pick.i]))) return [];
+  const points = new Set(picked.filter(pick => pick.kind === 'point').map(pick => pick.i));
+  const edges = new Set(picked.filter(pick => pick.kind === 'edge').map(pick => pick.i));
+  return source.points.flatMap((_, i) => points.has(i) || (edges.has(i) && edges.has((i - 1 + n) % n)) ? [i] : []);
+}
+
+const unsafeSideId = (id: string) => /^e\d+$/.test(id) && !Number.isSafeInteger(Number(id.slice(1)));
+
+function cornerFinishInputs(owner: SketchState, shape: Polygon) {
+  const { joined, protectedShapes } = sketchFinishInputs({ ...owner, shape });
+  const hasUnsafeId = withIds(joined, undefined, protectedShapes).some(item =>
+    item.ids?.some(unsafeSideId) || (item.kind === 'polygon' && item.circleIds?.some(unsafeSideId)));
+  return { joined, hasUnsafeId };
+}
+
 function tagCornerSegment(owner: SketchState, shape: Polygon, corner: number, operation: string): Polygon | string {
   const id = nextIdOf([shape, ...(owner.done ?? [])]);
   const noIds = `This sketch has no available side IDs for the ${operation} and its other shapes.`;
   if (!Number.isSafeInteger(id)) return noIds;
   const tagged = shape.ids ? { ...shape, ids: shape.ids.map((side, i) => i === corner ? `e${id}` : side) } : shape;
-  const { joined, protectedShapes } = sketchFinishInputs({ ...owner, shape: tagged });
-  const unsafeId = (id: string) => /^e\d+$/.test(id) && !Number.isSafeInteger(Number(id.slice(1)));
-  return withIds(joined, undefined, protectedShapes).some(item =>
-    item.ids?.some(unsafeId) || (item.kind === 'polygon' && item.circleIds?.some(unsafeId))) ? noIds : tagged;
+  return cornerFinishInputs(owner, tagged).hasUnsafeId ? noIds : tagged;
+}
+
+export function prepareSketchCorners(owner: SketchState, source: Polygon, doc: StudioDoc,
+  operation: SketchCornerOperation, corners: readonly number[], input: string): SketchCornerResult {
+  if (corners.length === 1) return prepareSketchCorner(owner, source, doc, operation, corners[0], input);
+  const stored = owner.editNode === undefined ? undefined : doc.nodes[owner.editNode];
+  if (owner.association || owner.base || owner.band || source.circles?.length || source.construction
+    || (stored?.kind === 'sketch' && (stored.on || stored.profile === 'band'))
+    || owner.done?.some(item => !item.construction && item.kind !== 'bezier'))
+    return { error: 'Edit several corners on one independent outline.' };
+  const value = input.trim() === '' ? NaN : Number(input);
+  const result = prepareStraightCornerBatch(source, operation, corners, value, nextIdOf([source, ...(owner.done ?? [])]));
+  if ('error' in result) return result;
+  const { joined, hasUnsafeId } = cornerFinishInputs(owner, result.display);
+  if (hasUnsafeId) return { error: 'This sketch has no available side IDs for the corner edits and its other shapes.' };
+  const profile = profileOf(joined);
+  if ('error' in profile) return profile;
+  if (stored?.kind === 'sketch' && rebindDims(stored, profile.node, doc.parameters).dropped.length)
+    return { error: 'The corner edits would remove a sketch parameter binding.' };
+  return result;
 }
 
 export function prepareSketchCorner(owner: SketchState, source: Polygon, doc: StudioDoc,

@@ -86,7 +86,7 @@ interface SketchOverlayInputs {
   dragTrim?: DragTrimPreview | null;
   inspected?: readonly SketchPick[];
   constraintComparison?: Polygon;
-  cornerPreview?: Polygon;
+  cornerPreview?: { shape?: Polygon; corners: readonly number[] };
   bandCache: RefObject<SketchBandCache | null>;
   picking: boolean;
   cutting: boolean;
@@ -224,7 +224,7 @@ export function drawSketchOverlay({
     const last = pts.at(-1);
     if (!s.closed && last) ring.push([last[0], last[1]]);
     const line = s.closed || s.pending ? ring : cur ? [...ring, P(cur[0], cur[1])] : ring;
-    const shapeClass = 'sk-shape' + (s.construction ? ' construction' : '') + (cornerPreview ? ' sk-corner-source' : '');
+    const shapeClass = 'sk-shape' + (s.construction ? ' construction' : '') + (cornerPreview?.shape ? ' sk-corner-source' : '');
     items.push(s.closed ? <polygon key="pg" points={line.map(p => p[0] + ',' + p[1]).join(' ')} className={shapeClass} />
       : <polyline key="pl" points={line.map(p => p[0] + ',' + p[1]).join(' ')} className={shapeClass + ' open'} />);
     if (constraintComparison) {
@@ -232,10 +232,16 @@ export function drawSketchOverlay({
       items.push(<polygon key="constraint-comparison" className="sk-constraint-comparison" aria-hidden="true"
         points={comparison.map(p => `${p[0]},${p[1]}`).join(' ')} />);
     }
-    if (cornerPreview) {
-      const candidate = cornerPreview.points.flatMap((_, i) => projectSketchEdge(cornerPreview, i, P, scale).slice(0, -1));
+    if (cornerPreview?.shape) {
+      const shape = cornerPreview.shape;
+      const candidate = shape.points.flatMap((_, i) => projectSketchEdge(shape, i, P, scale).slice(0, -1));
       items.push(<polygon key="corner-preview" className="sk-corner-preview" aria-hidden="true"
         points={candidate.map(p => `${p[0]},${p[1]}`).join(' ')} />);
+    }
+    for (const i of cornerPreview?.corners ?? []) {
+      const p = pts[i];
+      if (p) items.push(<circle key={`corner-target-${i}`} cx={p[0]} cy={p[1]} r={6.5}
+        className="sk-pick-point sk-corner-target" data-corner-index={i} aria-hidden="true" pointerEvents="none" />);
     }
     const underIndex = items.length;
     const ell = isSettled(s) && !!s.ellipse && ellipseMatches(s); // (An ellipse's 96 tiny arcs get no radius labels or centre dots; its centre and axis ends are marked instead.)

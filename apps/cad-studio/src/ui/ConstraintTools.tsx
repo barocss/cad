@@ -13,6 +13,7 @@ import { useStoreValue } from '../state/valueStore';
 import { duplicatePointDistance } from './sketchPresentation';
 import { ConstraintList } from './ConstraintList';
 import { SketchCornerTools } from './SketchCornerTools';
+import { sketchCornerTargets } from '../sketch/cornerDraft';
 import './constraints.css';
 
 const TOOLS: { kind: ConstraintKind; sym: string; label: string; short: string }[] = [
@@ -62,6 +63,7 @@ export function ConstraintTools({ shape: s, owner, conflictIds, documentScope, i
     if (current?.owner === owner && current.target === 'comparison' && current.kind === kind && current.input === input) inspection.set(null);
   };
   const point = picked.find(p => p.kind === 'point'), circle = picked.find(p => p.kind === 'circle');
+  const corners = sketchCornerTargets(s, picked);
   const twoPoints = picked.length === 2 && picked.every(p => p.kind === 'point') ? pointDimensionKeys(picked[0].i, picked[1].i)
     : picked.length === 2 && point && circle ? circleDimensionKeys(point.i, circle.i)
       : picked.length === 2 && picked.every(p => p.kind === 'circle') ? circlePairKeys(picked[0].i, picked[1].i) : null;
@@ -96,7 +98,7 @@ export function ConstraintTools({ shape: s, owner, conflictIds, documentScope, i
       <button type="button" aria-label="Horizontal distance" title="Distance along the sketch X axis" onClick={() => onEditDim(twoPoints.dx)}><b>↔</b><span>Horizontal</span></button>
       <button type="button" aria-label="Vertical distance" title="Distance along the sketch Y axis" onClick={() => onEditDim(twoPoints.dy)}><b>↕</b><span>Vertical</span></button>
     </div>}
-    {picked.length === 1 && point && <SketchCornerTools owner={owner} source={s} doc={documentScope} corner={point.i}
+    {!!corners.length && <SketchCornerTools owner={owner} source={s} doc={documentScope} corners={corners}
       inspection={inspection} onApply={shape => { onShape(shape); onPicked([]); }} />}
     {refused && <div className="sk-status open" role="alert"><i />{refused}</div>}
     <ConstraintList shape={s} owner={owner} conflictIds={conflictIds} documentScope={documentScope} inspection={inspection}
