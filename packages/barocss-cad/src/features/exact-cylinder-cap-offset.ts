@@ -1,7 +1,7 @@
 // Edits of the original native two-quarter Exact cylinder Thicken.
 import { BrepError, checkBrep, type Brep } from '../brep/brep-core.js';
 import { faceGeometry } from '../brep/analytic-boolean.js';
-import { isThickenCylinderError, thickenCylinderOuterOffsetSolid, thickenCylinderSolid } from '../brep/thicken-cylinder.js';
+import { isThickenCylinderError, thickenCylinderWallOffsetSolid, thickenCylinderSolid } from '../brep/thicken-cylinder.js';
 import { validateSurface } from '../core/math.js';
 import { len } from '../core/vec3.js';
 import { CadNumericPolicy, geometryScaleMM, linearToleranceMM } from '../numeric-policy.js';
@@ -45,7 +45,7 @@ export function exactSemicylinderCapReplacementFrame(brep: Brep, faceName: strin
   return cap?.sign === 1 ? { anchor: cap.anchor, normal: [0, 0, 1] } : undefined;
 }
 
-function admittedOuterWall(brep: Brep, faceName: string, source: Source) {
+function admittedWall(brep: Brep, faceName: string, source: Source) {
   try {
     const [a, b] = source.surface.controlPoints[0];
     const cap = admitted(brep, `${source.id}.${a[2] < b[2] ? 'v-max' : 'v-min'}`, source);
@@ -56,67 +56,94 @@ function admittedOuterWall(brep: Brep, faceName: string, source: Source) {
     if (outerIndex < 0) return;
     const outer = skins[outerIndex], inner = skins[1 - outerIndex];
     const round = supports[outerIndex], bore = supports[1 - outerIndex];
-    if (outer.name !== faceName || round.kind !== 'cylinder' || bore.kind !== 'cylinder' || bore.out !== -1) return;
-    return { cap, outer, inner, round, bore };
+    if (round.kind !== 'cylinder' || bore.kind !== 'cylinder' || bore.out !== -1) return;
+    const skin: 'outer' | 'inner' | undefined = outer.name === faceName ? 'outer' : inner.name === faceName ? 'inner' : undefined;
+    if (!skin) return;
+    return { cap, skin, moving: skin === 'outer' ? outer : inner, fixed: skin === 'outer' ? inner : outer,
+      support: skin === 'outer' ? round : bore, retained: skin === 'outer' ? bore : round };
   } catch { return; }
 }
 
-/** The original physical outer skin, with a radial handle at its crown and axial midpoint. */
-export function exactSemicylinderOuterWallOffsetFrame(brep: Brep, faceName: string, source: Source): { anchor: Point; normal: Point } | undefined {
-  const wall = admittedOuterWall(brep, faceName, source);
-  if (!wall || wall.outer.surface.kind !== 'surface') return;
-  const point = wall.outer.surface.controlPoints[2][0], dx = point[0] - wall.round.c[0], dy = point[1] - wall.round.c[1];
+function wallFrame(wall: NonNullable<ReturnType<typeof admittedWall>>): { anchor: Point; normal: Point } | undefined {
+  if (wall.moving.surface.kind !== 'surface') return;
+  const point = wall.moving.surface.controlPoints[2][0], dx = point[0] - wall.support.c[0], dy = point[1] - wall.support.c[1];
   const radius = Math.hypot(dx, dy);
-  return { anchor: [point[0], point[1], wall.cap.lo + (wall.cap.hi - wall.cap.lo) / 2], normal: [dx / radius, dy / radius, 0] };
+  const sign = wall.skin === 'outer' ? 1 : -1;
+  return { anchor: [point[0], point[1], wall.cap.lo + (wall.cap.hi - wall.cap.lo) / 2],
+    normal: [dx === 0 ? 0 : sign * dx / radius, dy === 0 ? 0 : sign * dy / radius, 0] };
 }
 
-/** Resize only the outer support of the original annular semicylinder, keeping every native identity. */
-export function offsetExactSemicylinderOuterWallIfAdmitted(brep: Brep, faceName: string, source: Source, distance: number): Brep | undefined {
-  const wall = admittedOuterWall(brep, faceName, source);
-  if (!wall) return;
+/** Either original skin, pointing out of material: away from the axis outside, toward it inside. */
+export function exactSemicylinderWallOffsetFrame(brep: Brep, faceName: string, source: Source): { anchor: Point; normal: Point } | undefined {
+  const wall = admittedWall(brep, faceName, source);
+  return wall && wallFrame(wall);
+}
+
+/** Compatibility admission for only the original physical outer skin. */
+export function exactSemicylinderOuterWallOffsetFrame(brep: Brep, faceName: string, source: Source): { anchor: Point; normal: Point } | undefined {
+  const wall = admittedWall(brep, faceName, source);
+  return wall?.skin === 'outer' ? wallFrame(wall) : undefined;
+}
+
+function offsetWall(brep: Brep, source: Source, wall: NonNullable<ReturnType<typeof admittedWall>>, distance: number): Brep {
+  const label = `Exact semicylinder ${wall.skin} offset`, fixedSkin = wall.skin === 'outer' ? 'inner' : 'outer';
   if (!Number.isFinite(distance) || distance === 0 || Math.abs(distance) > CadNumericPolicy.coordinateAbs)
-    throw new BrepError('INPUT', 'Exact semicylinder outer offset: distance must be nonzero and within the modeling range');
-  const radius = wall.round.r + distance;
+    throw new BrepError('INPUT', `${label}: distance must be nonzero and within the modeling range`);
+  const sign = wall.skin === 'outer' ? 1 : -1, radius = wall.support.r + sign * distance;
   const extent = Math.max(geometryScaleMM(brep.vertices.map(vertex => vertex.point)),
-    Math.abs(wall.round.c[0]) + Math.abs(radius), Math.abs(wall.round.c[1]) + Math.abs(radius));
-  if (!(radius - wall.bore.r > linearToleranceMM(extent)))
-    throw new BrepError('GEOMETRY', 'Exact semicylinder outer offset: the offset would reach or cross the retained inner wall');
-  if (radius === wall.round.r) throw new BrepError('GEOMETRY', 'Exact semicylinder outer offset: distance is too small to move the wall');
-  if (wall.outer.surface.kind !== 'surface') return;
-  const [cx, cy] = wall.round.c, factor = radius / wall.round.r;
-  const outsideRange = wall.outer.surface.controlPoints.flat().some(([x, y]) =>
+    Math.abs(wall.support.c[0]) + Math.abs(radius), Math.abs(wall.support.c[1]) + Math.abs(radius));
+  const tolerance = linearToleranceMM(extent);
+  if (wall.skin === 'inner' && !(radius > tolerance))
+    throw new BrepError('GEOMETRY', `${label}: the offset would reach or cross the cylinder axis`);
+  if (!((radius - wall.retained.r) * sign > tolerance))
+    throw new BrepError('GEOMETRY', `${label}: the offset would reach or cross the retained ${fixedSkin} wall`);
+  if (radius === wall.support.r) throw new BrepError('GEOMETRY', `${label}: distance is too small to move the wall`);
+  const [cx, cy] = wall.support.c, factor = radius / wall.support.r;
+  const outsideRange = (wall.moving.surface as Surface).controlPoints.flat().some(([x, y]) =>
     Math.max(Math.abs(cx + (x - cx) * factor), Math.abs(cy + (y - cy) * factor)) > CadNumericPolicy.coordinateAbs);
-  if (outsideRange) throw new BrepError('GEOMETRY', 'Exact semicylinder outer offset: the wall leaves the modeling range');
+  if (outsideRange) throw new BrepError('GEOMETRY', `${label}: the wall leaves the modeling range`);
   let candidate: Brep;
-  try { candidate = thickenCylinderOuterOffsetSolid(source, distance); }
+  try { candidate = thickenCylinderWallOffsetSolid(source, wall.skin, distance); }
   catch (cause) {
-    if (isThickenCylinderError(cause)) throw new BrepError('GEOMETRY', `Exact semicylinder outer offset: ${cause.message}`);
+    if (isThickenCylinderError(cause)) throw new BrepError('GEOMETRY', `${label}: ${cause.message}`);
     throw cause;
   }
-  // A profile-chart scale change can round even the retained inner support. Refuse that
+  // A profile-chart scale change can round even the retained support. Refuse that
   // representation change instead of moving an unselected native boundary.
-  const innerLoops = new Set(wall.inner.loops), innerEdges = new Set(brep.coedges.filter(use => innerLoops.has(use.loop)).map(use => use.edge));
-  const innerVertices = new Set(brep.edges.filter(edge => innerEdges.has(edge.id)).flatMap(edge => edge.vertices));
+  const fixedLoops = new Set(wall.fixed.loops), fixedEdges = new Set(brep.coedges.filter(use => fixedLoops.has(use.loop)).map(use => use.edge));
+  const fixedVertices = new Set(brep.edges.filter(edge => fixedEdges.has(edge.id)).flatMap(edge => edge.vertices));
   const unchanged = (before: unknown, after: unknown) => JSON.stringify(before) === JSON.stringify(after);
-  if (!unchanged(wall.inner, candidate.faces.find(face => face.id === wall.inner.id))
-    || brep.edges.some(edge => innerEdges.has(edge.id) && !unchanged(edge, candidate.edges.find(value => value.id === edge.id)))
-    || brep.vertices.some(vertex => innerVertices.has(vertex.id) && !unchanged(vertex, candidate.vertices.find(value => value.id === vertex.id))))
-    throw new BrepError('GEOMETRY', 'Exact semicylinder outer offset: the retained inner boundary cannot preserve its native representation');
+  if (!unchanged(wall.fixed, candidate.faces.find(face => face.id === wall.fixed.id))
+    || brep.edges.some(edge => fixedEdges.has(edge.id) && !unchanged(edge, candidate.edges.find(value => value.id === edge.id)))
+    || brep.vertices.some(vertex => fixedVertices.has(vertex.id) && !unchanged(vertex, candidate.vertices.find(value => value.id === vertex.id))))
+    throw new BrepError('GEOMETRY', `${label}: the retained ${fixedSkin} boundary cannot preserve its native representation`);
   const poles = [...candidate.vertices.map(vertex => vertex.point), ...candidate.edges.flatMap(edge => edge.curve.controlPoints),
     ...candidate.faces.flatMap(face => face.surface.kind === 'surface' ? face.surface.controlPoints.flat() : [])];
   const nextExtent = geometryScaleMM(poles);
   if (!poles.every(point => point.every(Number.isFinite)) || nextExtent > CadNumericPolicy.coordinateAbs)
-    throw new BrepError('GEOMETRY', 'Exact semicylinder outer offset: the wall leaves the modeling range');
-  const support = faceGeometry(candidate.faces.find(face => face.id === wall.outer.id)!);
+    throw new BrepError('GEOMETRY', `${label}: the wall leaves the modeling range`);
+  const support = faceGeometry(candidate.faces.find(face => face.id === wall.moving.id)!);
   const roundoff = 64 * Number.EPSILON * Math.max(1, nextExtent);
-  if (support.kind !== 'cylinder' || support.out !== wall.round.out || Math.abs(support.r - radius) > roundoff
-    || support.c.some((value, axis) => Math.abs(value - wall.round.c[axis]) > roundoff)
-    || support.a.some((value, axis) => value !== wall.round.a[axis])
+  if (support.kind !== 'cylinder' || support.out !== wall.support.out || Math.abs(support.r - radius) > roundoff
+    || support.c.some((value, axis) => Math.abs(value - wall.support.c[axis]) > roundoff)
+    || support.a.some((value, axis) => value !== wall.support.a[axis])
     || candidate.vertices.some(vertex => vertex.point[2] !== wall.cap.lo && vertex.point[2] !== wall.cap.hi))
-    throw new BrepError('GEOMETRY', 'Exact semicylinder outer offset: the outer support or axial stations could not be preserved');
+    throw new BrepError('GEOMETRY', `${label}: the ${wall.skin} support or axial stations could not be preserved`);
   const report = checkBrep(candidate, { strict: true });
-  if (!report.valid) throw new BrepError('GEOMETRY', `Exact semicylinder outer offset: the offset solid is invalid: ${report.issues[0]}`, report);
+  if (!report.valid) throw new BrepError('GEOMETRY', `${label}: the offset solid is invalid: ${report.issues[0]}`, report);
   return candidate;
+}
+
+/** Resize one original skin; positive distance adds material and preserves the opposite skin. */
+export function offsetExactSemicylinderWallIfAdmitted(brep: Brep, faceName: string, source: Source, distance: number): Brep | undefined {
+  const wall = admittedWall(brep, faceName, source);
+  return wall && offsetWall(brep, source, wall, distance);
+}
+
+/** Compatibility operation that continues to admit only the physical outer skin. */
+export function offsetExactSemicylinderOuterWallIfAdmitted(brep: Brep, faceName: string, source: Source, distance: number): Brep | undefined {
+  const wall = admittedWall(brep, faceName, source);
+  return wall?.skin === 'outer' ? offsetWall(brep, source, wall, distance) : undefined;
 }
 
 /** Move only the selected native station. All incidence, IDs and UV charts remain owned by the source. */

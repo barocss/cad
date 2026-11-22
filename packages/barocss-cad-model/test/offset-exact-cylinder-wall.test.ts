@@ -50,58 +50,69 @@ function measure(doc: StudioDoc, outside: number, inside: number, wall = outer) 
   return brep;
 }
 
-test('the original outer semicylinder wall supports signed Offset through Studio commands and native Open', async () => {
-  const source = sourceDoc(), ctx = context(source);
-  assert.equal(offsetFaceCommand.available(ctx).ok, true);
-  assert.equal(offsetFaceCommand.available(context(source, inner)).ok, false);
-  assert.deepEqual(offsetFaceCommand.fields!(ctx).map(field => field.key), ['d']);
-  const [handle] = offsetFaceCommand.handles!(ctx, { d: 2 });
-  assert.deepEqual(handle.dir, [0, 1, 0]);
-  assert.deepEqual(handle.at, [20, 30, 6]);
+for (const [role, wall, sign, radius] of [['outer', outer, 1, 10], ['inner', inner, -1, 8]] as const) {
+  test(`the original ${role} semicylinder wall supports signed Offset through Studio commands and native Open`, async () => {
+    const source = sourceDoc(), ctx = context(source, wall);
+    assert.equal(offsetFaceCommand.available(ctx).ok, true);
+    assert.deepEqual(offsetFaceCommand.fields!(ctx).map(field => field.key), ['d']);
+    const [handle] = offsetFaceCommand.handles!(ctx, { d: 2 });
+    handle.dir.forEach((value, axis) => near(value, axis === 1 ? sign : 0));
+    assert.deepEqual(handle.at, [20, 20 + radius, 6]);
 
-  const expanded = offsetFaceCommand.build!(ctx, { d: 2 }), saved = expanded.nodes[1];
-  assert.ok(saved.kind === 'offset-face');
-  assert.deepEqual([saved.parent, saved.faces, saved.distance, saved.target], [{ node: 0, side: 'solid' }, [outer], 2, undefined]);
-  assert.equal(saved.sigs?.[outer]?.k, 'curved');
-  assert.deepEqual(expanded.nodes[0], source.nodes[0]);
-  measure(expanded, 12, 8);
+    const expanded = offsetFaceCommand.build!(ctx, { d: 2 }), saved = expanded.nodes[1];
+    assert.ok(saved.kind === 'offset-face');
+    assert.deepEqual([saved.parent, saved.faces, saved.distance, saved.target], [{ node: 0, side: 'solid' }, [wall], 2, undefined]);
+    assert.equal(saved.sigs?.[wall]?.k, 'curved');
+    assert.deepEqual(expanded.nodes[0], source.nodes[0]);
+    const positive: [number, number] = role === 'outer' ? [12, 8] : [10, 6];
+    const negative: [number, number] = role === 'outer' ? [9, 8] : [10, 9];
+    measure(expanded, ...positive);
 
-  const agent = await dispatchTool({ doc: source, bodies: ctx.bodies }, 'features',
-    { action: 'command', command: 'offset-face', faces: [outer], values: { d: 2 }, expectedRevision: revisionOf(source) }, evaluate);
-  assert.ok(agent.changed && !agent.isError, agent.content);
-  assert.deepEqual(agent.state.doc, expanded);
+    const agent = await dispatchTool({ doc: source, bodies: ctx.bodies }, 'features',
+      { action: 'command', command: 'offset-face', faces: [wall], values: { d: 2 }, expectedRevision: revisionOf(source) }, evaluate);
+    assert.ok(agent.changed && !agent.isError, agent.content);
+    assert.deepEqual(agent.state.doc, expanded);
 
-  const edit = editSavedOffsetFaceCommand(expanded, 1), after = context(expanded);
-  assert.ok(edit?.build);
-  assert.deepEqual(edit.fields!(after).map(field => field.key), ['d']);
-  assert.throws(() => edit.build!(after, { offsetMode: 'to-plane' }), /signed distance/);
-  const reduced = edit.build(after, { d: -1 });
-  assert.deepEqual(reduced.nodes[1], { ...saved, distance: -1 });
-  const expected = measure(reduced, 9, 8);
-  const opened = await readStudioFile(encodeStudioFile(reduced));
-  assert.ok('doc' in opened);
-  assert.deepEqual(opened.doc, reduced);
-  assert.deepEqual(measure(opened.doc, 9, 8), expected);
-  const checkWall = async (doc: StudioDoc, value: number) => {
-    const wall = await runCheck(doc, context(doc).bodies, evaluate, {
-      query: { fn: 'radial_wall', a: outer, b: inner }, op: '==', value, tol: 0.01, unit: 'mm',
-    });
-    assert.equal(wall.status, 'pass');
-    assert.deepEqual(wall.entities, [outer, inner]);
-    assert.ok(typeof wall.measured === 'number');
-    near(wall.measured, value);
-  };
-  await checkWall(expanded, 4);
-  await checkWall(opened.doc, 1);
-  assert.equal(offsetFaceCommand.available(after).ok, false);
-  for (const distance of [-2, -2.1, -2 + 1e-8]) {
-    const refused = await evaluate(edit.build(after, { d: distance }));
-    assert.ok(!refused.ok);
-    assert.match(refused.error.detail, /inner (?:skin|wall)/i);
-  }
+    const edit = editSavedOffsetFaceCommand(expanded, 1), after = context(expanded, wall);
+    assert.ok(edit?.build);
+    assert.deepEqual(edit.fields!(after).map(field => field.key), ['d']);
+    assert.throws(() => edit.build!(after, { offsetMode: 'to-plane' }), /signed distance/);
+    const reduced = edit.build(after, { d: -1 });
+    assert.deepEqual(reduced.nodes[1], { ...saved, distance: -1 });
+    const expected = measure(reduced, ...negative);
+    const opened = await readStudioFile(encodeStudioFile(reduced));
+    assert.ok('doc' in opened);
+    assert.deepEqual(opened.doc, reduced);
+    assert.deepEqual(measure(opened.doc, ...negative), expected);
+    const checkWall = async (doc: StudioDoc, value: number) => {
+      const wall = await runCheck(doc, context(doc).bodies, evaluate, {
+        query: { fn: 'radial_wall', a: outer, b: inner }, op: '==', value, tol: 0.01, unit: 'mm',
+      });
+      assert.equal(wall.status, 'pass');
+      assert.deepEqual(wall.entities, [outer, inner]);
+      assert.ok(typeof wall.measured === 'number');
+      near(wall.measured, value);
+    };
+    await checkWall(expanded, 4);
+    await checkWall(opened.doc, 1);
+    assert.equal(offsetFaceCommand.available(after).ok, false);
+    const contacts = role === 'outer' ? /inner (?:skin|wall)/i : /outer (?:skin|wall)/i;
+    for (const distance of [-2, -2.1, -2 + 1e-8]) {
+      const refused = await evaluate(edit.build(after, { d: distance }));
+      assert.ok(!refused.ok);
+      assert.match(refused.error.detail, contacts);
+    }
 
-  const reverse = sourceDoc(true), reverseCtx = context(reverse, inner);
-  assert.equal(offsetFaceCommand.available(reverseCtx).ok, true);
-  assert.equal(offsetFaceCommand.available(context(reverse, outer)).ok, false);
-  measure(offsetFaceCommand.build!(reverseCtx, { d: 0.1 }), 12.1, 10, inner);
-});
+    if (role === 'inner') {
+      for (const distance of [8, 8.1, 8 - 1e-8]) {
+        const refused = await evaluate(edit.build(after, { d: distance }));
+        assert.ok(!refused.ok);
+        assert.match(refused.error.detail, /axis/i);
+      }
+    }
+    const reverseCtx = context(sourceDoc(true), role === 'outer' ? inner : outer);
+    assert.equal(offsetFaceCommand.available(reverseCtx).ok, true);
+    const reverseRadii: [number, number] = role === 'outer' ? [12.1, 10] : [12, 9.9];
+    measure(offsetFaceCommand.build!(reverseCtx, { d: 0.1 }), ...reverseRadii, inner);
+  });
+}

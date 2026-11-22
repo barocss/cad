@@ -2,7 +2,7 @@
 import { CadNumericPolicy, CadPartLimits, brepFromPrismatic, checkBrep, prismaticFromProfile, prismaticMassProperties, transformBrep, type Brep, type BrepFace, type Curve, type Surface } from '@barocss/cad';
 import { boxCapOffsetFrame, draftedFaceOffsetFrame } from '@barocss/cad/internal/drafted-cap-offset';
 import { annularCapReplacementFrame, boredCapOffsetFrame, boredPlateWallOffsetFrame, boreWallOffsetFrame, circularWallOffsetFrame } from '@barocss/cad/internal/bored-cap-offset';
-import { exactSemicylinderCapOffsetFrame, exactSemicylinderOuterWallOffsetFrame } from '@barocss/cad/internal/exact-cylinder-cap-offset';
+import { exactSemicylinderCapOffsetFrame, exactSemicylinderWallOffsetFrame } from '@barocss/cad/internal/exact-cylinder-cap-offset';
 import { prismWallOffsetFrame } from '@barocss/cad/internal/prism-wall-offset';
 import { fillFeaturePatternSpec } from '@barocss/cad/api';
 import { finiteBinary64Integer } from '../engine/binary64';
@@ -366,14 +366,14 @@ export function resolveDirectOffsetFace(ctx: Ctx): {
     const source = exactSemicylinderCapSource(ctx.doc.nodes, ref.node, ctx.doc.parameters);
     const radial = display.exact?.kind === 'cylinder';
     if (!source || !(radial ? source.skins : source.faces).includes(display.name))
-      return unsupported('select an original axial cap or the outer wall of an Exact semicylinder.');
+      return unsupported('select an original axial cap or cylindrical wall of an Exact semicylinder.');
     const current = currentOffsetBody(ctx, body);
     const { brep } = nativeOffsetBody(ctx, body, display);
     const authored = { id: source.id, surface: { ...node.surface, kind: 'surface', id: 'surface' } as Surface,
       thickness: source.thickness, side: node.side };
     if (radial) {
-      const frame = exactSemicylinderOuterWallOffsetFrame(brep, display.name, authored);
-      if (!frame) return unsupported('only the original outer cylindrical wall supports this radial offset.');
+      const frame = exactSemicylinderWallOffsetFrame(brep, display.name, authored);
+      if (!frame) return unsupported('the original cylindrical wall could not be certified for radial offset.');
       return radialOffsetPick(ref, display.name, current, frame);
     }
     const frame = exactSemicylinderCapOffsetFrame(brep, display.name, authored);

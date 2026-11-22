@@ -5,6 +5,11 @@ import { createFlow } from './flow-helper.mjs';
 import { withMcpSession } from './mcp-browser-session.mjs';
 
 const outer = 'n0.normal', inner = 'n0.reverse', height = 12;
+const isInner = process.argv.includes('--inner');
+const role = isInner ? 'inner' : 'outer';
+const face = isInner ? inner : outer, fixedFace = isInner ? outer : inner;
+const view = isInner ? 'Front' : 'Back';
+const wallY = isInner ? 28 : 30, radialSign = isInner ? -1 : 1;
 const profile = [[30, 20], [30, 30], [20, 30], [10, 30], [10, 20]];
 const seed = {
   format: 'barocss-cad-model', schema: 3, units: 'mm', nextId: 1, parameters: {},
@@ -27,9 +32,9 @@ const pins = [
     .map(name => 'packages/barocss-cad/src/' + name + '.ts'),
 ];
 const f = await createFlow({
-  name: 'exact-semicylinder-wall-offset', envFrozen: 'D1656_SOURCE_FROZEN', output: process.argv[2],
+  name: 'exact-semicylinder-wall-offset', envFrozen: isInner ? 'D1657_SOURCE_FROZEN' : 'D1656_SOURCE_FROZEN', output: process.argv[2],
   initialFiles: pins, requiredFrozen: pins,
-  qualification: 'Offset the original outer wall by signed distance through Studio and the local Agent.',
+  qualification: `Offset the original ${role} wall by signed distance through Studio and the local Agent.`,
   limits: ['One two-quarter upright Exact cylinder Thicken. Desktop WebGPU and local stdio MCP.'],
   inspectorSource: `
 import { readFileSync } from 'node:fs';
@@ -44,11 +49,11 @@ const { vertices, edges, coedges, loops, faces, shells, bodies } = brep;
 const owners = [vertices.map(v => v.id), edges.map(({curve, ...edge}) => [edge, curve.id]),
   coedges.map(({pcurve, ...use}) => [use, pcurve?.id]), loops,
   faces.map(({surface, ...face}) => [face, surface.id]), shells, bodies];
-const inner = faces.find(face => face.name === 'n0.reverse');
-const innerUses = coedges.filter(use => inner.loops.includes(use.loop));
-const innerEdges = edges.filter(edge => innerUses.some(use => use.edge === edge.id));
-const innerVertices = vertices.filter(vertex => innerEdges.some(edge => edge.vertices.includes(vertex.id)));
-console.log(JSON.stringify({ meshFaces, owners, fixed: [inner, innerUses, innerEdges, innerVertices],
+const fixed = faces.find(face => face.name === ${JSON.stringify(fixedFace)});
+const fixedUses = coedges.filter(use => fixed.loops.includes(use.loop));
+const fixedEdges = edges.filter(edge => fixedUses.some(use => use.edge === edge.id));
+const fixedVertices = vertices.filter(vertex => fixedEdges.some(edge => edge.vertices.includes(vertex.id)));
+console.log(JSON.stringify({ meshFaces, owners, fixed: [fixed, fixedUses, fixedEdges, fixedVertices],
   geometry: Object.fromEntries(faces.map(face => [face.name, faceGeometry(face)])),
   mass: brepMassProperties(brep, 1), report: checkBrep(brep, { strict: true }), digest: digestOf(brep) }));
 `,
@@ -60,11 +65,12 @@ const status = (panel, state) => panel.locator('.status').filter({ hasText: new 
 const near = (got, want, tolerance = 1e-8) => assert.ok(Math.abs(got - want) < tolerance, `${got} != ${want}`);
 const mcp = (file, label, run) => withMcpSession({ app: f.app, output: f.output, clientName: f.name, autonomy: 3 }, file, label, run);
 
-async function check(label, doc, radius, original) {
+async function check(label, doc, distance, original) {
+  const outside = isInner ? 10 : 10 + distance, inside = isInner ? 8 - distance : 8;
   const result = await f.inspect(label, doc), { report, geometry, mass } = result;
   assert.ok(report.valid, report.issues.join('\n'));
   assert.deepEqual(report.counts, { bodies: 1, shells: 1, faces: 6, loops: 6, coedges: 24, edges: 12, vertices: 8 });
-  for (const [name, r, sense] of [[outer, radius, 1], [inner, 8, -1]]) {
+  for (const [name, r, sense] of [[outer, outside, 1], [inner, inside, -1]]) {
     const support = geometry[name];
     assert.deepEqual([support.kind, support.a, support.out], ['cylinder', [0, 0, 1], sense]);
     near(support.c[0], 20);
@@ -82,8 +88,8 @@ async function check(label, doc, radius, original) {
       near(after.o.reduce((sum, v, i) => sum + (v - before.o[i]) * before.n[i], 0), 0);
     }
   }
-  const volume = 6 * Math.PI * (radius ** 2 - 64);
-  const centroid = [20, 20 + 4 * (radius ** 3 - 512) / (3 * Math.PI * (radius ** 2 - 64)), height / 2];
+  const radiiSquared = outside ** 2 - inside ** 2, volume = 6 * Math.PI * radiiSquared;
+  const centroid = [20, 20 + 4 * (outside ** 3 - inside ** 3) / (3 * Math.PI * radiiSquared), height / 2];
   const { bodies } = await f.bodies();
   assert.equal(bodies.length, 1);
   near(bodies[0].volume, volume);
@@ -92,7 +98,7 @@ async function check(label, doc, radius, original) {
     near(mass.centroid[axis], value);
     near(bodies[0].centroid[axis], value);
   });
-  f.report.observations.push({ label, radius, volume, actualVolume: mass.volume, digest: result.digest, pcurveGap: report.maximumPcurveGap });
+  f.report.observations.push({ label, outside, inside, distance, volume, actualVolume: mass.volume, digest: result.digest, pcurveGap: report.maximumPcurveGap });
   return result;
 }
 
@@ -108,36 +114,36 @@ await f.run(async () => {
     return context;
   };
 
-  const agentFile = join(f.output, 'outer-wall-agent.bcad');
+  const agentFile = join(f.output, `${role}-wall-agent.bcad`);
   await writeFile(agentFile, JSON.stringify(seed));
-  const agentDoc = await mcp(agentFile, 'outer-wall-agent', async call => {
+  const agentDoc = await mcp(agentFile, `${role}-wall-agent`, async call => {
     const pin = await call('query', { action: 'summary' });
-    await call('features', { action: 'command', command: 'offset-face', faces: [outer], values: { d: 2 }, expectedRevision: pin.revision });
+    await call('features', { action: 'command', command: 'offset-face', faces: [face], values: { d: 2 }, expectedRevision: pin.revision });
     return JSON.parse(await readFile(agentFile, 'utf8'));
   });
   await f.newPage();
   const [picker] = await Promise.all([f.page.waitForEvent('filechooser'), button('Open').click()]);
   await picker.setFiles({ name: 'exact-semicylinder.bcad', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(seed)) });
   await f.same(seed);
-  const original = await check('01-source', seed, 10);
+  const original = await check('01-source', seed, 0);
 
-  f.phase = 'Pick the original outer cylindrical wall';
+  f.phase = `Pick the original ${role} cylindrical wall`;
   await button('View cube directions').click();
-  await f.page.getByRole('menuitem', { name: 'Back', exact: true }).click();
-  await f.page.waitForFunction(() => {
+  await f.page.getByRole('menuitem', { name: view, exact: true }).click();
+  await f.page.waitForFunction(label => {
     const marks = document.querySelectorAll('.view-cube .vc-label');
-    return marks.length === 1 && marks[0].textContent === 'BACK';
-  });
+    return marks.length === 1 && marks[0].textContent === label;
+  }, view.toUpperCase());
   if (await button('Ortho').getAttribute('aria-pressed') !== 'true') await button('Ortho').click();
   await f.page.getByTitle('Frame all (F)', { exact: true }).click();
   const filter = button('Selection filter');
   for (let i = 0; i < 6 && !(await filter.innerText()).includes('Faces'); i++) await filter.click();
   assert.match(await filter.innerText(), /Faces/);
-  const pick = await f.page.evaluate(() => window.__studioScreenOf([20, 30, 6]));
+  const pick = await f.page.evaluate(y => window.__studioScreenOf([20, y, 6]), wallY);
   assert.ok(pick && await f.page.evaluate(p => document.elementFromPoint(...p)?.matches('canvas.vp-canvas'), pick));
   await f.page.mouse.click(...pick);
   await f.page.waitForFunction(index => window.__studioSelection.selection.faces.length === 1 &&
-    window.__studioSelection.selection.faces[0].face === index, original.meshFaces.find(([name]) => name === outer)[1]);
+    window.__studioSelection.selection.faces[0].face === index, original.meshFaces.find(([name]) => name === face)[1]);
   await f.page.evaluate(() => document.activeElement?.blur());
   await f.command('Offset face');
   const panel = hud('Offset face');
@@ -146,10 +152,10 @@ await f.run(async () => {
   assert.equal(await panel.getByLabel('Mode', { exact: true }).count(), 0);
 
   f.phase = 'Drag along the radial normal and apply the signed distance';
-  const delta = await f.page.evaluate(() => {
-    const a = window.__studioScreenOf([20, 30, 6]), b = window.__studioScreenOf([20, 31, 6]);
+  const delta = await f.page.evaluate(({ y, sign }) => {
+    const a = window.__studioScreenOf([20, y, 6]), b = window.__studioScreenOf([20, y + sign, 6]);
     return b.map((value, i) => value - a[i]);
-  });
+  }, { y: wallY, sign: radialSign });
   assert.ok(Math.hypot(...delta) > 6, delta);
   const handle = await f.page.locator('g.gizmo-handle[data-handle="d"] polygon').evaluate(polygon => {
     const svg = polygon.closest('svg').getBoundingClientRect(), points = [...polygon.points];
@@ -171,28 +177,35 @@ await f.run(async () => {
   assert.deepEqual(expanded, agentDoc);
   assert.deepEqual(expanded.nodes[0], seed.nodes[0]);
   assert.deepEqual([savedNode.kind, savedNode.parent, savedNode.faces, savedNode.distance, savedNode.target],
-    ['offset-face', { node: 0, side: 'solid' }, [outer], 2, undefined]);
-  await check('03-expanded', expanded, 12, original);
+    ['offset-face', { node: 0, side: 'solid' }, [face], 2, undefined]);
+  await check('03-expanded', expanded, 2, original);
   await f.snapshot('03-expanded-wall');
 
   f.phase = 'Refuse contact and edit to a negative distance in History';
-  await f.openFeatureEditor(1, 'outer wall Offset');
+  await f.openFeatureEditor(1, `${role} wall Offset`);
   await button('Edit offset', f.editor()).click();
   const edit = hud('Edit Offset face');
   assert.equal(await edit.getByLabel('Mode', { exact: true }).count(), 0);
-  await offset(edit).fill('-2');
-  await status(edit, 'refused');
-  const error = edit.locator('.hud-error'), details = error.locator('details:not([open]) > summary');
-  if (await details.count()) await details.click();
-  assert.match(await error.innerText(), /inner (?:skin|wall)/i);
-  assert.ok(await button('Apply', edit).isDisabled());
-  await f.same(expanded);
-  await f.snapshot('04-inner-contact-refused');
+  const refuse = async (distance, reason, label) => {
+    await offset(edit).fill(String(distance));
+    await status(edit, 'refused');
+    const error = edit.locator('.hud-error').filter({ hasText: reason });
+    await error.waitFor();
+    const details = error.locator('details:not([open]) > summary');
+    if (await details.count()) await details.click();
+    assert.match(await error.innerText(), reason);
+    assert.ok(await button('Apply', edit).isDisabled());
+    await f.same(expanded);
+    await f.snapshot(label);
+  };
+  await refuse(-2, isInner ? /outer (?:skin|wall)/i : /inner (?:skin|wall)/i,
+    isInner ? '04-outer-contact-refused' : '04-inner-contact-refused');
+  if (isInner) await refuse(8, /axis/i, '05-axis-contact-refused');
   await offset(edit).fill('-1');
   await status(edit, 'preview');
   await button('Apply', edit).click();
   await f.changed(expanded);
-  const reduced = await f.doc(), expected = await check('05-reduced', reduced, 9, original);
+  const reduced = await f.doc(), expected = await check('05-reduced', reduced, -1, original);
   assert.deepEqual(reduced.nodes[1], { ...savedNode, distance: -1 });
   await f.undo();
   await f.same(expanded);
@@ -200,11 +213,11 @@ await f.run(async () => {
   await f.same(reduced);
   const saved = await f.save('exact-semicylinder-wall-offset');
   await f.freshOpen(saved.file, reduced, '06-native-open');
-  assert.equal((await check('06-opened', await f.doc(), 9, original)).digest, expected.digest);
-  await f.openFeatureEditor(1, 'reopened outer wall Offset');
+  assert.equal((await check('06-opened', await f.doc(), -1, original)).digest, expected.digest);
+  await f.openFeatureEditor(1, `reopened ${role} wall Offset`);
   await button('Edit offset', f.editor()).click();
   assert.equal(await offset(hud('Edit Offset face')).inputValue(), '-1');
-  await f.snapshot('07-reopened-outer-wall');
+  await f.snapshot(`07-reopened-${role}-wall`);
   await button('Cancel', hud('Edit Offset face')).click();
   await f.same(reduced);
 });

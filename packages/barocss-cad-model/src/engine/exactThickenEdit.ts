@@ -1,5 +1,5 @@
 import { reevaluate, type Brep, type CadPartSnapshot, type Surface } from '@barocss/cad';
-import { offsetExactSemicylinderCapIfAdmitted, offsetExactSemicylinderOuterWallIfAdmitted, replaceExactSemicylinderCapIfAdmitted } from '@barocss/cad/internal/exact-cylinder-cap-offset';
+import { offsetExactSemicylinderCapIfAdmitted, offsetExactSemicylinderWallIfAdmitted, replaceExactSemicylinderCapIfAdmitted } from '@barocss/cad/internal/exact-cylinder-cap-offset';
 import { canonical } from '../util/revision';
 import { exactSemicylinderCapSource, type StudioDoc } from './doc';
 import { featureId } from './ids';
@@ -44,7 +44,7 @@ export function isExactThickenEdit(doc: StudioDoc, snapshot: CadPartSnapshot, in
     } else if (node.kind === 'offset-face' && edit.kind === 'offset-face') {
       const distance = node.target ? resolveOffsetPlaneDistance(doc, node.target, node, prefix, build) : node.distance;
       if (distance !== edit.distance) return false;
-      const offset = radial ? offsetExactSemicylinderOuterWallIfAdmitted : offsetExactSemicylinderCapIfAdmitted;
+      const offset = radial ? offsetExactSemicylinderWallIfAdmitted : offsetExactSemicylinderCapIfAdmitted;
       expected = offset(original.brep, face, source, edit.distance);
     }
     return expected !== undefined && canonical(expected) === canonical(brep);

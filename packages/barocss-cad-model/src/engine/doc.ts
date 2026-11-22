@@ -702,7 +702,7 @@ export function directFaceDocumentProblem(input: unknown): string | null {
         const axial = signature.k === 'plane' && source?.faces.includes(face);
         const radial = signature.k === 'curved' && source?.skins.includes(face);
         if (!axial && !radial)
-          return 'Offset face: pick an original axial cap or the outer wall of an Exact semicylinder.';
+          return 'Offset face: pick an original axial cap or cylindrical wall of an Exact semicylinder.';
         if (radial && node.target !== undefined) return 'Offset face: an original Exact semicylinder wall needs a signed distance.';
         continue;
       }

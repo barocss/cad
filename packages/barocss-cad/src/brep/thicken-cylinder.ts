@@ -180,20 +180,20 @@ export function thickenCylinderSolid(req: Pick<ThickenSolidRequest, 'id' | 'surf
   return cylinderSolid(req, 0);
 }
 
-/** @internal Continue only the physical outer radius through the same certified native producer. */
-export function thickenCylinderOuterOffsetSolid(req: Pick<ThickenSolidRequest, 'id' | 'surface' | 'thickness' | 'side'>, distance: number): Brep {
-  if (!Number.isFinite(distance)) return fail('the outer radius offset must be finite.');
-  return cylinderSolid(req, distance);
+/** @internal Continue one physical skin with signed distance along its outward material normal. */
+export function thickenCylinderWallOffsetSolid(req: Pick<ThickenSolidRequest, 'id' | 'surface' | 'thickness' | 'side'>, skin: 'outer' | 'inner', distance: number): Brep {
+  if (!Number.isFinite(distance) || (skin !== 'outer' && skin !== 'inner')) return fail('the skin and its radius offset must be valid and finite.');
+  return cylinderSolid(req, skin === 'outer' ? distance : 0, skin === 'inner' ? -distance : 0);
 }
 
-function cylinderSolid(req: Pick<ThickenSolidRequest, 'id' | 'surface' | 'thickness' | 'side'>, outerOffset: number): Brep {
+function cylinderSolid(req: Pick<ThickenSolidRequest, 'id' | 'surface' | 'thickness' | 'side'>, outerOffset: number, innerOffset = 0): Brep {
   const frame = frameOf(req.surface), t = req.thickness;
   if (!(Number.isFinite(t) && t > frame.tolerance)) return fail('thickness must be finite and exceed the native linear tolerance.');
   if (req.side !== undefined && req.side !== 'normal' && req.side !== 'reverse' && req.side !== 'both')
     return fail('side must be normal, reverse or both.');
   const [lo, hi] = req.side === 'reverse' ? [-t, 0] : req.side === 'both' ? [-t / 2, t / 2] : [0, t];
   const sign = frame.outward ? 1 : -1, reverseRadius = frame.radius + sign * lo, normalRadius = frame.radius + sign * hi;
-  const innerRadius = Math.min(reverseRadius, normalRadius), outerRadius = Math.max(reverseRadius, normalRadius) + outerOffset;
+  const innerRadius = Math.min(reverseRadius, normalRadius) + innerOffset, outerRadius = Math.max(reverseRadius, normalRadius) + outerOffset;
   if (!(innerRadius > 0)) return fail('the inward offset reaches or crosses the cylinder axis.', 'OFFSET_FOLDS');
   if (!(innerRadius > frame.tolerance && outerRadius - innerRadius > frame.tolerance))
     return fail('the annular wall cannot be resolved within the native linear tolerance.');

@@ -15,7 +15,7 @@ export const isThickenWallQuery = (fn: unknown): fn is WallQuery['fn'] => fn ===
 export function thickenWallOf(doc: StudioDoc, bodies: readonly BodyResult[], { fn, a, b }: WallQuery) {
   const radial = fn === 'radial_wall';
   const unknown = { unknown: radial
-    ? 'Radial wall thickness needs the distinct native inner and outer faces of one current Exact cylinder Thicken solid, its full axial-end cut, its original axial-cap or outer-wall Offset, or its original upper-cap replacement.'
+    ? 'Radial wall thickness needs the distinct native inner and outer faces of one current Exact cylinder Thicken solid, its full axial-end cut, its original axial-cap or cylindrical wall Offset, or its original upper-cap replacement.'
     : 'Planar wall thickness needs the distinct normal and reverse skin faces of one current Exact planar Thicken solid.' };
   if (!bodies.length || typeof a !== 'string' || typeof b !== 'string' || a === b) return unknown;
   const keys = new Set(bodies.map(body => body.key));
