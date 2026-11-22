@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1642: [Verify the radial wall after an axial Subtract](notes/agent-axial-cut-wall-approval-2026-11-22/README.md), #175 and #322. Check full axial coverage, refuse a partial cutter at approval and reproduce current radial wall evidence on Open.
 - D1641: [Cut the axial end of an Exact semicylinder Thicken](notes/exact-cylinder-axial-cut-2026-11-22/README.md), #175 and #368. Use native Subtract, edit the cutter plane in History and reproduce the two cylindrical skins and closed cap after Open.
 - D1640: [Check normal wall thickness before Exact planar Thicken approval](notes/agent-exact-planar-wall-approval-2026-11-22/README.md), #322 and #324. Measure the two native skins of a tilted sheet and reproduce the approval evidence after Studio Save and Open.
 - D1639: [Check a named radial wall before Exact Thicken approval](notes/agent-exact-thicken-wall-approval-2026-11-22/README.md), #322 and #324. Bind the native wall check to the candidate image, refuse a thin wall in Studio and reproduce the passing evidence after native Open.

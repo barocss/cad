@@ -3,21 +3,23 @@ import type { StudioDoc } from '../engine/doc';
 import type { BodyResult } from '../engine/evaluate';
 import { bodyNodeOf, featureId } from '../engine/ids';
 import { bodyKeyOf, partSnapshot } from '../engine/part';
+import { isAxialThickenCut, isClosedSixFaceSolid } from '../engine/axialThickenCut';
 import { dot, sub } from '../engine/vec3';
 import type { Query } from '../engine/schema/spec';
 
 type WallQuery = Extract<Query, { fn: 'radial_wall' | 'planar_wall' }>;
 export const isThickenWallQuery = (fn: unknown): fn is WallQuery['fn'] => fn === 'radial_wall' || fn === 'planar_wall';
 
-/** The current Exact Thicken feature owns the two corresponding native skins. */
+/** Measure the two native skins of a current Exact Thicken or its qualified axial crop. */
 export function thickenWallOf(doc: StudioDoc, bodies: readonly BodyResult[], { fn, a, b }: WallQuery) {
   const radial = fn === 'radial_wall';
   const unknown = { unknown: radial
-    ? 'Radial wall thickness needs the distinct native inner and outer faces of one current Exact cylinder Thicken solid.'
+    ? 'Radial wall thickness needs the distinct native inner and outer faces of one current Exact cylinder Thicken solid or its full axial-end cut.'
     : 'Planar wall thickness needs the distinct normal and reverse skin faces of one current Exact planar Thicken solid.' };
   if (!bodies.length || typeof a !== 'string' || typeof b !== 'string' || a === b) return unknown;
   const keys = new Set(bodies.map(body => body.key));
-  const faces = partSnapshot(doc).outputs.filter(output => keys.has(bodyKeyOf(output.id, doc.nodes))).flatMap(output =>
+  const snapshot = partSnapshot(doc);
+  const faces = snapshot.outputs.filter(output => keys.has(bodyKeyOf(output.id, doc.nodes))).flatMap(output =>
     output.brep.faces.map(face => ({ output, face })));
   const first = faces.filter(({ face }) => face.name === a);
   const second = faces.filter(({ face }) => face.name === b);
@@ -25,10 +27,10 @@ export function thickenWallOf(doc: StudioDoc, bodies: readonly BodyResult[], { f
   const { id, feature, brep } = first[0].output;
   const owner = bodyNodeOf(doc.nodes, bodyKeyOf(id, doc.nodes));
   const node = owner && doc.nodes[owner.node];
-  if (owner?.side !== 'solid' || node?.kind !== 'thicken' || node.mode !== (radial ? 'exact-cylinder' : 'exact-planar') || node.suppressed ||
-      id !== feature || featureId(doc.nodes, owner.node) !== feature ||
-      brep.bodies.length !== 1 || brep.bodies[0].kind !== 'solid' || brep.shells.length !== 1 || !brep.shells[0].closed ||
-      brep.faces.length !== 6 || first[0].face.shell !== brep.shells[0].id || second[0].face.shell !== brep.shells[0].id) return unknown;
+  if (owner?.side !== 'solid' || node?.suppressed || id !== feature || featureId(doc.nodes, owner.node) !== feature ||
+      !isClosedSixFaceSolid(brep)) return unknown;
+  const direct = node?.kind === 'thicken' && node.mode === (radial ? 'exact-cylinder' : 'exact-planar');
+  if (!direct && (!radial || node?.kind !== 'difference')) return unknown;
   const firstGeometry = faceGeometry(first[0].face), secondGeometry = faceGeometry(second[0].face);
   if (!radial) {
     const normalName = `${feature}.normal`, reverseName = `${feature}.reverse`;
@@ -42,6 +44,7 @@ export function thickenWallOf(doc: StudioDoc, bodies: readonly BodyResult[], { f
     return Number.isFinite(x) && x > 0 ? { x, entities: [normalName, reverseName], hint: 'the native normal wall thickness' } : unknown;
   }
   if (firstGeometry.kind !== 'cylinder' || secondGeometry.kind !== 'cylinder' || firstGeometry.out === secondGeometry.out) return unknown;
+  if (!direct && !isAxialThickenCut(doc, snapshot, owner.node, brep, [a, b], [firstGeometry, secondGeometry])) return unknown;
   const outerFirst = firstGeometry.out === 1;
   const [outer, inner] = outerFirst ? [firstGeometry, secondGeometry] : [secondGeometry, firstGeometry];
   const x = outer.r - inner.r;

@@ -1,9 +1,13 @@
 import assert from 'node:assert/strict';
-import { writeFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createFlow } from './flow-helper.mjs';
 import { clickModelCommand } from './model-rail-helper.mjs';
+import { withMcpSession } from './mcp-browser-session.mjs';
 
+const wallCheck = process.argv.includes('--wall-check');
+const wall = { id: 'RADIAL-2', source: 'Keep the radial wall at 2 ± 0.01 mm.', hard: true,
+  check: { query: { fn: 'radial_wall', a: 'n0.normal', b: 'n0.reverse' }, op: '==', value: 2, tol: 0.01, unit: 'mm' } };
 const profile = [[30, 20], [30, 30], [20, 30], [10, 30], [10, 20]];
 const weights = [1, Math.SQRT1_2, 1, Math.SQRT1_2, 1];
 const surface = {
@@ -19,6 +23,7 @@ const seed = {
     { id: 'n2', kind: 'extrude', sketch: 1, from: 8, height: 9 },
   ],
   outputs: { b0: { node: 0, side: 'solid' }, b2: { node: 2, side: 'solid' } },
+  ...(wallCheck ? { requirements: [wall] } : {}),
 };
 const pins = [
   'apps/cad-studio/test/exact-cylinder-axial-cut-browser.mjs', 'apps/cad-studio/test/model-rail-helper.mjs',
@@ -26,10 +31,13 @@ const pins = [
   'packages/barocss-cad-model/src/engine/part.ts', 'packages/barocss-cad/src/part/part-model.ts',
   'packages/barocss-cad/src/brep/analytic-boolean.ts', 'packages/barocss-cad/src/brep/thicken-cylinder.ts',
 ];
+if (wallCheck) pins.push('packages/barocss-cad-model/src/engine/axialThickenCut.ts', 'packages/barocss-cad-model/src/chat/thickenWall.ts',
+  'packages/barocss-cad-model/src/chat/part/proposals.ts', 'apps/cad-studio/test/mcp-browser-session.mjs');
 const f = await createFlow({
-  name: 'exact-cylinder-axial-cut', output: process.argv[2], envFrozen: 'D1641_SOURCE_FROZEN',
+  name: 'exact-cylinder-axial-cut', output: process.argv[2], envFrozen: wallCheck ? 'D1642_SOURCE_FROZEN' : 'D1641_SOURCE_FROZEN',
   initialFiles: pins, requiredFrozen: pins,
-  qualification: 'Subtract a box across one end of an Exact semicylinder Thicken, edit the cutting plane and reopen the native part.',
+  qualification: wallCheck ? 'Approve a full axial crop, refuse a partial crop and check current radial wall evidence after native Open.'
+    : 'Subtract a box across one end of an Exact semicylinder Thicken, edit the cutting plane and reopen the native part.',
   limits: ['One upright two-quarter semicylinder and one rectangular cutter with full XY clearance. Desktop WebGPU.'],
   inspectorSource: `
 import { readFileSync } from 'node:fs';
@@ -59,6 +67,39 @@ const button = name => f.page.getByRole('button', { name, exact: true });
 const near = (got, expected, tolerance = 1e-8) => assert.ok(Math.abs(got - expected) < tolerance, `${got} != ${expected}`);
 const target = { node: 0, side: 'solid' }, tool = { node: 2, side: 'solid' };
 const retainedFaces = ['n0.normal', 'n0.reverse', 'n0.u-max', 'n0.u-min', 'n0.v-min', 'n2.bottom'];
+const proposal = () => f.page.getByRole('listitem', { name: 'Proposal P1', exact: true });
+const requirement = () => f.page.getByRole('listitem', { name: `Requirement ${wall.id}`, exact: true });
+const mcp = (file, label, run) => withMcpSession({ app: f.app, output: f.output, clientName: 'exact-cylinder-axial-cut', autonomy: 1 }, file, label, run);
+
+async function propose(file, title) {
+  return mcp(file, title, async call => {
+    const result = await call('proposals', { action: 'propose', title, requirements: [wall.id], ops: [
+      { tool: 'features', args: { action: 'command', command: 'difference', bodies: ['b0', 'b2'] } },
+    ] });
+    assert.deepEqual([result.proposal, result.applied], ['P1', false]);
+    return result.checks.after;
+  });
+}
+
+async function checkEvidence(file, label, oldRevision) {
+  const bytes = await readFile(file);
+  const evidence = await mcp(file, label, async call => {
+    if (oldRevision) {
+      const stale = await call('requirements', { action: 'evidence', expectedRevision: oldRevision }, true);
+      assert.match(stale.error, /OUTPUT_STALE/);
+      assert.equal(stale.files, undefined);
+    }
+    const result = await call('requirements', { action: 'evidence' });
+    const { evidence } = JSON.parse(result.files[0].text);
+    const row = evidence.find(row => row.requirement?.id === wall.id);
+    assert.deepEqual([row.result.run, row.result.verdict, row.freshness.state, row.result.value.entities],
+      [result.revision, 'pass', 'current', ['n0.normal', 'n0.reverse']]);
+    near(row.result.number, 2);
+    return { revision: result.revision, row };
+  });
+  assert.deepEqual(await readFile(file), bytes);
+  return evidence;
+}
 
 async function check(label, doc, height) {
   assert.deepEqual(doc.nodes, [...seed.nodes.slice(0, 2), { ...seed.nodes[2], from: height }, { id: 'n3', kind: 'difference', parent: target, tool }]);
@@ -131,19 +172,51 @@ await f.run(async () => {
   };
   const file = join(f.output, 'semicylinder-and-cutter.bcad');
   await writeFile(file, JSON.stringify(seed));
-  await f.freshOpen(file, seed, '01-input');
+  if (wallCheck) {
+    const partial = join(f.output, 'partial-wall-cutter.bcad');
+    const partialSeed = { ...seed, nodes: seed.nodes.map((node, i) => i === 1 ? { ...node, max: [22, 35] } : node) };
+    await writeFile(partial, JSON.stringify(partialSeed));
+    assert.deepEqual(await propose(partial, 'Partial axial cutter'), { pass: 0, fail: 0, unknown: 1 });
+    const pending = JSON.parse(await readFile(partial, 'utf8'));
+    await f.freshOpen(partial, pending, '00-partial-pending');
+    await button('Chat').first().click();
+    await proposal().getByRole('button', { name: 'Preview', exact: true }).click();
+    await proposal().getByLabel('Volume change').waitFor();
+    await proposal().getByRole('button', { name: 'Accept', exact: true }).click();
+    const refusal = await f.waitToast(/P1 could not be applied.*RADIAL-2.*full axial-end cut/);
+    await f.same(pending);
+    await f.snapshot('00-partial-refused');
+    f.report.observations.push({ refusedPartial: refusal });
+    assert.deepEqual(await propose(file, 'Full axial cutter'), { pass: 1, fail: 0, unknown: 0 });
+  }
+  const working = wallCheck ? JSON.parse(await readFile(file, 'utf8')) : seed;
+  await f.freshOpen(file, working, '01-input');
   await button('Iso').click();
   await f.page.getByTitle('Frame all (F)', { exact: true }).click();
   const bodies = f.page.locator('.outliner .ol-row > button.ol');
   assert.equal(await bodies.count(), 2);
-  await bodies.filter({ hasText: 'Semicylinder' }).click();
-  await bodies.nth(1).click({ modifiers: ['Shift'] });
-  await f.snapshot('02-ordered-operands');
-
   f.phase = 'Subtract through the top end';
-  await clickModelCommand(f.page, 'Combine', 'Subtract');
-  await f.changed(seed);
+  if (wallCheck) {
+    await button('Chat').first().click();
+    await proposal().getByRole('button', { name: 'Preview', exact: true }).click();
+    await proposal().getByLabel('Volume change').waitFor();
+    await proposal().getByRole('button', { name: 'Accept', exact: true }).click();
+  } else {
+    await bodies.filter({ hasText: 'Semicylinder' }).click();
+    await bodies.nth(1).click({ modifiers: ['Shift'] });
+    await f.snapshot('02-ordered-operands');
+    await clickModelCommand(f.page, 'Combine', 'Subtract');
+  }
+  await f.changed(working);
   const cut = await f.doc(), first = await check('03-cut-native', cut, 8);
+  let firstEvidence;
+  if (wallCheck) {
+    await requirement().and(f.page.locator('.req.pass')).waitFor();
+    const approved = await f.save('approved-axial-wall');
+    firstEvidence = await checkEvidence(approved.file, 'approved-evidence');
+    assert.equal(firstEvidence.revision, cut.proposals[0].decided.evidence_revisions.after);
+    assert.equal(cut.history.filter(entry => entry.kind === 'accept').length, 1);
+  }
   await f.snapshot('03-cut');
 
   await f.openFeatureEditor(2, 'cutter Extrude');
@@ -160,6 +233,12 @@ await f.run(async () => {
   const saved = await f.save('semicylinder-axial-cut');
   await f.freshOpen(saved.file, edited, '05-fresh-open');
   assert.deepEqual(await check('06-reopened-native', await f.doc(), 6), second);
+  if (wallCheck) {
+    await requirement().and(f.page.locator('.req.pass')).waitFor();
+    const reopenedEvidence = await checkEvidence(saved.file, 'reopened-evidence', firstEvidence.revision);
+    assert.notEqual(firstEvidence.revision, reopenedEvidence.revision);
+    f.report.observations.push({ firstEvidence, reopenedEvidence });
+  }
   await button('Iso').click();
   await f.page.getByTitle('Frame all (F)', { exact: true }).click();
   await f.snapshot('06-reopened-cut');
