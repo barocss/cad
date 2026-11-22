@@ -36,6 +36,14 @@ test('the MCP server: its contract version, the v2 tools with titles and annotat
   assert.equal(read.isError, false);
   assert.deepEqual(read.structuredContent, JSON.parse(read.content[0].text));
   assert.deepEqual(validate(outputSchemaOf('mass_properties')!, read.structuredContent), []);
+  const listed = (await request('tools/call', { name: 'describe', arguments: { tool: 'query', action: 'edit_fields' } })).result!;
+  assert.equal(listed.isError, false);
+  const fields = (await request('tools/call', { name: 'query', arguments: { action: 'edit_fields', index: 1 } })).result!;
+  assert.equal(fields.isError, false);
+  assert.deepEqual(fields.structuredContent, JSON.parse(fields.content[0].text));
+  assert.deepEqual(validate(outputSchemaOf('list_feature_edit_fields')!, fields.structuredContent), []);
+  assert.deepEqual([fields.structuredContent.index, fields.structuredContent.id], [1, 'n1']);
+  assert.ok(fields.structuredContent.fields.some((field: { key: string }) => field.key === 'h'));
   // A change: no structured content (no output schema); a refused call: isError, none either.
   const change = (await request('tools/call', { name: 'requirements', arguments: { action: 'set', requirements: [{ id: 'R1', source: '64 long', hard: true, check: { op: '==', query: { fn: 'bbox', axis: 'x' }, value: 64, tol: 0.1 } }] } })).result!;
   assert.equal(change.isError, false, change.content[0].text); assert.equal(change.structuredContent, undefined);

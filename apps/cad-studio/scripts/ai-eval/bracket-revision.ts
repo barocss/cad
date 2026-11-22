@@ -34,6 +34,7 @@ export function bracketRevisionBrief(repo: string): Brief {
     autonomy: 1,
     prompt: 'Widen the base of the open support bracket from 60 mm to 80 mm by moving its right end. Keep the left end, depth, thickness, boss, through-hole, and corner fillets as they are. Keep the existing sketch dimension editable and preserve the downstream feature references. Show me the change for approval before applying it.',
     reference: [
+      { tool: 'query', args: { action: 'edit_fields', index: 0 } },
       { tool: 'proposals', args: { action: 'propose', title: 'Widen the support bracket to 80 mm',
         ops: [{ tool: 'features', args: { action: 'edit', index: 0, values: { olen0: 80 } } }] } },
       { tool: '@accept', args: {} },

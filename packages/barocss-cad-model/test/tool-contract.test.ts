@@ -34,6 +34,30 @@ test('every handler is classified, nothing reaches outside the document, read ha
   assert.deepEqual(TOOLS.filter(t => annotationsOf(t.name).readOnlyHint && !outputSchemaOf(t.name)).map(t => t.name), ['get_image_layers'], 'a read tool without a fixed result shape');
 });
 
+test('query edit fields resolves parameter values without evaluating or changing the model', async () => {
+  const doc = rectanglePart(15, 8, 10);
+  const extrusion = doc.nodes[1];
+  assert.ok(extrusion.kind === 'extrude');
+  doc.nodes[1] = { ...extrusion, height: { parameter: 'edit_feature' } };
+  doc.parameters.edit_feature = 10;
+  const state: ChatState = { doc, bodies: [] };
+  const cannotEvaluate = async () => assert.fail('Reading edit fields must not evaluate a draft');
+  const read = await dispatchTool(state, 'query', { action: 'edit_fields', index: 1 }, cannotEvaluate);
+  assert.ok(!read.isError && !read.changed, read.content);
+  assert.equal(read.state.doc, doc);
+  const result = JSON.parse(read.content);
+  assert.deepEqual(validate(outputSchemaOf('list_feature_edit_fields')!, result), []);
+  assert.equal(result.id, 'n1');
+  assert.deepEqual(result.fields.find((field: { key: string }) => field.key === 'h'),
+    { key: 'h', label: 'Distance', kind: 'number', value: 10, unit: 'mm', parameter: 'edit_feature' });
+  for (const index of [-1, 1.5, '1', 2]) {
+    const bad = await dispatchTool(state, 'query', { action: 'edit_fields', index }, cannotEvaluate);
+    assert.ok(bad.isError && !bad.changed);
+    assert.equal(bad.state.doc, doc);
+    assert.equal(JSON.parse(bad.content).code, 'EDIT_FIELDS_INDEX');
+  }
+});
+
 test('the breaking-change rules: removals and narrowing break, additions do not', () => {
   const base: ContractEntry[] = [{ name: 't', annotations: { title: 'T', readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false }, input: { type: 'object', properties: { a: { type: 'string', enum: ['x', 'y'] } }, required: [] }, output: { type: 'object', properties: { r: { type: 'number' } }, required: ['r'] } }];
   const edit = (f: (e: ContractEntry) => void) => { const c = JSON.parse(JSON.stringify(base)); f(c[0]); return breakingChanges(base, c); };
@@ -51,7 +75,7 @@ test('every read tool’s result matches its output schema and changes nothing',
   let doc: StudioDoc = withSampleRows({ ...starterDoc(), requirements: [{ id: 'R1', source: '64 long', hard: true, check: { op: '==', query: { fn: 'bbox', axis: 'x' }, value: 64, tol: 0.1 } }] } as StudioDoc);
   const r = await evaluate(doc); assert.ok(r.ok);
   let s: ChatState = { doc, bodies: r.bodies };
-  const calls: [string, object][] = [['get_part_summary', {}], ['measure', { a: 'n1.top' }], ['measure', { a: 'n1.top', b: 'n1.bottom' }], ['mass_properties', {}], ['rebuild_report', {}], ['interference', {}], ['section', { axis: 'z', at: 4 }], ['wall_thickness', {}], ['draft', {}], ['check_spec', {}], ['diff', {}], ['list_proposals', {}], ['inspect', { faces: ['n1.top'] }], ['select', { faces: ['n1.top'] }], ['checkpoint', { name: 'a' }], ['make_version', { name: 'v1' }], ['make_branch', { name: 'b' }], ['list_versions', {}], ['compare_versions', {}], ['drawing_issues', {}], ['tolerance_suggestions', {}], ['get_assembly', {}], ['list_library', {}], ['check_printability', {}], ['render_views', {}], ['get_joints', {}], ['forward_kinematics', {}], ['link_inertia', {}], ['export_urdf', {}], ['export_mjcf', {}], ['sweep_path', { to: {} }], ['gravity_torques', {}], ['motion_torques', { to: {}, profile: 'trapezoid' }], ['size_actuators', { to: {}, profile: 'trapezoid' }], ['get_brief', {}], ['get_references', {}], ['get_drafts', {}], ['standards_lookup', {}], ['standards_lookup', { table: 'fasteners-metric-coarse', row: 'M6', field: 'tap' }]];
+  const calls: [string, object][] = [['get_part_summary', {}], ['list_feature_edit_fields', { index: 1 }], ['measure', { a: 'n1.top' }], ['measure', { a: 'n1.top', b: 'n1.bottom' }], ['mass_properties', {}], ['rebuild_report', {}], ['interference', {}], ['section', { axis: 'z', at: 4 }], ['wall_thickness', {}], ['draft', {}], ['check_spec', {}], ['diff', {}], ['list_proposals', {}], ['inspect', { faces: ['n1.top'] }], ['select', { faces: ['n1.top'] }], ['checkpoint', { name: 'a' }], ['make_version', { name: 'v1' }], ['make_branch', { name: 'b' }], ['list_versions', {}], ['compare_versions', {}], ['drawing_issues', {}], ['tolerance_suggestions', {}], ['get_assembly', {}], ['list_library', {}], ['check_printability', {}], ['render_views', {}], ['get_joints', {}], ['forward_kinematics', {}], ['link_inertia', {}], ['export_urdf', {}], ['export_mjcf', {}], ['sweep_path', { to: {} }], ['gravity_torques', {}], ['motion_torques', { to: {}, profile: 'trapezoid' }], ['size_actuators', { to: {}, profile: 'trapezoid' }], ['get_brief', {}], ['get_references', {}], ['get_drafts', {}], ['standards_lookup', {}], ['standards_lookup', { table: 'fasteners-metric-coarse', row: 'M6', field: 'tap' }]];
   const seen = new Set<string>();
   for (const [name, args] of calls) {
     const out = await dispatchTool(s, name, args, evaluate);

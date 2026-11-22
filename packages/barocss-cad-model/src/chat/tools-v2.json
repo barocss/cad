@@ -355,6 +355,7 @@
        "wall",
        "draft",
        "fit_clearance",
+       "edit_fields",
        "rebuild",
        "welds",
        "cutlist",

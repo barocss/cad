@@ -22,7 +22,7 @@ const pins = [
 const f = await createFlow({
   name: 'bracket-agent-revision', output: process.argv[2], envFrozen: 'D1683_SOURCE_FROZEN',
   initialFiles: pins, requiredFrozen: pins, inspectorSource, oracleSource,
-  qualification: 'Local revision-bound width proposal, explicit Studio acceptance, native Save and fresh Open, editable locked width.',
+  qualification: 'Discover the locked width through a read-only query, approve a revision-bound proposal, and verify current fields after Studio Save and fresh Open.',
   limits: ['One exact B01 bracket. The scripted L1 MCP calls exercise the tool and approval path. No live model or provider.'],
   snapshotExtra: () => ({
     documentJSON: JSON.stringify(window.__studioDoc),
@@ -64,15 +64,28 @@ await f.run(async () => {
   const start = await f.freshOpen(file, seed, '01-original-W60');
   const native60 = await verify(start, 60);
 
-  f.phase = 'Stage one revision-bound L1 proposal via local MCP';
-  await withMcpSession({ app: f.app, output: f.output, clientName: f.name }, file, 'bracket', async call => {
-    const revision = await currentPartRevision(call);
-    const op = expectedRevision => ({ tool: 'features', args: { action: 'edit', index: 0, expectedRevision, values: { olen0: 80 } } });
+  f.phase = 'Read the width and stage one revision-bound L1 proposal';
+  const session = { app: f.app, output: f.output, clientName: f.name };
+  const source = await withMcpSession(session, file, 'bracket', async (call, request) => {
+    const summary = await call('query', { action: 'summary', response_format: 'concise' });
+    const sketch = summary.features.find(feature => feature.id === seed.nodes[0].id);
+    assert.ok(sketch);
+    const description = await call('describe', { tool: 'query', action: 'edit_fields' });
+    assert.match(JSON.stringify(description), /expectedRevision/);
+    const edit = await call('describe', { tool: 'features', action: 'edit' });
+    assert.match(JSON.stringify(edit), /query\.edit_fields/);
+    const result = await request('tools/call', { name: 'query', arguments: { action: 'edit_fields', index: sketch.index } });
+    assert.equal(result.isError, false);
+    const fields = result.structuredContent;
+    assert.deepEqual(JSON.parse(result.content[0].text), fields);
+    assert.deepEqual([fields.id, fields.index, fields.revision], [sketch.id, sketch.index, await currentPartRevision(call)]);
+    const field = fields.fields.find(row => row.label === 'Length of edge 1');
+    assert.deepEqual(field, { key: 'olen0', label: 'Length of edge 1', kind: 'number', value: 60, unit: 'mm' });
+    assert.equal(sha256(await readFile(file)), seedSHA256);
+    const revision = fields.revision;
+    const op = expectedRevision => ({ tool: 'features', args: { action: 'edit', index: fields.index, expectedRevision, values: { [field.key]: 80 } } });
     const direct = await call('features', op(revision).args, true);
     assert.match(direct.error, /autonomy L1.*only proposes/i);
-    const fields = await call('features', { action: 'batch', dryRun: true,
-      ops: [{ tool: 'features', args: { action: 'edit', index: 0, expectedRevision: revision } }] }, true);
-    assert.match(fields.error, /olen0 \(Length of edge 1 = 60\)/);
     const stale = await call('features', { action: 'batch', dryRun: true, ops: [op('0000000000000000')] }, true);
     assert.match(stale.error, /part changed/i);
     const dry = await call('features', { action: 'batch', dryRun: true, ops: [op(revision)] });
@@ -85,6 +98,7 @@ await f.run(async () => {
     const denied = await call('proposals', { action: 'accept', id: 'P1' }, true);
     assert.match(denied.error, /user accepts.*studio/i);
     assert.deepEqual(await readFile(file), bytes);
+    return { index: fields.index, revision, key: field.key };
   });
 
   const pending = JSON.parse(await readFile(file, 'utf8'));
@@ -109,6 +123,20 @@ await f.run(async () => {
   const saved = await f.save('b01-bracket-W80');
   const reopened = await f.freshOpen(saved.file, saved.doc, '05-fresh-open-W80');
   assert.equal(await verify(reopened, 80), native80);
+  f.phase = 'Read the saved W80 fields and refuse the previous revision';
+  await withMcpSession(session, saved.file, 'reopened-bracket', async call => {
+    const before = await readFile(saved.file);
+    const current = await call('query', { action: 'edit_fields', index: source.index });
+    assert.equal(current.id, seed.nodes[0].id);
+    assert.equal(current.fields.find(row => row.key === source.key).value, 80);
+    assert.notEqual(current.revision, source.revision);
+    assert.equal(current.revision, await currentPartRevision(call));
+    const stale = await call('features', { action: 'batch', dryRun: true, ops: [{ tool: 'features', args: {
+      action: 'edit', index: current.index, expectedRevision: source.revision, values: { [source.key]: 60 },
+    } }] }, true);
+    assert.match(stale.error, /part changed/i);
+    assert.deepEqual(await readFile(saved.file), before);
+  });
   await f.openFeatureEditor(1);
   await button('Edit sketch', f.editor()).click();
   await lockedWidth(80);

@@ -40,8 +40,8 @@ export const GROUPS: Record<string, Group> = {
     title: 'Query',
     about: 'Reads the part without changing it.',
     actions: {
-      summary: ['get_part_summary', 'body?, page? — features, parameters, bodies, faces and edges by name'],
-      inspect: ['inspect', 'faces?, edges?, curve?, surface? — native detail; describe lists the revision pins for candidate review'],
+      summary: ['get_part_summary', 'body?, page? — features and persistent geometry names'],
+      inspect: ['inspect', 'faces?, edges?, curve?, surface? — native detail and review pins'],
       measure: ['measure', 'a, b? — a face or edge, or the distance and angle between two'],
       mass: ['mass_properties', 'bodies?'],
       interference: ['interference', 'bodies? — overlap and clearance'],
@@ -52,7 +52,8 @@ export const GROUPS: Record<string, Group> = {
       wall: ['wall_thickness', 'body?, below?'],
       draft: ['draft', 'body?, pull?, draftMin?'],
       fit_clearance: ['fit_clearance', 'hole?, shaft?, hole_class?, shaft_class?, size? — a hole–shaft fit\u2019s limits and clearance from your fit tables (D155)'],
-      rebuild: ['rebuild_report', '— each feature\'s build time and kernel calls; mate loops'],
+      edit_fields: ['list_feature_edit_fields', 'index — edit fields and revision'],
+      rebuild: ['rebuild_report', 'feature timings, kernel calls and mate loops'],
       welds: ['weld_list', '— the frame\'s weld joints, seams from the geometry, sizes yours or estimated (FRd1)'],
       cutlist: ['cut_list', 'csv? — a frame\u2019s members to cut: rows of identical ones, lengths, end cuts, mass (FR4a); nested into the stock lengths (FRb)'],
       bom: ['output_bom', 'expectedRevision? — BOM files'], purchase_csv: ['output_purchase_csv', 'withMade?, expectedRevision?'], clearance: ['output_clearance', 'near?, expectedRevision? — current assembly map'], cam: ['output_cam_package', 'part?, toolDiameter?, expectedRevision? — NOT FOR PRODUCTION'],
@@ -206,6 +207,7 @@ export function v2Result(text: string, handler?: string): string {
   let parsed: unknown;
   try { parsed = JSON.parse(text); } catch { return v2Text(text); }
   // These records carry literal IDs, names and refusal codes.
+  if (handler === 'list_feature_edit_fields' && isRecord(parsed) && Array.isArray(parsed.fields)) return text;
   if (handler === 'get_drawing_dimensions' || handler === 'calculate_drawing_tolerance_stack'
     || (handler === 'inspect' && isRecord(parsed) && ('curveJoin' in parsed || 'surfacePoint' in parsed
       || (parsed.unit === 'mm' && typeof parsed.revision === 'string' && Array.isArray(parsed.faces))))

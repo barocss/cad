@@ -105,6 +105,11 @@ const READ: Record<string, JsonSchema | null> = {
   fit_clearance: o({ kind: str, clearanceMin: num, clearanceMax: num, estimate: bool, hole: obj, shaft: obj, offset: num, length: num, margin: num, mmc: obj, lmc: obj, contradicted: bool, message: str }, ['kind', 'clearanceMin', 'clearanceMax', 'estimate', 'hole', 'shaft']),
   // (FRd1, O118: a frame's welds.)
   weld_list: o({ joints: arr, totals: obj, orphaned: arr, notes: arr }, ['joints', 'totals', 'orphaned', 'notes']),
+  list_feature_edit_fields: o({ index: { type: 'integer', minimum: 0 }, id: str, label: str, revision: str, fields: { type: 'array',
+    items: o({ key: str, label: str, kind: { type: 'string', enum: ['number', 'choice', 'toggle'] }, value: { type: ['number', 'string', 'boolean', 'null'] },
+      unit: str, options: { type: 'array', items: o({ value: str, label: str }, ['value', 'label']) }, parameter: str,
+      integerRange: o({ min: num, max: num }, ['min', 'max']) }, ['key', 'label', 'kind', 'value']) },
+  }, ['index', 'id', 'label', 'revision', 'fields']),
   rebuild_report: o({ revision: str, evaluation: num, basis: str, evaluationTime: num, features: arr, built: num, builtTime: num, slowest: { type: ['string', 'null'] }, reused: num, mates: arr, loops: arr, limits: str }, ['revision', 'basis', 'evaluationTime', 'features', 'built', 'builtTime', 'slowest', 'reused', 'mates', 'loops', 'limits']),
   diff: o({ from: str, to: str, diff: obj }, ['diff']),
   list_proposals: o({ proposals: arr }, ['proposals']),

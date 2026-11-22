@@ -2,7 +2,7 @@
 // commands, raw nodes, edits and deletes, materials, and the person's rows (stock, frame stock, sections, welds).
 import { commandById, commands, givenValues, shownFields, type Ctx, type Values } from '../../app/commands';
 import { updateBoxFootprint } from '../../app/editCommand';
-import { editFields } from '../../app/editFields';
+import { editFields, type BindableField } from '../../app/editFields';
 import { extrudeEndFaceValues } from '../../app/extrudeEndFacePick';
 import { editSavedOffsetFaceCommand } from '../../app/offsetFaceEdit';
 import { currentOffsetBody } from '../../app/nativeOffsetFace';
@@ -434,6 +434,41 @@ async function editReviewedWallDistance(state: ChatState, index: number, distanc
   return accept(state, next, evaluate, options, `edited ${index}: ${featureLabel(next.nodes[index], index, next.nodes)}`);
 }
 
+function featureEditFields(state: ChatState, index: number, parameters?: StudioDoc['parameters']) {
+  const { nodes } = state.doc;
+  // (O167, F6: a part-scoped edit offers what the bearing command offers — the draft's context and its fit tables.)
+  const circularTurn = hasLineArcTurnSections(nodes, index);
+  const fields = editFields(nodes, index, parameters, undefined, { context: bearingContextOf(state.doc), fits: state.doc.fits, doc: state.doc })
+    .filter(field => !circularTurn || field.key !== smoothTurnAngleKey);
+  const circularSegment = hasLineArcScrewSections(nodes, index);
+  const screwPitch = circularSegment ? undefined : smoothScrewPitchField(nodes, index);
+  const screwAngle = circularSegment ? undefined : smoothScrewAngleField(nodes, index);
+  if (screwPitch) fields.push(screwPitch);
+  if (screwAngle) fields.push(screwAngle);
+  return fields;
+}
+
+async function listFeatureEditFields(state: ChatState, args: Record<string, unknown>): Promise<ToolOutcome> {
+  const { doc } = state, { nodes } = doc, { index } = args;
+  if (typeof index !== 'number' || !Number.isInteger(index) || !nodes[index])
+    return fail(state, `No feature at index ${String(index)}. Use get_part_summary to find its current index.`, { code: 'EDIT_FIELDS_INDEX' });
+  const wall = reviewedWallDistance(state, index);
+  const fields = featureEditFields(state, index, doc.parameters).map(field => {
+    const { key, label, kind } = field;
+    const value = field.get(nodes);
+    if (field.kind === 'number') {
+      const parameter = (field as BindableField).param?.(nodes);
+      return { key, label, kind, value: Number.isFinite(value) ? value : null, unit: field.unit,
+        integerRange: field.integerRange, ...(parameter ? { parameter } : {}) };
+    }
+    return { key, label, kind, value, ...(field.kind === 'choice' ? { options: field.options } : {}) };
+  });
+  if (wall) fields.push({ key: savedWallDistanceKey, label: 'Offset distance', kind: 'number', unit: 'mm', value: wall.distance });
+  const label = featureLabel(nodes[index], index, nodes);
+  return { state, content: json({ index, id: featureId(nodes, index), label, revision: revisionOf(doc), fields }),
+    isError: false, changed: false, summary: `${fields.length} edit fields for ${label}` };
+}
+
 async function editFeatureTool(state: ChatState, args: Record<string, unknown>, evaluate: Evaluate, options: CallOptions): Promise<ToolOutcome> {
   const refusal = checkFeatureRevision(state, args.expectedRevision, 'EDIT');
   if (refusal) return refusal;
@@ -468,15 +503,7 @@ async function editFeatureTool(state: ChatState, args: Record<string, unknown>, 
       next = updated;
     }
   } else {
-    // (O167, F6: a part-scoped edit offers what the bearing command offers — the draft's context and its fit tables.)
-    const circularTurn = hasLineArcTurnSections(nodes, index);
-    const fields = editFields(nodes, index, undefined, undefined, { context: bearingContextOf(state.doc), fits: state.doc.fits, doc: state.doc })
-      .filter(field => !circularTurn || field.key !== smoothTurnAngleKey);
-    const circularSegment = hasLineArcScrewSections(nodes, index);
-    const screwPitch = circularSegment ? undefined : smoothScrewPitchField(nodes, index);
-    const screwAngle = circularSegment ? undefined : smoothScrewAngleField(nodes, index);
-    if (screwPitch) fields.push(screwPitch);
-    if (screwAngle) fields.push(screwAngle);
+    const fields = featureEditFields(state, index);
     if (!Object.keys(given).length) {
       const wall = reviewedWallDistance(state, index);
       if (wall) return fail(state, `Pass only values.offsetDistance (signed mm, current value ${wall.distance}) and the current expectedRevision.`);
@@ -675,4 +702,4 @@ async function setWeldsTool(state: ChatState, args: Record<string, unknown>, eva
 }
 
 /** The feature group's handlers, by v1 tool name (R3). */
-export const FEATURE_HANDLERS: Readonly<Record<string, PartHandler>> = { run_command: runCommandTool, add_features: addFeaturesTool, edit_feature: editFeatureTool, delete_feature: deleteFeatureTool, set_material: setMaterialTool, load_rows: loadRowsTool, set_stock: setStockTool, set_casting: setCastingTool, set_frame_stock: setFrameStockTool, set_parameters: setParametersTool, set_frame_sections: setFrameSectionsTool, set_welds: setWeldsTool };
+export const FEATURE_HANDLERS: Readonly<Record<string, PartHandler>> = { list_feature_edit_fields: listFeatureEditFields, run_command: runCommandTool, add_features: addFeaturesTool, edit_feature: editFeatureTool, delete_feature: deleteFeatureTool, set_material: setMaterialTool, load_rows: loadRowsTool, set_stock: setStockTool, set_casting: setCastingTool, set_frame_stock: setFrameStockTool, set_parameters: setParametersTool, set_frame_sections: setFrameSectionsTool, set_welds: setWeldsTool };
