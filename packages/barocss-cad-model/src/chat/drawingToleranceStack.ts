@@ -2,7 +2,8 @@ import type { JsonSchema } from './contract';
 import type { Resolved } from '../drawing/dimensions';
 import { issueContext, type SheetInputs } from '../drawing/issues';
 import { drawingScopeOf } from '../drawing/scope';
-import { dimensionLine, type Sheet } from '../drawing/sheet';
+import { dimensionLine } from '../drawing/sheet';
+import { printableCallouts } from '../drawing/printableCallouts';
 import { forSheet, sheetCount, sheetName } from '../drawing/sheets';
 import { presetFor } from '../drawing/standard';
 import { calculateToleranceStack, type ToleranceStackTerm } from '../drawing/toleranceStack';
@@ -50,22 +51,6 @@ function readTerm(value: unknown): ToleranceStackTerm | null {
   const { id, sign, ...other } = value as Record<string, unknown>;
   if (typeof id !== 'string' || !id.trim() || (sign !== 1 && sign !== -1) || Object.keys(other).length) return null;
   return { id, sign };
-}
-
-/** Only resolved dimension marks actually printed on this sheet can supply callout text. */
-function printableCallouts(sheet: Sheet) {
-  const kinds = new Map<string, 'diameter' | 'radius'>();
-  for (const r of sheet.dimensions) {
-    if (r.ok && (r.kind === 'diameter' || r.kind === 'radius'))
-      kinds.set(JSON.stringify([r.dim.id, r.dim.view]), r.kind);
-  }
-  return sheet.groups.flatMap(group => {
-    if (group.role !== 'dimension' || !group.id || !group.view) return [];
-    const kind = kinds.get(JSON.stringify([group.id, group.view]));
-    if (!kind) return [];
-    const lines = group.marks.flatMap(mark => mark.kind === 'text' ? [mark.text] : []);
-    return lines.length ? [{ id: group.id, view: group.view, kind, lines }] : [];
-  });
 }
 
 export function readDrawingStack(

@@ -20,6 +20,7 @@ import { WireReceiver, type WireDoc } from '@barocss/cad-model/engine/wireDoc';
 import { receiveStepMetadata, type StepMetadata } from './stepMetadata';
 import { mouldView } from './mouldView';
 import { proposalDiffFor } from '@barocss/cad-model/chat/proposalDiff';
+import { proposalDrawingCallouts } from './proposalDrawingCallouts';
 import type { StudioDoc } from '@barocss/cad-model/engine/doc';
 import { checkOutput, diagnoseMesh, massPropertiesOf, repairMesh, stepMeshes, stepSizeProblem, stepTessellatedChars, type MeshRepairSteps } from '@barocss/cad';
 
@@ -46,6 +47,7 @@ export type WorkerRequest =
   /** The mould's parting loops, and its halves when asked (G6: the tooling's Booleans, off the main thread). */
   | { type: 'mould'; id: number; doc: WireDoc; revision: number; halves: boolean; mould: StudioDoc['mould'] }
   | { type: 'proposalDiff'; id: number; doc: WireDoc; proposed: WireDoc; revision: number; key: { revision: string; proposal: string } }
+  | { type: 'proposalDrawingCallouts'; id: number; doc: WireDoc; proposed: WireDoc }
   | { type: 'stl'; id: number; doc: WireDoc; key: string; options?: { segmentsPerQuarter: number } }
   | { type: 'step'; id: number; doc: WireDoc; metadata: StepMetadata; name: string; meshes?: 'auto' | 'tessellated' | 'planar' }
   /** A STEP file's meshes when it holds nothing else (R3.5), for the repair gate. */
@@ -118,7 +120,7 @@ self.onmessage = (event: MessageEvent<WorkerRequest>) => {
   }
   // (The documents unpacked in the order the client packed them: the request's, then a placed part's base.)
   const doc = wire.unpack(event.data.doc), base = event.data.type === 'placed' ? wire.unpack(event.data.base) : null;
-  const proposed = event.data.type === 'proposalDiff' ? wire.unpack(event.data.proposed) : null;
+  const proposed = 'proposed' in event.data ? wire.unpack(event.data.proposed) : null;
   const request = { ...event.data, doc };
   if (request.type === 'insetRelink') {
     try {
@@ -225,6 +227,9 @@ self.onmessage = (event: MessageEvent<WorkerRequest>) => {
     const sides = d ? [d.added, d.removed] : [], bodies = sides.flatMap((m, i) => m ? [{ ...a.bodies[0], key: i ? 'removed' : 'added', mesh: m.mesh }] : []);
     const out = meshesOut.pack('proposalDiff', { ok: true, revision: request.revision, wallTime: 0, bodies });
     (self as unknown as Worker).postMessage({ id: request.id, result: out.result, diff: d && { added: d.added ? d.added.volume : null, removed: d.removed ? d.removed.volume : null, changedFaces: d.changedFaces, method: d.method, why: d.why ?? null }, why }, out.transfer);
+  } else if (request.type === 'proposalDrawingCallouts') {
+    try { post({ id: request.id, callouts: proposalDrawingCallouts(doc, proposed!) }); }
+    catch (e) { post({ id: request.id, callouts: { error: e instanceof Error ? e.message : String(e) } }); }
   } else if (request.type === 'volumes') {
     (self as unknown as Worker).postMessage({ id: request.id, volumes: evaluateVolumes(request.doc, 'probe', request.intersection) });
   } else if (request.type === 'drawing') {

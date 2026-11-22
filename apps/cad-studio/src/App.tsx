@@ -2190,7 +2190,7 @@ export function App() {
   const { refLocal, refErrors, refPending, keepoutBodies, keepoutVerdicts, spec, specRunning, specStale } = useModelChecks({ model: { doc, evaluated, bodies, fresh, busy, active, sketch, previewBodies },
     worker: { engine, nextRevision: () => revision.current++ }, onNotice: setToast });
   const [failingOnly, setFailingOnly] = useState(false);
-  const proposals = useProposalPreview({ model: { doc, bodies, instances: instanceBodies, marker, active: !!active, sketch: !!sketch }, worker: { engine, lanes, nextRevision: () => revision.current++ },
+  const proposals = useProposalPreview({ model: { doc, bodies, instances: instanceBodies, marker, active: !!active, sketch: !!sketch }, worker: { engine, lanes, session: workerSession, currentSession: () => workerSessionNow.current, nextRevision: () => revision.current++ },
     changes: { commit: next => commit(next, false, false, true), currentDoc: () => docNow.current, setPreviewBodies }, chatRowFiles, displayDirect: D?.directDisplay, onNotice: setToast });
   const { ghost, proposalOverlay, proposalBusy, evidenceRevision, isStale, partEval, acceptIt, rejectIt } = proposals;
   const heldDraftPreviewClear = heldDraftFacePreviewClear({ proposal: ghost, proposalBusy, comparison: workingComparison,
@@ -2226,7 +2226,7 @@ export function App() {
   routeContext.current = { blocked: busy || !fresh || !!parameterEdit || marker !== null || !!shownVariant.current || !!active || !!sketch || rendering || drawing || !!measure || !!assembly.draft || !!cageEd.session || !!skel.session || !!ghost };
   const footprintReady = nativeVertexReady && !routeContext.current.blocked && !routePanelOpen && !bodyDrag;
   useEffect(() => routeEditor.discardBlocked(), [busy, fresh, parameterEdit, marker, active, sketch, rendering, drawing, measure, assembly.draft, cageEd.session, skel.session, ghost, doc]);
-  useEffect(() => proposals.resetForModelChange(), [doc.nodes, doc.parameters, evidenceRevision]);
+  useEffect(() => proposals.resetForModelChange(), [doc.nodes, doc.parameters, evidenceRevision, workerSession]);
   useEffect(() => proposals.updateDiff(), [ghost?.id, ghost?.shown]);
   // (CG6: a version compared with the working document — its geometry's difference on the same overlay, version → working.)
   useEffect(() => {

@@ -4,6 +4,7 @@ import type { BodyResult } from '@barocss/cad-model/engine/evaluate';
 import { ToolIconButton } from '@/components/ui/tool-button';
 import type { useProposalPreview } from '../state/useProposalPreview';
 import { Icon } from './atoms';
+import { ProposalDrawingCallouts } from './ProposalDrawingCallouts';
 interface ProposalBrowserProps {
   controller: ReturnType<typeof useProposalPreview>;
   reviewRecovery?: string;
@@ -17,7 +18,7 @@ interface ProposalBrowserProps {
 }
 const volumeOf = (list: readonly BodyResult[]) => list.reduce((s, b) => s + (b.volume ?? 0), 0);
 export function ProposalBrowser({ controller, reviewRecovery = 'Finish or cancel the current edit to review the proposal.', doc, bodies, fresh, massReady, placedPreviewEnabled, decidedShown, setDecidedShown }: ProposalBrowserProps) {
-  const { ghost, proposalBusy, reviewBlocked, isStale, showProposal, rebaseIt, tickPart, flipGhost, acceptIt, rejectIt, screwChangesAvailable, toggleScrewChanges } = controller;
+  const { ghost, drawingCallouts, proposalBusy, reviewBlocked, isStale, showProposal, rebaseIt, tickPart, flipGhost, acceptIt, rejectIt, screwChangesAvailable, toggleScrewChanges } = controller;
   return <>{!!doc.proposals?.length && <div className="chat-proposals" role="list" aria-label="Proposals"><div className="ol-head req-head">Proposals <span className="muted">{doc.proposals.filter(p => p.status === 'open').length} open</span>
           <ToolIconButton size="tiny" state={decidedShown ? 'on' : 'idle'} data-proposal-history-toggle aria-label={decidedShown ? 'Hide decided proposals' : 'Show decided proposals'} aria-pressed={decidedShown} data-tip={decidedShown ? 'Hide decided proposals' : 'Show accepted and rejected'} onClick={() => setDecidedShown(f => !f)}><Icon name="history" small /></ToolIconButton></div>
         {doc.proposals.filter(p => decidedShown || p.status === 'open').map(p => {
@@ -42,6 +43,7 @@ export function ProposalBrowser({ controller, reviewRecovery = 'Finish or cancel
               : distanceMate ? <div className="mono proposal-dv">{ghost.after ? 'after' : 'before'} · Distance <span aria-label="Mate distance preview">{fmt(ghost.after ? distanceMate.after : distanceMate.before)} mm</span></div>
               : <div className="mono proposal-dv">{ghost.after ? 'after' : 'before'} · Volume change <span aria-label="Volume change">{!massReady ? '…' : dv === null ? 'unavailable'
                 : `${dv >= 0 ? '+' : '−'}${fmt(Math.abs(dv))} mm³${!placed && base ? ` (${dv >= 0 ? '+' : '−'}${fmt(Math.abs(dv) / base * 100)}%)` : ''}`}</span></div>)}
+            {shown && drawingCallouts && <ProposalDrawingCallouts result={drawingCallouts} />}
             {shown && !ghost.atomic && ghost.parts.length > 1 && <div className="proposal-parts" role="group" aria-label={`${p.id} features`}>{ghost.parts.map(q => <label key={q.id} className={'proposal-part ' + q.kind}>
               <input type="checkbox" aria-label={`Keep ${q.id}`} disabled={q.kind === 'deleted' || proposalBusy} checked={!ghost.leaveOut.includes(q.id)} onChange={e => void tickPart(q.id, e.currentTarget.checked)} />
               <span className="mono">{q.id}</span> {q.kind === 'added' ? '+' : q.kind === 'changed' ? '~' : '−'} {q.label}</label>)}</div>}

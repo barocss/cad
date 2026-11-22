@@ -17,6 +17,13 @@ const pins = [
   'apps/cad-studio/test/mcp-browser-session.mjs',
   'apps/cad-studio/src/ui/DrawingWorkspace.tsx',
   'apps/cad-studio/src/state/useProposalPreview.ts',
+  'apps/cad-studio/src/state/useProposalDrawingCallouts.ts',
+  'apps/cad-studio/src/ui/ProposalBrowser.tsx',
+  'apps/cad-studio/src/ui/ProposalDrawingCallouts.tsx',
+  'apps/cad-studio/src/engine/engine.worker.ts',
+  'apps/cad-studio/src/engine/client.ts',
+  'apps/cad-studio/src/engine/proposalDrawingCallouts.ts',
+  'apps/cad-studio/src/styles.css',
   'packages/barocss-cad-model/src/chat/part/features.ts',
   'packages/barocss-cad-model/src/chat/part/drawingReview.ts',
   'packages/barocss-cad-model/src/chat/part/proposals.ts',
@@ -26,13 +33,15 @@ const pins = [
   'packages/barocss-cad-model/src/chat/contract.ts',
   'packages/barocss-cad-model/src/chat/groups.ts',
   'packages/barocss-cad-model/src/drawing/callout.ts',
+  'packages/barocss-cad-model/src/drawing/printableCallouts.ts',
+  'packages/barocss-cad-model/src/chat/drawing.ts',
   'packages/barocss-cad-model/src/io/svg.ts',
 ];
 const f = await createFlow({
-  name: 'counterbore-drawing-agent-revision', envFrozen: 'D1689_SOURCE_FROZEN', output: process.argv[2],
+  name: 'counterbore-drawing-agent-revision', envFrozen: 'D1690_SOURCE_FROZEN', output: process.argv[2],
   initialFiles: pins, requiredFrozen: pins, oracleSource,
-  qualification: 'Review two isolated proposal pins, compare the working and candidate drawings before approval, and verify the approved callout against exact SVG after native Open.',
-  limits: ['One D675 counterbore and Top callout, two A4 sheets, desktop Studio WebGPU, scripted local L1 MCP.'],
+  qualification: 'Switch the displayed proposal, compare its drawing callout in Studio before approval, and match the approved callout against exact SVG after native Open.',
+  limits: ['One D675 counterbore and Top callout, two A4 sheets, desktop Studio WebGPU, scripted local L1 MCP. Delay and Retry controls use real worker replies with test-controlled delivery.'],
 });
 const button = (name, scope = f.page) => scope.getByRole('button', { name, exact: true });
 
@@ -68,6 +77,38 @@ async function matchPrintableCallouts(call, front, top) {
   assert.match(full.revision, /^[a-f0-9]{64}$/);
   assert.notEqual(first.revision, full.revision);
   return { source, firstRevision: first.revision, secondRevision: full.revision, callouts };
+}
+
+function installCalloutReplyControl() {
+  const send = Worker.prototype.postMessage, listening = new WeakSet();
+  let armed = false, target, held;
+  Worker.prototype.postMessage = function (request, ...args) {
+    if (armed && request.type === 'proposalDrawingCallouts') {
+      target = { id: request.id, worker: this };
+      armed = false;
+      if (!listening.has(this)) {
+        const receive = this.onmessage;
+        this.onmessage = event => {
+          if (target?.worker === this && target.id === event.data?.id && event.data?.callouts) {
+            held = { worker: this, reply: event.data.callouts, deliver: () => receive.call(this, event) };
+            target = undefined;
+          } else receive.call(this, event);
+        };
+        listening.add(this);
+      }
+    }
+    return Reflect.apply(send, this, [request, ...args]);
+  };
+  window.__calloutReply = {
+    arm() { armed = true; },
+    read() { return held?.reply; },
+    release() { const reply = held; held = undefined; reply.deliver(); },
+    fail() {
+      const { worker } = held;
+      held = undefined;
+      worker.dispatchEvent(new ErrorEvent('error', { message: 'Controlled drawing review worker failure', cancelable: true }));
+    },
+  };
 }
 
 await f.run(async () => {
@@ -135,16 +176,95 @@ await f.run(async () => {
   checkModel(pending, 4);
   await f.freshOpen(stagedFile, pending, '04-pending-depth-two');
   await button('Chat').first().click();
-  const card = f.page.getByRole('listitem', { name: 'Proposal P1', exact: true });
+  let card = f.page.getByRole('listitem', { name: 'Proposal P1', exact: true });
   await button('Preview', card).click();
   await button('Hide', card).waitFor();
   const delta = card.getByLabel('Volume change', { exact: true });
   await delta.getByText(/^\+75\.\d+ mm³/).waitFor();
   assert.ok(Math.abs(Number.parseFloat(await delta.innerText()) - 24 * Math.PI) < .1);
+  const calloutChanges = scope => scope.getByRole('group', { name: 'Drawing callout changes', exact: true });
+  const checkCalloutChanges = async (scope, expected) => {
+    const change = calloutChanges(scope);
+    await change.getByText('Sheet 2 · Top · d4', { exact: true }).waitFor();
+    assert.deepEqual(await change.locator('dt').allTextContents(), ['Before', 'After']);
+    assert.deepEqual(await change.locator('dd').allTextContents(), [initialTop.printedLines[0], expected]);
+  };
+  await checkCalloutChanges(card, comparisons[1].candidate.callouts[0].lines[0]);
+  assert.equal(await calloutChanges(f.page).count(), 1);
   await f.same(pending);
   assert.deepEqual(await readFile(stagedFile), staged);
   await f.snapshot('05-preview-retains-depth-four');
+
+  const alternative = f.page.getByRole('listitem', { name: 'Proposal P2', exact: true });
+  await button('Preview', alternative).click();
+  await checkCalloutChanges(alternative, 'Ø4 THRU  CBORE Ø8 × 3 DEEP');
+  assert.equal(await calloutChanges(card).count(), 0);
+  await f.snapshot('05b-alternative-depth-three');
+  await button('Hide', alternative).click();
+  await calloutChanges(f.page).waitFor({ state: 'detached' });
+  await f.same(pending);
+  await f.snapshot('05c-callouts-hidden');
+
+  const p1Text = comparisons[1].candidate.callouts[0].lines[0];
+  await f.page.evaluate(installCalloutReplyControl);
+  const armReply = () => f.page.evaluate(() => window.__calloutReply.arm());
+  const waitReply = async () => {
+    await f.page.waitForFunction(() => !!window.__calloutReply.read());
+    const reply = await f.page.evaluate(() => window.__calloutReply.read());
+    return reply.changes[0].after.lines[0];
+  };
+  f.phase = 'Release the older real P2 callout reply after the visible P1 reply';
+  await armReply();
+  await button('Preview', alternative).click();
+  assert.equal(await waitReply(), 'Ø4 THRU  CBORE Ø8 × 3 DEEP');
+  await button('Preview', card).click();
+  await checkCalloutChanges(card, p1Text);
+  await f.page.evaluate(async () => {
+    window.__calloutReply.release();
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+  });
+  await checkCalloutChanges(card, p1Text);
+  assert.equal(await calloutChanges(alternative).count(), 0);
+
+  f.phase = 'Retry the engine while the same proposal comparison is pending';
+  await button('Hide', card).click();
+  await armReply();
+  await button('Preview', card).click();
+  assert.equal(await waitReply(), p1Text);
+  await f.page.evaluate(() => window.__calloutReply.fail());
+  await button('Retry engine').click();
+  await f.ready();
+  await button('Preview', card).waitFor();
+  await calloutChanges(f.page).waitFor({ state: 'detached' });
+  assert.equal(await button('Show before', card).count(), 0);
+  await button('Preview', card).click();
+  await delta.getByText(/^\+75\.\d+ mm³/).waitFor();
+  await checkCalloutChanges(card, p1Text);
+  await f.same(pending);
+  await f.snapshot('05d-callouts-after-engine-retry');
+
+  f.phase = 'Reject the other proposal while P1 remains previewed';
+  await button('Reject', alternative).click();
+  await f.changed(pending);
+  const rejected = await f.doc();
+  checkModel(rejected, 4);
+  assert.deepEqual(rejected.proposals.map(p => p.status), ['open', 'rejected']);
+  await checkCalloutChanges(card, p1Text);
+  assert.deepEqual(await readFile(stagedFile), staged);
+  await f.snapshot('05e-other-proposal-rejected');
+
+  await f.freshOpen(stagedFile, pending, '05f-open-original-pending-file');
+  await button('Chat').first().click();
+  card = f.page.getByRole('listitem', { name: 'Proposal P1', exact: true });
+  await button('Preview', card).click();
+  await checkCalloutChanges(card, comparisons[1].candidate.callouts[0].lines[0]);
+  await button('Show before', card).click();
+  await button('Show after', card).waitFor();
+  await checkCalloutChanges(card, comparisons[1].candidate.callouts[0].lines[0]);
+  await f.same(pending);
+  assert.deepEqual(await readFile(stagedFile), staged);
   await button('Accept', card).click();
+  await calloutChanges(f.page).waitFor({ state: 'detached' });
   await f.changed(pending);
   const accepted = await f.doc();
   checkModel(accepted, 2);
@@ -200,6 +320,7 @@ await f.run(async () => {
   assert.deepEqual(candidateTop.callouts, currentPrint.callouts);
   await button('Chat').first().click();
   await button('Rebase & preview', f.page.getByRole('listitem', { name: 'Proposal P2', exact: true })).waitFor();
+  assert.equal(await calloutChanges(f.page).count(), 0);
   await f.snapshot('09b-reopened-alternative-is-stale');
   await writeFile(join(f.output, 'printable-callouts.json'), JSON.stringify({ initialPrint, comparisons, currentPrint }, null, 2));
 

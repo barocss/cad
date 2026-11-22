@@ -20,7 +20,7 @@ function controller(flags: Partial<Pick<Model, 'active' | 'sketch' | 'marker'>> 
   let api!: Controller, workerCalls = 0;
   function Probe() {
     api = useProposalPreview({ model: { doc, bodies: [], instances: new Map(), active: false, sketch: false, marker: null, ...flags },
-      worker: { engine: { part() { workerCalls++; throw new Error('Unexpected evaluation'); } } as unknown as Parameters<typeof useProposalPreview>[0]['worker']['engine'], lanes: new Lanes(), nextRevision: () => 1 },
+      worker: { engine: { part() { workerCalls++; throw new Error('Unexpected evaluation'); } } as unknown as Parameters<typeof useProposalPreview>[0]['worker']['engine'], lanes: new Lanes(), session: 0, currentSession: () => 0, nextRevision: () => 1 },
       changes: { currentDoc: () => doc, commit(next) { commits.push(next); return true; }, setPreviewBodies: next => previews.push(next) },
       chatRowFiles: { current: undefined }, onNotice: notice => notices.push(notice) });
     return null;
@@ -73,7 +73,7 @@ test('blocked Preview, Accept and stale Rebase reference nearby recovery text', 
 
 test('existing Hide and Reject are not blocked, and original busy/stale rules remain', async () => {
   const state = controller({ active: true });
-  const ghost: NonNullable<Controller['ghost']> = { id: proposal.id, bodies: [], placed: null, after: true, full: state.doc, shown: state.doc, parts: [], leaveOut: [] };
+  const ghost: NonNullable<Controller['ghost']> = { id: proposal.id, session: 0, base: state.doc, proposal, bodies: [], placed: null, after: true, full: state.doc, shown: state.doc, parts: [], leaveOut: [] };
   let hidden = 0;
   const view = browser(state, { ghost, showProposal: async () => { hidden++; } });
   assert.equal(button(view, 'Hide').disabled, false); assert.equal(button(view, 'Hide')['aria-describedby'], undefined);
@@ -107,7 +107,7 @@ test('idle recovery enables review actions and removes recovery text; decided ca
 test('preview status names the current geometry once; switch names its next action and retains the volume delta', () => {
   const state = controller(), before = structuredClone(state.doc);
   type Body = Parameters<typeof ProposalBrowser>[0]['bodies'][number];
-  const ghost: NonNullable<Controller['ghost']> = { id: proposal.id, bodies: [{ volume: 10553.21467 } as Body], placed: null, after: true,
+  const ghost: NonNullable<Controller['ghost']> = { id: proposal.id, session: 0, base: state.doc, proposal, bodies: [{ volume: 10553.21467 } as Body], placed: null, after: true,
     full: state.doc, shown: state.doc, parts: [], leaveOut: [] };
   let flips = 0;
   const flipGhost = () => { flips++; ghost.after = !ghost.after; };
@@ -129,7 +129,7 @@ test('preview status names the current geometry once; switch names its next acti
 
 test('preview volume-change copy retains pending and unavailable states', () => {
   const state = controller();
-  const ghost: NonNullable<Controller['ghost']> = { id: proposal.id, bodies: [], placed: null, after: true,
+  const ghost: NonNullable<Controller['ghost']> = { id: proposal.id, session: 0, base: state.doc, proposal, bodies: [], placed: null, after: true,
     full: state.doc, shown: state.doc, parts: [], leaveOut: [] };
   const props: Parameters<typeof ProposalBrowser>[0] = { controller: { ...state.api, ghost, isStale: () => false }, doc: state.doc, bodies: [],
     fresh: true, massReady: false, placedPreviewEnabled: true, decidedShown: false, setDecidedShown: () => {} };

@@ -16,6 +16,7 @@ import { tableContent } from '../drawing/tables';
 import { bomPanelDataOf } from '../bom/bom';
 import type { Bom } from '../bom/core';
 import { drawingHoleCallouts } from '../drawing/callout';
+import { printableCallouts } from '../drawing/printableCallouts';
 import { sectionsCut } from '../drawing/section';
 import { sheetSections } from '../drawing/sheet';
 import { sectionTextClearanceSource, sectionTextClearanceScope } from '../drawing/sectionTextClearanceScope';
@@ -104,6 +105,23 @@ function readDrawingInputs(doc: StudioDoc, settings: DrawingSettings, includeBom
   }
   const holes = drawingHoleCallouts(doc, r.views);
   return { views: r.views, settings, locationOwner: holes.owner, fastenerSizes: fastenerSizesOf(doc), elements, callout: Object.assign(withElements(doc, withFit(doc, holes.callout), elements), { holeKind: holes.holeKind, patternQuantity: holes.patternQuantity, stalePatternSpacing: holes.stalePatternSpacing }), fitMiss: fitMiss(doc), followedChanged: followedStale(authored).map(staleText), meta: { svgSectionTextClearance, title: settings.title ?? 'part', date: new Date().toISOString().slice(0, 10), source, threads: threadsOf(doc.nodes, fastenerSizesOf(doc)), tableContent: (tb, context) => tableContent(tb, { doc: tb.from === 'fits' ? sourceDoc : doc, ...(bom ? { bom } : {}), ...(context ? { drawing: { ...context, wholeSettings: readDrawing(sourceDoc.drawing) } } : {}) }), ...(settings.weldSymbols ? { welds: weldJointsOf(doc) } : {}), ...(bom ? { bom } : {}), ...(bom && settings.balloons ? { bodyFaces: baseBodyFaces(doc) } : {}) }, ...(sections.length ? { sections } : {}) };
+}
+
+const isCircularDimension = (dimension: DrawingSettings['dimensions'][number]) => dimension.kind === 'diameter' || dimension.kind === 'radius';
+
+/** Read the printable marks for all authored callouts from one drawing projection. */
+export function drawingCalloutsOf(doc: StudioDoc) {
+  const settings = readDrawing(doc.drawing);
+  if (!settings.dimensions.some(isCircularDimension)) return [];
+  const inputs = readDrawingInputs(doc, settings, false);
+  if (typeof inputs === 'string') return { error: inputs };
+  const scope = drawingScopeOf(settings);
+  return Array.from({ length: sheetCount(settings) }, (_, index) => {
+    const local = { ...forSheet(settings, index), scope };
+    if (!local.dimensions.some(isCircularDimension)) return [];
+    const sheet = issueContext({ ...inputs, settings: local }).sheet;
+    return printableCallouts(sheet).map(callout => ({ ...callout, sheet: index + 1, sheetName: sheetName(settings, index) }));
+  }).flat();
 }
 
 /** O147 B2: the BOM, when a table or the balloons read it (each document evaluated on its own, synchronously). */

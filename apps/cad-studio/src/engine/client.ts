@@ -27,6 +27,7 @@ import type { SketchPlane } from '@barocss/cad-model/sketch/plane';
 import type { relinkAssociativeInset } from '@barocss/cad-model/app/associativeInsetRelink';
 import type { NativeMidpointFace } from '@barocss/cad-model/app/nativeMidpointPlane';
 import type { MassReply } from './engine.worker';
+import type { ProposalCalloutReply } from './proposalDrawingCallouts';
 export type { LaneReply } from './lanes';
 export interface InsetRelinkPreview {
   association: PlanarFaceOutlineInsetAssociation;
@@ -330,6 +331,21 @@ export class EngineClient {
       this.post(id, () => {
         const baseWire = this.wire!.pack(base), proposedWire = this.wire!.pack(proposed);
         return { type: 'proposalDiff', id, doc: baseWire, proposed: proposedWire, revision, key };
+      });
+    });
+  }
+
+  proposalDrawingCallouts(working: StudioDoc, candidate: StudioDoc): Promise<ProposalCalloutReply> {
+    const id = this.next++;
+    return new Promise(resolve => {
+      this.pending.set(id, data => resolve((data as { callouts?: ProposalCalloutReply }).callouts ?? { error: 'Drawing check stopped.' }));
+      this.post(id, () => {
+        // Preserve authored drawing inputs while using the existing worker's node and blob transfer.
+        const pack = (doc: StudioDoc) => {
+          const wire = this.wire!.pack(doc, { assemblyCuts: true });
+          return { ...wire, doc: { ...doc, nodes: wire.doc.nodes, proposals: undefined, history: undefined } };
+        };
+        return { type: 'proposalDrawingCallouts', id, doc: pack(working), proposed: pack(candidate) };
       });
     });
   }

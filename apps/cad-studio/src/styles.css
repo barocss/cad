@@ -544,6 +544,10 @@ button.chip.snap:hover { background: #3a3c41; }
 .proposal-plan { white-space: pre-wrap; color: var(--text); opacity: 0.85; }
 .proposal-actions { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
 .proposal-dv { font-size: 11px; }
+.proposal-callouts { display: grid; gap: 6px; margin: 4px 0; font-size: 11px; }
+.proposal-callout dl { display: grid; grid-template-columns: 42px 1fr; gap: 0 4px; margin: 0; }
+.proposal-callout dd { margin: 0; }
+.proposal-callout .mono { white-space: pre-wrap; overflow-wrap: anywhere; }
 .history-note { font-size: 11px; }
 .hist { font-size: 11px; line-height: 1.4; padding: 1px 4px; }
 .history-note .link { border: 0; background: transparent; color: var(--accent); font: inherit; padding: 0; cursor: pointer; text-decoration: underline; }

@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1690: [Show changed drawing callouts in Studio proposal preview](notes/studio-proposal-drawing-callouts-2026-11-22/README.md), #322. Compare printed marks on the two exact snapshots and retire the complete preview on engine Retry.
 - D1689: [Compare printable drawing callouts before proposal approval](notes/drawing-proposal-callout-review-2026-11-22/README.md), #322 and #324. Bind the working and candidate sheets to their revisions and match the approved SVG after fresh Open.
 - D1688: [Read the selected drawing's printable callouts from the Agent](notes/drawing-printable-callouts-2026-11-22/README.md), #322. Match the selected sheet's literal diameter and radius marks and title-block source to actual SVG.
 - D1687: [Freeze a two-sheet counterbore drawing revision for Agent evaluation](notes/b06-counterbore-drawing-agent-revision-2026-11-22/README.md), #322. Verify the editable approved depth and the original Sheet 2 callout in actual SVG exports after native Open.
