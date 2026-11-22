@@ -41,7 +41,7 @@ export const GROUPS: Record<string, Group> = {
     about: 'Reads the part without changing it.',
     actions: {
       summary: ['get_part_summary', 'body?, page? — features, parameters, bodies, faces and edges by name'],
-      inspect: ['inspect', 'faces?, edges?, curve?, surface? — native detail'],
+      inspect: ['inspect', 'faces?, edges?, curve?, surface? — native detail; describe lists the revision pins for candidate review'],
       measure: ['measure', 'a, b? — a face or edge, or the distance and angle between two'],
       mass: ['mass_properties', 'bodies?'],
       interference: ['interference', 'bodies? — overlap and clearance'],
@@ -56,7 +56,7 @@ export const GROUPS: Record<string, Group> = {
       welds: ['weld_list', '— the frame\'s weld joints, seams from the geometry, sizes yours or estimated (FRd1)'],
       cutlist: ['cut_list', 'csv? — a frame\u2019s members to cut: rows of identical ones, lengths, end cuts, mass (FR4a); nested into the stock lengths (FRb)'],
       bom: ['output_bom', 'expectedRevision? — BOM files'], purchase_csv: ['output_purchase_csv', 'withMade?, expectedRevision?'], clearance: ['output_clearance', 'near?, expectedRevision? — current assembly map'], cam: ['output_cam_package', 'part?, toolDiameter?, expectedRevision? — NOT FOR PRODUCTION'],
-      render: ['render_views', 'highlight?, section?, expectedRevision? or expectedDirectRevision with proposal?, expectedProposalRevision?'],
+      render: ['render_views', 'highlight?, section?, expectedRevision? or expectedDirectRevision, proposal?, expectedProposalRevision?'],
       select: ['select', 'faces?, edges?, bodies? — shows them selected in the studio'],
       manufacturability: ['check_printability', 'direction?, finish?, sides? — the report for the part\'s process: printing, injection moulding (pull, finish, halves), machining, casting (pull)'],
     },

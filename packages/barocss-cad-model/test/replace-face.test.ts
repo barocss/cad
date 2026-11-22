@@ -12,6 +12,7 @@ import { isExactThickenBoreHeal, isExactThickenEdit } from '../src/engine/exactT
 import { partSnapshot } from '../src/engine/part';
 import { readStudioDoc } from '../src/engine/migrate';
 import { revisionOf } from '../src/util/revision';
+import { digestOf, sha256Hex } from '../src/util/digest';
 
 const evaluate = async (doc: StudioDoc) => evaluatePart(doc, 0);
 async function stateOf(doc: StudioDoc): Promise<ChatState> {
@@ -531,4 +532,85 @@ test('reviewed wall proposals edit the terminal outer Offset of a certified radi
     assert.match('error' in blocked ? blocked.error : '', /WALL-4.*wall thickness/i);
     assert.equal(JSON.stringify(guardedProposal.state.doc), guardedBefore);
   }
+});
+
+test('a pending bored wall image and exact inspection share one candidate review revision', async () => {
+  const outer = 'n0.normal', boreFace = 'n7.side0#1';
+  const cut = await boredSemicylinder(false);
+  const doc = await applyLinkedCapCommand(cut, 'offset-face', [outer], { d: -1 });
+  const base = await stateOf(doc), expectedRevision = revisionOf(doc);
+  const call = (state: ChatState, args: Record<string, unknown>) => dispatchTool(state, 'query', args, evaluate);
+  const args = { action: 'edit', index: 9, expectedRevision, values: { offsetDistance: 1 } };
+  const propose = (state: ChatState, title: string) => dispatchTool(state, 'proposals', {
+    action: 'propose', title, ops: [{ tool: 'features', args }],
+  }, evaluate);
+  const first = await propose(base, 'First review'), second = await propose(first.state, 'Same geometry, separate review');
+  assert.ok(!first.isError && !second.isError, second.content);
+  const pending = second.state, before = JSON.stringify(pending.doc);
+  const listed = await dispatchTool(pending, 'proposals', { action: 'list' }, evaluate);
+  const [p1, p2] = JSON.parse(listed.content).proposals;
+  assert.match(p1.modelReviewRevision, /^[a-f0-9]{64}$/);
+  assert.match(p2.modelReviewRevision, /^[a-f0-9]{64}$/);
+  assert.notEqual(p1.modelReviewRevision, p2.modelReviewRevision);
+  const review = { expectedRevision, proposal: p1.id, expectedProposalRevision: p1.modelReviewRevision };
+  const shown = await call(pending, { ...review, action: 'render' });
+  assert.ok(!shown.isError && !shown.changed, shown.content);
+  assert.equal(shown.state, pending);
+  const meta = JSON.parse(shown.content), png = shown.images![0].data;
+  assert.equal(meta.imageSha256, sha256Hex(Buffer.from(png, 'base64')));
+  assert.match(meta.candidate.reviewRevision, /^[a-f0-9]{64}$/);
+  assert.deepEqual([meta.candidate.proposal, meta.candidate.proposalRevision, meta.candidate.baseRevision],
+    [p1.id, p1.modelReviewRevision, expectedRevision]);
+  assert.notEqual(meta.revision, expectedRevision);
+  const inspect = { ...review, action: 'inspect', faces: [outer, boreFace], expectedReviewRevision: meta.candidate.reviewRevision };
+  const observed = await call(pending, inspect);
+  assert.ok(!observed.isError && !observed.changed, observed.content);
+  assert.equal(observed.state, pending);
+  const result = JSON.parse(observed.content);
+  assert.deepEqual([result.revision, result.candidate, result.bore], [meta.revision, meta.candidate, meta.bore]);
+  assert.equal(result.imageSha256, meta.imageSha256);
+  for (const [index, [radius, sense]] of [[13, 'away-from-axis'], [1.5, 'toward-axis']].entries()) {
+    const face = result.faces[index];
+    near(face.geometry.radius, Number(radius));
+    assert.equal(face.geometry.outwardNormal, sense);
+  }
+  near(result.bore.diameter, 3);
+  assert.deepEqual(result.bore.openings.map((opening: { face: string }) => opening.face), ['n0.normal', 'n0.reverse']);
+  assert.equal(new Set(result.bore.openings.flatMap((opening: { edges: string[] }) => opening.edges)).size, 16);
+
+  const otherReview = { ...review, proposal: p2.id, expectedProposalRevision: p2.modelReviewRevision };
+  const other = await call(pending, { ...otherReview, action: 'render' });
+  assert.ok(!other.isError, other.content);
+  assert.equal(other.images?.[0].data, png);
+  assert.notEqual(JSON.parse(other.content).candidate.reviewRevision, meta.candidate.reviewRevision);
+  const movedDoc = structuredClone(pending.doc), donor = movedDoc.nodes[3];
+  assert.ok(donor.kind === 'translate');
+  donor.offset[2] = -1;
+  const moved = await stateOf(movedDoc);
+  const accepted = await acceptProposal(pending, p1.id, evaluate);
+  assert.ok('state' in accepted);
+  for (const [state, input, code] of [
+    [pending, { ...inspect, expectedReviewRevision: undefined }, 'MODEL_REVIEW_INPUT'],
+    [pending, { ...inspect, expectedReviewRevision: '0'.repeat(64) }, 'MODEL_REVIEW_IMAGE_STALE'],
+    [pending, { ...inspect, ...otherReview }, 'MODEL_REVIEW_IMAGE_STALE'],
+    [pending, { ...inspect, proposal: p2.id }, 'MODEL_REVIEW_PROPOSAL_STALE'],
+    [pending, { ...inspect, expectedRevision: meta.revision }, 'MODEL_REVIEW_BASE_STALE'],
+    [moved, inspect, 'MODEL_REVIEW_BASE_STALE'],
+    [moved, { ...inspect, expectedRevision: revisionOf(movedDoc) }, 'MODEL_REVIEW_PROPOSAL_STALE'],
+    [accepted.state, inspect, 'MODEL_REVIEW_BASE_STALE'],
+    [accepted.state, { ...inspect, expectedRevision: revisionOf(accepted.state.doc) }, 'MODEL_REVIEW_UNAVAILABLE'],
+  ] as const) {
+    const refused = await call(state, input);
+    assert.ok(refused.isError && !refused.changed, refused.content);
+    assert.equal(refused.state, state);
+    assert.equal(JSON.parse(refused.content).code, code);
+    assert.equal(refused.images, undefined);
+  }
+  assert.equal(JSON.stringify(pending.doc), before);
+  const read = await readStudioFile(encodeStudioFile(accepted.state.doc));
+  assert.ok('doc' in read);
+  assert.equal(digestOf(partBreps(read.doc).find(body => body.key === 'b9')!.brep), meta.candidate.bodySha256);
+  const current = await call(await stateOf(read.doc), { action: 'render', expectedRevision: meta.revision });
+  assert.ok(!current.isError, current.content);
+  assert.equal(current.images?.[0].data, png);
 });

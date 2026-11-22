@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1669: [Review the native bore before approving a wall edit](notes/pending-bored-wall-review-2026-11-22/README.md), #322 and #324. The same PNG and two native openings survive approval and Open. A pin from another proposal fails even for identical geometry.
 - D1668: [Approve a reviewed outer-wall Offset on a bored Exact semicylinder](notes/reviewed-bored-wall-offset-2026-11-22/README.md), #322, #324 and #629. Verify stale and unsafe refusals, explicit Studio approval and native Open with both openings.
 - D1667: [Extract the Studio History editor session](notes/studio-history-editor-session-2026-11-22/README.md), #44. Restore History feature focus after Close and verify draft, Apply and saved-command ownership in six desktop flows.
 - D1666: [Offset the outer wall of a bored Exact semicylinder](notes/bored-exact-semicylinder-wall-offset-2026-11-22/README.md), #17 and #629. Verify the signed edit, both openings, blind-result refusal, linked cap motion and native Open in Studio.
