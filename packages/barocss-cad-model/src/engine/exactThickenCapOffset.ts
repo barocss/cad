@@ -15,7 +15,7 @@ export function isExactThickenCapOffset(doc: StudioDoc, snapshot: CadPartSnapsho
   const { document } = snapshot, { features, parameters } = document;
   const parent = exactSemicylinderCapSource(nodes, node.parent.node, doc.parameters);
   const [face] = node.faces;
-  if (!parent || (face !== parent.upperFace && (face !== parent.lowerFace || node.target !== undefined)) ||
+  if (!parent?.faces.includes(face) ||
       !names.includes(`${parent.id}.normal`) || !names.includes(`${parent.id}.reverse`)) return false;
 
   const id = featureId(nodes, index), offsetIndex = features.findIndex(feature => feature.id === id);

@@ -345,7 +345,7 @@ function offsetPlaneAvailable(ctx: Ctx): boolean {
   const node = ref && ctx.doc.nodes[ref.node], face = body?.mesh.faces[pick.face];
   if (!node || !face?.exact || ref.side !== 'solid') return false;
   if (node.kind === 'thicken' && node.mode === 'exact-cylinder')
-    return face.exact.kind === 'plane' && exactSemicylinderCapSource(ctx.doc.nodes, ref.node, ctx.doc.parameters)?.upperFace === face.name;
+    return face.exact.kind === 'plane' && !!exactSemicylinderCapSource(ctx.doc.nodes, ref.node, ctx.doc.parameters)?.faces.includes(face.name);
   return node.kind === 'draft' || (node.kind === 'offset-face' && !isBoredPlateOffsetSource(ctx.doc.nodes, ref.node) &&
     !isBoxCapOffsetSource(ctx.doc.nodes, ref.node)) || (node.kind === 'extrude' &&
     (!!node.draft || (face.nativeAxisPlane?.axis !== 'z' && isStraightHexagonalExtrusion(ctx.doc.nodes, node))));
@@ -376,7 +376,7 @@ export const offsetFaceCommand: Command = {
     const ref = body.ref, source = ref && ctx.doc.nodes[ref.node];
     if (source?.kind === 'thicken' && source.mode === 'exact-cylinder') {
       const caps = ref?.side === 'solid' && exactSemicylinderCapSource(ctx.doc.nodes, ref.node, ctx.doc.parameters);
-      if (!caps || face.exact?.kind !== 'plane' || (face.name !== caps.upperFace && face.name !== caps.lowerFace))
+      if (!caps || face.exact?.kind !== 'plane' || !caps.faces.includes(face.name))
         return no('Pick an original axial cap of an Exact semicylinder.');
     }
     if (ref && isExactCylinderOffsetChain(ctx.doc.nodes, ref.node))

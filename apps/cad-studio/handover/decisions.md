@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1652: [Link the Exact semicylinder lower cap to a reference plane](notes/exact-semicylinder-lower-cap-to-plane-2026-11-22/README.md), #17 and #629. Verify linked motion, refusal and current wall evidence through Studio Open.
 - D1651: [Extract native edge inspection from Studio App](notes/studio-native-edge-inspection-extraction-2026-11-22/README.md). Verify continuity location, late replies and the curvature comb in desktop Studio.
 - D1650: [Offset the original Exact semicylinder lower cap](notes/exact-semicylinder-lower-cap-offset-2026-11-22/README.md), #17 and #629. Move the lower cap by signed distance, retain the upper station and verify History, refusal and native Open.
 - D1649: [Link the Exact semicylinder upper cap to a reference plane](notes/exact-semicylinder-cap-to-plane-2026-11-22/README.md), #17 and #629. Move a saved native reference, refuse collapse, and verify the cap and wall evidence after Open.

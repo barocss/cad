@@ -430,12 +430,7 @@ export function exactSemicylinderCapSource(nodes: readonly unknown[], index: num
   if (!Array.isArray(first) || first.length !== 2 || !textVector(first[0], false) || !textVector(first[1], false) || first[1][2] === first[0][2]) return;
   const thickness = textDimension(node.thickness, parameters);
   if (thickness === null || thickness <= 0) return;
-  const forwardV = first[1][2] > first[0][2];
-  return {
-    id: node.id, thickness,
-    upperFace: `${node.id}.${forwardV ? 'v-max' : 'v-min'}`,
-    lowerFace: `${node.id}.${forwardV ? 'v-min' : 'v-max'}`,
-  };
+  return { id: node.id, thickness, faces: [`${node.id}.v-min`, `${node.id}.v-max`] };
 }
 
 function offsetSourceBase(nodes: readonly unknown[], index: number): number | undefined {
@@ -696,10 +691,8 @@ export function directFaceDocumentProblem(input: unknown): string | null {
       if (isExactCylinderThicken(parent)) {
         const parameters = textRecord(value.parameters) ? value.parameters as Record<string, number> : {};
         const source = exactSemicylinderCapSource(value.nodes, parentIndex, parameters);
-        if (!source || (face !== source.upperFace && face !== source.lowerFace) || signature.k !== 'plane')
+        if (!source?.faces.includes(face) || signature.k !== 'plane')
           return 'Offset face: pick an original axial cap of an Exact semicylinder.';
-        if (face === source.lowerFace && node.target !== undefined)
-          return 'Offset face: the original lower cap of an Exact semicylinder needs a signed distance.';
         continue;
       }
       if (isExactCylinderOffsetChain(value.nodes, parentIndex))

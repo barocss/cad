@@ -3,7 +3,10 @@ import { readFile } from 'node:fs/promises';
 import { createFlow } from './flow-helper.mjs';
 import { withMcpSession } from './mcp-browser-session.mjs';
 
-const cap = 'n0.v-max', reference = 'n2.top';
+const lower = process.argv.includes('--lower');
+const cap = lower ? 'n0.v-min' : 'n0.v-max', reference = 'n2.top';
+const [sourceZ, oppositeZ] = lower ? [0, 12] : [12, 0];
+const targetZ = lower ? -2 : 14, shift = lower ? 5 : -5;
 const skins = ['n0.normal', 'n0.reverse'];
 const wall = { id: 'RADIAL-2', source: 'Keep the radial wall at 2 ± 0.01 mm.', hard: true,
   check: { query: { fn: 'radial_wall', a: skins[0], b: skins[1] }, op: '==', value: 2, tol: 0.01, unit: 'mm' } };
@@ -18,7 +21,7 @@ const seed = {
         weights: [1, Math.SQRT1_2, 1, Math.SQRT1_2, 1].map(weight => [weight, weight]),
       } },
     { id: 'n1', kind: 'sketch', profile: 'rectangle', min: [44, 22], max: [56, 33] },
-    { id: 'n2', kind: 'extrude', sketch: 1, from: 10, height: 4 },
+    { id: 'n2', kind: 'extrude', sketch: 1, from: targetZ - 4, height: 4 },
     { id: 'n3', kind: 'translate', parent: { node: 2, side: 'solid' }, offset: [0, 0, 0] },
   ],
   outputs: { b0: { node: 0, side: 'solid' }, b3: { node: 3, side: 'solid' } },
@@ -32,9 +35,9 @@ const pins = [
   'packages/barocss-cad/src/features/exact-cylinder-cap-offset.ts',
 ];
 const f = await createFlow({
-  name: 'exact-cylinder-cap-plane', envFrozen: 'D1649_SOURCE_FROZEN', output: process.argv[2],
+  name: 'exact-cylinder-cap-plane', envFrozen: lower ? 'D1652_SOURCE_FROZEN' : 'D1649_SOURCE_FROZEN', output: process.argv[2],
   initialFiles: pins, requiredFrozen: pins,
-  qualification: 'Bind the original upper cap of an Exact semicylinder to a parallel native face. Move and reopen the reference.',
+  qualification: `Bind the original ${lower ? 'lower' : 'upper'} cap of an Exact semicylinder to a parallel native face. Move and reopen the reference.`,
   limits: ['One upright two-quarter semicylinder and one translated reference box. Desktop WebGPU and local stdio MCP.'],
   inspectorSource: `
 import { readFileSync } from 'node:fs';
@@ -75,29 +78,31 @@ async function point(world) {
   await f.page.mouse.click(...pixel);
 }
 
-async function check(label, doc, original, height) {
+async function check(label, doc, original, station) {
   const rows = await f.inspect(label, doc);
   const { bodies } = await f.bodies();
   assert.deepEqual(bodies.map(body => body.key).sort(), ['b3', 'b4']);
   const solid = rows.find(row => row.key === 'b4'), target = rows.find(row => row.key === 'b3');
   assert.ok(solid.valid && target.valid);
-  assert.deepEqual([solid.geometry[cap].o[2], target.geometry[reference].o[2]], [height, height]);
+  assert.deepEqual([solid.geometry[cap].o[2], target.geometry[reference].o[2]], [station, station]);
+  const otherCap = lower ? 'n0.v-max' : 'n0.v-min';
+  assert.equal(solid.geometry[otherCap].o[2], oppositeZ);
   near(solid.geometry[skins[0]].r, 10);
   near(solid.geometry[skins[1]].r, 8);
-  const volume = 18 * Math.PI * height;
+  const volume = 18 * Math.PI * Math.abs(station - oppositeZ);
   near(solid.volume, volume);
   near(bodies.find(body => body.key === 'b4').volume, volume);
-  const upper = ([x, y, z]) => [x, y, z === 12 ? height : z];
+  const moved = ([x, y, z]) => [x, y, z === sourceZ ? station : z];
   const expected = {
     ...original,
-    vertices: original.vertices.map(vertex => ({ ...vertex, point: upper(vertex.point) })),
-    edges: original.edges.map(edge => ({ ...edge, curve: { ...edge.curve, controlPoints: edge.curve.controlPoints.map(upper) } })),
+    vertices: original.vertices.map(vertex => ({ ...vertex, point: moved(vertex.point) })),
+    edges: original.edges.map(edge => ({ ...edge, curve: { ...edge.curve, controlPoints: edge.curve.controlPoints.map(moved) } })),
     faces: original.faces.map(face => ({ ...face, surface: { ...face.surface,
-      controlPoints: face.surface.controlPoints.map(row => row.map(upper)),
+      controlPoints: face.surface.controlPoints.map(row => row.map(moved)),
     } })),
   };
   assert.deepEqual(solid.brep, expected);
-  f.report.observations.push({ label, height, volume, actualVolume: solid.volume, digest: solid.digest });
+  f.report.observations.push({ label, station, oppositeZ, volume, actualVolume: solid.volume, digest: solid.digest });
   return { digest: solid.digest, referenceDigest: target.digest };
 }
 
@@ -120,13 +125,15 @@ await f.run(async () => {
   const before = await f.inspect('source-native', seed);
   const original = before.find(row => row.key === 'b0').brep;
   const referenceBefore = before.find(row => row.key === 'b3').digest;
-  await view('Top');
+  await view(lower ? 'Bottom' : 'Top');
   if (await button('Ortho').getAttribute('aria-pressed') !== 'true') await button('Ortho').click();
   await frame();
   const filter = button('Selection filter');
   for (let i = 0; i < 6 && !(await filter.innerText()).includes('Faces'); i++) await filter.click();
   assert.match(await filter.innerText(), /Faces/);
-  await point([20, 29, 12]);
+  if (lower) await f.page.waitForFunction(() => window.__studioCamera().pitch < -1.3);
+  await point([20, 29, sourceZ]);
+  await f.page.evaluate(() => document.activeElement?.blur());
   await f.command('Offset face');
   const panel = hud('Offset face');
   await panel.getByLabel('Mode', { exact: true }).selectOption('to-plane');
@@ -134,14 +141,14 @@ await f.run(async () => {
 
   f.phase = 'Refuse a perpendicular plane and bind the parallel reference';
   await view('Front');
-  await point([50, 22, 12]);
+  await point([50, 22, targetZ - 2]);
   await status(panel, 'refused');
   assert.match(await panel.locator('.hud-error').innerText(), /parallel/i);
   assert.ok(await button('Apply', panel).isDisabled());
   await f.same(seed);
   await f.snapshot('01-perpendicular-refused');
   await view('Top');
-  await point([50, 27, 14]);
+  await point([50, 27, targetZ]);
   await status(panel, 'preview');
   await panel.getByText(reference).waitFor();
   await f.same(seed);
@@ -152,7 +159,7 @@ await f.run(async () => {
   assert.deepEqual([node.kind, node.faces, node.parent, node.distance], ['offset-face', [cap], { node: 0, side: 'solid' }, undefined]);
   assert.deepEqual([node.target.body, node.target.feature, node.target.face], [{ node: 3, side: 'solid' }, 'n3', reference]);
   await requirement().and(f.page.locator('.req.pass')).waitFor();
-  const first = await check('02-bound-native', bound, original, 14);
+  const first = await check('02-bound-native', bound, original, targetZ);
   assert.equal(first.referenceDigest, referenceBefore);
   await button('Iso').click();
   await frame();
@@ -162,7 +169,7 @@ await f.run(async () => {
   const z = f.editor().getByLabel('ΔZ', { exact: true });
   const undoBefore = await button('Undo').getAttribute('data-tip');
   f.phase = 'Refuse a reference move that collapses the semicylinder';
-  await z.fill('-14');
+  await z.fill(String(oppositeZ - targetZ));
   await button('Apply', f.editor()).click();
   const failure = f.editor().locator('.hud-error');
   await failure.waitFor();
@@ -173,12 +180,12 @@ await f.run(async () => {
   assert.equal(await button('Undo').getAttribute('data-tip'), undoBefore);
   await f.snapshot('03-reference-motion-refused');
 
-  await z.fill('-5');
+  await z.fill(String(shift));
   await f.applyEditor(bound, '04-reference-moved');
   const moved = await f.doc();
-  assert.deepEqual(moved.nodes[3], { ...bound.nodes[3], offset: [0, 0, -5] });
+  assert.deepEqual(moved.nodes[3], { ...bound.nodes[3], offset: [0, 0, shift] });
   assert.deepEqual(moved.nodes[4], node);
-  const second = await check('04-moved-native', moved, original, 9);
+  const second = await check('04-moved-native', moved, original, targetZ + shift);
   await requirement().and(f.page.locator('.req.pass')).waitFor();
   await f.undo();
   await f.same(bound);
@@ -186,7 +193,7 @@ await f.run(async () => {
   await f.same(moved);
   const saved = await f.save('semicylinder-to-plane');
   await f.freshOpen(saved.file, moved, '05-fresh-open');
-  assert.deepEqual(await check('05-reopened-native', await f.doc(), original, 9), second);
+  assert.deepEqual(await check('05-reopened-native', await f.doc(), original, targetZ + shift), second);
   await requirement().and(f.page.locator('.req.pass')).waitFor();
   await f.openFeatureEditor(4, 'reopened plane Offset');
   await button('Edit offset', f.editor()).click();

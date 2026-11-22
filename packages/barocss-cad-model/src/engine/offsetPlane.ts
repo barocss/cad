@@ -75,7 +75,7 @@ export function resolveOffsetPlaneDistance(doc: StudioDoc, binding: OffsetPlaneR
   let frame: { anchor: Vec3; normal: Vec3 } | undefined;
   if (owner?.kind === 'thicken' && owner.mode === 'exact-cylinder') {
     const cap = exactSemicylinderCapSource(doc.nodes, node.parent.node, doc.parameters);
-    if (cap?.upperFace === face) frame = exactSemicylinderCapOffsetFrame(source, face, {
+    if (cap?.faces.includes(face)) frame = exactSemicylinderCapOffsetFrame(source, face, {
       id: cap.id, surface: { ...owner.surface, kind: 'surface', id: 'surface' }, thickness: cap.thickness, side: owner.side,
     });
   } else {
