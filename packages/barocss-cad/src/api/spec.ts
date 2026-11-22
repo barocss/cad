@@ -92,7 +92,7 @@ export interface RawNurbsSurface {
   readonly controlPoints: readonly (readonly (readonly [number, number, number])[])[];
   readonly weights: readonly (readonly number[])[];
 }
-/** Total thickness t along du × dv by default. Exact modes accept whole planar quadrilaterals or certified upright single-span circular sectors. */
+/** Total thickness t along du × dv by default. Exact modes accept whole planar quadrilaterals, certified upright single-span circular sectors and two-quarter semicylinders. */
 export interface ThickenOptions { t: Dim; side?: 'normal' | 'reverse' | 'both'; mode?: ThickenMode }
 /** `sew`: tolerance in mm; omitted or 0 uses the native automatic tolerance. */
 export interface SewOptions { tol?: number }

@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1635: [Exact Thicken for an authored semicylinder](notes/exact-semicylinder-thicken-2026-11-22/README.md), #11 and #368. Certify two coaxial quarter spans and verify a six-face solid from a Studio-drawn 180° arc through thickness edit and native Open.
 - D1634: [Exact cylinder Thicken from a Studio sketch](notes/sketch-arc-exact-thicken-2026-11-22/README.md), #11 and #368. Preserve a newly authored quarter circle through Make curves, Duplicate, vertical Move and Ruled, then verify exact Thicken and native Open.
 - D1633: [Exact Thicken for upright circular sectors](notes/exact-cylinder-sector-thicken-2026-11-22/README.md), #11 and #368. Extend certified arcs beyond 90° and verify one native Studio edit and Open, local agent approval and quarter-cylinder compatibility.
 - D1632: [Exact Thicken for an upright quarter-cylinder](notes/exact-cylinder-thicken-2026-11-22/README.md), #11 and #368. Add a native six-face solid and verify independent radii, axis-collapse refusal, Studio edit and native Open.

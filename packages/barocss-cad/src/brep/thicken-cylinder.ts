@@ -23,6 +23,16 @@ export const isThickenCylinderError = (error: unknown): error is KernelError => 
 const integerSub = (a: IntegerPoint, b: IntegerPoint): IntegerPoint => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
 const dot = (a: IntegerPoint, b: IntegerPoint) => a.reduce((sum, value, axis) => sum + value * b[axis], 0n);
 
+/** Put the stored binary64 controls on a common exact integer grid. */
+function integerControls(points: Point[]): IntegerPoint[] {
+  const dyadics = points.map(point => point.map(binary64Dyadic));
+  const exponent = Math.max(...dyadics.flat().map(value => value.k));
+  return dyadics.map(point => {
+    const at = (axis: number) => point[axis].m << BigInt(exponent - point[axis].k);
+    return [at(0), at(1), at(2)];
+  });
+}
+
 /** Positive ratio rounded once to binary64; the conditioned angle ratio is between 1/16 and 15/16. */
 function ratio(n: bigint, d: bigint): number {
   let exponent = n.toString(2).length - d.toString(2).length;
@@ -85,19 +95,61 @@ function sectorFrame(surface: Surface, a: IntegerPoint, b: IntegerPoint, c: Inte
     outward: (turn > 0n) === (translation[2] > 0n), forwardV: translation[2] > 0n };
 }
 
+/** Two exact quarter spans form one open semicircle; unequal positive span widths affect speed only. */
+function semicircleFrame(surface: Surface): CylinderFrame {
+  const knot = surface.knotsU[3], start = surface.knotsU[2], end = surface.knotsU[5];
+  if (surface.controlPoints.some(row => row.length !== 2)
+    || surface.knotsU.length !== 8 || surface.knotsU[4] !== knot || !(start < knot && knot < end)
+    || surface.weights.some((row, index) => row.some(weight => weight !== (index % 2 ? Math.SQRT1_2 : 1))))
+    return fail('a semicircle requires two canonical quarter spans with one exact double internal knot.');
+  const points = surface.controlPoints.flat(), integers = integerControls(points);
+  const [a, a1, b, , c, , d, , e] = integers, translation = integerSub(a1, a);
+  if (translation[0] !== 0n || translation[1] !== 0n || translation[2] === 0n
+    || [0, 1, 2, 3, 4].some(index => integers[2 * index][2] !== a[2]
+      || integerSub(integers[2 * index + 1], integers[2 * index]).some((value, axis) => value !== translation[axis])))
+    return fail('the semicircle requires one exact common nonzero Z translation of all five XY controls.');
+  const firstRadial = integerSub(b, c), seamRadial = integerSub(b, a);
+  const secondSeamRadial = integerSub(d, e), terminalRadial = integerSub(d, c), squaredRadius = dot(firstRadial, firstRadial);
+  if (squaredRadius === 0n || dot(firstRadial, seamRadial) !== 0n || dot(seamRadial, seamRadial) !== squaredRadius
+    || dot(secondSeamRadial, terminalRadial) !== 0n || dot(secondSeamRadial, secondSeamRadial) !== squaredRadius
+    || dot(terminalRadial, terminalRadial) !== squaredRadius)
+    return fail('both semicircle spans must have exact perpendicular equal nonzero radial vectors.');
+  const firstCenter = integerSub(a, firstRadial), secondCenter = integerSub(c, secondSeamRadial);
+  if (firstCenter.some((value, axis) => value !== secondCenter[axis]))
+    return fail('the two semicircle spans must retain one exact center and seam.');
+  if (terminalRadial.some((value, axis) => value !== -firstRadial[axis]))
+    return fail('the semicircle terminal must be exactly opposite its first endpoint.');
+  const firstTurn = firstRadial[0] * seamRadial[1] - firstRadial[1] * seamRadial[0];
+  const secondTurn = secondSeamRadial[0] * terminalRadial[1] - secondSeamRadial[1] * terminalRadial[0];
+  if (firstTurn === 0n || secondTurn === 0n || (firstTurn > 0n) !== (secondTurn > 0n))
+    return fail('the semicircle spans must traverse the shared seam without folding.');
+  const [[p0, q0], [p1], [p2]] = surface.controlPoints;
+  const first = sub(p1, p2), last = sub(p1, p0), radius = Math.hypot(first[0], first[1]);
+  const center: Point = [p0[0] - first[0], p0[1] - first[1], 0];
+  const tolerance = linearToleranceMM(geometryScaleMM(points)), z0 = Math.min(p0[2], q0[2]), z1 = Math.max(p0[2], q0[2]);
+  if (!(Number.isFinite(radius) && radius > tolerance && z1 - z0 > tolerance))
+    return fail('the radius and axial span must exceed the native linear tolerance.');
+  const firstAxis: Point = [first[0] / radius, first[1] / radius, 0], lastAxis: Point = [last[0] / radius, last[1] / radius, 0];
+  const represented = [first, [first[0] + last[0], first[1] + last[1], 0], last,
+    [last[0] - first[0], last[1] - first[1], 0], [-first[0], -first[1], 0]];
+  const envelope = 64 * Number.EPSILON * Math.max(radius, ...points.flat().map(Math.abs), ...center.map(Math.abs));
+  if (![...center, ...firstAxis, ...lastAxis].every(Number.isFinite)
+    || represented.some((radial, index) => len(sub([center[0] + radial[0], center[1] + radial[1], p0[2]], surface.controlPoints[index][0])) > envelope))
+    return fail('the semicircle frame does not reconstruct its stored controls within the binary64 arithmetic envelope.');
+  // The two radial walls remain separate native faces; the seam within each cylinder skin is not a face boundary.
+  return { center, first: firstAxis, last: lastAxis, radius, z0, z1, tolerance, end: [-1, 0],
+    outward: (firstTurn > 0n) === (translation[2] > 0n), forwardV: translation[2] > 0n };
+}
+
 /** The caller validates the native surface. No circle fit or sampled circularity is used. */
 function frameOf(surface: Surface): CylinderFrame {
+  if (surface.degreeU === 2 && surface.degreeV === 1 && surface.controlPoints.length === 5) return semicircleFrame(surface);
   if (surface.degreeU !== 2 || surface.degreeV !== 1 || surface.controlPoints.length !== 3
     || surface.controlPoints.some(row => row.length !== 2)
     || surface.weights[0].some(weight => weight !== 1) || surface.weights[2].some(weight => weight !== 1)
     || !(surface.weights[1][0] > 0 && surface.weights[1][0] < 1) || surface.weights[1][0] !== surface.weights[1][1])
     return fail('requires one rational quadratic circular sector with unit end weights and one linear axial span.');
-  const points = surface.controlPoints.flat(), dyadics = points.map(point => point.map(binary64Dyadic));
-  const exponent = Math.max(...dyadics.flat().map(value => value.k));
-  const integers = dyadics.map(point => {
-    const at = (axis: number) => point[axis].m << BigInt(exponent - point[axis].k);
-    return [at(0), at(1), at(2)] as const;
-  });
+  const points = surface.controlPoints.flat(), integers = integerControls(points);
   const [a, a1, b, b1, c, c1] = integers, translation = integerSub(a1, a);
   if (translation[0] !== 0n || translation[1] !== 0n || translation[2] === 0n
     || [integerSub(b1, b), integerSub(c1, c)].some(delta => delta.some((value, axis) => value !== translation[axis]))

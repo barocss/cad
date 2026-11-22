@@ -73,6 +73,34 @@ test('authored quarter source survives Duplicate, vertical Move, native Ruled an
   }
 });
 
+test('authored signed semicircles retain both canonical quarters through Ruled and exact Thicken', () => {
+  const railWeights = [1, Math.SQRT1_2, 1, Math.SQRT1_2, 1];
+  const railKnots = [0, 0, 0, 1, 1, 2, 2, 2];
+  for (const sign of [-1, 1]) {
+    const curve = outlineCurve(xyPlane(), [[30, 20], [10, 20]], [sign], false);
+    const y = 20 + sign * 10;
+    assert.deepEqual(curve.points, [[30, 20, 0], [30, y, 0], [20, y, 0], [10, y, 0], [10, 20, 0]]);
+    assert.deepEqual(curve.weights, railWeights);
+    assert.deepEqual(curve.knots, railKnots);
+    const direct = importSource(emptyDirect(), curvesSource('sketch', [curve]), 'Semicircle');
+    const first = direct.objects[0].id, copied = directOps.duplicate(direct, [first]), second = copied.objects[1].id;
+    const moved = directOps.move(copied, [second], [0, 0, 12]);
+    const ruled = directOps.ruledSurface(moved, first, second);
+    const native = geometryOf(ruled, ruled.objects.at(-1)!);
+    assert.equal(native.kind, 'surface');
+    const { degreeU, degreeV, knotsU, knotsV, controlPoints, weights } = native as Surface;
+    assert.deepEqual(knotsU, railKnots);
+    assert.deepEqual(weights, railWeights.map(w => [w, w]));
+    assert.deepEqual(controlPoints, curve.points.map(point => [point, [point[0], point[1], 12]]));
+    const made = part().thicken({ degreeU, degreeV, knotsU, knotsV, controlPoints, weights },
+      { t: 2, side: sign > 0 ? 'reverse' : 'normal', mode: 'exact-cylinder' });
+    const [{ brep }] = partBreps(made.doc);
+    assert.equal(checkBrep(brep, { strict: true }).valid, true);
+    assert.equal(brep.faces.length, 6);
+    near(made.mass({ density: 1 }).volume, 216 * Math.PI);
+  }
+});
+
 test('the original rounded quarter source and saved document remain unchanged on native reopen', async () => {
   const curve = outlineCurve(xyPlane(), [[30, 20], [20, 30]], [Math.round(quarter * 1e9) / 1e9], false);
   const source = curvesSource('sketch', [curve]);

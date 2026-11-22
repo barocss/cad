@@ -8,21 +8,27 @@ import type { DisplayMesh, Vec3 } from './mesh';
 
 type P2 = [number, number];
 export interface NurbsCurve { degree: number; knots: number[]; points: Vec3[]; weights: number[] }
-// Only newly constructed, certified single arcs use full precision. This is not stored metadata.
-const canonicalQuarterCurves = new WeakMap<NurbsCurve, string>();
+// Only newly constructed, certified circular arcs use full precision. This is not stored metadata.
+const canonicalArcCurves = new WeakMap<NurbsCurve, string>();
 const quarterBulge = Math.tan(Math.PI / 8);
 
-/** A dyadic quarter turn: the tangent intersection is M - sign(bulge) perpendicular(B-A)/2. */
-function canonicalQuarter(plane: SketchPlane, a: P2, b: P2, bulge: number): NurbsCurve | null {
-  if (bulge !== quarterBulge && bulge !== -quarterBulge) return null;
+/** One exact quarter or a semicircle made of two exact quarters in the XY plane. */
+function canonicalArc(plane: SketchPlane, a: P2, b: P2, bulge: number): NurbsCurve | null {
+  const half = Math.abs(bulge) === 1;
+  if (!half && Math.abs(bulge) !== quarterBulge) return null;
   // The fixed binary grid bounds each integer sum below 2^53. It also makes the pole exactly
   // representable; arbitrary decimals and conditioned-but-uncertified planes retain the legacy path.
   const grid = 2 ** 30, input = [...a, ...b];
   if (!input.every(value => Number.isFinite(value) && Math.abs(value) <= 1e6 && Number.isSafeInteger(value * grid))) return null;
   const [ax, ay, bx, by] = input.map(value => value * grid), sign = bulge > 0 ? 1 : -1;
-  const tangent: P2 = [(ax + bx + sign * (by - ay)) / (2 * grid), (ay + by - sign * (bx - ax)) / (2 * grid)];
-  const points = [toWorld(plane, a), toWorld(plane, tangent), toWorld(plane, b)];
   const scale = 2 * grid;
+  const dx = sign * (by - ay), dy = -sign * (bx - ax);
+  const middle: P2 = [(ax + bx + dx) / scale, (ay + by + dy) / scale];
+  // In a quarter turn the middle pole is the tangent intersection. In a half turn it joins the two quarters.
+  const local: P2[] = half
+    ? [a, [(2 * ax + dx) / scale, (2 * ay + dy) / scale], middle, [(2 * bx + dx) / scale, (2 * by + dy) / scale], b]
+    : [a, middle, b];
+  const points = local.map(point => toWorld(plane, point));
   if (!points.flat().every(value => Number.isFinite(value) && Math.abs(value) <= 1e6
     && Number.isSafeInteger(value * scale) && !/[eE]/.test(String(value)))) return null;
   const integers = points.map(point => point.map(value => BigInt(value * scale)));
@@ -31,8 +37,13 @@ function canonicalQuarter(plane: SketchPlane, a: P2, b: P2, bulge: number): Nurb
   const last = integers[1].map((value, axis) => value - integers[0][axis]);
   const dot = (x: bigint[], y: bigint[]) => x.reduce((sum, value, axis) => sum + value * y[axis], 0n);
   if (dot(first, first) === 0n || dot(first, last) !== 0n || dot(first, first) !== dot(last, last)) return null;
-  const curve = fromSpans([{ p0: points[0], p1: points[1], p2: points[2], w: Math.SQRT1_2 }]);
-  canonicalQuarterCurves.set(curve, JSON.stringify(curve));
+  // With the same center and rotation, the last radius is the negative of the first.
+  if (half && first.some((radial, axis) => integers[3][axis] !== integers[2][axis] - radial
+    || integers[4][axis] !== integers[0][axis] - 2n * radial)) return null;
+  const spans = [{ p0: points[0], p1: points[1], p2: points[2], w: Math.SQRT1_2 }];
+  if (half) spans.push({ p0: points[2], p1: points[3], p2: points[4], w: Math.SQRT1_2 });
+  const curve = fromSpans(spans);
+  canonicalArcCurves.set(curve, JSON.stringify(curve));
   return curve;
 }
 
@@ -57,7 +68,7 @@ function arcSpans(plane: SketchPlane, c: P2, r: number, t0: number, sw: number) 
 /** A sketch outline (points, bulges) as one curve in 3D; closed outlines return to their start. */
 export function outlineCurve(plane: SketchPlane, points: P2[], bulges: number[] | undefined, closed: boolean): NurbsCurve {
   if (!closed && points.length === 2) {
-    const canonical = canonicalQuarter(plane, points[0], points[1], bulges?.[0] ?? 0);
+    const canonical = canonicalArc(plane, points[0], points[1], bulges?.[0] ?? 0);
     if (canonical) return canonical;
   }
   const n = points.length, spans: { p0: Vec3; p1: Vec3; p2: Vec3; w: number }[] = [];
@@ -128,7 +139,7 @@ export function curvesSource(name: string, curves: NurbsCurve[]): string {
   const body = curves.map((c, k) => {
     // Certified coordinates have plain-decimal shortest spellings, so no duplicate decimal expander
     // is needed here. Every other producer keeps its existing nine-decimal spelling byte for byte.
-    const snapshot = canonicalQuarterCurves.get(c), certified = snapshot !== undefined && snapshot === JSON.stringify(c);
+    const snapshot = canonicalArcCurves.get(c), certified = snapshot !== undefined && snapshot === JSON.stringify(c);
     const decimal = certified ? (value: number) => Object.is(value, -0) ? '-0' : String(value) : num;
     return `  @curve #c${k + 1} { type: nurbs; degree: ${c.degree}; knots: [${c.knots.map(decimal).join(',')}]; control-points: [${c.points.map(p => `[${p.map(decimal).join(',')}]`).join(',')}]; weights: [${c.weights.map(decimal).join(',')}]; }`;
   }).join('\n');

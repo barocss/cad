@@ -213,6 +213,68 @@ test('exact cylinder Thicken refuses unsupported sector weights, tangent poles a
   refused(() => part().thicken(obtuseCylinder(), { t: 11, side: 'reverse', mode: 'exact-cylinder' }), 'OFFSET_FOLDS', 'evaluate');
 });
 
+const halfCylinder = () => ({
+  ...sectorCylinder([[6, 8], [-2, 14], [-8, 6], [-14, -2], [-6, -8]], Math.SQRT1_2),
+  knotsU: [-2, -2, -2, 0, 0, 6, 6, 6],
+  weights: [1, Math.SQRT1_2, 1, Math.SQRT1_2, 1].map(weight => [weight, weight]),
+});
+
+test('exact cylinder Thicken closes a two-span semicylinder with six faces and source-relative names', () => {
+  for (const [side, flipU, flipV, inner, outer] of [
+    ['reverse', false, false, 8, 10], ['normal', false, false, 10, 12], ['both', false, false, 9, 11],
+    ['normal', true, false, 8, 10], ['normal', false, true, 8, 10], ['normal', true, true, 10, 12],
+  ]) {
+    const raw = halfCylinder();
+    if (flipU) {
+      raw.controlPoints.reverse();
+      raw.knotsU[3] = raw.knotsU[4] = 4;
+    }
+    if (flipV) raw.controlPoints.forEach(row => row.reverse());
+    const made = part().thicken(raw, { t: 2, side, mode: 'exact-cylinder' });
+    const { brep } = outputOf(evaluateCadPart(made.doc), 'thicken1');
+    const strict = checkBrep(brep, { strict: true });
+    assert.ok(strict.valid, JSON.stringify(strict.issues));
+    assert.deepEqual([strict.counts.bodies, strict.counts.vertices, strict.counts.edges, strict.counts.faces, strict.topology[0].genus], [1, 8, 12, 6, 0]);
+    const faces = new Map(brep.faces.map(face => [face.name, faceGeometry(face, 24)]));
+    for (const [name, r] of [['normal', flipU === flipV ? outer : inner], ['reverse', flipU === flipV ? inner : outer]]) {
+      const face = faces.get('thicken1.' + name);
+      assert.equal(face.kind, 'cylinder');
+      assert.ok(Math.abs(face.r - r) < 1e-9);
+      assert.ok(Math.hypot(face.c[0] - 30, face.c[1] + 14) < 1e-9);
+    }
+    for (const name of ['u-min', 'u-max']) {
+      const wall = faces.get('thicken1.' + name);
+      assert.equal(wall.kind, 'plane');
+      assert.ok(Math.hypot(wall.n[0] - .8, wall.n[1] + .6, wall.n[2]) < 1e-9);
+    }
+    for (const [name, z] of [['v-min', raw.controlPoints[0][0][2]], ['v-max', raw.controlPoints[0][1][2]]]) {
+      const cap = faces.get('thicken1.' + name);
+      assert.equal(cap.kind, 'plane');
+      assert.equal(cap.o[2], z);
+    }
+    const mass = made.mass({ density: 1 });
+    const area = Math.PI / 2 * (outer ** 2 - inner ** 2);
+    const centroidDistance = 4 * (outer ** 3 - inner ** 3) / (3 * Math.PI * (outer ** 2 - inner ** 2));
+    assert.ok(Math.abs(mass.volume - 12 * area) < 1e-7);
+    assert.ok(Math.hypot(...mass.centroid.map((value, axis) => value - [30 - .8 * centroidDistance, -14 + .6 * centroidDistance, 4][axis])) < 1e-8);
+  }
+});
+
+test('exact cylinder Thicken rejects a folded or displaced second quarter, wrong seam knots and axis crossing', () => {
+  for (const mutate of [
+    raw => { raw.controlPoints.splice(3, 2, structuredClone(raw.controlPoints[1]), structuredClone(raw.controlPoints[0])); },
+    raw => { raw.controlPoints[3].forEach(point => { point[0] += 1; }); },
+    raw => { raw.knotsU[4] = 1; },
+    raw => { raw.weights[3].fill(raw.weights[3][0] + Number.EPSILON); },
+    raw => { raw.controlPoints.forEach(([, point]) => { point[0] += 1; }); },
+  ]) {
+    const raw = halfCylinder();
+    mutate(raw);
+    refused(() => part().thicken(raw, { t: 2, mode: 'exact-cylinder' }), 'CAPABILITY', 'evaluate');
+  }
+  refused(() => part().thicken(halfCylinder(), { t: 10, side: 'reverse', mode: 'exact-cylinder' }), 'OFFSET_FOLDS', 'evaluate');
+});
+
 test('public thicken: exact six-field plain dense snapshot refuses metadata, accessors, wrappers and malformed geometry', () => {
   const inputs = [];
   for (const key of ['trims', 'objectId', 'source', 'geometry', 'kind', 'id', 'transform']) inputs.push({ ...plane(), [key]: key === 'trims' ? [] : 'extra' });

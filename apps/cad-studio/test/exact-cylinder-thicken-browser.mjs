@@ -4,15 +4,19 @@ import { join } from 'node:path';
 import { createFlow } from './flow-helper.mjs';
 
 const sector = process.argv.includes('--sector');
-const authored = process.argv.includes('--authored');
+const half = process.argv.includes('--semicircle');
+const authored = half || process.argv.includes('--authored');
 assert.ok(!authored || !sector, 'Choose either the authored or the explicit sector source');
-const profile = authored ? [[30, 20], [30, 30], [20, 30]]
-  : sector ? [[40, -14], [40, 6], [24, -6]] : [[36, -6], [28, 0], [22, -8]];
+const profile = half ? [[30, 20], [30, 30], [20, 30], [10, 30], [10, 20]]
+  : authored ? [[30, 20], [30, 30], [20, 30]]
+    : sector ? [[40, -14], [40, 6], [24, -6]] : [[36, -6], [28, 0], [22, -8]];
 const [z0, z1] = authored ? [0, 12] : [-2, 10];
 const [cx, cy] = authored ? [20, 20] : [30, -14];
 const grid = profile.map(([x, y]) => [[x, y, z0], [x, y, z1]]);
 const weight = sector ? 1 / Math.sqrt(5) : Math.SQRT1_2;
-const sweep = sector ? 2 * Math.atan(2) : Math.PI / 2;
+const railWeights = profile.map((_, index) => index % 2 === 0 ? 1 : weight);
+const surfaceWeights = railWeights.map(value => [value, value]);
+const sweep = half ? Math.PI : sector ? 2 * Math.atan(2) : Math.PI / 2;
 const patch = sector ? 'sector' : 'quarter';
 const patchName = `Upright ${patch} cylinder`;
 const source = `@model cylinder {version:0;length-unit:mm; @surface #${patch} {type:nurbs;degree-u:2;degree-v:1;knots-u:[-2,-2,-2,6,6,6];knots-v:[1,1,7,7];control-points:${JSON.stringify(grid)};weights:[[1,1],[${weight},${weight}],[1,1]];}}`;
@@ -29,11 +33,12 @@ if (authored) pins.push('apps/cad-studio/src/viewport/viewportPointerInput.ts',
   'apps/cad-studio/src/sketch/useSketchActions.ts', 'packages/barocss-cad-model/src/engine/curveSource.ts');
 const f = await createFlow({
   name: 'exact-cylinder-thicken', output: process.argv[2],
-  envFrozen: authored ? 'D1634_SOURCE_FROZEN' : sector ? 'D1633_SOURCE_FROZEN' : 'D1632_SOURCE_FROZEN',
+  envFrozen: half ? 'D1635_SOURCE_FROZEN' : authored ? 'D1634_SOURCE_FROZEN' : sector ? 'D1633_SOURCE_FROZEN' : 'D1632_SOURCE_FROZEN',
   initialFiles: pins, requiredFrozen: pins,
   qualification: authored ? 'Draw a Centre arc, make and duplicate its curve, move it in Z, build a Ruled surface and save the exact thickened cylinder in Studio.'
     : `Thicken an open upright ${(sweep * 180 / Math.PI).toFixed(2)}-degree cylinder inward, edit its thickness, and reopen the exact solid in Studio.`,
-  limits: ['One canonical rational circular span and one linear axial span. Desktop WebGPU.'],
+  limits: [half ? 'Two canonical quarter spans and one linear axial span. Desktop WebGPU.'
+    : 'One canonical rational circular span and one linear axial span. Desktop WebGPU.'],
   inspectorSource: `
 import { readFileSync } from 'node:fs';
 import { checkBrep, brepMassProperties, faceGeometry } from '@barocss/cad';
@@ -67,20 +72,22 @@ async function authorPatch() {
   const blank = await f.doc();
   assert.equal(blank.nodes.length, 0);
   assert.equal(blank.direct?.objects.length ?? 0, 0);
-  f.phase = 'Draw a 90-degree arc with the Centre arc tool';
+  f.phase = `Draw a ${half ? 180 : 90}-degree arc with the Centre arc tool`;
   await button('Sketch', f.page.locator('.mode')).click();
   const sketch = f.sketchPanel();
   await sketch.waitFor();
   await sketch.getByLabel('Sketch plane', { exact: true }).selectOption('xy');
-  await f.frame([[12, 12], [38, 38]]);
+  await f.frame([[8, 12], [38, 38]]);
   await f.tool('Centre arc', 'q');
   await f.worldClick([cx, cy]);
   await f.worldClick(profile[0]);
-  for (const point of [[28, 26], [26, 28], profile[2]]) {
+  const arcEnd = profile.at(-1);
+  const samples = half ? [[28, 26], [26, 28], [20, 30], [14, 28], [12, 26], arcEnd] : [[28, 26], [26, 28], arcEnd];
+  for (const point of samples) {
     const pixel = await f.screenOf(point);
     await f.page.mouse.move(...pixel, { steps: 3 });
   }
-  await f.worldClick(profile[2]);
+  await f.worldClick(arcEnd);
   near(Number(await sketch.getByLabel('Arc 1 radius', { exact: true }).inputValue()), 10, 1e-7);
   await f.snapshot('01-authored-centre-arc');
 
@@ -93,7 +100,8 @@ async function authorPatch() {
   assert.deepEqual(arc.nodes, blank.nodes);
   const [low] = await f.inspect('01a-curve-native', arc);
   assert.deepEqual(low.controlPoints, grid.map(ends => ends[0]));
-  assert.deepEqual(low.weights, [1, weight, 1]);
+  assert.deepEqual(low.weights, railWeights);
+  if (half) assert.deepEqual(low.knots, [0, 0, 0, 1, 1, 2, 2, 2]);
   await button('Duplicate', panel()).click();
   await f.changed(arc);
   const duplicated = await f.doc(), copy = duplicated.direct.objects[1];
@@ -117,7 +125,8 @@ async function authorPatch() {
   assert.deepEqual(liftedRail.weights, low.weights);
   assert.deepEqual([ruled.kind, ruled.degreeU, ruled.degreeV], ['surface', 2, 1]);
   assert.deepEqual(ruled.controlPoints, grid);
-  assert.deepEqual(ruled.weights, [[1, 1], [weight, weight], [1, 1]]);
+  assert.deepEqual(ruled.weights, surfaceWeights);
+  assert.deepEqual(ruled.knotsU, low.knots);
   await button('Iso').click();
   await f.page.getByTitle('Frame all (F)', { exact: true }).click();
   await f.snapshot('01c-authored-ruled-cylinder');
@@ -128,7 +137,8 @@ async function verify(label, doc, sourceDoc, thickness) {
   assert.equal(doc.nodes.length, 1);
   assert.deepEqual([doc.nodes[0].kind, doc.nodes[0].mode, doc.nodes[0].side, doc.nodes[0].thickness], ['thicken', 'exact-cylinder', 'reverse', thickness]);
   assert.deepEqual(doc.nodes[0].surface.controlPoints, grid);
-  assert.deepEqual(doc.nodes[0].surface.weights, [[1, 1], [weight, weight], [1, 1]]);
+  assert.deepEqual(doc.nodes[0].surface.weights, surfaceWeights);
+  if (half) assert.deepEqual(doc.nodes[0].surface.knotsU, [0, 0, 0, 1, 1, 2, 2, 2]);
   assert.deepEqual(doc.direct, sourceDoc.direct);
   const [solid] = await f.inspect(label, doc);
   assert.deepEqual([solid.key, solid.valid, solid.genus, solid.counts.bodies, solid.counts.faces, solid.counts.edges, solid.counts.vertices],
@@ -150,7 +160,7 @@ async function verify(label, doc, sourceDoc, thickness) {
     near(cap.o[2], z);
     near(Math.abs(cap.n[2]), 1);
   }
-  const rays = [profile[0], profile[2]].map(([x, y]) => [(x - cx) / 10, (y - cy) / 10]);
+  const rays = [profile[0], profile.at(-1)].map(([x, y]) => [(x - cx) / 10, (y - cy) / 10]);
   for (const [face, ray] of [['n0.u-min', rays[0]], ['n0.u-max', rays[1]]]) {
     const wall = byName.get(face);
     assert.equal(wall.kind, 'plane');
