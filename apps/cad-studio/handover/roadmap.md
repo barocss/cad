@@ -1,13 +1,13 @@
 # CAD roadmap — current status and execution order
 
-Updated 2026-11-22 · Priority authority: D520 · Latest delivery: D1662 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
+Updated 2026-11-22 · Priority authority: D520 · Latest delivery: D1663 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
 
 This is the only current status index. Detailed tracks define acceptance; the 34 stable row pages retain scope and issue navigation. Immutable decision notes retain results. Do not append chronological status paragraphs here. [D520 decision](notes/cad-roadmap-replan-2026-11-04/README.md) supersedes D445 execution order and historical next-item text, while retaining its safeguards and bounded proofs.
 
 ## Now and next
 
-- **Current position:** [D1662](notes/reviewed-linked-cap-wall-offset-2026-11-22/README.md), P5 row 31, adds a revision-pinned Agent proposal for the signed wall Offset after an inclined cap replacement. Studio refuses a stale proposal after donor motion and approves a new proposal. See the [decision index](decisions.md).
-- **Next MAIN:** D1663, P4 [row 22](roadmap-rows/22.md). Extract live measurement target resolution and readout preparation from Studio App. Compare native and placed face measurements, section picks, curved-distance provenance and the pinned measurement entry before and after.
+- **Current position:** [D1663](notes/studio-live-measurement-extraction-2026-11-22/README.md), P4 row 22, extracts Studio live measurement. Six desktop flows match the baseline at 26 checkpoints. See the [decision index](decisions.md).
+- **Next MAIN:** D1664, P5 [row 31](roadmap-rows/31.md). Add Delete face healing for one radial through bore in an Exact semicylinder with a signed outer-wall Offset and a linked inclined upper cap. Native evaluation builds the cut and currently refuses healing either bore half. Verify the recovered solid, saved reference, Undo and fresh Open in Studio.
 - **Separate follow-ups:** Continue Studio App extraction in cohesive parts with affected desktop checks. [#608 Rendering](https://github.com/barocss/cad/issues/608) stays on HOLD. API inventory drift remains open. The issue tracker records [#126](https://github.com/barocss/cad/issues/126), [#613](https://github.com/barocss/cad/issues/613), [#152](https://github.com/barocss/cad/issues/152) and [#22](https://github.com/barocss/cad/issues/22) as closed.
 - **Active repository:** [barocss/cad](https://github.com/barocss/cad), based on `origin/main`. Fetch before work and preserve unexpected changes. The [migration record](../../../docs/migration/README.md) maps the former `local/cad-dev` history and issue numbers.
 - **Measured progress:** whole CAD and core readiness **NOT_MEASURED**; B01 v1 **12/12 accepted groups**; B02 v1 **11/11 accepted groups**; B04 v1 **26/26 accepted groups**; B07 v1 **6/6 accepted profiles**; B09 v1 **9/9 accepted groups**; initial scenarios **8/10 accepted**; B06 **6/7 qualified groups, PDF held**; B05 **7/7 accepted groups**; B08 **6/6 accepted groups**; B10 **7/7 accepted groups**; B03 **NOT_ADJUDICATED**. The legacy43% is frozen history. P0 has12 acceptance items; R01–R12 have bounded D521–D532 closeouts; D785 demonstrates one R04 native collision; no whole-product acceptance follows. This is backlog state, not a whole-CAD percentage.

@@ -97,7 +97,7 @@ import { RequirementsBrowser } from './ui/RequirementsBrowser';
 import { DesignHistory } from './ui/DesignHistory';
 import { MeasurementInspector, PinnedMeasurement, InterferenceInspector } from './ui/MeasurementInspector';
 import { useInterferenceCheck } from './state/useInterferenceCheck';
-import { measureQuantityText } from './ui/quantityText';
+import { measurementLineFor, useLiveMeasurement } from './state/useLiveMeasurement';
 import { SelectionInspector } from './ui/SelectionInspector';
 import { useDirectCurveCurvature } from './app/useDirectCurveCurvature';
 import { useNativeEdgeInspection } from './app/useNativeEdgeInspection';
@@ -160,9 +160,8 @@ import type { DrawingReferenceLabel, DrawingReferencePreview } from './ui/Drawin
 import type { FriendlyError } from '@barocss/cad-model/engine/errors';
 import type { Vec3 } from '@barocss/cad-model/engine/mesh';
 import { carrySelection, commands, patchValues, refOf, selectedBodies, subdNodeOf, type Command, type Ctx, type Selection, type Values } from '@barocss/cad-model/app/commands';
-import { measureBetween, type MeasurePick } from '@barocss/cad-model/app/measure';
-import { usesCurvedMeshDistance } from './app/measureProvenance';
-import { captureMeasureTarget, readMeasureTarget, sameMeasureOccurrence, type MeasureTarget, type PlacedMeasureSource } from './app/measureTargets';
+import type { MeasurePick } from '@barocss/cad-model/app/measure';
+import { captureMeasureTarget, type MeasureTarget, type PlacedMeasureSource } from './app/measureTargets';
 import { hostsOf, nestedCard, renderKeysOf, singleNested, singleTop, viewportInstanceSelection } from './assembly/nestedSelection';
 import { NestedPartPanel } from './ui/NestedPartPanel';
 import { offsetFaceLaunchView } from './viewport/offsetFaceLaunchView';
@@ -2598,42 +2597,27 @@ export function App() {
   const shownEndFace = active && commandPickScope.current && active.preview === 'ok' &&
     (isExtrudeToFace(active.cmd.id, active.values) || isReferencePlaneEdit(active.cmd.id, active.values))
     ? shownExtrudeEndFace(active, shownBodies) : null;
-  const placedMeasureSources = useMemo(() => {
-    const entries = new Map<string, PlacedMeasureSource>();
-    if ((!measure && !placedMeasureContext) || !fresh || busy || shownDoc !== doc || section || exploded || jointTree || instDrag || cutDraft || stepsDisp || isolatedInstances
-      || ghost || candidateReview?.shown || workingComparison || previewBodies || routePreviewBodies) return entries;
-    for (const inst of doc.instances ?? []) {
-      const have = instanceBodies.get(inst.id);
-      if (inst.hidden || !have || !instanceEvaluationCurrent(have, inst, instanceSources.get(inst.id))) continue;
-      const hidden = new Set(have.bodies.filter(body => instanceLooks.get(inst.id)?.get(body.key)?.hidden).map(body => body.key));
-      entries.set(inst.id, { inst, bodies: have.bodies, hidden });
-    }
-    return entries;
-  }, [measure, placedMeasureContext, fresh, busy, shownDoc, doc, section, exploded, jointTree, instDrag, cutDraft, stepsDisp, isolatedInstances, ghost, candidateReview?.shown, workingComparison, previewBodies, routePreviewBodies, instanceBodies, instanceSources, instanceLooks]);
-  measureInstances.current = placedMeasureSources;
-  const measurementItems = useMemo(() => measure?.map(target => {
-    if (!fresh || busy) return null;
-    const occurrence = target.occurrence ? placedMeasureSources.get(target.occurrence.id) : undefined;
-    if (target.occurrence && (!occurrence || !sameMeasureOccurrence(target.occurrence, occurrence.inst) || occurrence.hidden.has(target.body))) return null;
-    const source = occurrence ? occurrence.bodies : bodies;
-    const pick = readMeasureTarget(target, doc, source);
-    return pick ? { pick, mesh: source[pick.body].mesh, instance: target.occurrence?.id } : null;
-  }), [measure, fresh, busy, doc, bodies, placedMeasureSources]);
-  const liveMeasurePicks = measurementItems?.flatMap(item => item && !item.instance ? [item.pick] : []);
-  const measuredInstanceFaces = measurementItems?.flatMap(item =>
-    item?.instance && item.pick.face !== undefined ? [{ id: item.instance, body: item.pick.body, face: item.pick.face }] : []);
+  const liveMeasurement = useLiveMeasurement({
+    doc, bodies, targets: measure, current: fresh && !busy,
+    placed: {
+      available: (measure !== null || placedMeasureContext) && fresh && !busy && shownDoc === doc
+        && !section && !exploded && !jointTree && !instDrag && !cutDraft && !stepsDisp && !isolatedInstances
+        && !ghost && !candidateReview?.shown && !workingComparison && !previewBodies && !routePreviewBodies,
+      evaluated: instanceBodies, sources: instanceSources, looks: instanceLooks,
+    },
+  });
+  measureInstances.current = liveMeasurement.placedSources;
   const sectionSelection = useSectionSelection({
     doc, section, cutFrom: nextSerial(evaluated), sourceBodies: bodies, shownBodies, sourceKeys: sectionExact?.from,
     exactView: sectionExactShown && shownBodies === sectionBodies, canPick: fresh && !busy,
-    showSelection: !!(section && sectionBodies && !sketch && !previewBodies), sourceEdges: liveMeasurePicks ?? selection.edges,
+    showSelection: !!(section && sectionBodies && !sketch && !previewBodies), sourceEdges: liveMeasurement.picks ?? selection.edges,
   });
   const shownSelection = modelUnavailable ? emptySel : sectionSelection.selection ?? (
     shownEndFace ? { ...emptySel, faces: [shownEndFace] }
       : bandShown ? bandShown
-      : routePreviewBodies || routePanelOpen || shownPreviewBodies || sketch ? emptySel : mateFaces ? { faces: assembly.highlight.faces, edges: [], bodies: [] } : liveMeasurePicks ? { faces: liveMeasurePicks.flatMap(m => m.face !== undefined ? [{ body: m.body, face: m.face }] : []), edges: liveMeasurePicks.flatMap(m => m.edge !== undefined ? [{ body: m.body, edge: m.edge }] : []), bodies: [] } : selection);
-  const [measureFrom, measureTo] = measurementItems ?? [];
-  const measured = measureFrom && measureTo ? measureBetween(measureFrom.mesh, measureFrom.pick, measureTo.mesh, measureTo.pick) : null;
-  const approximateMeasure = !!measureFrom && !!measureTo && (usesCurvedMeshDistance(measureFrom) || usesCurvedMeshDistance(measureTo));
+      : routePreviewBodies || routePanelOpen || shownPreviewBodies || sketch ? emptySel
+      : mateFaces ? { faces: assembly.highlight.faces, edges: [], bodies: [] }
+      : liveMeasurement.selection ?? selection);
   // (The locked references and the keep-outs, A6.3: drawn ghosted after the part's bodies, never picked.)
   const refShown = useMemo(() => { const set = readReferences(doc.references); return [...set.references.flatMap(r => placeReference(refLocal.get(r.id) ?? [], r.at)), ...keepoutBodies]; }, [doc.references, refLocal, keepoutBodies]);
   // (An in-place edit's surroundings, roadmap 10 ⑧: ghosted the same way, after the references.)
@@ -2661,11 +2645,12 @@ export function App() {
   meshCirclePick.current = meshCircle.pick;
   measureNativeReady.current = pinReady;
   const pinnedReadout = usePinnedFaceReadout({
-    session: pinnedFaces, doc, bodies, ready: pinReady, picks: liveMeasurePicks, targetCount: measure?.length,
+    session: pinnedFaces, doc, bodies, ready: pinReady, picks: liveMeasurement.picks, targetCount: measure?.length,
     isCurrent: () => measureNativeReady.current && docNow.current === doc && workerSessionNow.current === workerSession,
     stopMeasuring: () => setMeasure(null),
   });
-  const visibleMeasurement = measure ? measured : pinnedReadout.result;
+  const measurementLine = measurementLineFor(measure ? liveMeasurement.result : pinnedReadout.result,
+    measure !== null && liveMeasurement.approximateDistance);
   const sketchTool = sketch?.tool;
   const usesNativeCrossings = sketchTool === 'rectangle' || sketchTool === 'polygon' || sketchTool === 'arc' || sketchTool === 'circle' || sketchTool === 'carc';
   const crossingBodies = usesNativeCrossings && fresh && !busy && shownDoc === doc && marker === null && !inPlace && !doc.instances?.length
@@ -2822,7 +2807,7 @@ export function App() {
       pickedVertices: modelUnavailable || historyPreviewBodies ? undefined : selection.vertices,
       hoverBody: shownPreviewBodies ? null : rowHover,
       instanceSelection: assembly.draft ? assembly.highlight.instances : steppedSelection,
-      instanceFaces: mateFaces ? assembly.highlight.instanceFaces : measuredInstanceFaces,
+      instanceFaces: mateFaces ? assembly.highlight.instanceFaces : liveMeasurement.instanceFaces,
     },
     actions: picking, historyPreview: !!historyPreviewBodies,
     draftFace: !heldDraftFace.view ? null : heldDraftFace.view.kind === 'ready' ? { kind: 'ready' } : { kind: 'picking', pick: heldDraftFace.pick },
@@ -3082,7 +3067,7 @@ export function App() {
         onSaveCamera={() => { const c = viewport.current?.getCamera(); if (c) commitRender({ ...render, camera: c }); }}
         onUseCamera={() => { if (render.camera) { viewport.current?.setCamera(render.camera); setFov(Math.round(render.camera.fovY * 180 / Math.PI)); } }} /></Suspense>}
       {fresh && !rendering && !sketch && measure && meshCircle.mode && <MeshCircleInspector state={meshCircle.state} ready={meshCircle.ready} onReset={meshCircle.reset} onBack={() => { meshCircle.choose(false); setMeasure([]); }} onClose={() => { meshCircle.choose(false); setMeasure(null); }} />}
-      {fresh && !rendering && !sketch && measure && !meshCircle.mode && <MeasurementInspector onMeshCircle={() => { meshCircle.choose(true); setMeasure([]); }} pickFilter={pickFilter} targets={measure} items={measurementItems ?? []} measured={measured} approximateDistance={approximateMeasure} onClose={() => setMeasure(null)} onPin={pinnedReadout.pin} />}
+      {fresh && !rendering && !sketch && measure && !meshCircle.mode && <MeasurementInspector onMeshCircle={() => { meshCircle.choose(true); setMeasure([]); }} pickFilter={pickFilter} targets={measure} items={liveMeasurement.items ?? []} measured={liveMeasurement.result} approximateDistance={liveMeasurement.approximateDistance} onClose={() => setMeasure(null)} onPin={pinnedReadout.pin} />}
       {massPinView && (massPin.pinned || (!active && !measure && !directSel.length && !instanceSel.length)) && <PinnedMassControls pinned={massPin.pinned} result={massPin.result} canPin={massPin.canPin} onPin={massPin.pin} onClear={massPin.clear} />}
       {pinView && pinnedFaces.pair && !measure && <PinnedMeasurement distance={pinnedReadout.result?.normalDistance ?? null} onClear={clearPinnedFaces} />}
       {cutDraft && !rendering && !sketch && !measure && <AssemblyCutHud draft={cutDraft} instances={doc.instances ?? NO_INSTANCES} problem={draftProblem(doc, cutDraft) ?? (cutTrial?.key === cutKey ? cutTrial.problem : undefined)}
@@ -3277,7 +3262,7 @@ export function App() {
           return box ? { ...box, label: [0, 1, 2].map(k => fmt(Math.round((box.max[k] - box.min[k]) * 100) / 100)).join(' × ') } : null;
         })() : null}
         centreOfMass={massPinView && massPin.result?.ok ? massPin.result.centroid : null}
-        measureLine={visibleMeasurement && visibleMeasurement.distance > 1e-9 ? { a: visibleMeasurement.a, b: visibleMeasurement.b, label: (measure && approximateMeasure ? '≈' : '') + measureQuantityText(visibleMeasurement.distance, 2) + ' mm' } : null} />
+        measureLine={measurementLine} />
 
       <TooltipLayer />
       <Profiler id="toolbar" onRender={onBlockRender}><nav className={'card toolbar' + (sketch ? '' : ' model-toolbar')} aria-label="Tools" hidden={rendering || drawing}>
@@ -3339,7 +3324,7 @@ export function App() {
       <FeatureHistoryMenu doc={doc} ctx={ctx} marker={marker} historyMenu={historyMenu} close={() => setHistoryMenu(null)}
         beforeEdit={action => workspaceModeExit.switchWhenReady(action, { originFocus: historyMenu?.focus, readFeature: readFeatureTransitionDraft })}
         editors={{ setEditNode, setInstanceSel, setDirectSel, editSketch, exportSketchDxf, cancel, beginSkeleton: skel.begin, setSelection }} history={{ toggleSuppress, reorder, setMarker, deleteNode }} />
-      <ViewContextMenu model={{ doc, bodies, ctx, placed: placedMeasureContext ? placedMeasureSources : undefined, placedMeasureContextReady }} menu={modelUnavailable ? null : menu} setMenu={setMenu} viewport={viewport} changes={{ commit, start, deleteSelection, setSelection, setMeasure, setEditNode }} />
+      <ViewContextMenu model={{ doc, bodies, ctx, placed: placedMeasureContext ? liveMeasurement.placedSources : undefined, placedMeasureContextReady }} menu={modelUnavailable ? null : menu} setMenu={setMenu} viewport={viewport} changes={{ commit, start, deleteSelection, setSelection, setMeasure, setEditNode }} />
 
       {cutListView && (() => { const list = partCutList(doc, bodies, material); return list ? <CutListDialog list={list} nesting={nestCutList(doc, list)} name={fileName.replace(/[^\w.-]+/g, '_')} onClose={() => setCutListView(false)} /> : null; })()}
       {flatView && (() => { const fb = flatView.body; return sameSheetRuleSource(flatView.source, sheetRuleCurrent(), fb) && fb.flat ? <FlatPatternDialog bendActions={flangeBendActions(fb, flatView.source)} onEditSharedRules={sheetRuleAction(fb, flatView.source)} flat={fb.flat} name={`${fileName}-${bodyName(doc, fb)}`.replace(/[^\w.-]+/g, '_')} onClose={() => setFlatView(null)} /> : null; })()}

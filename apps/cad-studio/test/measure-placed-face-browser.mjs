@@ -82,7 +82,7 @@ await f.run(async () => {
     assert.equal(await metric('Body').innerText(), 'Witness plate (inst1/b1)');
     await cap('Top', [20,6,10]);
     await readDistance('placed-context-to-base', '20.62', '5');
-    assert.deepEqual((await metric('ΔX ΔY ΔZ').innerText()).split(', ').map(Number), [-20,0,-5]);
+    assert.equal(await metric('ΔX ΔY ΔZ').innerText(), '-20, 0, -5 mm');
     assert.equal(await button('Pin measurement').count(), 0);
     await f.same(source);
 
@@ -122,7 +122,7 @@ await f.run(async () => {
   assert.ok(measured, 'placed cap must become the To face');
   await readDistance('accepted-distance', '20.62', '5');
   assert.match(await panel().innerText(), /Witness plate/);
-  assert.deepEqual((await metric('ΔX ΔY ΔZ').innerText()).split(', ').map(Number), [20,0,5]);
+  assert.equal(await metric('ΔX ΔY ΔZ').innerText(), '20, 0, 5 mm');
   await f.same(source);
 
   f.phase = 'An exploded occurrence cannot reuse its accepted placement measurement';
@@ -143,7 +143,7 @@ await f.run(async () => {
   await panel().getByText('Planar face', { exact: true }).waitFor();
   await cap('Top', [20,6,10]);
   await readDistance('placed-to-base', '20.62', '5');
-  assert.deepEqual((await metric('ΔX ΔY ΔZ').innerText()).split(', ').map(Number), [-20,0,-5]);
+  assert.equal(await metric('ΔX ΔY ΔZ').innerText(), '-20, 0, -5 mm');
   await f.same(source);
 
   assert.deepEqual(f.report.downloads, []);

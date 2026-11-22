@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1663: [Extract Studio live measurement](notes/studio-live-measurement-extraction-2026-11-22/README.md). Six actual desktop flows preserve all 26 recorded checkpoints.
 - D1662: [Review a saved wall Offset after an inclined cap replacement](notes/reviewed-linked-cap-wall-offset-2026-11-22/README.md), #322 and #629. Verify stale proposal refusal after a donor move, Studio approval of a fresh revision and exact native Open.
 - D1661: [Offset one wall and replace the original upper cap with an inclined plane](notes/exact-semicylinder-wall-cap-replacement-2026-11-22/README.md), #17 and #629. Verify both orders, combined rim contact, linked History, native Open and current wall evidence.
 - D1660: [Offset one wall and the original upper cap of an Exact semicylinder](notes/exact-semicylinder-wall-cap-offsets-2026-11-22/README.md), #17 and #629. Both signed edit orders agree in Studio and local Agent. Verify retained recipes, contact refusal and native Open.
