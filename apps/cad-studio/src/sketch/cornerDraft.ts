@@ -3,6 +3,7 @@ import { chamferCorner, roundCorner } from '@barocss/cad-model/sketch/corner';
 import { editChamferSetback, savedChamferSetback } from '@barocss/cad-model/sketch/chamferEdit';
 import { prepareStraightCornerBatch } from '@barocss/cad-model/sketch/cornerBatch';
 import { nextIdOf, withIds } from '@barocss/cad-model/sketch/entityIds';
+import { editFilletRadius, savedFilletRadius } from '@barocss/cad-model/sketch/filletEdit';
 import { profileOf } from '@barocss/cad-model/sketch/loops';
 import { rebindDims } from '@barocss/cad-model/sketch/reopen';
 import { isSettled, type Polygon, type SketchPick } from '@barocss/cad-model/sketch/rules';
@@ -11,31 +12,35 @@ import type { SketchState } from '@barocss/cad-model/sketch/types';
 import { sketchFinishInputs } from '../app/sketchControls';
 
 export type SketchCornerOperation = 'fillet' | 'chamfer';
-export type SketchCornerAction = SketchCornerOperation | 'resize-chamfer';
+type SketchCornerResize = 'resize-fillet' | 'resize-chamfer';
+export type SketchCornerAction = SketchCornerOperation | SketchCornerResize;
 export type SketchCornerResult = { shape: Polygon; display: Polygon } | { error: string };
-export type SavedSketchChamfer = { edge: number; distance: number };
+export type SavedSketchCorner = { edge: number; operation: SketchCornerResize; value: number };
 
-function independentChamferOutline(owner: SketchState, source: Polygon, doc: StudioDoc): boolean {
+function independentCornerOutline(owner: SketchState, source: Polygon, doc: StudioDoc): boolean {
   const stored = owner.editNode === undefined ? undefined : doc.nodes[owner.editNode];
   return !owner.association && !owner.base && !owner.band && !owner.anchor?.face?.linkSource &&
     !(stored?.kind === 'sketch' && (stored.on || stored.profile === 'band')) &&
     !owner.done?.some(item => !item.construction && item.kind !== 'bezier') && !source.construction;
 }
 
-export function selectedSavedChamfer(owner: SketchState, source: Polygon, doc: StudioDoc,
-  picked: readonly SketchPick[]): SavedSketchChamfer | undefined {
+export function selectedSavedCorner(owner: SketchState, source: Polygon, doc: StudioDoc,
+  picked: readonly SketchPick[]): SavedSketchCorner | undefined {
   const [edge] = picked;
   if (owner.tool !== 'select' || picked.length !== 1 || edge.kind !== 'edge' || edge.done ||
-    !independentChamferOutline(owner, source, doc)) return;
-  const distance = savedChamferSetback(source, edge.i);
-  if (distance !== undefined) return { edge: edge.i, distance };
+    !independentCornerOutline(owner, source, doc)) return;
+  const fillet = !!source.bulges?.[edge.i];
+  const value = fillet ? savedFilletRadius(source, edge.i) : savedChamferSetback(source, edge.i);
+  if (value !== undefined) return { edge: edge.i, value, operation: fillet ? 'resize-fillet' : 'resize-chamfer' };
 }
 
-export function prepareSavedSketchChamfer(owner: SketchState, source: Polygon, doc: StudioDoc,
-  edge: number, input: string): SketchCornerResult {
-  if (!independentChamferOutline(owner, source, doc)) return { error: 'Edit one chamfer on an independent outline.' };
-  const distance = input.trim() === '' ? NaN : Number(input);
-  const edited = editChamferSetback(source, edge, distance);
+export function prepareSavedSketchCorner(owner: SketchState, source: Polygon, doc: StudioDoc,
+  resize: SavedSketchCorner, input: string): SketchCornerResult {
+  const fillet = resize.operation === 'resize-fillet';
+  const name = fillet ? 'fillet' : 'chamfer';
+  if (!independentCornerOutline(owner, source, doc)) return { error: `Edit one ${name} on an independent outline.` };
+  const value = input.trim() === '' ? NaN : Number(input);
+  const edited = fillet ? editFilletRadius(source, resize.edge, value) : editChamferSetback(source, resize.edge, value);
   if ('error' in edited) return edited;
   if (edited.shape === source) return { shape: source, display: source };
   const { joined, hasUnsafeId } = cornerFinishInputs(owner, edited.shape);
@@ -44,7 +49,7 @@ export function prepareSavedSketchChamfer(owner: SketchState, source: Polygon, d
   if ('error' in profile) return profile;
   const stored = owner.editNode === undefined ? undefined : doc.nodes[owner.editNode];
   if (stored?.kind === 'sketch' && rebindDims(stored, profile.node, doc.parameters).dropped.length)
-    return { error: 'Editing this chamfer would remove a sketch parameter binding.' };
+    return { error: `Editing this ${name} would remove a sketch parameter binding.` };
   return { shape: edited.shape, display: edited.shape };
 }
 

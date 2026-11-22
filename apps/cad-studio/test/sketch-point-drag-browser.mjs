@@ -3,7 +3,14 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createFlow } from './flow-helper.mjs';
 
+const radiusBaseline = process.argv.includes('--radius-baseline');
+const radiusEdit = process.argv.includes('--radius-edit');
+const savedRadius = radiusBaseline || radiusEdit;
 const pins = [
+  ...(savedRadius ? ['apps/cad-studio/src/ui/ConstraintTools.tsx',
+    'apps/cad-studio/src/ui/SketchCornerTools.tsx', 'apps/cad-studio/src/sketch/cornerDraft.ts',
+    'packages/barocss-cad-model/src/sketch/rules.ts'] : []),
+  ...(radiusEdit ? ['packages/barocss-cad-model/src/sketch/filletEdit.ts'] : []),
   'apps/cad-studio/src/viewport/sketchPointDrag.ts',
   'apps/cad-studio/src/viewport/viewportPointerInput.ts',
   'apps/cad-studio/src/viewport/Viewport.tsx',
@@ -12,9 +19,12 @@ const pins = [
   'packages/barocss-cad-model/src/sketch/pointDrag.ts',
 ];
 const f = await createFlow({
-  output: process.argv[2], name: 'sketch-point-drag', envFrozen: 'D1698_SOURCE_FROZEN',
+  output: process.argv[2], name: savedRadius ? 'saved-sketch-fillet-radius' : 'sketch-point-drag',
+  envFrozen: savedRadius ? 'D1710_SOURCE_FROZEN' : 'D1698_SOURCE_FROZEN',
   initialFiles: pins, requiredFrozen: pins,
-  qualification: 'Drag one closed sketch vertex with its constraints, then finish and reopen the downstream solid.',
+  qualification: radiusBaseline ? 'Measure the saved Fillet through the existing generic radius editor.'
+    : radiusEdit ? 'Edit the saved Fillet radius while keeping both straight carriers in place.'
+    : 'Drag one closed sketch vertex with its constraints, then finish and reopen the downstream solid.',
   limits: ['Desktop Studio WebGPU, one tagged XY outline, 10 mm native Extrude, one optional convex R6 Fillet.'],
   inspectorSource: String.raw`
 import assert from 'node:assert/strict';
@@ -91,7 +101,140 @@ const fixtures = [{
   expected: [[0, 0], [40, 0], [40, 34], [34, 40], [0, 40]], volume: (1600 - 36 + 9 * Math.PI) * 10,
 }];
 
+async function checkSavedRadius() {
+  const { shape } = fixtures.find(fixture => fixture.label === 'fillet');
+  const source = await f.inspect('seed-saved-fillet', shape, 'seed');
+  const file = join(f.output, 'saved-fillet-source.bcad');
+  const bytes = JSON.stringify(source);
+  await writeFile(file, bytes);
+  const original = await f.freshOpen(file, source, '01-saved-fillet-open');
+  const arcMidpoint = [34 + 6 * Math.SQRT1_2, 24 + 6 * Math.SQRT1_2];
+  await edit(shape.points);
+  const pick = f.page.locator('.vp-overlay .sk-pick-edge.on[data-sketch-entity="edge:2"]');
+  f.phase = 'Select the saved R6 fillet by its rounded edge';
+  await f.worldClick(arcMidpoint);
+  await pick.waitFor();
+  await f.snapshot('02-saved-fillet-selected');
+  if (radiusEdit) {
+    await editSavedRadius(source, shape, arcMidpoint);
+    assert.equal(await readFile(file, 'utf8'), bytes);
+    return;
+  }
+
+  f.phase = 'Change R6 to R8 through the existing radius dimension';
+  await f.sketchPanel().getByRole('button', { name: 'Dimension the selection', exact: true }).click();
+  const field = f.page.locator('input.dim-edit');
+  await field.waitFor();
+  near(Number(await field.inputValue()), 6);
+  await field.fill('8');
+  await field.press('Enter');
+  await f.snapshot('03-generic-radius-changed');
+  const { doc } = await f.finishSketch('04-generic-radius-finished');
+  const native = await f.inspect('generic-radius-native', doc);
+  const arc = native.faces.find(face => face.name === 'n1.side[e5]').geometry;
+  const expected = [[0, 0], [40, 0], [40, 22], [32, 30], [0, 30]];
+  const changes = doc.nodes[0].outline.points.map((point, i) => Math.hypot(point[0] - expected[i][0], point[1] - expected[i][1]));
+  f.report.observations.push({ label: 'generic-radius-edit', original: original.doc.nodes[0].outline.points,
+    actual: doc.nodes[0].outline.points, expected, changes, arc, nativeVolume: native.volume,
+    supportsRetained: Math.max(...changes) < 1e-7, tagsRetained: JSON.stringify(doc.nodes[0].sideTags) === JSON.stringify(source.nodes[0].sideTags) });
+  assert.equal(await readFile(file, 'utf8'), bytes);
+}
+
+async function editSavedRadius(source, shape, arcMidpoint) {
+  const button = (label, scope = f.sketchPanel()) => scope.getByRole('button', { name: label, exact: true });
+  const editor = () => f.sketchPanel().getByRole('group', { name: 'Edit Fillet', exact: true });
+  const field = () => editor().getByLabel('Radius', { exact: true });
+  const apply = () => button('Apply', editor());
+  const preview = () => f.page.locator('.sk-corner-preview');
+  const points = [[0, 0], [40, 0], [40, 22], [32, 30], [0, 30]];
+  const seedNative = await f.inspect('original-radius-native', source);
+  near(seedNative.volume, (1200 - 36 + 9 * Math.PI) * 10);
+
+  f.phase = 'Refuse a blank radius and a radius that consumes a carrier';
+  await button('Edit Fillet').click();
+  near(Number(await field().inputValue()), 6);
+  assert.equal(await apply().isDisabled(), true);
+  for (const value of ['', '30']) {
+    await field().fill(value);
+    await editor().getByRole('alert').waitFor();
+    assert.equal(await apply().isDisabled(), true);
+    await preview().waitFor({ state: 'hidden' });
+    await expectPoints(shape.points);
+    await f.same(source);
+  }
+  await f.snapshot('03-overflow-radius-refused');
+  await button('Cancel', editor()).click();
+
+  f.phase = 'Preview R8 on the saved Fillet and apply one local edit';
+  await button('Edit Fillet').click();
+  near(Number(await field().inputValue()), 6);
+  await field().fill('8');
+  await preview().waitFor();
+  await expectPoints(shape.points);
+  await f.same(source);
+  await f.snapshot('04-local-radius-preview');
+  await field().press('Enter');
+  await expectPoints(points);
+  await f.page.keyboard.press(`${keyboard}+z`);
+  await expectPoints(shape.points);
+  await f.page.keyboard.press(`${keyboard}+Shift+z`);
+  await expectPoints(points);
+  const { doc } = await f.finishSketch('05-local-radius-rebuilt');
+  assert.deepEqual(doc.nodes[0].outline.points, points);
+  assert.deepEqual(doc.nodes[0].outline.radii, { 2: 8 });
+  for (const key of ['tangents', 'rules', 'lengths', 'hv']) {
+    assert.deepEqual(doc.nodes[0].outline[key], source.nodes[0].outline[key]);
+  }
+  assert.deepEqual(doc.nodes[0].sideTags, source.nodes[0].sideTags);
+  assert.deepEqual(doc.nodes[1], source.nodes[1]);
+  const native = await f.inspect('edited-radius-native', doc);
+  near(native.volume, (1200 - 64 + 16 * Math.PI) * 10);
+  assert.deepEqual(native.faces.map(face => face.name), seedNative.faces.map(face => face.name));
+  const geometry = (tag, model) => model.faces.find(face => face.name === `n1.side[${tag}]`).geometry;
+  const arc = geometry('e5', native);
+  assert.equal(arc.kind, 'cylinder');
+  near(arc.r, 8);
+  near(arc.c[0], 32);
+  near(arc.c[1], 22);
+  for (const tag of ['e1', 'e2', 'e3', 'e4']) {
+    const before = geometry(tag, seedNative), after = geometry(tag, native);
+    assert.equal(after.kind, 'plane');
+    after.n.forEach((value, i) => near(value, before.n[i]));
+    near(after.n.reduce((dot, value, i) => dot + value * (after.o[i] - before.o[i]), 0), 0);
+  }
+  const saved = await f.save('edited-saved-fillet');
+  await f.freshOpen(saved.file, doc, '06-radius-fresh-open');
+  assert.deepEqual(await f.inspect('reopened-radius-native', await f.doc()), native);
+  await edit(points);
+  await f.worldClick([32 + 8 * Math.SQRT1_2, 22 + 8 * Math.SQRT1_2]);
+  await button('Edit Fillet').click();
+  near(Number(await field().inputValue()), 8);
+  await f.snapshot('07-reopened-radius-editor');
+  f.report.observations.push({ label: 'local-radius-edit', points, before: seedNative, after: native });
+
+  f.phase = 'Refuse an edit that would remove an authored tangent coordinate binding';
+  const bound = structuredClone(source);
+  bound.parameters.FilletTangentY = 24;
+  bound.nodes[0].segments[2].start[1] = { parameter: 'FilletTangentY' };
+  const boundFile = join(f.output, 'bound-saved-fillet.bcad');
+  const boundBytes = JSON.stringify(bound);
+  await writeFile(boundFile, boundBytes);
+  await f.freshOpen(boundFile, bound, '08-radius-binding-open');
+  await edit(shape.points);
+  await f.worldClick(arcMidpoint);
+  await button('Edit Fillet').click();
+  await field().fill('8');
+  await editor().getByRole('alert').getByText(/parameter binding/i).waitFor();
+  assert.equal(await apply().isDisabled(), true);
+  await preview().waitFor({ state: 'hidden' });
+  await expectPoints(shape.points);
+  await f.same(bound);
+  assert.equal(await readFile(boundFile, 'utf8'), boundBytes);
+  await f.snapshot('09-radius-binding-refused');
+}
+
 await f.run(async () => {
+  if (savedRadius) return checkSavedRadius();
   for (const { label, shape, index, target, expected, blocked, escape, volume } of fixtures) {
     const original = shape.points, start = original[index];
     const seed = await f.inspect(`${label}-seed`, shape, 'seed');

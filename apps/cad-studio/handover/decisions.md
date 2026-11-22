@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D1710: [Edit a saved sketch Fillet without moving its carriers](notes/edit-saved-sketch-fillet-2026-11-23/README.md), #21. Verify local R6 to R8 preview, straight carrier and ID retention, refusal, Undo, Redo and fresh Open.
+
 - D1709: [Sweep a solid rectangle along same-turn tangent arcs](notes/exact-same-turn-rectangular-sweep-2026-11-23/README.md), #10. Verify four native joins, width changes before and after fresh Open, and explicit Agent approval.
 
 - D1708: [Sweep a concentric bore along same-turn tangent arcs](notes/exact-same-turn-annular-sweep-2026-11-23/README.md), #10. Verify four native seams, two bore mouths, explicit Agent approval and fresh Studio Open.
