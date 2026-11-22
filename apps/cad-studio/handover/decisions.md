@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D1717: [Replace one held edge in a saved two-edge Fillet](notes/two-edge-fillet-history-replacement-2026-11-23/README.md), #20. Preview a direct viewport pick, retain the second exact line and verify both blends after fresh Open.
+
 - D1716: [Use one native radius handle when creating a two-rim Fillet](notes/paired-circular-fillet-create-2026-11-23/README.md), #214. Select both circular rims and verify one end-on drag, typed parity and editable fresh Open.
 
 - D1715: [Drag one History Fillet radius for two circular rims](notes/paired-circular-history-fillet-2026-11-23/README.md), #214. Keep the upper original rim as the anchor and match end-on drag, numeric entry and fresh Open.

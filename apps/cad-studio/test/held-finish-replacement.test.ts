@@ -1,8 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { rectanglePart, withNode } from '@barocss/cad-model/engine/doc';
+import { evaluatePart } from '@barocss/cad-model/engine/evaluate';
 import type { DisplayEdge } from '@barocss/cad-model/engine/mesh';
-import { heldFinishRadiusText, heldFinishCandidate, heldFinishReplaceable, heldFinishReplacement, type HeldFinish } from '../src/state/heldFinishReplacement';
+import { toSig } from '@barocss/cad-model/engine/references';
+import { signaturesOf } from '@barocss/cad-model/engine/rematch';
+import { heldFinishRadiusText, heldFinishCandidate, heldFinishProblem, heldFinishReplaceable, heldFinishReplacement, type HeldFinish } from '../src/state/heldFinishReplacement';
 const finish:Extract<HeldFinish,{kind:'fillet'}>={id:'repair',kind:'fillet',parent:{node:1,side:'solid'},edges:['missing'],radius:1,held:'missing edge',suppressed:true,radii:[{at:[0,0,0],radius:1,atEnd:true},{at:[10,0,0],radius:3,atEnd:true}]};
 const edge:DisplayEdge={index:0,faces:[0,1],a:[0,20,10],b:[30,20,10],straight:true,axis:'x',names:['new-edge'],nativeLine:true};
 const sig={k:'curve' as const,p:[15,20,10] as [number,number,number],s:30};
@@ -33,6 +36,41 @@ test('constant fillet and chamfer keep their existing unconstrained edge replace
  const constant={...finish,radii:undefined}, curved={...edge,nativeLine:undefined,straight:false};
  for(const node of [constant,{id:'chamfer',kind:'chamfer' as const,parent:finish.parent,edges:['missing'],distance:2,held:'missing edge'}]){
   assert.ok(heldFinishReplaceable(node));const source=withNode(rectanglePart(30,20,10),node),next=heldFinishReplacement(source,2,curved,[curved],sig);assert.ok(next);assert.equal(next.nodes[2].kind,node.kind);assert.ok('edges'in next.nodes[2]);if('edges'in next.nodes[2])assert.deepEqual(next.nodes[2].edges,['new-edge']);
+ }
+});
+
+test('paired Constant Fillet replaces only the held slot and its signature', () => {
+ const stock = rectanglePart(30, 20, 10);
+ const evaluated = evaluatePart(stock, 1);
+ assert.ok(evaluated.ok);
+ const [body] = evaluated.bodies;
+ const edges = body.mesh.edges;
+ const [retained, missing, picked] = edges.filter(edge => edge.nativeLine && edge.names.length === 1);
+ const [keep, old, next] = [retained, missing, picked].map(edge => edge.names[0]);
+ const signatures = signaturesOf(body).edges;
+ const saved = { [keep]: toSig(signatures.get(keep)!), [old]: toSig(signatures.get(old)!) };
+ const problem = { index: 1, where: 'feature 2', node: 2, name: old, candidates: [next] };
+ for (const names of [[keep, old], [old, keep]]) {
+  const node = { ...finish, radii: undefined, edges: names, sigs: saved };
+  const source = withNode(stock, node);
+  assert.equal(heldFinishProblem(source, 2, [problem], body), problem);
+  assert.equal(heldFinishProblem(source, 2, [problem, { ...problem, name: keep }], body), undefined);
+  const stale = withNode(stock, { ...node, sigs: { ...saved, [keep]: { ...saved[keep], s: 99 } } });
+  assert.equal(heldFinishProblem(stale, 2, [problem], body), undefined);
+  assert.equal(heldFinishProblem({ ...source, nodes: [...source.nodes, stock.nodes[0]] }, 2, [problem], body), undefined);
+  assert.ok('error' in heldFinishCandidate(node, retained, edges, {}, old));
+  assert.ok('error' in heldFinishCandidate(node, picked, [...edges, { ...picked }], {}, old));
+  const result = heldFinishReplacement(source, 2, picked, edges, toSig(signatures.get(next)!), old);
+  assert.ok(result);
+  const changed = result.nodes[2];
+  assert.ok(changed.kind === 'fillet');
+  assert.deepEqual(changed.edges, names.map(name => name === old ? next : name));
+  assert.equal(changed.sigs?.[keep], saved[keep]);
+  assert.deepEqual(changed.sigs?.[next], toSig(signatures.get(next)!));
+  assert.equal(changed.sigs?.[old], undefined);
+  assert.equal(changed.held, undefined);
+  assert.equal(changed.suppressed, undefined);
+  assert.deepEqual(source.nodes[2], node);
  }
 });
 

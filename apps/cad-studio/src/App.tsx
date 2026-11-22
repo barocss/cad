@@ -1906,7 +1906,8 @@ export function App() {
     enabled: fresh && !busy && marker === null && !shownVariant.current && !inPlace && !active && !section &&
       !sketch && !rendering && !drawing && !measure && !directSel.length && !instanceSel.length &&
       !previewBodies && !assembly.draft && !cageEd.session && !skel.session,
-    ownsSource: () => finishEdgeOpen === openIntent.current && ownsEvaluatedSource() && shownDocNow.current === doc,
+    ownsSource: () => finishEdgeOpen === openIntent.current && ownsEvaluatedSource() && shownDocNow.current === doc
+      && editNodeNow.current === editNode && bodiesRef.current === bodies && referenceProblems.current.get(doc) === refProblems,
     evaluate: next => engine.part(prefixDoc(next, next.nodes.length), revision.current++, 'refs'),
     accept: (next, problem) => {
       if (!commit(next, false, false, true)) return false;
@@ -2511,8 +2512,11 @@ export function App() {
     exactView: sectionExactShown && shownBodies === sectionBodies, canPick: fresh && !busy,
     showSelection: !!(section && sectionBodies && !sketch && !previewBodies), sourceEdges: liveMeasurement.picks ?? selection.edges,
   });
+  const replacementEdge = finishEdgeEditor.previewEdge;
+  const replacementBody = replacementEdge ? shownBodies.findIndex(body => body.mesh === replacementEdge.mesh) : -1;
   const shownSelection = modelUnavailable ? emptySel : sectionSelection.selection ?? (
-    shownEndFace ? { ...emptySel, faces: [shownEndFace] }
+    replacementEdge && replacementBody >= 0 ? { ...emptySel, edges: [{ body: replacementBody, edge: replacementEdge.edge.index }] }
+      : shownEndFace ? { ...emptySel, faces: [shownEndFace] }
       : bandShown ? bandShown
       : routePreviewBodies || routePanelOpen || shownPreviewBodies || sketch ? emptySel
       : mateFaces ? { faces: assembly.highlight.faces, edges: [], bodies: [] }
