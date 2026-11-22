@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1675: [Sweep a through-open rectangular duct around a tangent elbow](notes/exact-rectangular-duct-sweep-2026-11-22/README.md), #10. Verify two openings, editable aperture, native Open and local Agent approval.
 - D1674: [Sweep an aligned rectangular section through a tangent elbow](notes/exact-rectangular-elbow-sweep-2026-11-22/README.md), #10. Verify both native joints, editable profile, native Studio Open and local Agent approval.
 - D1673: [Sweep a circular disk around a closed circle](notes/exact-closed-circle-sweep-2026-11-22/README.md), #10. Verify native ring closure, eight inspectable seams, editable Studio Save/Open and local Agent approval.
 - D1672: [Trim and round the inlet of an Exact elbow](notes/exact-elbow-inlet-fillet-2026-11-22/README.md), #10. Verify box Intersect, the complete new rim, Fillet and upstream Sweep edits, and native Studio Save/Open.

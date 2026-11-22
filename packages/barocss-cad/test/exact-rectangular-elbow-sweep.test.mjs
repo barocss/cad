@@ -157,5 +157,5 @@ test('a rectangular exact elbow refuses roll, radial axis contact and crossing, 
     'CAPABILITY', /original axes aligned to the bend radial and binormal/);
   for (const radius of [2, 1.99]) refuses(elbow({ radius }), section, 'PARAMETER', /radial half-width smaller than the path radius/);
   const perforated = { ...section, holes: [[{ kind: 'arc', start: [51, -30], center: [50, -30], direction: 'ccw' }]] };
-  refuses(rail, perforated, 'CAPABILITY', /bend-aligned rectangular section without holes/);
+  refuses(rail, perforated, 'CAPABILITY', /one centered rectangular opening aligned with the outer rectangle/);
 });
