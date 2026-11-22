@@ -6,6 +6,7 @@ import { CadNumericPolicy, geometryScaleMM, linearToleranceMM } from '../numeric
 import type { Curve, Point, Surface } from '../types.js';
 import type { Brep, BrepCoedge, BrepFace } from './brep-core.js';
 import { recoverBoxFilletBindings } from './box-fillet-bindings.js';
+import { halfRingMeridianD1 } from './exact-ring-intersect.js';
 
 export type BrepEdgeContinuityRefusal =
   | 'edge-not-found'
@@ -92,10 +93,10 @@ function faceIdentity(face: BrepFace): FaceIdentity {
   return face.name === undefined ? { id: face.id } : { id: face.id, name: face.name };
 }
 
-function prepareSide(pcurve: Curve, surface: Surface, sense: BrepFace['sense']) {
+function prepareSide(pcurve: Curve, surface: Surface, sense: BrepFace['sense'], surfaceAt = surfaceD1Evaluator(surface)) {
   return {
     uvAt: curveD1Evaluator(pcurve),
-    surfaceAt: surfaceD1Evaluator(surface),
+    surfaceAt,
     domain: surfaceDomain(surface),
     orientation: sense === 'forward' ? 1 : -1,
   };
@@ -227,8 +228,8 @@ export function measureBrepEdgeContinuity(
     }
     const edgeAt = curveD1Evaluator(edge.curve);
     const sides = [
-      prepareSide(firstBinding, firstFace.surface, firstFace.sense),
-      prepareSide(secondBinding, secondFace.surface, secondFace.sense),
+      prepareSide(firstBinding, firstFace.surface, firstFace.sense, halfRingMeridianD1(brep, edge, firstFace, secondFace, firstBinding)),
+      prepareSide(secondBinding, secondFace.surface, secondFace.sense, halfRingMeridianD1(brep, edge, secondFace, firstFace, secondBinding)),
     ];
     const tolerance = Math.min(edge.tolerance, linearToleranceMM(geometryScaleMM(edge.curve.controlPoints)));
     const samples: { parameter: number; angleDegrees: number }[] = [];

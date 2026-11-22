@@ -20,6 +20,7 @@
 import { revolutionOf, profileCrossings, onPatch, patchMargin, type Revolution } from '../nurbs/surfaces/surface-revolution.js';
 import { curvePiece, curveReversed } from '../nurbs/curves/curve-segment.js';
 import { BrepError, buildBrep, checkBrep, isFacetFace, lineCurve, nurbsOf as surfaceOfFace, type Brep, type BrepFace } from './brep-core.js';
+import { bindHalfRingIntersection } from './exact-ring-intersect.js';
 import { facetPlane } from '../mesh/facet-patch.js';
 import { circleOf, polesOf, tessellateBrep } from './brep-tessellate.js';
 import { booleanCurveRegions, regionBox, curveFaceRegions, intersectSegments, segmentsApart, segAt as segAtAny, locateInRegion, paramOf as paramOfCurve, regionArea, regionInteriorPoint, segDistance, segIntegral, segReverse, type CurveRegion2, type CurveSegment2, type XY } from './curved-arrangement.js';
@@ -1558,7 +1559,9 @@ function analyticBoolean(a: Brep, b: Brep, operation: AnalyticBooleanOperation, 
     return [q]; });
   // (A tolerant input's — a fitted offset's, D110, D113 — pieces keep its tolerance: the result is tolerant as its worst.)
   const inputTol = Math.max(0, ...[a, b].flatMap(x => [...x.edges.map(e => e.tolerance), ...x.vertices.map(v => v.tolerance)]));
-  const result = stitch(mergePieces(kept, tol, trace), id, tol, options.exactEdges !== false, inputTol, undefined, edgeFit, frozen, trace);
+  const stitched = stitch(mergePieces(kept, tol, trace), id, tol, options.exactEdges !== false, inputTol, undefined, edgeFit, frozen, trace);
+  const result = operation === 'intersection' && options.exactEdges !== false
+    ? bindHalfRingIntersection(a, b, stitched, tol) ?? stitched : stitched;
   if (!touches.length) return touchChecked(result, touchedAt);
   // (A piece re-judged where a surface only touches it leaves the result's boundary touching there. Two lumps meeting
   // there are two bodies, as D204 has them; one lump touching itself — empty on both sides of the touch, or the same

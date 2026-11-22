@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1677: [Retain measurable circular rims after intersecting an Exact Sweep ring](notes/exact-half-ring-intersect-2026-11-22/README.md), #10. Verify both caps, native 0° and 90° measurements, editable Studio Open and local Agent approval.
 - D1676: [Extract Studio global keyboard routing](notes/studio-keyboard-routing-2026-11-22/README.md), #44. Preserve listener phase and match text, sketch, clipboard and History checkpoints in desktop Studio.
 - D1675: [Sweep a through-open rectangular duct around a tangent elbow](notes/exact-rectangular-duct-sweep-2026-11-22/README.md), #10. Verify two openings, editable aperture, native Open and local Agent approval.
 - D1674: [Sweep an aligned rectangular section through a tangent elbow](notes/exact-rectangular-elbow-sweep-2026-11-22/README.md), #10. Verify both native joints, editable profile, native Studio Open and local Agent approval.
