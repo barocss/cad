@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D1693: [Propose a revision-pinned straight-corner sketch Round](notes/agent-sketch-round-2026-11-22/README.md), #21. Protect constraints and boundary contact, then verify the approved native cylindrical wall and editable radius after fresh Open.
+
 - D1692: [Propose a revision-pinned sketch chamfer](notes/agent-sketch-chamfer-2026-11-22/README.md), #21. Discover the two saved sides through MCP and verify explicit Studio approval and editable fresh Open.
 
 - D1691: [Add an equal-distance chamfer to a sketch corner](notes/equal-distance-sketch-chamfer-2026-11-22/README.md), #21. Verify the setback, surviving side IDs and exact native extrusion through Studio history and fresh Open.

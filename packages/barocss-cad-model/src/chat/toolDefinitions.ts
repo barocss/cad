@@ -135,6 +135,9 @@ Ref = {"node": index of the feature that made a visible body, "side": "solid"} (
       sketchChamfer: { type: 'object', description: 'An equal-distance corner edit in sketch mm. Send it alone with the index and expectedRevision. Use the sketch ID and one pair from query.edit_fields with includeSketchCorners.', additionalProperties: false, required: ['sketch', 'sides', 'distance'], properties: {
         sketch: { type: 'string', minLength: 1 }, sides: { type: 'array', items: { type: 'string', minLength: 1 }, minItems: 2, maxItems: 2 }, distance: { type: 'number', exclusiveMinimum: 0 },
       } },
+      sketchRound: { type: 'object', description: 'A tangent arc between two straight sketch sides. Radius is in mm. Send it alone with the index and expectedRevision. Use the sketch ID and one pair from query.edit_fields with includeSketchCorners.', additionalProperties: false, required: ['sketch', 'sides', 'radius'], properties: {
+        sketch: { type: 'string', minLength: 1 }, sides: { type: 'array', items: { type: 'string', minLength: 1 }, minItems: 2, maxItems: 2 }, radius: { type: 'number', exclusiveMinimum: 0 },
+      } },
     }, required: ['index'], additionalProperties: false },
   },
   {

@@ -1,16 +1,17 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { checkBrep, faceGeometry, massPropertiesOf } from '@barocss/cad';
+import { buildProfileLoop, checkBrep, faceGeometry, massPropertiesOf } from '@barocss/cad';
 import { emptyDoc, withNode, type DocPlane } from '../src/engine/doc';
 import { partBreps } from '../src/engine/evaluate';
 import { partSnapshot } from '../src/engine/part';
-import { chamferCorner, roundCorner } from '../src/sketch/corner';
+import { chamferCorner, roundCorner, roundStraightCornerForEdit } from '../src/sketch/corner';
 import { planPinnedLineArcRadiusEdit } from '../src/sketch/internal/pinnedLineArcRound';
 import { profileOf } from '../src/sketch/loops';
-import { arcOf, type P2 } from '../src/sketch/profile';
+import { arcOf, outlineSegments, type P2 } from '../src/sketch/profile';
 import { sketchShapes } from '../src/sketch/reopen';
 import { applyConstraint, checkEdit, commitDimension, constraintOptions, commitInlineDimension, removeConstraint, type Polygon } from '../src/sketch/rules';
 import { settleShape } from '../src/sketch/settle';
+import { arcMeetsOtherOutline } from '../src/sketch/trim';
 
 test('rounding a corner: an arc tangent to both edges, ends cut back, constraints renumbered', () => {
   const sq = { kind: 'polygon' as const, points: [[0, 0], [20, 0], [20, 10], [0, 10]] as [number, number][], closed: true, bulges: [0, 0, 0, 0], lengths: { 0: 20, 1: 10, 2: 20 }, hv: { h: [0, 2], v: [1, 3] } };
@@ -29,6 +30,65 @@ const rectangle: Polygon = {
   ids: ['e1', 'e2', 'e3', 'e4'], hv: { h: [0, 2], v: [1, 3] },
   lengths: { 2: 40 }, rules: [{ kind: 'fix', point: 0, at: [0, 0] }],
 };
+
+test('a saved straight-corner round keeps its carriers and driving inputs in either direction', () => {
+  const reversed: Polygon = {
+    kind: 'polygon', closed: true, points: [[40, 0], [0, 0], [0, 30], [40, 30]],
+    ids: ['e1', 'e4', 'e3', 'e2'], hv: { h: [0, 2], v: [1, 3] },
+    lengths: { 2: 40 }, rules: [{ kind: 'fix', point: 1, at: [0, 0] }],
+  };
+  for (const [source, i, sign] of [[rectangle, 1, 1], [reversed, 0, -1]] as const) {
+    const before = structuredClone(source);
+    const result = roundStraightCornerForEdit(source, i, 6);
+    assert.ok('shape' in result, 'error' in result ? result.error : '');
+    const { shape } = result;
+    assert.deepEqual(source, before);
+    assert.deepEqual(shape.ids?.filter(Boolean), source.ids);
+    assert.equal(shape.ids?.[i], '');
+    assert.deepEqual(shape.lengths, { 3: 40 });
+    assert.deepEqual(shape.points.slice(i, i + 2), sign > 0 ? [[34, 0], [40, 6]] : [[40, 6], [34, 0]]);
+    const arc = arcOf(shape.points[i], shape.points[i + 1], shape.bulges![i]);
+    assert.ok(Math.hypot(arc.center[0] - 34, arc.center[1] - 6) < 1e-8);
+    assert.ok(Math.abs(arc.radius - 6) < 1e-8 && Math.abs(arc.sweep - sign * Math.PI / 2) < 1e-8);
+  }
+  const locked = { ...rectangle, lengths: { 0: 40, 2: 40 } };
+  const legacy = roundCorner(locked, 1, 6);
+  assert.ok('shape' in legacy);
+  assert.deepEqual(legacy.shape.lengths, { 3: 40 });
+  assert.deepEqual(roundStraightCornerForEdit(locked, 1, 6), {
+    error: 'The round would remove a constraint on the original corner or its trimmed edges.',
+  });
+  assert.ok('error' in roundStraightCornerForEdit(rectangle, 0, 6), 'the fixed corner would disappear');
+  assert.ok('error' in roundStraightCornerForEdit(rectangle, 1, 0.009));
+});
+
+test('a saved reflex Round detects contact with a nonincident tip on its circle', () => {
+  const theta = 40 * Math.PI / 180;
+  const source: Polygon = { kind: 'polygon', closed: true, points: [
+    [0, 0], [0, 20], [-10, 20], [-10, -10], [30, -10], [30, 20], [15, 20], [15, 14],
+    [10 - 10 * Math.sin(theta), 10 - 10 * Math.cos(theta)], [15, 9], [20, 9], [20, 0],
+  ] };
+  const before = structuredClone(source);
+  const legacy = roundCorner(source, 0, 10);
+  assert.ok('shape' in legacy);
+  assert.doesNotThrow(() => buildProfileLoop(outlineSegments(legacy.shape.points, legacy.shape.bulges)));
+  assert.deepEqual(roundStraightCornerForEdit(source, 0, 10), { error: 'The round would touch another edge.' });
+  assert.deepEqual(source, before);
+  const result = roundStraightCornerForEdit(source, 0, 9);
+  assert.ok('shape' in result, 'error' in result ? result.error : '');
+});
+
+test('finite arc contact includes interior tangency and excludes separated arcs', () => {
+  const quarter = Math.tan(Math.PI / 8);
+  const outline = (separation: number): Polygon => {
+    const offset = separation / Math.sqrt(2);
+    return { kind: 'polygon', closed: true, points: [
+      [0, -1], [1, 0], [offset, 1 - offset], [offset - 1, -offset], [0, -2], [-2, -2], [-2, 0],
+    ], bulges: [quarter, 0, quarter, 0, 0, 0, 0] };
+  };
+  assert.equal(arcMeetsOtherOutline(outline(2), 0), true);
+  assert.equal(arcMeetsOtherOutline(outline(2.001), 0), false);
+});
 
 test('chamfer splits a corner and preserves the survivors, constraints and native wall owners', () => {
   const before = structuredClone(rectangle);

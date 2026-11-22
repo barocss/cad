@@ -40,7 +40,7 @@ import { bodyKeyFor, featureId } from '../../engine/ids';
 import { sweepSourceRevision } from '../sweepSource';
 import { isReferencePlaneEdit } from '../../app/offsetPlanePick';
 import { preparePairedFixedSpanHoleEdit } from '../../app/patternHoleSpacing';
-import { editSketchChamfer, sketchChamferCorners } from './sketchChamfer';
+import { editSketchCorner, sketchEditCorners } from './sketchCorner';
 
 /** Commands the chat can run (the ones that build; sketch-mode and measure UI actions are tools of their own). */
 // (Loft takes sketches picked in the studio, Align a face clicked there; chat writes a loft node with
@@ -466,7 +466,7 @@ async function listFeatureEditFields(state: ChatState, args: Record<string, unkn
   });
   if (wall) fields.push({ key: savedWallDistanceKey, label: 'Offset distance', kind: 'number', unit: 'mm', value: wall.distance });
   const label = featureLabel(nodes[index], index, nodes);
-  const corners = args.includeSketchCorners === true ? { sketchCorners: sketchChamferCorners(doc, index) } : {};
+  const corners = args.includeSketchCorners === true ? { sketchCorners: sketchEditCorners(doc, index) } : {};
   return { state, content: json({ index, id: featureId(nodes, index), label, revision: revisionOf(doc), fields, ...corners }),
     isError: false, changed: false, summary: `${fields.length} edit fields for ${label}` };
 }
@@ -490,15 +490,19 @@ async function editFeatureTool(state: ChatState, args: Record<string, unknown>, 
   const index = Number(args.index), nodes = state.doc.nodes;
   if (!Number.isInteger(index) || !nodes[index]) return fail(state, `There is no feature ${String(args.index)} (features 0–${nodes.length - 1}).`);
   const chamfer = args.sketchChamfer !== undefined;
-  if (chamfer && (args.expectedRevision === undefined || args.feature !== undefined || args.values !== undefined || args.retainBoxCommand !== undefined))
-    return fail(state, 'Pass only index, expectedRevision and sketchChamfer for a sketch corner edit.', { code: 'EDIT_INPUT' });
+  const round = args.sketchRound !== undefined;
+  if ((chamfer || round) && ((chamfer && round) || args.expectedRevision === undefined || args.feature !== undefined
+    || args.values !== undefined || args.retainBoxCommand !== undefined))
+    return fail(state, 'Pass only index, expectedRevision and one sketch corner edit.', { code: 'EDIT_INPUT' });
   const retainBox = args.retainBoxCommand === true;
   if (args.retainBoxCommand !== undefined && (!retainBox || args.feature === undefined || args.values !== undefined || nodes.length !== 2 || index !== 0))
     return fail(state, 'Retaining the Box command requires a replacement sketch for one standard Box.');
   if (editWallDistance) return editReviewedWallDistance(state, index, given[savedWallDistanceKey], evaluate, options);
   let next: ModelNode[];
-  if (chamfer) {
-    const result = editSketchChamfer(state.doc, index, args.sketchChamfer);
+  if (chamfer || round) {
+    const result = round
+      ? editSketchCorner(state.doc, index, 'ROUND', args.sketchRound)
+      : editSketchCorner(state.doc, index, 'CHAMFER', args.sketchChamfer);
     if ('error' in result) return fail(state, result.error, { code: result.code, kept: 'the part is unchanged' });
     next = dropStaleMade(nodes, nodes.map((node, at) => at === index ? result.node : node));
   } else if (args.feature !== undefined) {

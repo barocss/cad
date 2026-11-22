@@ -2,13 +2,13 @@
 // direction rules and drop trimmed length locks. The bounded line–arc round requires pinned carriers.
 import { buildProfileLoop, ExtrudedProfileLimits, isExtrudedProfileError } from '@barocss/cad';
 import { circleRelation } from './loops';
-import { outlineSegments } from './profile';
+import { arcOf, outlineSegments } from './profile';
 import { matchesPinnedRound, preparePinnedLineArcRound } from './internal/pinnedLineArcRound';
 import { settleShape } from './settle';
 import type { SketchShape } from './types';
 import type { SketchRule } from './terms';
 import { hvOf } from './rules';
-import { sideMeetsOtherOutline } from './trim';
+import { arcMeetsOtherOutline, sideMeetsOtherOutline } from './trim';
 import { r6Signed as r6 } from '../util/round';
 
 type Polygon = Extract<SketchShape, { kind: 'polygon' }>;
@@ -45,6 +45,63 @@ export function roundCorner(s: Polygon, i: number, r: number): { shape: Polygon 
   out.radii = { ...out.radii, [i]: r };
   out.tangents = [...(out.tangents ?? []), i, i + 1];
   return { shape: out };
+}
+
+/** Prepare a straight-corner edit of a saved outline without removing driving inputs. */
+export function roundStraightCornerForEdit(s: Polygon, i: number, radius: number): { shape: Polygon } | { error: string } {
+  const n = s.points.length;
+  if (!s.closed || s.pending || n < 3 || !Number.isInteger(i) || i < 0 || i >= n)
+    return { error: 'Select a corner on a closed outline.' };
+  if (!Number.isFinite(radius) || radius < ExtrudedProfileLimits.minimumRadiusMM)
+    return { error: `Enter a finite radius of at least ${ExtrudedProfileLimits.minimumRadiusMM} mm.` };
+  const prev = (i - 1 + n) % n;
+  if (s.bulges?.[prev] || s.bulges?.[i] || s.spline || s.ellipse || s.circles?.length)
+    return { error: 'Select a corner between two straight edges of an independent outline.' };
+  const planned = roundCorner({ ...s, hv: hvOf(s) }, i, radius);
+  if ('error' in planned) return planned;
+  const candidate = planned.shape;
+  if (s.lengths?.[prev] !== undefined || s.lengths?.[i] !== undefined || s.tangents?.includes(i)
+    || (s.rules?.length ?? 0) !== (candidate.rules?.length ?? 0))
+    return { error: 'The round would remove a constraint on the original corner or its trimmed edges.' };
+
+  // Settlement can snap an unrelated tip off a touching arc by a fraction of a micron.
+  if (arcMeetsOtherOutline(candidate, i)) return { error: 'The round would touch another edge.' };
+  const { shape, error } = settleShape(candidate, s);
+  if (error || shape?.kind !== 'polygon') return { error: error ?? 'The round could not be settled.' };
+  const tolerance = 2e-6;
+  const bulge = shape.bulges?.[i] ?? 0;
+  const from = shape.points[i], to = shape.points[i + 1];
+  const arc = arcOf(from, to, bulge);
+  if (!bulge || Math.abs(bulge) >= 1 || Math.sign(bulge) !== Math.sign(candidate.bulges![i]) || !(Math.abs(arc.radius - radius) <= tolerance)
+    || !tangentToCarrier(arc.center, from, s.points[i], s.points[prev], tolerance)
+    || !tangentToCarrier(arc.center, to, s.points[i], s.points[(i + 1) % n], tolerance))
+    return { error: 'The settled arc would lose the requested radius or tangency to its original edges.' };
+  const movedOther = shape.points.some((point, index) => index !== i && index !== i + 1
+    && Math.hypot(point[0] - candidate.points[index][0], point[1] - candidate.points[index][1]) > tolerance);
+  const changedOtherArc = candidate.bulges?.some((before, index) => index !== i
+    && Math.abs((shape.bulges?.[index] ?? 0) - before) > 1e-9);
+  if (movedOther || changedOtherArc) return { error: 'The round would move other sketch geometry.' };
+
+  const keys = new Set(shape.points.map(point => point.map(value => value.toFixed(6)).join(',')));
+  if (keys.size !== shape.points.length || arcMeetsOtherOutline(shape, i))
+    return { error: 'The round would touch another edge.' };
+  try { buildProfileLoop(outlineSegments(shape.points, shape.bulges), { maximumSegments: 1024 }); }
+  catch (cause) {
+    if (!isExtrudedProfileError(cause)) throw cause;
+    return { error: cause.message };
+  }
+  return { shape };
+}
+
+function tangentToCarrier(center: P2, contact: P2, corner: P2, other: P2, tolerance: number): boolean {
+  const carrier = unitFrom(corner, other);
+  if (!carrier) return false;
+  const [x, y] = carrier.direction;
+  const dx = contact[0] - corner[0], dy = contact[1] - corner[1];
+  const along = dx * x + dy * y;
+  const tangentError = (center[0] - contact[0]) * x + (center[1] - contact[1]) * y;
+  return along > tolerance && along < carrier.length - tolerance
+    && Math.abs(dx * y - dy * x) <= tolerance && Math.abs(tangentError) <= tolerance;
 }
 
 /** Shorten the two straight carriers by the same setback and join their new ends. */

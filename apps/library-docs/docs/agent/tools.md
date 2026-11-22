@@ -96,6 +96,18 @@ For example, use this as an operation in `proposals.propose` and approve it in S
 The distance is the setback in mm along each of the two straight sides. This edit supports one
 independent material outline with saved side IDs and no holes. The edit is refused if the corner
 cannot fit, a constraint or binding would be lost, or the part revision has changed.
+
+### Round a sketch corner
+
+For the same read and approval workflow, send `sketchRound` instead of `sketchChamfer`:
+
+```json
+{ "sketchRound": { "sketch": "n0", "sides": ["e1", "e2"], "radius": 6 } }
+```
+
+Include the sketch's `index` and `expectedRevision` as above. Round places a tangent circular arc
+between two straight sides. Its radius is editable in Studio after approval. The edit refuses a
+radius that cannot fit, makes contact with another edge, or would remove a saved constraint or binding.
 If the model has changed, `EDIT_STALE`, `COMMAND_STALE` or `DELETE_STALE` returns the requested and current revisions.
 Review the current part before resubmitting. For delete, read the current feature tree to find the new index.
 In a batch, the pin applies to the document at the operation's position.

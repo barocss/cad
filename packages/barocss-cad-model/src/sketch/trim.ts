@@ -3,6 +3,7 @@
 // the shape left open is an outline with ends, and open outlines meeting end to end join — when they
 // close up, into one closed outline. A rectangle and a circle across its edge become a keyhole after two
 // trims: the rectangle's edge inside the circle, then the circle's arc inside the rectangle.
+import { ExtrudedProfileLimits } from '@barocss/cad';
 import type { SketchShape } from './types';
 import { arcOf } from './profile';
 import { carryPolygon, inheritIds, nextIdOf, withIds } from './entityIds';
@@ -85,6 +86,60 @@ export function sideMeetsOtherOutline(shape: Extract<SketchShape, { kind: 'polyg
     || (other.kind === 'line' && [other.a, other.b].some(p => distance(line, p) <= 1e-6));
   return pieces.some((other, i) => i !== index && i !== before && i !== after && meets(other))
     || (shape.circles ?? []).some(c => meets({ kind: 'arc', c: c.c, r: c.r, t0: 0, sw: TAU }));
+}
+
+/** A new arc may touch only its two neighbors, where their ends are already shared. */
+export function arcMeetsOtherOutline(shape: Extract<SketchShape, { kind: 'polygon' }>, index: number): boolean {
+  const pieces = piecesOf(shape), n = pieces.length, arc = pieces[index];
+  if (arc?.kind !== 'arc') return true;
+  const before = (index - 1 + n) % n, after = (index + 1) % n;
+  return pieces.some((other, i) => i !== index && i !== before && i !== after && arcMeetsPiece(arc, other))
+    || (shape.circles ?? []).some(c => arcMeetsPiece(arc, { kind: 'arc', c: c.c, r: c.r, t0: 0, sw: TAU }));
+}
+
+function arcMeetsPiece(arc: ArcPiece, other: Piece): boolean {
+  const tol = ExtrudedProfileLimits.tolerance;
+  const onBoth = (p: P2) => distance(arc, p) <= tol && distance(other, p) <= tol;
+  const ends = [0, 1];
+  if (ends.some(t => distance(arc, at(other, t)) <= tol || distance(other, at(arc, t)) <= tol)) return true;
+
+  if (other.kind === 'line') {
+    const dx = other.b[0] - other.a[0], dy = other.b[1] - other.a[1], length = Math.hypot(dx, dy);
+    if (!length) return false;
+    const ux = dx / length, uy = dy / length;
+    const x = arc.c[0] - other.a[0], y = arc.c[1] - other.a[1];
+    const along = ux * x + uy * y, offset = ux * y - uy * x;
+    const gap = arc.r - Math.abs(offset);
+    if (gap < -tol) return false;
+    // The factored half-chord avoids subtracting two squared distances to a distant line endpoint.
+    const half = Math.sqrt(Math.max(0, gap) * (arc.r + Math.abs(offset)));
+    return [-half, half].some(step => {
+      const t = along + step;
+      return t >= -tol && t <= length + tol && onBoth([arc.c[0] + uy * offset + ux * step, arc.c[1] - ux * offset + uy * step]);
+    });
+  }
+
+  const dx = other.c[0] - arc.c[0], dy = other.c[1] - arc.c[1], separation = Math.hypot(dx, dy);
+  const outer = arc.r + other.r, inner = Math.abs(arc.r - other.r);
+  if (separation > outer + tol || separation < inner - tol) return false;
+  if (separation <= tol) {
+    // For coincident circles, overlapping finite intervals include an endpoint of at least one arc.
+    const onProjectedArc = (a: ArcPiece, b: ArcPiece, t: number) => {
+      const angle = a.t0 + t * a.sw;
+      return distance(b, [b.c[0] + b.r * Math.cos(angle), b.c[1] + b.r * Math.sin(angle)]) <= 2 * tol;
+    };
+    return ends.some(t => onProjectedArc(arc, other, t) || onProjectedArc(other, arc, t));
+  }
+
+  const ux = dx / separation, uy = dy / separation;
+  if (separation >= outer || separation <= inner) {
+    const radial = separation <= inner && arc.r < other.r ? -arc.r : arc.r;
+    return onBoth([arc.c[0] + ux * radial, arc.c[1] + uy * radial]);
+  }
+  const along = (separation + (arc.r - other.r) / separation * outer) / 2;
+  const half = Math.sqrt((outer - separation) * (outer + separation)
+    * (separation - inner) * (separation + inner)) / (2 * separation);
+  return [-half, half].some(step => onBoth([arc.c[0] + ux * along - uy * step, arc.c[1] + uy * along + ux * step]));
 }
 
 /** The outline of piece `s` from t0 to t1 as its start point and bulge. */
