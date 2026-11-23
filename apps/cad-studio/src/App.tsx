@@ -1,5 +1,4 @@
-import { flangeBendOwners, canOpenFlangeBendOwner } from './state/flangeBendOwners';
-import { sharedSheetRuleOwner, ownsSharedSheetRules, sameSheetRuleSource, type SheetRuleSource } from './state/sharedSheetRules';
+import { useStudioSheetPatterns } from './app/useStudioSheetPatterns';
 import { prepareParameterPatternHoleSpacing } from './state/parameterPatternHoleSpacing';
 import { useNamedInspection } from './state/useNamedInspection';
 import { useMeshCircleMeasurement, type MeshCircleHit } from './app/useMeshCircleMeasurement';
@@ -220,7 +219,7 @@ import { blobStats, collectRecoveryBlobs, evictBlobs, loadRecoveryBlobs, saveRec
 import { indexedDbBlobStore } from './ui/blobStore';
 // (The recovery copy's blobs kept in this browser's IndexedDB: the store set before the studio reads or writes one — PKG-g2.)
 setBlobStore(indexedDbBlobStore());
-import { bendTableProblem, convexHull, type BendTable } from '@barocss/cad';
+import { convexHull } from '@barocss/cad';
 import { readStudioFile } from '@barocss/cad-model/engine/container';
 import { ParametersPanel } from './ui/ParametersPanel';
 import { LibraryPanel } from './ui/LibraryPanel';
@@ -251,7 +250,7 @@ import { asSection, type AxisSection, type Section } from './viewport/sectionVie
 import { type MapKind } from './viewport/scalarMaps';
 import { edgeChain } from '@barocss/cad-model/app/edgeChain';
 import { sectionSketchAction } from './app/sectionSketch';
-import { bodyName, describeChange, lookOf, rootOf } from '@barocss/cad-model/app/bodies';
+import { bodyName, describeChange, lookOf } from '@barocss/cad-model/app/bodies';
 import { readBrief } from '@barocss/cad-model/chat/brief';
 import { BriefPanel } from './ui/BriefPanel';
 import { SpecifyPanel } from './ui/SpecifyPanel';
@@ -1598,34 +1597,6 @@ export function App() {
     generation: workOwnership.current.generation,
     available: fresh && !busy && marker === null && !variants.showing && !inPlace && !project.opening()
       && !rendering && !drawing && !sketch && !previewBodies && !active && !assembly.draft };
-  const sheetRuleSourceNow = useRef(sheetRuleSource); sheetRuleSourceNow.current = sheetRuleSource;
-  const sheetRuleCurrent = () => ({ ...sheetRuleSourceNow.current, doc: docNow.current, evaluated: evaluatedRef.current,
-    bodies: bodiesRef.current, open: openIntent.current, worker: workerSessionNow.current, generation: workOwnership.current.generation,
-    available: sheetRuleSourceNow.current.available && !project.opening() && markerNow.current === null
-      && !shownVariant.current && !inPlaceNow.current && !activeStore.get() });
-  const sheetRuleAction = (body: BodyResult, source: SheetRuleSource) => {
-    const owner = sharedSheetRuleOwner(doc, evaluated, body);
-    const owns = () => ownsSharedSheetRules(source, sheetRuleCurrent(), body) && ownsEvaluatedSource();
-    if (!owner || !owns()) return undefined;
-    return () => {
-      if (!owns() || !canChangeDocument()) return;
-      openHistoryFeatureAt(owner.index, undefined, () => owns() && canChangeDocument(), () => setFlatView(null));
-    };
-  };
-
-  const flangeBendActions = (body: BodyResult, source: SheetRuleSource) =>
-    flangeBendOwners(source, body).map(row => {
-      const owns = () => canOpenFlangeBendOwner(source, sheetRuleCurrent(), body, row) && ownsEvaluatedSource();
-      const open = (index: number) => {
-        if (!owns() || !canChangeDocument()) return;
-        openHistoryFeatureAt(index, undefined, () => owns() && canChangeDocument(), () => setFlatView(null));
-      };
-      return { featureId: row.id, bend: row.bend, disabled: !owns(),
-        radiusSource: row.radiusSource === 'own' ? `own Flange ${row.id}` : `inherited from ${row.rulesId}`,
-        ruleSource: `Thickness and ${row.rulesSource === 'bend-table' ? 'bend table' : 'K-factor'}: ${row.rulesId}`,
-        onEdit: () => open(row.index), onEditRules: () => open(row.rulesIndex) };
-    });
-
   const readFeatureTransitionDraft = () => assembly.currentDraft() ?? commandDraft() ?? nodeEditorDraft.current;
   const { openHistoryFeature, openHistoryFeatureAt } = createHistoryFeatureNavigation({
     doc, editNode, hasEditorDraft: () => !!nodeEditorDraft.current, readFeatureTransitionDraft,
@@ -1957,42 +1928,15 @@ export function App() {
     ui: { notice: setToast, entered: () => { setCompareBase(null); setVersionsOpen(false); setTimeout(() => viewport.current?.fit(), 300); },
       returned: owner => setInstanceSel([owner]), workspaceExit: workspaceModeExit },
   });
-  // Evaluate a bend table against the current part before accepting it into history.
-  const bendTableRequest = useRef<object | null>(null);
-  const loadBendTable = async (b: BodyResult, file?: File) => {
-    if (!file || !canChangeDocument()) return;
-    const request = {}, openScope = openIntent.current;
-    bendTableRequest.current = request;
-    const current = () => bendTableRequest.current === request && docNow.current === doc && isOpenCurrent(openScope);
-    let table: unknown;
-    try { table = JSON.parse(await file.text()); } catch {
-      if (current()) setToast({ title: 'Not a bend table', hint: `${file.name} is not JSON.`, detail: '' });
-      return;
-    }
-    if (!current()) return;
-    const problem = bendTableProblem(table);
-    if (problem) { setToast({ title: 'Bend table refused', hint: problem, detail: '' }); return; }
-    const i = rootOf(doc.nodes, refOf(b).node), node = doc.nodes[i];
-    if (!node || (node.kind !== 'sheet-base' && node.kind !== 'sheet-contour')) {
-      setToast({ title: 'No sheet feature', hint: 'This body does not start from a sheet plate or profile.', detail: '' });
-      return;
-    }
-    const { kFactor, ...sheet } = node;
-    void kFactor; // A bend table replaces the scalar allowance.
-    const next = { ...doc, nodes: doc.nodes.map((item, index) => index === i ? { ...sheet, bendTable: table as BendTable } : item) };
-    const reply = await engine.evaluate(prefixDoc(next, next.nodes.length), revision.current++);
-    if (!current() || !reply) return;
-    if (!reply.ok) { setToast({ ...reply.error, title: 'Bend table refused', hint: 'Check that the table covers the current bends.' }); return; }
-    commit(next);
-  };
-  // (A sheet-metal body's flat pattern shown: its body key; R12.2, D117.)
-  const [flatView, setFlatViewState] = useState<{ body: BodyResult; source: SheetRuleSource } | null>(null);
-  const setFlatView = (key: string | null) => {
-    const body = key === null ? undefined : bodies.find(value => value.key === key);
-    setFlatViewState(body ? { body, source: sheetRuleSource } : null);
-  };
-  useEffect(() => {
-    if (flatView && !sameSheetRuleSource(flatView.source, sheetRuleCurrent(), flatView.body)) setFlatViewState(null);
+  const { flatPatternOpen, setFlatView, loadBendTable, dialog: flatPattern } = useStudioSheetPatterns({
+    source: sheetRuleSource,
+    readCurrent: source => ({ ...source, doc: docNow.current, evaluated: evaluatedRef.current, bodies: bodiesRef.current,
+      open: openIntent.current, worker: workerSessionNow.current, generation: workOwnership.current.generation,
+      available: source.available && !project.opening() && markerNow.current === null
+        && !shownVariant.current && !inPlaceNow.current && !activeStore.get() }),
+    fileName, engine, nextRevision: () => revision.current++, canChangeDocument, ownsEvaluatedSource, isOpenCurrent,
+    openHistory: (index, owns, onOpen) => openHistoryFeatureAt(index, undefined, owns, onOpen),
+    commit, onNotice: setToast,
   });
   // (FR4a: the part's cut list, open or not.)
   const [cutListView, setCutListView] = useState(false);
@@ -2595,14 +2539,14 @@ export function App() {
         ? 'Return to the ordinary Model view before finding the selection.'
         : bodyDrag || instDrag || poleEditor.dragging || sectionDragFrom || dragCmd.current
           ? 'Finish the current drag before finding the selection.'
-          : project.opening() || workspaceModeExit.pending || askDiscard || palette || cascade || flatView || cutListView || stepAsk || stlAsk
+          : project.opening() || workspaceModeExit.pending || askDiscard || palette || cascade || flatPatternOpen || cutListView || stepAsk || stlAsk
             ? 'Finish the current document or dialog operation before finding the selection.' : null;
   const bodyRevealOpenIntent = openIntent.current;
   const isolationAddBlocked = !fresh || busy || workerFailure || shownDoc !== doc || marker !== null || variants.showing
     ? 'Wait for the current main Model result.'
     : displayScopeReason || active || sketch || editNode !== null || instanceEdit || renaming || parameterEdit || assembly.draft || inPlace || section || measure || previewMode !== 'none' || pmiEnabled || routePanelOpen || stepsDisp || ghost || workingComparison || cutDraft
       ? 'Finish the current operation and return to ordinary Model view.'
-      : bodyDrag || instDrag || poleEditor.dragging || sectionDragFrom || dragCmd.current || project.opening() || workspaceModeExit.pending || askDiscard || palette || cascade || flatView || cutListView || stepAsk || stlAsk
+      : bodyDrag || instDrag || poleEditor.dragging || sectionDragFrom || dragCmd.current || project.opening() || workspaceModeExit.pending || askDiscard || palette || cascade || flatPatternOpen || cutListView || stepAsk || stlAsk
         ? 'Finish the current drag or dialog first.' : null;
   const browserActions = useBrowserActions({
     model: { doc, evaluated, bodies, generation: docGeneration, workerSession, openIntent: bodyRevealOpenIntent },
@@ -2966,7 +2910,7 @@ export function App() {
       <ViewContextMenu model={{ doc, bodies, ctx, placed: placedMeasureContext ? liveMeasurement.placedSources : undefined, placedMeasureContextReady }} menu={modelUnavailable ? null : menu} setMenu={setMenu} viewport={viewport} changes={{ commit, start, deleteSelection, setSelection, setMeasure, setEditNode }} />
 
       {cutListView && (() => { const list = partCutList(doc, bodies, material); return list ? <CutListDialog list={list} nesting={nestCutList(doc, list)} name={fileName.replace(/[^\w.-]+/g, '_')} onClose={() => setCutListView(false)} /> : null; })()}
-      {flatView && (() => { const fb = flatView.body; return sameSheetRuleSource(flatView.source, sheetRuleCurrent(), fb) && fb.flat ? <FlatPatternDialog bendActions={flangeBendActions(fb, flatView.source)} onEditSharedRules={sheetRuleAction(fb, flatView.source)} flat={fb.flat} name={`${fileName}-${bodyName(doc, fb)}`.replace(/[^\w.-]+/g, '_')} onClose={() => setFlatView(null)} /> : null; })()}
+      {flatPattern && <FlatPatternDialog {...flatPattern} />}
       {!workerFailure && <MeshFileDialogs controller={meshImport}><ModelExportDialogs controller={modelExports} /></MeshFileDialogs>}
       <StudioNoticeStack recovery={recovery} notice={workerFailure || (!cascade && !meshAsk && !repairAsk && !stepAsk && !stlAsk) ? toast : null}
         restoreRecovery={async () => {
