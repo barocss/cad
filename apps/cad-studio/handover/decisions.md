@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1759: [Resize a saved angle-constrained Sketch Chamfer](notes/edit-saved-oblique-sketch-chamfer-2026-11-23/README.md), #21. Verify the two setbacks through numeric and physical edits, fresh Open and explicit Agent approval.
 - D1758: [Chamfer two straight sketch sides with an authored angle](notes/create-angle-constrained-sketch-chamfer-2026-11-23/README.md), #21. Preserve equal setbacks, the original carrier angle, native extrusion and explicit Studio Agent approval.
 - D1757: [Keep the authored corner angle when creating a Sketch Fillet](notes/create-angle-constrained-sketch-fillet-2026-11-23/README.md), #21. Preserve the source carriers, replay the saved angle and resize after fresh Open.
 - D1756: [Resize a saved angle-constrained Sketch Fillet](notes/edit-saved-oblique-sketch-fillet-2026-11-23/README.md), #21. Retain both straight carriers through typed and drag edits, fresh Open and explicit Agent approval.

@@ -241,3 +241,109 @@ test('clockwise recipe retains sign; a wraparound bevel cannot silently move the
   near(savedChamferSetback(wrap, 0)!, 6);
   assert.ok('error' in editChamferSetback(wrap, 0, 8)); assert.deepEqual(wrap, before);
 });
+
+function savedObliqueChamfer(reflex = false, reflected = false, reversedRules = false): Polygon {
+  // The convex record matches the native D6 file created by Studio, including its stored length.
+  const points: Polygon['points'] = reflex
+    ? [[0, 0], [60, 0], [60, 45], [40, 45], [40, 26], [35.2, 16.4], [20, 5], [0, 5]]
+    : [[0, 0], [24, 0], [34.8, 3.6], [50, 15], [50, 45], [0, 45]];
+  if (reflected) for (const point of points) point[1] = point[1] ? -point[1] : 0;
+  const edge = reflex ? 4 : 1, angle = Math.atan2(reflex ? 4 : 3, reflex ? 3 : 4) * 180 / Math.PI;
+  return { kind: 'polygon', closed: true, points, bulges: points.map(() => 0),
+    lengths: { [edge]: reflex ? 10.73312629199899 : 11.384199576606163 },
+    hv: reflex ? { h: [0, 2, 6], v: [1, 3, 7] } : { h: [0, 4], v: [3, 5] },
+    ids: reflex ? ['e1', 'e2', 'e3', 'e4', 'e8', 'e5', 'e6', 'e7'] : ['e1', 'e6', 'e2', 'e3', 'e4', 'e5'],
+    rules: [...(reflex ? [0, 3, 6] : [0, 3]).map(point => ({ kind: 'fix' as const, point, at: [...points[point]] as [number, number] })),
+      { kind: 'angle', a: reversedRules ? edge + 1 : edge - 1, b: reversedRules ? edge - 1 : edge + 1, value: angle },
+      { kind: 'angle', a: reversedRules ? edge : edge - 1, b: reversedRules ? edge - 1 : edge, value: 180 - angle / 2 },
+    ] };
+}
+
+function retainedObliqueChamfer(source: Polygon, shape: Polygon, edge: number) {
+  for (const key of ['ids', 'rules', 'hv', 'bulges'] as const) assert.deepEqual(shape[key], source[key], key);
+  for (const [i, point] of source.points.entries()) if (i !== edge && i !== edge + 1) assert.deepEqual(shape.points[i], point);
+  for (const [i, value] of Object.entries(source.lengths!)) if (+i !== edge) assert.equal(shape.lengths![+i], value);
+}
+
+test('saved authored oblique D6 to D9 preserves carriers, angle rules and native side IDs', () => {
+  for (const reflected of [false, true]) for (const reversedRules of [false, true]) {
+    const source = native(savedObliqueChamfer(false, reflected, reversedRules), 20892, 10).shape;
+    const before = structuredClone(source), sign = reflected ? -1 : 1;
+    assert.equal(savedChamferSetback(source, 1), 6, 'binary recovery noise does not change the shown dimension');
+    assert.equal(resized(source, 1, 6), source, 're-entering the shown D6 is an exact no-op');
+    const shape = resized(source, 1, 9);
+    assert.deepEqual(shape.points, [[0, 0], [21, 0], [37.2, 5.4 * sign], [50, 15 * sign], [50, 45 * sign], [0, 45 * sign]]);
+    near(shape.lengths![1], 9 * 3 * Math.sqrt(10) / 5, 1e-12);
+    retainedObliqueChamfer(source, shape, 1); assert.equal(savedChamferSetback(shape, 1), 9);
+    const { shape: opened, body } = native(shape, 10 * (2100 - 9 * 9 * 0.6 / 2), 10);
+    assert.equal(resized(opened, 1, 9), opened);
+    for (const [id, x, y, offset] of [['e1', 0, 1, 0], ['e6', 1, -3 * sign, 21], ['e2', 3, -4 * sign, 90]] as const) {
+      const wall = faceGeometry(body.brep.faces.find(face => face.name === `n1.side[${id}]`)!);
+      assert.equal(wall.kind, 'plane'); near(x * wall.o[0] + y * wall.o[1], offset);
+    }
+    const restored = resized(opened, 1, 6); assert.deepEqual(restored.points, source.points);
+    retainedObliqueChamfer(source, restored, 1); native(restored, 20892, 10); assert.deepEqual(source, before);
+  }
+});
+
+test('oblique recovery keeps precise setback edits and both reflected reflex branches', () => {
+  const source = savedObliqueChamfer(), before = structuredClone(source);
+  for (const value of [6.0000004, 6.0000000004]) {
+    const shape = resized(source, 1, value); assert.notEqual(shape, source);
+    near(savedChamferSetback(shape, 1)!, value, 1e-12);
+    near(shape.lengths![1], value * 3 * Math.sqrt(10) / 5, 1e-12);
+    retainedObliqueChamfer(source, shape, 1);
+    native(shape, 10 * (2100 - value * value * 0.6 / 2), 10);
+  }
+  assert.deepEqual(source, before);
+  for (const reflected of [false, true]) {
+    const reflex = native(savedObliqueChamfer(true, reflected), 12644, 10).shape, original = structuredClone(reflex);
+    const shape = resized(reflex, 4, 9), sign = reflected ? -1 : 1;
+    assert.deepEqual(shape.points.slice(4, 6), [[40, 29 * sign], [32.8, 14.6 * sign]]);
+    near(shape.lengths![4], 9 * 4 / Math.sqrt(5), 1e-12);
+    assert.equal(savedChamferSetback(shape, 4), 9); retainedObliqueChamfer(reflex, shape, 4);
+    native(shape, 10 * (1250 + 9 * 9 * 0.8 / 2), 10); assert.deepEqual(reflex, original);
+  }
+});
+
+test('oblique discovery rejects wrong carrier and joint recipes without changing saved data', () => {
+  const source = savedObliqueChamfer();
+  const angleRules = source.rules!.filter(rule => rule.kind === 'angle');
+  const cases: Polygon[] = [
+    { ...source, rules: source.rules!.filter(rule => rule !== angleRules[0]) },
+    { ...source, rules: [...source.rules!, angleRules[1]] },
+    { ...source, lengths: { 1: source.lengths![1] + 1 } },
+    ...[NaN, Infinity, 0, 90, 180, 45].map(value => ({ ...source, rules: source.rules!.map(rule => rule === angleRules[0] ? { ...angleRules[0], value } : rule) })),
+    ...[NaN, Infinity, 135, 160, 180].map(value => ({ ...source, rules: source.rules!.map(rule => rule === angleRules[1] ? { ...angleRules[1], value } : rule) })),
+    { ...source, rules: source.rules!.map(rule => rule === angleRules[0] ? { kind: 'angle' as const, a: 0, b: 3, value: angleRules[0].value } : rule) },
+    { ...source, rules: source.rules!.map(rule => rule === angleRules[1] ? { kind: 'angle' as const, a: 1, b: 2, value: angleRules[1].value } : rule) },
+    { ...source, points: source.points.map((point, i) => i === 2 ? [point[0], point[1] + 0.1] : point) },
+  ];
+  for (const shape of cases) {
+    const before = structuredClone(shape); assert.equal(savedChamferSetback(shape, 1), undefined);
+    assert.ok('error' in editChamferSetback(shape, 1, 9)); assert.deepEqual(shape, before);
+  }
+});
+
+test('oblique oversized, conflicting and anchor-moving setback edits refuse atomically', () => {
+  const source = savedObliqueChamfer(), before = structuredClone(source);
+  for (const value of [NaN, Infinity, -1, 0, 1e-7, 25, 26, 30]) {
+    assert.ok('error' in editChamferSetback(source, 1, value)); assert.deepEqual(source, before);
+  }
+  const conflicts: Polygon[] = [
+    { ...source, lengths: { ...source.lengths, 0: 24 } },
+    { ...source, rules: [...source.rules!, { kind: 'fix', point: 1, at: [24, 0] }] },
+    { ...source, rules: [...source.rules!, { kind: 'distance', a: 1, b: 3, value: Math.hypot(26, 15) }] },
+    { ...source, circles: [{ c: [29, 2.65], r: 0.1 }], circleIds: ['e7'] },
+  ];
+  for (const shape of conflicts) {
+    const original = structuredClone(shape); assert.ok('error' in editChamferSetback(shape, 1, 9)); assert.deepEqual(shape, original);
+  }
+  const shift = (i: number) => (i + 5) % 6;
+  const wrap: Polygon = { ...source, points: [...source.points.slice(1), source.points[0]], ids: [...source.ids!.slice(1), source.ids![0]],
+    lengths: { 0: source.lengths![1] }, hv: { h: source.hv!.h.map(shift), v: source.hv!.v.map(shift) },
+    rules: source.rules!.map(rule => rule.kind === 'fix' ? { ...rule, point: shift(rule.point) }
+      : rule.kind === 'angle' ? { ...rule, a: shift(rule.a), b: shift(rule.b) } : rule) };
+  const original = structuredClone(wrap); assert.equal(savedChamferSetback(wrap, 0), 6);
+  assert.match((editChamferSetback(wrap, 0, 9) as { error: string }).error, /anchor/); assert.deepEqual(wrap, original);
+});

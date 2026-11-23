@@ -3,6 +3,7 @@ import { circleRelation } from './loops';
 import { outlineSegments, type P2 } from './profile';
 import { checkEdit, hvOf, solveShape, type Polygon } from './rules';
 import { settleShape } from './settle';
+import { edgeAngle } from './terms';
 
 const tolerance = 2e-6;
 const distance = (a: P2, b: P2) => Math.hypot(a[0] - b[0], a[1] - b[1]);
@@ -10,7 +11,7 @@ const cross = (a: P2, b: P2) => a[0] * b[1] - a[1] * b[0];
 const dot = (a: P2, b: P2) => a[0] * b[0] + a[1] * b[1];
 const vector = (a: P2, b: P2): P2 => [b[0] - a[0], b[1] - a[1]];
 const finitePoint = (p: P2) => Array.isArray(p) && p.length === 2 && p.every(Number.isFinite);
-type Chamfer = { setback: number; corner: P2; incoming: P2; outgoing: P2; turn: number };
+type Chamfer = { setback: number; corner: P2; incoming: P2; outgoing: P2; turn: number; lengthPerSetback: number };
 
 function inspect(source: Polygon, bevel: number): Chamfer | undefined {
   const n = source.points.length;
@@ -26,32 +27,49 @@ function inspect(source: Polygon, bevel: number): Chamfer | undefined {
   // bevel does not identify an editable equal-setback Chamfer.
   const joints = source.rules?.filter(rule => rule.kind === 'angle' &&
     (([prev, next].includes(rule.a) && rule.b === bevel) || (rule.a === bevel && [prev, next].includes(rule.b)))) ?? [];
-  if (joints.length !== 1 || joints[0].kind !== 'angle' || joints[0].value !== 135
+  if (joints.length !== 1 || joints[0].kind !== 'angle' || !Number.isFinite(joints[0].value)
     || ![joints[0].a, joints[0].b].includes(prev)) return;
   const hv = hvOf(source);
   const orthogonal = (hv.h.includes(prev) && hv.v.includes(next)) || (hv.v.includes(prev) && hv.h.includes(next))
     || source.rules?.some(rule => rule.kind === 'perpendicular' &&
       ((rule.a === prev && rule.b === next) || (rule.a === next && rule.b === prev)));
-  if (!orthogonal) return;
   const a = source.points[bevel], b = source.points[next];
   const u = vector(source.points[prev], a), v = vector(b, source.points[(next + 1) % n]);
   const lu = Math.hypot(...u), lv = Math.hypot(...v);
   if (Math.min(lu, lv) < ExtrudedProfileLimits.minimumLengthMM) return;
   const incoming: P2 = [u[0] / lu, u[1] / lu], outgoing: P2 = [v[0] / lv, v[1] / lv];
-  if (Math.abs(dot(incoming, outgoing)) > 1e-6) return;
-  const along = cross(vector(a, b), outgoing) / cross(incoming, outgoing);
+  const sine = cross(incoming, outgoing), cosine = dot(incoming, outgoing);
+  let lengthPerSetback = Math.SQRT2;
+  if (orthogonal) {
+    if (joints[0].value !== 135 || Math.abs(cosine) > 1e-6) return;
+  } else {
+    if (Math.abs(sine) <= 1e-6 || Math.abs(cosine) <= 1e-6) return;
+    const sweep = Math.abs(Math.atan2(sine, cosine));
+    const angleRule = source.rules?.some(rule => rule.kind === 'angle'
+      && ((rule.a === prev && rule.b === next) || (rule.a === next && rule.b === prev))
+      && Number.isFinite(rule.value) && rule.value > 0 && rule.value < 180
+      && Math.abs(edgeAngle(source.points, rule.a, rule.b).degrees - rule.value) * Math.PI / 180 <= 1e-6);
+    if (!angleRule || Math.abs(joints[0].value - (180 - sweep * 90 / Math.PI)) * Math.PI / 180 > 1e-6) return;
+    lengthPerSetback = 2 * Math.cos(sweep / 2);
+  }
+  const along = cross(vector(a, b), outgoing) / sine;
   const corner: P2 = [a[0] + incoming[0] * along, a[1] + incoming[1] * along];
-  const setback = length! / Math.SQRT2;
+  let setback = length! / lengthPerSetback;
+  if (!orthogonal) {
+    // Remove binary division noise only from the new recipe; retain precise authored distances.
+    const normalized = Number(setback.toPrecision(15));
+    if (Math.abs(normalized - setback) <= 8 * Number.EPSILON * Math.max(1, Math.abs(setback))) setback = normalized;
+  }
   const ac = vector(a, corner), cb = vector(corner, b);
-  const turn = Math.sign(cross(incoming, outgoing));
+  const turn = Math.sign(sine);
   if (!finitePoint(corner) || dot(ac, incoming) <= tolerance || dot(cb, outgoing) <= tolerance
     || Math.abs(distance(a, corner) - setback) > tolerance || Math.abs(distance(b, corner) - setback) > tolerance
     || Math.abs(distance(a, b) - length!) > tolerance
     || turn * cross(incoming, vector(a, b)) <= tolerance || turn * cross(vector(a, b), outgoing) <= tolerance) return;
-  return { setback, corner, incoming, outgoing, turn };
+  return { setback, corner, incoming, outgoing, turn, lengthPerSetback };
 }
 
-/** Discover the bounded saved orthogonal Chamfer recipe without adding metadata. */
+/** Discover a saved equal-setback Chamfer on orthogonal or explicitly angle-constrained carriers. */
 export function savedChamferSetback(source: Polygon, bevel: number): number | undefined {
   return inspect(source, bevel)?.setback;
 }
@@ -61,10 +79,10 @@ export function editChamferSetbacks(source: Polygon, edges: readonly number[], v
   const selected: { edge: number; setback: number }[] = [];
   for (const edge of new Set(edges)) {
     const setback = savedChamferSetback(source, edge);
-    if (setback === undefined) return { error: 'Select saved, constrained orthogonal Chamfers.' };
+    if (setback === undefined) return { error: 'Select saved Chamfers between constrained straight lines.' };
     selected.push({ edge, setback });
   }
-  if (!selected.length) return { error: 'Select saved, constrained orthogonal Chamfers.' };
+  if (!selected.length) return { error: 'Select saved Chamfers between constrained straight lines.' };
   // Shrink larger setbacks before growing smaller ones on a shared carrier. Equal sizes retain selection order.
   selected.sort((a, b) => b.setback - a.setback);
   let shape = source;
@@ -79,7 +97,7 @@ export function editChamferSetbacks(source: Polygon, edges: readonly number[], v
 /** Resize one saved Chamfer; all other geometry and authored constraints stay in place. */
 export function editChamferSetback(source: Polygon, bevel: number, value: number): { shape: Polygon } | { error: string } {
   const plan = inspect(source, bevel);
-  if (!plan) return { error: 'Select a saved, constrained orthogonal Chamfer.' };
+  if (!plan) return { error: 'Select a saved Chamfer between constrained straight lines.' };
   if (!Number.isFinite(value) || value <= tolerance)
     return { error: 'Enter a positive chamfer distance that the sketch can resolve.' };
   if (value === plan.setback) return { shape: source };
@@ -95,7 +113,7 @@ export function editChamferSetback(source: Polygon, bevel: number, value: number
   // Point 0 is the sketch's implicit anchor. A local setback edit cannot re-anchor it.
   if (distance(points[0], source.points[0]) > tolerance)
     return { error: 'This Chamfer would move the sketch anchor.' };
-  const candidate: Polygon = { ...source, points, hv: hvOf(source), lengths: { ...source.lengths, [bevel]: value * Math.SQRT2 } };
+  const candidate: Polygon = { ...source, points, hv: hvOf(source), lengths: { ...source.lengths, [bevel]: value * plan.lengthPerSetback } };
   const built = loop(candidate), original = loop(source);
   if (!built || !original || built.reversed !== original.reversed || !keepsDirections(source, candidate))
     return { error: 'The chamfer distance would collapse or cross an edge.' };

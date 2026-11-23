@@ -1,4 +1,5 @@
 import { useRef, type PointerEvent } from 'react';
+import { savedChamferSetback } from '@barocss/cad-model/sketch/chamferEdit';
 import { arcOf, type P2 } from '@barocss/cad-model/sketch/profile';
 import type { Polygon } from '@barocss/cad-model/sketch/rules';
 import { prepareSavedSketchCorners, type SavedSketchCorners } from '../sketch/cornerDraft';
@@ -10,8 +11,7 @@ type SizeOperation = SavedSketchCorners['operation'];
 
 function savedSize(shape: Polygon, edge: number, operation: SizeOperation): number | undefined {
   if (operation === 'resize-fillet') return shape.radii?.[edge];
-  const diagonal = shape.lengths?.[edge];
-  return diagonal === undefined ? undefined : diagonal / Math.SQRT2;
+  return savedChamferSetback(shape, edge);
 }
 
 function midpointTravel(source: Polygon, edge: number, operation: SizeOperation, size: number): { midpoint: P2; step: P2 } | null {
