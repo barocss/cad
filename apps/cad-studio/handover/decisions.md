@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D1825: [Review the five-span inlet offset before Agent approval](notes/pending-five-span-inlet-offset-review-2026-11-24/README.md), #324. Pin both orientations to the original rail, the signed inlet move and the retained outlet through Studio approval and reopen.
+
 - D1824: [Offset the original inlet of the paired Exact S-bend](notes/paired-five-span-inlet-offset-2026-11-24/README.md), #17. Keep both passages, the fixed outlet and all 48 joins through signed edits, saved drag and Studio reopen.
 
 - D1823: [Review the five-span outlet offset before Agent approval](notes/pending-five-span-outlet-offset-review-2026-11-24/README.md), #324. Bind both pending images to the signed native offset, original Direct rail and unchanged fixed geometry.

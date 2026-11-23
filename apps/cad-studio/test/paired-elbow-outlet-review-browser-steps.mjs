@@ -27,10 +27,9 @@ export async function reviewPendingOutlet(f, file, call, request, expectedRevisi
   } else assert.equal(evidence.sourceRail, undefined);
   assert.deepEqual([evidence.sourceBody, evidence.body, evidence.pathKind, evidence.face, evidence.distance],
     ['b1', 'b2', sBend ? 'line-arc-line-arc-line' : arcFirst ? 'arc-and-line' : 'line-arc-line', inlet ? 'n1.start' : 'n1.end', -4]);
-  const [original, moved] = sBend ? [[36, 38, 0], [32, 38, 0]] : arcFirst || inlet ? [[-10, 0, 0], [-6, 0, 0]] : [[20, 34, 0], [20, 30, 0]];
-  assert.deepEqual(evidence.displacement, sBend ? { normal: [1, 0, 0], vector: [-4, 0, 0] }
-    : arcFirst || inlet ? { normal: [-1, 0, 0], vector: [4, 0, 0] }
-    : { normal: [0, 1, 0], vector: [0, -4, 0] });
+  const [original, moved] = arcFirst || inlet ? [[-10, 0, 0], [-6, 0, 0]] : sBend ? [[36, 38, 0], [32, 38, 0]] : [[20, 34, 0], [20, 30, 0]];
+  assert.deepEqual(evidence.displacement, arcFirst || inlet ? { normal: [-1, 0, 0], vector: [4, 0, 0] }
+    : sBend ? { normal: [1, 0, 0], vector: [-4, 0, 0] } : { normal: [0, 1, 0], vector: [0, -4, 0] });
   assert.deepEqual([evidence.originalCap.center, evidence.movedCap.center], [original, moved]);
   assert.equal(evidence.movedCap.apertures.length, 2);
   assert.equal(evidence.throughApertures.apertures.length, 2);
@@ -40,17 +39,19 @@ export async function reviewPendingOutlet(f, file, call, request, expectedRevisi
     const joins = evidence.retained.junctions;
     assert.deepEqual(joins.map(joint => joint.pieces), [['lead', 'first'], ['first', 'line'], ['line', 'second'], ['second', 'tail']]);
     assert.equal(new Set(joins.flatMap(joint => joint.exteriorSeams.concat(...joint.interiorSeams))).size, 48);
-    assert.deepEqual(evidence.retained.inlet.center, [-10, 0, 0]);
-    assert.deepEqual([evidence.originalCap, evidence.movedCap, evidence.retained.inlet]
+    const fixedCap = inlet ? evidence.retained.outlet : evidence.retained.inlet;
+    assert.deepEqual(fixedCap.center, inlet ? [36, 38, 0] : [-10, 0, 0]);
+    assert.deepEqual([evidence.originalCap, evidence.movedCap, fixedCap]
       .map(cap => cap.apertures.map(aperture => aperture.edges.length)), [[4, 4], [4, 4], [4, 4]]);
-    assert.deepEqual([evidence.throughApertures.dimensions.leadLength, evidence.throughApertures.dimensions.tailLength], [10, 2]);
+    const { leadLength, tailLength } = evidence.throughApertures.dimensions;
+    assert.deepEqual([leadLength, tailLength], inlet ? [6, 6] : [10, 2]);
     assert.ok(alternate.meta.views.left.visible_faces.includes('n1.start'));
     assert.ok(meta.views.right.visible_faces.includes('n1.end'));
     const near = (actual, expected) => assert.ok(Math.abs(actual - expected) < 1e-7, JSON.stringify({ actual, expected }));
     const length = 20 + 15 * Math.PI;
     near(evidence.volume.original.native, 32 * (24 + 15 * Math.PI));
     near(evidence.volume.candidate.native, 32 * length);
-    const centroid = [(270 * Math.PI - 72) / length, (252 * Math.PI + 384) / length, 0];
+    const centroid = [(270 * Math.PI + (inlet ? 96 : -72)) / length, (252 * Math.PI + (inlet ? 536 : 384)) / length, 0];
     for (const point of [evidence.centroid.analytic, evidence.centroid.native])
       point.forEach((coordinate, index) => near(coordinate, centroid[index]));
   }
@@ -70,7 +71,7 @@ export async function reviewPendingOutlet(f, file, call, request, expectedRevisi
     for (const point of [evidence.centroid.analytic, evidence.centroid.native])
       point.forEach((coordinate, index) => near(coordinate, centroid[index]));
   }
-  if (inlet) {
+  if (inlet && !sBend) {
     assert.deepEqual(evidence.retained.outlet.center, [20, 34, 0]);
     assert.deepEqual([evidence.originalCap, evidence.movedCap, evidence.retained.outlet]
       .map(cap => cap.apertures.map(aperture => aperture.edges.length)), [[4, 4], [4, 4], [4, 4]]);
@@ -92,7 +93,10 @@ export async function reviewPendingOutlet(f, file, call, request, expectedRevisi
   assert.ok(evidence.maximumGapMM < 1e-7);
 
   const faces = ['n1.start', 'n1.end'];
-  if (sBend) faces.push('n1.lead.side[e1]', 'n1.tail.side[e6]', 'n1.tail.side[e10]');
+  if (sBend) {
+    const [fixedPiece, movedPiece] = inlet ? ['tail', 'lead'] : ['lead', 'tail'];
+    faces.push(`n1.${fixedPiece}.side[e1]`, `n1.${movedPiece}.side[e6]`, `n1.${movedPiece}.side[e10]`);
+  }
   const reviewPin = { ...pins, action: 'inspect', faces,
     expectedReviewRevision: meta.candidate.reviewRevision };
   const native = await call('query', reviewPin);
@@ -133,13 +137,13 @@ export async function checkReopenedOutlet(f, session, approved, reviewed) {
 }
 
 export async function checkChangedOutletRail(session, pending, reviewed, controlPoints) {
-  const { sourceRail } = reviewed.meta.pairedElbowOutletOffset ?? reviewed.meta.pairedElbowInletOffset;
+  const { sourceRail, face } = reviewed.meta.pairedElbowOutletOffset ?? reviewed.meta.pairedElbowInletOffset;
   const file = await checkChangedDuctPath(session, pending, reviewed, controlPoints, sourceRail);
   await withMcpSession(session, file, 'outlet-changed-rail-new-proposal', async call => {
     const expectedRevision = await currentPartRevision(call);
     const original = pending.proposals.find(entry => entry.id === reviewed.meta.candidate.proposal);
     const [{ args }] = original.ops;
-    const staged = await call('proposals', { action: 'propose', title: 'Review the outlet with a changed rail',
+    const staged = await call('proposals', { action: 'propose', title: `Review the ${face.endsWith('.start') ? 'inlet' : 'outlet'} with a changed rail`,
       ops: [{ tool: 'features', args: { action: 'command', ...args, expectedRevision } }] });
     assert.deepEqual([staged.proposal, staged.applied], ['P2', false]);
     const { proposals } = await call('proposals', { action: 'list' });

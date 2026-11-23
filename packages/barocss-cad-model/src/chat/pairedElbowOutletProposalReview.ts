@@ -29,7 +29,7 @@ function scope(doc: StudioDoc, inlet: boolean) {
   if (doc.direct && (doc.direct.objects.length !== 1 || !rail || rail.hidden || rail.trims?.length ||
     typeof doc.direct.sources[rail.source] !== 'string')) return;
   const [sketch, sweep] = doc.nodes, section = pairedDuctSection(sketch);
-  if (!section || sweep?.kind !== 'sweep-curve' || (inlet && sweep.path.controlPoints.length !== 7)) return;
+  if (!section || sweep?.kind !== 'sweep-curve') return;
   const face = `${featureId(doc.nodes, 1)}.${inlet ? 'start' : 'end'}`;
   if (!(inlet ? isPairedElbowInletOffsetSource : isPairedElbowOutletOffsetSource)(doc.nodes, 1, face)) return;
   const parent: BodyRef = { node: 1, side: 'solid' }, body = bodyKey(parent, doc.nodes);
@@ -59,7 +59,7 @@ export function pairedElbowOutletProposal(doc: StudioDoc, proposal: Proposal) {
   return pairedElbowProposal(doc, proposal, false);
 }
 
-/** The inlet proposal stays bounded to the original paired seven-point line–arc–line source. */
+/** Bind the original inlet on an admitted paired duct before replaying geometry. */
 export function pairedElbowInletProposal(doc: StudioDoc, proposal: Proposal) {
   return pairedElbowProposal(doc, proposal, true);
 }

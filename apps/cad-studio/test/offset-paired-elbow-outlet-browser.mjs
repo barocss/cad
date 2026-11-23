@@ -36,7 +36,7 @@ const terminal = inlet ? path.controlPoints[0] : path.controlPoints.at(-1);
 const cap = inlet ? 'n1.start' : 'n1.end';
 const fixedCap = inlet ? 'n1.end' : 'n1.start';
 const straightPiece = inlet && sBend ? 'lead' : arcFirst || inlet ? 'line' : 'tail';
-const frozenEnv = sBend && inlet ? 'D1824_SOURCE_FROZEN'
+const frozenEnv = sBend && inlet ? (reviewOutlet ? 'D1825_SOURCE_FROZEN' : 'D1824_SOURCE_FROZEN')
   : sBend ? (reviewOutlet || reviewUnavailable ? 'D1823_SOURCE_FROZEN' : 'D1822_SOURCE_FROZEN')
   : inlet ? (reviewOutlet || reviewUnavailable ? 'D1809_SOURCE_FROZEN' : 'D1808_SOURCE_FROZEN')
   : arcFirst ? (reviewOutlet || reviewUnavailable ? 'D1806_SOURCE_FROZEN' : 'D1805_SOURCE_FROZEN') : 'D1788_SOURCE_FROZEN';

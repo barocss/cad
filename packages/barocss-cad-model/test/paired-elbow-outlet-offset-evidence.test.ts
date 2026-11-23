@@ -325,42 +325,46 @@ test('inlet evidence refuses either chart at both mouths and all joins, changed 
     assert.equal(pairedElbowInletOffsetEvidence(native(five), candidate, five, section, -4), undefined);
 });
 
-test('five-span signed outlet evidence retains its inlet, 49 native boundaries and all 48 tangent joints with independent material moments', () => {
+for (const inlet of [false, true]) test(`five-span signed ${inlet ? 'inlet' : 'outlet'} evidence retains the other mouth, 49 native boundaries and all 48 tangent joints with independent material moments`, () => {
+  const review = inlet ? pairedElbowInletOffsetEvidence : pairedElbowOutletOffsetEvidence;
   const path = endedRail(), original = native(path), saved = structuredClone({ path, original, section });
   for (const distance of [4, -4, 4]) {
-    const candidate = native(path, distance), before = structuredClone(candidate);
-    const evidence = pairedElbowOutletOffsetEvidence(original, candidate, path, section, distance); assert.ok(evidence);
-    assert.equal(evidence.pathKind, 'line-arc-line-arc-line'); assert.equal(evidence.face, 'w.end');
+    const candidate = native(path, distance, section, inlet), before = structuredClone(candidate);
+    const evidence = review(original, candidate, path, section, distance); assert.ok(evidence);
+    const retained = 'outlet' in evidence.retained ? evidence.retained.outlet : evidence.retained.inlet;
+    assert.equal(evidence.pathKind, 'line-arc-line-arc-line'); assert.equal(evidence.face, inlet ? 'w.start' : 'w.end');
     assert.deepEqual(Object.keys(evidence), ['pathKind', 'face', 'distance', 'displacement', 'originalCap', 'movedCap', 'retained',
       'throughApertures', 'materialChange', 'volume', 'centroid', 'maximumGapMM']);
     assert.deepEqual(checkBrep(candidate, { strict: true }).counts,
       { bodies: 1, shells: 1, faces: 62, loops: 66, coedges: 264, edges: 132, vertices: 72 });
-    pointNear(evidence.displacement.normal, [1, 0, 0]); pointNear(evidence.displacement.vector, [distance, 0, 0]);
-    pointNear(evidence.retained.inlet.center, [-10, 0, 0]); pointNear(evidence.retained.inlet.plane.normal, [-1, 0, 0]);
-    pointNear(evidence.originalCap.center, [36, 38, 0]); pointNear(evidence.movedCap.center, [36 + distance, 38, 0]);
+    pointNear(evidence.displacement.normal, [inlet ? -1 : 1, 0, 0]); pointNear(evidence.displacement.vector, [inlet ? -distance : distance, 0, 0]);
+    pointNear(retained.center, inlet ? [36, 38, 0] : [-10, 0, 0]); pointNear(retained.plane.normal, [inlet ? 1 : -1, 0, 0]);
+    pointNear(evidence.originalCap.center, inlet ? [-10, 0, 0] : [36, 38, 0]);
+    pointNear(evidence.movedCap.center, inlet ? [-10 - distance, 0, 0] : [36 + distance, 38, 0]);
     assert.equal(evidence.retained.faces.length, 49);
-    assert.ok(evidence.retained.faces.every(name => !name.startsWith('w.tail.') && name !== 'w.end'));
+    assert.ok(evidence.retained.faces.every(name => !name.startsWith(inlet ? 'w.lead.' : 'w.tail.') && name !== (inlet ? 'w.start' : 'w.end')));
     assert.deepEqual(evidence.retained.junctions!.map(join => join.pieces), [['lead', 'first'], ['first', 'line'], ['line', 'second'], ['second', 'tail']]);
     const ids = evidence.retained.junctions!.flatMap(join => [join.exteriorSeams, ...join.interiorSeams]).flat();
     assert.equal(new Set(ids).size, 48);
     for (const id of [...ids, ...evidence.movedCap.outerEdges, ...evidence.movedCap.innerEdges,
-      ...evidence.retained.inlet.outerEdges, ...evidence.retained.inlet.innerEdges])
+      ...retained.outerEdges, ...retained.innerEdges])
       assert.equal(candidate.coedges.filter(use => use.edge === id && use.pcurve).length, 2);
     const dimensions = evidence.throughApertures.dimensions; assert.ok('leadLength' in dimensions);
-    near(dimensions.leadLength!, 10); near(dimensions.tailLength!, 6 + distance);
+    near(dimensions.leadLength!, 10 + (inlet ? distance : 0)); near(dimensions.tailLength!, 6 + (inlet ? 0 : distance));
     near(evidence.materialChange.sectionArea, 32); near(evidence.materialChange.analytic, 32 * distance); near(evidence.materialChange.native, 32 * distance);
     const length = 24 + 15 * Math.PI + distance;
     near(evidence.volume.candidate.native, 32 * length);
-    const centroid: Point = [(270 * Math.PI + 64 + 36 * distance + distance ** 2 / 2) / length,
-      (252 * Math.PI + 536 + 38 * distance) / length, 0];
+    const centroid: Point = [(270 * Math.PI + 64 + (inlet ? -10 * distance - distance ** 2 / 2 : 36 * distance + distance ** 2 / 2)) / length,
+      (252 * Math.PI + 536 + (inlet ? 0 : 38 * distance)) / length, 0];
     pointNear(evidence.centroid.analytic, centroid); pointNear(evidence.centroid.native, centroid);
-    assert.equal(pairedElbowInletOffsetEvidence(original, candidate, path, section, distance), undefined);
+    assert.equal((inlet ? pairedElbowOutletOffsetEvidence : pairedElbowInletOffsetEvidence)(original, candidate, path, section, distance), undefined);
     assert.deepEqual(candidate, before);
   }
   assert.deepEqual({ path, original, section }, saved);
 });
 
-test('five-span outlet evidence keeps asymmetric lane order, translated oblique limits and both radial axes and bend signs', () => {
+for (const inlet of [false, true]) test(`five-span ${inlet ? 'inlet' : 'outlet'} evidence keeps asymmetric lane order, translated oblique limits and both radial axes and bend signs`, () => {
+  const review = inlet ? pairedElbowInletOffsetEvidence : pairedElbowOutletOffsetEvidence;
   const edited = { ...section, cavities: [{ ...section.cavities[0], min: [-.75, -2.5], max: [.75, -1.5] }, section.cavities[1]] };
   for (const lanes of [edited, { ...edited, cavities: [...edited.cavities].reverse() }])
     for (const [first, second] of [[30, 120], [120, 30], [120, 120]]) for (const radialY of [false, true]) for (const polarity of [-1, 1]) {
@@ -371,7 +375,7 @@ test('five-span outlet evidence keeps asymmetric lane order, translated oblique 
         radialY ? [0, polarity, 0] : [-.8 * polarity, .6 * polarity, 0]);
       const original = native(path, undefined, source);
       for (const distance of [4, -4]) {
-        const evidence = pairedElbowOutletOffsetEvidence(original, native(path, distance, source), path, source, distance);
+        const evidence = review(original, native(path, distance, source, inlet), path, source, distance);
         assert.ok(evidence, `${first}/${second}, radialY=${radialY}, polarity=${polarity}, d=${distance}`);
         near(evidence.materialChange.sectionArea, 34.5); near(evidence.materialChange.native, 34.5 * distance);
         assert.deepEqual(evidence.movedCap.apertures.map(aperture => aperture.tags), source.cavities.map(cavity => cavity.tags));
@@ -380,38 +384,44 @@ test('five-span outlet evidence keeps asymmetric lane order, translated oblique 
     }
 });
 
-test('five-span outlet evidence refuses either mouth chart, each retained joint chart, swapped tail lanes and changed retained coefficients', () => {
-  const path = endedRail(), original = native(path), candidate = native(path, -4);
-  const evidence = pairedElbowOutletOffsetEvidence(original, candidate, path, section, -4); assert.ok(evidence);
+for (const inlet of [false, true]) test(`five-span ${inlet ? 'inlet' : 'outlet'} evidence refuses either mouth chart, each retained joint chart, swapped moving lanes and changed retained coefficients`, () => {
+  const review = inlet ? pairedElbowInletOffsetEvidence : pairedElbowOutletOffsetEvidence;
+  const path = endedRail(), original = native(path), candidate = native(path, -4, section, inlet);
+  const evidence = review(original, candidate, path, section, -4); assert.ok(evidence);
+  const retained = 'outlet' in evidence.retained ? evidence.retained.outlet : evidence.retained.inlet;
   const ids = [...evidence.movedCap.outerEdges, ...evidence.movedCap.innerEdges,
-    ...evidence.retained.inlet.outerEdges, ...evidence.retained.inlet.innerEdges,
+    ...retained.outerEdges, ...retained.innerEdges,
     ...evidence.retained.junctions!.flatMap(join => [join.exteriorSeams, ...join.interiorSeams]).flat()];
-  refuseChangedCharts(original, candidate, path, section, -4, pairedElbowOutletOffsetEvidence, ids);
-  const swapped = { ...candidate, faces: candidate.faces.map(face => face.name?.startsWith('w.tail.') ? { ...face,
+  refuseChangedCharts(original, candidate, path, section, -4, review, ids);
+  const swapped = { ...candidate, faces: candidate.faces.map(face => face.name?.startsWith(inlet ? 'w.lead.' : 'w.tail.') ? { ...face,
     name: face.name.replace(/\[e([5-9]|1[0-2])\]/g, (_, tag: string) => `[e${Number(tag) < 9 ? Number(tag) + 4 : Number(tag) - 4}]`) } : face) };
   assert.ok(checkBrep(swapped, { strict: true }).valid);
-  assert.equal(pairedElbowOutletOffsetEvidence(original, swapped, path, section, -4), undefined);
+  assert.equal(review(original, swapped, path, section, -4), undefined);
   const fixed = candidate.faces.find(face => face.name?.startsWith('w.first.') && face.surface.kind === 'surface')!;
   const coefficients = { ...candidate, faces: candidate.faces.map(face => face.id === fixed.id && face.surface.kind === 'surface'
     ? { ...face, surface: { ...face.surface, weights: face.surface.weights.map(row => row.map(weight => 2 * weight)) } } : face) };
   assert.ok(checkBrep(coefficients, { strict: true }).valid);
-  assert.equal(pairedElbowOutletOffsetEvidence(original, coefficients, path, section, -4), undefined);
+  assert.equal(review(original, coefficients, path, section, -4), undefined);
 });
 
-test('five-span outlet evidence refuses wrong original rail, alternate native output, collapsed tail and wrong signed intent', () => {
-  const path = endedRail(), original = native(path), candidate = native(path, 4), saved = structuredClone({ path, original, candidate });
-  for (const distance of [0, -4, -6, -7, -5.99999, Number.NaN, Number.POSITIVE_INFINITY, 10001])
-    assert.equal(pairedElbowOutletOffsetEvidence(original, candidate, path, section, distance), undefined);
+for (const inlet of [false, true]) test(`five-span ${inlet ? 'inlet' : 'outlet'} evidence refuses wrong original rail, alternate native output, collapsed straight end and wrong signed intent`, () => {
+  const review = inlet ? pairedElbowInletOffsetEvidence : pairedElbowOutletOffsetEvidence;
+  const path = endedRail(), original = native(path), candidate = native(path, 4, section, inlet), saved = structuredClone({ path, original, candidate });
+  for (const distance of [0, -4, ...(inlet ? [-10, -11, -9.99999] : [-6, -7, -5.99999]), Number.NaN, Number.POSITIVE_INFINITY, 10001])
+    assert.equal(review(original, candidate, path, section, distance), undefined);
   const tail = structuredClone(path); tail.controlPoints[9][0] += 1; tail.controlPoints[10][0] += 2;
-  const inlet = structuredClone(path); inlet.controlPoints[0][0] -= 2; inlet.controlPoints[1][0] -= 1;
+  const lead = structuredClone(path); lead.controlPoints[0][0] -= 2; lead.controlPoints[1][0] -= 1;
   const tiny = structuredClone(path); tiny.controlPoints[10][1] += 1e-8; tiny.controlPoints[9] = scale(add(tiny.controlPoints[8], tiny.controlPoints[10]), .5);
-  for (const changed of [tail, inlet, tiny, { ...path, weights: path.weights.map((weight, index) => index === 9 ? 2 : weight) }])
-    assert.equal(pairedElbowOutletOffsetEvidence(original, candidate, changed, section, 4), undefined);
-  for (const changed of [native(inlet, 4), native(path, 3), native(rail(), 4), original,
-    native(path, 4, { ...section, cavities: [{ ...section.cavities[0], max: [1, -1.5] }, section.cavities[1]] })])
-    assert.equal(pairedElbowOutletOffsetEvidence(original, changed, path, section, 4), undefined);
-  assert.equal(pairedElbowOutletOffsetEvidence(native(rail()), candidate, path, section, 4), undefined);
-  assert.equal(pairedElbowOutletOffsetEvidence(original, candidate, path, { ...section, outer: [4.1, 10] }, 4), undefined);
+  const tinyLead = structuredClone(path); tinyLead.controlPoints[0][1] += 1e-8; tinyLead.controlPoints[1] = scale(add(tinyLead.controlPoints[0], tinyLead.controlPoints[2]), .5);
+  for (const changed of [tail, lead, tiny, tinyLead, { ...path, weights: path.weights.map((weight, index) => index === 9 ? 2 : weight) }])
+    assert.equal(review(original, candidate, changed, section, 4), undefined);
+  for (const changed of [native(lead, 4, section, inlet), native(tail, 4, section, inlet), native(path, 3, section, inlet), native(rail(), 4, section, inlet), original,
+    native(path, 4, { ...section, cavities: [{ ...section.cavities[0], max: [1, -1.5] }, section.cavities[1]] }, inlet)])
+    assert.equal(review(original, changed, path, section, 4), undefined);
+  assert.equal(review(native(rail()), candidate, path, section, 4), undefined);
+  assert.equal(review(original, candidate, path, { ...section, outer: [4.1, 10] }, 4), undefined);
+  const leading = { ...path, controlPoints: path.controlPoints.slice(0, 9), weights: path.weights.slice(0, 9), knots: [...path.knots.slice(0, 11), path.knots[10]] };
+  assert.equal(pairedElbowInletOffsetEvidence(native(leading), candidate, leading, section, 4), undefined);
   assert.deepEqual({ path, original, candidate }, saved);
 });
 

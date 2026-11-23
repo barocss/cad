@@ -49,7 +49,7 @@ function boundary(brep: Brep, id: string) {
 function pairedElbowOffsetEvidence(original: Brep, candidate: Brep, path: Path, source: Source, distance: number, inlet: boolean) {
   try {
     if (!Number.isFinite(distance) || distance === 0 || Math.abs(distance) > CadNumericPolicy.coordinateAbs) return;
-    if (inlet && path.controlPoints.length !== 7) return;
+    if (inlet && path.controlPoints.length !== 7 && path.controlPoints.length !== 11) return;
     const arcFirst = path.controlPoints.length === 5, ended = path.controlPoints.length === 11;
     const evidenceOf = ended ? pairedEndedSpacedArcDuctEvidence : arcFirst ? pairedArcLineDuctEvidence : pairedLineArcDuctEvidence;
     const before = evidenceOf(original, path, source);
@@ -67,7 +67,7 @@ function pairedElbowOffsetEvidence(original: Brep, candidate: Brep, path: Path, 
     if (!after || after.pathKind !== before.pathKind || !after.throughApertures.junctions
       || !same(incidence(original), incidence(candidate))
       || !same(before.throughApertures.junctions, after.throughApertures.junctions)
-      || !(arcFirst || inlet ? sameRetainedCap(before.caps[inlet ? 1 : 0], after.caps[inlet ? 1 : 0])
+      || !(ended && inlet ? same(before.caps[1], after.caps[1]) : arcFirst || inlet ? sameRetainedCap(before.caps[inlet ? 1 : 0], after.caps[inlet ? 1 : 0])
         : same(before.caps[0], after.caps[0]))) return;
     const [originalCap, movedCap] = [before.caps[inlet ? 0 : 1], after.caps[inlet ? 0 : 1]];
     if (!pointNear(originalCap.plane.normal, normal) || !pointNear(movedCap.plane.normal, normal)
@@ -80,7 +80,8 @@ function pairedElbowOffsetEvidence(original: Brep, candidate: Brep, path: Path, 
       if (!moved || !same({ ...edge.curve, controlPoints: undefined }, { ...moved.curve, controlPoints: undefined })
         || edge.curve.controlPoints.some((point, index) => !pointNear(moved.curve.controlPoints[index], add(point, vector)))) return;
     }
-    const fixed = original.faces.filter(face => face.name !== originalCap.name && !face.name?.startsWith(`${original.source.id}.${inlet || arcFirst ? 'line' : 'tail'}.`));
+    const movingPiece = inlet && ended ? 'lead' : inlet || arcFirst ? 'line' : 'tail';
+    const fixed = original.faces.filter(face => face.name !== originalCap.name && !face.name?.startsWith(`${original.source.id}.${movingPiece}.`));
     if (fixed.some(face => !same(boundary(original, face.id), boundary(candidate, face.id)))) return;
     const through = before.throughApertures, exterior = through.dimensions.exterior;
     const outerArea = exterior.radial * exterior.axial;
@@ -117,13 +118,14 @@ export function pairedElbowOutletOffsetEvidence(original: Brep, candidate: Brep,
   return { ...evidence, retained: { inlet: cap, junctions, faces } };
 }
 
-/** Only the original seven-point line–arc–line duct has an independently retained straight inlet. */
+/** Original seven-point and opposite-turn five-span ducts have independently retained straight inlets. */
 export function pairedElbowInletOffsetEvidence(original: Brep, candidate: Brep, path: Path, source: Source, distance: number) {
   const evidence = pairedElbowOffsetEvidence(original, candidate, path, source, distance, true);
   if (!evidence) return;
   const dimensions = evidence.throughApertures.dimensions;
   if (!('leadLength' in dimensions)) return;
   const { cap, junctions, faces } = evidence.retained;
-  return { ...evidence, pathKind: 'line-arc-line' as const, retained: { outlet: cap, junctions, faces },
+  return { ...evidence, pathKind: path.controlPoints.length === 11 ? 'line-arc-line-arc-line' as const : 'line-arc-line' as const,
+    retained: { outlet: cap, junctions, faces },
     throughApertures: { ...evidence.throughApertures, dimensions } };
 }
