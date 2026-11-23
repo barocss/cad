@@ -3,8 +3,11 @@ import { copyFile, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createFlow } from './flow-helper.mjs';
 import { currentPartRevision, withMcpSession } from './mcp-browser-session.mjs';
+import { checkReopenedOutlet, reviewPendingOutlet } from './paired-elbow-outlet-review-browser-steps.mjs';
 
 const baseline = process.argv.includes('--expect-refused');
+const reviewUnavailable = process.argv.includes('--expect-review-unavailable');
+const reviewOutlet = process.argv.includes('--review-outlet');
 const path = {
   degree: 2, knots: [0, 0, 0, 1, 1, 2, 2, 3, 3, 3],
   controlPoints: [[-10, 0, 0], [-5, 0, 0], [0, 0, 0], [20, 0, 0], [20, 20, 0], [20, 27, 0], [20, 34, 0]],
@@ -32,6 +35,16 @@ const pins = [
   'packages/barocss-cad-model/src/engine/doc.ts',
   'packages/barocss-cad-model/src/engine/errors.ts',
   'packages/barocss-cad-model/src/chat/part/features.ts',
+  'packages/barocss-cad-model/src/chat/part/modelCandidate.ts',
+  'packages/barocss-cad-model/src/chat/part/proposals.ts',
+  'packages/barocss-cad-model/src/chat/part/views.ts',
+  'apps/cad-studio/test/paired-elbow-outlet-review-browser-steps.mjs',
+  ...(reviewOutlet ? [
+    'apps/cad-studio/test/duct-proposal-review-browser-steps.mjs',
+    'packages/barocss-cad-model/src/chat/pairedElbowOutletOffsetEvidence.ts',
+    'packages/barocss-cad-model/src/chat/pairedElbowOutletProposalReview.ts',
+    'packages/barocss-cad-model/src/chat/pairedLineArcDuctEvidence.ts',
+  ] : []),
 ];
 const f = await createFlow({
   name: 'offset-paired-elbow-outlet', output: process.argv[2], envFrozen: 'D1788_SOURCE_FROZEN',
@@ -133,7 +146,7 @@ async function approveWithAgent(savedSource, original, expected) {
   const file = join(f.output, 'paired-elbow-outlet-agent-proposal.bcad');
   await copyFile(savedSource.file, file);
   const session = { app: f.app, output: f.output, clientName: f.name };
-  await withMcpSession(session, file, 'outlet-offset', async call => {
+  const reviewed = await withMcpSession(session, file, 'outlet-offset', async (call, request) => {
     const expectedRevision = await currentPartRevision(call), before = await readFile(file);
     const description = await call('describe', { command: 'offset-face' });
     assert.match(description.selection, /original straight outlet/);
@@ -145,6 +158,17 @@ async function approveWithAgent(savedSource, original, expected) {
     assert.deepEqual(await readFile(file), before);
     const staged = await call('proposals', { action: 'propose', title: 'Move the paired outlet inward by 4 mm', ops: [op] });
     assert.deepEqual([staged.proposal, staged.applied], ['P1', false]);
+    if (reviewUnavailable) {
+      const { proposals: [pending] } = await call('proposals', { action: 'list' });
+      assert.equal(pending.modelReviewRevision, undefined);
+      const beforeReview = await readFile(file);
+      const refusal = await call('query', { action: 'render', proposal: 'P1', expectedRevision,
+        expectedProposalRevision: pending.proposalRevision }, true);
+      assert.equal(refusal.code, 'MODEL_REVIEW_UNAVAILABLE');
+      assert.deepEqual(await readFile(file), beforeReview);
+      f.report.observations.push({ label: 'pending-outlet-image-refused', code: refusal.code });
+    }
+    if (reviewOutlet) return reviewPendingOutlet(f, file, call, request, expectedRevision);
   });
   const pending = JSON.parse(await readFile(file));
   assert.deepEqual([pending.nodes, pending.outputs], [source.nodes, source.outputs]);
@@ -155,10 +179,16 @@ async function approveWithAgent(savedSource, original, expected) {
   await button('Hide', card).waitFor();
   await f.same(pending);
   await f.snapshot('09-agent-preview');
+  if (reviewUnavailable) return;
   await button('Accept', card).click();
   await f.changed(pending);
   const approved = (await f.snapshot('10-agent-approved')).doc;
-  assert.equal((await verify('approved-native', approved, -4, original)).digest, expected.digest);
+  const result = await verify('approved-native', approved, -4, original);
+  assert.equal(result.digest, expected?.digest ?? reviewed.meta.candidate.bodySha256);
+  if (reviewOutlet) {
+    const reopened = await checkReopenedOutlet(f, session, approved, reviewed);
+    assert.equal((await verify('review-reopened-native', reopened, -4, original)).digest, result.digest);
+  }
 }
 
 await f.run(async () => {
@@ -179,6 +209,7 @@ await f.run(async () => {
   const original = await f.inspect('original-native', source);
   assert.ok(original.check.valid, original.check.issues.join('\n'));
   const savedSource = baseline ? undefined : await f.save('paired-elbow-source');
+  if (reviewUnavailable || reviewOutlet) return approveWithAgent(savedSource, original);
 
   f.phase = 'Pick the original outlet cap in Studio';
   await button('View cube directions', f.page.getByRole('group', { name: 'View cube', exact: true })).click();

@@ -67,7 +67,8 @@ const renderViewsTool: PartHandler = async (state, args, evaluate, _options, dis
       ? ('closedCavities' in duct && duct.closedCavities ? 'Closed duct with two sealed cavities' : `Rectangular ${duct.pathKind ?? 'S-bend'} duct`)
       : intersection ? ('centroid' in intersection
         ? `${intersection.offset === 0 ? 'Centered' : 'Offset'} two-cavity duct Intersect` : 'Offset rectangular duct Intersect')
-        : 'chamferResize' in review.geometry ? 'Saved Chamfer resize'
+        : 'pairedElbowOutletOffset' in review.geometry ? 'Paired duct outlet Offset'
+          : 'chamferResize' in review.geometry ? 'Saved Chamfer resize'
           : 'cornerBatch' in review.geometry ? 'Sketch corner proposal' : 'Bored wall proposal';
     return { state, content: json({ revision: review.revision, ...views, candidate: review.candidate, ...review.geometry }),
       isError: false, changed: false, summary: `${label} ${review.candidate.proposal}`, images: [{ data: image, mediaType: 'image/png' }] };

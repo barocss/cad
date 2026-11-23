@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { sha256 } from './flow-helper.mjs';
 import { currentPartRevision, withMcpSession } from './mcp-browser-session.mjs';
 
-async function render(request, args) {
+export async function render(request, args) {
   const reply = await request('tools/call', { name: 'query', arguments: { action: 'render', ...args } });
   assert.equal(reply.isError, false, JSON.stringify(reply.content[0]));
   const meta = JSON.parse(reply.content[0].text);
