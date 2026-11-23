@@ -11,9 +11,10 @@ import type { StudioDoc } from '../engine/doc';
 import { sectionFrame, type Orientation } from './views';
 export { sectionDepth } from './views';
 import type { DrawingSection, SectionViewId, XY } from './types';
+import { sectionCircleHatch, type SectionCircleHatch } from './sectionCircleHatch';
 
 /** `ringBodies`: each ring's body (the part's output index: one body hatched the same in every section). */
-export type SectionResult = { ok: true; projection: BrepProjection; rings: XY[][]; ringBodies: number[] } | { ok: false; error: string };
+export type SectionResult = { ok: true; projection: BrepProjection; rings: XY[][]; ringBodies: number[]; circleHatch?: SectionCircleHatch } | { ok: false; error: string };
 /** O148 X1: a section of the drawing and what cutting it gave. */
 export type SectionCut = DrawingSection & { result: SectionResult };
 
@@ -72,7 +73,14 @@ export function sectionOf(doc: StudioDoc, y: number, orientation: Orientation = 
         ringBodies.push(keep[i].body);
       }
     });
-    return { ok: true, projection: faceOnly ? onPlane(projection, sectionBreps, d, y) : projection, rings, ringBodies };
+    // Only one complete principal cut face can supply the optional analytic hatch. Its existing
+    // projection remains the outline authority; clipped, moved and composed sections keep polygons.
+    const cutFaces = principal && !faceOnly && breps.length === 1 && sectionBreps.length === 1
+      ? sectionBreps[0].faces.filter(face => faceOnPlane(face, d, y)) : [];
+    const circleHatch = cutFaces.length === 1 && cutFaces[0].loops.length === rings.length
+      ? sectionCircleHatch(sectionBreps[0], cutFaces[0], projection) : undefined;
+    return { ok: true, projection: faceOnly ? onPlane(projection, sectionBreps, d, y) : projection, rings, ringBodies,
+      ...(circleHatch ? { circleHatch } : {}) };
   } catch (cause) { return { ok: false, error: cause instanceof Error ? cause.message : String(cause) }; }
 }
 /** O148 X1: every section of the drawing, cut. */

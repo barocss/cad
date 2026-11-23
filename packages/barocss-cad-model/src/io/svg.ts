@@ -1,4 +1,5 @@
 import { subtractHatchText } from '../drawing/hatchClearance';
+import { hatchSectionCircles } from '../drawing/svgCircleHatch';
 // The sheet as SVG: one user unit per millimetre, so the file prints at the drawing's scale. Arcs are
 // exact SVG elliptical arcs (a projected circle's principal axes from its conjugate semi-diameters).
 import { refusal } from '../engine/refusal';
@@ -31,7 +32,7 @@ function markSvg(m: Mark): string {
   }
   const pen = PENS[m.pen], style = `stroke-width="${pen.width}"${pen.dash ? ` stroke-dasharray="${pen.dash.join(' ')}"` : ''}`;
   if (m.kind === 'hatch') {
-    const lines = hatch(m.rings, m.spacing, m.angle);
+    const lines = m.svgCircleHatch ? hatchSectionCircles(m.svgCircleHatch, m.spacing, m.angle) : hatch(m.rings, m.spacing, m.angle);
     return (m.svgTextExclusions?.length ? subtractHatchText(lines, m.svgTextExclusions) : lines).map(markSvg).join('');
   }
   if (m.kind === 'line') return `<line x1="${n(m.a[0])}" y1="${n(m.a[1])}" x2="${n(m.b[0])}" y2="${n(m.b[1])}" ${style}/>`;

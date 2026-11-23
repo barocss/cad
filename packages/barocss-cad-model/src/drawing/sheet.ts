@@ -24,9 +24,10 @@ import { VIEWS, scaleLabel, sectionDepth, sectionFrame, toSheet, type Orientatio
 import type { DrawingDatum, DrawingFrame, DrawingNote, DrawingSection, DrawingSettings, DrawingTable, DrawingViews, SectionViewId, Tolerance, ViewId, XY } from './types';
 import { tableLayout, tableSize, type TableContent, type TableLayout } from './table';
 import type { TableCell } from './types';
-import { VIEW_IDS, detailLetter, isDetailRef, isSectionRef, isViewId, sameSection, sectionLetter, sectionsOf, type DetailRef, type DimView, type SectionRef } from './types';
+import { VIEW_IDS, detailLetter, isDetailRef, isSectionRef, isViewId, sameSection, sectionHatchVisibilitySupported, sectionLetter, sectionsOf, type DetailRef, type DimView, type SectionRef } from './types';
 import { clipProjectionToDisk, clipRingsToDisk, detailScale, type DetailParent, type DrawingDetail } from './detail';
 import { clipProjectionOutside, clipRingsOutside } from './breaks';
+import type { SectionCircleHatch } from './sectionCircleHatch';
 
 /** visible 0.5, hidden 0.35 dashed, thin 0.25 (dimensions, title block rules), centre 0.25 chain, phantom 0.25 two-dot chain (datum target lines and areas), frame 0.7. */
 export type Pen = 'visible' | 'hidden' | 'thin' | 'center' | 'phantom' | 'frame';
@@ -45,7 +46,7 @@ export type Mark =
   | { kind: 'fill'; points: XY[]; head?: Head }
   /** Parallel lines `spacing` apart at `angle` degrees (counter-clockwise as read) over rings, even–odd (R11b, O1: kept as one mark so a DXF gets a HATCH; SVG and PDF draw its lines). */
   /** `angle`: the lines' direction on the sheet (degrees, y down the paper): 45 for one body, a body's own in a section of several. */
-  | { kind: 'hatch'; rings: XY[][]; spacing: number; angle: number; pen: Pen; /** Transient SVG-only clearance, not section geometry or saved settings. */ svgTextExclusions?: XY[][] }
+  | { kind: 'hatch'; rings: XY[][]; spacing: number; angle: number; pen: Pen; /** Analytic cut rings in sheet units for SVG. */ svgCircleHatch?: SectionCircleHatch; /** Transient SVG-only text clearance. */ svgTextExclusions?: XY[][] }
   /** `angle`: degrees, counter-clockwise as read on the sheet. */
   | { kind: 'text'; at: XY; text: string; size: number; anchor: 'start' | 'middle' | 'end'; angle?: number; bold?: boolean };
 /** `datum`, `control` (R14.4, O5): a datum feature symbol, a feature control frame. */
@@ -53,7 +54,7 @@ export type Mark =
 /** `weld` (FRd2, O119): a weld symbol, its id the joint's W-number. */
 /** `balloon` (O147 B2): an item balloon, its id the BOM line's number. */
 /** O148 X1: a section as the sheet draws it — its letter, view and place along the view's depth, its projection and cut rings (`ringBodies`: each ring's body, the part's output index). */
-export interface SheetSection extends DrawingSection { projection: BrepProjection; rings: XY[][]; ringBodies?: number[] }
+export interface SheetSection extends DrawingSection { projection: BrepProjection; rings: XY[][]; ringBodies?: number[]; circleHatch?: SectionCircleHatch }
 /** A body's hatch in a section of several (the viewport's order, the GPU lane's G19.3): 45°, 135°, 30°, 120°, 60°, 150°; past them, wider. */
 export const HATCH_ANGLES: readonly number[] = [45, 135, 30, 120, 60, 150];
 export const HATCH_SPACING = 2.5;
@@ -66,8 +67,8 @@ export function hatchGroups(rings: readonly XY[][], bodies?: readonly number[]):
   return [...by].sort((a, b) => a[0] - b[0]).map(([body, rs]) => ({ body, rings: rs, angle: HATCH_ANGLES[body % HATCH_ANGLES.length], spacing: HATCH_SPACING * (1 + 0.4 * Math.floor(body / HATCH_ANGLES.length)) }));
 }
 /** The sections that cut (O148 X1), as the sheet draws them; one that failed is left out (its error is the caller's to say). */
-export const sheetSections = (cuts: readonly (DrawingSection & { result: { ok: true; projection: BrepProjection; rings: XY[][]; ringBodies?: number[] } | { ok: false; error: string } })[]): SheetSection[] =>
-  cuts.flatMap(c => c.result.ok ? [{ id: c.id, view: c.view, at: c.at, ...(c.dir ? { dir: c.dir } : {}), ...(c.half ? { half: c.half } : {}), ...(c.steps ? { steps: c.steps, ...(c.along ? { along: c.along } : {}) } : {}), ...(c.removed ? { removed: c.removed } : {}), ...(c.revolved ? { revolved: true as const } : {}), projection: c.result.projection, rings: c.result.rings, ...(c.result.ringBodies ? { ringBodies: c.result.ringBodies } : {}) }] : []);
+export const sheetSections = (cuts: readonly (DrawingSection & { result: { ok: true; projection: BrepProjection; rings: XY[][]; ringBodies?: number[]; circleHatch?: SectionCircleHatch } | { ok: false; error: string } })[]): SheetSection[] =>
+  cuts.flatMap(c => c.result.ok ? [{ id: c.id, view: c.view, at: c.at, ...(c.dir ? { dir: c.dir } : {}), ...(c.half ? { half: c.half } : {}), ...(c.steps ? { steps: c.steps, ...(c.along ? { along: c.along } : {}) } : {}), ...(c.removed ? { removed: c.removed } : {}), ...(c.revolved ? { revolved: true as const } : {}), projection: c.result.projection, rings: c.result.rings, ...(c.result.ringBodies ? { ringBodies: c.result.ringBodies } : {}), ...(c.result.circleHatch && sectionHatchVisibilitySupported(c) ? { circleHatch: c.result.circleHatch } : {}) }] : []);
 /** The middle of the part along a section view's depth (O148 X1: where a new section is cut), from a view that sees that depth edge-on; null if none is shown. */
 export function sectionMiddle(views: DrawingViews, view: SectionViewId, orientation?: Orientation): number | null {
   const { k, sign } = sectionDepth(view, orientation);
@@ -1194,7 +1195,16 @@ function sectionMarks(v: SectionPlacement, section: SheetSection, hideHatch = fa
   }
   // (Each body its own hatch — the part's body k at HATCH_ANGLES[k], so adjacent parts read apart, and a body the same in
   // every section; one body alone at 45° as always.)
-  if (!hideHatch) for (const g of hatchGroups(rings, bodies)) marks.push({ kind: 'hatch', rings: g.rings.map(r => r.map(q => toSheet(v, q))), spacing: g.spacing, angle: g.angle, pen: 'thin' });
+  const circleHatch = cut ? undefined : section.circleHatch;
+  if (!hideHatch) for (const g of hatchGroups(rings, bodies)) {
+    const mark: Extract<Mark, { kind: 'hatch' }> = { kind: 'hatch', rings: g.rings.map(r => r.map(q => toSheet(v, q))), spacing: g.spacing, angle: g.angle, pen: 'thin' };
+    if (circleHatch && g.rings.length === rings.length) {
+      const [outer, inner] = circleHatch.radii;
+      mark.svgCircleHatch = { center: toSheet(v, circleHatch.center), radii: inner === undefined
+        ? [outer * v.scale] : [outer * v.scale, inner * v.scale] };
+    }
+    marks.push(mark);
+  }
   return marks;
 }
 /** A section's cutting plane, in the first shown view that sees it edge-on (none shown: none). */
