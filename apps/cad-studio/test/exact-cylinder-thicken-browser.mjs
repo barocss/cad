@@ -5,12 +5,16 @@ import { createFlow } from './flow-helper.mjs';
 
 const sector = process.argv.includes('--sector');
 const half = process.argv.includes('--semicircle');
-const authored = half || process.argv.includes('--authored');
+const gallery = process.argv.includes('--gallery');
+assert.ok(!gallery || !half, 'The gallery uses the original quarter cylinder.');
+const authored = half || gallery || process.argv.includes('--authored');
 assert.ok(!authored || !sector, 'Choose either the authored or the explicit sector source');
+const radius = gallery ? 20 : 10;
 const profile = half ? [[30, 20], [30, 30], [20, 30], [10, 30], [10, 20]]
-  : authored ? [[30, 20], [30, 30], [20, 30]]
+  : authored ? [[20 + radius, 20], [20 + radius, 20 + radius], [20, 20 + radius]]
     : sector ? [[40, -14], [40, 6], [24, -6]] : [[36, -6], [28, 0], [22, -8]];
-const [z0, z1] = authored ? [0, 12] : [-2, 10];
+const [z0, z1] = authored ? [0, gallery ? 30 : 12] : [-2, 10];
+const height = z1 - z0;
 const [cx, cy] = authored ? [20, 20] : [30, -14];
 const grid = profile.map(([x, y]) => [[x, y, z0], [x, y, z1]]);
 const weight = sector ? 1 / Math.sqrt(5) : Math.SQRT1_2;
@@ -33,7 +37,7 @@ if (authored) pins.push('apps/cad-studio/src/viewport/viewportPointerInput.ts',
   'apps/cad-studio/src/sketch/useSketchActions.ts', 'packages/barocss-cad-model/src/engine/curveSource.ts');
 const f = await createFlow({
   name: 'exact-cylinder-thicken', output: process.argv[2],
-  envFrozen: half ? 'D1635_SOURCE_FROZEN' : authored ? 'D1634_SOURCE_FROZEN' : sector ? 'D1633_SOURCE_FROZEN' : 'D1632_SOURCE_FROZEN',
+  envFrozen: gallery ? 'D1860_SOURCE_FROZEN' : half ? 'D1635_SOURCE_FROZEN' : authored ? 'D1634_SOURCE_FROZEN' : sector ? 'D1633_SOURCE_FROZEN' : 'D1632_SOURCE_FROZEN',
   initialFiles: pins, requiredFrozen: pins,
   qualification: authored ? 'Draw a Centre arc, make and duplicate its curve, move it in Z, build a Ruled surface and save the exact thickened cylinder in Studio.'
     : `Thicken an open upright ${(sweep * 180 / Math.PI).toFixed(2)}-degree cylinder inward, edit its thickness, and reopen the exact solid in Studio.`,
@@ -41,7 +45,7 @@ const f = await createFlow({
     : 'One canonical rational circular span and one linear axial span. Desktop WebGPU.'],
   inspectorSource: `
 import { readFileSync } from 'node:fs';
-import { checkBrep, brepMassProperties, faceGeometry } from '@barocss/cad';
+import { checkBrep, brepMassProperties, brepSurfaceArea, faceGeometry } from '@barocss/cad';
 import { geometryOf } from '@barocss/cad-model/engine/direct';
 import { partBreps } from '@barocss/cad-model/engine/evaluate';
 import { digestOf } from '@barocss/cad-model/util/digest';
@@ -50,6 +54,7 @@ const solids = partBreps(doc).map(({ key, brep }) => {
   const report = checkBrep(brep, { strict: true });
   return { key, valid: report.valid, counts: report.counts, genus: report.topology[0]?.genus,
     volume: brepMassProperties(brep, 1).volume,
+    area: brepSurfaceArea(brep),
     faces: brep.faces.map(face => ({ name: face.name, geometry: faceGeometry(face, 20) })).sort((a, b) => a.name.localeCompare(b.name)),
     vertices: brep.vertices.map(v => v.point), digest: digestOf(brep) };
 });
@@ -77,18 +82,18 @@ async function authorPatch() {
   const sketch = f.sketchPanel();
   await sketch.waitFor();
   await sketch.getByLabel('Sketch plane', { exact: true }).selectOption('xy');
-  await f.frame([[8, 12], [38, 38]]);
+  await f.frame(gallery ? [[0, 0], [50, 50]] : [[8, 12], [38, 38]]);
   await f.tool('Centre arc', 'q');
   await f.worldClick([cx, cy]);
   await f.worldClick(profile[0]);
   const arcEnd = profile.at(-1);
-  const samples = half ? [[28, 26], [26, 28], [20, 30], [14, 28], [12, 26], arcEnd] : [[28, 26], [26, 28], arcEnd];
+  const samples = half ? [[28, 26], [26, 28], [20, 30], [14, 28], [12, 26], arcEnd] : [[20 + .8 * radius, 20 + .6 * radius], [20 + .6 * radius, 20 + .8 * radius], arcEnd];
   for (const point of samples) {
     const pixel = await f.screenOf(point);
     await f.page.mouse.move(...pixel, { steps: 3 });
   }
   await f.worldClick(arcEnd);
-  near(Number(await sketch.getByLabel('Arc 1 radius', { exact: true }).inputValue()), 10, 1e-7);
+  near(Number(await sketch.getByLabel('Arc 1 radius', { exact: true }).inputValue()), radius, 1e-7);
   await f.snapshot('01-authored-centre-arc');
 
   f.phase = 'Make the native curve and move only its duplicate';
@@ -106,7 +111,7 @@ async function authorPatch() {
   await f.changed(arc);
   const duplicated = await f.doc(), copy = duplicated.direct.objects[1];
   assert.notEqual(copy.id, original.id);
-  await panel().getByLabel('ΔZ', { exact: true }).fill(String(z1 - z0));
+  await panel().getByLabel('ΔZ', { exact: true }).fill(String(height));
   await button('Move', panel()).click();
   await f.changed(duplicated);
   const moved = await f.doc();
@@ -145,11 +150,11 @@ async function verify(label, doc, sourceDoc, thickness) {
     ['b0', true, 0, 1, 6, 12, 8]);
   assert.deepEqual(solid.faces.map(face => face.name).sort(), names);
   const byName = new Map(solid.faces.map(face => [face.name, face.geometry]));
-  const inner = 10 - thickness;
-  for (const [face, radius, orientation] of [['n0.normal', 10, 1], ['n0.reverse', inner, -1]]) {
+  const inner = radius - thickness;
+  for (const [face, wallRadius, orientation] of [['n0.normal', radius, 1], ['n0.reverse', inner, -1]]) {
     const wall = byName.get(face);
     assert.deepEqual([wall.kind, wall.out], ['cylinder', orientation]);
-    near(wall.r, radius);
+    near(wall.r, wallRadius);
     near(wall.c[0], cx);
     near(wall.c[1], cy);
     near(Math.abs(wall.a[2]), 1);
@@ -160,19 +165,26 @@ async function verify(label, doc, sourceDoc, thickness) {
     near(cap.o[2], z);
     near(Math.abs(cap.n[2]), 1);
   }
-  const rays = [profile[0], profile.at(-1)].map(([x, y]) => [(x - cx) / 10, (y - cy) / 10]);
+  const rays = [profile[0], profile.at(-1)].map(([x, y]) => [(x - cx) / radius, (y - cy) / radius]);
   for (const [face, ray] of [['n0.u-min', rays[0]], ['n0.u-max', rays[1]]]) {
     const wall = byName.get(face);
     assert.equal(wall.kind, 'plane');
     near(wall.n[2], 0);
     near(wall.n[0] * ray[0] + wall.n[1] * ray[1], 0);
     near(wall.n[0] * (wall.o[0] - cx) + wall.n[1] * (wall.o[1] - cy), 0);
-    for (const radius of [10, inner]) for (const z of [z0, z1]) {
-      const point = [cx + radius * ray[0], cy + radius * ray[1], z];
+    for (const r of [radius, inner]) for (const z of [z0, z1]) {
+      const point = [cx + r * ray[0], cy + r * ray[1], z];
       assert.ok(solid.vertices.some(vertex => Math.hypot(...vertex.map((coord, axis) => coord - point[axis])) < 1e-8));
     }
   }
-  near(solid.volume, sweep / 2 * (100 - inner ** 2) * 12, 1e-7);
+  const annularDifference = radius ** 2 - inner ** 2;
+  near(solid.volume, sweep / 2 * annularDifference * height, 1e-7);
+  if (gallery) {
+    const curvedSkins = sweep * (radius + inner) * height;
+    const radialWalls = 2 * thickness * height;
+    const caps = sweep * annularDifference;
+    near(solid.area, curvedSkins + radialWalls + caps, 1e-7);
+  }
   near((await f.bodies()).bodies[0].volume, solid.volume, 1e-7);
   return solid;
 }
@@ -205,7 +217,7 @@ await f.run(async () => {
   const thickness = hud().getByLabel('Thickness', { exact: true });
 
   f.phase = 'Refuse an inward offset that reaches or crosses the axis before writing a feature';
-  await thickness.fill(sector ? '11' : '10');
+  await thickness.fill(String(sector ? radius + 1 : radius));
   await hud().locator('.status').filter({ hasText: /^refused$/ }).waitFor();
   assert.equal(await button('Apply', hud()).isDisabled(), true);
   await f.same(sourceDoc);
@@ -231,6 +243,6 @@ await f.run(async () => {
   await button('Iso').click();
   await f.page.getByTitle('Frame all (F)', { exact: true }).click();
   await f.snapshot('09-reopened-cylinder');
-  f.report.observations.push({ authored, sweep, thicknesses: [2, 3], radii: [[8, 10], [7, 10]],
-    volumes: [first.volume, second.volume], names, digest: second.digest });
+  f.report.observations.push({ authored, sweep, height, thicknesses: [2, 3], radii: [[radius - 2, radius], [radius - 3, radius]],
+    volumes: [first.volume, second.volume], areas: [first.area, second.area], names, digest: second.digest });
 });

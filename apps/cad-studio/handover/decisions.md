@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1860: [Verify the original six-face cylinder gallery](notes/exact-cylinder-gallery-closeout-2026-11-24/README.md), #368. Verify the native open patch, inward thickness, independent area and volume and fresh Open.
 - D1859: [Pin both Agent images of the plane-bound inlet](notes/pinned-inlet-reference-review-2026-11-24/README.md), #324. Verify exact donor and candidate pins, stale refusal, explicit approval and fresh Open.
 - D1858: [Bind the original five-span inlet to a parallel native reference](notes/five-span-inlet-reference-plane-2026-11-24/README.md), #17. Verify the moving donor, History retargeting, fixed outlet and fresh Open.
 - D1857: [Extract the rounded inset History edit action](notes/studio-rounded-inset-history-edit-2026-11-24/README.md), #44. Verify distance, source width, Detach and late document replacement in desktop Studio.
