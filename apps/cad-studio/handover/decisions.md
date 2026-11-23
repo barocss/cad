@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1829: [Name the earlier rectangular cut in a local Agent proposal](notes/agent-prior-rectangular-cut-2026-11-24/README.md), #25. Verify revision-bound addressing and native geometry through explicit Studio approval and fresh Open.
 - D1828: [Repeat the earlier rectangular cut on the current two-cut stock](notes/prior-rectangular-cut-pattern-2026-11-24/README.md), #25. Separate native cut source from current target and verify both exact apertures, the XY grid and saved History.
 
 - D1827: [Place the long angle of a shared native Top corner](notes/native-top-reflex-angle-2026-11-24/README.md), #742. Bind the two original straight edges and verify the 270° and 300° long arcs in Studio, native reopen and SVG.

@@ -1,13 +1,19 @@
 import assert from 'node:assert/strict';
+import { readFile, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { createFlow } from './flow-helper.mjs';
+import { currentPartRevision, withMcpSession } from './mcp-browser-session.mjs';
 import { clickModelCommand } from './model-rail-helper.mjs';
 
+const agent = process.argv.includes('--agent');
 const f = await createFlow({
-  name: 'prior-rectangular-cut-pattern', output: process.argv[2], envFrozen: 'D1828_SOURCE_FROZEN',
-  qualification: '#25 repeat only the chosen earlier through-Subtract on its current same-stock result.',
+  name: 'prior-rectangular-cut-pattern', output: process.argv[2], envFrozen: agent ? 'D1829_SOURCE_FROZEN' : 'D1828_SOURCE_FROZEN',
+  qualification: agent ? '#25 revision-bound local Agent proposal for the earlier through-Subtract.' :
+    '#25 repeat only the chosen earlier through-Subtract on its current same-stock result.',
   limits: ['One original rectangular stock and two disjoint full-height rectangular cuts, XY rectangular pattern in desktop Studio.'],
   initialFiles: [import.meta.filename, 'apps/cad-studio/src/App.tsx', 'apps/cad-studio/src/app/cutPatternSource.ts',
     'apps/cad-studio/src/ui/Hud.tsx', 'apps/cad-studio/src/ui/NodeEditor.tsx', 'packages/barocss-cad-model/src/app/commands.ts',
+    'packages/barocss-cad-model/src/chat/part/features.ts',
     'packages/barocss-cad-model/src/engine/doc.ts', 'packages/barocss-cad-model/src/engine/part.ts',
     'packages/barocss-cad/src/part/part-model.ts', 'packages/barocss-cad/src/part/part-transform.ts',
     'packages/barocss-cad/src/part/part-types.ts', 'packages/barocss-cad/src/part/part-prior-rectangular-cut.ts'],
@@ -130,8 +136,72 @@ async function apply(p, before, label, usesEarlier) {
   return doc;
 }
 
+async function approveAgentPattern(source) {
+  const file = join(f.output, 'agent-proposal.bcad');
+  const original = Buffer.from(JSON.stringify(source));
+  await writeFile(file, original);
+  const session = { app: f.app, output: f.output, clientName: f.name };
+  await withMcpSession(session, file, 'earlier-cut-agent', async call => {
+    const command = 'rectangular-feature-pattern';
+    const description = await call('describe', { command });
+    assert.match(description.values.source, /stable feature ID.*expectedRevision/);
+    const expectedRevision = await currentPartRevision(call);
+    const values = { source: 'n4', axis: 'x', spacing: 16, count: 2, axis2: 'y', spacing2: 8, count2: 2 };
+    const op = (override = {}) => ({ tool: 'features', args: { action: 'command', command, bodies: ['b7'], expectedRevision, values, ...override } });
+    const dry = (operation, error = false) => call('features', { action: 'batch', dryRun: true, ops: [operation] }, error);
+    const result = await dry(op());
+    assert.equal(result.dryRun, true);
+    equivalent(result.change.volume, -240);
+    assert.match(result.would_apply[0].did, /"source":"n4"/);
+    assert.match((await dry(op({ expectedRevision: '0000000000000000' }), true)).error, /part changed/);
+    assert.match((await dry(op({ values: { ...values, source: 'n7' } }), true)).error, /distinct/);
+    const overlap = await dry(op({ values: { ...values, spacing2: 18 } }), true);
+    assert.deepEqual([overlap.failed_op, overlap.kept], [0, 'nothing was applied']);
+    assert.match(overlap.error, /kernel could not build/i);
+    assert.deepEqual(await readFile(file), original);
+    const proposal = await call('proposals', { action: 'propose', title: 'Repeat earlier Subtract n4 on current stock n7', ops: [op()] });
+    assert.deepEqual([proposal.proposal, proposal.applied], ['P1', false]);
+    const pendingBytes = await readFile(file);
+    assert.match((await call('proposals', { action: 'accept', id: 'P1' }, true)).error, /user accepts.*studio/i);
+    assert.deepEqual(await readFile(file), pendingBytes);
+  });
+
+  const pending = JSON.parse(await readFile(file, 'utf8'));
+  assert.deepEqual(pending.nodes, source.nodes);
+  await f.freshOpen(file, pending, 'agent-pending-open');
+  await button('Top', f.page.locator('.views')).click();
+  await f.page.getByTitle('Frame all (F)', { exact: true }).click();
+  await button('Chat').first().click();
+  const card = f.page.getByRole('listitem', { name: 'Proposal P1', exact: true });
+  await card.waitFor();
+  await f.snapshot('01-agent-pending');
+  await button('Preview', card).click();
+  await button('Hide', card).waitFor();
+  await f.same(pending);
+  await card.getByLabel('Volume change').getByText(/^[−-]240(?:\.0+)? mm³(?: \(.*\))?$/).waitFor();
+  await native('pending-original-cuts', pending, [older, later]);
+  await f.snapshot('02-agent-preview');
+  await button('Accept', card).click();
+  await f.changed(pending);
+  const approved = (await f.snapshot('03-agent-approved')).doc;
+  assert.deepEqual(approved.nodes.slice(0, -1), source.nodes);
+  assert.deepEqual(approved.nodes.at(-1).source, { node: 4, side: 'solid' });
+  assert.deepEqual(approved.nodes.at(-1).parent, { node: 7, side: 'solid' });
+  assert.deepEqual(approved.proposals.map(proposal => proposal.status), ['accepted']);
+  const { kind, proposal, by } = approved.history.at(-1);
+  assert.deepEqual([kind, proposal, by.agent], ['accept', 'P1', 'user']);
+  await native('agent-approved-five-cuts', approved, [...grid(older, 16), later]);
+  const saved = await f.save('agent-earlier-cut');
+  const reopened = await f.freshOpen(saved.file, approved, 'agent-approved-fresh-open');
+  await button('Top', f.page.locator('.views')).click();
+  await f.page.getByTitle('Frame all (F)', { exact: true }).click();
+  await native('agent-reopened-five-cuts', reopened.doc, [...grid(older, 16), later]);
+  await f.snapshot('04-agent-reopened');
+}
+
 await f.run(async () => {
   const source = await f.inspect('seed', {});
+  if (agent) return approveAgentPattern(source);
   await f.newPage();
   await f.page.getByLabel('Model file', { exact: true }).setInputFiles({
     name: 'two-rectangular-through-cuts.bcad', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(source)),

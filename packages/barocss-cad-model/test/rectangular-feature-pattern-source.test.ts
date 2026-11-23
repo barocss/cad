@@ -5,6 +5,7 @@ import { part } from '../src/api';
 import { commands, type Ctx } from '../src/app/commands';
 import { checkNode, deleteFeature, featureDependents, renumber } from '../src/chat/features';
 import { moveNode } from '../src/chat/remap';
+import { dispatchTool } from '../src/chat/tools';
 import { encodeStudioFile, readStudioFile } from '../src/engine/container';
 import { leafBodies, parentsOf, rectangularFeaturePatternProblem, rectangularPatternDocumentProblem, usesOf, type BodyRef, type ModelNode, type StudioDoc } from '../src/engine/doc';
 import { evaluateDoc, partBreps } from '../src/engine/evaluate';
@@ -13,6 +14,7 @@ import { featureId } from '../src/engine/ids';
 import { readStudioDoc } from '../src/engine/migrate';
 import { toPartDocument } from '../src/engine/part';
 import { isRefusal } from '../src/engine/refusal';
+import { revisionOf } from '../src/util/revision';
 
 const values = { axis: 'x', spacing: 16, count: 3, axis2: 'y', spacing2: 16, count2: 2 };
 function seed() {
@@ -62,6 +64,34 @@ test('omitted source and an explicit current intent keep legacy node bytes and o
   const linear = commands.find(command => command.id === 'linear-feature-pattern'); assert.ok(linear?.build);
   assert.deepEqual(linear.build(ctx, { axis: 'x', spacing: 16, count: 3 }),
     linear.build({ ...ctx, rectangularCutSource: { node: 999, side: 'negative' } }, { axis: 'x', spacing: 16, count: 3 }));
+});
+
+test('the Agent command binds an explicit earlier cut to one current body and revision', async () => {
+  const { doc, ctx, first, target, made } = authored(), before = structuredClone(doc);
+  const source = featureId(doc.nodes, first), targetId = featureId(doc.nodes, target), body = ctx.bodies[0].key;
+  const args = { action: 'command', command: command().id, expectedRevision: revisionOf(doc), bodies: [body], values: { ...values, source } };
+  const evaluate = async (input: StudioDoc) => evaluateDoc(input, 2);
+  const call = (input: Record<string, unknown>) => dispatchTool({ doc, bodies: ctx.bodies }, 'features', input, evaluate);
+  const result = await call(args);
+  assert.equal(result.isError, false, result.content);
+  assert.deepEqual(JSON.parse(result.content).cutSource, { source, target: targetId, body });
+  assert.deepEqual(result.state.doc.nodes, made.nodes);
+  const refusals: [Record<string, unknown>, RegExp][] = [
+    [{ expectedRevision: undefined }, /needs expectedRevision/],
+    [{ expectedRevision: '0000000000000000' }, /part changed/],
+    [{ values: { ...values, source: first } }, /stable ID/],
+    [{ values: { ...values, source: targetId } }, /distinct/],
+    [{ values: { ...values, source: featureId(doc.nodes, first - 1) } }, /direct earlier/],
+    [{ bodies: [body, body] }, /one current solid/],
+    [{ point: [0, 0, 0] }, /no face, edge or point/],
+  ];
+  for (const [override, message] of refusals) {
+    const refused = await call({ ...args, ...override });
+    assert.equal(refused.isError, true, refused.content);
+    assert.match(JSON.parse(refused.content).error, message);
+    assert.equal(refused.state.doc, doc);
+  }
+  assert.deepEqual(doc, before);
 });
 
 test('source indices follow delete, move, proposal remap and placed-document flattening without becoming consumed parents', () => {

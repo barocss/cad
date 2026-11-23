@@ -151,7 +151,7 @@ export const COMMAND_DOCS: Record<string, { selection: string; values: Record<st
   'linear-pattern': { selection: 'bodies: [one body]', values: { axis: 'x | y | z', distanceMode: 'spacing (default) | span (One body only)', spacing: 'mm between copies in spacing mode', span: 'positive first-to-last distance in mm in span mode', count: 'copies including the original', result: 'one (one output) | separate (each its own body)' } },
   'fill-feature-pattern': { selection: 'bodies: [one current unsuppressed subtract result]', values: { region: 'stable sketch index to capture one closed straight world XY region snapshot; later sketch edits do not change it', anchorX: 'authored reference X', anchorY: 'authored reference Y', spacing: 'positive X distance at most 10000', count: 'columns 1–64', spacing2: 'positive Y distance at most 10000', count2: 'rows 1–64; count × count2 at most 64 including original' } },
   'curve-feature-pattern': { selection: 'bodies: [one current unsuppressed subtract result]', values: { path: 'stable direct curve object id (open polyline or straight quadratic spans; fixed orientation)', spacing: 'positive distance at most 10000; total distance must fit the current path', count: 'whole number 1–64 including original' } },
-  'rectangular-feature-pattern': { selection: 'bodies: [one current unsuppressed subtract result]', values: { axis: 'x | y | z (first global direction)', spacing: 'positive distance between cuts (at most 10000)', count: 'whole number 1–64', axis2: 'x | y | z (different from axis)', spacing2: 'positive distance between cuts (at most 10000)', count2: 'whole number 1–64; count × count2 at most 64 including original' } },
+  'rectangular-feature-pattern': { selection: 'bodies: [one current unsuppressed subtract result]', values: { source: 'optional stable feature ID (for example n4) of the direct earlier rectangular through-Subtract on the same stock. Requires expectedRevision from query.rebuild. Omit to repeat the current cut.', axis: 'x | y | z (first global direction)', spacing: 'positive distance between cuts (at most 10000)', count: 'whole number 1–64', axis2: 'x | y | z (different from axis)', spacing2: 'positive distance between cuts (at most 10000)', count2: 'whole number 1–64; count × count2 at most 64 including original' } },
   'linear-feature-pattern': { selection: 'bodies: [one current unsuppressed subtract result]', values: { axis: 'x | y | z', spacing: 'positive mm between cuts (at most 10000)', count: 'whole number 2–64, including the original cut' } },
   'circular-pattern': { selection: 'bodies: [one body]', values: { axis: 'z | x | y (quarter turns)', count: 'copies including the original', span: 'degrees the copies spread over about Z (360: an even full turn)', px: 'Z axis position X (default 0)', py: 'Z axis position Y (default 0)', result: 'one (joined) | separate (each its own body)' } },
   hollow: { selection: 'none: the part (one body): the kernel\u2019s exact closed shell first, else (planar faces) a voxel cavity; the print direction (axis-aligned) decides its bottom, where the drains go', values: { t: 'wall thickness', h: 'voxel size of the depth field: the drains\u2019 placement, and the cavity when the shell refuses (at most t/2)', drain: 'drain hole diameter, one into each cavity from the bottom' } },
@@ -265,6 +265,7 @@ async function runCommandTool(state: ChatState, args: Record<string, unknown>, e
       sel.names.faces.some(name => state.bodies.flatMap(body => body.mesh.faces.filter(face => face.name === name && face.nativePlaneName === name)).length !== 1)))
     return fail(state, `${cmd.id === 'offset-face' ? 'Offset face to plane' : cmd.label} needs two unique native face names in source, reference order.`);
   let ctx: Ctx = { doc: state.doc, bodies: state.bodies, selection: toPlane ? { ...selection, faces: [sourceFace] } : selection, pick: point };
+  let cutSource: { source: string; target: string; body: string } | undefined;
   if (cmd.id === 'sweep-curve') {
     const { sketch, path, pathRevision, representation, ...other } = given;
     if (typeof sketch !== 'string' || typeof path !== 'string' || !sketch.trim() || !path.trim()
@@ -292,6 +293,24 @@ async function runCommandTool(state: ChatState, args: Record<string, unknown>, e
       return fail(state, `${cmd.label} needs one current sketch with that ID from query.summary.`, { code: 'COMMAND_INPUT' });
     ctx = { ...ctx, selection: { ...selection, sketches: matches } };
     given = other;
+  } else if (cmd.id === 'rectangular-feature-pattern' && Object.hasOwn(given, 'source')) {
+    const { source, ...other } = given;
+    if (args.expectedRevision === undefined)
+      return fail(state, 'An explicit cut source needs expectedRevision from query.rebuild for the same part.', { code: 'COMMAND_INPUT' });
+    const body = state.bodies[selection.bodies[0]];
+    if (sel.names.bodies.length !== 1 || !body || body.ref?.side !== 'solid' ||
+      (args.faces !== undefined && (!Array.isArray(args.faces) || args.faces.length > 0)) ||
+      (args.edges !== undefined && (!Array.isArray(args.edges) || args.edges.length > 0)) || args.point !== undefined)
+      return fail(state, 'An explicit cut source needs one current solid body and no face, edge or point selection.', { code: 'COMMAND_INPUT' });
+    if (typeof source !== 'string' || !source.trim())
+      return fail(state, 'Set values.source to the stable ID of the earlier Subtract from query.summary.', { code: 'COMMAND_INPUT' });
+    const matches = state.doc.nodes.flatMap((_, index) => featureId(state.doc.nodes, index) === source ? [index] : []);
+    const [index] = matches;
+    if (matches.length !== 1 || index === body.ref.node)
+      return fail(state, 'An explicit cut source must name one earlier feature distinct from the selected body’s current Subtract.', { code: 'COMMAND_INPUT' });
+    ctx = { ...ctx, rectangularCutSource: { node: index, side: 'solid' } };
+    given = other;
+    cutSource = { source, target: featureId(state.doc.nodes, body.ref.node), body: body.key };
   }
   const avail = cmd.available(ctx);
   if (!avail.ok) return fail(state, `${cmd.label} can’t run: ${avail.reason}`);
@@ -310,6 +329,7 @@ async function runCommandTool(state: ChatState, args: Record<string, unknown>, e
   let next: StudioDoc;
   try { next = cmd.build(ctx, values); } catch (e) { return fail(state, `${cmd.label}: ${e instanceof Error ? e.message : String(e)}`); }
   const shown: Values = {};
+  if (cutSource) shown.source = cutSource.source;
   for (const field of shownFields(fields, values)) shown[field.key] = field.kind === 'file' ? field.filename(values[field.key]) ?? 'Font file' : values[field.key];
   // (O14: a mount reports its row's source and its output axis — for a concentric mate, or set_frames as it is.)
   if (cmd.id === 'mount') {
@@ -318,7 +338,7 @@ async function runCommandTool(state: ChatState, args: Record<string, unknown>, e
       axis: mountAxis(row, face, face.centroid[k], Number(values.x), Number(values.y), Number(values.turn ?? 0)), shaft: row.shaft };
     return accept(state, next, evaluate, options, `${cmd.label} ${json(shown)}`, { ...(sel.resolved.length ? { resolved: sel.resolved } : {}), mount, added: next.nodes.slice(state.doc.nodes.length).map((n, k) => `${state.doc.nodes.length + k}: ${featureLabel(n, state.doc.nodes.length + k, next.nodes)}`) });
   }
-  return accept(state, next, evaluate, options, `${cmd.label} ${json(shown)}`, { ...(sel.resolved.length ? { resolved: sel.resolved } : {}), added: next.nodes.slice(state.doc.nodes.length).map((n, k) => `${state.doc.nodes.length + k}: ${featureLabel(n, state.doc.nodes.length + k, next.nodes)}`) });
+  return accept(state, next, evaluate, options, `${cmd.label} ${json(shown)}`, { ...(sel.resolved.length ? { resolved: sel.resolved } : {}), ...(cutSource ? { cutSource } : {}), added: next.nodes.slice(state.doc.nodes.length).map((n, k) => `${state.doc.nodes.length + k}: ${featureLabel(n, state.doc.nodes.length + k, next.nodes)}`) });
 }
 async function addFeaturesTool(state: ChatState, args: Record<string, unknown>, evaluate: Evaluate, options: CallOptions): Promise<ToolOutcome> {
   const list = Array.isArray(args.features) ? args.features : null;
