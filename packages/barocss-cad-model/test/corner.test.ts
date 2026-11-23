@@ -693,3 +693,85 @@ test('selected adjacent line and arc restore the same Round tangent joint', () =
   if (!seam.ok) assert.fail(seam.reason);
   assert.deepEqual(seam.shape.tangents, [0]);
 });
+
+function angleConstrainedCorner(reflected = false, reversedRule = false): Polygon {
+  const turn = Math.atan2(3, 4) * 180 / Math.PI;
+  const points: P2[] = [[0, 0], [30, 0], [50, 15], [50, 45], [0, 45]];
+  if (reflected) for (const point of points) point[1] = point[1] ? -point[1] : 0;
+  return { kind: 'polygon', closed: true, points, ids: ['e1', 'e2', 'e3', 'e4', 'e5'],
+    hv: { h: [0, 3], v: [2, 4] }, rules: [
+      { kind: 'fix', point: 0, at: [...points[0]] }, { kind: 'fix', point: 2, at: [...points[2]] },
+      { kind: 'angle', a: reversedRule ? 1 : 0, b: reversedRule ? 0 : 1, value: 180 - turn },
+      { kind: 'angle', a: 0, b: 3, value: 180 },
+      { kind: 'angle', a: 1, b: 2, value: 90 + turn },
+    ] };
+}
+
+test('straight Fillet converts only its removed corner angle to separated carrier directions', () => {
+  const turn = Math.atan2(3, 4), degrees = turn * 180 / Math.PI;
+  for (const reflected of [false, true]) for (const reversedRule of [false, true]) {
+    const source = angleConstrainedCorner(reflected, reversedRule), before = structuredClone(source);
+    const planned = roundCorner(source, 1, 6); assert.ok('shape' in planned);
+    assert.deepEqual(planned.shape.rules, [source.rules![0], { kind: 'fix', point: 3, at: [...source.points[2]] },
+      { kind: 'angle', a: reversedRule ? 2 : 0, b: reversedRule ? 0 : 2, value: 180 - (180 - degrees) },
+      { kind: 'angle', a: 0, b: 4, value: 180 }, { kind: 'angle', a: 2, b: 3, value: 90 + degrees }]);
+    const settled = settleShape(planned.shape, source); assert.equal(settled.error, null);
+    assert.equal(settled.shape?.kind, 'polygon'); const shape = settled.shape as Polygon;
+    const sign = reflected ? -1 : 1;
+    assert.deepEqual(shape.points, [[0, 0], [28, 0], [31.6, 1.2 * sign], [50, 15 * sign], [50, 45 * sign], [0, 45 * sign]]);
+    const arc = arcOf(shape.points[1], shape.points[2], shape.bulges![1]);
+    nearPoint(arc.center, [28, 6 * sign]); near(arc.radius, 6); near(arc.sweep, turn * sign);
+    // The virtual corner keeps the 143.1301° included angle: incoming is reversed there.
+    const incoming: P2 = [shape.points[1][0] - shape.points[0][0], shape.points[1][1] - shape.points[0][1]];
+    const outgoing: P2 = [shape.points[3][0] - shape.points[2][0], shape.points[3][1] - shape.points[2][1]];
+    near(Math.acos(-(incoming[0] * outgoing[0] + incoming[1] * outgoing[1]) / (Math.hypot(...incoming) * Math.hypot(...outgoing))) * 180 / Math.PI, 180 - degrees);
+    const bounded = roundStraightCornerForEdit(source, 1, 6); assert.ok('shape' in bounded, 'error' in bounded ? bounded.error : '');
+    assert.deepEqual(bounded.shape, shape); assert.deepEqual(shape.ids, ['e1', '', 'e2', 'e3', 'e4', 'e5']);
+    assert.deepEqual(shape.radii, { 1: 6 }); assert.deepEqual(shape.tangents, [1, 2]);
+    assert.deepEqual(source, before);
+  }
+});
+
+test('angle-constrained Fillet creates native R6 with persistent rules, contacts and side IDs after reopen', () => {
+  const authored = angleConstrainedCorner(); authored.rules = authored.rules!.slice(0, 3);
+  const profile = profileOf([authored]); assert.ok('node' in profile);
+  const source = sketchShapes(profile.node).shape; assert.equal(source?.kind, 'polygon');
+  const result = roundStraightCornerForEdit(source as Polygon, 1, 6); assert.ok('shape' in result, 'error' in result ? result.error : '');
+  const saved = profileOf([result.shape]); assert.ok('node' in saved);
+  assert.deepEqual(saved.node.sideTags?.outer, ['e1', 'e6', 'e2', 'e3', 'e4', 'e5']);
+  const reopened = sketchShapes(saved.node).shape; assert.equal(reopened?.kind, 'polygon');
+  const shape = reopened as Polygon;
+  assert.deepEqual(shape.points, result.shape.points); assert.deepEqual(shape.rules, result.shape.rules);
+  assert.deepEqual(shape.radii, { 1: 6 }); assert.deepEqual(shape.tangents, [1, 2]);
+  assert.deepEqual(shape.ids, saved.node.sideTags!.outer);
+  const body = partSnapshot(withNode(withNode(emptyDoc(), saved.node), { kind: 'extrude', sketch: 0, height: 10 })).outputs[0];
+  assert.ok(body && checkBrep(body.brep, { strict: true }).valid);
+  near(massPropertiesOf(body).volume, 10 * (2100 - 36 * (1 / 3 - Math.atan2(3, 4) / 2)), 2e-6);
+  for (const id of saved.node.sideTags!.outer) assert.equal(body.brep.faces.filter(face => face.name === `n1.side[${id}]`).length, 1);
+  const round = faceGeometry(body.brep.faces.find(face => face.name === 'n1.side[e6]')!);
+  assert.equal(round.kind, 'cylinder'); near(round.r, 6); nearPoint([round.c[0], round.c[1]], [28, 6]);
+  const incoming = faceGeometry(body.brep.faces.find(face => face.name === 'n1.side[e1]')!);
+  const outgoing = faceGeometry(body.brep.faces.find(face => face.name === 'n1.side[e2]')!);
+  assert.equal(incoming.kind, 'plane'); assert.equal(outgoing.kind, 'plane');
+  near(incoming.o[1], 0); near(3 * outgoing.o[0] - 4 * outgoing.o[1], 90);
+});
+
+test('removed wraparound angle is converted while unrelated angle values and refusal stay intact', () => {
+  const base = angleConstrainedCorner(), shift = (i: number) => (i + 4) % 5;
+  const source: Polygon = { ...base, points: [...base.points.slice(1), base.points[0]], ids: [...base.ids!.slice(1), base.ids![0]],
+    hv: { h: base.hv!.h.map(shift), v: base.hv!.v.map(shift) },
+    rules: base.rules!.map(rule => rule.kind === 'fix' ? { ...rule, point: shift(rule.point) }
+      : rule.kind === 'angle' ? { ...rule, a: shift(rule.a), b: shift(rule.b) } : rule) };
+  const before = structuredClone(source), result = roundStraightCornerForEdit(source, 0, 6);
+  assert.ok('shape' in result, 'error' in result ? result.error : '');
+  assert.deepEqual(result.shape.points, [[28, 0], [31.6, 1.2], [50, 15], [50, 45], [0, 45], [0, 0]]);
+  assert.deepEqual(result.shape.rules!.slice(2), [
+    { kind: 'angle', a: 5, b: 1, value: 180 - (base.rules![2] as { value: number }).value },
+    { kind: 'angle', a: 5, b: 3, value: 180 },
+    { kind: 'angle', a: 1, b: 2, value: (base.rules![4] as { value: number }).value },
+  ]);
+  assert.deepEqual(source, before);
+  const locked = { ...base, lengths: { 0: 30 } }, lockedBefore = structuredClone(locked);
+  assert.ok('error' in roundStraightCornerForEdit(locked, 1, 6)); assert.deepEqual(locked, lockedBefore);
+  assert.ok('error' in chamferCorner(base, 1, 6), 'Chamfer keeps its existing angle ownership refusal');
+});

@@ -5,8 +5,14 @@ import { createFlow } from './flow-helper.mjs';
 import { withMcpSession } from './mcp-browser-session.mjs';
 
 const baseline = process.argv.includes('--expect-unavailable');
+const create = process.argv.includes('--create');
 const turn = Math.atan2(3, 4);
 const sharp = [[0, 0], [30, 0], [50, 15], [50, 45], [0, 45]];
+const sharpShape = { kind: 'polygon', closed: true, points: sharp, hv: { h: [0, 3], v: [2, 4] },
+  ids: ['e1', 'e2', 'e3', 'e4', 'e5'], rules: [
+    { kind: 'fix', point: 0, at: sharp[0] }, { kind: 'fix', point: 2, at: sharp[2] },
+    { kind: 'angle', a: 0, b: 1, value: 180 - turn * 180 / Math.PI },
+  ] };
 const shapeAt = radius => {
   const setback = radius / 3;
   return { kind: 'polygon', closed: true, points: [sharp[0], [30 - setback, 0], [30 + .8 * setback, .6 * setback], ...sharp.slice(2)],
@@ -24,14 +30,15 @@ const sharpArea = Math.abs(sharp.reduce((area, [x, y], i) => {
 
 const pins = [
   'packages/barocss-cad-model/src/sketch/filletEdit.ts', 'packages/barocss-cad-model/src/sketch/rules.ts',
+  ...(create ? ['packages/barocss-cad-model/src/sketch/corner.ts'] : []),
   'packages/barocss-cad-model/src/chat/part/sketchCorner.ts',
   'apps/cad-studio/src/sketch/cornerDraft.ts', 'apps/cad-studio/src/ui/SketchCornerTools.tsx',
   'apps/cad-studio/src/viewport/SketchCornerSizeHandle.tsx',
 ];
 const f = await createFlow({
-  name: 'saved-oblique-sketch-fillet', output: process.argv[2], envFrozen: 'D1756_SOURCE_FROZEN',
+  name: 'saved-oblique-sketch-fillet', output: process.argv[2], envFrozen: create ? 'D1757_SOURCE_FROZEN' : 'D1756_SOURCE_FROZEN',
   initialFiles: pins, requiredFrozen: pins,
-  qualification: 'Resize a saved angle-constrained oblique Sketch Fillet, rebuild its Extrude and reopen its native file.',
+  qualification: (create ? 'Create' : 'Resize') + ' an angle-constrained oblique Sketch Fillet, rebuild its Extrude and reopen its native file.',
   limits: ['One convex 3:4:5 carrier pair in XY, one radius-locked Fillet, 10 mm extrusion and desktop WebGPU.'],
   inspectorSource: `
 import assert from 'node:assert/strict';
@@ -65,12 +72,16 @@ const apply = () => button('Apply', editor());
 const preview = () => f.page.locator('.sk-corner-preview');
 const handle = () => f.page.getByRole('button', { name: 'Fillet radius handle', exact: true });
 
-async function pickFillet(radius) {
+async function editSketch(points) {
   await f.openFeatureEditor(1, 'extrude');
   await button('Edit sketch', f.editor()).click();
   await f.sketchPanel().waitFor();
   await f.tool('Select', 's');
-  await f.frame(shapeAt(radius).points);
+  await f.frame(points);
+}
+
+async function pickFillet(radius) {
+  await editSketch(shapeAt(radius).points);
   await f.worldClick(midpoint(radius));
   await f.page.locator('.vp-overlay .sk-pick-edge.on[data-sketch-entity="edge:1"]').waitFor();
 }
@@ -87,7 +98,13 @@ async function assertGeometry(label, doc, radius, original) {
   near(arc.c[1], radius);
   const outline = doc.nodes[0].outline;
   const expected = shapeAt(radius);
-  for (const key of ['radii', 'tangents', 'rules', 'hv']) assert.deepEqual(outline[key], expected[key]);
+  for (const key of ['radii', 'tangents', 'hv']) assert.deepEqual(outline[key], expected[key]);
+  const withoutAngle = rules => rules.filter(rule => rule.kind !== 'angle');
+  assert.deepEqual(withoutAngle(outline.rules), withoutAngle(expected.rules));
+  const angles = outline.rules.filter(rule => rule.kind === 'angle');
+  assert.equal(angles.length, 1);
+  assert.deepEqual([angles[0].a, angles[0].b], [0, 2]);
+  near(angles[0].value, turn * 180 / Math.PI, 1e-9);
   assert.equal(outline.points.length, expected.points.length);
   outline.points.forEach((point, i) => point.forEach((value, axis) => near(value, expected.points[i][axis])));
   if (original) {
@@ -104,18 +121,81 @@ async function assertGeometry(label, doc, radius, original) {
   return native;
 }
 
-async function approveByAgent(source, typed, typedNative) {
+async function createFromSharpCorner() {
+  const source = await f.inspect('seed-sharp-corner', sharpShape, true);
+  const input = join(f.output, 'angle-constrained-corner.bcad');
+  await writeFile(input, JSON.stringify(source));
+  await f.freshOpen(input, source, '01-sharp-source');
+  const original = await f.inspect('sharp-source-native', source, false);
+  near(original.volume, sharpArea * 10);
+  await editSketch(sharp);
+  f.phase = 'Fillet the selected corner with its authored angle';
+  await f.worldClick(sharp[1]);
+  await f.page.locator('.sk-pick-point.on[data-sketch-entity="point:1"]').waitFor();
+  await button('Fillet').click();
+  const controls = f.sketchPanel().getByRole('group', { name: 'Fillet', exact: true });
+  await controls.getByLabel('Radius', { exact: true }).fill('6');
+  const createApply = button('Apply', controls);
+  await f.same(source);
+  await preview().waitFor();
+  assert.equal(await createApply.isEnabled(), true);
+  await f.snapshot('02-angle-fillet-preview');
+  await createApply.click();
+  const rounded = (await f.finishSketch('03-angle-fillet-finished')).doc;
+  if (baseline) {
+    assert.equal(rounded.nodes[0].outline.rules.find(rule => rule.kind === 'angle').value, sharpShape.rules[2].value);
+    assert.deepEqual(rounded.nodes[0].outline.points.slice(1, 3), [[52, 0], [55.6, 10.8]]);
+    return;
+  }
+  const native = await assertGeometry('created-r6-native', rounded, 6);
+  assert.deepEqual(rounded.nodes[0].sideTags.outer, shapeAt(6).ids);
+  assert.deepEqual(rounded.nodes[1], source.nodes[1]);
+  const walls = new Map(native.faces);
+  assert.equal(walls.size, original.faces.length + 1);
+  for (const [name, before] of original.faces.filter(([name]) => name.startsWith('n1.side['))) {
+    const after = walls.get(name);
+    assert.equal(after.kind, 'plane');
+    after.n.forEach((value, axis) => near(value, before.n[axis]));
+    near(after.n.reduce((sum, value, i) => sum + value * (after.o[i] - before.o[i]), 0), 0);
+  }
+  await f.undo();
+  await f.same(source);
+  await f.redo();
+  await f.same(rounded);
+  const saved = await f.save('created-oblique-fillet');
+  const reopened = (await f.freshOpen(saved.file, rounded, '04-created-r6-fresh-open')).doc;
+  assert.deepEqual(await assertGeometry('created-r6-reopened', reopened, 6), native);
+  await pickFillet(6);
+  await editButton().click();
+  await field().fill('9');
+  await preview().waitFor();
+  await apply().click();
+  const resized = (await f.finishSketch('05-created-r6-resized')).doc;
+  assert.deepEqual(resized.nodes[0].sideTags, rounded.nodes[0].sideTags);
+  await assertGeometry('created-and-resized-r9', resized, 9, native);
+  await approveByAgent(source, rounded, native);
+}
+
+async function approveByAgent(source, expected, expectedNative) {
   const file = join(f.output, 'oblique-fillet-proposal.bcad');
   const bytes = JSON.stringify(source);
   await writeFile(file, bytes);
-  f.phase = 'Propose the typed R9 edit by its saved Fillet side ID';
+  const title = create ? 'Create the angle-constrained R6 Fillet' : 'Set the saved oblique Fillet to R9';
+  f.phase = title;
   await withMcpSession({ app: f.app, output: f.output, clientName: f.name }, file, 'oblique-fillet', async call => {
     const fields = await call('query', { action: 'edit_fields', index: 0, includeSketchCorners: true });
-    assert.deepEqual(fields.sketchFillets, [{ fillet: 'e6', radius: 6 }]);
+    let sketchRound;
+    if (create) {
+      assert.ok(fields.sketchCorners.some(corner => corner.sides.join(',') === 'e1,e2'));
+      sketchRound = { sketch: fields.id, sides: ['e1', 'e2'], radius: 6 };
+    } else {
+      assert.deepEqual(fields.sketchFillets, [{ fillet: 'e6', radius: 6 }]);
+      sketchRound = { sketch: fields.id, fillet: 'e6', radius: 9 };
+    }
     const args = { action: 'edit', index: 0, expectedRevision: fields.revision,
-      sketchRound: { sketch: fields.id, fillet: 'e6', radius: 9 } };
+      sketchRound };
     const propose = (edit, refused) => call('proposals', {
-      action: 'propose', title: 'Set the saved oblique Fillet to R9', ops: [{ tool: 'features', args: edit }],
+      action: 'propose', title, ops: [{ tool: 'features', args: edit }],
     }, refused);
     assert.match((await propose({ ...args, expectedRevision: '0'.repeat(16) }, true)).error, /part changed/i);
     assert.equal(await readFile(file, 'utf8'), bytes);
@@ -133,8 +213,8 @@ async function approveByAgent(source, typed, typedNative) {
   await button('Accept', card).click();
   await f.changed(pending);
   const approved = (await f.snapshot('09-agent-approved')).doc;
-  assert.deepEqual([approved.nodes, approved.outputs], [typed.nodes, typed.outputs]);
-  assert.deepEqual(await f.inspect('r9-agent-native', approved, false), typedNative);
+  assert.deepEqual([approved.nodes, approved.outputs], [expected.nodes, expected.outputs]);
+  assert.deepEqual(await f.inspect('agent-approved-native', approved, false), expectedNative);
 }
 
 await f.run(async () => {
@@ -149,6 +229,7 @@ await f.run(async () => {
     });
     return context;
   };
+  if (create) return createFromSharpCorner();
   const source = await f.inspect('seed-oblique-fillet', shapeAt(6), true);
   const input = join(f.output, 'oblique-fillet.bcad');
   await writeFile(input, JSON.stringify(source));

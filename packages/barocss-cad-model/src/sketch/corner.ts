@@ -214,6 +214,12 @@ function replaceCorner(s: Polygon, i: number, A: P2, B: P2, bulge: number, chamf
       case 'ccdist': case 'ccdx': case 'ccdy': case 'cconc': return [rule];
       case 'ctan': return [prev, i].includes(rule.edge) ? [] : [{ ...rule, edge: seg(rule.edge) }];
       case 'symmetric': return pt(rule.a) < 0 || pt(rule.b) < 0 || (!chamfer && [prev, i].includes(rule.line)) ? [] : [{ ...rule, a: pt(rule.a), b: pt(rule.b), line: seg(rule.line) }];
+      case 'angle': {
+        // These carriers shared the removed corner. Once separated by a Fillet, the same
+        // physical included angle is stored between drawn directions (terms.edgeAngle).
+        const separated = !chamfer && ((rule.a === prev && rule.b === i) || (rule.a === i && rule.b === prev));
+        return [{ ...rule, a: seg(rule.a), b: seg(rule.b), value: separated ? 180 - rule.value : rule.value }];
+      }
       default: return [{ ...rule, a: seg(rule.a), b: seg(rule.b) }];
     }
   });
