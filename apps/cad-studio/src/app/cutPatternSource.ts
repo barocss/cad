@@ -1,5 +1,5 @@
 import { refOf, selectedBodies, type Ctx } from '@barocss/cad-model/app/commands';
-import type { BodyRef, ModelNode } from '@barocss/cad-model/engine/doc';
+import { linearFeaturePatternSourceProblem, rectangularFeaturePatternSourceProblem, type BodyRef, type ModelNode } from '@barocss/cad-model/engine/doc';
 import { featureId } from '@barocss/cad-model/engine/ids';
 
 export function isCutPattern(kind: string): boolean {
@@ -17,10 +17,12 @@ export function selectedCutPatternSource(ctx: Ctx): number | null {
 export function earlierRectangularCutSource(ctx: Ctx, command: string, index: number): BodyRef | undefined {
   if (!isCutPattern(command)) return;
   const target = selectedCutPatternSource(ctx);
-  const current = target === null ? undefined : ctx.doc.nodes[target], source = ctx.doc.nodes[index];
-  if (current?.kind !== 'difference' || current.suppressed || source?.kind !== 'difference' || source.suppressed
-    || current.parent.node !== index || current.parent.side !== 'solid') return;
-  return { node: index, side: 'solid' };
+  if (target === null) return;
+  const parent: BodyRef = { node: target, side: 'solid' }, source: BodyRef = { node: index, side: 'solid' };
+  const problem = command === 'linear-feature-pattern'
+    ? linearFeaturePatternSourceProblem(source, parent, ctx.doc.nodes)
+    : rectangularFeaturePatternSourceProblem(source, parent, ctx.doc.nodes);
+  if (!problem) return source;
 }
 
 export function savedCutPatternSource(node: ModelNode, nodes: readonly ModelNode[]): string | null {

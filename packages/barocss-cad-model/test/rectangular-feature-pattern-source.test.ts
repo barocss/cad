@@ -9,7 +9,7 @@ import { dispatchTool } from '../src/chat/tools';
 import { encodeStudioFile, readStudioFile } from '../src/engine/container';
 import { curvesSource } from '../src/engine/curveSource';
 import { importSource } from '../src/engine/direct';
-import { leafBodies, parentsOf, rectangularFeaturePatternProblem, rectangularPatternDocumentProblem, usesOf, withNode, type BodyRef, type ModelNode, type StudioDoc } from '../src/engine/doc';
+import { leafBodies, parentsOf, priorLinearFeaturePatternProblem, rectangularFeaturePatternProblem, rectangularPatternDocumentProblem, usesOf, withNode, type BodyRef, type ModelNode, type StudioDoc } from '../src/engine/doc';
 import { evaluateDoc, partBreps } from '../src/engine/evaluate';
 import { flattenAssembly } from '../src/engine/flatten';
 import { featureId } from '../src/engine/ids';
@@ -275,4 +275,50 @@ test('arbitrary consumed or cross-scope sources and missing, suppressed or non-D
   assert.ok(rectangularFeaturePatternProblem({ ...node, parent: { node: third.nodes.length - 1, side: 'solid' } }, third.nodes, third.parameters),
     'a more distant ancestor is not the kernel direct-source contract');
   assert.deepEqual(doc, before);
+});
+
+test('Linear can repeat the first rectangular cut on the third Difference without changing the original references', async () => {
+  const first = part('three cuts').box({ w: 60, d: 40, h: 10 })
+    .subtract(tool => tool.box({ w: 4, d: 2, h: 10, x: 8, y: 8 }));
+  const second = first.subtract(tool => tool.box({ w: 6, d: 2, h: 10, x: 8, y: 26 }));
+  const { doc } = second.subtract(tool => tool.box({ w: 4, d: 2, h: 10, x: 42, y: 8 }));
+  const ref = (node: number): BodyRef => ({ node, side: 'solid' });
+  const source = ref(first.doc.nodes.length - 1), parent = ref(doc.nodes.length - 1);
+  const ctx = { ...context(doc), rectangularCutSource: source };
+  const command = commands.find(command => command.id === 'linear-feature-pattern');
+  assert.ok(command?.build);
+  assert.equal(command.available(ctx).ok, true);
+  const values = { axis: 'x', spacing: 16, count: 2 };
+  const made = command.build(ctx, values), node = made.nodes.at(-1);
+  assert.ok(node?.kind === 'linear-feature-pattern');
+  assert.deepEqual(node.source, source);
+  assert.deepEqual(node.parent, parent);
+  assert.deepEqual(made.nodes.slice(0, -1), doc.nodes);
+  assert.deepEqual(parentsOf(node), [parent.node]);
+  assert.deepEqual(usesOf(node), [parent.node, source.node]);
+  assert.equal(checkNode(node, doc.nodes, doc.parameters), null);
+  const opened = await readStudioFile(encodeStudioFile(made));
+  assert.ok('doc' in opened);
+  assert.deepEqual(opened.doc, made);
+  const geometry = evaluateDoc(opened.doc, 2);
+  assert.ok(geometry.ok, geometry.ok ? '' : geometry.error.detail);
+  assert.ok(Math.abs(geometry.bodies[0].volume! - (24000 - (8 + 12 + 8 + 8) * 10)) < 1e-8);
+
+  const args = { action: 'command', command: command.id, expectedRevision: revisionOf(doc),
+    bodies: [ctx.bodies[0].key], values: { ...values, source: featureId(doc.nodes, source.node) } };
+  const run = (input: typeof args) => dispatchTool({ doc, bodies: ctx.bodies }, 'features', input,
+    async next => evaluateDoc(next, 2));
+  const result = await run(args);
+  assert.equal(result.isError, false, result.content);
+  assert.deepEqual(result.state.doc.nodes, made.nodes);
+  const refused = await run({ ...args, values: { ...args.values, count: 3 } });
+  assert.equal(refused.isError, true, refused.content);
+  assert.equal(refused.state.doc, doc);
+
+  const invalid = doc.nodes.map((node, index) => index === second.doc.nodes.length - 1 ? { ...node, held: 'held' } : node);
+  assert.ok(priorLinearFeaturePatternProblem(node, invalid, doc.parameters));
+  const fourth = part('four cuts', doc).subtract(tool => tool.box({ w: 2, d: 2, h: 10, x: 42, y: 26 })).doc;
+  assert.ok(priorLinearFeaturePatternProblem({ ...node, parent: ref(fourth.nodes.length - 1) }, fourth.nodes, fourth.parameters));
+  assert.ok(rectangularFeaturePatternProblem({ ...node, kind: 'rectangular-feature-pattern', axis2: 'y', spacing2: 8, count2: 2 },
+    doc.nodes, doc.parameters));
 });

@@ -4,12 +4,13 @@ import { join } from 'node:path';
 import { createFlow } from './flow-helper.mjs';
 import { currentPartRevision, withMcpSession } from './mcp-browser-session.mjs';
 import { clickModelCommand } from './model-rail-helper.mjs';
-import { choosePriorCutSource, equivalent, fillMask, inspectorSource, later, older, shift, verifyPriorCut } from './prior-cut-pattern-browser-fixture.mjs';
+import { choosePriorCutSource, equivalent, fillMask, inspectorSource, later, newest, older, shift, verifyPriorCut } from './prior-cut-pattern-browser-fixture.mjs';
 
 const mode = process.argv[3];
 const workflows = {
   '--agent': ['D1829_SOURCE_FROZEN', '#25 revision-bound local Agent proposal for the earlier through-Subtract.'],
   '--linear': ['D1830_SOURCE_FROZEN', '#25 repeat the earlier rectangular through-cut along a signed XY line.'],
+  '--linear-three': ['D1850_SOURCE_FROZEN', '#25 repeat a rectangular through-cut along a signed XY line after two newer cuts.'],
   '--fill': ['D1831_SOURCE_FROZEN', '#25 repeat the earlier rectangular through-cut at the captured mask cells.'],
 };
 const [envFrozen, qualification] = workflows[mode] ?? [
@@ -17,7 +18,7 @@ const [envFrozen, qualification] = workflows[mode] ?? [
 ];
 const f = await createFlow({
   name: 'prior-rectangular-cut-pattern', output: process.argv[2], envFrozen, qualification,
-  limits: ['One original rectangular stock and two disjoint full-height rectangular cuts in desktop Studio.'],
+  limits: ['One original rectangular stock and two or three disjoint full-height rectangular cuts in desktop Studio.'],
   initialFiles: [import.meta.filename, 'apps/cad-studio/test/prior-cut-pattern-browser-fixture.mjs', 'apps/cad-studio/src/App.tsx', 'apps/cad-studio/src/app/cutPatternSource.ts',
     'apps/cad-studio/src/ui/Hud.tsx', 'apps/cad-studio/src/ui/NodeEditor.tsx', 'packages/barocss-cad-model/src/app/commands.ts',
     'packages/barocss-cad-model/src/chat/part/features.ts',
@@ -128,6 +129,9 @@ async function approveAgentPattern(source) {
 }
 
 async function applyLinearPattern(source) {
+  const target = source.nodes.length - 1;
+  const acrossTwoCuts = mode === '--linear-three';
+  const retained = acrossTwoCuts ? [older, later, newest] : [older, later];
   const open = async entry => {
     await chooseSource(entry);
     await clickModelCommand(f.page, 'Pattern', 'Linear cut pattern');
@@ -144,15 +148,17 @@ async function applyLinearPattern(source) {
     await f.changed(source);
     const { doc } = await f.snapshot(label), node = doc.nodes.at(-1);
     assert.deepEqual(doc.nodes.slice(0, -1), source.nodes);
-    assert.deepEqual(node.parent, { node: 7, side: 'solid' });
+    assert.deepEqual(node.parent, { node: target, side: 'solid' });
     assert.deepEqual(node.source, earlier ? { node: 4, side: 'solid' } : undefined);
     assert.deepEqual([node.kind, node.axis, node.spacing, node.count], ['linear-feature-pattern', 'x', 16, 2]);
     return doc;
   };
-  const control = await applyLinear(await open(null), '01-linear-current-control', false);
-  await native('linear-current-source', control, [older, later, shift(later, 16, 0)]);
-  await f.undo();
-  await f.same(source);
+  if (!acrossTwoCuts) {
+    const control = await applyLinear(await open(null), '01-linear-current-control', false);
+    await native('linear-current-source', control, [older, later, shift(later, 16, 0)]);
+    await f.undo();
+    await f.same(source);
+  }
 
   const panel = await open('Browser');
   const undo = await button('Undo').getAttribute('data-tip');
@@ -163,22 +169,43 @@ async function applyLinearPattern(source) {
     await f.same(source);
     assert.equal(await button('Undo').getAttribute('data-tip'), undo);
   }
-  await f.snapshot('02-linear-overlap-refused');
+  if (acrossTwoCuts) {
+    await field(panel, 'Spacing').fill('16');
+    await phase(panel, 'preview');
+    await field(panel, 'Count').fill('3');
+    await phase(panel, 'refused');
+    assert.ok(await button('Apply', panel).isDisabled());
+    await f.same(source);
+    assert.equal(await button('Undo').getAttribute('data-tip'), undo);
+    await f.snapshot('02a-overlap-with-third-cut-refused');
+    await field(panel, 'Count').fill('2');
+    await phase(panel, 'preview');
+    await field(panel, 'Spacing').fill('14');
+    await field(panel, 'Direction').selectOption('y');
+    await phase(panel, 'preview');
+    await field(panel, 'Spacing').fill('18');
+    await phase(panel, 'refused');
+    assert.ok(await button('Apply', panel).isDisabled());
+    await f.same(source);
+    assert.equal(await button('Undo').getAttribute('data-tip'), undo);
+    await f.snapshot('02b-overlap-with-second-cut-refused');
+    await field(panel, 'Direction').selectOption('x');
+  } else await f.snapshot('02-linear-overlap-refused');
   await field(panel, 'Spacing').fill('16');
   const browser = await applyLinear(panel, '03-linear-earlier-positive', true);
-  const positive = [older, later, shift(older, 16, 0)];
+  const positive = [...retained, shift(older, 16, 0)];
   await native('linear-positive', browser, positive);
   await f.undo();
   await f.same(source);
   const history = await applyLinear(await open('History'), '04-linear-history-applied', true);
   assert.deepEqual(history, browser);
 
-  await f.openFeatureEditor(8, 'linear cut spacing');
+  await f.openFeatureEditor(target + 1, 'linear cut spacing');
   await f.editor().getByText('Subtract 1 (n4)', { exact: true }).waitFor();
   await field(f.editor(), 'Spacing').fill('-6');
   const edited = (await f.applyEditor(history, '05-linear-earlier-negative')).doc;
   assert.deepEqual(edited.nodes.at(-1), { ...history.nodes.at(-1), spacing: -6 });
-  const negative = [older, later, shift(older, -6, 0)];
+  const negative = [...retained, shift(older, -6, 0)];
   await native('linear-negative', edited, negative);
   await f.undo();
   await f.same(history);
@@ -190,7 +217,7 @@ async function applyLinearPattern(source) {
   await button('Top', f.page.locator('.views')).click();
   await f.page.getByTitle('Frame all (F)', { exact: true }).click();
   await native('linear-reopened-negative', edited, negative);
-  await f.openFeatureEditor(8, 'retained linear cut source');
+  await f.openFeatureEditor(target + 1, 'retained linear cut source');
   await f.editor().getByText('Subtract 1 (n4)', { exact: true }).waitFor();
   assert.equal(await field(f.editor(), 'Spacing').inputValue(), '-6');
   await f.snapshot('06-linear-reopened-source');
@@ -275,19 +302,21 @@ async function applyFillPattern(source) {
 }
 
 await f.run(async () => {
-  const source = await f.inspect('seed', { fill: mode === '--fill' });
+  const third = mode === '--linear-three';
+  const source = await f.inspect('seed', { fill: mode === '--fill', third });
   if (mode === '--agent') return approveAgentPattern(source);
   await f.newPage();
   await f.page.getByLabel('Model file', { exact: true }).setInputFiles({
-    name: 'two-rectangular-through-cuts.bcad', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(source)),
+    name: third ? 'three-rectangular-through-cuts.bcad' : 'two-rectangular-through-cuts.bcad',
+    mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(source)),
   });
   await f.same(source);
   const browser = f.page.getByRole('complementary', { name: 'Browser', exact: true });
   await button('Show its features', browser).click();
   await button('Top', f.page.locator('.views')).click();
   await f.page.getByTitle('Frame all (F)', { exact: true }).click();
-  await native('original-two-cuts', source, [older, later]);
-  if (mode === '--linear') return applyLinearPattern(source);
+  await native('original-through-cuts', source, third ? [older, later, newest] : [older, later]);
+  if (mode === '--linear' || third) return applyLinearPattern(source);
   if (mode === '--fill') return applyFillPattern(source);
 
   const latest = await openPattern(null);

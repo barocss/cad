@@ -369,23 +369,31 @@ function evaluateWith(input: CadPartDocument, previous: Cache | undefined, optio
       if (source !== undefined) {
         const label = `${pattern} feature pattern source`;
         const previous = ref(source, label), prototype = previous.author;
-        if (selected.part !== null || previous.part !== null || source !== previous.id || author.target !== previous.id
+        // Linear alone may cross exactly one additional original Difference, never an arbitrary ancestry walk.
+        const bridge = pattern === 'linear' && author.target !== previous.id ? ref(author.target, `${label} intervening difference`) : undefined;
+        const bridgePart = bridge?.result.kind === 'solid' && bridge.result.parts.length === 1 ? bridge.result.parts[0] : undefined;
+        const connected = author.target === previous.id || (bridge && bridge.part === null && author.target === bridge.id
+          && bridge.author?.kind === 'difference' && !('suppressed' in bridge.author && bridge.author.suppressed)
+          && bridge.author.target === previous.id && bridgePart && !empty(bridgePart.solid));
+        if (selected.part !== null || previous.part !== null || source !== previous.id || !connected
           || prototype?.kind !== 'difference' || ('suppressed' in prototype && prototype.suppressed) || previous.result.kind !== 'solid'
           || previous.result.parts.length !== 1 || empty(previous.result.parts[0].solid))
-          return fail('REFERENCE', `${label} must be the current difference target's direct earlier unsuppressed difference`);
+          return fail('REFERENCE', `${label} must be the current difference target's direct earlier unsuppressed difference${bridge ? '; Linear also supports its second ancestor through one intervening unsuppressed difference' : ''}`);
         const original = (reference: unknown, what: string): Part => {
           const producer = ref(reference, what);
           if (producer.part !== null || producer.author?.kind !== 'extrude' || ('suppressed' in producer.author && producer.author.suppressed))
-            return fail('CAPABILITY', `${label} needs original rectangular extrusions for the stock and both cutters`);
+            return fail('CAPABILITY', `${label} needs original rectangular extrusions for the stock and ${bridge ? 'all three' : 'both'} cutters`);
           const sketch = ref(producer.author.sketch, `${what} sketch`).author;
           if (sketch?.kind !== 'sketch' || sketch.profile !== 'rectangle' || ('suppressed' in sketch && sketch.suppressed) || sketch.holes?.length || sketch.regions?.length)
-            return fail('CAPABILITY', `${label} needs original rectangular extrusions for the stock and both cutters`);
+            return fail('CAPABILITY', `${label} needs original rectangular extrusions for the stock and ${bridge ? 'all three' : 'both'} cutters`);
           const parts = solids(reference, what, true);
           if (parts.length !== 1) return fail('REFERENCE', `${what} must be one nonempty solid`);
           return parts[0];
         };
         const stock = original(prototype.target, 'source stock'), tool = original(prototype.tool, 'source tool'), other = original(author.tool, 'newer tool');
-        return { seed: solids(r, 'target')[0], tool: [tool], prior: { stock, previous: previous.result.parts[0], other } };
+        const middleTool = bridge?.author?.kind === 'difference' ? original(bridge.author.tool, 'intervening tool') : undefined;
+        return { seed: solids(r, 'target')[0], tool: [tool], prior: { stock, previous: previous.result.parts[0], other,
+          ...(bridgePart && middleTool ? { bridge: { previous: bridgePart, other: middleTool } } : {}) } };
       }
       // Resolve the original operands as dependencies; never replace or truncate their history.
       const base = solids(author.target, 'difference target', true), tool = solids(author.tool, 'difference tool', true);

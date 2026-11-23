@@ -23,6 +23,10 @@ if (input.pathDocument) {
   doc = withNode(doc, { kind: 'difference', parent: ref(1), tool: ref(3) });
   box([8, 26], [14, 28]);
   doc = withNode(doc, { kind: 'difference', parent: ref(4), tool: ref(6) });
+  if (input.third) {
+    box([42, 8], [46, 10]);
+    doc = withNode(doc, { kind: 'difference', parent: ref(7), tool: ref(9) });
+  }
   if (input.fill) {
     const points: [number, number][] = ${JSON.stringify(fillMask)};
     doc = withNode(doc, { kind: 'sketch', profile: 'loop', segments: points.map(start => ({ kind: 'line', start })) });
@@ -55,6 +59,7 @@ if (input.pathDocument) {
 export const equivalent = (a, b) => assert.ok(Math.abs(a - b) < 1e-8, JSON.stringify({ actual: a, expected: b }));
 const order = (a, b) => a[0] - b[0] || a[1] - b[1];
 export const older = [8, 8, 12, 10], later = [8, 26, 14, 28];
+export const newest = [42, 8, 46, 10];
 export const shift = (box, x, y) => [box[0] + x, box[1] + y, box[2] + x, box[3] + y];
 
 export async function verifyPriorCut(f, label, doc, openings) {

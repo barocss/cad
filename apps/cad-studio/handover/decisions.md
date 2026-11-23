@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1850: [Repeat the first rectangular cut across two newer cuts](notes/three-cut-linear-pattern-2026-11-24/README.md), #25. Preserve every original aperture and refuse collisions before adding signed Linear copies.
 - D1849: [Extract the active Studio Fillet picking actions](notes/studio-fillet-picking-2026-11-24/README.md), #44. Preserve original-edge location, source seed removal, preview ownership and all three types in desktop Studio.
 - D1848: [Explain original STEP faces in the new native copy](notes/editable-step-face-evidence-2026-11-24/README.md), #320. Verify all original and final faces, retain history uncertainty, and reconcile the bounded checklist.
 - D1847: [Validate the active inch STEP conversion before reconstruction](notes/inch-step-plate-copy-2026-11-24/README.md), #320. Verify the linked 25.4 mm basis, exact native copy, refusal and Studio edits.
