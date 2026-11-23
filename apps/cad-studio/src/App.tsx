@@ -12,7 +12,7 @@ import { currentCoordinateFeedback } from './sketch/coordinateFeedback';
 import { useSketchDraftHistory } from './sketch/useSketchDraftHistory';
 import { useStudioProfilePresentation } from './app/useStudioProfilePresentation';
 import { modelWheelZoomAvailable, useWheelZoomPreference } from './viewport/wheelZoomPreference';
-import { filletPickFailure } from './app/filletPickFailure';
+import { createStudioFilletPicking } from './app/studioFilletPicking';
 import { createEvaluationEvidence } from './state/evaluationEvidence';
 import { candidateReferenceProblem, refreshCandidateReferences } from './state/candidateReferences';
 import { prepareParameterHeightFinish } from './state/parameterHeightFinish';
@@ -107,7 +107,7 @@ import { useRobotExports } from './robot/useRobotExports';
 import { RobotInspector } from './robot/RobotInspector';
 import { OFFSET_FACE_EDIT } from '@barocss/cad-model/app/offsetFaceEdit';
 import { useHistoryReferenceActions } from './app/useHistoryReferenceActions';
-import { filletLaunchAvailability, filletType, newFilletActive, pickedFilletSelection, prepareFilletPick, replaceFilletSelection, replaceFillet, type FilletType, type RadiusMode } from './app/filletFamily';
+import { filletLaunchAvailability, filletType, newFilletActive } from './app/filletFamily';
 import { currentNativePlanePick, SKETCH_AT_MIDPOINT } from './app/midpointSketch';
 import { createInsetSourceReview } from './sketch/insetSourceReview';
 import { PROJECT_TO_SKETCH } from './app/materialFootprint';
@@ -1675,33 +1675,12 @@ export function App() {
     worker: { engine, nextRevision: () => revision.current++ },
   });
   const sectionBoxRef = useRef<{ min: Vec3; max: Vec3 }>(null!);
-  const changeFillet = (type: FilletType, mode?: RadiusMode) => {
-    if (docNow.current !== doc || evaluatedRef.current !== evaluated || activeStore.get()?.ctx.doc !== ctx.doc) { commandPreview.retire(); commandApply.clearApply(); setActive(null); return; }
-    replaceFillet({ current: activeStore.get, context: () => ctx, retire: commandPreview.retire, clearApply: commandApply.clearApply, set: setActive, select: setSelection }, type, mode);
-  };
-  const pickFillet = (hit: { face: { body: number; face: number } | null; edge: { body: number; edge: number } | null; instance?: string }, additive: boolean): boolean => {
-    const current = activeStore.get(); if (!current?.fillet) return false;
-    if (docNow.current !== doc || evaluatedRef.current !== evaluated || current.ctx.doc !== ctx.doc) { commandPreview.retire(); commandApply.clearApply(); setActive(null); return true; }
-    const selection = prepareFilletPick(current, viewBodiesRef.current, hit, additive, commandApply.clearApply);
-    if (!selection) { setToast(filletPickFailure(current)); return true; }
-    replaceFilletSelection({ current: activeStore.get, context: () => ctx, retire: commandPreview.retire, clearApply: commandApply.clearApply, set: setActive, select: setSelection }, selection); return true;
-  };
-  const removeFilletEdge = (owner: Active, edge: Selection['edges'][number]) => {
-    if (owner !== activeStore.get() || owner.fillet?.type !== 'edge'
-      || docNow.current !== doc || evaluatedRef.current !== evaluated || owner.ctx.doc !== ctx.doc) return;
-    const next = pickedFilletSelection(owner, { face: null, edge }, true);
-    if (!next || next.edges.length !== owner.ctx.selection.edges.length - 1) return;
-    replaceFilletSelection({ current: activeStore.get, context: () => ctx, retire: commandPreview.retire,
-      clearApply: commandApply.clearApply, set: setActive, select: setSelection }, next);
-  };
-  const locateFilletEdge = (owner: Active, edge: Selection['edges'][number] | null) => {
-    if (!edge) {
-      setFilletPickedEdgeRequest(request => request?.owner.cmd === owner.cmd && request.owner.ctx === owner.ctx ? null : request);
-      return;
-    }
-    if (owner !== activeStore.get() || docNow.current !== doc || evaluatedRef.current !== evaluated || !ownsEvaluatedSource()) return;
-    setFilletPickedEdgeRequest({ owner, doc, evaluated, edge });
-  };
+  const { changeFillet, pickFillet, removeFilletEdge, locateFilletEdge } = createStudioFilletPicking({
+    doc, evaluated, context: ctx, sourceIsCurrent: () => docNow.current === doc && evaluatedRef.current === evaluated,
+    ownsEvaluatedSource, shownBodies: () => viewBodiesRef.current, current: activeStore.get,
+    retire: commandPreview.retire, clearApply: commandApply.clearApply, set: setActive,
+    select: setSelection, notice: setToast, setRequest: setFilletPickedEdgeRequest,
+  });
   const finishEdgeOpen = openIntent.current;
   const finishEdgeEditor = useHeldFinishEdge({
     doc, index: editNode, problems: refProblems, bodies,

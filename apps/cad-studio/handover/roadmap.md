@@ -1,13 +1,13 @@
 # CAD roadmap — current status and execution order
 
-Updated 2026-11-24 · Priority authority: D520 · Latest delivery: D1848 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
+Updated 2026-11-24 · Priority authority: D520 · Latest delivery: D1849 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
 
 This is the only current status index. Detailed tracks define acceptance; the 34 stable row pages retain scope and issue navigation. Immutable decision notes retain results. Do not append chronological status paragraphs here. [D520 decision](notes/cad-roadmap-replan-2026-11-04/README.md) supersedes D445 execution order and historical next-item text, while retaining its safeguards and bounded proofs.
 
 ## Now and next
 
-- **Current position:** [D1848](notes/editable-step-face-evidence-2026-11-24/README.md), P5 row 31 and P2 row 13. The exact plate and shaft reviews associate every original face with its new native feature and final face IDs. Original history stays unknown. The bounded #320 checklist has local Studio evidence.
-- **Next MAIN:** D1849, P4 rows [16](roadmap-rows/16.md) and [20](roadmap-rows/20.md), [#44](https://github.com/barocss/cad/issues/44). Extract the active Fillet picking actions from App and verify seed selection, edge location and removal in Studio.
+- **Current position:** [D1849](notes/studio-fillet-picking-2026-11-24/README.md), P4 rows 16 and 20. The active Fillet picking actions have their own controller. Studio verifies existing picks, types and replay. [D1848](notes/editable-step-face-evidence-2026-11-24/README.md) completes the original plate and shaft face associations and the scoped #320 closeout.
+- **Next MAIN:** D1850, P1 rows [15](roadmap-rows/15.md) and [16](roadmap-rows/16.md), [#25](https://github.com/barocss/cad/issues/25). Check the finite case of repeating the earlier rectangular through-cut across two newer cuts on the same stock. Require proof of each intervening site before enabling the selected source.
 - **Separate follow-ups:** Continue Studio App extraction in cohesive parts with affected desktop checks. [#608 Rendering](https://github.com/barocss/cad/issues/608) stays on HOLD. API inventory drift remains open. The issue tracker records [#126](https://github.com/barocss/cad/issues/126), [#613](https://github.com/barocss/cad/issues/613), [#152](https://github.com/barocss/cad/issues/152) and [#22](https://github.com/barocss/cad/issues/22) as closed.
 - **Active repository:** [barocss/cad](https://github.com/barocss/cad), based on `origin/main`. Fetch before work and preserve unexpected changes. The [migration record](../../../docs/migration/README.md) maps the former `local/cad-dev` history and issue numbers.
 - **Evidence correction:** D482 records2167 PASS/0 FAIL/2 existing SKIP in a later full-kernel run than D433. Neither result is a new full-suite PASS at this audit HEAD. [D482 record](notes/vertical-contact-refusal-2026-11-04/README.md).
@@ -43,7 +43,7 @@ P0 findings that can lose work, export stale geometry or misattribute results ta
 
 ## GitHub requirement and issue inventory
 
-- The [current closeout queue](roadmap-tracks/18-issue-closeout.md) records 218 open issues after seven completed closures and one new research proposal, with remaining acceptance gaps and held dependencies.
+- The [current closeout queue](roadmap-tracks/18-issue-closeout.md) records 217 open issues after eight completed closures and one new research proposal, with remaining acceptance gaps and held dependencies.
 
 The [November 20 routing snapshot](notes/open-issue-routing-2026-11-20/README.md) covers all 229 open issues in the standalone CAD repository. It links each issue to a primary route and identifies model-version tracking for agent visual review as the next AI workflow to measure (#324).
 
