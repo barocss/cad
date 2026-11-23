@@ -17,6 +17,7 @@ import { dispatchTool, type ChatState } from '@barocss/cad-model/chat/tools';
 import { lumpStls, meshToStl } from '@barocss/cad-model/engine/stl';
 import { notLocalModel, openModel, writeAtomic } from './cadDoc';
 import { taskRunMain } from './taskRun/cli';
+import { editableStepMain } from './editableStepCli';
 import { runPartsScenario, runScenario, runSummary, type PartsScenario, type Scenario } from '@barocss/cad-model/team/scripted';
 import { metricsOf, type Labelled } from '@barocss/cad-model/team/metrics';
 import { verifyBundle, writeBundle } from '@barocss/cad-model/team/bundle';
@@ -75,6 +76,10 @@ cad-cli run <script | -> [-o part.bcad] [--doc base.bcad] [--step part.step] [--
   --check runs the part's requirements; a failing hard one exits 3.
 cad-cli check part.bcad
   Runs a saved part's requirements: the summary, exit 3 when a hard one fails.
+cad-cli editable-step source.step [--named]
+  Reviews one supported STEP solid and prints a review ID. The command writes no file.
+cad-cli editable-step source.step [--named] --review <review-id> -o new-copy.bcad
+  Saves the same reviewed native copy. A changed source, candidate or existing output is refused.
 cad-cli urdf part.bcad -o folder [--name robot]
   Writes the assembly as URDF (folder/robot.urdf and folder/meshes/*.stl), checked against the URDF spec; exit 1 when refused.
 cad-cli mjcf part.bcad -o folder [--name robot]
@@ -172,6 +177,7 @@ export async function cliMain(argv: readonly string[], io: CliIo = { stdout: pro
   const failed = (why: string, code = 1) => { io.stderr.write(`cad-cli: ${why}\n`); return code; };
   if (cmd === undefined || cmd === 'help' || cmd === '--help' || cmd === '-h') { io.stdout.write(`${CLI_USAGE}\n`); return cmd === undefined ? 2 : 0; }
   if (cmd === 'task-run') return taskRunMain(rest, io);
+  if (cmd === 'editable-step') return editableStepMain(rest, io);
   if (cmd === 'team') {
     // (A7, O31: a scripted team through the Integrator; the traces printed.)
     if (rest[0] === '--metrics') {

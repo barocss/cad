@@ -6,6 +6,7 @@ import { stepLengthUnit } from './stepUnits';
 import { twoStepShaftDimensions } from './twoStepShaftGeometry';
 
 export type EditableStepCopy = { family: 'plate' | 'shaft'; doc: StudioDoc; named?: StudioDoc } | { error: string };
+export const editableStepByteLimit = 96 * 1024;
 
 const unsupported = 'Use one millimetre STEP solid that matches a supported recipe: a rectangular plate with one through hole or a two-step shaft.';
 
@@ -57,8 +58,7 @@ export function editableStepCopy(source: StudioDoc, includeNamed = false): Edita
   if (source.nodes.length !== 1 || node?.kind !== 'import' || (node.solids ?? 1) !== 1 || source.instances?.length)
     return { error: 'Open one STEP solid in its own document.' };
   // This recognition runs only on small files and has no fallback to a mesh or mass fit.
-  const limit = 96 * 1024;
-  if (node.step.length > limit || new TextEncoder().encode(node.step).byteLength > limit)
+  if (node.step.length > editableStepByteLimit || new TextEncoder().encode(node.step).byteLength > editableStepByteLimit)
     return { error: 'This STEP file exceeds the editable copy size limit (96 KiB).' };
   try {
     const unit = stepLengthUnit(node.step);

@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1845: [Review editable STEP copies through the local CLI](notes/editable-step-cli-review-2026-11-24/README.md), #320. Bind each review to original and candidate bytes, publish without replacing files and qualify native Studio edits.
 - D1844: [Refine exact shaft rims in Studio](notes/stepped-shaft-rim-display-2026-11-24/README.md), #16. Reduce projected chord error and retain each native or imported rim owner in both desktop renderers.
 - D1843: [Reconstruct a two-step shaft from STEP](notes/editable-step-shaft-copy-2026-11-24/README.md), #320. Qualify exact stages and shoulder, editable dimensions, refusal and fresh Open in Studio.
 - D1842: [Review an editable STEP copy and include named drivers](notes/review-named-step-plate-copy-2026-11-24/README.md), #320. Verify explicit Save, Cancel, source change and three native parameter bindings through fresh Open.

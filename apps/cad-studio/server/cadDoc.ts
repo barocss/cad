@@ -4,7 +4,7 @@
 // does not exist yet is a new, empty part, written on the first change. Local files only. The same tool layer as the
 // studio's chat: its gates, its proposals (kept in the file for the user to accept in the studio).
 import { createHash, randomUUID } from 'node:crypto';
-import { closeSync, fstatSync, lstatSync, mkdirSync, openSync, readFileSync, renameSync, rmdirSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
+import { closeSync, fstatSync, linkSync, lstatSync, mkdirSync, openSync, readFileSync, renameSync, rmdirSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
 import { encodeStudioFile, readStudioFile } from '@barocss/cad-model/engine/container';
 import { emptyDoc, type StudioDoc } from '@barocss/cad-model/engine/doc';
@@ -32,6 +32,14 @@ function prepareWrite(path: string, bytes: Uint8Array | string, publish: (tempor
 /** Replace a file with complete bytes from a temporary sibling. */
 export function writeAtomic(path: string, bytes: Uint8Array | string): void {
   prepareWrite(path, bytes, tmp => renameSync(tmp, path));
+}
+
+/** Publish complete bytes at a fresh name. A file that already exists keeps its bytes. */
+export function writeAtomicNew(path: string, bytes: Uint8Array): void {
+  prepareWrite(path, bytes, tmp => {
+    linkSync(tmp, path);
+    try { unlinkSync(tmp); } catch { /* The complete sibling is already published. */ }
+  });
 }
 
 interface DiskStamp { device: bigint; inode: bigint; digest: string }
