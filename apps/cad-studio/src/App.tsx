@@ -98,7 +98,7 @@ import { useDirectCurveCurvature } from './app/useDirectCurveCurvature';
 import { useNativeEdgeInspection } from './app/useNativeEdgeInspection';
 import { MeshFileDialogs } from './files/MeshFileDialogs';
 import { useRouteBundleEditor } from './state/useRouteBundleEditor';
-import { cutPatternSourceLabel, earlierRectangularCutSource, isCutPattern, selectedCutPatternSource } from './app/cutPatternSource';
+import { commandLaunchContext, prepareCutPatternLaunch } from './app/commandLaunchContext';
 import { moveRenderAppearance } from './app/moveRenderAppearance';
 import { curvePatternInputKey, curvePatternDocumentProblem, directCommandDocument, insertedCurvePartProblem, prepareDirectCurveCandidate, type DirectCurveEdit } from './app/directCurveCandidate';
 import { createRoundedInsetHistoryEdit, LINKED_INSET_EXTRUDE } from './app/roundedInsetCommand';
@@ -1437,19 +1437,9 @@ export function App() {
     setPalette(false); setRendering(false); setPlaying(false); setDrawing(false);
     const family = filletType(cmd.id);
     if (family && (!fresh || busy)) { setToast({ title: 'Fillet not started', hint: 'Wait for the current part to finish evaluating.', detail: '' }); return; }
-    const sourceIntent = cutSourceIntent.current;
-    const explicitCut = sourceIntent?.doc === doc && sourceIntent.selection === selection ? sourceIntent.index : null;
-    const rectangularCutSource = explicitCut !== null && marker === null && !inPlaceNow.current && fresh && !busy
-      ? earlierRectangularCutSource(ctx, cmd.id, explicitCut) : undefined;
-    if (isCutPattern(cmd.id) && explicitCut !== null && !rectangularCutSource) {
-      const source = selectedCutPatternSource(ctx);
-      if (source !== explicitCut) {
-        const earlier = cutPatternSourceLabel(doc.nodes, explicitCut);
-        const current = cutPatternSourceLabel(ctx.doc.nodes, source);
-        setToast({ title: `${cmd.label} can’t repeat ${earlier}`, hint: current ? `Select the body to repeat ${current}.` : 'Select a current Subtract result.', detail: '' });
-        return;
-      }
-    }
+    const cut = prepareCutPatternLaunch({ command: cmd, ctx, doc, selection, intent: cutSourceIntent.current,
+      canUseEarlier: marker === null && !inPlaceNow.current && fresh && !busy });
+    if ('notice' in cut) { setToast(cut.notice); return; }
     const avail = family ? filletLaunchAvailability(ctx, family) : cmd.available(ctx);
     if (!avail.ok) { setToast({ title: `${cmd.label} can’t run here`, hint: avail.reason, detail: '' }); return; }
     if (variants.showing) { setToast({ title: `${cmd.label} can’t run here`, hint: `Showing ${variants.showing}: show the master to edit.`, detail: '' }); return; }
@@ -1491,20 +1481,8 @@ export function App() {
       const n = face ? planeOf(face.node).normal : i !== undefined ? planeOf(evaluated.nodes[i] as SketchNode).normal : null, cam = viewport.current?.camera;
       if (n && cam) { const f = cam.basis().forward; if (Math.abs(f[0] * n[0] + f[1] * n[1] + f[2] * n[2]) > 0.95) viewport.current?.setView('iso'); }
     }
-    // Before the first link exists, the base memo does not depend on placed parts. Bearing still needs
-    // the current authored targets when it builds its candidate, as well as when it lists choices.
-    // Loft also captures the shown document's current curves without changing its evaluated prefix.
-    const splitFace = cmd.id === 'split' && selection.faces.length === 1 && !selection.edges.length
-      && !selection.bodies.length && !selection.vertices?.length && !selection.sketches?.length && !directSel.length
-      && (footprintState.current.midpointReady || footprintState.current.insetReady)
-      && currentNativePlanePick(ctx, selection.faces[0], doc) ? selection.faces[0] : undefined;
-    const startCtx: Ctx = rectangularCutSource ? { ...ctx, rectangularCutSource }
-      : splitFace ? { ...ctx, splitPlanePick: splitFace }
-      : cmd.id === 'bearing' ? { ...ctx, doc: { ...ctx.doc, instances: doc.instances } }
-      : cmd.id === 'loft' ? { ...ctx, doc: { ...ctx.doc, direct: shownDoc.direct } }
-      : cmd.id === 'hole' ? { ...ctx, holeSnapStep: snapStep }
-      : cmd.id === 'extrude' ? { ...ctx, viewportEndFace: true }
-      : cmd === LINKED_INSET_EXTRUDE ? { ...ctx, doc } : ctx;
+    const startCtx = commandLaunchContext({ command: cmd, ctx, doc, shownDoc, selection, cutSource: cut.source,
+      hasDirectSelection: directSel.length > 0, nativePlaneReady: footprintState.current.midpointReady || footprintState.current.insetReady, snapStep });
     if (cmd.id === 'extrude') {
       const focused = document.activeElement;
       extrudeOpener.current = focused instanceof HTMLElement && focused.matches('button')

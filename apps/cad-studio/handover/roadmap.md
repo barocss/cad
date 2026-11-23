@@ -1,13 +1,13 @@
 # CAD roadmap — current status and execution order
 
-Updated 2026-11-24 · Priority authority: D520 · Latest delivery: D1862 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
+Updated 2026-11-24 · Priority authority: D520 · Latest delivery: D1863 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
 
 This is the only current status index. Detailed tracks define acceptance; the 34 stable row pages retain scope and issue navigation. Immutable decision notes retain results. Do not append chronological status paragraphs here. [D520 decision](notes/cad-roadmap-replan-2026-11-04/README.md) supersedes D445 execution order and historical next-item text, while retaining its safeguards and bounded proofs.
 
 ## Now and next
 
-- **Current position:** [D1862](notes/three-cut-quadratic-path-2026-11-24/README.md), P1 rows 03, 08 and 16. A certified quadratic repeats the first of three rectangular cuts. Desktop Studio verifies the authored curve, fixed translation, History and fresh Open.
-- **Next MAIN:** D1863, P4 rows [15](roadmap-rows/15.md), [16](roadmap-rows/16.md) and [22](roadmap-rows/22.md), [#44](https://github.com/barocss/cad/issues/44). Extract command launch context from App and verify the earlier cut guard, native Split plane and related launch behavior in desktop Studio.
+- **Current position:** [D1863](notes/studio-command-launch-context-2026-11-24/README.md), P4 rows 15, 16 and 22. App no longer builds the command launch context. Desktop Studio verifies the explicit cut source guard, linked Path, native Split plane and exact annular Extrude.
+- **Next MAIN:** D1864, P4/P5 rows [08](roadmap-rows/08.md), [16](roadmap-rows/16.md) and [20](roadmap-rows/20.md), [#214](https://github.com/barocss/cad/issues/214). Reproduce the Constant Fillet handle on a complete native circular rim and use its original edge frame when the exact native recipe is supported.
 - **Separate follow-ups:** Continue Studio App extraction in cohesive parts with affected desktop checks. [#608 Rendering](https://github.com/barocss/cad/issues/608) stays on HOLD. API inventory drift remains open. The issue tracker records [#126](https://github.com/barocss/cad/issues/126), [#613](https://github.com/barocss/cad/issues/613), [#152](https://github.com/barocss/cad/issues/152) and [#22](https://github.com/barocss/cad/issues/22) as closed.
 - **Active repository:** [barocss/cad](https://github.com/barocss/cad), based on `origin/main`. Fetch before work and preserve unexpected changes. The [migration record](../../../docs/migration/README.md) maps the former `local/cad-dev` history and issue numbers.
 - **Evidence correction:** D482 records2167 PASS/0 FAIL/2 existing SKIP in a later full-kernel run than D433. Neither result is a new full-suite PASS at this audit HEAD. [D482 record](notes/vertical-contact-refusal-2026-11-04/README.md).
