@@ -4,10 +4,11 @@ import { exportStudioStep, partBreps } from './evaluate';
 import { addParameters, bindParameter } from './parameters';
 import { stepLengthUnit } from './stepUnits';
 import { editableStepSourceShape } from './editableStepSource';
+import { editableStepEvidence, type EditableStepEvidence } from './editableStepEvidence';
 import { twoStepShaftDimensions } from './twoStepShaftGeometry';
 import { MM_PER_INCH } from '../util/units';
 
-export type EditableStepCopy = { family: 'plate' | 'shaft'; sourceUnit?: 'cm' | 'in'; doc: StudioDoc; named?: StudioDoc } | { error: string };
+export type EditableStepCopy = { family: 'plate' | 'shaft'; sourceUnit?: 'cm' | 'in'; doc: StudioDoc; evidence: EditableStepEvidence; named?: StudioDoc } | { error: string };
 export const editableStepByteLimit = 96 * 1024;
 
 const unsupported = 'Use one STEP solid that matches a supported recipe: a rectangular plate with one through hole or a millimetre two-step shaft.';
@@ -84,8 +85,15 @@ export function editableStepCopy(source: StudioDoc, includeNamed = false): Edita
     if (!check.valid || check.topology[0]?.genus !== (family === 'plate' ? 1 : 0)) return { error: unsupported };
     const step = exportStudioStep(candidate, { name: 'Editable check' }).text;
     if (stepGeometryRecipeKey(step) !== originalKey) return { error: unsupported };
+    const copyOutputs = partBreps(candidate);
+    if (copyOutputs.length !== 1) return { error: unsupported };
+    const evidence = editableStepEvidence(outputs[0], copyOutputs[0], candidate);
+    if (!evidence) return { error: unsupported };
     const named = includeNamed && family === 'plate' ? withNamedDrivers(candidate, originalKey) : undefined;
-    return { family, doc: candidate, ...(sourceUnit ? { sourceUnit } : {}), ...(named ? { named } : {}) };
+    const namedOutput = named ? partBreps(named)[0] : undefined;
+    const namedEvidence = named && namedOutput ? editableStepEvidence(outputs[0], namedOutput, named) : undefined;
+    return { family, doc: candidate, evidence, ...(sourceUnit ? { sourceUnit } : {}),
+      ...(named && JSON.stringify(namedEvidence) === JSON.stringify(evidence) ? { named } : {}) };
   } catch {
     return { error: unsupported };
   }

@@ -1,11 +1,12 @@
 import type { StudioDoc } from '@barocss/cad-model/engine/doc';
 import type { EditableStepCopy } from '@barocss/cad-model/engine/editableStepCopy';
+import type { EditableStepEvidence } from '@barocss/cad-model/engine/editableStepEvidence';
 import type { StepOwner } from './stepExportPreparation';
 
 type Owner = Pick<StepOwner, 'doc' | 'evaluated' | 'shown' | 'name' | 'fresh' | 'hasBody'>;
 export type EditableStepPreview =
   | { stage: 'checking'; name: string }
-  | { stage: 'ready'; name: string; features: string; parameterNames: readonly string[] }
+  | { stage: 'ready'; name: string; features: string; parameterNames: readonly string[]; evidence: EditableStepEvidence }
   | { stage: 'error'; name: string; error: string };
 
 interface Options {
@@ -43,7 +44,7 @@ export function createEditableStepPreparation(options: Options) {
     if ('error' in copy) { options.changed({ stage: 'error', name, error: copy.error }); return; }
     request.copy = copy;
     options.changed({ stage: 'ready', name, features: copy.family === 'plate' ? 'Sketch, Extrude, Hole' : 'Shaft',
-      parameterNames: Object.keys(copy.named?.parameters ?? {}) });
+      parameterNames: Object.keys(copy.named?.parameters ?? {}), evidence: copy.evidence });
   };
   const save = (named: boolean) => {
     if (!active?.copy) return;

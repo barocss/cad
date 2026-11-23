@@ -273,7 +273,7 @@ async function shaftFlow() {
   assert.equal(source.nodes[0].step, original.toString());
   await shaftPhysical('01-imported-shaft-native', source, [10, 12], [6, 8]);
   const panel = await beginReview();
-  await panel.getByText('Shaft', { exact: true }).waitFor();
+  await panel.locator('.kv').filter({ hasText: /^New features/ }).getByText('Shaft', { exact: true }).waitFor();
   assert.equal(await panel.getByRole('checkbox').count(), 0);
   assert.equal(f.report.downloads.length, 0);
   await f.snapshot('01-source-review');

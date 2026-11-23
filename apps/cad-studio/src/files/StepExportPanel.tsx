@@ -1,7 +1,15 @@
 import { stepContinuityNotice } from '../ui/continuityRecovery';
+import type { StepFaceAssociation } from '@barocss/cad-model/engine/editableStepEvidence';
 import type { ModelExportController } from './useModelExports';
 
 const bodyCount = (count: number, label: string) => `${count} ${label} ${count === 1 ? 'body' : 'bodies'}`;
+const roleLabels: Record<StepFaceAssociation['role'], string> = {
+  'x-min': '−X side', 'x-max': '+X side', 'y-min': '−Y side', 'y-max': '+Y side',
+  bottom: 'Bottom cap', top: 'Top cap', bore: 'Through bore',
+  'first-end': 'First end', 'first-seat': 'First seat', shoulder: 'Shoulder',
+  'second-seat': 'Second seat', 'second-end': 'Second end',
+};
+const featureLabels: Record<StepFaceAssociation['feature']['kind'], string> = { extrude: 'Extrude', hole: 'Hole', shaft: 'Shaft' };
 
 function EditableStepCopyPanel({ controller, preview }: { controller: ModelExportController; preview: NonNullable<ModelExportController['editablePreview']> }) {
   const { clearStepAsk, saveEditableCopy } = controller;
@@ -16,7 +24,14 @@ function EditableStepCopyPanel({ controller, preview }: { controller: ModelExpor
     }}>
       {preview.stage === 'ready' && <>
         <div className="kv"><span>New features</span><b>{preview.features}</b></div>
-        <p className="muted">Copies the solid geometry. Original history and metadata are not included.</p>
+        <p className="muted">Geometry only. Original history is unknown.</p>
+        <details>
+          <summary>{preview.evidence.regions.reduce((count, region) => count + region.sourceFaces.length, 0)} source faces explained</summary>
+          {preview.evidence.regions.map(region => <div className="kv" key={region.role}>
+            <span>{roleLabels[region.role]}</span>
+            <b>{featureLabels[region.feature.kind]}{region.trimmedBy ? ' · Hole trim' : ''}</b>
+          </div>)}
+        </details>
         {preview.parameterNames.length > 0 && <label className="kv">
           <span>Named thickness and hole centre</span> <input type="checkbox" name="named" />
         </label>}

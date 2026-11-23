@@ -36,6 +36,10 @@ test('reviews exact plate and shaft graphs, then writes only the explicitly revi
     assert.equal(reviewed.out.source.sha256, sha256Hex(Buffer.from(original)));
     assert.equal(reviewed.out.candidate.family, family);
     assert.equal(reviewed.out.candidate.history, 'new');
+    assert.equal(reviewed.out.candidate.evidence.originalHistory, 'unknown');
+    const sourceFaces = reviewed.out.candidate.evidence.regions.flatMap((region: { sourceFaces: string[] }) => region.sourceFaces);
+    assert.equal(sourceFaces.length, family === 'plate' ? 8 : 10);
+    assert.equal(sourceFaces.length, new Set(sourceFaces).size);
     assert.equal(reviewed.out.candidate.nodes[0].id, 'n0');
     assert.match(reviewed.out.review, /^[0-9a-f]{64}$/);
     assert.equal(reviewed.out.written, undefined);

@@ -76,7 +76,7 @@ export function editableStepMain(args: readonly string[], io: CliIo): number {
   }
   io.stdout.write(JSON.stringify({
     ok: true, review: current, source: { name, sha256: sourceSha256, units: copy.sourceUnit ?? 'mm' },
-    candidate: { family: copy.family, sha256: candidateSha256, history: 'new', nodes: doc.nodes, parameters: doc.parameters },
+    candidate: { family: copy.family, sha256: candidateSha256, history: 'new', nodes: doc.nodes, parameters: doc.parameters, evidence: copy.evidence },
     ...(out !== undefined ? { written: basename(out) } : {}),
   }) + '\n');
   return 0;

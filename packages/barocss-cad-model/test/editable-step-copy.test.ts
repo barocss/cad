@@ -1,6 +1,6 @@
 import { strict as assert } from 'node:assert';
 import test from 'node:test';
-import { checkBrep, stepGeometryRecipeKey } from '@barocss/cad';
+import { checkBrep, faceGeometry, stepGeometryRecipeKey } from '@barocss/cad';
 import { emptyDoc, rectanglePart, withNode } from '../src/engine/doc';
 import { editableStepCopy } from '../src/engine/editableStepCopy';
 import { editableStepSource } from '../src/engine/editableStepSource';
@@ -234,4 +234,74 @@ test('refuses named INCH without the exact linked factor, length dimensions, uni
   }
   // The same edit could round away in another path. This reconstruction must have an exact key.
   assert.ok('error' in editableStepCopy(editableStepSource('Non-invertible fixture', inches(geometry))));
+});
+
+test('covers each real final face once for the plate in mm, cm and in, and both shaft orders', () => {
+  const inchNative = withNode(stock, { ...bore, center: [12, 9] });
+  const sources = [imported(geometry), editableStepSource('Centimetre', centimetres(geometry)),
+    editableStepSource('Inch', inches(stepOf(inchNative))),
+    imported(stepOf(shaft([20, 12], [12, 8]))), imported(stepOf(shaft([12, 12], [20, 8])))];
+  for (const source of sources) {
+    const result = editableStepCopy(source, true);
+    assert.ok('doc' in result, JSON.stringify(result));
+    const { evidence } = result, [input] = partBreps(source), [output] = partBreps(result.doc);
+    assert.equal(evidence.originalHistory, 'unknown');
+    assert.equal(evidence.sourceBody, input.key);
+    assert.equal(evidence.copyBody, output.key);
+    if (source.nodes.length === 2) assert.equal(evidence.sourceBody, 'b1');
+    assert.deepEqual(evidence.regions.flatMap(r => r.sourceFaces).sort(), input.brep.faces.map(f => f.id).sort());
+    assert.deepEqual(evidence.regions.flatMap(r => r.copyFaces).sort(), output.brep.faces.map(f => f.id).sort());
+    if (result.family === 'plate') {
+      assert.ok(result.named);
+      assert.deepEqual(partBreps(result.named)[0].brep.faces.map(f => f.id).sort(), output.brep.faces.map(f => f.id).sort());
+      const through = evidence.regions.find(r => r.role === 'bore');
+      assert.ok(through);
+      assert.equal(through.sourceFaces.length, 2);
+      assert.deepEqual(through.feature, { id: 'n2', kind: 'hole' });
+      const caps = evidence.regions.filter(region => region.role === 'bottom' || region.role === 'top');
+      assert.equal(caps.length, 2);
+      assert.ok(caps.every(cap => cap.feature.id === 'n1' && cap.trimmedBy === 'n2'));
+      assert.ok(caps.every(cap => output.brep.faces.find(face => face.id === cap.copyFaces[0])?.loops.length === 2));
+    } else {
+      const shoulder = evidence.regions.find(r => r.role === 'shoulder');
+      assert.ok(shoulder);
+      assert.equal(shoulder.sourceFaces.length, 2);
+      assert.deepEqual(shoulder.feature, { id: 'n0', kind: 'shaft' });
+      const n = result.doc.nodes[0];
+      assert.ok(n.kind === 'shaft');
+      for (const id of shoulder.sourceFaces) {
+        const face = input.brep.faces.find(face => face.id === id)!;
+        const g = faceGeometry(face);
+        assert.ok(g.kind === 'plane');
+        assert.equal(g.o[2], 12);
+        assert.equal(g.n[2], Number(n.steps[0].diameter) > Number(n.steps[1].diameter) ? 1 : -1);
+      }
+    }
+  }
+});
+
+test('the same bored volume can have a distinct circle-extrusion and Difference history', () => {
+  const sketch = withNode(stock, { kind: 'sketch', profile: 'circle', center: [11, 9], radius: 3 });
+  const tool = withNode(sketch, { kind: 'extrude', sketch: 2, height: 12, from: -1 });
+  const alternate = withNode(tool, { kind: 'difference', parent: { node: 1, side: 'solid' }, tool: { node: 3, side: 'solid' } });
+  assert.deepEqual(alternate.nodes.map(n => n.kind), ['sketch', 'extrude', 'sketch', 'extrude', 'difference']);
+  checkPhysical(alternate, 10, 11, 3);
+  const [brep] = partBreps(alternate);
+  const report = checkBrep(brep.brep, { strict: true });
+  assert.ok(report.valid);
+  assert.equal(report.topology[0].genus, 1);
+  assert.equal(brep.brep.faces.filter(face => faceGeometry(face).kind === 'cylinder').length, 2);
+  assert.equal(stepGeometryRecipeKey(stepOf(alternate)), stepGeometryRecipeKey(geometry));
+  const result = editableStepCopy(imported(geometry));
+  assert.ok('doc' in result);
+  assert.deepEqual(result.doc.nodes.map(n => n.kind), ['sketch', 'extrude', 'hole']);
+  assert.equal(result.evidence.originalHistory, 'unknown');
+});
+
+test('refuses a single STEP file with two solids before associating any faces', () => {
+  const other = withNode(withNode(plate, { kind: 'sketch', profile: 'rectangle', min: [60, 0], max: [70, 10] }),
+    { kind: 'extrude', sketch: 3, height: 5 });
+  const source = imported(stepOf(other));
+  assert.equal(partBreps(source)[0].brep.bodies.length, 2);
+  assert.ok('error' in editableStepCopy(source));
 });

@@ -257,7 +257,7 @@ export function useModelExports({ model, engine, fileName, current, onNotice }: 
   return { stepAsk: !!stepPreview || !!editablePreview, stepPreview, downloadStep, stlAsk, stlQuality, stlBusy, stlLossHint, stlTargets, stlCancelButton, clearStepAsk, changeStlQuality,
     askStlExport, cancelStlExport, exportStepFile, exportStl, exportQuote, exportThreeMf,
     editablePreview, saveEditableCopy: copyControl.current.save,
-    editableCopy: editableStepSourceShape(doc)
+    editableCopy: (doc.nodes.length === 1 && doc.nodes[0].kind === 'import') || editableStepSourceShape(doc)
       ? { run: reviewEditableCopy, disabled: busy || !fresh || editablePreview?.stage === 'checking' } : undefined };
 }
 
