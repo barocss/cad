@@ -36,7 +36,7 @@ function rail({ firstAngle = 90, secondAngle = 90, firstRadius = 12, secondRadiu
   start = [0, 0, 0], tangent = [1, 0, 0], inward = [0, 1, 0], turn = -1 } = {}) {
   const first = arc('first', start, tangent, inward, firstRadius, firstAngle);
   const second = arc('second', first.end, first.terminal, scale(first.exitInward, turn), secondRadius, secondAngle);
-  return { first, second, axis: cross(tangent, inward), path: joinCurves(first.curve, second.curve, { curveId: 'twoArcs' }).curve };
+  return { first, second, turn, axis: cross(tangent, inward), path: joinCurves(first.curve, second.curve, { curveId: 'twoArcs' }).curve };
 }
 const document = (path, sketch = section()) => ({ format: 'barocss-cad-part', version: 1, units: 'mm', parameters: {},
   features: [sketch, { kind: 'sweep-curve', id: 'w', sketch: 's', mode: 'exact', path }] });
@@ -122,7 +122,7 @@ function verify(output, path, intervals = [[-3, -1], [1, 3]], widths = [2, 2], a
     const loops = face.loops.map(id => brep.loops.find(loop => loop.id === id));
     assert.deepEqual(loops.map(loop => loop.kind).sort(), ['inner', 'inner', 'outer']);
     const center = start ? path.first.start : path.second.end, normal = start ? scale(path.first.tangent, -1) : path.second.terminal;
-    const radial = start ? path.first.inward : scale(path.second.exitInward, -1), plane = geometry.get(face.id);
+    const radial = start ? path.first.inward : scale(path.second.exitInward, path.turn), plane = geometry.get(face.id);
     assert.equal(plane.kind, 'plane'); pointNear(plane.n, normal); near(dot(sub(plane.o, center), normal), 0);
     const bounds = [];
     for (const loop of loops) {
@@ -168,24 +168,29 @@ function verify(output, path, intervals = [[-3, -1], [1, 3]], widths = [2, 2], a
     assert.equal(continuity.status, 'measured'); near(continuity.maximumAngleDegrees, 0, angularTolerance);
     assert.equal(continuity.curvature.status, 'measured');
     const supports = owners.map(owner => geometry.get(owner.id));
-    const expected = supports[0].kind === 'cylinder' ? supports.reduce((sum, surface) => sum + 1 / surface.r, 0) : 0;
+    const expected = supports[0].kind === 'cylinder' ? Math.abs(1 / supports[0].r - path.turn / supports[1].r) : 0;
     near(continuity.curvature.maximumDifference, expected, Math.max(1e-8, relativeCurvatureTolerance * Math.max(1, expected)));
-    if (supports[0].kind === 'cylinder') for (const sample of continuity.curvature.samples) assert.ok(sample.first * sample.second < 0);
+    if (supports[0].kind === 'cylinder') for (const sample of continuity.curvature.samples) assert.equal(Math.sign(sample.first * sample.second), path.turn);
   }
   assert.deepEqual(counts, [4, 4, 4]);
 }
 
-test('direct opposite-turn paired ducts retain both physical mouths, 12 charted joins and independent mass', () => {
-  const path = rail(), initial = evaluateCadPart(document(path.path));
+for (const turn of [-1, 1]) test(`direct ${turn === 1 ? 'same-turn' : 'opposite-turn'} paired ducts retain both physical mouths, 12 charted joins and independent mass`, () => {
+  const path = rail({ turn }), initial = evaluateCadPart(document(path.path));
   verify(initial.outputs[0], path);
   near(massPropertiesOf(initial.outputs[0]).volume, 480 * Math.PI);
-  // Quarter-turn radial second-moment terms cancel between the opposite bends.
-  pointNear(brepMassProperties(initial.outputs[0].brep, 1).centroid, [18 - 12 / Math.PI, 12 + 12 / Math.PI, 0]);
+  // Each quarter bend contributes q=19/12 mm² once to its radial material moment.
+  // Opposite turns cancel the X terms; same turns add them twice. Both cancel in Y.
+  pointNear(brepMassProperties(initial.outputs[0].brep, 1).centroid,
+    [turn === 1 ? (468 + 19 / 6 - 54 * Math.PI) / (15 * Math.PI) : 18 - 12 / Math.PI, 12 + 12 / Math.PI, 0]);
+  const end = initial.outputs[0].brep.faces.find(face => face.name === 'w.end');
+  pointNear(faceGeometry(end).n, [-turn, 0, 0]);
+  pointNear(path.second.end, [turn === 1 ? -6 : 30, 30, 0]);
   assert.deepEqual(loadCadPart(saveCadPart(initial)).outputs[0].brep, initial.outputs[0].brep);
 });
 
-test('an asymmetric lane edit preserves all native IDs and the other lane through rejection, reopen and restore', () => {
-  const path = rail(), sketch = section(), initial = evaluateCadPart(document(path.path, sketch)), before = saveCadPart(initial);
+for (const turn of [-1, 1]) test(`a ${turn === 1 ? 'same-turn' : 'opposite-turn'} asymmetric lane edit preserves all native IDs and the other lane through reopen and restore`, () => {
+  const path = rail({ turn }), sketch = section(), initial = evaluateCadPart(document(path.path, sketch)), before = saveCadPart(initial);
   const edited = reevaluate(initial, { document: document(path.path, { ...sketch, holes: [rectangle(1.5, -2.5, -1.5, true), sketch.holes[1]] }) });
   verify(edited.outputs[0], path, [[-2.5, -1.5], [1, 3]], [1.5, 2]);
   assert.deepEqual(identity(edited), identity(initial));
@@ -197,10 +202,10 @@ test('an asymmetric lane edit preserves all native IDs and the other lane throug
   assert.deepEqual(reevaluate(reopened, { document: document(path.path, sketch) }).outputs[0].brep, initial.outputs[0].brep);
 });
 
-test('translated oblique arc limits retain radial X or Y, reversed lane order, either winding and near-axis clearance', () => {
+for (const turn of [-1, 1]) test(`translated oblique ${turn === 1 ? 'same-turn' : 'opposite-turn'} arc limits retain radial X or Y, reversed lane order, either winding and near-axis clearance`, () => {
   for (const [firstAngle, secondAngle] of [[30, 120], [120, 30], [120, 120]])
     for (const clockwise of [[true, false], [false, true]]) for (const radialY of [false, true]) {
-    const path = rail({ firstAngle, secondAngle, firstRadius: 2.00001, secondRadius: 2.00002,
+    const path = rail({ turn, firstAngle, secondAngle, firstRadius: 2.00001, secondRadius: 2.00002,
       start: [32, -14, 18], tangent: [.6, .8, 0], inward: [-.8, .6, 0] });
     const intervals = [[1, 3], [-3, -1]], widths = [1.5, 2];
     const sketch = { ...section(intervals, widths, clockwise, [21.2, -7.1]),
@@ -216,8 +221,8 @@ test('translated oblique arc limits retain radial X or Y, reversed lane order, e
   }
 });
 
-test('paired admission preserves the prior solid on lost cover, radial offset, touching lanes and unsupported same-turn rails', () => {
-  const path = rail(), initial = evaluateCadPart(document(path.path)), saved = saveCadPart(initial);
+for (const turn of [-1, 1]) test(`${turn === 1 ? 'same-turn' : 'opposite-turn'} paired admission preserves the prior solid on lost cover, radial offset, touching lanes and unsupported rails`, () => {
+  const path = rail({ turn }), initial = evaluateCadPart(document(path.path)), saved = saveCadPart(initial);
   const refused = (sketch, code, message, changedPath = path.path) => {
     assert.throws(() => reevaluate(initial, { document: document(changedPath, sketch) }),
       error => error instanceof CadPartError && error.feature === 'w' && error.code === code && message.test(error.message));
@@ -234,11 +239,27 @@ test('paired admission preserves the prior solid on lost cover, radial offset, t
   refused({ ...three, holes: [...three.holes, three.holes[0]], sideTags: undefined }, 'CAPABILITY', /two axis-aligned rectangular cavities/);
   refused({ ...section(), holes: [[{ kind: 'arc', center: [0, -2], start: [.5, -2], direction: 'ccw' }], section().holes[1]], sideTags: undefined },
     'CAPABILITY', /two axis-aligned rectangular cavities/);
-  refused(section(), 'CAPABILITY', /one centered rectangular opening/, rail({ turn: 1 }).path);
+  // A true or tolerance-equivalent single carrier stays on the existing single-arc route.
+  for (const secondRadius of [12, 12 + 5e-8]) for (const angle of [45, 90])
+    refused(section(), 'CAPABILITY', /at most one circular hole/, rail({ turn: 1, firstAngle: angle, secondAngle: angle, secondRadius }).path);
   for (const radii of [{ firstRadius: 2 }, { secondRadius: 2 }])
-    refused(section(), 'PARAMETER', /radial half-width smaller than both path radii/, rail(radii).path);
+    refused(section(), 'PARAMETER', /radial half-width smaller than both path radii/, rail({ ...radii, turn }).path);
   refused({ ...section(), plane: { origin: [0, 0, 0], normal: [1, 0, 0], xAxis: [0, Math.SQRT1_2, Math.SQRT1_2] } },
     'CAPABILITY', /original axes aligned to the bend radial and binormal/);
   const narrow = [[-3, -2.5e-6], [2.5e-6, 3]];
   verify(evaluateCadPart(document(path.path, section(narrow))).outputs[0], path, narrow);
+  const joinedWith = (tangent, inward) => joinCurves(path.first.curve,
+    arc('changed', path.first.end, tangent, inward, 18, 90).curve, { curveId: 'changedPair' }).curve;
+  refused(section(), 'GEOMETRY', /common forward tangent/, joinedWith([1, 0, 0], [0, 1, 0]));
+  refused(section(), 'GEOMETRY', /common forward tangent/, joinedWith(scale(path.first.terminal, -1), [-1, 0, 0]));
+  refused(section(), 'CAPABILITY', /two coplanar circular arcs/, joinedWith(path.first.terminal, [0, 0, 1]));
+  for (const angles of [{ firstAngle: 29 }, { secondAngle: 121 }])
+    refused(section(), 'CAPABILITY', /at most one circular hole/, rail({ ...angles, turn }).path);
+});
+
+test('same-turn paired ducts also retain strict charts and material moments when the first radius is larger', () => {
+  const path = rail({ turn: 1, firstRadius: 18, secondRadius: 12 }), initial = evaluateCadPart(document(path.path));
+  verify(initial.outputs[0], path);
+  const reopened = loadCadPart(saveCadPart(initial));
+  assert.deepEqual(reopened.outputs[0].brep, initial.outputs[0].brep);
 });

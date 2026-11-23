@@ -264,8 +264,7 @@ for (const turn of [-1, 1]) test(`a rectangular ${turn === 1 ? 'same-turn bend' 
     kind, start: [50 + (x - y) * Math.SQRT1_2, -30 + (x + y) * Math.SQRT1_2],
   }));
   refuses(rail, sketchWith(rotated), 'CAPABILITY', aperture);
-  refuses(rail, sketchWith(section.holes[0], rectangle(.5, .5)), turn === 1 ? 'CAPABILITY' : 'GEOMETRY',
-    turn === 1 ? aperture : /strictly positive axial web clearance/);
+  refuses(rail, sketchWith(section.holes[0], rectangle(.5, .5)), 'GEOMETRY', /strictly positive axial web clearance/);
   refuses(rail, sketchWith(rectangle(1e-5, 2)), 'CAPABILITY', aperture);
   for (const radialHalfWidth of [2, 2 + .01, 2 - 5e-7, 2 - 1e-6])
     refuses(rail, sketchWith(rectangle(radialHalfWidth, 2)), 'GEOMETRY', wall);

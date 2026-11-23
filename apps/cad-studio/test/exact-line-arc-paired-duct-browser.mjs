@@ -9,23 +9,27 @@ const baseline = process.argv.includes('--expect-refused');
 const reviewBaseline = process.argv.includes('--expect-review-unavailable');
 const review = process.argv.includes('--review');
 const tail = process.argv.includes('--straight-tail') ? 14 : 0;
-const sameTurn = process.argv.includes('--spaced-same-turn');
-const spaced = sameTurn || process.argv.includes('--spaced-opposite');
+const spacedSameTurn = process.argv.includes('--spaced-same-turn');
+const spaced = spacedSameTurn || process.argv.includes('--spaced-opposite');
+const directSameTurn = process.argv.includes('--same-turn-arcs');
+const sameTurn = spacedSameTurn || directSameTurn;
 const oppositeArcs = process.argv.includes('--opposite-arcs');
 const arcAndLine = process.argv.includes('--arc-and-line');
-assert.ok([spaced, !!tail, oppositeArcs, arcAndLine].filter(Boolean).length <= 1);
-const revolvedEnds = spaced || oppositeArcs;
+assert.ok([spaced, !!tail, oppositeArcs, directSameTurn, arcAndLine].filter(Boolean).length <= 1);
+assert.ok(!directSameTurn || (!review && !reviewBaseline));
+const directArcs = oppositeArcs || directSameTurn;
+const revolvedEnds = spaced || directArcs;
 const threePieces = tail > 0 || spaced;
 const forwardEnds = [
   { direction: 'Left', axis: 0, sign: -1, center: revolvedEnds ? [0, 0] : [-10, 0] },
   spaced ? { direction: sameTurn ? 'Left' : 'Right', axis: 0, sign: sameTurn ? -1 : 1, center: [sameTurn ? -6 : 30, 38] }
-    : oppositeArcs ? { direction: 'Right', axis: 0, sign: 1, center: [30, 30] }
+    : directArcs ? { direction: sameTurn ? 'Left' : 'Right', axis: 0, sign: sameTurn ? -1 : 1, center: [sameTurn ? -6 : 30, 30] }
     : { direction: 'Back', axis: 1, sign: 1, center: [20, 20 + tail] },
 ];
 const ends = arcAndLine ? forwardEnds.toReversed() : forwardEnds;
-const junctionPlanes = spaced ? [[1, 12], [1, 20]] : oppositeArcs ? [[1, 12]] : tail ? [[0, 0], [1, 20]] : [[0, 0]];
+const junctionPlanes = spaced ? [[1, 12], [1, 20]] : directArcs ? [[1, 12]] : tail ? [[0, 0], [1, 20]] : [[0, 0]];
 const junctions = junctionPlanes.map((_, index) => index);
-const representation = spaced ? 'Exact arc–line–arc' : oppositeArcs ? 'Exact two-arc path' : tail ? 'Exact line–arc–line' : arcAndLine ? 'Exact arc and line' : 'Exact line and arc';
+const representation = spaced ? 'Exact arc–line–arc' : directArcs ? 'Exact two-arc path' : tail ? 'Exact line–arc–line' : arcAndLine ? 'Exact arc and line' : 'Exact line and arc';
 assert.ok([baseline, reviewBaseline, review].filter(Boolean).length <= 1);
 const railName = 'Paired duct rail';
 const straightToArc = [[-10, 0, 0], [-5, 0, 0], [0, 0, 0], [20, 0, 0], [20, 20, 0]];
@@ -33,9 +37,9 @@ const path = spaced ? {
   degree: 2, knots: [0, 0, 0, 1, 1, 2, 2, 3, 3, 3],
   controlPoints: [[0, 0, 0], [12, 0, 0], [12, 12, 0], [12, 16, 0], [12, 20, 0], [12, 38, 0], [sameTurn ? -6 : 30, 38, 0]],
   weights: [1, Math.SQRT1_2, 1, 1, 1, Math.SQRT1_2, 1],
-} : oppositeArcs ? {
+} : directArcs ? {
   degree: 2, knots: [0, 0, 0, 1, 1, 2, 2, 2],
-  controlPoints: [[0, 0, 0], [12, 0, 0], [12, 12, 0], [12, 30, 0], [30, 30, 0]],
+  controlPoints: [[0, 0, 0], [12, 0, 0], [12, 12, 0], [12, 30, 0], [sameTurn ? -6 : 30, 30, 0]],
   weights: [1, Math.SQRT1_2, 1, Math.SQRT1_2, 1],
 } : tail ? {
   degree: 2, knots: [0, 0, 0, 1, 1, 2, 2, 3, 3, 3],
@@ -73,7 +77,7 @@ if (review || reviewBaseline) pins.push(
 );
 const f = await createFlow({
   name: spaced ? 'exact-spaced-paired-duct' : 'exact-line-arc-paired-duct', output: process.argv[2],
-  envFrozen: arcAndLine ? (review || reviewBaseline ? 'D1801_SOURCE_FROZEN' : 'D1800_SOURCE_FROZEN') : oppositeArcs ? (review || reviewBaseline ? 'D1799_SOURCE_FROZEN' : 'D1798_SOURCE_FROZEN') : sameTurn ? (review || reviewBaseline ? 'D1796_SOURCE_FROZEN' : 'D1795_SOURCE_FROZEN') : spaced ? (review || reviewBaseline ? 'D1794_SOURCE_FROZEN' : 'D1792_SOURCE_FROZEN') : (review || reviewBaseline)
+  envFrozen: directSameTurn ? 'D1803_SOURCE_FROZEN' : arcAndLine ? (review || reviewBaseline ? 'D1801_SOURCE_FROZEN' : 'D1800_SOURCE_FROZEN') : oppositeArcs ? (review || reviewBaseline ? 'D1799_SOURCE_FROZEN' : 'D1798_SOURCE_FROZEN') : sameTurn ? (review || reviewBaseline ? 'D1796_SOURCE_FROZEN' : 'D1795_SOURCE_FROZEN') : spaced ? (review || reviewBaseline ? 'D1794_SOURCE_FROZEN' : 'D1792_SOURCE_FROZEN') : (review || reviewBaseline)
     ? (tail ? 'D1787_SOURCE_FROZEN' : 'D1783_SOURCE_FROZEN')
     : (tail ? 'D1786_SOURCE_FROZEN' : 'D1782_SOURCE_FROZEN'),
   initialFiles: pins, requiredFrozen: pins,
@@ -82,10 +86,10 @@ const f = await createFlow({
     ...(revolvedEnds ? ['packages/barocss-cad-model/src/chat/pairedSpacedArcDuctEvidence.ts'] : []),
   ] : [],
   qualification: spaced ? 'Carry two rectangular passages through two bends and a straight span.'
-    : oppositeArcs ? 'Sweep two rectangular passages through two directly joined opposite turns.'
+    : directArcs ? 'Sweep two rectangular passages through two directly joined tangent bends.'
     : arcAndLine ? 'Sweep two rectangular passages from an arc into a tangent straight span.'
     : 'Sweep two rectangular passages along a straight rail into a tangent arc.',
-  limits: [spaced ? 'A 4 × 10 mm section, two 2 × 2 mm lanes, R12/R18 quarter bends, an 8 mm straight span and desktop WebGPU.' : oppositeArcs ? 'A 4 × 10 mm section, two 2 × 2 mm passages, directly joined R12/R18 quarter arcs and desktop WebGPU.' : `A bend-aligned 4 × 10 mm rectangle, two axial lanes centered at ±2 mm, a 10 mm straight span and an R20 quarter arc${tail ? ' followed by a 14 mm straight span' : ''}. Desktop WebGPU.`],
+  limits: [spaced ? 'A 4 × 10 mm section, two 2 × 2 mm lanes, R12/R18 quarter bends, an 8 mm straight span and desktop WebGPU.' : directArcs ? 'A 4 × 10 mm section, two 2 × 2 mm passages, directly joined R12/R18 quarter arcs and desktop WebGPU.' : `A bend-aligned 4 × 10 mm rectangle, two axial lanes centered at ±2 mm, a 10 mm straight span and an R20 quarter arc${tail ? ' followed by a 14 mm straight span' : ''}. Desktop WebGPU.`],
   inspectorSource: `
 import { readFileSync } from 'node:fs';
 import { brepMassProperties, checkBrep, faceGeometry, massPropertiesOf, measureBrepEdgeContinuity } from '@barocss/cad';
@@ -268,7 +272,7 @@ async function approveWithAgent(source, expected) {
   const reviewed = await withMcpSession(session, file, 'paired-duct-proposal', async (call, request) => {
     const expectedRevision = await currentPartRevision(call);
     const description = await call('describe', { command: 'sweep-curve' });
-    assert.match(description.values.sketch, arcAndLine ? /arc–line duct also accepts this paired section/ : oppositeArcs ? /two directly joined opposite-turn arcs accept this paired section/i : sameTurn ? /Same-turn arc–line–arc ducts also accept this paired section/ : spaced ? /opposite-turn arc–line–arc duct accepts this paired section/
+    assert.match(description.values.sketch, directSameTurn ? /two directly joined unequal-radius same-turn arcs accept this paired section/i : arcAndLine ? /arc–line duct also accepts this paired section/ : oppositeArcs ? /two directly joined opposite-turn arcs accept this paired section/i : sameTurn ? /Same-turn arc–line–arc ducts also accept this paired section/ : spaced ? /opposite-turn arc–line–arc duct accepts this paired section/
       : tail ? /line–arc–line duct also accepts this paired section/ : /line–arc ducts accept two rectangular openings/);
     const rail = (await call('query', { action: 'summary' })).direct_curves.find(curve => curve.id === 'rail');
     assert.ok(rail?.revision);
