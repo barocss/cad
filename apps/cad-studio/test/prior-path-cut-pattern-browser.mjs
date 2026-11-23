@@ -3,27 +3,42 @@ import { createFlow } from './flow-helper.mjs';
 import { clickModelCommand, modelRail } from './model-rail-helper.mjs';
 import { choosePriorCutSource, inspectorSource, later, newest, older, shift, verifyPriorCut } from './prior-cut-pattern-browser-fixture.mjs';
 
-const third = process.argv.includes('--three');
+const quadratic = process.argv.includes('--quadratic');
+const third = quadratic || process.argv.includes('--three');
 const stock = third ? [older, later, newest] : [older, later];
-const spacing = third ? 20 : 16;
-const revisedSpacing = third ? 22 : 14;
-const points = third ? [[0, 0, 0], [34, 0, 0], [34, 18, 0], [0, 18, 0]] : [[0, 0, 0], [16, 0, 0], [16, 24, 0]];
+const spacing = quadratic ? 10 : third ? 20 : 16;
+const revisedSpacing = quadratic ? 12 : third ? 22 : 14;
+const points = quadratic ? [[0, 0, 0], [20, 20, 0]] : third ? [[0, 0, 0], [34, 0, 0], [34, 18, 0], [0, 18, 0]] : [[0, 0, 0], [16, 0, 0], [16, 24, 0]];
 
 const f = await createFlow({
-  name: 'prior-path-cut-pattern', output: process.argv[2], envFrozen: third ? 'D1853_SOURCE_FROZEN' : 'D1832_SOURCE_FROZEN',
-  qualification: '#25 repeat an earlier rectangular through-cut on a Studio-authored straight-segment XY path.',
+  name: 'prior-path-cut-pattern', output: process.argv[2], envFrozen: quadratic ? 'D1862_SOURCE_FROZEN' : third ? 'D1853_SOURCE_FROZEN' : 'D1832_SOURCE_FROZEN',
+  qualification: `#25 repeat an earlier rectangular through-cut on a Studio-authored ${quadratic ? 'quadratic' : 'straight-segment'} XY path.`,
   limits: ['One original rectangular stock, two or three full-height rectangular cuts, fixed orientation and a linked planar path.'],
-  initialFiles: [import.meta.filename, 'apps/cad-studio/test/prior-cut-pattern-browser-fixture.mjs',
+  initialFiles: ['apps/cad-studio/test/prior-path-cut-pattern-browser.mjs', 'apps/cad-studio/test/prior-cut-pattern-browser-fixture.mjs',
     'apps/cad-studio/src/app/cutPatternSource.ts', 'packages/barocss-cad-model/src/app/commands.ts',
     'packages/barocss-cad-model/src/chat/part/features.ts', 'packages/barocss-cad-model/src/engine/curveFeaturePattern.ts',
-    'packages/barocss-cad/src/features/curve-cut-pattern.ts', 'packages/barocss-cad/src/part/part-prior-rectangular-cut.ts'],
+    'packages/barocss-cad/src/features/curve-cut-pattern.ts', 'packages/barocss-cad/src/features/quadratic-cut-plan.ts', 'packages/barocss-cad/src/part/part-prior-rectangular-cut.ts'],
   inspectorSource,
 });
 const button = (name, scope = f.page) => scope.getByRole('button', { name, exact: true });
 const field = (scope, name) => scope.getByLabel(name, { exact: true });
 const phase = (scope, state) => scope.locator('.status').filter({ hasText: new RegExp(`^${state}$`) }).waitFor();
-const apertures = third ? [...stock, shift(older, 20, 0), shift(older, 34, 6)] : [...stock, shift(older, 16, 0), shift(older, 16, 16)];
-const revisedApertures = third ? [...stock, shift(older, 22, 0), shift(older, 34, 10)] : [...stock, shift(older, 14, 0), shift(older, 16, 12)];
+// Integrate 40·sqrt((1-t)²+t²) and invert it independently of the placement planner.
+const lengthPrimitive = x => 5 * Math.SQRT2 * (x * Math.hypot(1, x) + Math.asinh(x));
+function quadraticOffset(distance) {
+  let lower = 0, upper = 1;
+  for (let iteration = 0; iteration < 53; iteration++) {
+    const t = (lower + upper) / 2;
+    if (lengthPrimitive(2 * t - 1) - lengthPrimitive(-1) < distance) lower = t;
+    else upper = t;
+  }
+  const t = (lower + upper) / 2;
+  return [40 * t - 20 * t ** 2, 20 * t ** 2];
+}
+const quadraticApertures = pitch => [pitch, 2 * pitch].map(distance => shift(older, ...quadraticOffset(distance)));
+const positionTolerance = quadratic ? 1e-7 : 1e-8;
+const apertures = quadratic ? [...stock, ...quadraticApertures(spacing)] : third ? [...stock, shift(older, 20, 0), shift(older, 34, 6)] : [...stock, shift(older, 16, 0), shift(older, 16, 16)];
+const revisedApertures = quadratic ? [...stock, ...quadraticApertures(revisedSpacing)] : third ? [...stock, shift(older, 22, 0), shift(older, 34, 10)] : [...stock, shift(older, 14, 0), shift(older, 16, 12)];
 
 async function createPath() {
   f.phase = 'Create the linked XY path through Sketch and Make curves';
@@ -51,7 +66,27 @@ async function createPath() {
   knots.push(points.length - 1);
   assert.deepEqual([raw.degree, raw.knots, raw.weights], [2, knots, poles.map(() => 1)]);
   assert.deepEqual(raw.controlPoints, poles);
-  return { doc, objectId };
+  if (!quadratic) return { doc, objectId };
+  f.phase = 'Edit the real Direct middle control point';
+  const selectPath = async () => {
+    await f.page.locator('.ol.direct').filter({ hasText: doc.direct.objects[0].name }).click();
+    const direct = f.page.getByRole('complementary', { name: 'Direct geometry' });
+    await field(direct, 'Control point').selectOption('1');
+    return direct;
+  };
+  let before = doc;
+  for (const [axis, value] of [['X', 20], ['Y', 0]]) {
+    const direct = await selectPath(), input = field(direct, axis);
+    await input.fill(String(value));
+    await input.press('Enter');
+    await f.changed(before);
+    before = await f.doc();
+  }
+  const authored = await f.inspect('authored-quadratic', { pathDocument: before, objectId });
+  assert.deepEqual(authored.controlPoints, [[0, 0, 0], [20, 0, 0], [20, 20, 0]]);
+  assert.deepEqual([authored.degree, authored.knots, authored.weights], [2, [0, 0, 0, 1, 1, 1], [1, 1, 1]]);
+  await f.snapshot('01a-authored-quadratic');
+  return { doc: before, objectId };
 }
 
 await f.run(async () => {
@@ -93,13 +128,14 @@ await f.run(async () => {
     return doc;
   };
   const control = await apply(await open(null, 2), '02-path-current-control', false);
-  await verifyPriorCut(f, 'current-cut-path', control, [...stock, shift(third ? newest : later, currentSpacing, 0)]);
+  const currentOffset = quadratic ? quadraticOffset(currentSpacing) : [currentSpacing, 0];
+  await verifyPriorCut(f, 'current-cut-path', control, [...stock, shift(third ? newest : later, ...currentOffset)], positionTolerance);
   await f.undo();
   await f.same(source);
 
   const panel = await open('Browser', 3), undo = await button('Undo').getAttribute('data-tip');
-  const attempts = third
-    ? [[44, 3, /exceeds.*path length/i, '03-path-too-short'], [32, 3, /disjoint from the newer cut/, '03a-path-third-collision'], [86, 2, /disjoint from the newer cut/, '03b-path-second-collision']]
+  const attempts = quadratic ? [[17, 3, /exceeds.*path length/i, '03-quadratic-path-too-short']]
+    : third ? [[44, 3, /exceeds.*path length/i, '03-path-too-short'], [32, 3, /disjoint from the newer cut/, '03a-path-third-collision'], [86, 2, /disjoint from the newer cut/, '03b-path-second-collision']]
     : [[21, 3, /exceeds.*path length/i, '03-path-too-short'], [3, 3, /disjoint from the newer cut/, '03-path-overlap-refused']];
   for (const [attempt, count, reason, label] of attempts) {
     await field(panel, 'Count').fill(String(count));
@@ -117,7 +153,7 @@ await f.run(async () => {
   }
   await field(panel, 'Count').fill('3');
   const fromBrowser = await apply(panel, '04-path-earlier-applied', true);
-  await verifyPriorCut(f, 'earlier-cut-spacing', fromBrowser, apertures);
+  await verifyPriorCut(f, 'earlier-cut-spacing', fromBrowser, apertures, positionTolerance);
   await f.undo();
   await f.same(source);
   const history = await apply(await open('History', 3), '05-path-history-applied', true);
@@ -128,7 +164,7 @@ await f.run(async () => {
   await field(f.editor(), 'Spacing').fill(String(revisedSpacing));
   const edited = (await f.applyEditor(history, '06-path-spacing-edited')).doc;
   assert.deepEqual(edited.nodes.at(-1), { ...history.nodes.at(-1), spacing: revisedSpacing });
-  await verifyPriorCut(f, 'earlier-cut-revised-spacing', edited, revisedApertures);
+  await verifyPriorCut(f, 'earlier-cut-revised-spacing', edited, revisedApertures, positionTolerance);
   await f.undo();
   await f.same(history);
   await f.redo();
@@ -137,7 +173,7 @@ await f.run(async () => {
   await f.freshOpen(saved.file, edited, 'path-saved-fresh-open');
   await button('Top', f.page.locator('.views')).click();
   await f.page.getByTitle('Frame all (F)', { exact: true }).click();
-  await verifyPriorCut(f, 'earlier-cut-after-open', edited, revisedApertures);
+  await verifyPriorCut(f, 'earlier-cut-after-open', edited, revisedApertures, positionTolerance);
   await f.openFeatureEditor(source.nodes.length, 'path and earlier cut links');
   await f.editor().getByText('Subtract 1 (n4)', { exact: true }).waitFor();
   assert.equal(await field(f.editor(), 'Path').inputValue(), objectId);

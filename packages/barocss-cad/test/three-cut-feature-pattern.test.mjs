@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { evaluateCadPart, reevaluate, saveCadPart, loadCadPart, massPropertiesOf, brepMassProperties, checkBrep, faceGeometry, CadPartError } from '../dist/index.js';
 import { fillCutSnapshot, fillCutPlacements } from '../dist/features/fill-cut-pattern.js';
 import { curveCutOffsets } from '../dist/features/curve-cut-pattern.js';
+import { quadraticOracle } from './helpers/quadratic-cut-oracle.mjs';
 
 const near = (actual, expected) => assert.ok(Number.isFinite(actual) && Math.abs(actual - expected) <= 1e-7, `${actual} vs ${expected}`);
 const document = () => ({ format: 'barocss-cad-part', version: 1, units: 'mm', parameters: {
@@ -70,7 +71,7 @@ function bounds(brep, loop) {
     .concat([0, 1].map(axis => Math.max(...points.map(point => point[axis]))));
 }
 
-function verify(snapshot, current = false, { cells, lastBox, offsets } = {}) {
+function verify(snapshot, current = false, { cells, lastBox, offsets, approximate = false } = {}) {
   const doc = snapshot.document, p = doc.parameters, pattern = feature(doc, 'repeat');
   assert.equal(snapshot.outputs.length, 1);
   const output = snapshot.outputs[0], brep = output.brep, check = checkBrep(brep, { strict: true });
@@ -97,7 +98,11 @@ function verify(snapshot, current = false, { cells, lastBox, offsets } = {}) {
     const caps = brep.faces.filter(face => { const g = faceGeometry(face); return g.kind === 'plane' && Math.abs(g.n[2]) === 1 && g.o[2] === z; });
     assert.equal(caps.length, 1);
     const inner = caps[0].loops.map(id => brep.loops.find(loop => loop.id === id)).filter(loop => loop.kind === 'inner');
-    assert.deepEqual(inner.map(loop => bounds(brep, loop)).sort(), holes.slice().sort());
+    const actual = inner.map(loop => bounds(brep, loop)).sort(), expected = holes.slice().sort();
+    if (approximate) {
+      assert.equal(actual.length, expected.length);
+      actual.forEach((opening, i) => opening.forEach((value, axis) => near(value, expected[i][axis])));
+    } else assert.deepEqual(actual, expected);
   }
   // Independent material moments: subtract each literal rectangular prism from the 60x40x10 stock.
   let volume = 24000, mx = 720000, my = 480000;
@@ -327,6 +332,58 @@ test('Path collision probes are valid open paths and independently reach each ne
     const before = structuredClone(doc);
     assert.throws(() => reevaluate(accepted, { document: doc }), error => error instanceof CadPartError && error.feature === 'repeat'
       && error.code === 'GEOMETRY' && /disjoint from the newer cuts/.test(error.message));
+    assert.deepEqual(doc, before); assert.equal(saveCadPart(accepted), saved);
+  }
+});
+
+function quadraticDocument() {
+  const doc = pathDocument(2, [[0, 0, 2], [20, 20, 2]]);
+  doc.parameters.pitch = 10;
+  feature(doc, 'repeat').path.controlPoints[1] = [20, 0, 2];
+  return doc;
+}
+
+test('a certified quadratic repeats the first of three cuts with fixed rectangular orientation', () => {
+  const doc = quadraticDocument(), before = structuredClone(doc);
+  const offsets = [[0, 0, 0], ...quadraticOracle[0].offsets.map(({ offset }) => [...offset, 0])];
+  selectedPath(doc).forEach((offset, i) => offset.forEach((value, axis) => near(value, offsets[i][axis])));
+  const snapshot = evaluateCadPart(doc), brep = verify(snapshot, false, { offsets, approximate: true });
+  near(brepMassProperties(brep, 1).volume, 23560);
+  assert.ok(!brep.faces.some(face => /^(newerTool|lastTool)\..*@/.test(face.name)));
+  assert.deepEqual(verify(loadCadPart(saveCadPart(snapshot)), false, { offsets, approximate: true }), brep);
+  assert.deepEqual(doc, before);
+});
+
+test('quadratic earlier-source Path refuses each later collision and retains the accepted result', () => {
+  const accepted = evaluateCadPart(quadraticDocument()), saved = saveCadPart(accepted);
+  for (const [name, min, max, parameter] of [
+    ['newerSketch', [17, 10], [23, 12], 'newerRight'], ['lastSketch', [28, 16], [32, 18], 'lastRight'],
+  ]) {
+    const doc = quadraticDocument(), sketch = feature(doc, name);
+    sketch.min = min; sketch.max = max;
+    delete doc.parameters[parameter];
+    const intact = structuredClone(doc); intact.features.pop();
+    assert.ok(checkBrep(evaluateCadPart(intact).outputs[0].brep, { strict: true }).valid);
+    const before = structuredClone(doc);
+    assert.throws(() => reevaluate(accepted, { document: doc }), error => error instanceof CadPartError
+      && error.feature === 'repeat' && error.code === 'GEOMETRY' && /disjoint from the newer cuts/.test(error.message));
+    assert.deepEqual(doc, before); assert.equal(saveCadPart(accepted), saved);
+  }
+});
+
+test('the prior-source quadratic keeps the existing full path and distance checks', () => {
+  const accepted = evaluateCadPart(quadraticDocument()), saved = saveCadPart(accepted);
+  for (const [mutate, pattern] of [
+    [doc => { feature(doc, 'repeat').path.weights[1] = 2; }, /weights.*1/i],
+    [doc => { feature(doc, 'repeat').path.controlPoints[1][2] += 2 * Number.EPSILON; }, /constant authored Z/i],
+    [doc => { feature(doc, 'repeat').path.controlPoints[1] = [40, 40, 2]; }, /noncollinear/i],
+    [doc => { doc.parameters.pitch = 17; }, /path length/i],
+    [doc => { doc.parameters.pitch = 20 + 10 * Math.SQRT2 * Math.asinh(1); feature(doc, 'repeat').count = 2; }, /path length|uncertain|certif/i],
+  ]) {
+    const doc = quadraticDocument(); mutate(doc);
+    const before = structuredClone(doc);
+    assert.throws(() => reevaluate(accepted, { document: doc }), error => error instanceof CadPartError
+      && error.feature === 'repeat' && pattern.test(error.message));
     assert.deepEqual(doc, before); assert.equal(saveCadPart(accepted), saved);
   }
 });

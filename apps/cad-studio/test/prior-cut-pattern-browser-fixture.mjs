@@ -57,13 +57,13 @@ if (input.pathDocument) {
 }
 `;
 
-export const equivalent = (a, b) => assert.ok(Math.abs(a - b) < 1e-8, JSON.stringify({ actual: a, expected: b }));
+export const equivalent = (a, b, tolerance = 1e-8) => assert.ok(Math.abs(a - b) < tolerance, JSON.stringify({ actual: a, expected: b }));
 const order = (a, b) => a[0] - b[0] || a[1] - b[1];
 export const older = [8, 8, 12, 10], later = [8, 26, 14, 28];
 export const newest = [42, 8, 46, 10];
 export const shift = (box, x, y) => [box[0] + x, box[1] + y, box[2] + x, box[3] + y];
 
-export async function verifyPriorCut(f, label, doc, openings) {
+export async function verifyPriorCut(f, label, doc, openings, positionTolerance = 1e-8) {
   const result = await f.inspect(label, doc);
   assert.ok(result.counts.valid, result.counts.issues.join('\n'));
   assert.equal(result.counts.topology.length, 1);
@@ -73,7 +73,7 @@ export async function verifyPriorCut(f, label, doc, openings) {
   const expected = [...openings].sort(order);
   for (const cap of result.caps) {
     assert.equal(cap.openings.length, expected.length);
-    cap.openings.sort(order).forEach((opening, i) => opening.forEach((p, k) => equivalent(p, expected[i][k])));
+    cap.openings.sort(order).forEach((opening, i) => opening.forEach((p, k) => equivalent(p, expected[i][k], positionTolerance)));
   }
   const net = { volume: 24000, moment: [24000 * 30, 24000 * 20, 24000 * 5] };
   for (const [x0, y0, x1, y1] of openings) {

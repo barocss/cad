@@ -96,7 +96,7 @@ test('translated paths and nonuniform knots preserve offsets while original size
   assert.deepEqual(verify(reevaluate(moved, { document: document() })).brep, initial.outputs[0].brep); assert.equal(saveCadPart(initial), saved);
 });
 
-test('explicit source admission rejects even sub-tolerance nonlevel poles and every nonliteral straight encoding at count one', () => {
+test('explicit source admission rejects nonlevel poles and unsupported paths even at count one', () => {
   const initial = evaluateCadPart(document()), saved = saveCadPart(initial);
   const refused = (raw, code, message) => {
     const doc = document(raw); doc.features.at(-1).count = 1; const before = structuredClone(doc);
@@ -108,7 +108,7 @@ test('explicit source admission rejects even sub-tolerance nonlevel poles and ev
     refused(nonlevel, 'CAPABILITY', /one exact constant authored Z/);
   }
   const curved = path(); curved.controlPoints[1][1] = 1e-12; refused(curved, 'CAPABILITY', /exact straight-span midpoints/);
-  refused({ degree: 2, knots: [0, 0, 0, 1, 1, 1], controlPoints: [[0, 0, 2], [8, 6, 2], [16, 0, 2]], weights: [1, 1, 1] }, 'CAPABILITY', /exact straight-span midpoints/);
+  refused({ degree: 2, knots: [0, 0, 0, 1, 1, 1], controlPoints: [[0, 0, 2], [8, 6, 2], [16, 0, 2]], weights: [1, 2, 1] }, 'CAPABILITY', /weights must all be 1/);
   const smooth = path(); smooth.knots[4] = 1.1; refused(smooth, 'CAPABILITY', /double interior knots/);
   const weighted = path(1); weighted.weights[1] = 2; refused(weighted, 'CAPABILITY', /weights must all be 1/);
   const closed = path(1); closed.controlPoints[2] = [...closed.controlPoints[0]]; refused(closed, 'CAPABILITY', /open path/);

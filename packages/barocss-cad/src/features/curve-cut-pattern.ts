@@ -126,10 +126,14 @@ function quadratic(path: RawNurbsPath, spacing: number, count: number, limit: nu
 /** Preserve the legacy offset leaf; only a single nonstraight three-pole quadratic uses certification. */
 export function curveCutOffsets(path: unknown, spacing: number, count: number, lengthLimit: number, fail: Refuse, scope?: 'prior-xy-linear'): Point[] {
   if (scope === 'prior-xy-linear') {
-    // Read authored data once. The literal straight-span validator then sees only this owned copy.
+    // Read authored data once. Both the certified quadratic and legacy straight leaf use this owned copy.
     const owned = snapshot(path, fail), level = owned.controlPoints[0][2];
     if (owned.controlPoints.some(point => point[2] !== level))
       return fail('CAPABILITY', 'earlier-source path cut patterns require one exact constant authored Z');
+    if (owned.degree === 2 && owned.controlPoints.length === 3) {
+      const work = new QuadraticCutWork(fail); work.take(16384);
+      if (curved(owned, work)) return quadratic(owned, spacing, count, lengthLimit, fail, work).offsets;
+    }
     return legacyCurveCutOffsets(owned, spacing, count, lengthLimit, fail);
   }
   const degree = record(path) ? Object.getOwnPropertyDescriptor(path, 'degree') : undefined;

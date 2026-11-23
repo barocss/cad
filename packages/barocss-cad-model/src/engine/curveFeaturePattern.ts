@@ -204,8 +204,9 @@ export function curveFeaturePatternProblem(node: Record<string, unknown>, nodes:
     }
     const raw = resolveCurveFeaturePatternPathData(doc ?? {}, node.path);
     if (node.source !== undefined && raw.controlPoints.some(point => point[2] !== raw.controlPoints[0][2]))
-      return fail('an earlier rectangular source needs a straight-segment path in one XY plane.');
-    if (node.source === undefined && singleQuadratic(raw)) {
+      return fail('an earlier rectangular source needs a straight-segment or single polynomial quadratic path in one XY plane.');
+    if (singleQuadratic(raw) && (node.source === undefined || raw.controlPoints[0].some((value, axis) =>
+      !exactMidpoint(value, raw.controlPoints[1][axis], raw.controlPoints[2][axis])))) {
       sharedPathPlan(raw, spacing, node.count);
       return null;
     }

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { checkBrep } from '@barocss/cad';
+import { brepMassProperties, checkBrep } from '@barocss/cad';
 import { part } from '../src/api';
 import { commands, type Ctx } from '../src/app/commands';
 import { checkNode, deleteFeature, featureDependents, renumber } from '../src/chat/features';
@@ -221,6 +221,35 @@ test('Path keeps its linked straight spans and the distinct earlier source and c
   const wrongPlane = { ...feature.path, controlPoints: [[0, 0, 2], [16, 0, 3]], degree: 1, knots: [0, 0, 1, 1], weights: [1, 1] };
   const invalid: Record<string, unknown> = { ...made, nodes: [...doc.nodes, { ...node, path: wrongPlane, count: 1 }] };
   assert.ok('error' in readStudioDoc(JSON.stringify(invalid)));
+});
+
+test('a linked single quadratic can repeat the first rectangular cut across two newer cuts', async () => {
+  const { doc: seedDoc, first } = seed();
+  const original = part('third cut', seedDoc).subtract(tool => tool.box({ w: 5, d: 3, h: 10, x: 45, y: 2 })).doc;
+  const points: [number, number, number][] = [[0, 0, 2], [20, 0, 2], [20, 20, 2]];
+  const curve = { degree: 2, knots: [0, 0, 0, 1, 1, 1], points, weights: [1, 1, 1] };
+  const direct = importSource({ sources: {}, objects: [] }, curvesSource('quadratic_path', [curve]), 'Path');
+  const doc = { ...original, direct }, path = direct.objects[0].id, ctx = context(doc), target = doc.nodes.length - 1;
+  const run = (spacing: number) => dispatchTool({ doc, bodies: ctx.bodies }, 'features', {
+    action: 'command', command: 'curve-feature-pattern', bodies: [ctx.bodies[0].key], expectedRevision: revisionOf(doc),
+    values: { source: featureId(doc.nodes, first), path, spacing, count: 3 },
+  }, async input => evaluateDoc(input, 2));
+  const result = await run(10);
+  assert.ok(!result.isError && result.changed, result.content);
+  const made = result.state.doc, node = made.nodes.at(-1), feature = toPartDocument(made).features.at(-1);
+  assert.ok(node?.kind === 'curve-feature-pattern' && feature?.kind === 'curve-feature-pattern');
+  assert.deepEqual(node.path, { objectId: path });
+  assert.deepEqual(usesOf(node), [target, first]);
+  assert.deepEqual(made.nodes.slice(0, -1), doc.nodes);
+  assert.deepEqual(feature.path.controlPoints, points);
+  const [body] = partBreps(made), checked = checkBrep(body.brep, { strict: true });
+  assert.ok(checked.valid); assert.equal(checked.topology[0].genus, 5);
+  assert.ok(Math.abs(brepMassProperties(body.brep, 1).volume - (24000 - 4 * 160 - 150)) < 1e-7);
+  const opened = await readStudioFile(encodeStudioFile(made)); assert.ok('doc' in opened);
+  assert.deepEqual(opened.doc, made); assert.deepEqual(partBreps(opened.doc), partBreps(made));
+  const refused = await run(17);
+  assert.ok(refused.isError && !refused.changed, refused.content);
+  assert.equal(refused.state.doc, doc);
 });
 
 test('source indices follow delete, move, proposal remap and placed-document flattening without becoming consumed parents', () => {
