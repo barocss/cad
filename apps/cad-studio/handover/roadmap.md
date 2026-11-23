@@ -1,13 +1,13 @@
 # CAD roadmap — current status and execution order
 
-Updated 2026-11-24 · Priority authority: D520 · Latest delivery: D1845 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
+Updated 2026-11-24 · Priority authority: D520 · Latest delivery: D1846 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
 
 This is the only current status index. Detailed tracks define acceptance; the 34 stable row pages retain scope and issue navigation. Immutable decision notes retain results. Do not append chronological status paragraphs here. [D520 decision](notes/cad-roadmap-replan-2026-11-04/README.md) supersedes D445 execution order and historical next-item text, while retaining its safeguards and bounded proofs.
 
 ## Now and next
 
-- **Current position:** [D1845](notes/editable-step-cli-review-2026-11-24/README.md), P5 row 31, P2 row 13 and B09 local automation. The CAD CLI reviews the same plate and Shaft recipes and writes a separate copy pinned to the reviewed bytes. Studio editing and fresh Open pass for both CLI files. [D1844](notes/stepped-shaft-rim-display-2026-11-24/README.md) refines the shaft rim display.
-- **Next MAIN:** D1846, P2 row [13](roadmap-rows/13.md) and P5 row [31](roadmap-rows/31.md), [#320](https://github.com/barocss/cad/issues/320). Read one physically equivalent centimetre plate through the active STEP unit context and verify the editable millimetre copy in Studio and the local CLI.
+- **Current position:** [D1846](notes/centimetre-step-plate-copy-2026-11-24/README.md), P2 row 13 and P5 row 31. The exact centimetre STEP plate produces the same native millimetre copy as its equivalent millimetre file. Actual CLI, Studio edit and fresh Open agree. [D1845](notes/editable-step-cli-review-2026-11-24/README.md) qualifies source-bound local publication.
+- **Next MAIN:** D1847, P2 row [13](roadmap-rows/13.md) and P5 row [31](roadmap-rows/31.md), [#320](https://github.com/barocss/cad/issues/320). Qualify an equivalent conversion-based inch plate. Verify the linked conversion measure and reject a mislabeled inch declaration before native copy publication.
 - **Separate follow-ups:** Continue Studio App extraction in cohesive parts with affected desktop checks. [#608 Rendering](https://github.com/barocss/cad/issues/608) stays on HOLD. API inventory drift remains open. The issue tracker records [#126](https://github.com/barocss/cad/issues/126), [#613](https://github.com/barocss/cad/issues/613), [#152](https://github.com/barocss/cad/issues/152) and [#22](https://github.com/barocss/cad/issues/22) as closed.
 - **Active repository:** [barocss/cad](https://github.com/barocss/cad), based on `origin/main`. Fetch before work and preserve unexpected changes. The [migration record](../../../docs/migration/README.md) maps the former `local/cad-dev` history and issue numbers.
 - **Evidence correction:** D482 records2167 PASS/0 FAIL/2 existing SKIP in a later full-kernel run than D433. Neither result is a new full-suite PASS at this audit HEAD. [D482 record](notes/vertical-contact-refusal-2026-11-04/README.md).

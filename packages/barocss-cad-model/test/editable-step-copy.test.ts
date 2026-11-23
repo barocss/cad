@@ -3,6 +3,7 @@ import test from 'node:test';
 import { checkBrep, stepGeometryRecipeKey } from '@barocss/cad';
 import { emptyDoc, rectanglePart, withNode } from '../src/engine/doc';
 import { editableStepCopy } from '../src/engine/editableStepCopy';
+import { editableStepSource } from '../src/engine/editableStepSource';
 import { encodeStudioFile, readStudioFile } from '../src/engine/container';
 import { evaluateDoc, exportStudioStep, partBreps } from '../src/engine/evaluate';
 
@@ -146,4 +147,45 @@ test('rejects other shaft geometry, including a valid same-count translation', (
   assert.ok(movedCheck.valid);
   assert.deepEqual(movedCheck.counts, checkBrep(partBreps(imported(stepOf(original)))[0].brep).counts);
   for (const variant of variants) assert.ok('error' in editableStepCopy(imported(stepOf(variant))));
+});
+
+function centimetres(step: string) {
+  const one = (value: string) => String(Number(value) / 10);
+  return step
+    .replace('SI_UNIT(.MILLI.,.METRE.)', 'SI_UNIT(.CENTI.,.METRE.)')
+    .replace(/(=CARTESIAN_POINT\('',\()([^)]+)(\)\);)/g, (_, a, values, b) => a + values.split(',').map(one).join(',') + b)
+    .replace(/(=VECTOR\('',#\d+,)([^)]+)(\);)/g, (_, a, value, b) => a + one(value) + b)
+    .replace(/(=UNCERTAINTY_MEASURE_WITH_UNIT\(LENGTH_MEASURE\()([^)]+)(\))/g, (_, a, value, b) => a + one(value) + b);
+}
+
+test('reconstructs active SI centimetres into the same physical native millimetre plate', () => {
+  const step = centimetres(geometry), source = editableStepSource('Centimetres', step), before = encodeStudioFile(source);
+  assert.deepEqual(source.nodes.map(node => node.kind), ['import', 'scale']);
+  assert.equal(stepGeometryRecipeKey(step, true), stepGeometryRecipeKey(geometry));
+  const result = editableStepCopy(source, true);
+  assert.ok('doc' in result && result.named, JSON.stringify(result));
+  assert.equal(result.sourceUnit, 'cm');
+  assert.deepEqual(result.doc.nodes, plate.nodes);
+  assert.deepEqual(result.named.parameters, { plateThickness: 10, holeCentreX: 11, holeCentreY: 9 });
+  checkPhysical(source, 10, 11, 3);
+  checkPhysical(result.doc, 10, 11, 3);
+  checkPhysical(result.named, 10, 11, 3);
+  assert.deepEqual(encodeStudioFile(source), before);
+});
+
+test('refuses wrong active centimetre context, manual scaling and normalized carrier drift', () => {
+  const step = centimetres(geometry);
+  const shadow = geometry.replace('DATA;', 'DATA;\n#999=(LENGTH_UNIT()NAMED_UNIT(*)SI_UNIT(.CENTI.,.METRE.));');
+  const twoUnits = step
+    .replace('DATA;', 'DATA;\n#999=(LENGTH_UNIT()NAMED_UNIT(*)SI_UNIT(.MILLI.,.METRE.));')
+    .replace(/GLOBAL_UNIT_ASSIGNED_CONTEXT\(\(#(\d+),/, 'GLOBAL_UNIT_ASSIGNED_CONTEXT((#$1,#999,');
+  const badVector = step.replace(/(=VECTOR\('',#\d+,)[^)]+/, (_, carrier) => carrier + '56');
+  assert.notEqual(stepGeometryRecipeKey(badVector, true), stepGeometryRecipeKey(geometry));
+  for (const altered of [shadow, twoUnits, badVector])
+    assert.ok('error' in editableStepCopy(editableStepSource('Wrong centimetre evidence', altered)));
+  const source = editableStepSource('Centimetres', step), scale = source.nodes[1];
+  assert.ok(scale.kind === 'scale');
+  assert.ok('error' in editableStepCopy({ ...source, nodes: [source.nodes[0], { ...scale, pivot: [1, 0, 0] }] }));
+  assert.ok('error' in editableStepCopy(imported(step)));
+  assert.ok('error' in editableStepCopy(editableStepSource('Centimetre shaft', centimetres(stepOf(shaft([20, 12], [12, 8]))))));
 });

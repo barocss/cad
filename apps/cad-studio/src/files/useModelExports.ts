@@ -3,6 +3,7 @@ import { hasExportTriangles, hasStlTriangles } from '@barocss/cad-model/engine/e
 import { printSourceScope } from '../viewport/printSettings';
 import { bodyTopologyLabel, nativeBoundaryLabel } from '../ui/bodyTopologyLabel';
 import { useEffect, useRef, useState, type RefObject } from 'react';
+import { editableStepSourceShape } from '@barocss/cad-model/engine/editableStepSource';
 import type { StudioDoc } from '@barocss/cad-model/engine/doc';
 import { evaluateDoc, type BodyResult, type StudioStepRootScope } from '@barocss/cad-model/engine/evaluate';
 import type { FriendlyError } from '@barocss/cad-model/engine/errors';
@@ -256,7 +257,7 @@ export function useModelExports({ model, engine, fileName, current, onNotice }: 
   return { stepAsk: !!stepPreview || !!editablePreview, stepPreview, downloadStep, stlAsk, stlQuality, stlBusy, stlLossHint, stlTargets, stlCancelButton, clearStepAsk, changeStlQuality,
     askStlExport, cancelStlExport, exportStepFile, exportStl, exportQuote, exportThreeMf,
     editablePreview, saveEditableCopy: copyControl.current.save,
-    editableCopy: doc.nodes.length === 1 && doc.nodes[0].kind === 'import'
+    editableCopy: editableStepSourceShape(doc)
       ? { run: reviewEditableCopy, disabled: busy || !fresh || editablePreview?.stage === 'checking' } : undefined };
 }
 

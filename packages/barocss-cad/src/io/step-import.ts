@@ -158,8 +158,48 @@ const recipeMetadata = new Set([
   'PROPERTY_DEFINITION', 'PROPERTY_DEFINITION_REPRESENTATION', 'CARTESIAN_POINT',
 ]);
 
+function centimetreRecipeRecords(data: Map<number, Entity>, contextValue: Value) {
+  const reference = (value: Value | undefined) => value && typeof value === 'object' && 'ref' in value ? value.ref : undefined;
+  const enumIs = (value: Value | undefined, label: string) => value && typeof value === 'object' && 'enum' in value && value.enum === label;
+  const context = data.get(reference(contextValue) ?? -1);
+  const sets = context?.parts?.filter(part => part.type === 'GLOBAL_UNIT_ASSIGNED_CONTEXT');
+  const units = sets?.length === 1 ? sets[0].args[0] : undefined;
+  if (!Array.isArray(units)) return refuse('expected an active STEP unit context');
+  const lengths = units.map(reference).filter((id): id is number => id !== undefined
+    && !!data.get(id)?.parts?.some(part => part.type === 'LENGTH_UNIT'));
+  const id = lengths[0], unit = data.get(id);
+  const si = unit?.parts?.filter(part => part.type === 'SI_UNIT');
+  if (lengths.length !== 1 || si?.length !== 1 || si[0].args.length !== 2
+    || !enumIs(si[0].args[0], 'CENTI') || !enumIs(si[0].args[1], 'METRE'))
+    return refuse('expected the active SI centimetre length unit');
+  const sourceLengths = new Map<number, number>();
+  const mm = (value: Value) => {
+    if (typeof value !== 'number' || !Number.isFinite(value * 10)) return refuse('invalid centimetre length');
+    const converted = value * 10, prior = sourceLengths.get(converted);
+    if (prior !== undefined && prior !== value) return refuse('distinct centimetre lengths collapse in millimetres');
+    sourceLengths.set(converted, value);
+    return converted;
+  };
+  return (number: number, entity: Entity): Entity => {
+    if (number === id) return { ...entity, parts: entity.parts?.map(part => part.type === 'SI_UNIT'
+      ? { ...part, args: [{ enum: 'MILLI' }, part.args[1]] } : part) };
+    const args = entity.args.slice();
+    if (entity.type === 'CARTESIAN_POINT') {
+      if (!Array.isArray(args[1]) || args[1].length !== 3) return refuse('expected a three-dimensional centimetre point');
+      args[1] = args[1].map(mm);
+    } else if (entity.type === 'VECTOR') args[2] = mm(args[2]);
+    else if (entity.type === 'UNCERTAINTY_MEASURE_WITH_UNIT') {
+      const measure = args[0];
+      if (reference(args[1]) !== id || !measure || typeof measure !== 'object' || !('type' in measure)
+        || measure.type !== 'LENGTH_MEASURE' || measure.args.length !== 1) return refuse('expected a centimetre length uncertainty');
+      args[0] = { ...measure, args: [mm(measure.args[0])] };
+    } else return entity;
+    return { ...entity, args };
+  };
+}
+
 /** @internal Compare the submitted writer-profile geometry before import normalizes it. */
-export function stepGeometryRecipeKey(source: string): string {
+export function stepGeometryRecipeKey(source: string, normalizeCentimetres = false): string {
   const data = parseData(source, true);
   const representations = [...data].filter(([, entity]) => entity.type === 'ADVANCED_BREP_SHAPE_REPRESENTATION');
   if (representations.length !== 1) return refuse('expected one advanced B-rep representation');
@@ -168,6 +208,7 @@ export function stepGeometryRecipeKey(source: string): string {
   const represented = definitions[0]?.args[1];
   if (definitions.length !== 1 || !represented || typeof represented !== 'object' || !('ref' in represented) || represented.ref !== root)
     return refuse('expected one product shape linked to the B-rep representation');
+  const normalized = normalizeCentimetres ? centimetreRecipeRecords(data, representations[0][1].args[2]) : undefined;
 
   // Preserve reference sharing and every geometric argument. Record numbers and descriptive strings can change.
   const ids = new Map<number, number>(), records: unknown[] = [];
@@ -184,8 +225,9 @@ export function stepGeometryRecipeKey(source: string): string {
   function visit(id: number): number {
     const previous = ids.get(id);
     if (previous !== undefined) return previous;
-    const entity = data.get(id);
-    if (!entity) return refuse('missing recipe geometry instance');
+    const raw = data.get(id);
+    if (!raw) return refuse('missing recipe geometry instance');
+    const entity = normalized?.(id, raw) ?? raw;
     const ordinal = ids.size;
     ids.set(id, ordinal);
     records[ordinal] = [entity.type, entity.args.map(valueKey), entity.parts?.map(part => [part.type, part.args.map(valueKey)])];

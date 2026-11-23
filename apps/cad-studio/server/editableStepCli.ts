@@ -2,7 +2,7 @@ import { closeSync, constants, fstatSync, openSync, readSync } from 'node:fs';
 import { basename } from 'node:path';
 import { parseArgs } from 'node:util';
 import { encodeStudioFile } from '@barocss/cad-model/engine/container';
-import { emptyDoc, withNode } from '@barocss/cad-model/engine/doc';
+import { editableStepSource } from '@barocss/cad-model/engine/editableStepSource';
 import { editableStepByteLimit, editableStepCopy } from '@barocss/cad-model/engine/editableStepCopy';
 import { sha256Hex, sha256Text } from '@barocss/cad-model/util/digest';
 import type { CliIo } from './cadCli';
@@ -57,7 +57,7 @@ export function editableStepMain(args: readonly string[], io: CliIo): number {
     return fail('STEP_READ', codeOf(error) ? 'Could not read the local STEP file.' : (error as Error).message);
   }
   const name = basename(input), sourceSha256 = sha256Hex(original);
-  const copy = editableStepCopy(withNode(emptyDoc(), { kind: 'import', name, step }), named);
+  const copy = editableStepCopy(editableStepSource(name, step), named);
   if ('error' in copy) return fail('UNSUPPORTED_STEP', copy.error);
   const doc = named ? copy.named : copy.doc;
   if (!doc) return fail('UNSUPPORTED_DRIVERS', 'This STEP recipe has no certified named drivers.');
@@ -75,7 +75,7 @@ export function editableStepMain(args: readonly string[], io: CliIo): number {
     }
   }
   io.stdout.write(JSON.stringify({
-    ok: true, review: current, source: { name, sha256: sourceSha256, units: 'mm' },
+    ok: true, review: current, source: { name, sha256: sourceSha256, units: copy.sourceUnit ?? 'mm' },
     candidate: { family: copy.family, sha256: candidateSha256, history: 'new', nodes: doc.nodes, parameters: doc.parameters },
     ...(out !== undefined ? { written: basename(out) } : {}),
   }) + '\n');

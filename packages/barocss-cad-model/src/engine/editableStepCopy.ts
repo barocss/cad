@@ -3,12 +3,13 @@ import { emptyDoc, rectanglePart, withNode, type StudioDoc } from './doc';
 import { exportStudioStep, partBreps } from './evaluate';
 import { addParameters, bindParameter } from './parameters';
 import { stepLengthUnit } from './stepUnits';
+import { editableStepSourceShape } from './editableStepSource';
 import { twoStepShaftDimensions } from './twoStepShaftGeometry';
 
-export type EditableStepCopy = { family: 'plate' | 'shaft'; doc: StudioDoc; named?: StudioDoc } | { error: string };
+export type EditableStepCopy = { family: 'plate' | 'shaft'; sourceUnit?: 'cm'; doc: StudioDoc; named?: StudioDoc } | { error: string };
 export const editableStepByteLimit = 96 * 1024;
 
-const unsupported = 'Use one millimetre STEP solid that matches a supported recipe: a rectangular plate with one through hole or a two-step shaft.';
+const unsupported = 'Use one STEP solid that matches a supported recipe: a rectangular plate with one through hole or a millimetre two-step shaft.';
 
 function recipeTopology(brep: Brep): boolean {
   return brep.bodies.length === 1 && brep.bodies[0].kind === 'solid'
@@ -55,21 +56,24 @@ function withNamedDrivers(candidate: StudioDoc, originalKey: string): StudioDoc 
 /** Produce a separate, new history only when the full imported boundary matches a native recipe. */
 export function editableStepCopy(source: StudioDoc, includeNamed = false): EditableStepCopy {
   const node = source.nodes[0];
-  if (source.nodes.length !== 1 || node?.kind !== 'import' || (node.solids ?? 1) !== 1 || source.instances?.length)
+  const sourceShape = editableStepSourceShape(source);
+  if (node?.kind !== 'import' || !sourceShape)
     return { error: 'Open one STEP solid in its own document.' };
   // This recognition runs only on small files and has no fallback to a mesh or mass fit.
   if (node.step.length > editableStepByteLimit || new TextEncoder().encode(node.step).byteLength > editableStepByteLimit)
     return { error: 'This STEP file exceeds the editable copy size limit (96 KiB).' };
   try {
     const unit = stepLengthUnit(node.step);
-    if (!unit.declared || unit.to !== 1) return { error: 'The STEP file must declare millimetres.' };
-    const originalKey = stepGeometryRecipeKey(node.step);
+    const centimetres = unit.to === 10 && sourceShape === 'centimetres';
+    if (!unit.declared || !(centimetres || unit.to === 1 && sourceShape === 'raw'))
+      return { error: 'Use declared millimetres or a supported SI centimetre import.' };
+    const originalKey = stepGeometryRecipeKey(node.step, centimetres);
     const outputs = partBreps(source);
     if (outputs.length !== 1 || !recipeTopology(outputs[0].brep)) return { error: unsupported };
     const imported = outputs[0].brep;
     const family = imported.faces.length === 8 && imported.vertices.length === 12 ? 'plate'
       : imported.faces.length === 10 && imported.vertices.length === 10 ? 'shaft' : undefined;
-    if (!family) return { error: unsupported };
+    if (!family || centimetres && family !== 'plate') return { error: unsupported };
     const shaft = family === 'shaft' ? twoStepShaftDimensions(imported) : undefined;
     const candidate = shaft ? withNode(emptyDoc(), { kind: 'shaft', generator: 'shaft@0', center: [0, 0], steps: shaft.steps })
       : family === 'plate' ? plateRecipe(imported) : undefined;
@@ -79,7 +83,7 @@ export function editableStepCopy(source: StudioDoc, includeNamed = false): Edita
     const step = exportStudioStep(candidate, { name: 'Editable check' }).text;
     if (stepGeometryRecipeKey(step) !== originalKey) return { error: unsupported };
     const named = includeNamed && family === 'plate' ? withNamedDrivers(candidate, originalKey) : undefined;
-    return { family, doc: candidate, ...(named ? { named } : {}) };
+    return { family, doc: candidate, ...(centimetres ? { sourceUnit: 'cm' } : {}), ...(named ? { named } : {}) };
   } catch {
     return { error: unsupported };
   }
