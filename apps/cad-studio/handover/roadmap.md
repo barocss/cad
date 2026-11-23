@@ -1,13 +1,13 @@
 # CAD roadmap — current status and execution order
 
-Updated 2026-11-23 · Priority authority: D520 · Latest delivery: D1816 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
+Updated 2026-11-24 · Priority authority: D520 · Latest delivery: D1817 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
 
 This is the only current status index. Detailed tracks define acceptance; the 34 stable row pages retain scope and issue navigation. Immutable decision notes retain results. Do not append chronological status paragraphs here. [D520 decision](notes/cad-roadmap-replan-2026-11-04/README.md) supersedes D445 execution order and historical next-item text, while retaining its safeguards and bounded proofs.
 
 ## Now and next
 
-- **Current position:** [D1816](notes/two-point-rectangle-snap-closeout-2026-11-23/README.md), P1 rows 09 and 15. The two-point Rectangle snap meets its original acceptance. Desktop Studio verifies YZ and oblique plane placement, Sketch Undo, canceled and confirmed New part and browser Project Open.
-- **Next MAIN:** D1817, P4 rows [06](roadmap-rows/06.md) and [15](roadmap-rows/15.md), [#268](https://github.com/barocss/cad/issues/268). Reuse existing SVG and WebGPU annotation pick evidence. Verify the remaining supported camera-mode, resize and renderer-lifetime boundaries before deciding closure.
+- **Current position:** [D1817](notes/pmi-viewport-lifecycle-2026-11-24/README.md), P4 rows 06 and 15. Desktop WebGPU annotation picking passes the camera mode boundary, two resize scales and actual device recovery. [#229](https://github.com/barocss/cad/issues/229) is closed. [#268](https://github.com/barocss/cad/issues/268) still needs the wider layout and source-edit cases.
+- **Next MAIN:** D1818, P2 rows [13](roadmap-rows/13.md) and [16](roadmap-rows/16.md), [#279](https://github.com/barocss/cad/issues/279). Check whether a supported, visible body can exercise the real non-precision STL fallback. Keep the existing precision refusal and mask no export error. Return to feature delivery when no supported fixture is found.
 - **Separate follow-ups:** Continue Studio App extraction in cohesive parts with affected desktop checks. [#608 Rendering](https://github.com/barocss/cad/issues/608) stays on HOLD. API inventory drift remains open. The issue tracker records [#126](https://github.com/barocss/cad/issues/126), [#613](https://github.com/barocss/cad/issues/613), [#152](https://github.com/barocss/cad/issues/152) and [#22](https://github.com/barocss/cad/issues/22) as closed.
 - **Active repository:** [barocss/cad](https://github.com/barocss/cad), based on `origin/main`. Fetch before work and preserve unexpected changes. The [migration record](../../../docs/migration/README.md) maps the former `local/cad-dev` history and issue numbers.
 - **Evidence correction:** D482 records2167 PASS/0 FAIL/2 existing SKIP in a later full-kernel run than D433. Neither result is a new full-suite PASS at this audit HEAD. [D482 record](notes/vertical-contact-refusal-2026-11-04/README.md).
@@ -43,7 +43,7 @@ P0 findings that can lose work, export stale geometry or misattribute results ta
 
 ## GitHub requirement and issue inventory
 
-- The [current closeout queue](roadmap-tracks/18-issue-closeout.md) records 224 open issues at its November 23 snapshot, the next concrete acceptance gaps and held dependencies.
+- The [current closeout queue](roadmap-tracks/18-issue-closeout.md) records 223 open issues after closing #229, the remaining acceptance gaps and held dependencies.
 
 The [November 20 routing snapshot](notes/open-issue-routing-2026-11-20/README.md) covers all 229 open issues in the standalone CAD repository. It links each issue to a primary route and identifies model-version tracking for agent visual review as the next AI workflow to measure (#324).
 

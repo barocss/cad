@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D1817: [Qualify annotation picking across WebGPU viewport transitions](notes/pmi-viewport-lifecycle-2026-11-24/README.md), #268. Verify camera mode, earlier-pixel rejection and actual device recovery in Studio.
+
 - D1816: [Qualify the two-point Rectangle snap lifecycle](notes/two-point-rectangle-snap-closeout-2026-11-23/README.md), #229. Verify the remaining planes, temporary-state transitions and Project Open in Studio against the original acceptance.
 
 - D1815: [Extract Studio profile and grouped History presentation](notes/studio-profile-presentation-2026-11-23/README.md), #44. Verify region picks, linked profile refresh and grouped Fastener History in Studio.

@@ -4,13 +4,16 @@ import {readFile,writeFile} from 'node:fs/promises';
 import {createRequire} from 'node:module';
 import {join} from 'node:path';
 import {createFlow} from './flow-helper.mjs';
+import { installD525DeviceRecoveryObserver } from './native-device-recovery-observer.mjs';
 const {PNG}=createRequire(join(process.env.PW_DIR,'package.json'))('playwright-core/lib/utilsBundle');
 const saveReopen = process.argv.includes('--save-reopen');
+const viewportLifecycle = process.argv.includes('--viewport-lifecycle');
 const pins=['apps/cad-studio/test/pmi-gpu-hit-browser.mjs','apps/cad-studio/src/viewport/Viewport.tsx','apps/cad-studio/src/viewport/viewportPointerInput.ts','apps/cad-studio/src/viewport/pmiGeometry.ts','apps/cad-studio/src/viewport/useWorkspacePreviews.ts'];
+if (viewportLifecycle) pins.push('apps/cad-studio/test/native-device-recovery-observer.mjs');
 const f=await createFlow({name:'pmi-gpu-hit',output:process.argv[2],envFrozen:'PMI_GPU_HIT_FROZEN',initialFiles:pins,requiredFrozen:pins,
- qualification: saveReopen ? 'Actual WebGPU glyph selection around native Save and fresh Open.' :
+ qualification: viewportLifecycle ? 'Actual WebGPU PMI picks after desktop resize, camera mode change and native device replacement.' : saveReopen ? 'Actual WebGPU glyph selection around native Save and fresh Open.' :
  'Actual WebGPU authored label glyph clicks, independently located from on/off PNG differences in the visually reviewed synthetic label region.',
- limits:['One synthetic bracket label 4× 30 ±0.1234, Front planar and Top facing, DPR 1/2 and two public zoom-out steps. Raster segmentation is scoped to the manually reviewed isolated label region, not general OCR.', 'Unclassifiable raster or unavailable WebGPU is NOT_RUN, never fallback PASS. GPU-provider internals and product pick formulas are not used as the selection oracle.', saveReopen ? 'Native Save and fresh Open at DPR1 in the Top facing view. Other cameras and general label layouts are outside this route.' :
+ limits:['One synthetic bracket label 4× 30 ±0.1234, Front planar and Top facing, DPR 1/2 and two public zoom-out steps. Raster segmentation is scoped to the manually reviewed isolated label region, not general OCR.', 'Unclassifiable raster or unavailable WebGPU is NOT_RUN, never fallback PASS. GPU-provider internals and product pick formulas are not used as the selection oracle.', viewportLifecycle ? 'Resize at DPR1 and DPR2. Camera orbit and deliberate native device destruction at DPR1. One authored label; runtime backend switching and other layouts are outside this trace.' : saveReopen ? 'Native Save and fresh Open at DPR1 in the Top facing view. Other cameras and general label layouts are outside this route.' :
  'No native Save or geometry edits; fresh file Open checks accepted document equality. General fonts, arbitrary camera/coordinates, overlapping labels and multi-line actual UI are NOT_RUN.'],
  snapshotExtra:()=>({pmi:window.__studioPmi?.(),camera:window.__studioCamera?.(),dirty:!!document.querySelector('[aria-label="Unsaved changes"]'),dpr:devicePixelRatio})});
 const seed=JSON.parse(await readFile('apps/cad-studio/test/fixtures/bracket.bcad','utf8'));
@@ -47,16 +50,16 @@ async function raster(label,view,dpr){
  const roi={left:Math.ceil(cssRoi.left*dpr),right:Math.floor(cssRoi.right*dpr),top:Math.ceil(cssRoi.top*dpr),bottom:Math.floor(cssRoi.bottom*dpr)};
  await toggle().uncheck();await settle();const offBytes=await f.page.screenshot({scale:'device'});await writeFile(join(f.output,label+'-off.png'),offBytes);
  await enable();const onBytes=await f.page.screenshot({scale:'device'});await writeFile(join(f.output,label+'-on.png'),onBytes);
- assert.deepEqual((await read()).camera,before.camera);const off=PNG.sync.read(offBytes),on=PNG.sync.read(onBytes);assert.equal(on.width,off.width);assert.equal(on.height,off.height);assert.equal(on.width,1440*dpr);
+ assert.deepEqual((await read()).camera,before.camera);const off=PNG.sync.read(offBytes),on=PNG.sync.read(onBytes);assert.equal(on.width,off.width);assert.equal(on.height,off.height);assert.equal(on.width,f.page.viewportSize().width*dpr);
  const {pixels,bluePixels,components,glyphs}=classify(off,on,roi,dpr);const span=glyphs.length?(glyphs.at(-1).right-glyphs[0].left+1)/dpr:0;
  const classified=glyphs.length>=6&&span>=(view==='Top'?65:100)&&span<=(view==='Top'?140:550);
- const record={label,view,dpr,anchor,cssRoi,roi,changedBluePixels:pixels,components:components.map(({pixels,...c})=>c),eligibleGlyphComponents:glyphs.length,span,classification:classified?'REVIEWED_SYNTHETIC_GLYPH_REGION':'NOT_RUN_UNCLASSIFIED_RASTER',outcomes:[]};f.report.observations.push(record);await f.persist();
+ const record={label,view,dpr,anchor,cssRoi,roi,changedBluePixels:pixels,components:components.map(({pixels: _pixels,...c})=>c),eligibleGlyphComponents:glyphs.length,span,classification:classified?'REVIEWED_SYNTHETIC_GLYPH_REGION':'NOT_RUN_UNCLASSIFIED_RASTER',outcomes:[]};f.report.observations.push(record);await f.persist();
  assert.ok(classified,'NOT_RUN: raster did not satisfy reviewed glyph-region classifier; do not classify as product miss');
  const candidates=[glyphs[0],glyphs[Math.floor(glyphs.length/2)],glyphs.at(-1)].map(c=>{const cx=(c.left+c.right)/2,cy=(c.top+c.bottom)/2;const p=c.pixels.reduce((a,b)=>Math.hypot(a.x-cx,a.y-cy)<=Math.hypot(b.x-cx,b.y-cy)?a:b);return {...p,css:[(p.x+.5)/dpr,(p.y+.5)/dpr]};});
  // Retain the baseline's five occupied-column quantile probes for DPR1 Top.
  // Threshold, minimum population and vertical extent are unchanged; the reviewed above-anchor
  // band excludes the dimension line. Only run after glyph-region classification succeeds.
- if(dpr===1&&view==='Top'){
+ if(!viewportLifecycle&&dpr===1&&view==='Top'){
   const columns=new Map();for(const p of bluePixels){const c=columns.get(p.x)??[];c.push(p);columns.set(p.x,c);}
   const eligible=[...columns].filter(([,ps])=>ps.length>=3&&ps.at(-1).y-ps[0].y>=3).sort((a,b)=>a[0]-b[0]);
   assert.ok(eligible.length>=5,'baseline quantile columns remain visible');
@@ -129,8 +132,108 @@ async function verifyNativeSave() {
   savedExact: true, selectionSessionOnly: true, selectedAfterReopen: 'frontwidth', volume: 2160 });
 }
 
+async function verifyRetiredGlyph(pixel, currentRaster, label) {
+ const { dpr, components } = f.report.observations.find(item => item.label === currentRaster);
+ const left = Math.min(...components.map(component => component.left)) / dpr;
+ const right = Math.max(...components.map(component => component.right)) / dpr;
+ assert.ok(pixel[0] < left - 12 || pixel[0] > right + 12, 'The old glyph is outside the current raster');
+ await enable();
+ assert.equal(await f.page.evaluate(([x, y]) => document.elementFromPoint(x, y)?.matches('canvas.vp-canvas'), pixel), true);
+ await f.page.mouse.click(...pixel);
+ await settle();
+ assert.equal((await read()).pmi.selected, null);
+ await f.same(accepted);
+ await f.snapshot(label);
+}
+
+async function verifyResize() {
+ for (const dpr of [1, 2]) {
+  await f.newPage({ deviceScaleFactor: dpr });
+  await open(doc);
+  await topOrtho();
+  f.phase = 'Locate the visible facing glyphs before desktop resize at DPR ' + dpr;
+  const oldPixel = await raster('dpr-' + dpr + '-before-resize', 'Top', dpr);
+  f.phase = 'Resize the desktop canvas and select its new glyphs at DPR ' + dpr;
+  await f.page.setViewportSize({ width: 1060, height: 850 });
+  await settle();
+  const currentRaster = 'dpr-' + dpr + '-after-resize';
+  const currentPixel = await raster(currentRaster, 'Top', dpr);
+  await verifyRetiredGlyph(oldPixel, currentRaster, 'dpr-' + dpr + '-old-position-misses');
+  await pickVisibleGlyph(currentPixel, 'dpr-' + dpr + '-current-glyph-after-resize');
+  f.report.observations.push({ label: 'resize-retired-old-raster', dpr, oldPixel, currentPixel });
+ }
+}
+
+async function orbitFromTop(dy) {
+ const canvas = await f.page.locator('canvas.vp-canvas').boundingBox();
+ assert.ok(canvas);
+ const x = canvas.x + canvas.width * .48, y = canvas.y + canvas.height * .60;
+ await f.page.mouse.move(x, y);
+ await f.page.mouse.down({ button: 'right' });
+ await f.page.mouse.move(x, y + dy, { steps: 5 });
+ await f.page.mouse.up({ button: 'right' });
+ await settle();
+ const { camera: { pitch, yaw } } = await read();
+ // The authored bracket dimension is in the front plane with a Y normal.
+ return Math.abs(Math.cos(pitch) * Math.sin(yaw));
+}
+
+async function verifyOrbitAndRecovery() {
+ await f.newPage();
+ await open(doc);
+ await topOrtho();
+ const edgeOnLimit = Math.sin(10 * Math.PI / 180);
+ f.phase = 'Orbit to the facing side of the ten degree boundary';
+ const facing = await orbitFromTop(-18);
+ assert.ok(facing > .12 && facing < edgeOnLimit);
+ const facingGlyph = await raster('edge-on-facing', 'Top', 1);
+ await pickVisibleGlyph(facingGlyph, 'orbit-facing-selected');
+
+ f.phase = 'Orbit into the annotation plane beyond the ten degree boundary';
+ const planar = await orbitFromTop(-20);
+ assert.ok(planar > edgeOnLimit && planar < .35);
+ const planarGlyph = await raster('edge-on-planar', 'Front', 1);
+ await pickVisibleGlyph(planarGlyph, 'orbit-planar-selected');
+ f.report.observations.push({ label: 'camera-mode-transition', edgeOnLimit, facing, planar, facingGlyph, planarGlyph });
+
+ f.phase = 'Return to the facing side and reject the old planar hit';
+ const returned = await orbitFromTop(20);
+ assert.ok(Math.abs(returned - facing) < 1e-9);
+ const before = 'before-device-recovery';
+ const beforeGlyph = await raster(before, 'Top', 1);
+ await verifyRetiredGlyph(planarGlyph, before, 'old-planar-position-misses');
+ await pickVisibleGlyph(beforeGlyph, 'selected-before-device-recovery');
+ const { camera } = await read();
+
+ f.phase = 'Destroy and replace the actual Studio viewer device with annotations enabled';
+ await f.page.evaluate(installD525DeviceRecoveryObserver);
+ await f.page.evaluate(() => window.__studioViewer.loseDeviceForTesting());
+ await f.page.waitForFunction(() => {
+  const state = window.__d525Device.snapshot();
+  return state.events.some(event => event.kind === 'actual-onRecover-called')
+   && state.ready && state.replacement && !state.recoveryPending;
+ }, null, { timeout: 30000 });
+ await f.ready();
+ const recovery = await f.page.evaluate(() => window.__d525Device.snapshot());
+ assert.ok(recovery.events.some(event => event.kind === 'original-native-device-lost' && event.reason === 'destroyed'));
+ assert.ok(!recovery.events.some(event => event.kind === 'actual-onRecoverError-called'));
+ assert.notEqual(recovery.currentDevice, recovery.originalDevice);
+ assert.deepEqual((await read()).camera, camera);
+ await f.same(accepted);
+ await f.dismissToasts();
+ const recoveredGlyph = await raster('after-device-recovery', 'Top', 1);
+ await pickVisibleGlyph(recoveredGlyph, 'selected-after-device-recovery');
+ f.report.observations.push({ label: 'actual-device-replacement', recovery, beforeGlyph, recoveredGlyph });
+}
+
 await f.run(async()=>{
  if (saveReopen) { await verifyNativeSave(); return; }
+ if (viewportLifecycle) {
+  await verifyResize();
+  await verifyOrbitAndRecovery();
+  assert.equal(f.report.downloads.length, 0);
+  return;
+ }
  for(const dpr of [1,2]){
   f.phase='actual WebGPU DPR '+dpr;try{await f.newPage({deviceScaleFactor:dpr});await f.page.locator('.viewport[data-renderer="webgpu"]').waitFor();}catch(error){f.report.observations.push({qualification:'NOT_RUN',dpr,reason:'Actual WebGPU unavailable; fallback forbidden'});throw error;}
   assert.equal(await f.page.evaluate(()=>devicePixelRatio),dpr);await open(doc);const original=structuredClone(accepted);
