@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { CadPartError, checkBrep, evaluateCadPart, reverseCurve, transformBrep, type Brep, type CadPartDocument, type Curve, type Point } from '@barocss/cad';
-import { pairedLeadingSpacedArcDuctEvidence, pairedOppositeArcDuctEvidence, pairedSameTurnArcDuctEvidence, pairedSpacedArcDuctEvidence } from '../src/chat/pairedSpacedArcDuctEvidence';
+import { pairedEndedSpacedArcDuctEvidence, pairedLeadingSpacedArcDuctEvidence, pairedOppositeArcDuctEvidence, pairedSameTurnArcDuctEvidence, pairedSpacedArcDuctEvidence } from '../src/chat/pairedSpacedArcDuctEvidence';
 
 const source = { outer: [4, 10], outerTags: ['e1', 'e2', 'e3', 'e4'], cavities: [
   { min: [-1, -3], max: [1, -1], tags: ['e5', 'e6', 'e7', 'e8'] },
@@ -47,6 +47,15 @@ function withLead(curve = path(90, 90, undefined, undefined, undefined, 1), leng
   return { degree: 2, knots: [knot - 1, knot - 1, knot - 1, ...curve.knots.slice(1)],
     weights: [curve.weights[0], curve.weights[0], ...curve.weights],
     controlPoints: [add(start, scale(tangent, -length)), add(start, scale(tangent, -length / 2)), ...curve.controlPoints] };
+}
+
+function withTail(curve = withLead(path()), length = 6): Path {
+  const end = curve.controlPoints[curve.controlPoints.length - 1], previous = curve.controlPoints[curve.controlPoints.length - 2];
+  const handle = end.map((value, axis) => value - previous[axis]) as Point, tangent = scale(handle, 1 / Math.hypot(...handle));
+  const knot = curve.knots[curve.knots.length - 1], weight = curve.weights[curve.weights.length - 1];
+  return { degree: 2, knots: [...curve.knots.slice(0, -1), knot + 1, knot + 1, knot + 1],
+    weights: [...curve.weights, weight, weight],
+    controlPoints: [...curve.controlPoints, add(end, scale(tangent, length / 2)), add(end, scale(tangent, length))] };
 }
 
 for (const turn of [-1, 1]) test(`spaced ${turn === 1 ? 'same-turn' : 'opposite-turn'} paired review certifies both mouths, all 36 walls and 24 charted joins with independent mass without mutation`, () => {
@@ -490,4 +499,108 @@ for (const turn of [-1, 1]) test(`leading ${turn === 1 ? 'same-turn' : 'opposite
   for (const changed of variants) assert.equal(pairedLeadingSpacedArcDuctEvidence(brep, changed, source), undefined);
   const offset = { ...source, cavities: [{ ...source.cavities[0], min: [-1 + 5e-8, -3], max: [1 + 5e-8, -1] }, source.cavities[1]] };
   assert.equal(pairedLeadingSpacedArcDuctEvidence(brep, curve, offset), undefined);
+});
+
+test('five-span opposite-turn paired evidence binds both charted mouths, 48 internal pairs and independent authored material moments', () => {
+  for (const [firstRadius, secondRadius] of [[12, 18], [18, 12]]) {
+    const curve = withTail(withLead(path(90, 90, undefined, undefined, undefined, -1, 8, firstRadius, secondRadius)));
+    const brep = native(curve), saved = structuredClone({ brep, curve, source });
+    const evidence = pairedEndedSpacedArcDuctEvidence(brep, curve, source); assert.ok(evidence);
+    assert.equal(evidence.pathKind, 'line-arc-line-arc-line');
+    const report = checkBrep(brep, { strict: true });
+    assert.deepEqual(report.counts, { bodies: 1, shells: 1, faces: 62, loops: 66, coedges: 264, edges: 132, vertices: 72 });
+    assert.deepEqual(report.topology.map(item => [item.shells, item.genus]), [[1, 2]]);
+    const through = evidence.throughApertures;
+    assert.equal(through.exteriorFaces.length, 20);
+    assert.deepEqual(through.apertures.map(aperture => [aperture.faces.length, aperture.seams.length]), [[20, 16], [20, 16]]);
+    assert.deepEqual(through.junctions.map(join => join.pieces), [['lead', 'first'], ['first', 'line'], ['line', 'second'], ['second', 'tail']]);
+    const seams = [...evidence.exteriorSeams, ...evidence.interiorSeams.flat()]; assert.equal(new Set(seams).size, 48);
+    for (const id of seams) assert.equal(brep.coedges.filter(use => use.edge === id && use.pcurve).length, 2);
+    for (const [index, cap] of evidence.caps.entries()) {
+      pointNear(cap.plane.normal, [index ? 1 : -1, 0, 0]);
+      assert.equal(cap.outerEdges.length, 4); assert.equal(cap.innerEdges.length, 8);
+      assert.deepEqual(cap.apertures.map(aperture => aperture.tags), source.cavities.map(cavity => cavity.tags));
+      const ids = new Set([...cap.outerEdges, ...cap.innerEdges]);
+      assert.equal(brep.coedges.filter(use => ids.has(use.edge) && use.pcurve).length, 24);
+    }
+    near(through.dimensions.leadLength!, 10); near(through.dimensions.tailLength!, 6); near(through.dimensions.lineLength, 8);
+    const length = 24 + 15 * Math.PI;
+    near(through.volume.analytic, 32 * length); near(through.volume.native, 32 * length);
+    if (firstRadius === 12) {
+      pointNear(evidence.caps[0].center, [-10, 0, 0]); pointNear(evidence.caps[1].center, [36, 38, 0]);
+      // Add the six-millimetre prism at [33,38,0] to the independent four-span moments.
+      const centroid: Point = [(270 * Math.PI + 64) / length, (252 * Math.PI + 536) / length, 0];
+      pointNear(through.centroid.analytic, centroid); pointNear(through.centroid.native, centroid);
+    }
+    assert.ok(through.maximumGapMM < 1e-10);
+    assert.equal(pairedLeadingSpacedArcDuctEvidence(brep, curve, source), undefined);
+    assert.equal(pairedSpacedArcDuctEvidence(brep, curve, source), undefined);
+    assert.deepEqual({ brep, curve, source }, saved);
+  }
+});
+
+test('five-span review keeps asymmetric lane ownership, radial X and Y, both bend signs and oblique long-end separation', () => {
+  const edited: Source = { ...source, cavities: [{ ...source.cavities[0], min: [-.75, -2.5], max: [.75, -1.5] }, source.cavities[1]] };
+  for (const section of [edited, { ...edited, cavities: [...edited.cavities].reverse() }])
+    for (const [first, second] of [[30, 120], [120, 30], [120, 120]]) for (const radialY of [false, true]) for (const polarity of [-1, 1]) {
+      const input = radialY ? { ...section, outer: [10, 4], cavities: section.cavities.map(cavity => ({ ...cavity,
+        min: [cavity.min[1], cavity.min[0]], max: [cavity.max[1], cavity.max[0]],
+      })) } : section;
+      const curve = withTail(withLead(path(first, second, [32, -14, 18], radialY ? [0, 0, 1] : [.6, .8, 0],
+        radialY ? [0, polarity, 0] : [-.8 * polarity, .6 * polarity, 0]), 80), 120);
+      const evidence = pairedEndedSpacedArcDuctEvidence(native(curve, input, [false, true]), curve, input);
+      assert.ok(evidence, `${first}/${second}, radialY=${radialY}, polarity=${polarity}`);
+      near(evidence.throughApertures.volume.native, 34.5 * (208 + (12 * first + 18 * second) * Math.PI / 180));
+      near(evidence.throughApertures.dimensions.tailLength!, 120);
+      assert.deepEqual(evidence.throughApertures.apertures.map(aperture => aperture.tags), input.cavities.map(cavity => cavity.tags));
+      for (const cap of evidence.caps) assert.deepEqual(cap.apertures.map(aperture => aperture.tags), input.cavities.map(cavity => cavity.tags));
+    }
+});
+
+test('five-span evidence refuses every missing internal or physical mouth chart and shifted terminal charts', () => {
+  const curve = withTail(), brep = native(curve), evidence = pairedEndedSpacedArcDuctEvidence(brep, curve, source); assert.ok(evidence);
+  const ids = [...evidence.exteriorSeams, ...evidence.interiorSeams.flat(), ...evidence.caps.flatMap(cap => [...cap.outerEdges, ...cap.innerEdges])];
+  assert.equal(new Set(ids).size, 72);
+  for (const id of ids) for (const selected of brep.coedges.filter(use => use.edge === id)) {
+    const missing = { ...brep, coedges: brep.coedges.map(use => use.id === selected.id ? { ...use, pcurve: null } : use) };
+    assert.equal(pairedEndedSpacedArcDuctEvidence(missing, curve, source), undefined);
+  }
+  for (const id of [...evidence.caps[1].outerEdges, ...evidence.caps[1].innerEdges]) {
+    const shifted = { ...brep, coedges: brep.coedges.map(use => use.edge === id && use.pcurve ? { ...use,
+      pcurve: { ...use.pcurve, controlPoints: use.pcurve.controlPoints.map(([u, v, z]): Point => [u + .01, v, z]) } } : use) };
+    assert.equal(pairedEndedSpacedArcDuctEvidence(shifted, curve, source), undefined);
+  }
+});
+
+test('five-span review refuses changed tail source, wrong tail owners and incompatible valid native outputs', () => {
+  const curve = withTail(), brep = native(curve);
+  const changedTail = withTail(undefined, 8), other = native(changedTail);
+  assert.ok(checkBrep(other, { strict: true }).valid);
+  assert.equal(pairedEndedSpacedArcDuctEvidence(other, curve, source), undefined);
+  assert.equal(pairedEndedSpacedArcDuctEvidence(brep, changedTail, source), undefined);
+  const wrongLane = { ...brep, faces: brep.faces.map(face => face.name?.startsWith('w.tail.') ? { ...face,
+    name: face.name.replace(/\[e([5-9]|1[0-2])\]/g, (_, tag: string) => `[e${Number(tag) < 9 ? Number(tag) + 4 : Number(tag) - 4}]`) } : face) };
+  const wrongPiece = { ...brep, faces: brep.faces.map(face => ({ ...face,
+    name: face.name?.replace('.tail.', '.swap.').replace('.line.', '.tail.').replace('.swap.', '.line.') })) };
+  for (const wrong of [wrongLane, wrongPiece]) {
+    assert.ok(checkBrep(wrong, { strict: true }).valid);
+    assert.equal(pairedEndedSpacedArcDuctEvidence(wrong, curve, source), undefined);
+  }
+  const wrongMass = { ...source, cavities: [{ ...source.cavities[0], max: [1, -1.5] }, source.cavities[1]] };
+  for (const wrong of [native(withLead(path())), native(withLead()), native(curve, wrongMass),
+    { ...brep, source: { family: 'revolve', id: 'w' } }, { ...brep, shells: [{ ...brep.shells[0], body: 'other' }] }])
+    assert.equal(pairedEndedSpacedArcDuctEvidence(wrong, curve, source), undefined);
+});
+
+test('five-span copied-rail admission refuses same turns, malformed or reversed tails and tiny terminal kinks', () => {
+  const curve = withTail(), brep = native(curve), variants: Path[] = [withLead(path()), path(), withTail(withLead()),
+    withTail(undefined, .000099), withTail(undefined, -6)];
+  const collapsed = structuredClone(curve); collapsed.controlPoints[9] = [...collapsed.controlPoints[8]]; collapsed.controlPoints[10] = [...collapsed.controlPoints[8]];
+  const tiny = structuredClone(curve); tiny.controlPoints[10][1] += 1e-8; tiny.controlPoints[9] = scale(add(tiny.controlPoints[8], tiny.controlPoints[10]), .5);
+  variants.push(collapsed, tiny, { ...curve, weights: curve.weights.map((weight, index) => index === 9 ? 2 : weight) },
+    { ...curve, knots: curve.knots.map((knot, index) => index === 10 ? knot + .1 : knot) });
+  for (const [pole, axis, delta] of [[9, 1, .01], [10, 2, Number.NaN], [7, 2, .01]]) {
+    const changed = structuredClone(curve); changed.controlPoints[pole][axis] += delta; variants.push(changed);
+  }
+  for (const changed of variants) assert.equal(pairedEndedSpacedArcDuctEvidence(brep, changed, source), undefined);
 });

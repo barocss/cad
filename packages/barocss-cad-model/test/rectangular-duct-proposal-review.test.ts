@@ -290,11 +290,12 @@ test('a paired line-and-arc proposal binds two authored through apertures to bot
   assert.deepEqual({ doc, candidate }, before);
 });
 
-test('a paired line-arc-line proposal binds both junctions and physical mouths to its exact copied path and revisions', async () => {
+for (const ended of [false, true]) test(`a paired ${ended ? 'five-span S-bend' : 'line-arc-line'} proposal binds all junctions and both mouths to its copied path and pins`, async () => {
   const railText = `@model rails { version:0; length-unit:mm;
-    @curve #elbow { type:nurbs; degree:2; knots:[0,0,0,1,1,2,2,3,3,3];
-      control-points:[[-10,0,0],[-5,0,0],[0,0,0],[20,0,0],[20,20,0],[20,27,0],[20,34,0]];
-      weights:[1,1,1,${Math.SQRT1_2},1,1,1]; } }`;
+    @curve #elbow { type:nurbs; degree:2; knots:${ended ? '[0,0,0,1,1,2,2,3,3,4,4,5,5,5]' : '[0,0,0,1,1,2,2,3,3,3]'};
+      control-points:${ended ? '[[-10,0,0],[-5,0,0],[0,0,0],[12,0,0],[12,12,0],[12,16,0],[12,20,0],[12,38,0],[30,38,0],[33,38,0],[36,38,0]]'
+        : '[[-10,0,0],[-5,0,0],[0,0,0],[20,0,0],[20,20,0],[20,27,0],[20,34,0]]'};
+      weights:${ended ? `[1,1,1,${Math.SQRT1_2},1,1,1,${Math.SQRT1_2},1,1,1]` : `[1,1,1,${Math.SQRT1_2},1,1,1]`}; } }`;
   const { base, proposal } = await fixture(railText, 'elbow', 'Line arc line rail');
   const sketch = base.nodes[0];
   assert.ok(sketch.kind === 'sketch' && sketch.profile === 'rectangle');
@@ -311,13 +312,19 @@ test('a paired line-arc-line proposal binds both junctions and physical mouths t
   const before = structuredClone({ doc, candidate }), reviewed = await reviewedRectangularDuctEvidence(doc, candidate, edit);
   assert.ok(reviewed && 'throughApertures' in reviewed.rectangularDuct && reviewed.rectangularDuct.throughApertures);
   const duct = reviewed.rectangularDuct, through = reviewed.rectangularDuct.throughApertures;
-  assert.equal(duct.pathKind, 'line-arc-line');
+  assert.equal(duct.pathKind, ended ? 'line-arc-line-arc-line' : 'line-arc-line');
   assert.deepEqual([duct.path, duct.pathRevision, duct.body], ['elbow', edit.pathRevision, 'b1']);
   assert.deepEqual(duct.caps.map(cap => [cap.name, cap.outerEdges.length, cap.innerEdges.length]), [['n1.start', 4, 8], ['n1.end', 4, 8]]);
   assert.ok('junctions' in through && through.junctions);
-  assert.deepEqual(through.junctions.map(join => join.pieces), [['line', 'bend'], ['bend', 'tail']]);
-  assert.deepEqual(through.apertures.map(aperture => [aperture.index, aperture.faces.length, aperture.seams.length]), [[0, 12, 8], [1, 12, 8]]);
-  assert.ok(Math.abs(through.volume.native - 32 * (24 + 10 * Math.PI)) < 1e-7);
+  assert.deepEqual(through.junctions.map(join => join.pieces), ended
+    ? [['lead', 'first'], ['first', 'line'], ['line', 'second'], ['second', 'tail']] : [['line', 'bend'], ['bend', 'tail']]);
+  const faces = ended ? 20 : 12, seams = ended ? 16 : 8;
+  assert.deepEqual(through.apertures.map(aperture => [aperture.index, aperture.faces.length, aperture.seams.length]), [[0, faces, seams], [1, faces, seams]]);
+  assert.ok(Math.abs(through.volume.native - 32 * (24 + (ended ? 15 : 10) * Math.PI)) < 1e-7);
+  if (ended) {
+    assert.ok('tailLength' in through.dimensions && Math.abs(Number(through.dimensions.tailLength) - 6) < 1e-7);
+    duct.caps[1].center.forEach((value, i) => assert.ok(Math.abs(value - [36, 38, 0][i]) < 1e-7));
+  }
   for (const changed of [{ ...edit, pathRevision: 'f'.repeat(64) }, { ...edit, directRevision: 'f'.repeat(16) },
     { ...edit, sourceRevision: 'wrong' }, { ...edit, path: 'other' }])
     assert.equal(await reviewedRectangularDuctEvidence(doc, candidate, changed), undefined);
@@ -325,7 +332,7 @@ test('a paired line-arc-line proposal binds both junctions and physical mouths t
   assert.equal(await reviewedRectangularDuctEvidence(doc, { ...candidate, direct: { ...doc.direct, sources: { rails: railText + '\n' } } }, edit), undefined);
   const sweep = candidate.nodes[1];
   assert.ok(sweep.kind === 'sweep-curve');
-  const changed = structuredClone(sweep.path); changed.controlPoints[6][1] += .01;
+  const changed = structuredClone(sweep.path); changed.controlPoints.at(-1)![1] += .01;
   assert.equal(await reviewedRectangularDuctEvidence(doc, { ...candidate, nodes: [section, { ...sweep, path: changed }] }, edit), undefined);
   assert.deepEqual({ doc, candidate }, before);
 });

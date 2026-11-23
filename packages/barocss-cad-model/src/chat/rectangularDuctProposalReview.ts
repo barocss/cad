@@ -14,7 +14,7 @@ import { canonical, canonicalOf, revisionOf } from '../util/revision';
 import { closedRectangularDuctEvidence } from './closedRectangularDuctEvidence';
 import { closedPairedRectangularDuctEvidence } from './closedPairedRectangularDuctEvidence';
 import { pairedArcLineDuctEvidence, pairedLineArcDuctEvidence } from './pairedLineArcDuctEvidence';
-import { pairedLeadingSpacedArcDuctEvidence, pairedOppositeArcDuctEvidence, pairedSameTurnArcDuctEvidence, pairedSpacedArcDuctEvidence } from './pairedSpacedArcDuctEvidence';
+import { pairedEndedSpacedArcDuctEvidence, pairedLeadingSpacedArcDuctEvidence, pairedOppositeArcDuctEvidence, pairedSameTurnArcDuctEvidence, pairedSpacedArcDuctEvidence } from './pairedSpacedArcDuctEvidence';
 import { directInspectionRevision } from './sweepSource';
 
 const near = (a: number, b: number) => Number.isFinite(a) && Number.isFinite(b) && Math.abs(a - b) <= CadNumericPolicy.linearTolerance;
@@ -187,9 +187,10 @@ export async function reviewedRectangularDuctEvidence(base: StudioDoc, candidate
   // The same copied payload is hashed by sweepSourceRevision for the command's read pin.
   if (typeof copied === 'string' || digestOf(copied.path) !== edit.pathRevision || copied.path.degree !== 2) return;
   const { path } = copied;
+  const fivePieceDuct = 'cavities' in source && path.controlPoints.length === 11 && path.knots.length === 14;
   const fourPiecePath = path.controlPoints.length === 9 && path.knots.length === 12;
   const threePieceDuct = 'cavities' in source && path.controlPoints.length === 7 && path.knots.length === 10;
-  if (!fourPiecePath && !threePieceDuct && (path.controlPoints.length !== 5 || path.knots.length !== 8)) return;
+  if (!fivePieceDuct && !fourPiecePath && !threePieceDuct && (path.controlPoints.length !== 5 || path.knots.length !== 8)) return;
   const expected = withNode(base, { kind: 'sweep-curve', sketch: 0, name: copied.name, path: copied.path, mode: 'exact' });
   if (canonicalOf(candidate) !== canonicalOf(expected) || candidate.nextId !== expected.nextId) return;
   try {
@@ -198,6 +199,11 @@ export async function reviewedRectangularDuctEvidence(base: StudioDoc, candidate
     if (outputs.length !== 1 || outputs[0].key !== body || brep.source.family !== 'sweep-curve' || brep.source.id !== feature ||
       brep.bodies.length !== 1 || brep.bodies[0].kind !== 'solid') return;
     if ('cavities' in source) {
+      if (fivePieceDuct) {
+        const evidence = pairedEndedSpacedArcDuctEvidence(brep, path, source);
+        if (!evidence) return;
+        return { brep, rectangularDuct: { body, sketch: edit.sketch, path: edit.path, pathRevision: edit.pathRevision, ...evidence } };
+      }
       if (!fourPiecePath) {
         const evidence = pairedLineArcDuctEvidence(brep, path, source)
           ?? pairedArcLineDuctEvidence(brep, path, source)

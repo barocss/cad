@@ -86,7 +86,7 @@ if (checkingReview) pins.push(
 );
 const f = await createFlow({
   name: spaced ? 'exact-spaced-paired-duct' : 'exact-line-arc-paired-duct', output: process.argv[2],
-  envFrozen: outlet ? 'D1819_SOURCE_FROZEN' : leadOpposite ? (checkingReview ? 'D1814_SOURCE_FROZEN' : 'D1812_SOURCE_FROZEN')
+  envFrozen: outlet ? (checkingReview ? 'D1820_SOURCE_FROZEN' : 'D1819_SOURCE_FROZEN') : leadOpposite ? (checkingReview ? 'D1814_SOURCE_FROZEN' : 'D1812_SOURCE_FROZEN')
     : leadSameTurn ? (checkingReview ? 'D1811_SOURCE_FROZEN' : 'D1810_SOURCE_FROZEN')
     : directSameTurn ? (checkingReview ? 'D1804_SOURCE_FROZEN' : 'D1803_SOURCE_FROZEN')
     : arcAndLine ? (checkingReview ? 'D1801_SOURCE_FROZEN' : 'D1800_SOURCE_FROZEN')
@@ -315,7 +315,7 @@ async function approveWithAgent(source, expected) {
     }
     if (review) {
       const pending = await readFile(file);
-      const result = await reviewPendingPairedDuct(f, call, request, expectedRevision, rail.revision, expected, sideTags, { lead, tail, spaced, sameTurn, directArcs, arcAndLine });
+      const result = await reviewPendingPairedDuct(f, call, request, expectedRevision, rail.revision, expected, sideTags, { lead, outlet, tail, spaced, sameTurn, directArcs, arcAndLine });
       assert.deepEqual(await readFile(file), pending);
       return result;
     }

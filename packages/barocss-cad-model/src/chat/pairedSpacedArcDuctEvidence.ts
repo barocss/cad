@@ -58,7 +58,7 @@ function spacedArcs(path: Path) {
   return { first, second, length, turn, start: first.start, end: second.end, tangent: first.tangent, inward: first.inward,
     axis: unit(cross(first.tangent, first.inward)), radius: Math.min(first.radius, second.radius) };
 }
-type Frame = NonNullable<ReturnType<typeof spacedArcs>> & { leadLength?: number; leadStart?: Point };
+type Frame = NonNullable<ReturnType<typeof spacedArcs>> & { leadLength?: number; leadStart?: Point; tailLength?: number; tailEnd?: Point };
 
 /** Recover four authored spans independently; keep the producer's strict forward-tangent admission. */
 function leadingSpacedArcs(path: Path): Frame | undefined {
@@ -98,6 +98,28 @@ function leadingSpacedArcs(path: Path): Frame | undefined {
       / Math.min(frame.length, len(sub(points[4], points[3])), len(sub(points[7], points[6]))));
   if (len(sub(scale(frame.first.exitInward, frame.turn), frame.second.inward)) > angular) return;
   return { ...frame, leadLength, leadStart: points[0] };
+}
+
+/** Recover one original forward outlet after the independently certified opposite-turn four-span route. */
+function endedSpacedArcs(path: Path): Frame | undefined {
+  const { degree, knots, controlPoints: points, weights } = path;
+  if (degree !== 2 || points.length !== 11 || weights.length !== 11 || knots.length !== 14
+    || points.some(point => point.length !== 3 || point.some(value => !Number.isFinite(value) || Math.abs(value) > CadNumericPolicy.coordinateAbs))
+    || weights.some(value => !Number.isFinite(value) || value <= 0) || knots.some(value => !Number.isFinite(value))
+    || weights[8] !== weights[9] || weights[9] !== weights[10]
+    || knots[9] !== knots[10] || knots[11] !== knots[12] || knots[12] !== knots[13] || !(knots[10] < knots[11])) return;
+  const frame = leadingSpacedArcs({ degree, controlPoints: points.slice(0, 9), weights: weights.slice(0, 9),
+    knots: [...knots.slice(0, 11), knots[10]] });
+  const chord = sub(points[10], points[8]), tailLength = len(chord);
+  if (!frame || frame.turn !== -1 || !(tailLength >= minimumLengthMM)) return;
+  const tangent = unit(chord), handle = sub(points[8], points[7]);
+  const directionError = len(sub(tangent, frame.second.exitTangent));
+  const error = .5 * len(sub(sub(points[9], points[8]), scale(chord, .5)));
+  const extent = Math.max(1, ...points.flatMap(point => point.map(Math.abs)));
+  const angular = Math.min(CadNumericPolicy.relativeComparison, 256 * Number.EPSILON * extent / Math.min(tailLength, len(handle)));
+  if (directionError > angular || len(sub(tangent, unit(handle))) > angular
+    || error + tailLength * directionError > tolerance) return;
+  return { ...frame, tailLength, tailEnd: points[10] };
 }
 
 /** Reject a possible one-carrier normalization using independent circumcenters and whole-span bounds. */
@@ -225,15 +247,16 @@ function rectangle(edges: BrepEdge[], center: Point, inward: Point, axis: Point,
 
 /** Check every named wall support against the authored turn of the second bend. */
 function walls(brep: Brep, feature: string, frame: Frame, section: Section, inward: boolean) {
-  const pieces = frame.leadLength !== undefined ? ['lead', 'first', 'line', 'second']
+  const pieces = frame.tailLength !== undefined ? ['lead', 'first', 'line', 'second', 'tail']
+    : frame.leadLength !== undefined ? ['lead', 'first', 'line', 'second']
     : frame.length === 0 ? ['first', 'second'] : ['first', 'line', 'second'], direction = inward ? -1 : 1;
   const angular = CadNumericPolicy.relativeComparison;
   const names = pieces.flatMap(piece => section.tags.map(tag => `${feature}.${piece}.side[${tag}]`));
   for (const piece of pieces) {
-    const first = piece === 'lead' || piece === 'first', straight = piece === 'lead' || piece === 'line';
+    const first = piece === 'lead' || piece === 'first', straight = piece === 'lead' || piece === 'line' || piece === 'tail';
     const bend = first ? frame.first : frame.second;
-    const radial = first ? frame.inward : frame.first.exitInward;
-    const center = first ? frame.start : frame.first.end, turn = piece === 'second' ? frame.turn : 1;
+    const radial = piece === 'tail' ? scale(frame.second.exitInward, frame.turn) : first ? frame.inward : frame.first.exitInward;
+    const center = piece === 'tail' ? frame.second.end : first ? frame.start : frame.first.end, turn = piece === 'second' ? frame.turn : 1;
     const found = new Set<string>();
     for (const name of names.filter(name => name.startsWith(`${feature}.${piece}.`))) {
       const face = brep.faces.find(face => face.name === name);
@@ -264,16 +287,17 @@ function walls(brep: Brep, feature: string, frame: Frame, section: Section, inwa
 }
 
 /** Common native wall, mouth, join and mass checks for the two bounded arc producers. */
-function pairedArcDuctEvidence(brep: Brep, path: Path, source: Source, direct: boolean, turn: -1 | 1 = -1, leading = false) {
+function pairedArcDuctEvidence(brep: Brep, path: Path, source: Source, direct: boolean, turn: -1 | 1 = -1, leading = false, ended = false) {
   try {
-    const frame: Frame | undefined = leading ? leadingSpacedArcs(path) : direct ? directArcs(path, turn) : spacedArcs(path);
+    const frame: Frame | undefined = ended ? endedSpacedArcs(path) : leading ? leadingSpacedArcs(path) : direct ? directArcs(path, turn) : spacedArcs(path);
     const sizes = frame && sections(source, frame, leading), feature = brep.source.id;
     if (!frame || !sizes || brep.source.family !== 'sweep-curve' || !feature || brep.bodies.length !== 1
       || brep.bodies[0].kind !== 'solid' || brep.shells.length !== 1 || !brep.shells[0].closed
       || brep.bodies[0].shells.length !== 1 || brep.bodies[0].shells[0] !== brep.shells[0].id
       || brep.shells[0].body !== brep.bodies[0].id) return;
     const report = checkBrep(brep, { strict: true });
-    const expected = leading ? { bodies: 1, shells: 1, faces: 50, loops: 54, coedges: 216, edges: 108, vertices: 60 }
+    const expected = ended ? { bodies: 1, shells: 1, faces: 62, loops: 66, coedges: 264, edges: 132, vertices: 72 }
+      : leading ? { bodies: 1, shells: 1, faces: 50, loops: 54, coedges: 216, edges: 108, vertices: 60 }
       : direct ? { bodies: 1, shells: 1, faces: 26, loops: 30, coedges: 120, edges: 60, vertices: 36 }
       : { bodies: 1, shells: 1, faces: 38, loops: 42, coedges: 168, edges: 84, vertices: 48 };
     if (!report.valid || report.topology.length !== 1 || report.topology[0].genus !== 2
@@ -281,7 +305,7 @@ function pairedArcDuctEvidence(brep: Brep, path: Path, source: Source, direct: b
     if (leading) {
       const { first, second, length, leadLength } = frame, reach = sizes.exterior.radial / 2, half = first.angle / 2;
       const roundoff = 128 * Number.EPSILON * Math.max(1, first.radius, second.radius,
-        sizes.exterior.radial / 2, sizes.exterior.axial / 2, length, leadLength!);
+        sizes.exterior.radial / 2, sizes.exterior.axial / 2, length, leadLength!, frame.tailLength ?? 0);
       // Compare whole-section supports along the first bend's half-angle tangent. Each angle is
       // 30..120°, so sin(half+beta) is nonnegative and its interval minimum occurs at an endpoint.
       const leadUpper = -(first.radius - reach) * Math.sin(half);
@@ -292,6 +316,13 @@ function pairedArcDuctEvidence(brep: Brep, path: Path, source: Source, direct: b
         + (second.radius - reach) * Math.min(Math.sin(half), Math.sin(half + second.angle))
         : (first.radius - reach) * Math.sin(half) + length * Math.cos(half);
       if (report.topology[0].shells !== 1 || !(secondLower - leadUpper > 10 * tolerance + 2 * roundoff)) return;
+      if (ended) {
+        // Reverse travel at the second half-angle plane to separate the outlet from the first bend
+        // and spacer. The larger-angle plane also separates the two straight ends: its outward
+        // end projection is cos(alpha/2-beta)>=cos(alpha/2)>=1/2 (or the reversed inequality).
+        const reverseGap = 2 * (second.radius - reach) * Math.sin(second.angle / 2) + length * Math.cos(second.angle / 2);
+        if (!(reverseGap > 10 * tolerance + 2 * roundoff)) return;
+      }
     }
     const groups = [sizes.exterior, ...sizes.apertures], wallGroups = groups.map((section, index) => walls(brep, feature, frame, section, index > 0));
     if (wallGroups.some(group => !group)) return;
@@ -321,9 +352,9 @@ function pairedArcDuctEvidence(brep: Brep, path: Path, source: Source, direct: b
     const caps = [];
     for (const end of ['start', 'end']) {
       const name = `${feature}.${end}`, face = brep.faces.find(face => face.name === name), start = end === 'start';
-      const center = start ? leading ? frame.leadStart! : frame.start : frame.end;
+      const center = start ? leading ? frame.leadStart! : frame.start : ended ? frame.tailEnd! : frame.end;
       const radial = start ? frame.inward : scale(frame.second.exitInward, frame.turn);
-      const normal = start ? scale(frame.tangent, -1) : frame.second.exitTangent, piece = start ? leading ? 'lead' : 'first' : 'second';
+      const normal = start ? scale(frame.tangent, -1) : frame.second.exitTangent, piece = start ? leading ? 'lead' : 'first' : ended ? 'tail' : 'second';
       if (!face || face.loops.length !== 3) return;
       const plane = faceGeometry(face);
       if (plane.kind !== 'plane' || len(sub(plane.n, normal)) > CadNumericPolicy.relativeComparison
@@ -336,7 +367,7 @@ function pairedArcDuctEvidence(brep: Brep, path: Path, source: Source, direct: b
         let area = 0;
         for (const id of loop.coedges) {
           const use = brep.coedges.find(use => use.id === id), edge = use && brep.edges.find(edge => edge.id === use.edge);
-          const pair = edge && peers(edge, leading && start), twin = pair?.find(peer => peer.id !== use?.id);
+          const pair = edge && peers(edge, ended || leading && start), twin = pair?.find(peer => peer.id !== use?.id);
           const other = twin && brep.faces.find(face => face.loops.includes(twin.loop));
           if (!use || use.loop !== loop.id || !edge || !pair || !other?.name || edge.curve.controlPoints.length !== 2) return;
           adjacent.push(other.name); edges.push(edge);
@@ -359,7 +390,8 @@ function pairedArcDuctEvidence(brep: Brep, path: Path, source: Source, direct: b
     const joins = direct ? [{ pieces: ['first', 'second'], center: frame.first.end, radial: frame.first.exitInward }]
       : [...(leading ? [{ pieces: ['lead', 'first'], center: frame.first.start, radial: frame.inward }] : []),
         { pieces: ['first', 'line'], center: frame.first.end, radial: frame.first.exitInward },
-        { pieces: ['line', 'second'], center: frame.second.start, radial: frame.first.exitInward }];
+        { pieces: ['line', 'second'], center: frame.second.start, radial: frame.first.exitInward },
+        ...(ended ? [{ pieces: ['second', 'tail'], center: frame.second.end, radial: scale(frame.second.exitInward, frame.turn) }] : [])];
     const rings: string[][][] = [];
     for (const join of joins) {
       const seamGroups: string[][] = [];
@@ -389,7 +421,7 @@ function pairedArcDuctEvidence(brep: Brep, path: Path, source: Source, direct: b
     const radialMoment = (areaOf(sizes.exterior) * sizes.exterior.radial ** 2
       - sizes.apertures.reduce((sum, section) => sum + areaOf(section) * section.radial ** 2, 0)) / (12 * area);
     const axialMean = -sizes.apertures.reduce((sum, section) => sum + areaOf(section) * (section.interval[0] + section.interval[1]) / 2, 0) / area;
-    const length = frame.length + frame.first.radius * frame.first.angle + frame.second.radius * frame.second.angle + (frame.leadLength ?? 0);
+    const length = frame.length + frame.first.radius * frame.first.angle + frame.second.radius * frame.second.angle + (frame.leadLength ?? 0) + (frame.tailLength ?? 0);
     let moment = scale(add(frame.first.end, scale(frame.first.exitTangent, frame.length / 2)), frame.length);
     for (const bend of [frame.first, frame.second]) {
       const integralInward = sub(scale(bend.inward, Math.sin(bend.angle)), scale(bend.tangent, 1 - Math.cos(bend.angle)));
@@ -397,6 +429,7 @@ function pairedArcDuctEvidence(brep: Brep, path: Path, source: Source, direct: b
         bend.radius + radialMoment / bend.radius)), bend.radius));
     }
     if (leading) moment = add(moment, scale(add(frame.first.start, scale(frame.tangent, -frame.leadLength! / 2)), frame.leadLength!));
+    if (ended) moment = add(moment, scale(add(frame.second.end, scale(frame.second.exitTangent, frame.tailLength! / 2)), frame.tailLength!));
     const centroid = add(scale(moment, 1 / length), scale(frame.axis, axialMean)), analytic = area * length, mass = brepMassProperties(brep, 1);
     if (!(analytic > 0) || mass.method !== 'quadrature' || !Number.isFinite(mass.volume)
       || Math.abs(mass.volume - analytic) > CadNumericPolicy.relativeComparison * .1 * Math.max(1, analytic)
@@ -406,6 +439,7 @@ function pairedArcDuctEvidence(brep: Brep, path: Path, source: Source, direct: b
         faces: wallGroups[index + 1]!, seams: seamGroups[index + 1], dimensions: { radial: section.radial, axial: section.axial }, axialInterval: section.interval })),
       dimensions: { firstRadius: frame.first.radius, secondRadius: frame.second.radius, lineLength: frame.length,
         ...(leading ? { leadLength: frame.leadLength! } : {}),
+        ...(ended ? { tailLength: frame.tailLength! } : {}),
         firstSweepRadians: frame.first.angle, secondSweepRadians: frame.second.angle,
         exterior: { radial: sizes.exterior.radial, axial: sizes.exterior.axial }, axialWeb: sizes.axialWeb },
       junctions: joins.map((join, index) => ({ pieces: join.pieces, exteriorSeams: rings[index][0], interiorSeams: rings[index].slice(1) })),
@@ -424,6 +458,13 @@ export function pairedLeadingSpacedArcDuctEvidence(brep: Brep, path: Path, sourc
   const evidence = pairedArcDuctEvidence(brep, path, source, false, 1, true);
   if (!evidence || evidence.throughApertures.dimensions.leadLength === undefined) return;
   return { ...evidence, pathKind: 'line-arc-line-arc' as const };
+}
+
+/** Original opposite-turn five-span paired route, including both fully charted straight mouths. */
+export function pairedEndedSpacedArcDuctEvidence(brep: Brep, path: Path, source: Source) {
+  const evidence = pairedArcDuctEvidence(brep, path, source, false, -1, true, true);
+  if (!evidence || evidence.throughApertures.dimensions.tailLength === undefined) return;
+  return { ...evidence, pathKind: 'line-arc-line-arc-line' as const };
 }
 
 /** Native review for exactly two passages on directly joined opposite-turn circular arcs. */
