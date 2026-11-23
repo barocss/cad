@@ -737,7 +737,7 @@ function lineAndArcSweep(id: string, rail: JoinedRail, section: JoinedSection,
     : `Exact ${hasTail ? 'line-arc-line ' : ''}sweep needs a path radius larger than the profile radius.`);
   if (!(localRadius - radialReach > tolerance)) return bendClearance();
   const wall = apertures?.clearance ?? opening?.clearance ?? (bore ? radialReach - circleRadius(bore) : undefined);
-  const wallError = () => apertures ? refuse('GEOMETRY', 'Exact line-and-arc rectangular sweep needs strictly positive cover and axial web clearance between its apertures.') : opening ? ductWallError(refuse)
+  const wallError = () => apertures ? refuse('GEOMETRY', `Exact ${sweepStyle(rail)} rectangular sweep needs strictly positive cover and axial web clearance between its apertures.`) : opening ? ductWallError(refuse)
     : refuse('GEOMETRY', `Exact ${style} sweep needs strictly positive wall clearance around the bore.`);
   if (wall !== undefined && !(wall > 10 * tolerance)) return wallError();
   const holes = apertures?.profiles ?? (opening ? [opening.profile] : bore ? [[bore]] : undefined);
@@ -1127,13 +1127,13 @@ export function exactSweep(input: ExactSweepInput, refuse: Refuse): SweepSolid {
     const hole = rectangle ? undefined : circularHole(holes, sweepStyle(lineArc), refuse);
     const bore = hole && concentricBore(disk!, hole, refuse, sweepStyle(lineArc));
     const initial = frame(lineArc.tangent), [x, y] = initial;
-    const paired = rectangle && holes.length > 1 && lineArc.tailLength === undefined;
+    const paired = rectangle && holes.length > 1;
     const joined: { axes: SweepAxes; section: JoinedSection } = rectangle ? rectangularElbowSection(rectangle, paired ? [] : holes, initial, lineArc, refuse) : {
       axes: initial, section: { profile: [originDisk(profileRadius!)], bendCentre: [dot(lineArc.toCentre, x), dot(lineArc.toCentre, y)],
         radialReach: profileRadius!, extent: profileRadius!, edgeCount: 2 },
     };
     if (paired) joined.section = { ...joined.section, edgeCount: 12,
-      apertures: pairedRectangularApertures(rectangle, holes, joined.section, lineArc.tolerance, refuse, 'line-and-arc rectangular') };
+      apertures: pairedRectangularApertures(rectangle, holes, joined.section, lineArc.tolerance, refuse, `${sweepStyle(lineArc)} rectangular`) };
     const result = place(lineAndArcSweep(id, lineArc, joined.section, bore, sideTags, refuse), joined.axes, lineArc.start);
     const report = checkBrep(result.brep, { strict: true });
     if (!report.valid) return refuse('GEOMETRY',

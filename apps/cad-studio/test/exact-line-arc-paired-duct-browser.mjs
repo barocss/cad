@@ -8,9 +8,15 @@ import { currentPartRevision, withMcpSession } from './mcp-browser-session.mjs';
 const baseline = process.argv.includes('--expect-refused');
 const reviewBaseline = process.argv.includes('--expect-review-unavailable');
 const review = process.argv.includes('--review');
+const tail = process.argv.includes('--straight-tail') ? 14 : 0;
 assert.ok([baseline, reviewBaseline, review].filter(Boolean).length <= 1);
+assert.ok(!tail || !(review || reviewBaseline));
 const railName = 'Paired duct rail';
-const path = {
+const path = tail ? {
+  degree: 2, knots: [0, 0, 0, 1, 1, 2, 2, 3, 3, 3],
+  controlPoints: [[-10, 0, 0], [-5, 0, 0], [0, 0, 0], [20, 0, 0], [20, 20, 0], [20, 20 + tail / 2, 0], [20, 20 + tail, 0]],
+  weights: [1, 1, 1, Math.SQRT1_2, 1, 1, 1],
+} : {
   degree: 2, knots: [0, 0, 0, 1, 1, 2, 2, 2],
   controlPoints: [[-10, 0, 0], [-5, 0, 0], [0, 0, 0], [20, 0, 0], [20, 20, 0]],
   weights: [1, 1, 1, Math.SQRT1_2, 1],
@@ -41,11 +47,12 @@ if (review || reviewBaseline) pins.push(
   'apps/cad-studio/test/duct-proposal-review-browser-steps.mjs',
 );
 const f = await createFlow({
-  name: 'exact-line-arc-paired-duct', output: process.argv[2], envFrozen: review || reviewBaseline ? 'D1783_SOURCE_FROZEN' : 'D1782_SOURCE_FROZEN',
+  name: 'exact-line-arc-paired-duct', output: process.argv[2],
+  envFrozen: tail ? 'D1786_SOURCE_FROZEN' : review || reviewBaseline ? 'D1783_SOURCE_FROZEN' : 'D1782_SOURCE_FROZEN',
   initialFiles: pins, requiredFrozen: pins,
   extraFrozen: review ? ['packages/barocss-cad-model/src/chat/pairedLineArcDuctEvidence.ts'] : [],
   qualification: 'Sweep two rectangular passages along a straight rail into a tangent arc.',
-  limits: ['A bend-aligned 4 × 10 mm rectangle, two axial lanes centered at ±2 mm, a 10 mm straight span and an R20 quarter arc. Desktop WebGPU.'],
+  limits: [`A bend-aligned 4 × 10 mm rectangle, two axial lanes centered at ±2 mm, a 10 mm straight span and an R20 quarter arc${tail ? ' followed by a 14 mm straight span' : ''}. Desktop WebGPU.`],
   inspectorSource: `
 import { readFileSync } from 'node:fs';
 import { brepMassProperties, checkBrep, faceGeometry, massPropertiesOf, measureBrepEdgeContinuity } from '@barocss/cad';
@@ -68,10 +75,12 @@ const caps = brep.faces.filter(face => /^n1[.](start|end)$/.test(face.name)).map
     }) };
   }),
 }));
-const joints = brep.edges.filter(edge => edge.curve.controlPoints.every(point => Math.abs(point[0]) < 1e-7)).map(edge => ({
-  ...measureBrepEdgeContinuity(brep, edge.id, { curvature: true }),
-  bound: brep.coedges.filter(use => use.edge === edge.id).every(use => use.pcurve),
-}));
+const planes = ${JSON.stringify(tail ? [[0, 0], [1, 20]] : [[0, 0]])};
+const joints = planes.flatMap(([axis, at], index) => brep.edges
+  .filter(edge => edge.curve.controlPoints.every(point => Math.abs(point[axis] - at) < 1e-7)).map(edge => ({
+    ...measureBrepEdgeContinuity(brep, edge.id, { curvature: true }), junction: index,
+    bound: brep.coedges.filter(use => use.edge === edge.id).every(use => use.pcurve),
+  })));
 console.log(JSON.stringify({ source: brep.source, check: checkBrep(brep, { strict: true }), caps, joints,
   wallNames: brep.faces.filter(face => face.name.includes('.side[')).map(face => face.name),
   wallPlanes: brep.faces.filter(face => face.name.includes('.side[')).map(face => ({ name: face.name, plane: faceGeometry(face) }))
@@ -86,23 +95,26 @@ const coordinate = (index, axis) => f.sketchPanel().getByLabel(`Point ${index} $
 const near = (actual, expected, tolerance = 1e-7) =>
   assert.ok(Number.isFinite(actual) && Math.abs(actual - expected) <= tolerance, JSON.stringify({ actual, expected, tolerance }));
 const sortedTags = tags => [...tags].sort();
-const pathLength = 10 + 10 * Math.PI;
+const pathLength = 10 + 10 * Math.PI + tail;
 const volumeAt = halfHeight => (36 - 4 * halfHeight) * pathLength;
 
 async function verify(label, doc, firstHalfHeight) {
   const native = await f.inspect(label, doc);
   assert.deepEqual(native.source, { family: 'sweep-curve', id: 'n1' });
   assert.ok(native.check.valid, native.check.issues.join('\n'));
-  assert.deepEqual(native.check.counts, { bodies: 1, shells: 1, faces: 26, loops: 30, coedges: 120, edges: 60, vertices: 36 });
+  assert.deepEqual(native.check.counts, tail
+    ? { bodies: 1, shells: 1, faces: 38, loops: 42, coedges: 168, edges: 84, vertices: 48 }
+    : { bodies: 1, shells: 1, faces: 26, loops: 30, coedges: 120, edges: 60, vertices: 36 });
   assert.equal(native.check.topology[0].genus, 2);
   assert.ok(native.check.maximumPcurveGap < 1e-8);
-  assert.equal(native.wallNames.length, 24);
+  assert.equal(native.wallNames.length, tail ? 36 : 24);
   assert.equal(native.caps.length, 2);
   for (const cap of native.caps) {
     const start = cap.name === 'n1.start';
     const axis = start ? 0 : 1;
+    const at = start ? -10 : 20 + tail;
     assert.equal(cap.plane.kind, 'plane');
-    near(cap.plane.o[axis], start ? -10 : 20);
+    near(cap.plane.o[axis], at);
     near(cap.plane.n[axis], start ? -1 : 1);
     assert.deepEqual(cap.loops.map(loop => loop.kind).sort(), ['inner', 'inner', 'outer']);
     for (const [tags, radial, axial, center] of [
@@ -116,7 +128,7 @@ async function verify(label, doc, firstHalfHeight) {
       const points = loop.edges.flatMap(edge => {
         assert.equal(edge.degree, 1);
         assert.ok(edge.reciprocal);
-        if (!start) assert.ok(edge.bound, 'The bend cap and its adjacent wall need native charts');
+        if (!start || tail) assert.ok(edge.bound, 'Each terminal edge needs two native charts');
         return edge.points;
       });
       const transverse = points.map(point => point[1 - axis] - (start ? 0 : 20));
@@ -125,10 +137,11 @@ async function verify(label, doc, firstHalfHeight) {
       near(Math.max(...transverse), radial);
       near(Math.min(...height), center - axial);
       near(Math.max(...height), center + axial);
-      for (const point of points) near(point[axis], start ? -10 : 20);
+      for (const point of points) near(point[axis], at);
     }
   }
-  assert.equal(native.joints.length, 12);
+  assert.equal(native.joints.length, tail ? 24 : 12);
+  for (const junction of tail ? [0, 1] : [0]) assert.equal(native.joints.filter(joint => joint.junction === junction).length, 12);
   for (const joint of native.joints) {
     assert.equal(joint.status, 'measured');
     assert.equal(joint.curvature.status, 'measured');
@@ -139,8 +152,8 @@ async function verify(label, doc, firstHalfHeight) {
   const radialVariance = (40 * 4 ** 2 - (40 - area) * 2 ** 2) / (12 * area);
   const bendCentroidX = 2 * (20 + radialVariance / 20) / Math.PI;
   const expectedCentroid = [
-    (10 * Math.PI * bendCentroidX - 50) / pathLength,
-    10 * Math.PI * (20 - bendCentroidX) / pathLength,
+    (10 * Math.PI * bendCentroidX - 50 + tail * 20) / pathLength,
+    (10 * Math.PI * (20 - bendCentroidX) + tail * (20 + tail / 2)) / pathLength,
     (8 * firstHalfHeight - 8) / area,
   ];
   const { bodies } = await f.bodies();
@@ -166,7 +179,7 @@ async function showEnd(direction, label) {
     return labels.length === 1 && labels[0].textContent === name;
   }, direction.toUpperCase());
   const inlet = direction === 'Left';
-  const center = inlet ? [-10, 0] : [20, 20];
+  const center = inlet ? [-10, 0] : [20, 20 + tail];
   const axis = inlet ? 0 : 1;
   const sign = inlet ? -1 : 1;
   const [first, web, second] = await f.page.evaluate(center => [-2, 0, 2].map(z => window.__studioSurfacePoint([...center, z])), center);
@@ -188,14 +201,17 @@ async function inspectJoints(joints) {
   const options = panel.getByRole('combobox', { name: 'Native shared edge', exact: true });
   const result = panel.getByRole('status', { name: 'Edge continuity result', exact: true });
   const angle = result.locator('[data-continuity-angle]');
-  for (const joint of joints) {
-    await options.selectOption(joint.edgeId);
-    await button('Measure continuity', panel).click();
-    await angle.waitFor();
-    assert.equal(await angle.textContent(), '0°');
+  for (const junction of tail ? [0, 1] : [0]) {
+    for (const joint of joints.filter(item => item.junction === junction)) {
+      await options.selectOption(joint.edgeId);
+      await button('Measure continuity', panel).click();
+      await angle.waitFor();
+      assert.equal(await angle.textContent(), '0°');
+      assert.match(await result.innerText(), /Native samples\s+8/);
+    }
+    await result.scrollIntoViewIfNeeded();
+    await f.snapshot(tail ? `04-native-joins-${junction + 1}` : '04-native-joins');
   }
-  await result.scrollIntoViewIfNeeded();
-  await f.snapshot('04-native-joins');
 }
 
 async function openFirstPassage() {
@@ -211,7 +227,7 @@ async function approveWithAgent(source, expected) {
   const reviewed = await withMcpSession(session, file, 'paired-duct-proposal', async (call, request) => {
     const expectedRevision = await currentPartRevision(call);
     const description = await call('describe', { command: 'sweep-curve' });
-    assert.match(description.values.sketch, /line–arc ducts accept two rectangular openings/);
+    assert.match(description.values.sketch, tail ? /line–arc–line duct also accepts this paired section/ : /line–arc ducts accept two rectangular openings/);
     const rail = (await call('query', { action: 'summary' })).direct_curves.find(curve => curve.id === 'rail');
     assert.ok(rail?.revision);
     const op = { tool: 'features', args: { action: 'command', command: 'sweep-curve', expectedRevision,
@@ -290,7 +306,7 @@ await f.run(async () => {
   await f.page.evaluate(() => document.activeElement?.blur());
   await f.command('Sweep');
   await hud().getByLabel('Representation', { exact: true }).selectOption('exact');
-  await hud().locator('.hud-step').getByText('Exact line and arc', { exact: true }).waitFor();
+  await hud().locator('.hud-step').getByText(tail ? 'Exact line–arc–line' : 'Exact line and arc', { exact: true }).waitFor();
   if (baseline) {
     await hud().locator('.status').filter({ hasText: /^refused$/ }).waitFor();
     assert.match(await hud().innerText(), /centered rectangular opening/);

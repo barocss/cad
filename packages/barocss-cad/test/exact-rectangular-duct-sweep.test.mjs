@@ -194,7 +194,7 @@ test('the duct refuses displaced, rotated, multiple, too close, touching and axi
     kind, start: [(x - y) * Math.SQRT1_2, (x + y) * Math.SQRT1_2],
   }));
   refuses(rail, sketchWith(rotated), 'CAPABILITY', aperture);
-  refuses(rail, sketchWith(defaultOpening, rectangle(.5, .5)), 'CAPABILITY', aperture);
+  refuses(rail, sketchWith(defaultOpening, rectangle(.5, .5)), 'GEOMETRY', /strictly positive axial web clearance/);
   refuses(rail, sketchWith(rectangle(1e-5, 2)), 'CAPABILITY', aperture);
   for (const radialHalfWidth of [2, 2 + .01, 2 - 5e-7]) {
     refuses(rail, sketchWith(rectangle(radialHalfWidth, 2)), 'GEOMETRY', wall);
