@@ -1,8 +1,12 @@
 import assert from 'node:assert/strict';
+import { readFile, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { createFlow } from './flow-helper.mjs';
+import { currentPartRevision, withMcpSession } from './mcp-browser-session.mjs';
 
 const solid = node => ({ node, side: 'solid' });
 const outlet = 'n1.end';
+const agent = process.argv.includes('--agent');
 const input = {
   format: 'barocss-cad-model', schema: 3, units: 'mm', parameters: {}, nextId: 5,
   nodes: [
@@ -22,11 +26,14 @@ const input = {
 };
 const pins = ['apps/cad-studio/test/paired-outlet-reference-plane-browser.mjs', 'apps/cad-studio/src/App.tsx',
   ...['engine/doc', 'engine/offsetPlane', 'app/nativeOffsetFace', 'app/offsetFaceEdit', 'app/profileCommands', 'app/offsetPlanePick']
-    .map(path => `packages/barocss-cad-model/src/${path}.ts`)];
+    .map(path => `packages/barocss-cad-model/src/${path}.ts`),
+  ...(agent ? ['apps/cad-studio/test/mcp-browser-session.mjs', 'apps/cad-studio/src/ui/ProposalBrowser.tsx',
+    ...['features', 'proposals'].map(file => `packages/barocss-cad-model/src/chat/part/${file}.ts`)] : [])];
 const f = await createFlow({
-  name: 'paired-outlet-reference-plane', output: process.argv[2], envFrozen: 'D1854_SOURCE_FROZEN',
+  name: 'paired-outlet-reference-plane', output: process.argv[2], envFrozen: agent ? 'D1855_SOURCE_FROZEN' : 'D1854_SOURCE_FROZEN',
   initialFiles: pins, requiredFrozen: pins,
-  qualification: '#17 moves the original five-span paired outlet to a live parallel native face in desktop Studio.',
+  qualification: agent ? '#324 proposes a revision-bound outlet plane edit through local MCP and real Studio review.'
+    : '#17 moves the original five-span paired outlet to a live parallel native face in desktop Studio.',
   limits: ['One original five-span S-bend, one detached native donor and the original straight outlet.'],
   inspectorSource: `
 import { readFileSync } from 'node:fs';
@@ -110,7 +117,85 @@ async function verify(label, doc, original, key, face, x) {
   return { part, donor };
 }
 
+async function exerciseAgent() {
+  const file = join(f.output, 'agent-reference-proposal.bcad'), originalBytes = Buffer.from(JSON.stringify(input));
+  await writeFile(file, originalBytes);
+  f.phase = 'Propose the paired native outlet through local MCP';
+  await withMcpSession({ app: f.app, output: f.output, clientName: f.name }, file, 'paired-outlet-reference', async call => {
+    const description = await call('describe', { command: 'offset-face' });
+    assert.match(description.selection, /original five-span outlet accepts To plane/);
+    const expectedRevision = await currentPartRevision(call);
+    const command = { action: 'command', command: 'offset-face', expectedRevision,
+      faces: [outlet, 'n3.side3'], values: { offsetMode: 'to-plane' } };
+    const operation = (overrides = {}) => ({ tool: 'features', args: { ...command, ...overrides } });
+    const dry = (op, error = false) => call('features', { action: 'batch', dryRun: true, ops: [op] }, error);
+    const preview = await dry(operation());
+    assert.equal(preview.dryRun, true);
+    near(preview.change.volume, 128);
+    const detail = JSON.parse(preview.would_apply[0].did.slice('Offset face '.length));
+    assert.deepEqual(detail, { offsetMode: 'to-plane', sourceFace: outlet, referenceFeature: 'n4', referenceFace: 'n3.side3' });
+    assert.match((await dry(operation({ faces: [outlet, 'n3.top'] }), true)).error, /parallel/i);
+    assert.match((await dry(operation({ expectedRevision: '0000000000000000' }), true)).error, /part changed/i);
+    assert.deepEqual(await readFile(file), originalBytes);
+    const pending = await call('proposals', { action: 'propose', title: 'Move the paired outlet to the native donor face', ops: [operation()] });
+    assert.deepEqual([pending.proposal, pending.applied], ['P1', false]);
+    const savedPending = await readFile(file);
+    assert.match((await call('proposals', { action: 'accept', id: 'P1' }, true)).error, /user accepts.*studio/i);
+    assert.deepEqual(await readFile(file), savedPending);
+  });
+  const pending = JSON.parse(await readFile(file, 'utf8'));
+  assert.deepEqual(pending.nodes, input.nodes);
+  const records = await f.inspect('agent-original', pending), original = records.find(record => record.key === 'b1');
+  const donor = records.find(record => record.key === 'b4');
+  const openCard = async label => {
+    await f.freshOpen(file, pending, label);
+    await button('Chat').first().click();
+    const card = f.page.getByRole('listitem', { name: 'Proposal P1', exact: true });
+    await card.getByText(/n1\.end to n3\.side3 on n4/).waitFor();
+    return card;
+  };
+  const previewCard = async (card, label) => {
+    await button('Preview', card).click();
+    await button('Hide', card).waitFor();
+    await card.getByLabel('Volume change').getByText(/^\+128(?:\.0+)? mm³(?: \(.*\))?$/).waitFor();
+    await f.same(pending);
+    await f.snapshot(label);
+  };
+  const staleCard = await openCard('01-agent-pending');
+  await previewCard(staleCard, '02-agent-preview');
+  await button('Hide', staleCard).click();
+  await button('Preview', staleCard).waitFor();
+  await f.same(pending);
+  await f.openFeatureEditor(4, 'move the donor after review');
+  await field(f.editor(), 'ΔX').fill('-8');
+  const moved = (await f.applyEditor(pending, '03-agent-donor-changed')).doc;
+  await staleCard.getByText('stale ·', { exact: true }).waitFor();
+  assert.ok(await button('Preview', staleCard).isDisabled());
+  assert.equal(await button('Accept', staleCard).count(), 0);
+  await button('Rebase & preview', staleCard).waitFor();
+  assert.equal(moved.nodes.length, input.nodes.length);
+  assert.equal(moved.proposals[0].status, 'open');
+  await f.snapshot('04-agent-stale-no-approval');
+
+  const card = await openCard('05-agent-fresh-reference');
+  await previewCard(card, '06-agent-preview-before-approval');
+  await button('Accept', card).click();
+  await f.changed(pending);
+  const approved = (await f.snapshot('07-agent-approved')).doc, feature = approved.nodes[5];
+  assert.deepEqual(feature.parent, solid(1));
+  assert.deepEqual(feature.target.body, solid(4));
+  assert.equal(feature.target.feature, 'n4');
+  assert.equal(feature.target.face, 'n3.side3');
+  assert.deepEqual([approved.history.at(-1).by.agent, approved.proposals[0].status], ['user', 'accepted']);
+  const result = await verify('agent-approved-native', approved, original, 'b5', 'n3.side3', 40);
+  assert.equal(result.donor.hash, donor.hash);
+  const saved = await f.save('agent-approved-reference');
+  await f.freshOpen(saved.file, approved, '08-agent-fresh-open');
+  assert.equal((await verify('agent-reopened-native', approved, original, 'b5', 'n3.side3', 40)).part.hash, result.part.hash);
+}
+
 await f.run(async () => {
+  if (agent) return exerciseAgent();
   await f.newPage();
   await open(input, 'paired-outlet-reference.bcad');
   await f.same(input);

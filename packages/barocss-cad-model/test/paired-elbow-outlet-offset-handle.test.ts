@@ -5,9 +5,11 @@ import type { Ctx } from '../src/app/commands';
 import { editSavedOffsetFaceCommand } from '../src/app/offsetFaceEdit';
 import { savedPairedElbowOutletOffsetHandle } from '../src/app/pairedElbowOutletOffsetHandle';
 import { offsetFaceCommand } from '../src/app/profileCommands';
+import { dispatchTool } from '../src/chat/tools';
 import { encodeStudioFile, readStudioFile } from '../src/engine/container';
 import { emptyDoc, isPairedElbowInletOffsetSource, offsetFaceDocumentProblem, parentsOf, prefixDoc, usesOf, withNode, type StudioDoc } from '../src/engine/doc';
 import { evaluateDoc, partBreps } from '../src/engine/evaluate';
+import { revisionOf } from '../src/util/revision';
 
 const path: Pick<Curve, 'degree' | 'knots' | 'controlPoints' | 'weights'> = {
   degree: 2, knots: [0, 0, 0, 1, 1, 2, 2, 3, 3, 3],
@@ -145,6 +147,24 @@ test('the outlet refuses a nonparallel or exhausted reference and leaves shorter
     assert.ok(!offsetFaceCommand.fields!(ctx).some(field => field.key === 'offsetMode'));
   }
   assert.deepEqual(original, before);
+});
+
+test('the current-revision local command describes the two accepted native faces in the bound outlet result', async () => {
+  const doc = outletAndDonor(), { ctx } = pickedPair(doc);
+  const run = (faces: string[], expectedRevision = revisionOf(doc)) => dispatchTool({ doc, bodies: ctx.bodies }, 'features', {
+    action: 'command', command: 'offset-face', faces, values: { offsetMode: 'to-plane' }, expectedRevision,
+  }, async candidate => evaluateDoc(candidate, 1));
+  const applied = await run(['n1.end', 'n3.side3']);
+  assert.ok(applied.changed && !applied.isError, applied.content);
+  const { did } = JSON.parse(applied.content), node = applied.state.doc.nodes[5];
+  assert.ok(node.kind === 'offset-face' && node.target);
+  assert.equal(did, 'Offset face ' + JSON.stringify({
+    offsetMode: 'to-plane', sourceFace: node.faces[0], referenceFeature: node.target.feature, referenceFace: node.target.face,
+  }));
+  for (const result of [await run(['n1.end', 'n3.top']), await run(['n1.end', 'n3.side3'], '0000000000000000')]) {
+    assert.ok(result.isError && !result.changed, result.content);
+    assert.equal(result.state.doc, doc);
+  }
 });
 
 test('saved paired outlet uses its original signed origin, cached native receipt and typed reverse', () => {

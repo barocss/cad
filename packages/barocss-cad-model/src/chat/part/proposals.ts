@@ -144,10 +144,13 @@ export async function proposalOfWith(dispatch: PartRun, state: ChatState, ops: u
   const stepChanges = run.ops.flatMap((op, index) => op.tool === 'add_assembly_step' && typeof executedResults[index]?.did === 'string' ? [executedResults[index].did as string] : []);
   const sheets = run.ops.flatMap((op, index) => (isDirectRuledOperation(op) || isRuledThickenOperation(op))
     && typeof executedResults[index]?.did === 'string' ? [executedResults[index].did as string] : []);
+  const appended = run.ops.length === 1 && cur.doc.nodes.length === state.doc.nodes.length + 1 ? cur.doc.nodes.at(-1) : undefined;
+  const boundOutlet = appended?.kind === 'offset-face' && appended.target && cur.doc.nodes[appended.parent.node]?.kind === 'sweep-curve'
+    ? `${appended.faces[0]} to ${appended.target.face} on ${appended.target.feature}` : undefined;
   const checkLabel = nested !== undefined ? 'root checks' : 'checks';
   const rootChecks = checks && `${checkLabel} ${checks.before.pass}/${checks.before.fail}/${checks.before.unknown} → ${checks.after.pass}/${checks.after.fail}/${checks.after.unknown}`;
   const approvalChange = !changes && !sheets.length && risk.approval.length ? `${risk.approval.join(', ')} change` : '';
-  const summary = [changes || approvalChange, ...stepChanges, ...sheets, rootChecks, local?.summary].filter(Boolean).join(', ') || 'no change';
+  const summary = [changes || approvalChange, boundOutlet, ...stepChanges, ...sheets, rootChecks, local?.summary].filter(Boolean).join(', ') || 'no change';
   return { ...run, checks, risk, summary };
 }
 export const countsOf = (s: { pass: number; fail: number; unknown: number }) => ({ pass: s.pass, fail: s.fail, unknown: s.unknown });

@@ -81,7 +81,7 @@ export const COMMAND_DOCS: Record<string, { selection: string; values: Record<st
     pathRevision: 'revision of that curve from query.summary; changed geometry requires a new proposal',
     representation: 'required: exact-straight for one straight segment, or exact for a 30°–120° circular arc with an optional tangent lead or tail, or with both. Exact also accepts two coplanar tangent circular arcs of opposite curvature or two coplanar tangent unequal-radius arcs that turn in the same direction (30°–120° per arc). One straight tangent span can separate two coplanar bends that turn in the same or opposite directions. A closed circle uses four rational quadratic quarter spans. Join any mixed path as rational quadratic spans. The path starts at the outer profile’s area centroid. Creates a new body.',
   } },
-  'offset-face': { selection: 'Distance: faces [source]. A paired line–arc–line Exact Sweep accepts a signed distance at its original straight inlet or outlet. A paired arc–line accepts its original straight outlet. An opposite-turn paired line–arc–line–arc–line Exact Sweep accepts its original straight inlet or outlet. To plane: faces [source, reference] in that order, on distinct current solids.', values: { offsetMode: 'distance (default) | to-plane (direct native source face and a parallel reference face)', d: 'distance along the face normal: + out (material added), − in (taken off)' } },
+  'offset-face': { selection: 'Distance: faces [source]. A paired line–arc–line Exact Sweep accepts a signed distance at its original straight inlet or outlet. A paired arc–line accepts its original straight outlet. An opposite-turn paired line–arc–line–arc–line Exact Sweep accepts its original straight inlet or outlet. To plane: faces [source, reference] in that order, on distinct current solids. On a paired Exact Sweep, only the original five-span outlet accepts To plane.', values: { offsetMode: 'distance (default) | to-plane (direct native source face and a parallel reference face)', d: 'distance along the face normal: + out (material added), − in (taken off)' } },
   'replace-face': { selection: 'Give faces [source, reference] on distinct current solids. The source can be a supported extrusion face, a straight cylinder or tube cap, a rectangular through-bore plate cap, or the original Exact semicylinder upper cap. The reference must be tilted.', values: {} },
   box: { selection: 'none (or a top face to stack on)', values: { w: 'width along X', d: 'depth along Y', h: 'height along Z', x: 'min corner X', y: 'min corner Y', z: 'base Z' } },
   cylinder: { selection: 'none', values: { r: 'radius', h: 'height', x: 'centre X', y: 'centre Y', z: 'base Z' } },
@@ -331,6 +331,12 @@ async function runCommandTool(state: ChatState, args: Record<string, unknown>, e
   const shown: Values = {};
   if (cutSource) shown.source = cutSource.source;
   for (const field of shownFields(fields, values)) shown[field.key] = field.kind === 'file' ? field.filename(values[field.key]) ?? 'Font file' : values[field.key];
+  const offset = next.nodes[state.doc.nodes.length];
+  if (toPlane && offset?.kind === 'offset-face' && offset.target && state.doc.nodes[offset.parent.node]?.kind === 'sweep-curve') {
+    shown.sourceFace = offset.faces[0];
+    shown.referenceFeature = offset.target.feature;
+    shown.referenceFace = offset.target.face;
+  }
   // (O14: a mount reports its row's source and its output axis — for a concentric mate, or set_frames as it is.)
   if (cmd.id === 'mount') {
     const row = mountRowsOf(state.doc).get(String(values.row))!, f = selection.faces[0], face = state.bodies[f.body].mesh.faces[f.face], k = [0, 1, 2].find(i => Math.abs(Math.abs(face.normal[i]) - 1) < 1e-6)!;
