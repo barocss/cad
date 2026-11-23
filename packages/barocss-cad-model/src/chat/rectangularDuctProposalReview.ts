@@ -14,7 +14,7 @@ import { canonical, canonicalOf, revisionOf } from '../util/revision';
 import { closedRectangularDuctEvidence } from './closedRectangularDuctEvidence';
 import { closedPairedRectangularDuctEvidence } from './closedPairedRectangularDuctEvidence';
 import { pairedArcLineDuctEvidence, pairedLineArcDuctEvidence } from './pairedLineArcDuctEvidence';
-import { pairedOppositeArcDuctEvidence, pairedSpacedArcDuctEvidence } from './pairedSpacedArcDuctEvidence';
+import { pairedOppositeArcDuctEvidence, pairedSameTurnArcDuctEvidence, pairedSpacedArcDuctEvidence } from './pairedSpacedArcDuctEvidence';
 import { directInspectionRevision } from './sweepSource';
 
 const near = (a: number, b: number) => Number.isFinite(a) && Number.isFinite(b) && Math.abs(a - b) <= CadNumericPolicy.linearTolerance;
@@ -201,7 +201,8 @@ export async function reviewedRectangularDuctEvidence(base: StudioDoc, candidate
       if (!closedCircle) {
         const evidence = pairedLineArcDuctEvidence(brep, path, source)
           ?? pairedArcLineDuctEvidence(brep, path, source)
-          ?? (threePieceDuct ? pairedSpacedArcDuctEvidence(brep, path, source) : pairedOppositeArcDuctEvidence(brep, path, source));
+          ?? (threePieceDuct ? pairedSpacedArcDuctEvidence(brep, path, source)
+            : pairedOppositeArcDuctEvidence(brep, path, source) ?? pairedSameTurnArcDuctEvidence(brep, path, source));
         if (!evidence) return;
         return { brep, rectangularDuct: { body, sketch: edit.sketch, path: edit.path, pathRevision: edit.pathRevision, ...evidence } };
       }

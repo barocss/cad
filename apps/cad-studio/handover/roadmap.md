@@ -1,13 +1,13 @@
 # CAD roadmap — current status and execution order
 
-Updated 2026-11-23 · Priority authority: D520 · Latest delivery: D1803 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
+Updated 2026-11-23 · Priority authority: D520 · Latest delivery: D1804 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
 
 This is the only current status index. Detailed tracks define acceptance; the 34 stable row pages retain scope and issue navigation. Immutable decision notes retain results. Do not append chronological status paragraphs here. [D520 decision](notes/cad-roadmap-replan-2026-11-04/README.md) supersedes D445 execution order and historical next-item text, while retaining its safeguards and bounded proofs.
 
 ## Now and next
 
-- **Current position:** [D1803](notes/exact-direct-same-turn-paired-duct-2026-11-23/README.md), P5 rows 07 and 16. Direct unequal-radius same-turn arcs now support two rectangular passages. Both mouths, 12 charted joins and editable Studio fresh Open pass. The B06 PDF group remains held.
-- **Next MAIN:** D1804, P5 rows [07](roadmap-rows/07.md) and [16](roadmap-rows/16.md), [#324](https://github.com/barocss/cad/issues/324). Bind pending Agent review of the directly joined unequal-radius same-turn duct to its native geometry, both images and explicit Studio approval through Save and fresh Open.
+- **Current position:** [D1804](notes/pending-direct-same-turn-paired-duct-review-2026-11-23/README.md), P5 rows 07 and 16. Pending Agent review verifies both mouths and all 12 tangent joins on the direct same-turn duct. Both images and the native body match explicit Studio approval and fresh Open.
+- **Next MAIN:** D1805, P5 rows [30](roadmap-rows/30.md) and [31](roadmap-rows/31.md), [#17](https://github.com/barocss/cad/issues/17). Move the original straight outlet of a paired arc–line Exact Sweep. Preserve the inlet, bend, both apertures and all native joins through signed edit, refusal and Studio fresh Open.
 - **Separate follow-ups:** Continue Studio App extraction in cohesive parts with affected desktop checks. [#608 Rendering](https://github.com/barocss/cad/issues/608) stays on HOLD. API inventory drift remains open. The issue tracker records [#126](https://github.com/barocss/cad/issues/126), [#613](https://github.com/barocss/cad/issues/613), [#152](https://github.com/barocss/cad/issues/152) and [#22](https://github.com/barocss/cad/issues/22) as closed.
 - **Active repository:** [barocss/cad](https://github.com/barocss/cad), based on `origin/main`. Fetch before work and preserve unexpected changes. The [migration record](../../../docs/migration/README.md) maps the former `local/cad-dev` history and issue numbers.
 - **Evidence correction:** D482 records2167 PASS/0 FAIL/2 existing SKIP in a later full-kernel run than D433. Neither result is a new full-suite PASS at this audit HEAD. [D482 record](notes/vertical-contact-refusal-2026-11-04/README.md).

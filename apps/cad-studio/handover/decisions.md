@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D1804: [Review both passages on a pending same-turn Sweep](notes/pending-direct-same-turn-paired-duct-review-2026-11-23/README.md), #324. Bind both apertures, all 12 tangent joins and both pinned Agent images to explicit Studio approval and fresh Open.
+
 - D1803: [Sweep two passages through directly joined same-turn bends](notes/exact-direct-same-turn-paired-duct-2026-11-23/README.md), #10. Retain 12 charted tangent joins and both passage identities through asymmetric edits, refusal and fresh Open.
 
 - D1802: [Extract the Studio measurement session and readouts](notes/studio-measurement-readout-ownership-2026-11-23/README.md), #44. Match face pin Save and fresh Open, mesh circle picks and center-of-mass lifecycle in three paired desktop flows.

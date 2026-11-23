@@ -60,8 +60,46 @@ function spacedArcs(path: Path) {
 }
 type Frame = NonNullable<ReturnType<typeof spacedArcs>>;
 
-/** Read only two directly joined opposite-turn carriers, independently of the native producer. */
-function oppositeArcs(path: Path): Frame | undefined {
+/** Reject a possible one-carrier normalization using independent circumcenters and whole-span bounds. */
+function singleCarrier(path: Path) {
+  const [start, p1, join, p3, end] = path.controlPoints.map(point => sub(point, path.controlPoints[0]));
+  const [, w1, , w3] = path.weights.map(weight => weight / path.weights[0]);
+  const midpoint = (a: Point, pole: Point, b: Point, weight: number) => scale(add(add(a, b), scale(pole, 2 * weight)), 1 / (2 + 2 * weight));
+  const chord = len(end), half = scale(end, .5), direction = unit(end);
+  for (const sample of [join, midpoint(start, p1, join, w1), midpoint(join, p3, end, w3)]) {
+    const normal = cross(end, sample), squared = dot(normal, normal);
+    if (!(squared > 0)) continue;
+    // Solve C·end=|end|²/2 and C·sample=|sample|²/2 in their common plane.
+    const center = scale(add(scale(cross(sample, normal), dot(end, end)), scale(cross(normal, end), dot(sample, sample))), 1 / (2 * squared));
+    const sagitta = sub(sub(sample, half), scale(direction, dot(sub(sample, half), direction))), height = len(sagitta);
+    if (!(height > tolerance)) continue;
+    const centers = [center, ...[Math.PI / 6, Math.PI / 2, 2 * Math.PI / 3]
+      .map(angle => sub(half, scale(sagitta, chord / (2 * height * Math.tan(angle / 2)))))];
+    for (const candidate of centers) {
+      const radius = len(candidate), radial = scale(candidate, -1), last = sub(end, candidate), joint = sub(join, candidate);
+      if (!(radius > tolerance && len(joint) > tolerance)) continue;
+      let axis = unit(normal), tangent = unit(cross(axis, radial));
+      if (dot(tangent, sub(p1, start)) < 0) { axis = scale(axis, -1); tangent = scale(tangent, -1); }
+      const angleOf = (ray: Point) => { const angle = Math.atan2(dot(ray, tangent), dot(ray, scale(radial, 1 / radius))); return angle > 0 ? angle : angle + 2 * Math.PI; };
+      const rawAngle = angleOf(last), angle = Math.max(Math.PI / 6, Math.min(2 * Math.PI / 3, rawAngle)), firstAngle = angleOf(joint);
+      if (radius * Math.abs(rawAngle - angle) > tolerance || !(firstAngle > 0 && firstAngle < angle)) continue;
+      const projectedJoin = add(candidate, scale(joint, radius / len(joint))), correction = len(sub(projectedJoin, join));
+      const endpointCorrection = radius * Math.abs(rawAngle - angle);
+      const fits = (a: Point, pole: Point, b: Point, turn: number, weight: number) => {
+        const canonicalWeight = Math.cos(turn / 2), ray = sub(a, candidate), forward = unit(cross(axis, ray));
+        const canonicalPole = add(a, scale(forward, radius * Math.tan(turn / 2)));
+        const diameter = Math.max(len(sub(a, b)), .5 * len(sub(a, b)) / canonicalWeight);
+        const weightCorrection = .5 * Math.abs(weight - canonicalWeight) * diameter / Math.min(1, weight, canonicalWeight);
+        return Math.max(correction, endpointCorrection, len(sub(pole, canonicalPole))) + weightCorrection <= tolerance;
+      };
+      if (fits(start, p1, projectedJoin, firstAngle, w1) && fits(projectedJoin, p3, end, angle - firstAngle, w3)) return true;
+    }
+  }
+  return false;
+}
+
+/** Read two directly joined carriers of one requested turn, independently of the native producer. */
+function directArcs(path: Path, turn: -1 | 1): Frame | undefined {
   const { degree, knots, controlPoints: points, weights } = path;
   if (degree !== 2 || points.length !== 5 || weights.length !== 5 || knots.length !== 8
     || points.some(point => point.length !== 3 || point.some(value => !Number.isFinite(value) || Math.abs(value) > CadNumericPolicy.coordinateAbs))
@@ -72,15 +110,17 @@ function oppositeArcs(path: Path): Frame | undefined {
   const first = arc(points[0], points[1], points[2], weights[1] / weights[0]);
   const second = arc(points[2], points[3], points[4], weights[3] / weights[0]);
   if (!first || !second) return;
+  // The native producer tries one-carrier normalization before its equal-radius guard.
+  if (turn === 1 && (singleCarrier(path) || Math.abs(first.radius - second.radius) <= tolerance)) return;
   const lead = sub(points[2], points[1]), tail = sub(points[3], points[2]);
   // The direct producer's tangent test uses coordinate roundoff, not the wider linear tolerance.
   const roundoff = 256 * Number.EPSILON * Math.max(1, ...points.flatMap(point => point.map(Math.abs)), first.radius, second.radius);
   const angular = Math.min(CadNumericPolicy.relativeComparison, roundoff / Math.min(len(lead), len(tail)));
-  const inwardError = len(add(first.exitInward, second.inward));
+  const inwardError = turn === -1 ? len(add(first.exitInward, second.inward)) : len(sub(first.exitInward, second.inward));
   if ([unit(lead), unit(tail), second.tangent].some(tangent => len(sub(first.exitTangent, tangent)) > angular)
     || inwardError > angular
     || 2 * second.radius * (inwardError + len(sub(first.exitTangent, second.tangent))) > tolerance) return;
-  return { first, second, length: 0, turn: -1, start: first.start, end: second.end, tangent: first.tangent, inward: first.inward,
+  return { first, second, length: 0, turn, start: first.start, end: second.end, tangent: first.tangent, inward: first.inward,
     axis: unit(cross(first.tangent, first.inward)), radius: Math.min(first.radius, second.radius) };
 }
 
@@ -178,9 +218,9 @@ function walls(brep: Brep, feature: string, frame: Frame, section: Section, inwa
 }
 
 /** Common native wall, mouth, join and mass checks for the two bounded arc producers. */
-function pairedArcDuctEvidence(brep: Brep, path: Path, source: Source, direct: boolean) {
+function pairedArcDuctEvidence(brep: Brep, path: Path, source: Source, direct: boolean, turn: -1 | 1 = -1) {
   try {
-    const frame = direct ? oppositeArcs(path) : spacedArcs(path), sizes = frame && sections(source, frame), feature = brep.source.id;
+    const frame = direct ? directArcs(path, turn) : spacedArcs(path), sizes = frame && sections(source, frame), feature = brep.source.id;
     if (!frame || !sizes || brep.source.family !== 'sweep-curve' || !feature || brep.bodies.length !== 1
       || brep.bodies[0].kind !== 'solid' || brep.shells.length !== 1 || !brep.shells[0].closed
       || brep.bodies[0].shells.length !== 1 || brep.bodies[0].shells[0] !== brep.shells[0].id
@@ -313,7 +353,16 @@ export function pairedSpacedArcDuctEvidence(brep: Brep, path: Path, source: Sour
 
 /** Native review for exactly two passages on directly joined opposite-turn circular arcs. */
 export function pairedOppositeArcDuctEvidence(brep: Brep, path: Path, source: Source) {
-  const evidence = pairedArcDuctEvidence(brep, path, source, true);
+  return directDuctEvidence(brep, path, source, -1);
+}
+
+/** Native review for exactly two passages on directly joined unequal-radius same-turn circular arcs. */
+export function pairedSameTurnArcDuctEvidence(brep: Brep, path: Path, source: Source) {
+  return directDuctEvidence(brep, path, source, 1);
+}
+
+function directDuctEvidence(brep: Brep, path: Path, source: Source, turn: -1 | 1) {
+  const evidence = pairedArcDuctEvidence(brep, path, source, true, turn);
   if (!evidence) return;
   const { firstRadius, secondRadius, firstSweepRadians, secondSweepRadians, exterior, axialWeb } = evidence.throughApertures.dimensions;
   return { ...evidence, pathKind: 'two-arc' as const, throughApertures: { ...evidence.throughApertures,
