@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D1811: [Review the pending four-span paired duct](notes/pending-four-span-paired-duct-review-2026-11-23/README.md), #324. Bind both mouths and 36 charted joins to the original rail and both Agent images through explicit approval and fresh Open.
+
 - D1810: [Sweep two rectangular passages through four planar spans](notes/exact-four-span-paired-duct-sweep-2026-11-23/README.md), #10. Verify both mouths and 36 charted joints through Studio edits, local Agent approval and fresh Open.
 
 - D1809: [Review a pending paired duct inlet Offset](notes/pending-paired-inlet-offset-review-2026-11-23/README.md), #324. Bind the moved inlet, retained outlet, signed material change and both images to the original rail and explicit Studio approval.

@@ -18,7 +18,6 @@ const sameTurn = !!lead || spacedSameTurn || directSameTurn;
 const oppositeArcs = process.argv.includes('--opposite-arcs');
 const arcAndLine = process.argv.includes('--arc-and-line');
 assert.ok([!!lead, spacedSameTurn, spacedOpposite, !!tail, oppositeArcs, directSameTurn, arcAndLine].filter(Boolean).length <= 1);
-assert.ok(!lead || (!review && !reviewBaseline));
 const directArcs = oppositeArcs || directSameTurn;
 const revolvedEnds = spaced || directArcs;
 const forwardEnds = [
@@ -83,7 +82,7 @@ if (review || reviewBaseline) pins.push(
 );
 const f = await createFlow({
   name: spaced ? 'exact-spaced-paired-duct' : 'exact-line-arc-paired-duct', output: process.argv[2],
-  envFrozen: lead ? 'D1810_SOURCE_FROZEN' : directSameTurn ? (review || reviewBaseline ? 'D1804_SOURCE_FROZEN' : 'D1803_SOURCE_FROZEN') : arcAndLine ? (review || reviewBaseline ? 'D1801_SOURCE_FROZEN' : 'D1800_SOURCE_FROZEN') : oppositeArcs ? (review || reviewBaseline ? 'D1799_SOURCE_FROZEN' : 'D1798_SOURCE_FROZEN') : sameTurn ? (review || reviewBaseline ? 'D1796_SOURCE_FROZEN' : 'D1795_SOURCE_FROZEN') : spaced ? (review || reviewBaseline ? 'D1794_SOURCE_FROZEN' : 'D1792_SOURCE_FROZEN') : (review || reviewBaseline)
+  envFrozen: lead ? (review || reviewBaseline ? 'D1811_SOURCE_FROZEN' : 'D1810_SOURCE_FROZEN') : directSameTurn ? (review || reviewBaseline ? 'D1804_SOURCE_FROZEN' : 'D1803_SOURCE_FROZEN') : arcAndLine ? (review || reviewBaseline ? 'D1801_SOURCE_FROZEN' : 'D1800_SOURCE_FROZEN') : oppositeArcs ? (review || reviewBaseline ? 'D1799_SOURCE_FROZEN' : 'D1798_SOURCE_FROZEN') : sameTurn ? (review || reviewBaseline ? 'D1796_SOURCE_FROZEN' : 'D1795_SOURCE_FROZEN') : spaced ? (review || reviewBaseline ? 'D1794_SOURCE_FROZEN' : 'D1792_SOURCE_FROZEN') : (review || reviewBaseline)
     ? (tail ? 'D1787_SOURCE_FROZEN' : 'D1783_SOURCE_FROZEN')
     : (tail ? 'D1786_SOURCE_FROZEN' : 'D1782_SOURCE_FROZEN'),
   initialFiles: pins, requiredFrozen: pins,
@@ -306,7 +305,7 @@ async function approveWithAgent(source, expected) {
     }
     if (review) {
       const pending = await readFile(file);
-      const result = await reviewPendingPairedDuct(f, call, request, expectedRevision, rail.revision, expected, sideTags, { tail, spaced, sameTurn, directArcs, arcAndLine });
+      const result = await reviewPendingPairedDuct(f, call, request, expectedRevision, rail.revision, expected, sideTags, { lead, tail, spaced, sameTurn, directArcs, arcAndLine });
       assert.deepEqual(await readFile(file), pending);
       return result;
     }
