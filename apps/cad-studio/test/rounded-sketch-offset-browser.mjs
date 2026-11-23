@@ -1159,7 +1159,10 @@ async function verifyInsetEdits(stock, candidate, check) {
   await f.page.evaluate(() => window.__holdInset.arm());
   await apply(2.5);
   await f.page.waitForFunction(() => window.__holdInset.held()?.ok === true);
-  await open(stock);
+  await chooseFile(stock);
+  const exit = f.page.getByRole('dialog', { name: 'Discard feature changes?', exact: true });
+  await button(exit, 'Discard changes').click();
+  await f.same(stock);
   const replacement = await f.snapshot('15-replacement-before-late-reply');
   await f.page.evaluate(() => window.__holdInset.release());
   const after = await f.snapshot('16-replacement-after-late-reply');

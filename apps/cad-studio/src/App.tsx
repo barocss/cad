@@ -101,7 +101,7 @@ import { useRouteBundleEditor } from './state/useRouteBundleEditor';
 import { cutPatternSourceLabel, earlierRectangularCutSource, isCutPattern, selectedCutPatternSource } from './app/cutPatternSource';
 import { moveRenderAppearance } from './app/moveRenderAppearance';
 import { curvePatternInputKey, curvePatternDocumentProblem, directCommandDocument, insertedCurvePartProblem, prepareDirectCurveCandidate, type DirectCurveEdit } from './app/directCurveCandidate';
-import { LINKED_INSET_EXTRUDE } from './app/roundedInsetCommand';
+import { createRoundedInsetHistoryEdit, LINKED_INSET_EXTRUDE } from './app/roundedInsetCommand';
 import { ReferenceDecisions } from './ui/ReferenceDecisions';
 import { useRobotExports } from './robot/useRobotExports';
 import { RobotInspector } from './robot/RobotInspector';
@@ -118,8 +118,7 @@ import { StepExportPanel } from './files/StepExportPanel';
 import { changesBeyondVariability } from './app/documentChanges';
 import { sameMeshes, withMasses, samePlacement, meshVolume } from './app/bodyResults';
 import { activateDraftBezier, activateDraftOutline, draftShapeOrder, sketchCutInputs, TOOLS, sketchRegion } from './app/sketchControls';
-import { detachRoundedInsetRecipe, resizeRoundedInsetSource, roundedInsetSourceWidth, validateRoundedInsetDocument } from '@barocss/cad-model/sketch/internal/roundedInsetRecipe';
-import { roundedInsetMinimumSpan } from '@barocss/cad-model/sketch/internal/roundedRectangleInset';
+import { validateRoundedInsetDocument } from '@barocss/cad-model/sketch/internal/roundedInsetRecipe';
 import { activeKey, historyHandleIsCurrent, type Active } from './app/commandState';
 import { emptySel, NO_CUTS, NO_INSTANCES, BROWSER_PLACEMENT, PALETTE_EXTRA } from './app/studioConstants';
 import { routeMessage } from './app/routeSession';
@@ -1064,37 +1063,10 @@ export function App() {
     workOwnership.current = beginWork(workOwnership.current, doc, candidate.input, true);
     parameterEditNow.current = edit; setParameterEdit(edit); setBusy(true);
   }, [doc, bodiesFor, massReady, commit]);
-  const applyRoundedInsetEdit = (nodes?: ModelNode[], sourceWidth?: number) => {
-    if (!canChangeDocument()) return;
-    const [source, current, extrude] = doc.nodes, draft = nodes?.[1];
-    if (editNode !== 2 || doc.nodes.length !== 3 || source?.kind !== 'sketch' || current?.kind !== 'rounded-rectangle-inset'
-      || extrude?.kind !== 'extrude' || extrude.sketch !== 1) return;
-    const changesWidth = sourceWidth !== undefined && sourceWidth !== roundedInsetSourceWidth(source);
-    const failureTitle = !nodes ? 'Inset not detached' : changesWidth ? 'Inset source width not changed' : 'Inset distance not changed';
-    if (markerNow.current !== null || shownVariant.current || !fresh || busy) {
-      setToast({ title: failureTitle, hint: 'Show the master at the latest History and wait for the part.', detail: '' });
-      return;
-    }
-    try {
-      let next: StudioDoc;
-      if (!nodes) next = detachRoundedInsetRecipe(doc);
-      else {
-        if (draft?.kind !== 'rounded-rectangle-inset' || (!changesWidth && draft.insetMM === current.insetMM)) return;
-        const resized = changesWidth ? resizeRoundedInsetSource(source, sourceWidth) : source;
-        const recipe = draft.insetMM === current.insetMM ? current : { ...current, insetMM: draft.insetMM };
-        next = { ...doc, nodes: [resized, recipe, extrude] };
-      }
-      stageFeatureCandidate({ next, input: prefixDoc(next, next.nodes.length), failureTitle, roundedInset: nodes ? 'edit' : 'detach' });
-    } catch (error) {
-      const radius = isRefusal(error, 'BAD_REFERENCE') && error.details?.roundedInsetSourceRadius;
-      if (typeof radius === 'number') {
-        const display = (value: number) => Number(value.toPrecision(12));
-        setToast({ title: failureTitle,
-          hint: `With a ${display(radius)} mm corner radius, the straight span must exceed ${roundedInsetMinimumSpan} mm. Increase Source width above ${display(2 * radius + roundedInsetMinimumSpan)} mm.`,
-          detail: '' });
-      } else setToast({ title: failureTitle, hint: error instanceof Error ? error.message : String(error), detail: '' });
-    }
-  };
+  const applyRoundedInsetEdit = createRoundedInsetHistoryEdit({
+    doc, index: editNode, canChangeDocument, ready: () => markerNow.current === null && !shownVariant.current && fresh && !busy,
+    stage: stageFeatureCandidate, notice: setToast,
+  });
   /** One undoable change of the direct geometry (the model stays as evaluated). */
   const commitDirect = useCallback((next: DirectGeometry, select?: string[], edit?: DirectCurveEdit) => {
     if (!canChangeDocument()) return false;

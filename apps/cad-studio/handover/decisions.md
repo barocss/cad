@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1857: [Extract the rounded inset History edit action](notes/studio-rounded-inset-history-edit-2026-11-24/README.md), #44. Verify distance, source width, Detach and late document replacement in desktop Studio.
 - D1856: [Pin both Agent images of the plane-bound outlet](notes/pinned-outlet-reference-review-2026-11-24/README.md), #324. Verify the actual donor plane and exact native candidate in both pinned views through explicit Studio approval.
 - D1855: [Review and approve a plane-bound outlet through the local Agent](notes/agent-five-span-outlet-reference-plane-2026-11-24/README.md), #324. Report both resolved faces, refuse the stale donor proposal and reopen the exact approved model.
 - D1854: [Bind the original five-span outlet to a parallel native reference](notes/five-span-outlet-reference-plane-2026-11-24/README.md), #17. Move the reference, reselect its other face and preserve both passages and all 48 joins in Studio.
