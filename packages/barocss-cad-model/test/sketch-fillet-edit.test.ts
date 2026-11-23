@@ -243,3 +243,111 @@ test('remote circles stay fixed, resolvable small radii work, and nonincident ar
   assert.match((editFilletRadius(roundedSource, 1, 10) as { error: string }).error, /touch|cross/);
   assert.deepEqual(roundedSource, before);
 });
+
+function obliqueFillet(reflex = false, reflected = false): Polygon {
+  // Authored saved outlines: these rational contacts do not use the edit helper's setback formula.
+  const points: P2[] = reflex
+    ? [[0, 0], [60, 0], [60, 45], [40, 45], [40, 23], [37.6, 18.2], [20, 5], [0, 5]]
+    : [[0, 0], [28, 0], [31.6, 1.2], [50, 15], [50, 45], [0, 45]];
+  const edge = reflex ? 4 : 1, angle = reflex ? Math.atan2(4, 3) : Math.atan2(3, 4);
+  if (reflected) for (const point of points) point[1] = point[1] ? -point[1] : 0;
+  const fixed = reflex ? [0, 1, 2, 3, 6, 7] : [0, 3, 4, 5];
+  return { kind: 'polygon', closed: true, points,
+    bulges: points.map((_, i) => i === edge ? (reflex !== reflected ? -1 : 1) * Math.tan(angle / 4) : 0),
+    radii: { [edge]: 6 }, tangents: [edge, edge + 1], equalRadii: [], concentric: [],
+    hv: reflex ? { h: [0, 2, 6], v: [1, 3, 7] } : { h: [0, 4], v: [3, 5] },
+    ids: reflex ? ['e1', 'e2', 'e3', 'e4', 'e8', 'e5', 'e6', 'e7'] : ['e1', 'e6', 'e2', 'e3', 'e4', 'e5'],
+    // The saved carriers no longer share a point: their angle uses drawn directions, not the interior angle.
+    rules: [{ kind: 'angle', a: edge - 1, b: edge + 1, value: angle * 180 / Math.PI },
+      ...fixed.map(point => ({ kind: 'fix' as const, point, at: [...points[point]] as P2 }))] };
+}
+
+function retainedFillet(source: Polygon, shape: Polygon, edge: number) {
+  for (const key of ['ids', 'rules', 'lengths', 'hv', 'tangents'] as const)
+    assert.deepEqual(shape[key], source[key], key);
+  for (const key of ['equalRadii', 'concentric'] as const) assert.deepEqual(shape[key] ?? [], source[key] ?? [], key);
+  for (let i = 0; i < source.points.length; i++) {
+    if (i !== edge && i !== edge + 1) assert.deepEqual(shape.points[i], source.points[i]);
+    near(shape.bulges![i], source.bulges![i], 1e-9);
+  }
+}
+
+test('saved oblique R6 to R12 preserves fixed carriers, angle rule and native identity in either winding', () => {
+  const angle = Math.atan2(3, 4), area = (r: number) => 2100 - r * r * (1 / 3 - angle / 2);
+  for (const reflected of [false, true]) for (const reversedRule of [false, true]) {
+    const authored = obliqueFillet(false, reflected);
+    if (reversedRule) authored.rules![0] = { kind: 'angle', a: 2, b: 0, value: angle * 180 / Math.PI };
+    const source = native(authored, 10 * area(6)).shape, before = structuredClone(source);
+    assert.equal(savedFilletRadius(source, 1), 6);
+    assert.equal(resized(source, 1, 6), source);
+    const shape = resized(source, 1, 12), sign = reflected ? -1 : 1;
+    assert.deepEqual(shape.points, [[0, 0], [26, 0], [33.2, 2.4 * sign], [50, 15 * sign], [50, 45 * sign], [0, 45 * sign]]);
+    assert.deepEqual(shape.radii, { 1: 12 }); retainedFillet(source, shape, 1);
+    const arc = arcOf(shape.points[1], shape.points[2], shape.bulges![1]);
+    nearPoint(arc.center, [26, 12 * sign]); near(arc.radius, 12); near(arc.sweep, angle * sign);
+    // Both contact distances are 4 = R12 / 3, not R12 and not R12 * tan(interior / 2).
+    near(Math.hypot(shape.points[1][0] - 30, shape.points[1][1]), 4);
+    near(Math.hypot(shape.points[2][0] - 30, shape.points[2][1]), 4);
+    const { shape: reopened, body } = native(shape, 10 * area(12));
+    const incoming = faceGeometry(body.brep.faces.find(face => face.name === 'n1.side[e1]')!);
+    const outgoing = faceGeometry(body.brep.faces.find(face => face.name === 'n1.side[e2]')!);
+    assert.equal(incoming.kind, 'plane'); assert.equal(outgoing.kind, 'plane');
+    near(incoming.o[1], 0);
+    // The unchanged oblique carrier is 3*x - sign*4*y = 90.
+    near(3 * outgoing.o[0] - sign * 4 * outgoing.o[1], 90);
+    const back = resized(reopened, 1, 6); assert.deepEqual(back.points, source.points);
+    retainedFillet(source, back, 1); native(back, 10 * area(6)); assert.deepEqual(source, before);
+  }
+});
+
+test('saved reflex oblique Fillet retains its negative local turn and increases native area', () => {
+  const angle = Math.atan2(4, 3), area = (r: number) => 1250 + r * r * (1 / 2 - angle / 2);
+  for (const reflected of [false, true]) {
+    const source = native(obliqueFillet(true, reflected), 10 * area(6)).shape, before = structuredClone(source);
+    for (const radius of [9, 12]) {
+      const shape = resized(source, 4, radius), sign = reflected ? -1 : 1;
+      nearPoint(shape.points[4], [40, (20 + radius / 2) * sign]);
+      nearPoint(shape.points[5], [40 - 2 * radius / 5, (20 - 3 * radius / 10) * sign]);
+      retainedFillet(source, shape, 4);
+      const arc = arcOf(shape.points[4], shape.points[5], shape.bulges![4]);
+      nearPoint(arc.center, [40 - radius, (20 + radius / 2) * sign]); near(arc.sweep, -angle * sign);
+      assert.equal(savedFilletRadius(shape, 4), radius); native(shape, 10 * area(radius));
+    }
+    assert.deepEqual(source, before);
+  }
+});
+
+test('oblique Fillet refuses missing or mismatched carrier angles and inconsistent stored arcs', () => {
+  const source = obliqueFillet(), angle = Math.atan2(3, 4) * 180 / Math.PI;
+  const rules = source.rules!.slice(1);
+  const cases: Polygon[] = [
+    { ...source, rules },
+    ...[NaN, Infinity, 0, 180, 180 - angle, angle + 1].map(value => ({ ...source, rules: [{ kind: 'angle' as const, a: 0, b: 2, value }, ...rules] })),
+    { ...source, rules: [{ kind: 'angle', a: 0, b: 3, value: angle }, ...rules] },
+    { ...source, tangents: [1] }, { ...source, radii: { 1: 7 } },
+    { ...source, bulges: source.bulges!.map(b => -b) },
+    { ...source, bulges: source.bulges!.map(b => b * 0.9) },
+    { ...source, points: source.points.map((p, i) => i === 2 ? [p[0], p[1] + 0.1] : p) },
+  ];
+  for (const shape of cases) {
+    const before = structuredClone(shape); assert.equal(savedFilletRadius(shape, 1), undefined);
+    assert.ok('error' in editFilletRadius(shape, 1, 12)); assert.deepEqual(shape, before);
+  }
+});
+
+test('oblique oversized and cross-constrained radius edits refuse atomically', () => {
+  const source = obliqueFillet();
+  const conflicts: Polygon[] = [source,
+    { ...source, rules: [...source.rules!, { kind: 'fix', point: 1, at: [28, 0] }] },
+    { ...source, lengths: { 0: 28 } },
+    { ...source, rules: [...source.rules!, { kind: 'distance', a: 1, b: 3, value: Math.hypot(22, 15) }] },
+    { ...source, circles: [{ c: [29, 0.3], r: 0.1 }] },
+  ];
+  for (const [i, shape] of conflicts.entries()) {
+    const before = structuredClone(shape);
+    for (const value of i ? [12] : [NaN, Infinity, -1, 0, 0.009, 75, 90, 100]) {
+      assert.ok('error' in editFilletRadius(shape, 1, value), `${i}: R${value}`);
+      assert.deepEqual(shape, before);
+    }
+  }
+});

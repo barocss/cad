@@ -23,8 +23,8 @@ function midpointTravel(source: Polygon, edge: number, operation: SizeOperation,
     const arc = arcOf(a, b, bulge);
     const angle = arc.start + arc.sweep / 2;
     const x = Math.cos(angle), y = Math.sin(angle);
-    // The orthogonal Fillet midpoint moves away from its fixed corner as the radius grows.
-    const growth = 1 - Math.SQRT2;
+    // The arc center travels one secant per unit radius along the corner bisector.
+    const growth = 1 - 1 / Math.cos(arc.sweep / 2);
     return { midpoint: [arc.center[0] + size * x, arc.center[1] + size * y], step: [growth * x, growth * y] };
   }
   const previous = source.points[(edge - 1 + n) % n], next = source.points[(edge + 2) % n];

@@ -3,6 +3,7 @@ import { circleRelation } from './loops';
 import { arcOf, outlineSegments, type P2 } from './profile';
 import { checkEdit, hvOf, solveShape, type Polygon } from './rules';
 import { settleShape } from './settle';
+import { edgeAngle } from './terms';
 import { arcMeetsOtherOutline, sideMeetsOtherOutline } from './trim';
 
 const tolerance = 2e-6;
@@ -11,7 +12,7 @@ const vector = (a: P2, b: P2): P2 => [b[0] - a[0], b[1] - a[1]];
 const dot = (a: P2, b: P2) => a[0] * b[0] + a[1] * b[1];
 const cross = (a: P2, b: P2) => a[0] * b[1] - a[1] * b[0];
 const finitePoint = (p: P2) => Array.isArray(p) && p.length === 2 && p.every(Number.isFinite);
-type Fillet = { radius: number; corner: P2; incoming: P2; outgoing: P2; turn: number };
+type Fillet = { radius: number; corner: P2; incoming: P2; outgoing: P2; turn: number; setbackPerRadius: number };
 
 function inspect(source: Polygon, edge: number): Fillet | undefined {
   const n = source.points.length;
@@ -28,26 +29,34 @@ function inspect(source: Polygon, edge: number): Fillet | undefined {
   const orthogonal = (hv.h.includes(prev) && hv.v.includes(next)) || (hv.v.includes(prev) && hv.h.includes(next))
     || source.rules?.some(rule => rule.kind === 'perpendicular'
       && ((rule.a === prev && rule.b === next) || (rule.a === next && rule.b === prev)));
-  if (!orthogonal) return;
+  const angleRule = !orthogonal && source.rules?.some(rule => rule.kind === 'angle'
+    && ((rule.a === prev && rule.b === next) || (rule.a === next && rule.b === prev))
+    && Number.isFinite(rule.value) && rule.value > 0 && rule.value < 180
+    && Math.abs(edgeAngle(source.points, rule.a, rule.b).degrees - rule.value) * Math.PI / 180 <= 1e-6);
+  if (!orthogonal && !angleRule) return;
   const a = source.points[edge], b = source.points[next];
   const u = vector(source.points[prev], a), v = vector(b, source.points[(next + 1) % n]);
   const lu = Math.hypot(...u), lv = Math.hypot(...v);
   if (Math.min(lu, lv) < ExtrudedProfileLimits.minimumLengthMM) return;
   const incoming: P2 = [u[0] / lu, u[1] / lu], outgoing: P2 = [v[0] / lv, v[1] / lv];
-  if (Math.abs(dot(incoming, outgoing)) > 1e-6) return;
-  const along = cross(vector(a, b), outgoing) / cross(incoming, outgoing);
+  const sine = cross(incoming, outgoing), cosine = dot(incoming, outgoing);
+  if (orthogonal ? Math.abs(cosine) > 1e-6 : Math.abs(sine) <= 1e-6) return;
+  // Keep the established orthogonal branch exact; oblique contacts use the traveled turn.
+  const sweep = orthogonal ? Math.PI / 2 : Math.abs(Math.atan2(sine, cosine));
+  const setbackPerRadius = orthogonal ? 1 : Math.tan(sweep / 2), contact = radius! * setbackPerRadius;
+  const along = cross(vector(a, b), outgoing) / sine;
   const corner: P2 = [a[0] + incoming[0] * along, a[1] + incoming[1] * along];
-  const arc = arcOf(a, b, bulge), turn = Math.sign(cross(incoming, outgoing));
+  const arc = arcOf(a, b, bulge), turn = Math.sign(sine);
   if (!finitePoint(corner) || turn !== Math.sign(bulge)
     || dot(vector(a, corner), incoming) <= tolerance || dot(vector(corner, b), outgoing) <= tolerance
-    || Math.abs(distance(a, corner) - radius!) > tolerance || Math.abs(distance(b, corner) - radius!) > tolerance
-    || Math.abs(arc.radius - radius!) > tolerance || Math.abs(Math.abs(arc.sweep) - Math.PI / 2) > 1e-6
+    || Math.abs(distance(a, corner) - contact) > tolerance || Math.abs(distance(b, corner) - contact) > tolerance
+    || Math.abs(arc.radius - radius!) > tolerance || Math.abs(Math.abs(arc.sweep) - sweep) > 1e-6
     || Math.abs(dot(vector(a, arc.center), incoming)) > tolerance
     || Math.abs(dot(vector(b, arc.center), outgoing)) > tolerance) return;
-  return { radius: radius!, corner, incoming, outgoing, turn };
+  return { radius: radius!, corner, incoming, outgoing, turn, setbackPerRadius };
 }
 
-/** Discover a saved radius-locked Fillet tangent to two constrained orthogonal straight carriers. */
+/** Discover a saved radius-locked Fillet tangent to two orthogonal or explicitly angle-constrained straight carriers. */
 export function savedFilletRadius(source: Polygon, edge: number): number | undefined {
   return inspect(source, edge)?.radius;
 }
@@ -57,10 +66,10 @@ export function editFilletRadii(source: Polygon, edges: readonly number[], value
   const selected: { edge: number; radius: number }[] = [];
   for (const edge of new Set(edges)) {
     const radius = savedFilletRadius(source, edge);
-    if (radius === undefined) return { error: 'Select saved, constrained orthogonal Fillets.' };
+    if (radius === undefined) return { error: 'Select saved Fillets between constrained straight lines.' };
     selected.push({ edge, radius });
   }
-  if (!selected.length) return { error: 'Select saved, constrained orthogonal Fillets.' };
+  if (!selected.length) return { error: 'Select saved Fillets between constrained straight lines.' };
   // Shrink larger radii before growing smaller ones on a shared carrier. Equal radii retain selection order.
   selected.sort((a, b) => b.radius - a.radius);
   let shape = source;
@@ -75,7 +84,7 @@ export function editFilletRadii(source: Polygon, edges: readonly number[], value
 /** Resize one saved Fillet while retaining its carriers and every other sketch element. */
 export function editFilletRadius(source: Polygon, edge: number, value: number): { shape: Polygon } | { error: string } {
   const plan = inspect(source, edge);
-  if (!plan) return { error: 'Select a saved, constrained orthogonal Fillet.' };
+  if (!plan) return { error: 'Select a saved Fillet between constrained straight lines.' };
   if (!Number.isFinite(value) || value < ExtrudedProfileLimits.minimumRadiusMM)
     return { error: `Enter a finite radius of at least ${ExtrudedProfileLimits.minimumRadiusMM} mm.` };
   if (value === plan.radius) return { shape: source };
@@ -86,8 +95,9 @@ export function editFilletRadius(source: Polygon, edge: number, value: number): 
     return { error: 'The saved sketch must satisfy its current constraints before editing the Fillet.' };
   const n = source.points.length, next = (edge + 1) % n, prev = (edge - 1 + n) % n;
   const points = source.points.map(p => [...p] as P2);
-  points[edge] = [plan.corner[0] - plan.incoming[0] * value, plan.corner[1] - plan.incoming[1] * value];
-  points[next] = [plan.corner[0] + plan.outgoing[0] * value, plan.corner[1] + plan.outgoing[1] * value];
+  const contact = value * plan.setbackPerRadius;
+  points[edge] = [plan.corner[0] - plan.incoming[0] * contact, plan.corner[1] - plan.incoming[1] * contact];
+  points[next] = [plan.corner[0] + plan.outgoing[0] * contact, plan.corner[1] + plan.outgoing[1] * contact];
   // Point zero is the implicit sketch anchor, including either endpoint of a wraparound arc.
   if (distance(points[0], source.points[0]) > tolerance) return { error: 'This Fillet would move the sketch anchor.' };
   const candidate: Polygon = { ...source, points, hv: hvOf(source), radii: { ...source.radii, [edge]: value } };
