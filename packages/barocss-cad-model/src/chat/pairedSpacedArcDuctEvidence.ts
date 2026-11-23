@@ -60,6 +60,30 @@ function spacedArcs(path: Path) {
 }
 type Frame = NonNullable<ReturnType<typeof spacedArcs>>;
 
+/** Read only two directly joined opposite-turn carriers, independently of the native producer. */
+function oppositeArcs(path: Path): Frame | undefined {
+  const { degree, knots, controlPoints: points, weights } = path;
+  if (degree !== 2 || points.length !== 5 || weights.length !== 5 || knots.length !== 8
+    || points.some(point => point.length !== 3 || point.some(value => !Number.isFinite(value) || Math.abs(value) > CadNumericPolicy.coordinateAbs))
+    || weights.some(value => !Number.isFinite(value) || value <= 0) || knots.some(value => !Number.isFinite(value))
+    || weights[0] !== weights[2] || weights[2] !== weights[4]
+    || knots[0] !== knots[1] || knots[1] !== knots[2] || knots[3] !== knots[4]
+    || knots[5] !== knots[6] || knots[6] !== knots[7] || !(knots[2] < knots[3] && knots[3] < knots[5])) return;
+  const first = arc(points[0], points[1], points[2], weights[1] / weights[0]);
+  const second = arc(points[2], points[3], points[4], weights[3] / weights[0]);
+  if (!first || !second) return;
+  const lead = sub(points[2], points[1]), tail = sub(points[3], points[2]);
+  // The direct producer's tangent test uses coordinate roundoff, not the wider linear tolerance.
+  const roundoff = 256 * Number.EPSILON * Math.max(1, ...points.flatMap(point => point.map(Math.abs)), first.radius, second.radius);
+  const angular = Math.min(CadNumericPolicy.relativeComparison, roundoff / Math.min(len(lead), len(tail)));
+  const inwardError = len(add(first.exitInward, second.inward));
+  if ([unit(lead), unit(tail), second.tangent].some(tangent => len(sub(first.exitTangent, tangent)) > angular)
+    || inwardError > angular
+    || 2 * second.radius * (inwardError + len(sub(first.exitTangent, second.tangent))) > tolerance) return;
+  return { first, second, length: 0, turn: -1, start: first.start, end: second.end, tangent: first.tangent, inward: first.inward,
+    axis: unit(cross(first.tangent, first.inward)), radius: Math.min(first.radius, second.radius) };
+}
+
 function sections(source: Source, frame: Frame) {
   const finite = (value: number) => Number.isFinite(value) && Math.abs(value) <= CadNumericPolicy.coordinateAbs;
   if (source.outer.length !== 2 || source.outer.some(value => !finite(value) || value <= 0)
@@ -115,9 +139,9 @@ function rectangle(edges: BrepEdge[], center: Point, inward: Point, axis: Point,
   return corners.size === 4 && sides.size === 4;
 }
 
-/** Check all 36 named wall supports against the authored turn of the second bend. */
+/** Check every named wall support against the authored turn of the second bend. */
 function walls(brep: Brep, feature: string, frame: Frame, section: Section, inward: boolean) {
-  const pieces = ['first', 'line', 'second'], direction = inward ? -1 : 1;
+  const pieces = frame.length === 0 ? ['first', 'second'] : ['first', 'line', 'second'], direction = inward ? -1 : 1;
   const angular = CadNumericPolicy.relativeComparison;
   const names = pieces.flatMap(piece => section.tags.map(tag => `${feature}.${piece}.side[${tag}]`));
   for (const piece of pieces) {
@@ -153,16 +177,17 @@ function walls(brep: Brep, feature: string, frame: Frame, section: Section, inwa
   return names;
 }
 
-/** Native review for exactly two passages on the same- or opposite-turn arc–line–arc producer. */
-export function pairedSpacedArcDuctEvidence(brep: Brep, path: Path, source: Source) {
+/** Common native wall, mouth, join and mass checks for the two bounded arc producers. */
+function pairedArcDuctEvidence(brep: Brep, path: Path, source: Source, direct: boolean) {
   try {
-    const frame = spacedArcs(path), sizes = frame && sections(source, frame), feature = brep.source.id;
+    const frame = direct ? oppositeArcs(path) : spacedArcs(path), sizes = frame && sections(source, frame), feature = brep.source.id;
     if (!frame || !sizes || brep.source.family !== 'sweep-curve' || !feature || brep.bodies.length !== 1
       || brep.bodies[0].kind !== 'solid' || brep.shells.length !== 1 || !brep.shells[0].closed
       || brep.bodies[0].shells.length !== 1 || brep.bodies[0].shells[0] !== brep.shells[0].id
       || brep.shells[0].body !== brep.bodies[0].id) return;
     const report = checkBrep(brep, { strict: true });
-    const expected = { bodies: 1, shells: 1, faces: 38, loops: 42, coedges: 168, edges: 84, vertices: 48 };
+    const expected = direct ? { bodies: 1, shells: 1, faces: 26, loops: 30, coedges: 120, edges: 60, vertices: 36 }
+      : { bodies: 1, shells: 1, faces: 38, loops: 42, coedges: 168, edges: 84, vertices: 48 };
     if (!report.valid || report.topology.length !== 1 || report.topology[0].genus !== 2
       || Object.entries(expected).some(([key, value]) => report.counts[key as keyof typeof expected] !== value)) return;
     const groups = [sizes.exterior, ...sizes.apertures], wallGroups = groups.map((section, index) => walls(brep, feature, frame, section, index > 0));
@@ -227,7 +252,8 @@ export function pairedSpacedArcDuctEvidence(brep: Brep, path: Path, source: Sour
       caps.push({ name, outerEdges: found.get(0)!, innerEdges: apertures.flatMap(aperture => aperture.edges),
         center, plane: { origin: plane.o, normal: plane.n }, apertures });
     }
-    const joins = [{ pieces: ['first', 'line'], center: frame.first.end }, { pieces: ['line', 'second'], center: frame.second.start }];
+    const joins = direct ? [{ pieces: ['first', 'second'], center: frame.first.end }]
+      : [{ pieces: ['first', 'line'], center: frame.first.end }, { pieces: ['line', 'second'], center: frame.second.start }];
     const rings: string[][][] = [];
     for (const join of joins) {
       const seamGroups: string[][] = [];
@@ -250,7 +276,7 @@ export function pairedSpacedArcDuctEvidence(brep: Brep, path: Path, source: Sour
       }
       rings.push(seamGroups);
     }
-    if (new Set(rings.flat(2)).size !== 24) return;
+    if (new Set(rings.flat(2)).size !== 12 * joins.length) return;
     const seamGroups = groups.map((_, index) => rings.flatMap(ring => ring[index]));
     const areaOf = (section: Section) => section.radial * section.axial;
     const area = areaOf(sizes.exterior) - sizes.apertures.reduce((sum, section) => sum + areaOf(section), 0);
@@ -278,4 +304,18 @@ export function pairedSpacedArcDuctEvidence(brep: Brep, path: Path, source: Sour
       volume: { analytic, native: mass.volume, method: 'quadrature' as const }, centroid: { analytic: centroid, native: mass.centroid }, maximumGapMM,
     } };
   } catch { return; }
+}
+
+/** Native review for exactly two passages on the same- or opposite-turn arc–line–arc producer. */
+export function pairedSpacedArcDuctEvidence(brep: Brep, path: Path, source: Source) {
+  return pairedArcDuctEvidence(brep, path, source, false);
+}
+
+/** Native review for exactly two passages on directly joined opposite-turn circular arcs. */
+export function pairedOppositeArcDuctEvidence(brep: Brep, path: Path, source: Source) {
+  const evidence = pairedArcDuctEvidence(brep, path, source, true);
+  if (!evidence) return;
+  const { firstRadius, secondRadius, firstSweepRadians, secondSweepRadians, exterior, axialWeb } = evidence.throughApertures.dimensions;
+  return { ...evidence, pathKind: 'two-arc' as const, throughApertures: { ...evidence.throughApertures,
+    dimensions: { firstRadius, secondRadius, firstSweepRadians, secondSweepRadians, exterior, axialWeb } } };
 }

@@ -1,13 +1,13 @@
 # CAD roadmap — current status and execution order
 
-Updated 2026-11-23 · Priority authority: D520 · Latest delivery: D1798 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
+Updated 2026-11-23 · Priority authority: D520 · Latest delivery: D1799 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
 
 This is the only current status index. Detailed tracks define acceptance; the 34 stable row pages retain scope and issue navigation. Immutable decision notes retain results. Do not append chronological status paragraphs here. [D520 decision](notes/cad-roadmap-replan-2026-11-04/README.md) supersedes D445 execution order and historical next-item text, while retaining its safeguards and bounded proofs.
 
 ## Now and next
 
-- **Current position:** [D1798](notes/exact-opposite-arc-paired-duct-2026-11-23/README.md), P5 rows 07 and 16. A directly joined opposite-turn S-bend supports two rectangular passages. Both mouths, 12 charted join edges, independent lane edits and Studio fresh Open pass. The B06 PDF group remains held.
-- **Next MAIN:** D1799, P5 rows [07](roadmap-rows/07.md) and [16](roadmap-rows/16.md), [#324](https://github.com/barocss/cad/issues/324). Bind pending Agent images for the direct paired S-bend to both mouth planes, all 24 native walls and the single twelve-edge tangent join. Verify stale refusals and explicit Studio approval through Save and fresh Open.
+- **Current position:** [D1799](notes/pending-opposite-arc-paired-duct-review-2026-11-23/README.md), P5 rows 07 and 16. The direct paired S-bend has independent native proof and two pinned Agent images. Studio approval and fresh Open preserve the native body and both images. The B06 PDF group remains held.
+- **Next MAIN:** D1800, P5 rows [07](roadmap-rows/07.md) and [16](roadmap-rows/16.md), [#10](https://github.com/barocss/cad/issues/10). Carry both rectangular passages from an arc into a tangent straight span. Verify the reversed producer preserves both authored mouth identities, lane and side ownership, and editable Studio History through Save and fresh Open.
 - **Separate follow-ups:** Continue Studio App extraction in cohesive parts with affected desktop checks. [#608 Rendering](https://github.com/barocss/cad/issues/608) stays on HOLD. API inventory drift remains open. The issue tracker records [#126](https://github.com/barocss/cad/issues/126), [#613](https://github.com/barocss/cad/issues/613), [#152](https://github.com/barocss/cad/issues/152) and [#22](https://github.com/barocss/cad/issues/22) as closed.
 - **Active repository:** [barocss/cad](https://github.com/barocss/cad), based on `origin/main`. Fetch before work and preserve unexpected changes. The [migration record](../../../docs/migration/README.md) maps the former `local/cad-dev` history and issue numbers.
 - **Evidence correction:** D482 records2167 PASS/0 FAIL/2 existing SKIP in a later full-kernel run than D433. Neither result is a new full-suite PASS at this audit HEAD. [D482 record](notes/vertical-contact-refusal-2026-11-04/README.md).

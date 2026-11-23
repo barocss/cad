@@ -109,7 +109,7 @@ export async function checkApprovedDuctReview(call, request, reviewed) {
   assert.equal((await call('query', { ...reviewed.reviewPin, expectedRevision }, true)).code, 'MODEL_REVIEW_UNAVAILABLE');
 }
 
-export async function reviewPendingPairedDuct(f, call, request, expectedRevision, pathRevision, expected, sideTags, { tail, spaced, sameTurn }) {
+export async function reviewPendingPairedDuct(f, call, request, expectedRevision, pathRevision, expected, sideTags, { tail, spaced, sameTurn, oppositeArcs }) {
   const { proposals: [proposal] } = await call('proposals', { action: 'list' });
   assert.equal(proposal.id, 'P1');
   assert.match(proposal.modelReviewRevision, /^[0-9a-f]{64}$/);
@@ -118,7 +118,7 @@ export async function reviewPendingPairedDuct(f, call, request, expectedRevision
   const opposite = await render(request, { ...pins, orientation: 'opposite' });
   const evidence = meta.rectangularDuct;
   assert.deepEqual([evidence.body, evidence.sketch, evidence.path, evidence.pathRevision, evidence.pathKind],
-    ['b1', 'n0', 'rail', pathRevision, spaced ? 'arc-line-arc' : tail ? 'line-arc-line' : 'line-and-arc']);
+    ['b1', 'n0', 'rail', pathRevision, spaced ? 'arc-line-arc' : oppositeArcs ? 'two-arc' : tail ? 'line-arc-line' : 'line-and-arc']);
   assert.deepEqual(opposite.meta.rectangularDuct, evidence);
   assert.notEqual(opposite.meta.imageSha256, meta.imageSha256);
   assert.notEqual(opposite.meta.candidate.reviewRevision, meta.candidate.reviewRevision);
@@ -127,7 +127,7 @@ export async function reviewPendingPairedDuct(f, call, request, expectedRevision
       [proposal.id, expectedRevision, expected.digest]);
   }
   assert.ok(opposite.meta.views.left.visible_faces.includes('n1.start'));
-  assert.ok((sameTurn ? opposite.meta.views.left : spaced ? meta.views.right : opposite.meta.views.back).visible_faces.includes('n1.end'));
+  assert.ok((sameTurn ? opposite.meta.views.left : spaced || oppositeArcs ? meta.views.right : opposite.meta.views.back).visible_faces.includes('n1.end'));
 
   const tagOf = name => name.match(/\[(e\d+)\]$/)?.[1];
   const sorted = values => values.toSorted();
@@ -140,10 +140,11 @@ export async function reviewPendingPairedDuct(f, call, request, expectedRevision
   const wallNames = tags => expected.wallNames.filter(name => tags.includes(tagOf(name)));
   const paired = evidence.throughApertures;
   const { dimensions, volume, centroid } = paired;
-  if (spaced) {
+  if (spaced || oppositeArcs) {
     near(dimensions.firstRadius, 12);
     near(dimensions.secondRadius, 18);
-    near(dimensions.lineLength, 8);
+    if (spaced) near(dimensions.lineLength, 8);
+    else assert.equal(dimensions.lineLength, undefined);
     near(dimensions.firstSweepRadians, Math.PI / 2);
     near(dimensions.secondSweepRadians, Math.PI / 2);
   } else {
@@ -155,7 +156,7 @@ export async function reviewPendingPairedDuct(f, call, request, expectedRevision
   }
   near(dimensions.axialWeb, 2);
   assert.deepEqual(dimensions.exterior, { radial: 4, axial: 10 });
-  near(volume.analytic, 32 * (spaced ? 8 + 15 * Math.PI : 10 + 10 * Math.PI + tail));
+  near(volume.analytic, 32 * (spaced ? 8 + 15 * Math.PI : oppositeArcs ? 15 * Math.PI : 10 + 10 * Math.PI + tail));
   near(volume.native, expected.quadrature.volume);
   pointNear(centroid.analytic, expected.quadrature.centroid);
   pointNear(centroid.native, expected.quadrature.centroid);
@@ -170,8 +171,8 @@ export async function reviewPendingPairedDuct(f, call, request, expectedRevision
     assert.deepEqual(sorted(aperture.seams), sorted(seamIds(tags)));
     assert.deepEqual(sorted(evidence.interiorSeams[index]), sorted(aperture.seams));
   }
-  if (tail || spaced) {
-    const pieces = spaced ? [['first', 'line'], ['line', 'second']] : [['line', 'bend'], ['bend', 'tail']];
+  if (tail || spaced || oppositeArcs) {
+    const pieces = spaced ? [['first', 'line'], ['line', 'second']] : oppositeArcs ? [['first', 'second']] : [['line', 'bend'], ['bend', 'tail']];
     assert.deepEqual(paired.junctions.map(joint => joint.pieces), pieces);
     for (const [index, joint] of paired.junctions.entries()) {
       assert.deepEqual(sorted(joint.exteriorSeams), sorted(seamIds(sideTags.outer, index)));
@@ -181,7 +182,7 @@ export async function reviewPendingPairedDuct(f, call, request, expectedRevision
   assert.deepEqual(evidence.caps.map(cap => cap.name), ['n1.start', 'n1.end']);
   for (const cap of evidence.caps) {
     const native = expected.caps.find(value => value.name === cap.name);
-    const centers = spaced ? [[0, 0, 0], [sameTurn ? -6 : 30, 38, 0]] : [[-10, 0, 0], [20, 20 + tail, 0]];
+    const centers = spaced ? [[0, 0, 0], [sameTurn ? -6 : 30, 38, 0]] : oppositeArcs ? [[0, 0, 0], [30, 30, 0]] : [[-10, 0, 0], [20, 20 + tail, 0]];
     pointNear(cap.center, centers[cap.name === 'n1.start' ? 0 : 1]);
     pointNear(cap.plane.origin, native.plane.o);
     pointNear(cap.plane.normal, native.plane.n);
@@ -199,6 +200,7 @@ export async function reviewPendingPairedDuct(f, call, request, expectedRevision
 
   const faces = spaced
     ? ['n1.start', 'n1.end', 'n1.line.side[e6]', 'n1.first.side[e8]', 'n1.line.side[e10]', 'n1.second.side[e12]']
+    : oppositeArcs ? ['n1.start', 'n1.end', 'n1.first.side[e6]', 'n1.first.side[e10]', 'n1.second.side[e6]', 'n1.second.side[e10]']
     : ['n1.start', 'n1.end', 'n1.line.side[e6]', 'n1.bend.side[e8]', 'n1.line.side[e10]', 'n1.bend.side[e12]'];
   if (tail) faces.push('n1.tail.side[e6]', 'n1.tail.side[e10]');
   const reviewPin = { ...pins, action: 'inspect', faces, expectedReviewRevision: meta.candidate.reviewRevision };

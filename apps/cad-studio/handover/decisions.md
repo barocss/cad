@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D1799: [Review the direct paired S-bend before Agent approval](notes/pending-opposite-arc-paired-duct-review-2026-11-23/README.md), #324. Verify both mouths, 24 walls and 12 tangent joins against the two pinned images. Studio Accept, Save and fresh Open preserve the native body and PNGs.
+
 - D1798: [Sweep two passages through directly joined opposite turns](notes/exact-opposite-arc-paired-duct-2026-11-23/README.md), #10. Verify three charted join rings, both mouths, independent lane edits and fresh Open.
 
 - D1797: [Extract the Studio reference-review session from App](notes/studio-reference-review-session-2026-11-23/README.md), #44. Match candidate preview, explicit confirmation, stale guards, saved files and final keyboard focus in paired desktop runs.
