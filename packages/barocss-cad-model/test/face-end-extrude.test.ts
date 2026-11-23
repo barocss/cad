@@ -230,7 +230,7 @@ test('annular saved bindings retain stock and source identity and refuse reverse
   assert.throws(() => toPartDocument(annularTarget(0)), /positive extrusion direction/i);
 });
 
-test('annular support remains bounded to a direct upright single through Hole and admitted straight source', () => {
+test('annular support remains bounded to a direct upright single through Hole and untrimmed source', () => {
   const doc = annularTarget(), hole = doc.nodes[2], stock = doc.nodes[1], circle = doc.nodes[0], source = doc.nodes[3];
   assert.ok(hole.kind === 'hole' && stock.kind === 'extrude' && circle.kind === 'sketch' && circle.profile === 'circle'
     && source.kind === 'sketch' && source.profile === 'rectangle');
@@ -246,7 +246,8 @@ test('annular support remains bounded to a direct upright single through Hole an
     replaceNode(doc, 2, { ...hole, countersink: 8 }),
     replaceNode(doc, 1, { ...stock, draft: 2 }),
     replaceNode(doc, 0, { ...circle, plane: { origin: [0, 0, 0], normal: [0, 0, 1], xAxis: [1, 0, 0] } }),
-    replaceNode(doc, 3, { id: 'n3', kind: 'sketch', profile: 'circle', center: [6, 0], radius: 1 }),
+    replaceNode(doc, 3, { id: 'n3', kind: 'sketch', profile: 'circle', center: [6, 0], radius: 1,
+      holes: [[{ kind: 'arc', start: [6.25, 0], center: [6, 0], direction: 'ccw' }]] }),
   ]) assert.throws(() => toPartDocument(candidate));
   const bound = doc.nodes[4]; assert.ok(bound.kind === 'face-end-extrude');
   const consumed: StudioDoc = { ...doc, nodes: [...doc.nodes.slice(0, 4),
@@ -403,6 +404,47 @@ test('circle-to-disk proof uses native endpoint radius normalization and transla
   assert.ok(evaluateCadPart(toPartDocument(nearLimit)).outputs.every(output => checkOutput(output).valid));
 });
 
+function annularCircle(center: [number, number], radius = 3, from = 20): StudioDoc {
+  const doc = annularTarget(from), bore = doc.nodes[2];
+  assert.ok(bore.kind === 'hole');
+  return replaceNode(replaceNode(doc, 2, { ...bore, radius: 4 }), 3,
+    { id: 'n3', kind: 'sketch', profile: 'circle', center, radius });
+}
+
+test('an exact round profile fits the lower annular cap even when its square bounds extend outside it', () => {
+  assert.ok(Math.hypot(6, 6) + 3 < 12 && Math.hypot(6, 6) - 3 > 4);
+  assert.ok(Math.hypot(9, 9) > 12);
+  const original = annularCircle([6, 6]);
+  for (const z of [20, 28, 36]) {
+    const doc = annularCircle([6, 6], 3, z), opened = readStudioDoc(JSON.stringify(doc));
+    assert.ok('doc' in opened); assert.deepEqual(opened.doc, doc);
+    assert.deepEqual(doc.nodes[4], original.nodes[4]);
+    assert.equal(currentFaceEndDistance(opened.doc, 4), z);
+    const { outputs } = evaluateCadPart(toPartDocument(opened.doc));
+    assert.deepEqual(outputs.map(output => output.id), ['n2', 'n4']);
+    assert.ok(outputs.every(output => checkOutput(output).valid));
+    const [tube, post] = outputs;
+    assert.deepEqual(tube.brep, evaluateCadPart(toPartDocument(prefixDoc(doc, 4))).outputs[0].brep);
+    const native = massPropertiesOf(post);
+    assert.ok(Math.abs(native.volume - 9 * Math.PI * z) < 1e-8);
+    native.centroid.forEach((value, axis) => assert.ok(Math.abs(value - [6, 6, z / 2][axis]) < 1e-8));
+    const plane = faceGeometry(post.brep.faces.find(face => face.name === 'n4.top')!);
+    assert.ok(plane.kind === 'plane');
+    assert.equal(plane.o[2], z);
+    assert.deepEqual(plane.n, [0, 0, 1]);
+  }
+});
+
+test('circle-to-annulus refuses crossing or tangent contact at the bore and outer trim', () => {
+  for (const [x, radius] of [[0, 5], [5.5, 2], [6, 2], [9, 3], [9.5, 3]]) {
+    const doc = annularCircle([x, 0], radius), before = structuredClone(doc);
+    assert.throws(() => toPartDocument(doc), /bore|entire projected profile/i);
+    assert.deepEqual(doc, before);
+  }
+  for (const [x, radius] of [[6 + 1e-6, 2], [9 - 1e-6, 3]])
+    assert.equal(currentFaceEndDistance(annularCircle([x, 0], radius), 4), 20);
+});
+
 test('circle-to-disk support retains original target and source limits and circle-to-rectangle behavior', () => {
   const doc = circleSourceTarget(), source = doc.nodes[2], target = doc.nodes[1];
   assert.ok(source.kind === 'sketch' && source.profile === 'circle' && target.kind === 'extrude');
@@ -420,8 +462,6 @@ test('circle-to-disk support retains original target and source limits and circl
   const flatPost = evaluateCadPart(toPartDocument(flat)).outputs[1];
   assert.ok(checkOutput(flatPost).valid);
   assert.ok(Math.abs(massPropertiesOf(flatPost).volume - Math.PI * 16 * 20) < 1e-7);
-  const annular = replaceNode(annularTarget(), 3, { id: 'n3', kind: 'sketch', profile: 'circle', center: [6, 0], radius: 1 });
-  assert.throws(() => toPartDocument(annular), /convex straight trim.*without holes/i);
 });
 
 test('circular target admission keeps the direction, authored identity and saved-format guards', () => {

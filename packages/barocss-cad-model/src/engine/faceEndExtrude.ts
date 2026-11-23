@@ -181,6 +181,9 @@ type LiteralRectangle = Extract<SketchNode, { profile: 'rectangle' }> & { min: [
 type LiteralPolygon = Omit<Extract<SketchNode, { profile: 'polygon' }>, 'points'> & { points: [number, number][] };
 
 type LiteralCircle = Omit<Extract<SketchNode, { profile: 'circle' }>, 'center' | 'radius'> & { center: [number, number]; radius: number };
+type RadialTarget = ReturnType<typeof targetPolygon> & {
+  centre: readonly [number, number]; radius: number; roundoff: number; bore?: number;
+};
 function literalCircle(sketch: Extract<SketchNode, { profile: 'circle' }>): sketch is LiteralCircle {
   const { center, radius } = sketch;
   if (!Array.isArray(center) || center.length !== 2 || !center.every(finiteCoordinate)
@@ -193,7 +196,7 @@ function literalCircle(sketch: Extract<SketchNode, { profile: 'circle' }>): sket
 
 /** Only a current original lower disk of an intact upright circular Extrude reaches this branch. */
 function circularProfileTarget(doc: StudioDoc, node: FaceEndExtrudeNode, sketch: LiteralRectangle | LiteralPolygon | LiteralCircle,
-  brep: Brep, face: BrepFace, axes: EndFrame): (ReturnType<typeof targetPolygon> & { centre: readonly [number, number]; radius: number; roundoff: number }) | undefined {
+  brep: Brep, face: BrepFace, axes: EndFrame): RadialTarget | undefined {
   const target = doc.nodes[node.target.body.node];
   if ((sketch.profile !== 'rectangle' && sketch.profile !== 'circle') || axes !== XY || target?.kind !== 'extrude' || target.held || target.cutDepth !== undefined
     || target.draft || face.name !== `${node.target.feature}.bottom`) return;
@@ -219,8 +222,8 @@ function circularProfileTarget(doc: StudioDoc, node: FaceEndExtrudeNode, sketch:
 }
 
 /** Certify the represented source disk, including native radius normalization and XY placement. */
-function circleFitsDisk(doc: StudioDoc, node: FaceEndExtrudeNode, prefix: readonly CadPartFeature[],
-  target: NonNullable<ReturnType<typeof circularProfileTarget>>, height: number): boolean {
+function circleFitsRadialTarget(doc: StudioDoc, node: FaceEndExtrudeNode, prefix: readonly CadPartFeature[],
+  target: RadialTarget, height: number): boolean {
   const sourceId = featureId(doc.nodes, node.sketch), sources = prefix.filter(feature => feature.id === sourceId);
   if (sources.length !== 1 || sources[0].kind !== 'sketch' || sources[0].profile !== 'circle') throw missing('the original circular source is missing or ambiguous.');
   // A two-feature probe uses the same compiled sketch and actual depth, without changing the document.
@@ -239,14 +242,19 @@ function circleFitsDisk(doc: StudioDoc, node: FaceEndExtrudeNode, prefix: readon
       || !support.c.every(finiteCoordinate) || !finiteCoordinate(support.r) || support.r <= 0) return false;
     const room = exact(target.radius) - exact(support.r) - exact(roundoff);
     const dx = exact(support.c[0]) - exact(target.centre[0]), dy = exact(support.c[1]) - exact(target.centre[1]);
-    return room > 0n && dx * dx + dy * dy < room * room;
+    const distance2 = dx * dx + dy * dy;
+    if (!(room > 0n && distance2 < room * room)) return false;
+    if (target.bore === undefined) return true;
+    // Exclude the complete bore disk, including strict contact. Add before squaring without Number rounding.
+    const excluded = exact(target.bore) + exact(support.r) + exact(roundoff);
+    return distance2 > excluded * excluded;
   });
 }
 
 /** One original lower annulus of a forward upright coaxial circular Extrude and through Hole. */
 function annularProfileTarget(doc: StudioDoc, node: FaceEndExtrudeNode, sketch: LiteralRectangle | LiteralPolygon | LiteralCircle,
-  brep: Brep, face: BrepFace, axes: EndFrame, min: readonly number[], max: readonly number[]): ReturnType<typeof targetPolygon> | undefined {
-  if ((sketch.profile !== 'rectangle' && sketch.profile !== 'polygon') || axes !== XY) return;
+  brep: Brep, face: BrepFace, axes: EndFrame, min: readonly number[], max: readonly number[]): RadialTarget | undefined {
+  if (axes !== XY) return;
   const source = annularSource(doc.nodes, node.target.body.node);
   if (!source) return;
   const { hole, stock, circle } = source;
@@ -278,6 +286,13 @@ function annularProfileTarget(doc: StudioDoc, node: FaceEndExtrudeNode, sketch: 
   const radius = Math.min(...outer.map(support => support.r - separation(support))) - roundoff;
   const bore = Math.max(...inner.map(support => support.r + separation(support))) + roundoff;
   if (!(bore > roundoff && radius - bore > roundoff)) throw invalid('the annular target radii cannot be certified.');
+  const target: RadialTarget = {
+    min: [cx - radius, cy - radius], max: [cx + radius, cy + radius], level, rectangle: false,
+    centre: [cx, cy], radius, bore, roundoff,
+    contains: point => Math.hypot(point[0] - cx, point[1] - cy) + roundoff <= radius,
+  };
+  // A circle uses its represented native disk at the actual depth, not its bounding square or authored radius.
+  if (sketch.profile === 'circle') return target;
   let clearsBore: boolean;
   if (sketch.profile === 'rectangle') {
     // Clamp to the whole rectangle, including its edges and interior.
@@ -290,10 +305,7 @@ function annularProfileTarget(doc: StudioDoc, node: FaceEndExtrudeNode, sketch: 
     clearsBore = polygonClearsDisk(polygon, [exact(cx), exact(cy)], exact(bore) + exact(roundoff));
   }
   if (!clearsBore) throw invalid('the target face must contain the entire projected profile clear of its bore.');
-  return {
-    min: [cx - radius, cy - radius], max: [cx + radius, cy + radius], level, rectangle: false,
-    contains: point => Math.hypot(point[0] - cx, point[1] - cy) + roundoff <= radius,
-  };
+  return target;
 }
 
 /** Exact global convexity plus the existing minimum edge/altitude boundary. */
@@ -391,13 +403,12 @@ export function faceEndExtrudeHeight(doc: StudioDoc, node: FaceEndExtrudeNode, p
   const faces = brep.faces.filter(face => face.name === node.target.face);
   if (faces.length !== 1) throw missing('the named target face is missing or ambiguous.');
   const disk = circularProfileTarget(doc, node, sketch, brep, faces[0], axes);
-  const box = disk
-    ?? annularProfileTarget(doc, node, sketch, brep, faces[0], axes, [u0, v0], [u1, v1])
-    ?? targetPolygon(brep, faces[0], axes);
-  if (!(sketch.profile === 'circle' && disk)) {
+  const radial = disk ?? annularProfileTarget(doc, node, sketch, brep, faces[0], axes, [u0, v0], [u1, v1]);
+  const box = radial ?? targetPolygon(brep, faces[0], axes);
+  if (!(sketch.profile === 'circle' && radial)) {
     if (u0 < box.min[0] || v0 < box.min[1] || u1 > box.max[0] || v1 > box.max[1]) throw invalid('the target face must contain the entire projected profile.');
     if (!box.rectangle) {
-      if (sketch.profile === 'circle') throw invalid('a circle source currently needs an axis-aligned rectangle target or an original lower circular disk.');
+      if (sketch.profile === 'circle') throw invalid('a circle source currently needs an axis-aligned rectangle target or an original lower circular disk or annulus.');
       const projected = sketch.profile === 'rectangle' ? [[u0,v0],[u1,v0],[u1,v1],[u0,v1]]
         : sketch.points.map(p => [origin[u]+p[0],origin[v]+p[1]]);
       if (!projected.every(box.contains)) throw invalid('the target face must contain the entire projected profile.');
@@ -406,7 +417,8 @@ export function faceEndExtrudeHeight(doc: StudioDoc, node: FaceEndExtrudeNode, p
   const height = sign * (box.level - origin[w]);
   if (height <= CadNumericPolicy.linearTolerance || height > CadPartLimits.length) throw invalid('the target must be ahead of the source in the positive extrusion direction.');
   if (!withinTolerance(origin[w] + sign * height, box.level)) throw invalid('the reconstructed end is outside the native linear tolerance.');
-  if (sketch.profile === 'circle' && disk && !circleFitsDisk(doc, node, prefix, disk, height))
-    throw invalid('the target face must contain the entire projected profile.');
+  if (sketch.profile === 'circle' && radial && !circleFitsRadialTarget(doc, node, prefix, radial, height))
+    throw invalid(radial.bore === undefined ? 'the target face must contain the entire projected profile.'
+      : 'the target face must contain the entire projected profile clear of its bore.');
   return height;
 }

@@ -4,7 +4,9 @@ import { join } from 'node:path';
 import { createFlow } from './flow-helper.mjs';
 
 const polygonSource = process.argv.includes('--polygon');
-const profile = polygonSource ? 'polygon' : 'rectangle';
+const circleSource = process.argv.includes('--circle');
+assert.ok(!polygonSource || !circleSource, 'Choose only one source profile.');
+const profile = circleSource ? 'circle' : polygonSource ? 'polygon' : 'rectangle';
 const pins = [
   'apps/cad-studio/test/annular-face-end-extrude-browser.mjs',
   'apps/cad-studio/src/app/extrudeEndFace.ts',
@@ -12,7 +14,7 @@ const pins = [
   'packages/barocss-cad-model/src/engine/faceEndExtrude.ts',
 ];
 const f = await createFlow({
-  name: 'annular-face-end-extrude', output: process.argv[2], envFrozen: polygonSource ? 'D1621_SOURCE_FROZEN' : 'D1609_SOURCE_FROZEN',
+  name: 'annular-face-end-extrude', output: process.argv[2], envFrozen: circleSource ? 'D1861_SOURCE_FROZEN' : polygonSource ? 'D1621_SOURCE_FROZEN' : 'D1609_SOURCE_FROZEN',
   initialFiles: pins, requiredFrozen: pins,
   qualification: 'Select the original lower annular face in Studio. Refuse a footprint over the bore and retain the exact accepted target through History and Open.',
   limits: [`One upright tube with a 12 mm outer radius and a centred 4 mm through bore, and one horizontal ${profile} profile.`],
@@ -32,14 +34,16 @@ const button = (scope, name) => scope.getByRole('button', { name, exact: true })
 const field = (scope, name) => scope.getByLabel(name, { exact: true });
 const originalZ = 20, nextZ = 28, height = 6, targetName = 'n1.bottom';
 const acceptedPoints = [[0, 7], [7, 0], [8, 8]], refusedPoints = [[0, 5], [5, 0], [8, 8]];
-const acceptedSketch = polygonSource
+const acceptedSketch = circleSource ? { id: 'n3', kind: 'sketch', profile, center: [6, 6], radius: 3 }
+  : polygonSource
   ? { id: 'n3', kind: 'sketch', profile, points: acceptedPoints }
   : { id: 'n3', kind: 'sketch', profile, min: [6, -2], max: [9, 2] };
-const refusedSketch = polygonSource ? { ...acceptedSketch, points: refusedPoints }
+const refusedSketch = circleSource ? { ...acceptedSketch, center: [5.5, 0], radius: 2 }
+  : polygonSource ? { ...acceptedSketch, points: refusedPoints }
   : { ...acceptedSketch, min: [-5, -1], max: [5, 1] };
 // The triangle has base direction (7, -7) and the third point is (8, 1)
 // from its first vertex. The determinant gives 31.5 square millimetres.
-const sourceArea = polygonSource ? 31.5 : 12;
+const sourceArea = circleSource ? 9 * Math.PI : polygonSource ? 31.5 : 12;
 const footprint = polygonSource ? acceptedPoints : [[6, -2], [6, 2], [9, -2], [9, 2]];
 const model = sketch => ({
   format: 'barocss-cad-model', schema: 3, units: 'mm', parameters: {},
@@ -108,9 +112,25 @@ async function inspect(label, doc, z) {
   near(tube.mass.volume, Math.PI * (144 - 16) * height);
   near(post.mass.volume, sourceArea * z);
   if (polygonSource) [5, 5, z / 2].forEach((expected, axis) => near(post.mass.centroid[axis], expected));
-  const top = post.vertices.filter(point => Math.abs(point[2] - z) < 1e-8).map(point => point.slice(0, 2));
-  assert.equal(top.length, footprint.length);
-  for (const [x, y] of footprint) assert.equal(top.filter(p => p[0] === x && p[1] === y).length, 1);
+  if (circleSource) {
+    [6, 6, z / 2].forEach((expected, axis) => near(post.mass.centroid[axis], expected));
+    const cylinders = post.faces.map(face => face.geometry).filter(face => face.kind === 'cylinder');
+    assert.equal(cylinders.length, 2);
+    for (const wall of cylinders) {
+      near(wall.c[0], 6);
+      near(wall.c[1], 6);
+      near(wall.r, 3);
+      near(Math.abs(wall.a[2]), 1);
+    }
+    const end = post.faces.find(face => face.name === 'n4.top').geometry;
+    assert.equal(end.kind, 'plane');
+    near(end.o[2], z);
+    assert.equal(end.n[2], 1);
+  } else {
+    const top = post.vertices.filter(point => Math.abs(point[2] - z) < 1e-8).map(point => point.slice(0, 2));
+    assert.equal(top.length, footprint.length);
+    for (const [x, y] of footprint) assert.equal(top.filter(p => p[0] === x && p[1] === y).length, 1);
+  }
   const bodies = (await f.bodies()).bodies;
   assert.deepEqual(bodies.map(body => body.key), ['b2', 'b4']);
   near(bodies[0].volume, Math.PI * (144 - 16) * height);
@@ -134,7 +154,10 @@ await f.run(async () => {
   await f.newPage();
   const refused = model(refusedSketch), source = model(acceptedSketch);
   f.phase = 'refuse a footprint spanning the bore although its vertices clear it';
-  if (polygonSource) {
+  if (circleSource) {
+    assert.ok(Math.hypot(6, 6) + 3 < 12 && Math.hypot(6, 6) - 3 > 4);
+    assert.ok(Math.hypot(9, 9) > 12);
+  } else if (polygonSource) {
     assert.ok(refusedPoints.every(point => Math.hypot(...point) > 4 && Math.hypot(...point) < 12));
     const edgeDistanceSquared = ([[ax, ay], [bx, by]]) =>
       (ax * by - ay * bx) ** 2 / ((bx - ax) ** 2 + (by - ay) ** 2);
@@ -151,6 +174,21 @@ await f.run(async () => {
   await f.snapshot('01-bore-overlap-refused');
   await button(f.hud(), 'Cancel').click();
   await f.hud().waitFor({ state: 'hidden' });
+
+  if (circleSource) {
+    f.phase = 'refuse the circular profile crossing the outer rim';
+    const outside = model({ ...acceptedSketch, center: [9.5, 0] });
+    await open('circle-crosses-outer-trim', outside);
+    await begin();
+    await pickCap('Bottom', [0, 8, originalZ]);
+    await status('refused');
+    assert.equal(await button(f.hud(), 'Apply').isDisabled(), true);
+    assert.match(await f.hud().locator('.hud-error').textContent(), /projected profile|outer/i);
+    await f.same(outside);
+    await f.snapshot('01b-annular-outer-trim-refused');
+    await button(f.hud(), 'Cancel').click();
+    await f.hud().waitFor({ state: 'hidden' });
+  }
 
   f.phase = 'pick the exact lower annulus and create a separate solid';
   await open(`${profile}-clears-bore`, source);
