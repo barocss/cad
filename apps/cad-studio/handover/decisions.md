@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D1806: [Review a pending arc-first paired duct outlet Offset](notes/pending-arc-first-outlet-offset-review-2026-11-23/README.md), #324. Bind both apertures, the original rail, the retained bend and both Agent images through explicit Studio approval and fresh Open.
+
 - D1805: [Move the straight outlet after an arc-first paired Sweep](notes/paired-arc-line-outlet-offset-2026-11-23/README.md), #17. Move the signed cap while keeping both passages and retained native boundaries. Verify saved handle drag, Studio fresh Open and local Agent approval.
 
 - D1804: [Review both passages on a pending same-turn Sweep](notes/pending-direct-same-turn-paired-duct-review-2026-11-23/README.md), #324. Bind both apertures, all 12 tangent joins and both pinned Agent images to explicit Studio approval and fresh Open.

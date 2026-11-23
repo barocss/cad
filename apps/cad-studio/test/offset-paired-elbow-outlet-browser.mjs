@@ -69,7 +69,7 @@ const pins = [
   ] : []),
 ];
 const f = await createFlow({
-  name: 'offset-paired-elbow-outlet', output: process.argv[2], envFrozen: arcFirst ? 'D1805_SOURCE_FROZEN' : 'D1788_SOURCE_FROZEN',
+  name: 'offset-paired-elbow-outlet', output: process.argv[2], envFrozen: arcFirst ? (reviewOutlet || reviewUnavailable ? 'D1806_SOURCE_FROZEN' : 'D1805_SOURCE_FROZEN') : 'D1788_SOURCE_FROZEN',
   initialFiles: pins, requiredFrozen: pins,
   qualification: 'Move the original straight outlet cap of a paired rectangular Exact Sweep.',
   limits: [arcFirst ? 'Two 2 × 2 mm through passages on an R20 bend and a 10 mm straight tail. Desktop Studio WebGPU.'
@@ -184,10 +184,6 @@ async function approveWithAgent(savedSource, original, expected) {
     assert.deepEqual(await readFile(file), before);
     const staged = await call('proposals', { action: 'propose', title: 'Move the paired outlet inward by 4 mm', ops: [op] });
     assert.deepEqual([staged.proposal, staged.applied], ['P1', false]);
-    if (arcFirst) {
-      const { proposals: [pending] } = await call('proposals', { action: 'list' });
-      assert.equal(pending.modelReviewRevision, undefined);
-    }
     if (reviewUnavailable) {
       const { proposals: [pending] } = await call('proposals', { action: 'list' });
       assert.equal(pending.modelReviewRevision, undefined);
@@ -198,7 +194,7 @@ async function approveWithAgent(savedSource, original, expected) {
       assert.deepEqual(await readFile(file), beforeReview);
       f.report.observations.push({ label: 'pending-outlet-image-refused', code: refusal.code });
     }
-    if (reviewOutlet) return reviewPendingOutlet(f, file, call, request, expectedRevision, retainedRail);
+    if (reviewOutlet) return reviewPendingOutlet(f, file, call, request, expectedRevision, retainedRail, arcFirst);
   });
   const pending = JSON.parse(await readFile(file));
   assert.deepEqual([pending.nodes, pending.outputs, pending.direct], [source.nodes, source.outputs, source.direct]);

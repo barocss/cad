@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { checkApprovedDuctReview, checkChangedDuctPath, render } from './duct-proposal-review-browser-steps.mjs';
 import { currentPartRevision, withMcpSession } from './mcp-browser-session.mjs';
 
-export async function reviewPendingOutlet(f, file, call, request, expectedRevision, retainedRail) {
+export async function reviewPendingOutlet(f, file, call, request, expectedRevision, retainedRail, arcFirst) {
   const before = await readFile(file);
   const { proposals: [proposal] } = await call('proposals', { action: 'list' });
   assert.equal(proposal.id, 'P1');
@@ -25,13 +25,31 @@ export async function reviewPendingOutlet(f, file, call, request, expectedRevisi
     assert.deepEqual(evidence.sourceRail, { path: rail.id, pathRevision: rail.revision, directRevision });
   } else assert.equal(evidence.sourceRail, undefined);
   assert.deepEqual([evidence.sourceBody, evidence.body, evidence.pathKind, evidence.face, evidence.distance],
-    ['b1', 'b2', 'line-arc-line', 'n1.end', -4]);
-  assert.deepEqual(evidence.displacement, { normal: [0, 1, 0], vector: [0, -4, 0] });
-  assert.deepEqual([evidence.originalCap.center, evidence.movedCap.center], [[20, 34, 0], [20, 30, 0]]);
+    ['b1', 'b2', arcFirst ? 'arc-and-line' : 'line-arc-line', 'n1.end', -4]);
+  const [outlet, moved] = arcFirst ? [[-10, 0, 0], [-6, 0, 0]] : [[20, 34, 0], [20, 30, 0]];
+  assert.deepEqual(evidence.displacement, arcFirst ? { normal: [-1, 0, 0], vector: [4, 0, 0] }
+    : { normal: [0, 1, 0], vector: [0, -4, 0] });
+  assert.deepEqual([evidence.originalCap.center, evidence.movedCap.center], [outlet, moved]);
   assert.equal(evidence.movedCap.apertures.length, 2);
   assert.equal(evidence.throughApertures.apertures.length, 2);
   assert.deepEqual(evidence.retained.junctions, evidence.throughApertures.junctions);
-  assert.equal(evidence.retained.faces.length, 25);
+  assert.equal(evidence.retained.faces.length, arcFirst ? 13 : 25);
+  if (arcFirst) {
+    const joins = evidence.retained.junctions;
+    assert.deepEqual(joins.map(joint => joint.pieces), [['bend', 'line']]);
+    assert.equal(new Set(joins.flatMap(joint => joint.exteriorSeams.concat(...joint.interiorSeams))).size, 12);
+    assert.deepEqual([evidence.originalCap, evidence.movedCap, evidence.retained.inlet]
+      .map(cap => cap.apertures.map(aperture => aperture.edges.length)), [[4, 4], [4, 4], [4, 4]]);
+    assert.ok(alternate.meta.views.back.visible_faces.includes('n1.start'));
+    assert.ok(alternate.meta.views.left.visible_faces.includes('n1.end'));
+    const near = (actual, expected) => assert.ok(Math.abs(actual - expected) < 1e-7, JSON.stringify({ actual, expected }));
+    const length = 6 + 10 * Math.PI;
+    near(evidence.volume.original.native, 32 * (10 + 10 * Math.PI));
+    near(evidence.volume.candidate.native, 32 * length);
+    const centroid = [(382 + 19 / 12) / length, (200 * Math.PI - 400 - 19 / 12) / length, 0];
+    for (const point of [evidence.centroid.analytic, evidence.centroid.native])
+      point.forEach((coordinate, index) => near(coordinate, centroid[index]));
+  }
   assert.equal(evidence.materialChange.sectionArea, 32);
   assert.equal(evidence.materialChange.analytic, -128);
   assert.ok(Math.abs(evidence.materialChange.native + 128) < 1e-6);
@@ -43,7 +61,8 @@ export async function reviewPendingOutlet(f, file, call, request, expectedRevisi
   assert.deepEqual(native.pairedElbowOutletOffset, evidence);
   assert.deepEqual(native.candidate, meta.candidate);
   assert.equal(native.imageSha256, meta.imageSha256);
-  assert.equal(native.faces.find(face => face.name === 'n1.end').geometry.point[1], 30);
+  const axis = arcFirst ? 0 : 1;
+  assert.equal(native.faces.find(face => face.name === 'n1.end').geometry.point[axis], moved[axis]);
   const opposite = await call('query', { ...reviewPin, orientation, expectedReviewRevision: alternate.meta.candidate.reviewRevision });
   assert.deepEqual(opposite.faces, native.faces);
   assert.equal(opposite.imageSha256, alternate.meta.imageSha256);
