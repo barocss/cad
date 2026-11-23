@@ -2,10 +2,13 @@ import assert from 'node:assert/strict';
 import { createFlow } from './flow-helper.mjs';
 
 const baseline = process.argv.includes('--baseline');
+const browserRows = process.argv.includes('--browser-rows');
 const pins = ['apps/cad-studio/src/App.tsx', 'apps/cad-studio/src/viewport/useViewportPicking.ts',
   'packages/barocss-cad-model/src/app/profileCommands.ts'];
+if (browserRows) pins.push('apps/cad-studio/test/sweep-preview-retarget-browser.mjs');
+if (process.argv.includes('--extracted')) pins.push('apps/cad-studio/src/ui/BrowserGeometryRows.tsx');
 const f = await createFlow({
-  name: 'sweep-preview-retarget', output: process.argv[2], envFrozen: 'D1168_SOURCE_FROZEN',
+  name: 'sweep-preview-retarget', output: process.argv[2], envFrozen: browserRows ? 'D1764_SOURCE_FROZEN' : 'D1168_SOURCE_FROZEN',
   initialFiles: pins, requiredFrozen: pins,
   qualification: 'Replace one Sweep input in the Browser and keep the other input through Apply.',
   limits: ['Desktop WebGPU. Two circular profiles, two straight direct paths, New body.'],
@@ -36,7 +39,8 @@ const seed = {
     sources: { ra: source('railA', railA), rb: source('railB', railB),
       surface: '@model plane { version: 0; length-unit: mm; @surface #plate { type: nurbs; degree-u: 1; degree-v: 1; knots-u: [0,0,1,1]; knots-v: [0,0,1,1]; control-points: [[[70,0,0],[70,5,0]],[[75,0,0],[75,5,0]]]; weights: [[1,1],[1,1]]; } }' },
     objects: [{ id: 'path-a', name: 'Rail A', source: 'ra', geometry: 'rail' }, { id: 'path-b', name: 'Rail B', source: 'rb', geometry: 'rail' },
-      { id: 'plate', name: 'Test surface', source: 'surface', geometry: 'plate' }],
+      { id: 'plate', name: 'Test surface', source: 'surface', geometry: 'plate' },
+      ...(browserRows ? [{ id: 'hidden-rail', name: 'Hidden rail', source: 'ra', geometry: 'rail', hidden: true }] : [])],
   },
 };
 const button = (name, scope = f.page) => scope.getByRole('button', { name, exact: true });
@@ -76,11 +80,68 @@ async function verify(doc, label) {
   for (const ring of native.rings) assert.ok(ring.count === 32 && near(ring.min, 3) && near(ring.max, 3));
 }
 
+async function checkBrowserRows() {
+  async function selection(label, sketches, paths) {
+    const state = await read();
+    assert.deepEqual([state.sketches, state.paths], [sketches, paths]);
+    f.report.observations.push({ label, sketches: state.sketches, paths: state.paths });
+    await f.snapshot(label);
+  }
+  await button('Sketch 1').click();
+  await button('Rail A').click();
+  await selection('browser-curve-keeps-sketch', [0], ['Rail A']);
+  await button('Collapse the browser').click();
+  await button('Expand the browser').click();
+  await selection('browser-reopened-keeps-selection', [0], ['Rail A']);
+  await button('Rail B').click({ modifiers: ['Shift'] });
+  await selection('browser-shift-adds-curve', [], ['Rail A', 'Rail B']);
+  await button('Rail A').click({ modifiers: ['Shift'] });
+  await selection('browser-shift-removes-curve', [], ['Rail B']);
+  await button('Sketch 1').click();
+  await button('Test surface').click();
+  await selection('browser-surface-clears-sketch', [], ['Test surface']);
+  await button('Sketch 1').click();
+  await selection('browser-sketch-clears-surface', [0], []);
+  await f.same(seed);
+
+  const hidden = button('Hidden rail');
+  assert.equal(await hidden.getAttribute('title'), 'Hidden: click to show');
+  await hidden.click();
+  const shown = structuredClone(seed);
+  shown.direct.objects.at(-1).hidden = false;
+  await f.same(shown);
+  assert.equal(await hidden.getAttribute('title'), 'Hidden rail');
+  await selection('browser-reveals-hidden-rail', [0], ['Hidden rail']);
+  await f.undo();
+  await f.same(seed);
+  await f.snapshot('browser-reveal-undone');
+  await f.redo();
+  await f.same(shown);
+  await f.snapshot('browser-reveal-redone');
+  await f.undo();
+  await f.same(seed);
+  await button('Test surface').click();
+}
+
 await f.run(async () => {
+  if (browserRows) {
+    const origin = new URL(f.server.resolvedUrls.local[0]).origin;
+    const newContext = f.browser.newContext.bind(f.browser);
+    f.browser.newContext = async options => {
+      const context = await newContext({ ...options, serviceWorkers: 'block' });
+      await context.route('**/*', route => {
+        const url = new URL(route.request().url());
+        if (url.hostname === 'fonts.googleapis.com') return route.fulfill({ contentType: 'text/css', body: '' });
+        return url.origin === origin ? route.continue() : route.abort();
+      });
+      return context;
+    };
+  }
   await f.newPage();
   const [chooser] = await Promise.all([f.page.waitForEvent('filechooser'), button('Open').click()]);
   await chooser.setFiles({ name: 'D1168-sweep-retarget.bcad', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(seed)) });
   await f.same(seed);
+  if (browserRows) await checkBrowserRows();
   await button('Sketch 1').click();
   await button('Rail A').click();
   await f.page.evaluate(() => document.activeElement?.blur());

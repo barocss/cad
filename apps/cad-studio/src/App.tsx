@@ -91,6 +91,7 @@ import { useAlignHistoryPreview } from './app/useAlignHistoryPreview';
 import { useOppositeFlangeRadiusPreview } from './app/useOppositeFlangeRadiusPreview';
 import { carrySketchSelection } from './state/profileSelection';
 import { BodyBrowserRows } from './ui/BodyBrowserRows';
+import { DirectBrowserRows, SketchBrowserRows } from './ui/BrowserGeometryRows';
 import { ModelBrowser } from './ui/ModelBrowser';
 import { RequirementsBrowser } from './ui/RequirementsBrowser';
 import { DesignHistory } from './ui/DesignHistory';
@@ -259,7 +260,7 @@ import { ReferencesPanel } from './ui/ReferencesPanel';
 import { placeReference, readReferences } from '@barocss/cad-model/chat/references';
 import { confirmDimension, liveDrafts } from '@barocss/cad-model/chat/drafts';
 import { DraftsPanel } from './ui/DraftsPanel';
-import { sweepPath, extrudeProfile, isIndependentExtrudeJoinProfile } from '@barocss/cad-model/app/profileCommands';
+import { extrudeProfile, isIndependentExtrudeJoinProfile } from '@barocss/cad-model/app/profileCommands';
 import { editCommand } from '@barocss/cad-model/app/editCommand';
 import { isBodyEyeVisibilityOnly } from './state/bodyVisibilityReferenceProblems';
 import { heldDraftFacePreviewClear, heldDraftFaceWorkCurrent } from './state/heldDraftFaceSession';
@@ -2659,26 +2660,14 @@ export function App() {
               setSelection(picked);
             }, { event, readFeature: readFeatureTransitionDraft }),
           }} />
-        {freeSketches.length > 0 && <div className="ol-head">Sketches</div>}
-        {freeSketches.map(k => <div key={'s' + k} className={'ol-row' + (selection.sketches?.includes(k) ? ' sel' : '')}>
-          <span className="ol-eye"><Icon name="cad-sketch" small /></span>
-          <button className={'ol' + (selection.sketches?.includes(k) ? ' sel' : '')} onClick={e => pickProfile(k, e.shiftKey)}>Sketch {k + 1}</button></div>)}
+        <SketchBrowserRows indices={freeSketches} selected={selection.sketches} onPick={pickProfile} />
         {!!doc.instances?.length && <div className="ol-head">Parts placed <span className="muted">{doc.instances.length}</span></div>}
         <OutlinerInstances isolationAction={isolationAction} open={bodyReveal.openPaths} onToggle={bodyReveal.togglePath} registerRow={bodyReveal.registerInstance} instances={doc.instances ?? NO_INSTANCES} selection={instanceSel} edit={instanceEdit} locked={!!active || !!sketch || rendering || drawing}
           onPick={pickInstanceRow} onEdit={editInstanceRow} iconFor={iconFor} />
         {!!doc.assemblyCuts?.length && <div className="ol-head">Cuts <span className="muted">{doc.assemblyCuts.length}</span></div>}
         <OutlinerCuts cuts={doc.assemblyCuts ?? NO_CUTS} instances={doc.instances ?? NO_INSTANCES} editing={cutDraft?.editing ?? null} locked={!!active || !!sketch || rendering || drawing} onEdit={openCut} onDelete={deleteCut} />
-        {!!doc.direct?.objects.length && <div className="ol-head">Curves and surfaces</div>}
-        {(doc.direct?.objects ?? []).map(o => <button key={o.id} className={'ol direct' + (directSel.includes(o.id) ? ' sel' : '') + (o.hidden ? ' hidden-obj' : '')}
-          title={o.hidden ? 'Hidden: click to show' : o.name}
-          onClick={e => {
-            if (retargetActiveSweep({ path: o.id })) return;
-            if (o.hidden) { commitDirect({ ...doc.direct!, objects: doc.direct!.objects.map(x => x.id === o.id ? { ...x, hidden: false } : x) }, [o.id]); return; }
-            const keepProfile = !e.shiftKey && typeof sweepPath(doc, [o.id]) !== 'string';
-            setSelection(previous => keepProfile && previous.sketches?.length === 1 && !previous.profileRegions?.indices.length
-              ? { ...emptySel, sketches: previous.sketches } : emptySel);
-            setDirectSel(prev => e.shiftKey ? (prev.includes(o.id) ? prev.filter(x => x !== o.id) : [...prev, o.id]) : [o.id]);
-          }}><Icon name={o.hidden ? 'visibility_off' : 'gesture'} small />{o.name}</button>)}
+        <DirectBrowserRows doc={doc} selected={directSel} actions={{ retarget: retargetActiveSweep,
+          commit: commitDirect, selectGeometry: setDirectSel, selectModel: setSelection }} />
         <SpecifyPanel doc={doc} onAnswer={answerQuestions} onAcceptAll={acceptAll} />
         <DraftsPanel drafts={liveDrafts(doc)} underlays={doc.underlays ?? []} onUnderlay={(id, hidden) => commit({ ...doc, underlays: (doc.underlays ?? []).map(u => u.id === id ? { ...u, hidden } : u) }, false)} onAddDrawing={f => void addDrawingFile(f)} onConfirm={(key, value) => { try { commit(confirmDimension(doc, key, value, new Date().toISOString())); } catch (e) { setToast({ title: 'Dimension not changed', hint: e instanceof Error ? e.message.replace(/^\[[A-Z_]+\] /, '') : String(e), detail: '' }); } }} />
         <ReferencesPanel set={readReferences(doc.references)} resetKey={doc} local={refLocal} errors={refErrors} pending={refPending} verdicts={keepoutVerdicts} onAddFile={f => void addReferenceFile(f)} onPlace={placeRef}
