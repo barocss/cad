@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1779: [Resize adjacent right and oblique saved Sketch Chamfers](notes/resize-adjacent-right-oblique-sketch-chamfers-2026-11-23/README.md), #21. Match numeric and drag previews, preserve both bevel planes and verify Agent approval and fresh Open.
 - D1778: [Verify adjacent right and oblique Sketch Chamfers](notes/adjacent-right-oblique-sketch-chamfers-2026-11-23/README.md), #21. Match point and carrier selection, shared-side refusal and local Agent approval through Studio fresh Open.
 - D1777: [Review four apertures on a pending offset two-cavity Intersect](notes/pending-offset-paired-duct-intersect-review-2026-11-23/README.md), #324. Pin actual widths, wall ownership and twelve non-right angles through explicit Studio approval and fresh Open.
 - D1776: [Bind native joints on an offset two-cavity duct Intersect](notes/exact-offset-paired-cavity-duct-intersect-2026-11-23/README.md), #10. Preserve four apertures, exact offset angles and the edited cut through Studio fresh Open.
