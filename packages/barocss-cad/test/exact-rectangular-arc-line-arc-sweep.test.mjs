@@ -346,8 +346,7 @@ for (const turn of [-1, 1]) test(`the ${turn === 1 ? 'same-turn' : 'opposite-tur
     kind, start: [50 + (x - y) * Math.SQRT1_2, -30 + (x + y) * Math.SQRT1_2],
   }));
   refused(path, withHole(rotated), 'CAPABILITY', aperture);
-  refused(path, withHole(...duct.holes, rectangle(.5, .5)), turn === -1 ? 'GEOMETRY' : 'CAPABILITY',
-    turn === -1 ? /strictly positive axial web clearance/ : aperture);
+  refused(path, withHole(...duct.holes, rectangle(.5, .5)), 'GEOMETRY', /strictly positive axial web clearance/);
   refused(path, withHole(rectangle(1e-5, 2)), 'CAPABILITY', aperture);
   for (const width of [2, 2.01, 2 - 5e-7, 2 - 1e-6]) refused(path, withHole(rectangle(width, 2)), 'GEOMETRY', wall);
   refused(path, withHole(rectangle(1, 2, { center: [51, -30] })), 'GEOMETRY', wall);

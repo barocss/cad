@@ -9,12 +9,14 @@ const baseline = process.argv.includes('--expect-refused');
 const reviewBaseline = process.argv.includes('--expect-review-unavailable');
 const review = process.argv.includes('--review');
 const tail = process.argv.includes('--straight-tail') ? 14 : 0;
-const spaced = process.argv.includes('--spaced-opposite');
+const sameTurn = process.argv.includes('--spaced-same-turn');
+const spaced = sameTurn || process.argv.includes('--spaced-opposite');
+assert.ok(!sameTurn || (!review && !reviewBaseline));
 assert.ok(!spaced || !tail);
 const threePieces = tail > 0 || spaced;
 const ends = [
   { direction: 'Left', axis: 0, sign: -1, center: spaced ? [0, 0] : [-10, 0] },
-  spaced ? { direction: 'Right', axis: 0, sign: 1, center: [30, 38] }
+  spaced ? { direction: sameTurn ? 'Left' : 'Right', axis: 0, sign: sameTurn ? -1 : 1, center: [sameTurn ? -6 : 30, 38] }
     : { direction: 'Back', axis: 1, sign: 1, center: [20, 20 + tail] },
 ];
 const junctionPlanes = spaced ? [[1, 12], [1, 20]] : tail ? [[0, 0], [1, 20]] : [[0, 0]];
@@ -24,7 +26,7 @@ assert.ok([baseline, reviewBaseline, review].filter(Boolean).length <= 1);
 const railName = 'Paired duct rail';
 const path = spaced ? {
   degree: 2, knots: [0, 0, 0, 1, 1, 2, 2, 3, 3, 3],
-  controlPoints: [[0, 0, 0], [12, 0, 0], [12, 12, 0], [12, 16, 0], [12, 20, 0], [12, 38, 0], [30, 38, 0]],
+  controlPoints: [[0, 0, 0], [12, 0, 0], [12, 12, 0], [12, 16, 0], [12, 20, 0], [12, 38, 0], [sameTurn ? -6 : 30, 38, 0]],
   weights: [1, Math.SQRT1_2, 1, 1, 1, Math.SQRT1_2, 1],
 } : tail ? {
   degree: 2, knots: [0, 0, 0, 1, 1, 2, 2, 3, 3, 3],
@@ -62,7 +64,7 @@ if (review || reviewBaseline) pins.push(
 );
 const f = await createFlow({
   name: spaced ? 'exact-spaced-paired-duct' : 'exact-line-arc-paired-duct', output: process.argv[2],
-  envFrozen: spaced ? (review || reviewBaseline ? 'D1794_SOURCE_FROZEN' : 'D1792_SOURCE_FROZEN') : (review || reviewBaseline)
+  envFrozen: sameTurn ? 'D1795_SOURCE_FROZEN' : spaced ? (review || reviewBaseline ? 'D1794_SOURCE_FROZEN' : 'D1792_SOURCE_FROZEN') : (review || reviewBaseline)
     ? (tail ? 'D1787_SOURCE_FROZEN' : 'D1783_SOURCE_FROZEN')
     : (tail ? 'D1786_SOURCE_FROZEN' : 'D1782_SOURCE_FROZEN'),
   initialFiles: pins, requiredFrozen: pins,
@@ -70,7 +72,7 @@ const f = await createFlow({
     'packages/barocss-cad-model/src/chat/pairedLineArcDuctEvidence.ts',
     ...(spaced ? ['packages/barocss-cad-model/src/chat/pairedSpacedArcDuctEvidence.ts'] : []),
   ] : [],
-  qualification: spaced ? 'Carry two rectangular passages through two opposite bends and a straight span.'
+  qualification: spaced ? 'Carry two rectangular passages through two bends and a straight span.'
     : 'Sweep two rectangular passages along a straight rail into a tangent arc.',
   limits: [spaced ? 'A 4 × 10 mm section, two 2 × 2 mm lanes, R12/R18 quarter bends, an 8 mm straight span and desktop WebGPU.' : `A bend-aligned 4 × 10 mm rectangle, two axial lanes centered at ±2 mm, a 10 mm straight span and an R20 quarter arc${tail ? ' followed by a 14 mm straight span' : ''}. Desktop WebGPU.`],
   inspectorSource: `
@@ -176,7 +178,7 @@ async function verify(label, doc, firstHalfHeight) {
   const firstRadial = 2 * (12 + radialVariance / 12) / Math.PI;
   const secondRadial = 2 * (18 + radialVariance / 18) / Math.PI;
   const expectedCentroid = spaced ? [
-    (firstArc * firstRadial + 8 * 12 + secondArc * (30 - secondRadial)) / pathLength,
+    (firstArc * firstRadial + 8 * 12 + secondArc * (sameTurn ? -6 + secondRadial : 30 - secondRadial)) / pathLength,
     (firstArc * (12 - firstRadial) + 8 * 16 + secondArc * (20 + secondRadial)) / pathLength,
     (8 * firstHalfHeight - 8) / area,
   ] : [
@@ -198,7 +200,7 @@ async function verify(label, doc, firstHalfHeight) {
   return native;
 }
 
-async function showEnd(direction, label) {
+async function showEnd(direction, label, index = 0) {
   const cube = f.page.getByRole('group', { name: 'View cube', exact: true });
   await button('View cube directions', cube).click();
   await f.page.getByRole('menuitem', { name: direction, exact: true }).click();
@@ -208,7 +210,7 @@ async function showEnd(direction, label) {
     const labels = [...document.querySelectorAll('.view-cube .vc-label')];
     return labels.length === 1 && labels[0].textContent === name;
   }, direction.toUpperCase());
-  const { center, axis, sign } = ends.find(end => end.direction === direction);
+  const { center, axis, sign } = ends[index];
   const [first, web, second] = await f.page.evaluate(center => [-2, 0, 2].map(z => window.__studioSurfacePoint([...center, z])), center);
   assert.ok(web, 'Material between the passages must face the viewport');
   near(web[axis], center[axis], 1e-4);
@@ -254,7 +256,7 @@ async function approveWithAgent(source, expected) {
   const reviewed = await withMcpSession(session, file, 'paired-duct-proposal', async (call, request) => {
     const expectedRevision = await currentPartRevision(call);
     const description = await call('describe', { command: 'sweep-curve' });
-    assert.match(description.values.sketch, spaced ? /opposite-turn arc–line–arc duct accepts this paired section/
+    assert.match(description.values.sketch, sameTurn ? /Same-turn arc–line–arc ducts also accept this paired section/ : spaced ? /opposite-turn arc–line–arc duct accepts this paired section/
       : tail ? /line–arc–line duct also accepts this paired section/ : /line–arc ducts accept two rectangular openings/);
     const rail = (await call('query', { action: 'summary' })).direct_curves.find(curve => curve.id === 'rail');
     assert.ok(rail?.revision);
@@ -352,7 +354,7 @@ await f.run(async () => {
   assert.deepEqual([part.nodes[1].kind, part.nodes[1].mode, part.nodes[1].path], ['sweep-curve', 'exact', path]);
   const original = await verify('applied-native', part, 1);
   await showEnd('Left', '02-inlet');
-  await showEnd(ends[1].direction, '03-outlet');
+  await showEnd(ends[1].direction, '03-outlet', 1);
   await inspectJoints(original.joints);
 
   f.phase = 'Refuse invalid passage edits';
@@ -392,7 +394,7 @@ await f.run(async () => {
   const reopened = (await f.freshOpen(saved.file, edited, '05-fresh-open')).doc;
   assert.equal((await verify('reopened-native', reopened, .5)).digest, narrower.digest);
   await showEnd('Left', '06-reopened-inlet');
-  await showEnd(ends[1].direction, '07-reopened-outlet');
+  await showEnd(ends[1].direction, '07-reopened-outlet', 1);
   await openFirstPassage();
   await coordinate(1, 'Y').fill('-3');
   await coordinate(2, 'Y').fill('-1');

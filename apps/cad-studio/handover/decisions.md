@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D1795: [Sweep two passages through spaced same-turn bends](notes/exact-spaced-same-turn-paired-duct-2026-11-23/README.md), #10. Verify both mouths, all 24 native tangent joins, editable lane geometry, Undo, Redo and fresh Open.
+
 - D1794: [Review the paired spaced S-bend before Agent approval](notes/pending-spaced-paired-duct-review-2026-11-23/README.md), #324. Bind both mouths, 36 tagged walls and 24 native tangent joins to the candidate and both images through explicit Studio approval and fresh Open.
 - D1793: [Extract Studio sheet pattern ownership from App](notes/studio-sheet-pattern-ownership-2026-11-23/README.md), #44. Match shared and Flange rule ownership, bend-table acceptance and refusal, and flat-pattern fresh Open in desktop Studio.
 - D1792: [Sweep two passages through a spaced S-bend](notes/exact-spaced-paired-duct-2026-11-23/README.md), #10. Verify both apertures at both ends, 24 native tangent joins, editable lane geometry, fresh Open and explicit local Agent approval.

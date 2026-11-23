@@ -1156,7 +1156,7 @@ export function exactSweep(input: ExactSweepInput, refuse: Refuse): SweepSolid {
     const hole = rectangle ? undefined : circularHole(holes, 'arc-line-arc', refuse);
     const bore = hole && concentricBore(disk!, hole, refuse);
     const initial = frame(spaced.first.tangent), [x, y] = initial;
-    const paired = rectangle && holes.length > 1 && spaced.turn === -1;
+    const paired = rectangle && holes.length > 1;
     const joined: { axes: SweepAxes; section: JoinedSection } = rectangle
       ? rectangularElbowSection(rectangle, paired ? [] : holes, initial, spaced.first, refuse, 'rectangular arc-line-arc') : {
       axes: initial, section: { profile: [originDisk(profileRadius!)],
