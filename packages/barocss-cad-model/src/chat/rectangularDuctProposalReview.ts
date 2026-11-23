@@ -11,6 +11,7 @@ import type { Proposal } from '../engine/schema/proposals';
 import { digestOf } from '../util/digest';
 import { isObj } from '../util/guards';
 import { canonical, canonicalOf, revisionOf } from '../util/revision';
+import { closedRectangularDuctEvidence } from './closedRectangularDuctEvidence';
 import { directInspectionRevision } from './sweepSource';
 
 const near = (a: number, b: number) => Number.isFinite(a) && Number.isFinite(b) && Math.abs(a - b) <= CadNumericPolicy.linearTolerance;
@@ -132,7 +133,7 @@ function seams(brep: Brep, feature: string, tags: string[], [lead, exit]: readon
   return result;
 }
 
-/** Verify unchanged sources, the exact copied path and strict native openings and tangent seams. */
+/** Verify unchanged sources, the exact copied path and the native open ends or sealed cavity. */
 export async function reviewedRectangularDuctEvidence(base: StudioDoc, candidate: StudioDoc, edit: NonNullable<ReturnType<typeof rectangularDuctProposal>>) {
   const source = scope(base);
   if (!source || edit.source !== canonicalOf(base) || edit.sourceRevision !== revisionOf(base) ||
@@ -141,19 +142,28 @@ export async function reviewedRectangularDuctEvidence(base: StudioDoc, candidate
   await loadDirect();
   const copied = sweepPath(base, [edit.path]);
   // The same copied payload is hashed by sweepSourceRevision for the command's read pin.
-  if (typeof copied === 'string' || digestOf(copied.path) !== edit.pathRevision ||
-    copied.path.degree !== 2 || copied.path.controlPoints.length !== 5 || copied.path.knots.length !== 8) return;
+  if (typeof copied === 'string' || digestOf(copied.path) !== edit.pathRevision || copied.path.degree !== 2) return;
+  const { path } = copied;
+  const closedCircle = path.controlPoints.length === 9 && path.knots.length === 12;
+  if (!closedCircle && (path.controlPoints.length !== 5 || path.knots.length !== 8)) return;
   const expected = withNode(base, { kind: 'sweep-curve', sketch: 0, name: copied.name, path: copied.path, mode: 'exact' });
   if (canonicalOf(candidate) !== canonicalOf(expected) || candidate.nextId !== expected.nextId) return;
   try {
     if (partBreps(base).length) return;
     const outputs = partBreps(candidate), brep = outputs[0]?.brep, feature = featureId(candidate.nodes, 1), body = bodyKeyFor(candidate.nodes, 1);
     if (outputs.length !== 1 || outputs[0].key !== body || brep.source.family !== 'sweep-curve' || brep.source.id !== feature ||
-      brep.bodies.length !== 1 || brep.bodies[0].kind !== 'solid' || brep.shells.length !== 1 || !brep.shells[0].closed) return;
+      brep.bodies.length !== 1 || brep.bodies[0].kind !== 'solid') return;
+    if (closedCircle) {
+      const evidence = closedRectangularDuctEvidence(brep, path, source);
+      if (!evidence) return;
+      return { brep, rectangularDuct: { body, sketch: edit.sketch, path: edit.path, pathRevision: edit.pathRevision,
+        pathKind: 'closed-circle' as const, caps: [], ...evidence } };
+    }
+    if (brep.shells.length !== 1 || !brep.shells[0].closed) return;
     const report = checkBrep(brep, { strict: true });
     if (!report.valid || report.topology.length !== 1 || report.topology[0].genus !== 1 ||
       canonical(report.counts) !== canonical({ bodies: 1, shells: 1, faces: 18, loops: 20, coedges: 80, edges: 40, vertices: 24 })) return;
-    const path = copied.path, points = path.controlPoints;
+    const points = path.controlPoints;
     const mixedPath = brep.faces.some(face => face.name?.startsWith(`${feature}.line.`));
     const arcFirst = mixedPath && path.weights[1] < path.weights[0];
     const pieces = mixedPath ? arcFirst ? ['bend', 'line'] as const : ['line', 'bend'] as const : ['first', 'second'] as const;

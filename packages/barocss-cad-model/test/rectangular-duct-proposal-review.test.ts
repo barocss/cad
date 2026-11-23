@@ -75,6 +75,28 @@ test('one pinned rectangular duct creation proves both native openings and all e
   assert.equal(await reviewedRectangularDuctEvidence(base, { ...candidate, parameters: { extra: 1 } }, edit), undefined);
 });
 
+test('a pinned closed-circle duct can review its sealed cavity and keeps the source unchanged', async () => {
+  const circle = `@model rails { version:0; length-unit:mm;
+    @curve #circle { type:nurbs; degree:2; knots:[0,0,0,1,1,2,2,3,3,4,4,4];
+      control-points:[[20,0,0],[20,20,0],[0,20,0],[-20,20,0],[-20,0,0],[-20,-20,0],[0,-20,0],[20,-20,0],[20,0,0]];
+      weights:[1,0.7071067811865476,1,0.7071067811865476,1,0.7071067811865476,1,0.7071067811865476,1]; } }`;
+  const { base, candidate, edit } = await fixture(circle, 'circle', 'Closed circle');
+  const before = structuredClone(base), after = structuredClone(candidate);
+  const reviewed = await reviewedRectangularDuctEvidence(base, candidate, edit);
+  assert.ok(reviewed);
+  const { rectangularDuct: duct } = reviewed;
+  assert.deepEqual([duct.pathKind, duct.caps, duct.path, duct.pathRevision], ['closed-circle', [], 'circle', edit.pathRevision]);
+  assert.equal(duct.exteriorSeams.length, 8);
+  assert.equal(duct.interiorSeams.length, 8);
+  assert.ok('closedCavity' in duct && duct.closedCavity);
+  assert.ok(Math.abs(duct.closedCavity.volume.native - 640 * Math.PI) < 1e-7);
+  assert.equal(duct.closedCavity.volume.method, 'quadrature');
+  assert.equal(await reviewedRectangularDuctEvidence(base, candidate, { ...edit, pathRevision: 'a'.repeat(64) }), undefined);
+  assert.equal(await reviewedRectangularDuctEvidence(base, { ...candidate, nextId: 99 }, edit), undefined);
+  assert.deepEqual(base, before);
+  assert.deepEqual(candidate, after);
+});
+
 test('closed, stale, ambiguous, dependent and unrelated Sweep proposals do not receive a duct review revision', async () => {
   const { base, proposal } = await fixture(), op = proposal.ops[0], args = op.args!, values = args.values as Record<string, unknown>;
   for (const status of ['accepted', 'rejected'] as const) assert.equal(rectangularDuctProposal(base, { ...proposal, status }), undefined);

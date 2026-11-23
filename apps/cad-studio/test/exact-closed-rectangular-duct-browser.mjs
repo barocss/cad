@@ -1,10 +1,13 @@
 import assert from 'node:assert/strict';
-import { copyFile, readFile } from 'node:fs/promises';
+import { copyFile, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { createFlow } from './flow-helper.mjs';
+import { checkChangedDuctPath } from './duct-proposal-review-browser-steps.mjs';
+import { createFlow, sha256 } from './flow-helper.mjs';
 import { currentPartRevision, withMcpSession } from './mcp-browser-session.mjs';
 
 const baseline = process.argv.includes('--expect-refused');
+const reviewBaseline = process.argv.includes('--expect-review-refused');
+const review = reviewBaseline || process.argv.includes('--review-cavity');
 const radius = 20;
 const railId = 'circle-rail', railName = 'Closed circular rail';
 const path = { degree: 2, knots: [0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 4],
@@ -29,8 +32,17 @@ const pins = [
   'packages/barocss-cad-model/src/app/profileCommands.ts', 'packages/barocss-cad-model/src/engine/errors.ts',
   'packages/barocss-cad-model/src/chat/part/features.ts', 'apps/cad-studio/src/sketch/useSketchActions.ts',
 ];
+if (review) pins.push(
+  'apps/cad-studio/test/exact-closed-rectangular-duct-browser.mjs',
+  'apps/cad-studio/test/duct-proposal-review-browser-steps.mjs',
+  'packages/barocss-cad-model/src/chat/rectangularDuctProposalReview.ts',
+  'packages/barocss-cad-model/src/chat/part/modelCandidate.ts',
+  'packages/barocss-cad-model/src/chat/part/views.ts',
+  'packages/barocss-cad-model/src/chat/part/proposals.ts',
+);
+if (review && !reviewBaseline) pins.push('packages/barocss-cad-model/src/chat/closedRectangularDuctEvidence.ts');
 const f = await createFlow({
-  name: 'exact-closed-rectangular-duct', output: process.argv[2], envFrozen: 'D1762_SOURCE_FROZEN',
+  name: 'exact-closed-rectangular-duct', output: process.argv[2], envFrozen: review ? 'D1763_SOURCE_FROZEN' : 'D1762_SOURCE_FROZEN',
   initialFiles: pins, requiredFrozen: pins,
   qualification: 'Sweep a rectangle with a centered rectangular opening around a closed circle and edit the cavity after Open.',
   limits: ['One R20 four-quarter rail and one aligned 4 × 6 mm outer rectangle, desktop WebGPU and local L1 MCP.'],
@@ -147,6 +159,77 @@ async function setHeight(halfHeight) {
   await coordinate(2, 'Y').fill(String(halfHeight));
 }
 
+async function proposalImage(request, args, error = false) {
+  const reply = await request('tools/call', { name: 'query', arguments: { action: 'render', ...args } });
+  assert.equal(reply.isError, error, reply.content[0].text);
+  const meta = JSON.parse(reply.content[0].text);
+  if (error) return { meta };
+  const png = Buffer.from(reply.content.find(item => item.type === 'image').data, 'base64');
+  assert.equal(png.subarray(0, 8).toString('hex'), '89504e470d0a1a0a');
+  assert.equal(sha256(png), meta.imageSha256);
+  assert.equal(Object.keys(meta.views).length, 4);
+  return { meta, png };
+}
+
+async function reviewPendingCavity(call, request, expectedRevision, pathRevision, nativeDigest) {
+  const { proposals: [proposal] } = await call('proposals', { action: 'list' });
+  assert.equal(proposal.id, 'P1');
+  assert.match(proposal.modelReviewRevision, /^[0-9a-f]{64}$/);
+  const pins = { expectedRevision, proposal: proposal.id, expectedProposalRevision: proposal.modelReviewRevision };
+  if (reviewBaseline) {
+    const { meta } = await proposalImage(request, pins, true);
+    assert.equal(meta.code, 'MODEL_REVIEW_REPLAY_FAILED');
+    assert.match(meta.error, /native geometry.*could not be verified/i);
+    f.report.observations.push({ label: 'closed-duct-review-refused', ...meta });
+    return;
+  }
+  const { meta, png } = await proposalImage(request, pins);
+  assert.equal(meta.candidate.bodySha256, nativeDigest);
+  assert.equal(meta.rectangularDuct.pathRevision, pathRevision);
+  assert.equal(meta.rectangularDuct.pathKind, 'closed-circle');
+  assert.deepEqual(meta.rectangularDuct.caps, []);
+  assert.equal(meta.rectangularDuct.exteriorSeams.length, 8);
+  assert.equal(meta.rectangularDuct.interiorSeams.length, 8);
+  assert.equal(new Set([...meta.rectangularDuct.exteriorSeams, ...meta.rectangularDuct.interiorSeams]).size, 16);
+  const cavity = meta.rectangularDuct.closedCavity;
+  assert.deepEqual([cavity.exteriorFaces.length, cavity.interiorFaces.length], [8, 8]);
+  const dimensions = cavity.dimensions;
+  for (const [actual, expected] of [[dimensions.pathRadius, radius], [dimensions.exterior.radial, 4], [dimensions.exterior.axial, 6],
+    [dimensions.interior.radial, 2], [dimensions.interior.axial, 4], [dimensions.wall.radial, 1], [dimensions.wall.axial, 1]]) near(actual, expected);
+  near(cavity.volume.analytic, volume(2));
+  near(cavity.volume.native, volume(2));
+  assert.equal(cavity.volume.method, 'quadrature');
+  assert.ok(cavity.maximumGapMM <= 1e-8);
+  const expectedReviewRevision = meta.candidate.reviewRevision;
+  const faces = ['n1.side[outer]#1', 'n1.side[hole-outer]#1'];
+  const lookup = { ...pins, expectedReviewRevision, action: 'inspect', faces };
+  const native = await call('query', lookup);
+  assert.deepEqual([native.candidate, native.imageSha256, native.rectangularDuct], [meta.candidate, meta.imageSha256, meta.rectangularDuct]);
+  assert.deepEqual(native.faces.map(({ name, geometry }) => [name, geometry.kind, geometry.outwardNormal]),
+    [[faces[0], 'cylinder', 'away-from-axis'], [faces[1], 'cylinder', 'toward-axis']]);
+  near(native.faces[0].geometry.radius, 22);
+  near(native.faces[1].geometry.radius, 21);
+  assert.equal((await call('query', { ...lookup, expectedReviewRevision: '0'.repeat(64) }, true)).code, 'MODEL_REVIEW_IMAGE_STALE');
+  assert.equal((await call('query', { ...lookup, orientation: 'opposite' }, true)).code, 'MODEL_REVIEW_IMAGE_STALE');
+  assert.equal((await call('query', { ...lookup, expectedProposalRevision: '0'.repeat(64) }, true)).code, 'MODEL_REVIEW_PROPOSAL_STALE');
+  const opposite = await proposalImage(request, { ...pins, orientation: 'opposite' });
+  assert.notEqual(opposite.meta.imageSha256, meta.imageSha256);
+  assert.notEqual(opposite.meta.candidate.reviewRevision, expectedReviewRevision);
+  assert.equal(opposite.meta.candidate.bodySha256, nativeDigest);
+  assert.deepEqual(opposite.meta.rectangularDuct, meta.rectangularDuct);
+  for (const view of [...Object.values(meta.views), ...Object.values(opposite.meta.views)]) {
+    assert.ok(view.visible_faces.every(name => !cavity.interiorFaces.includes(name)));
+  }
+  const oppositeInspection = await call('query', { ...lookup, orientation: 'opposite', expectedReviewRevision: opposite.meta.candidate.reviewRevision });
+  assert.deepEqual(oppositeInspection.faces, native.faces);
+  assert.deepEqual(oppositeInspection.rectangularDuct, native.rectangularDuct);
+  await writeFile(join(f.output, 'closed-duct-four-views.png'), png);
+  await writeFile(join(f.output, 'closed-duct-opposite-views.png'), opposite.png);
+  f.report.observations.push({ label: 'closed-duct-proposal-review', revision: meta.revision, imageSha256: meta.imageSha256,
+    oppositeImageSha256: opposite.meta.imageSha256, candidate: meta.candidate, rectangularDuct: meta.rectangularDuct });
+  return { meta, png, lookup, native, opposite };
+}
+
 await f.run(async () => {
   const origin = new URL(f.server.resolvedUrls.local[0]).origin;
   const newContext = f.browser.newContext.bind(f.browser);
@@ -235,7 +318,8 @@ await f.run(async () => {
 
   const file = join(f.output, 'closed-duct-proposal.bcad');
   await copyFile(original.file, file);
-  await withMcpSession({ app: f.app, output: f.output, clientName: f.name }, file, 'closed-duct', async call => {
+  const session = { app: f.app, output: f.output, clientName: f.name };
+  const reviewed = await withMcpSession(session, file, 'closed-duct', async (call, request) => {
     const expectedRevision = await currentPartRevision(call);
     const description = await call('describe', { command: 'sweep-curve' });
     assert.match(description.values.sketch, /A closed circle [^.]*aligned rectangle with an optional centered rectangular opening/);
@@ -251,19 +335,40 @@ await f.run(async () => {
     assert.deepEqual(await readFile(file), bytes);
     const staged = await call('proposals', { action: 'propose', title: 'Exact closed rectangular duct', ops: [op(rail.revision)] });
     assert.deepEqual([staged.proposal, staged.applied], ['P1', false]);
+    if (!review) return;
+    const pendingBytes = await readFile(file);
+    const result = await reviewPendingCavity(call, request, expectedRevision, rail.revision, before.digest);
+    assert.deepEqual(await readFile(file), pendingBytes);
+    return result;
   });
   const pending = JSON.parse(await readFile(file));
   assert.deepEqual([pending.nodes, pending.outputs], [seed.nodes, seed.outputs]);
+  if (reviewed) await checkChangedDuctPath(session, pending, reviewed, path.controlPoints);
   await f.freshOpen(file, pending, '10-proposal-pending');
   await button('Chat').first().click();
   const card = f.page.getByRole('listitem', { name: 'Proposal P1', exact: true });
   await button('Preview', card).click();
   await button('Hide', card).waitFor();
   await f.same(pending);
+  if (reviewed) await f.snapshot('10-candidate-preview');
   await button('Accept', card).click();
   await f.changed(pending);
   await f.page.getByTitle('Frame all (F)', { exact: true }).click();
   const approved = (await f.snapshot('11-proposal-approved')).doc;
   assert.deepEqual([approved.nodes[1].mode, approved.nodes[1].path], ['exact', path]);
   assert.equal((await verify('approved-native', approved, 2)).digest, before.digest);
+  if (review) {
+    const approvedSave = await f.save('closed-duct-reviewed');
+    await f.freshOpen(approvedSave.file, approved, '12-approved-fresh-open');
+    assert.equal((await verify('approved-reopened-native', approvedSave.doc, 2)).digest, before.digest);
+    if (reviewed) await withMcpSession(session, approvedSave.file, 'closed-duct-reviewed', async (call, request) => {
+      const expectedRevision = await currentPartRevision(call);
+      assert.equal(expectedRevision, reviewed.meta.revision);
+      assert.deepEqual((await proposalImage(request, { expectedRevision })).png, reviewed.png);
+      assert.deepEqual((await proposalImage(request, { expectedRevision, orientation: 'opposite' })).png, reviewed.opposite.png);
+      const current = await call('query', { action: 'inspect', faces: reviewed.lookup.faces, expectedRevision });
+      assert.deepEqual(current.faces, reviewed.native.faces);
+      assert.equal((await call('query', { ...reviewed.lookup, expectedRevision }, true)).code, 'MODEL_REVIEW_UNAVAILABLE');
+    });
+  }
 });
