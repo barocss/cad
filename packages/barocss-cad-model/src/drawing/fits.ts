@@ -33,29 +33,53 @@ function classedFace(doc: StudioDoc, edge: string): { face: string; class: strin
   return null;
 }
 
+type FitAnnotation = { class: string; limits: readonly (readonly [number, number])[]; estimate: boolean }
+  | { class: string; miss: string };
+
+function fitAnnotation(doc: StudioDoc, edge: string, diameter: number): FitAnnotation | null {
+  const own = classedFace(doc, edge);
+  if (!own) return null;
+  const tables = doc.fits?.tables ?? [], pairs = doc.fits?.pairs ?? [];
+  const pair = pairs.find(p => p.hole === own.face || p.shaft === own.face), other = pair ? doc.fits?.faces?.find(f => f.face === (pair.hole === own.face ? pair.shaft : pair.hole)) : undefined;
+  if (other) {
+    const [hc, sc] = isHoleClass(own.class) ? [own.class, other.class] : [other.class, own.class];
+    const cls = `${hc}/${sc}`;
+    try {
+      const fit = fitLimits(tables, hc, sc, diameter);
+      return { class: cls, limits: [[fit.hole.upper, fit.hole.lower], [fit.shaft.upper, fit.shaft.lower]], estimate: fit.estimate };
+    } catch (e) {
+      if (!(e instanceof FitError)) throw e;
+      return { class: `${own.class}/${other.class}`, miss: e.message };
+    }
+  }
+  try {
+    const fit = lookupFit(tables, own.class, diameter);
+    return { class: own.class, limits: [[fit.upper, fit.lower]], estimate: fit.estimate };
+  } catch (e) {
+    if (!(e instanceof FitError)) throw e;
+    return { class: own.class, miss: e.message };
+  }
+}
+
 /**
  * The fit a diameter dimension on `edge` at `diameter` shows, after its size: its class and limits (a pair's both),
  * or the class alone with why its limits are missing; null when no face of the edge carries a class.
  */
-export function fitCallout(doc: StudioDoc, edge: string, diameter: number, f: LengthFormat = plainMM): { text: string; miss?: string; /** The decimals its deviations print at: the size reads at them too. */ digits?: number } | null {
-  const own = classedFace(doc, edge); if (!own) return null;
-  const tables = doc.fits?.tables ?? [], pairs = doc.fits?.pairs ?? [];
-  const pair = pairs.find(p => p.hole === own.face || p.shaft === own.face), other = pair ? doc.fits?.faces?.find(f => f.face === (pair.hole === own.face ? pair.shaft : pair.hole)) : undefined;
-  try {
-    if (pair && other) {
-      const [hc, sc] = isHoleClass(own.class) ? [own.class, other.class] : [other.class, own.class];
-      const l = fitLimits(tables, hc, sc, diameter);
-      const d = limitsOf([[l.hole.upper, l.hole.lower], [l.shaft.upper, l.shaft.lower]], diameter, f);
-      return { text: `${hc}/${sc} (${d.texts[0]}, ${d.texts[1]})${l.estimate ? ' (est.)' : ''}`, ...(d.digits !== undefined ? { digits: d.digits } : {}) };
-    }
-    const l = lookupFit(tables, own.class, diameter);
-    const d = limitsOf([[l.upper, l.lower]], diameter, f);
-    return { text: `${own.class} (${d.texts[0]})${l.estimate ? ' (est.)' : ''}`, ...(d.digits !== undefined ? { digits: d.digits } : {}) };
-  } catch (e) {
-    if (!(e instanceof FitError)) throw e;
-    const cls = pair && other ? (isHoleClass(own.class) ? `${own.class}/${other.class}` : `${other.class}/${own.class}`) : own.class;
-    return { text: cls, miss: e.message };
-  }
+export function fitCallout(doc: StudioDoc, edge: string, diameter: number, f: LengthFormat = plainMM): { text: string; miss?: string; digits?: number } | null {
+  const fit = fitAnnotation(doc, edge, diameter);
+  if (!fit) return null;
+  if ('miss' in fit) return { text: fit.class, miss: fit.miss };
+  const d = limitsOf(fit.limits, diameter, f);
+  return { text: `${fit.class} (${d.texts.join(', ')})${fit.estimate ? ' (est.)' : ''}`, ...(d.digits !== undefined ? { digits: d.digits } : {}) };
+}
+
+/** Exact deviations for proposal review, independent of drawing units and printed rounding. */
+export function fitForReview(doc: StudioDoc, edge: string, diameter: number): string | undefined {
+  const fit = fitAnnotation(doc, edge, diameter);
+  if (!fit) return;
+  if ('miss' in fit) return fit.class + ' (limits unavailable)';
+  const limits = fit.limits.map(([upper, lower]) => `${deviation(upper, String)}/${deviation(lower, String)}`);
+  return `${fit.class} (${limits.join(', ')})${fit.estimate ? ' (est.)' : ''}`;
 }
 
 /** A diameter dimension's callout with its fit: the hole's callout (or Ø and the size), then the fit, when the edge's face carries a class. */

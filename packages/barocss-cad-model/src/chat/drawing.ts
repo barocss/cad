@@ -6,7 +6,7 @@ import { firstProblem, isRefusal } from '../engine/refusal';
 import { drawingDocument, drawingSource, drawingScopeOf, drawingSourceRevision, checkDrawingScope, changeDrawingScope, drawsMadeOnly, type DrawingScope } from '../drawing/scope';
 import { elementNotes, partElements, withElementNotes, withElements } from '../drawing/elementCallouts';
 import { followedStale, staleText } from '../frames/skeleton';
-import { fitMiss, withFit } from '../drawing/fits';
+import { fitForReview, fitMiss, withFit } from '../drawing/fits';
 import { weldList, type WeldJoint } from '../frames/welds';
 import { evaluatePart } from '../engine/evaluate';
 import { baseBodyFaces, brepsFor } from '../engine/evaluate';
@@ -76,7 +76,9 @@ export function drawingInputs(doc: StudioDoc, settings: DrawingSettings = readDr
   return readDrawingInputs(doc, settings);
 }
 
-function readDrawingInputs(doc: StudioDoc, settings: DrawingSettings, includeBom = true): SheetInputs | string {
+type DrawingReadInputs = SheetInputs & { fitForReview(edge: string, diameter: number): string | undefined };
+
+function readDrawingInputs(doc: StudioDoc, settings: DrawingSettings, includeBom = true): DrawingReadInputs | string {
   const sourceDoc = doc;
   let authored = doc;
   try { authored = drawingSource(doc, settings); doc = drawingDocument(doc, settings); } catch (cause) { return String(cause instanceof Error ? cause.message : cause); }
@@ -104,7 +106,7 @@ function readDrawingInputs(doc: StudioDoc, settings: DrawingSettings, includeBom
     svgSectionTextClearance = evaluated.ok && sectionTextClearanceScope(sourceDoc, doc, settings, evaluated.bodies);
   }
   const holes = drawingHoleCallouts(doc, r.views);
-  return { views: r.views, settings, locationOwner: holes.owner, fastenerSizes: fastenerSizesOf(doc), elements, callout: Object.assign(withElements(doc, withFit(doc, holes.callout), elements), { holeKind: holes.holeKind, patternQuantity: holes.patternQuantity, stalePatternSpacing: holes.stalePatternSpacing }), fitMiss: fitMiss(doc), followedChanged: followedStale(authored).map(staleText), meta: { svgSectionTextClearance, title: settings.title ?? 'part', date: new Date().toISOString().slice(0, 10), source, threads: threadsOf(doc.nodes, fastenerSizesOf(doc)), tableContent: (tb, context) => tableContent(tb, { doc: tb.from === 'fits' ? sourceDoc : doc, ...(bom ? { bom } : {}), ...(context ? { drawing: { ...context, wholeSettings: readDrawing(sourceDoc.drawing) } } : {}) }), ...(settings.weldSymbols ? { welds: weldJointsOf(doc) } : {}), ...(bom ? { bom } : {}), ...(bom && settings.balloons ? { bodyFaces: baseBodyFaces(doc) } : {}) }, ...(sections.length ? { sections } : {}) };
+  return { views: r.views, settings, fitForReview: (edge, diameter) => fitForReview(doc, edge, diameter), locationOwner: holes.owner, fastenerSizes: fastenerSizesOf(doc), elements, callout: Object.assign(withElements(doc, withFit(doc, holes.callout), elements), { holeKind: holes.holeKind, patternQuantity: holes.patternQuantity, stalePatternSpacing: holes.stalePatternSpacing }), fitMiss: fitMiss(doc), followedChanged: followedStale(authored).map(staleText), meta: { svgSectionTextClearance, title: settings.title ?? 'part', date: new Date().toISOString().slice(0, 10), source, threads: threadsOf(doc.nodes, fastenerSizesOf(doc)), tableContent: (tb, context) => tableContent(tb, { doc: tb.from === 'fits' ? sourceDoc : doc, ...(bom ? { bom } : {}), ...(context ? { drawing: { ...context, wholeSettings: readDrawing(sourceDoc.drawing) } } : {}) }), ...(settings.weldSymbols ? { welds: weldJointsOf(doc) } : {}), ...(bom ? { bom } : {}), ...(bom && settings.balloons ? { bodyFaces: baseBodyFaces(doc) } : {}) }, ...(sections.length ? { sections } : {}) };
 }
 
 const isCircularDimension = (dimension: DrawingSettings['dimensions'][number]) => dimension.kind === 'diameter' || dimension.kind === 'radius';
@@ -120,7 +122,16 @@ export function drawingCalloutsOf(doc: StudioDoc) {
     const local = { ...forSheet(settings, index), scope };
     if (!local.dimensions.some(isCircularDimension)) return [];
     const sheet = issueContext({ ...inputs, settings: local }).sheet;
-    return printableCallouts(sheet).map(callout => ({ ...callout, sheet: index + 1, sheetName: sheetName(settings, index) }));
+    const fits = new Map<string, string>();
+    for (const resolved of sheet.dimensions) {
+      if (!resolved.ok || resolved.kind !== 'diameter') continue;
+      const fit = inputs.fitForReview(resolved.dim.edge, resolved.value);
+      if (fit) fits.set(JSON.stringify([resolved.dim.id, resolved.dim.view]), fit);
+    }
+    return printableCallouts(sheet).map(callout => {
+      const fit = fits.get(JSON.stringify([callout.id, callout.view]));
+      return { ...callout, sheet: index + 1, sheetName: sheetName(settings, index), ...(fit ? { fit } : {}) };
+    });
   }).flat();
 }
 
@@ -200,7 +211,8 @@ export function runDrawingTool(doc: StudioDoc, name: string, args: Record<string
         return set(withElementNotes({ ...i.settings, dimensions: r.dimensions }, i.elements ? elementNotes(i.views, ctx.layout, i.elements) : []), 'drawing dimensioned', { added: r.report.added, kept: r.report.kept, skipped: r.report.skipped, crowded: r.report.crowded });
       }
       // The front's side by information, when nothing placed by hand ties it (R14.3b): the part projected for it first.
-      let base = i, front: string | undefined;
+      let base: SheetInputs = i;
+      let front: string | undefined;
       const pick = frontByInformation(i.views, i.settings);
       if (pick) {
         const other = drawingInputs(doc, pick.orientation === 'y-' ? { ...i.settings } : { ...i.settings, orientation: pick.orientation });

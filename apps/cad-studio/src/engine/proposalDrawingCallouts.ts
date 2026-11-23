@@ -6,6 +6,7 @@ export interface ProposalCalloutChange {
   key: string;
   before?: DrawingCallout;
   after?: DrawingCallout;
+  fitChanged?: true;
 }
 export type ProposalCalloutReply = { changes: ProposalCalloutChange[] } | { error: string };
 
@@ -24,10 +25,11 @@ export function proposalDrawingCallouts(working: StudioDoc, candidate: StudioDoc
   for (const callout of before) {
     const key = calloutKey(callout), next = remaining.get(key);
     remaining.delete(key);
-    if (next?.sheet === callout.sheet && next.sheetName === callout.sheetName &&
+    const fitChanged = callout.fit !== next?.fit;
+    if (!fitChanged && next?.sheet === callout.sheet && next.sheetName === callout.sheetName &&
       next.lines.length === callout.lines.length && next.lines.every((line, index) => line === callout.lines[index])) continue;
-    changes.push({ key, before: callout, ...(next ? { after: next } : {}) });
+    changes.push({ key, before: callout, ...(next ? { after: next } : {}), ...(fitChanged ? { fitChanged: true } : {}) });
   }
-  for (const [key, callout] of remaining) changes.push({ key, after: callout });
+  for (const [key, callout] of remaining) changes.push({ key, after: callout, ...(callout.fit ? { fitChanged: true } : {}) });
   return { changes };
 }

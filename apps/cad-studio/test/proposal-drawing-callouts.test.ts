@@ -32,3 +32,27 @@ test('ambiguous drawing references fail instead of hiding a printed annotation',
   const duplicate = { ...seed, drawing: { ...drawing, dimensions: [...drawing.dimensions, diameter] } };
   assert.deepEqual(proposalDrawingCallouts(seed, duplicate), { error: 'Callout references are ambiguous.' });
 });
+
+test('report a fit change independently of ordinary printed callout edits', () => {
+  const withFit = (upper: number): StudioDoc => ({ ...seed, fits: {
+    version: 1, faces: [{ face: 'n2.side0', class: 'H7' }],
+    tables: [{ id: 'synthetic', rows: [{ class: 'H7', over: 3, upTo: 6, upper, lower: 0 }] }],
+  } });
+  const fitted = withFit(.018);
+  const moved: StudioDoc = { ...fitted, drawing: { ...fitted.drawing!, dimensions: fitted.drawing!.dimensions.map(dimension =>
+    dimension.id === 'd4' ? { ...dimension, place: [0, -20] } : dimension) } };
+  assert.deepEqual(proposalDrawingCallouts(fitted, moved), { changes: [] });
+
+  const updated = proposalDrawingCallouts(fitted, withFit(.0180001));
+  assert.ok('changes' in updated);
+  const [change] = updated.changes;
+  assert.equal(updated.changes.length, 1);
+  assert.equal(change.before?.fit, 'H7 (+0.018/0)');
+  assert.equal(change.after?.fit, 'H7 (+0.0180001/0)');
+  assert.equal(change.fitChanged, true);
+
+  const removed = proposalDrawingCallouts(fitted, seed);
+  assert.ok('changes' in removed);
+  assert.equal(removed.changes[0].fitChanged, true);
+  assert.equal(removed.changes[0].after?.fit, undefined);
+});
