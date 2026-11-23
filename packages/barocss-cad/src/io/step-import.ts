@@ -45,7 +45,7 @@ function space(s: string, i: number): boolean {
   return c === 32 || (c >= 9 && c <= 13) || (c > 127 && (c === 0xa0 || /\s/.test(s[i])));
 }
 /** First DATA section, with real comments replaced by whitespace and all quoted bytes retained. */
-function dataSection(source: string): string {
+function dataSection(source: string, singleSection: boolean): string {
   const chunks: string[] = [];
   let start = 0, quoted = false;
   for (let i = 0; i < source.length; i++) {
@@ -75,7 +75,10 @@ function dataSection(source: string): string {
     } else if (clean[i] === ';') {
       const word = clean.slice(statement, i).trim();
       if (dataStart < 0 && word === 'DATA') dataStart = i + 1;
-      else if (dataStart >= 0 && word === 'ENDSEC') return clean.slice(dataStart, statement);
+      else if (dataStart >= 0 && word === 'ENDSEC') {
+        if (singleSection && clean.slice(i + 1).trim() !== 'END-ISO-10303-21;') refuse('expected one DATA section');
+        return clean.slice(dataStart, statement);
+      }
       statement = i + 1;
     }
   }
@@ -103,8 +106,8 @@ function zeroMantissa(token: string): boolean {
   return true;
 }
 /** The DATA section's instances: simple ones and complex ones (as their partial entities). */
-function parseData(source: string): Map<number, Entity> {
-  const s = dataSection(source), out = new Map<number, Entity>();
+function parseData(source: string, strictRecords = false): Map<number, Entity> {
+  const s = dataSection(source, strictRecords), out = new Map<number, Entity>();
   const zeroOffsetArgs = new WeakSet<Value[]>();
   let i = 0;
   const ws = () => { while (i < s.length && space(s, i)) i++; };
@@ -130,6 +133,7 @@ function parseData(source: string): Map<number, Entity> {
   while (i < s.length) {
     ws(); if (i >= s.length) break;
     const head = sticky(HEAD, s, i); if (!head) refuse(`expected an instance near ${s.slice(i, i + 30)}`);
+    if (strictRecords && out.has(Number(head![1]))) refuse('duplicate instance number');
     i += head![0].length; ws();
     if (s[i] === '(') {
       i++; const parts: { type: string; args: Value[] }[] = [];
@@ -141,8 +145,57 @@ function parseData(source: string): Map<number, Entity> {
       out.set(Number(head![1]), { type: w![0], args, ...(zeroOffsetArgs.has(args) ? { zeroOffsetDistance: true as const } : {}) });
     }
     ws(); if (s[i] === ';') i++;
+    else if (strictRecords) refuse('expected an instance terminator');
   }
   return out;
+}
+
+const recipeMetadata = new Set([
+  'APPLICATION_CONTEXT', 'APPLICATION_PROTOCOL_DEFINITION', 'PRODUCT_CONTEXT', 'PRODUCT',
+  'PRODUCT_RELATED_PRODUCT_CATEGORY', 'PRODUCT_DEFINITION_FORMATION', 'PRODUCT_DEFINITION_CONTEXT',
+  'PRODUCT_DEFINITION', 'PRODUCT_DEFINITION_SHAPE', 'SHAPE_DEFINITION_REPRESENTATION',
+  'DERIVED_UNIT_ELEMENT', 'DERIVED_UNIT', 'MEASURE_REPRESENTATION_ITEM', 'REPRESENTATION',
+  'PROPERTY_DEFINITION', 'PROPERTY_DEFINITION_REPRESENTATION', 'CARTESIAN_POINT',
+]);
+
+/** @internal Compare the submitted writer-profile geometry before import normalizes it. */
+export function stepGeometryRecipeKey(source: string): string {
+  const data = parseData(source, true);
+  const representations = [...data].filter(([, entity]) => entity.type === 'ADVANCED_BREP_SHAPE_REPRESENTATION');
+  if (representations.length !== 1) return refuse('expected one advanced B-rep representation');
+  const root = representations[0][0];
+  const definitions = [...data.values()].filter(entity => entity.type === 'SHAPE_DEFINITION_REPRESENTATION');
+  const represented = definitions[0]?.args[1];
+  if (definitions.length !== 1 || !represented || typeof represented !== 'object' || !('ref' in represented) || represented.ref !== root)
+    return refuse('expected one product shape linked to the B-rep representation');
+
+  // Preserve reference sharing and every geometric argument. Record numbers and descriptive strings can change.
+  const ids = new Map<number, number>(), records: unknown[] = [];
+  const valueKey = (value: Value): unknown => {
+    if (typeof value === 'string') return '';
+    if (typeof value === 'number' && !Number.isFinite(value)) return refuse('non-finite recipe coordinate');
+    if (Array.isArray(value)) return value.map(valueKey);
+    if (value && typeof value === 'object') {
+      if ('ref' in value) return { ref: visit(value.ref) };
+      if ('type' in value) return { type: value.type, args: value.args.map(valueKey) };
+    }
+    return value;
+  };
+  function visit(id: number): number {
+    const previous = ids.get(id);
+    if (previous !== undefined) return previous;
+    const entity = data.get(id);
+    if (!entity) return refuse('missing recipe geometry instance');
+    const ordinal = ids.size;
+    ids.set(id, ordinal);
+    records[ordinal] = [entity.type, entity.args.map(valueKey), entity.parts?.map(part => [part.type, part.args.map(valueKey)])];
+    return ordinal;
+  }
+  visit(root);
+  for (const [id, entity] of data) {
+    if (!ids.has(id) && !recipeMetadata.has(entity.type)) refuse('extra geometry or units outside the recipe representation');
+  }
+  return JSON.stringify(records);
 }
 const expand = (values: readonly number[], mults: readonly number[]) => values.flatMap((v, k) => Array(mults[k]).fill(v) as number[]);
 const TAU = 2 * Math.PI;

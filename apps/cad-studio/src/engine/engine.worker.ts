@@ -1,5 +1,6 @@
 import type { DrawingBodySelector } from '@barocss/cad-model/drawing/scope';
 import { readNativeEdgeCurve } from '@barocss/cad-model/engine/nativeEdgeCurve';
+import { editableStepCopy } from '@barocss/cad-model/engine/editableStepCopy';
 /// <reference lib="webworker" />
 import { brepsFor, deferMasses, evaluateDoc, evaluatePart, evaluatePlaced, evaluatePreview, evaluateVolumes, massOfRef, shareMeshes, exportStudioStep, stlFor, type BodyResult, type EvalResult, type PartSlot, type StudioStepRootScope } from '@barocss/cad-model/engine/evaluate';
 import { nativeMassEnvelope, type NativeMassEnvelope, type NativeMassSource } from '@barocss/cad-model/engine/nativeMassWire';
@@ -50,6 +51,7 @@ export type WorkerRequest =
   | { type: 'proposalDrawingCallouts'; id: number; doc: WireDoc; proposed: WireDoc }
   | { type: 'stl'; id: number; doc: WireDoc; key: string; options?: { segmentsPerQuarter: number } }
   | { type: 'step'; id: number; doc: WireDoc; metadata: StepMetadata; name: string; meshes?: 'auto' | 'tessellated' | 'planar'; rootScope?: StudioStepRootScope }
+  | { type: 'editableStepCopy'; id: number; doc: WireDoc }
   /** A STEP file's meshes when it holds nothing else (R3.5), for the repair gate. */
   | { type: 'stepMeshes'; id: number; step: string }
   | { type: 'drawing'; id: number; doc: WireDoc; options?: { tangentEdges?: boolean; sections?: DrawingSection[]; orientation?: 'x+' | 'y+' | 'x-'; made?: boolean; body?: DrawingBodySelector } }
@@ -241,6 +243,8 @@ self.onmessage = (event: MessageEvent<WorkerRequest>) => {
     (self as unknown as Worker).postMessage({ id: request.id, drawing });
   } else if (request.type === 'step') {
     (self as unknown as Worker).postMessage({ id: request.id, step: stepReply(receiveStepMetadata(request.doc, request.metadata), request.name, request.meshes, request.rootScope) });
+  } else if (request.type === 'editableStepCopy') {
+    post({ id: request.id, copy: editableStepCopy(request.doc) });
   } else {
     try {
       const bytes = stlFor(request.doc, request.key, request.options);

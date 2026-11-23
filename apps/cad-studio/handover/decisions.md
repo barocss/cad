@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1841: [Save an editable copy of a STEP plate](notes/editable-step-plate-copy-2026-11-24/README.md), #320. Qualify the original solid and edits to the new Sketch, Extrude and Hole copy in desktop Studio.
 - D1840: [Extract Studio history controls from App](notes/studio-history-controls-2026-11-24/README.md), #44. Verify document and draft replay, labels and native project lifecycle in desktop Studio.
 - D1839: [Refine imported two-guide Loft display](notes/two-guide-loft-step-display-2026-11-24/README.md), #16. Certify exact trims and wall supports and verify reduced projected error with the same native selection on both desktop renderers.
 - D1838: [Verify exact STEP exchange of the unequal two-guide Loft](notes/two-guide-loft-taper-step-exchange-2026-11-24/README.md), #16. Compare two edited Studio files against independent curve, surface and volume oracles through fresh Open, and record the observed display gap.

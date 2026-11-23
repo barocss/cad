@@ -2,7 +2,7 @@
 import {
   ArrowLeft, ArrowLeftRight, ArrowRight, Bandage, BookOpen, Box, Boxes, Camera,
   Check, ChevronDown, ChevronRight, ChevronUp, Circle, CircleAlert, CircleCheck, CircleDot,
-  CircleHelp, Compass, CopyPlus, Download, Ellipsis, EllipsisVertical, Eraser, Eye,
+  CircleHelp, Compass, Copy, CopyPlus, Download, Ellipsis, EllipsisVertical, Eraser, Eye,
   EyeOff, FileInput, Focus, FolderOpen, Grid2x2, Hand, History, Image,
   Info, LibraryBig, Lightbulb, Link, List, ListFilter, LocateFixed, Lock,
   Maximize, MessageSquare, Moon, MousePointer2, MousePointer2Off, MousePointerClick, Move, Network,
@@ -45,6 +45,7 @@ export const UI_ICONS: Readonly<Record<string, LucideIcon>> = {
   error: CircleAlert,
   expand_less: ChevronUp,
   expand_more: ChevronDown,
+  file_copy: Copy,
   file_open: FileInput,
   filter_center_focus: Focus,
   filter_list: ListFilter,

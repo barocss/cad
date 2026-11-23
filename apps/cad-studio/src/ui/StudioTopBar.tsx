@@ -52,6 +52,7 @@ interface StudioTopBarProps {
     stl(): void;
     threeMf(): Promise<void>;
     step(): Promise<void>;
+    editableCopy?: { run(): Promise<void>; disabled: boolean };
     iges?: () => Promise<void>;
   };
 }
@@ -121,6 +122,9 @@ export function StudioTopBar({ file, workspace, history, panels, template, excha
         onClick={() => void exchange.threeMf()}><Icon name="print" /></ToolIconButton>,
       <ToolIconButton key="tool11" aria-label="Export STEP" data-tip="Export STEP" data-tip-desc="The exact solids, for other CAD"
         onClick={() => void exchange.step()}><Icon name="deployed_code_update" /></ToolIconButton>,
+      exchange.editableCopy && <ToolIconButton key="editable-step-copy" aria-label="Save editable STEP copy" data-tip="Save editable STEP copy"
+        data-tip-desc="Create a separate BCAD model from a supported STEP solid" disabled={exchange.editableCopy.disabled}
+        onClick={() => void exchange.editableCopy?.run()}><Icon name="file_copy" /></ToolIconButton>,
       exchange.iges && <ToolIconButton key="tool12" aria-label="Export IGES" data-tip="Export IGES" data-tip-desc="The visible curves and surfaces"
         onClick={exchange.iges}><Icon name="polyline" /></ToolIconButton>,
       route && <ToolIconButton key="route-bundle" state={route.open ? 'on' : 'idle'} aria-label="Route bundle" data-tip="Route bundle"

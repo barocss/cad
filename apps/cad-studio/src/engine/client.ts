@@ -1,5 +1,6 @@
 import type { DrawingBodySelector } from '@barocss/cad-model/drawing/scope';
 import type { NativeEdgeCurveReply } from '@barocss/cad-model/engine/nativeEdgeCurve';
+import type { EditableStepCopy } from '@barocss/cad-model/engine/editableStepCopy';
 import type { ContinuityReply, ContinuityRequest } from '@barocss/cad-model/engine/edgeContinuity';
 import { rememberFaceTable } from '@barocss/cad-model/assembly/faces';
 import type { EvalResult, PartSlot, VolumeEvaluation, StudioStep, StudioStepRootScope } from '@barocss/cad-model/engine/evaluate';
@@ -404,6 +405,14 @@ export class EngineClient {
     return new Promise(resolve => {
       this.pending.set(id, data => resolve((data as { step: StudioStep | { error: string } }).step));
       this.post(id, () => ({ type: 'step', id, doc: this.wire!.pack(doc), metadata: stepMetadata(doc), name, ...(meshes ? { meshes } : {}), rootScope }));
+    });
+  }
+
+  editableStepCopy(doc: StudioDoc): Promise<EditableStepCopy> {
+    const id = this.next++;
+    return new Promise(resolve => {
+      this.pending.set(id, data => resolve((data as { copy?: EditableStepCopy }).copy ?? { error: 'Editable STEP check stopped.' }));
+      this.post(id, () => ({ type: 'editableStepCopy', id, doc: this.wire!.pack(doc) }));
     });
   }
 

@@ -2746,7 +2746,7 @@ export function App() {
             versions: { open: versionsOpen, toggle: toggleVersions },
             route: routeAvailable ? { open: routePanelOpen, disabled: routeContext.current.blocked, show: openRoute } : undefined }}
           template={{ doc, onTemplate: chooseTemplate, onNotice: setToast }}
-          exchange={{ stl: askStlExport, threeMf: exportThreeMf, step: exportStepFile, iges: canExportIges ? exportIges : undefined }}
+          exchange={{ stl: askStlExport, threeMf: exportThreeMf, step: exportStepFile, editableCopy: modelExports.editableCopy, iges: canExportIges ? exportIges : undefined }}
         />
       </Profiler>
       <div className="stage">

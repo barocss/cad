@@ -18,6 +18,7 @@ import { placedLooksOf } from '../state/useInstanceLooks';
 import type { EngineClient } from '../engine/client';
 import { downloadBytes, lumpStls, meshToStl } from '../ui/files';
 import { createStepPreparation, type StepPreview, type StepMeshes } from './stepExportPreparation';
+import { writeDocumentFile } from './documentFile';
 
 export interface ModelExportContext {
   doc: StudioDoc;
@@ -75,6 +76,31 @@ export function useModelExports({ model, engine, fileName, current, onNotice }: 
   const clearStepAsk = stepControl.current.cancel;
   useEffect(() => { stepControl.current?.reconcile(); }, [doc, evaluated, model.shown, fileName, fresh, busy, instanceBodies, model.instancesFresh]);
   useEffect(() => () => stepControl.current?.dispose(), []);
+  const [editableCopyBusy, setEditableCopyBusy] = useState(false);
+  const editableCopyPending = useRef(false);
+  const exportEditableCopy = async () => {
+    const owner = currentStepOwner(stepLatest.current);
+    if (!owner.fresh || editableCopyPending.current) return;
+    const owns = () => {
+      const next = currentStepOwner(stepLatest.current);
+      return next.fresh && next.doc === owner.doc && next.evaluated === owner.evaluated && next.shown === owner.shown && next.name === owner.name;
+    };
+    editableCopyPending.current = true;
+    setEditableCopyBusy(true);
+    const refuse = (hint: string) => onNotice({ title: 'Could not make an editable copy', hint, detail: '' });
+    try {
+      const copy = await engine.editableStepCopy(owner.doc);
+      if (!owns()) return;
+      if ('error' in copy) { refuse(copy.error); return; }
+      writeDocumentFile(copy.doc, `${owner.name}-editable.bcad`);
+      onNotice({ title: 'Editable copy written', hint: 'Open the BCAD copy to edit the new Sketch, Extrude and Hole. The STEP document is unchanged.', detail: '' });
+    } catch (error) {
+      if (owns()) refuse(error instanceof Error ? error.message : String(error));
+    } finally {
+      editableCopyPending.current = false;
+      setEditableCopyBusy(false);
+    }
+  };
   const [stlAsk, setStlAsk] = useState(false), [stlQuality, setStlQuality] = useState<'automatic' | '8' | '16' | '32'>('automatic'), [stlBusy, setStlBusy] = useState(false);
   const stlHasPlacedParts = model.shown.instances?.some(i => !i.hidden) ?? false;
   const stlPlacedHint = stlQuality === 'automatic' ? stlPlacedLoss : 'Draft, Standard and Fine require no visible placed parts.';
@@ -233,7 +259,9 @@ export function useModelExports({ model, engine, fileName, current, onNotice }: 
     if (value === 'automatic' || value === '8' || value === '16' || value === '32') { stlGeneration.current++; setStlQuality(value); }
   };
   return { stepAsk: !!stepPreview, stepPreview, downloadStep, stlAsk, stlQuality, stlBusy, stlLossHint, stlTargets, stlCancelButton, clearStepAsk, changeStlQuality,
-    askStlExport, cancelStlExport, exportStepFile, exportStl, exportQuote, exportThreeMf };
+    askStlExport, cancelStlExport, exportStepFile, exportStl, exportQuote, exportThreeMf,
+    editableCopy: doc.nodes.length === 1 && doc.nodes[0].kind === 'import'
+      ? { run: exportEditableCopy, disabled: busy || !fresh || editableCopyBusy } : undefined };
 }
 
 export type ModelExportController = ReturnType<typeof useModelExports>;
