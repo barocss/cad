@@ -9,7 +9,8 @@ const paired = process.argv.includes('--paired-cavities');
 const reviewBaseline = process.argv.includes('--expect-cut-review-unavailable');
 const reviewCut = reviewBaseline || process.argv.includes('--review-cut');
 const cutOffset = (!paired && reviewCut) || process.argv.includes('--offset') ? 1 : 0;
-assert.ok(!paired || cutOffset === 0, 'Paired cavity qualification uses the centered box.');
+const pairedOffset = paired && cutOffset > 0;
+assert.ok(!pairedOffset || !reviewCut, 'Paired Agent image review uses the centered box.');
 const path = {
   degree: 2, knots: [0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 4],
   controlPoints: [[20, 0, 0], [20, 20, 0], [0, 20, 0], [-20, 20, 0], [-20, 0, 0],
@@ -54,13 +55,13 @@ if (paired && reviewCut && !reviewBaseline) pins.push(
 );
 const f = await createFlow({
   name: 'exact-rectangular-duct-intersection', output: process.argv[2],
-  envFrozen: paired ? (reviewCut ? 'D1774_SOURCE_FROZEN' : 'D1773_SOURCE_FROZEN')
+  envFrozen: pairedOffset ? 'D1776_SOURCE_FROZEN' : paired ? (reviewCut ? 'D1774_SOURCE_FROZEN' : 'D1773_SOURCE_FROZEN')
     : reviewCut ? 'D1769_SOURCE_FROZEN' : cutOffset ? 'D1767_SOURCE_FROZEN' : 'D1765_SOURCE_FROZEN',
   initialFiles: pins, requiredFrozen: pins,
-  qualification: paired ? 'Intersect the exact two-cavity duct with a centered box in desktop Studio.'
+  qualification: paired ? `Intersect the exact two-cavity duct with a ${cutOffset ? 'positive-offset' : 'centered'} box in desktop Studio.`
     : cutOffset ? 'Intersect one exact closed rectangular duct with an offset box in desktop Studio.'
       : 'Intersect one exact closed rectangular duct with a centered box in desktop Studio.',
-  limits: [paired ? 'One R20 mm rail, outer 4 × 10 mm and two axially separated 2 × 2 mm cavities, retained x ≥ 0, desktop WebGPU.'
+  limits: [paired ? `One R20 mm rail, outer 4 × 10 mm and two axially separated 2 × 2 mm cavities, initial retained x ≥ ${cutOffset}, desktop WebGPU.`
     : `One R20 mm rail, outer 4 × 6 mm and centered 2 × 4 or 2 × 2 mm cavity, retained x ≥ ${cutOffset}, desktop WebGPU.`],
   inspectorSource: `
 import { readFileSync } from 'node:fs';
@@ -159,8 +160,8 @@ function verifyCut(native, cavityHalfHeight, offset = cutOffset) {
   near(native.mass.volume, volume);
   near(native.quadrature.volume, volume, 1e-6);
   if (paired) {
-    const halfAnnulusMoment = (outer, inner) => 2 * (outer ** 3 - inner ** 3) / 3;
-    const x = (10 * halfAnnulusMoment(22, 18) - hollowHeight * halfAnnulusMoment(21, 19)) / volume;
+    const annularSegmentMoment = (outer, inner) => 2 * (ordinate(outer, offset) ** 3 - ordinate(inner, offset) ** 3) / 3;
+    const x = (10 * annularSegmentMoment(22, 18) - hollowHeight * annularSegmentMoment(21, 19)) / volume;
     const z = -openings.reduce((total, hole) => total + 2 * hole.halfHeight * hole.center * innerArea, 0) / volume;
     for (const value of [native.mass, native.quadrature]) {
       assert.equal(value.method, 'quadrature');
@@ -533,7 +534,7 @@ await f.run(async () => {
     keptOffset = 2;
     beforeCavityEdit = await editOffset(cut, keptOffset, '05-box-offset-two');
     const offsetNative = await f.inspect('offset-two-native', beforeCavityEdit);
-    verifyCut(offsetNative, 2, keptOffset);
+    verifyCut(offsetNative, initialHalfHeight, keptOffset);
     await f.undo();
     await f.same(cut);
     await f.redo();
@@ -547,7 +548,7 @@ await f.run(async () => {
   await f.same(beforeCavityEdit);
   await f.redo();
   await f.same(edited);
-  const saved = await f.save(paired ? 'paired-cavity-intersection'
+  const saved = await f.save(pairedOffset ? 'paired-cavity-offset-intersection' : paired ? 'paired-cavity-intersection'
     : cutOffset ? 'offset-rectangular-duct-intersection' : 'centered-rectangular-duct-intersection');
   const reopened = (await f.freshOpen(saved.file, edited, '06-fresh-open')).doc;
   const reopenedNative = await f.inspect('reopened-intersection-native', reopened);

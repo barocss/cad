@@ -135,7 +135,7 @@ function readDuct(brep: Brep, tolerance: number): Duct | undefined {
     && report.topology[0].genus === count && report.maximumPcurveGap <= roundoff) return { outer, inner, roundoff };
 }
 
-/** Retain one or two apertures per cap; paired cavities require x = 0 and all other box faces clear. */
+/** Retain one or two apertures per cap, with all other box faces clear. */
 function coveringBox(box: Brep, duct: Duct, tolerance: number): number | undefined {
   if (box.bodies.length !== 1 || box.shells.length !== 1 || box.faces.length !== 6 || box.loops.length !== 6
     || box.vertices.length !== 8 || box.edges.length !== 12) return;
@@ -143,7 +143,6 @@ function coveringBox(box: Brep, duct: Duct, tolerance: number): number | undefin
   if (limits.some(values => values.length !== 2)) return;
   const [x, y, z] = limits, reach = duct.outer.radius + duct.outer.width;
   const offset = Math.abs(x[0]) <= duct.roundoff ? 0 : x[0];
-  if (duct.inner.length === 2 && offset !== 0) return;
   if ((offset !== 0 && !(offset > tolerance && offset < duct.outer.radius - duct.outer.width - tolerance))
     || !(x[1] > reach + tolerance && y[0] < -reach - tolerance && y[1] > reach + tolerance
     && z[0] < -duct.outer.height - tolerance && z[1] > duct.outer.height + tolerance)) return;
