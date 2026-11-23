@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { checkBrep, evaluateCadPart, reverseCurve, transformBrep, type Brep, type CadPartDocument, type Curve, type Point } from '@barocss/cad';
-import { pairedLineArcDuctEvidence } from '../src/chat/pairedLineArcDuctEvidence';
+import { pairedArcLineDuctEvidence, pairedLineArcDuctEvidence } from '../src/chat/pairedLineArcDuctEvidence';
 
 const source = { outer: [4, 10], outerTags: ['e1', 'e2', 'e3', 'e4'], cavities: [
   { min: [-1, -3], max: [1, -1], tags: ['e5', 'e6', 'e7', 'e8'] },
@@ -311,4 +311,152 @@ test('paired elbow handles reversed seam storage and refuses missing charts, wro
     { ...curve, knots: [0, 0, 0, 1, 1, 2, 2, 3, 3.1, 3.1] });
   for (const changed of variants) assert.equal(pairedLineArcDuctEvidence(original, changed, source), undefined);
   assert.equal(pairedLineArcDuctEvidence(original, curve, { ...source, outer: [4.1, 10] }), undefined);
+});
+
+function reversedPath(curve: Path): Path {
+  const sum = curve.knots[0] + curve.knots[curve.knots.length - 1];
+  return { ...curve, controlPoints: [...curve.controlPoints].reverse(), weights: [...curve.weights].reverse(),
+    knots: [...curve.knots].reverse().map(knot => sum - knot) };
+}
+const pointNear = (actual: Point, expected: Point) => actual.forEach((value, axis) => near(value, expected[axis]));
+
+test('arc-first paired evidence retains authored mouths, one twelve-edge join and independent material moments without mutation', () => {
+  const curve = reversedPath(path()), brep = native(curve), before = structuredClone({ brep, curve, source });
+  const evidence = pairedArcLineDuctEvidence(brep, curve, source);
+  assert.ok(evidence); assert.equal(evidence.pathKind, 'arc-and-line');
+  assert.deepEqual(checkBrep(brep, { strict: true }).counts,
+    { bodies: 1, shells: 1, faces: 26, loops: 30, coedges: 120, edges: 60, vertices: 36 });
+  const through = evidence.throughApertures, dimensions = through.dimensions;
+  assert.deepEqual(Object.keys(dimensions), ['pathRadius', 'tailLength', 'sweepRadians', 'exterior', 'axialWeb']);
+  near(dimensions.pathRadius, 20); near(dimensions.tailLength, 10); near(dimensions.sweepRadians, Math.PI / 2);
+  assert.deepEqual(dimensions.exterior, { radial: 4, axial: 10 }); near(dimensions.axialWeb, 2);
+  assert.deepEqual(through.junctions.map(join => join.pieces), [['bend', 'line']]);
+  assert.equal(through.exteriorFaces.length, 8);
+  assert.deepEqual(evidence.caps.map(cap => [cap.name, cap.outerEdges.length, cap.innerEdges.length]), [['w.start', 4, 8], ['w.end', 4, 8]]);
+  pointNear(evidence.caps[0].center, [20, 20, 0]); pointNear(evidence.caps[1].center, [-10, 0, 0]);
+  pointNear(evidence.caps[0].plane.normal, [0, 1, 0]); pointNear(evidence.caps[1].plane.normal, [-1, 0, 0]);
+  assert.deepEqual(through.apertures.map(aperture => aperture.axialInterval), [[-3, -1], [1, 3]]);
+  for (const [index, aperture] of through.apertures.entries()) {
+    assert.deepEqual(aperture.tags, source.cavities[index].tags);
+    assert.equal(aperture.faces.length, 8); assert.equal(aperture.seams.length, 4);
+    assert.deepEqual(aperture.seams, evidence.interiorSeams[index]);
+    for (const cap of evidence.caps) {
+      assert.deepEqual(cap.apertures[index].tags, aperture.tags);
+      pointNear(cap.apertures[index].center, add(cap.center, [0, 0, index ? 2 : -2]));
+    }
+  }
+  const seams = [...evidence.exteriorSeams, ...evidence.interiorSeams.flat()];
+  assert.equal(new Set(seams).size, 12);
+  assert.deepEqual(through.junctions[0].exteriorSeams, evidence.exteriorSeams);
+  assert.deepEqual(through.junctions[0].interiorSeams, evidence.interiorSeams);
+  for (const id of [...seams, ...evidence.caps.flatMap(cap => [...cap.outerEdges, ...cap.innerEdges])])
+    assert.ok(brep.coedges.filter(use => use.edge === id).every(use => use.pcurve));
+  const length = 10 + 10 * Math.PI;
+  near(through.volume.analytic, 32 * length); near(through.volume.native, 32 * length);
+  // The normalized radial second moment q is 19/12 mm². The quarter bend's
+  // X moment per unit section area is R²+q; add the straight prism's -50 mm².
+  const centroid: Point = [(350 + 19 / 12) / length, (200 * Math.PI - 400 - 19 / 12) / length, 0];
+  pointNear(through.centroid.analytic, centroid); pointNear(through.centroid.native, centroid);
+  assert.ok(through.maximumGapMM < 1e-10); assert.deepEqual({ brep, curve, source }, before);
+  assert.equal(pairedLineArcDuctEvidence(brep, curve, source), undefined);
+  assert.equal(pairedArcLineDuctEvidence(native(), path(), source), undefined);
+});
+
+test('arc-first asymmetric lanes preserve signed source ownership, order, winding, all IDs and the other lane', () => {
+  const curve = reversedPath(path()), before = native(curve);
+  const edited: Source = { ...source, cavities: [{ ...source.cavities[0], min: [-.75, -2.5], max: [.75, -1.5] }, source.cavities[1]] };
+  for (const section of [edited, { ...edited, cavities: [...edited.cavities].reverse() }]) for (const clockwise of [[true, false], [false, true]]) {
+    const evidence = pairedArcLineDuctEvidence(native(curve, section, clockwise), curve, section);
+    assert.ok(evidence);
+    near(evidence.throughApertures.volume.native, 34.5 * (10 + 10 * Math.PI));
+    near(evidence.throughApertures.centroid.native[2], -5 / 34.5);
+    assert.deepEqual(evidence.throughApertures.apertures.map(aperture => aperture.tags), section.cavities.map(cavity => cavity.tags));
+    for (const cap of evidence.caps) for (const [index, cavity] of section.cavities.entries())
+      pointNear(cap.apertures[index].center, add(cap.center, [0, 0, (cavity.min[1] + cavity.max[1]) / 2]));
+  }
+  const after = native(curve, edited), tags = [...source.outerTags, ...source.cavities[1].tags];
+  for (const key of ['bodies', 'shells', 'faces', 'loops', 'coedges', 'edges', 'vertices'] as const)
+    assert.deepEqual(after[key].map(item => item.id), before[key].map(item => item.id));
+  const untouched = (brep: Brep) => brep.faces.filter(face => tags.some(tag => face.name?.endsWith(`.side[${tag}]`)));
+  assert.deepEqual(untouched(after), untouched(before));
+  assert.equal(pairedArcLineDuctEvidence(before, curve, edited), undefined);
+  assert.equal(pairedArcLineDuctEvidence(after, curve, source), undefined);
+});
+
+test('arc-first translated oblique 30 and 120 degree frames and radial Y derive physical mouth centers from the authored sketch axes', () => {
+  const swapped = { ...source, outer: [10, 4], cavities: source.cavities.map(cavity => ({ ...cavity,
+    min: [cavity.min[1], cavity.min[0]], max: [cavity.max[1], cavity.max[0]],
+  })) };
+  for (const degrees of [30, 120]) for (const radialY of [false, true]) {
+    const curve = reversedPath(path(degrees, [32, -14, 18], radialY ? [0, 0, 1] : [.6, .8, 0], radialY ? [0, 1, 0] : [-.8, .6, 0]));
+    const section = radialY ? swapped : source, evidence = pairedArcLineDuctEvidence(native(curve, section), curve, section);
+    assert.ok(evidence, `${degrees} radialY=${radialY}`);
+    near(evidence.throughApertures.volume.native, 32 * (10 + 20 * degrees * Math.PI / 180));
+    const unit = (vector: Point) => scale(vector, 1 / Math.hypot(...vector));
+    const tangent = unit(add(curve.controlPoints[1], scale(curve.controlPoints[0], -1)));
+    const dot = (a: Point, b: Point) => a.reduce((sum, value, axis) => sum + value * b[axis], 0);
+    const project = (axis: Point) => add(axis, scale(tangent, -dot(axis, tangent)));
+    const projectedX = project([1, 0, 0]), x = unit(Math.hypot(...projectedX) < 1e-6 ? project([0, 1, 0]) : projectedX);
+    const axial: Point = radialY ? x : [tangent[1] * x[2] - tangent[2] * x[1], tangent[2] * x[0] - tangent[0] * x[2], tangent[0] * x[1] - tangent[1] * x[0]];
+    for (const cap of evidence.caps) for (const [index, cavity] of section.cavities.entries()) {
+      const axis = radialY ? 0 : 1, offset = (cavity.min[axis] + cavity.max[axis]) / 2;
+      pointNear(cap.apertures[index].center, add(cap.center, scale(axial, offset)));
+    }
+    pointNear(evidence.caps[0].plane.normal, scale(tangent, -1));
+    pointNear(evidence.caps[1].plane.normal, unit(add(curve.controlPoints[4], scale(curve.controlPoints[3], -1))));
+  }
+});
+
+test('arc-first exact reversal retains nonuniform knot domains, admitted midpoint sagitta and rational weight corrections', () => {
+  const original = { ...path(), knots: [-3, -3, -3, 1, 1, 2, 2, 2] }, curve = reversedPath(original);
+  assert.ok(pairedArcLineDuctEvidence(native(curve), curve, source));
+  for (const [index, delta] of [[3, 1.5e-7], [1, 2e-9]]) {
+    const changed = structuredClone(curve);
+    if (index === 3) changed.controlPoints[3][1] += delta; else changed.weights[1] += delta;
+    assert.ok(pairedArcLineDuctEvidence(native(changed), changed, source));
+  }
+});
+
+test('arc-first reversed native join storage retains the same reciprocal chart proof', () => {
+  const curve = reversedPath(path()), original = native(curve), evidence = pairedArcLineDuctEvidence(original, curve, source);
+  assert.ok(evidence); const ids = new Set([...evidence.exteriorSeams, ...evidence.interiorSeams.flat()]);
+  const reverse = (curve: Curve) => reverseCurve(curve, { curveId: `${curve.id}_reversed` }).curve;
+  const brep: Brep = { ...original, faces: [...original.faces].reverse(), loops: [...original.loops].reverse(),
+    edges: original.edges.map(edge => ids.has(edge.id) ? { ...edge, curve: reverse(edge.curve), vertices: [edge.vertices[1], edge.vertices[0]] } : edge),
+    coedges: original.coedges.map(use => ids.has(use.edge) ? { ...use, sense: use.sense === 'forward' ? 'reversed' : 'forward', pcurve: use.pcurve && reverse(use.pcurve) } : use),
+  };
+  assert.ok(checkBrep(brep, { strict: true }).valid); assert.ok(pairedArcLineDuctEvidence(brep, curve, source));
+});
+
+test('arc-first missing and displaced charts on either physical cap and every join fail closed', () => {
+  const curve = reversedPath(path()), original = native(curve), evidence = pairedArcLineDuctEvidence(original, curve, source);
+  assert.ok(evidence);
+  for (const edge of [...evidence.caps.flatMap(cap => [...cap.outerEdges, ...cap.innerEdges]), ...evidence.exteriorSeams, ...evidence.interiorSeams.flat()]) {
+    const selected = original.coedges.find(use => use.edge === edge)!.id;
+    const missing = { ...original, coedges: original.coedges.map(use => use.id === selected ? { ...use, pcurve: null } : use) };
+    const shifted = { ...original, coedges: original.coedges.map(use => use.id === selected && use.pcurve ? { ...use,
+      pcurve: { ...use.pcurve, controlPoints: use.pcurve.controlPoints.map(([u, v, z]): Point => [u + .01, v, z]) } } : use) };
+    for (const changed of [missing, shifted]) assert.equal(pairedArcLineDuctEvidence(changed, curve, source), undefined);
+  }
+});
+
+test('arc-first moved or swapped native walls, wrong ownership and malformed copied rails cannot receive evidence', () => {
+  const curve = reversedPath(path()), brep = native(curve);
+  const swapped = { ...brep, faces: brep.faces.map(face => {
+    const indices = source.cavities.map(cavity => cavity.tags.findIndex(tag => face.name?.endsWith(`.side[${tag}]`)));
+    if (indices[0] >= 0) return { ...face, name: face.name!.replace(source.cavities[0].tags[indices[0]], source.cavities[1].tags[indices[0]]) };
+    if (indices[1] >= 0) return { ...face, name: face.name!.replace(source.cavities[1].tags[indices[1]], source.cavities[0].tags[indices[1]]) };
+    return face;
+  }) };
+  const moved = transformBrep(brep, { matrix: [1, 0, 0, 0, 1, 0, 0, 0, 1], offset: [1, 0, 0] });
+  const normal = { ...brep, faces: brep.faces.map(face => face.name === 'w.start' ? { ...face, sense: face.sense === 'forward' ? 'reversed' as const : 'forward' as const } : face) };
+  for (const changed of [swapped, moved, normal, { ...brep, source: { family: 'revolve', id: 'w' } },
+    { ...brep, source: { family: 'sweep-curve', id: 'other' } }, { ...brep, shells: [{ ...brep.shells[0], body: 'other' }] }])
+    assert.equal(pairedArcLineDuctEvidence(changed, curve, source), undefined);
+  const variants = [reversedPath(path(29)), reversedPath(path(121)), path()];
+  for (const [pole, axis, delta] of [[1, 2, .01], [3, 1, .01], [4, 2, Number.NaN]]) {
+    const changed = structuredClone(curve); changed.controlPoints[pole][axis] += delta; variants.push(changed);
+  }
+  variants.push({ ...curve, weights: [1, .7, 1, 1, 1] }, { ...curve, knots: [0, 0, 0, 1, 1.1, 2, 2, 2] });
+  for (const changed of variants) assert.equal(pairedArcLineDuctEvidence(brep, changed, source), undefined);
 });

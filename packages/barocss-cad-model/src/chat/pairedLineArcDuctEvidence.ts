@@ -67,6 +67,15 @@ function lineArcLine(path: Path) {
 }
 type Frame = NonNullable<ReturnType<typeof lineArc>> & { arcEnd?: Point; tailLength?: number };
 
+/** Reverse the copied rational payload exactly, then use the independent line–arc oracle. */
+function arcLine(path: Path) {
+  const { degree, knots, controlPoints, weights } = path;
+  if (degree !== 2 || controlPoints.length !== 5 || weights.length !== 5 || knots.length !== 8) return;
+  const sum = knots[0] + knots[knots.length - 1];
+  return lineArc({ degree, controlPoints: [...controlPoints].reverse(), weights: [...weights].reverse(),
+    knots: [...knots].reverse().map(knot => sum - knot) });
+}
+
 function sections(source: Source, frame: Frame) {
   const finite = (value: number) => Number.isFinite(value) && Math.abs(value) <= CadNumericPolicy.coordinateAbs;
   if (source.outer.length !== 2 || source.outer.some(value => !finite(value) || value <= 0)
@@ -123,8 +132,8 @@ function rectangle(edges: BrepEdge[], center: Point, inward: Point, axis: Point,
 }
 
 /** No generic/fitted wall supports: verify every tagged straight plane and bend plane/cylinder. */
-function walls(brep: Brep, feature: string, frame: Frame, section: Section, inward: boolean) {
-  const pieces = frame.tailLength === undefined ? ['line', 'bend'] : ['line', 'bend', 'tail'];
+function walls(brep: Brep, feature: string, frame: Frame, section: Section, inward: boolean, arcFirst: boolean) {
+  const pieces = arcFirst ? ['bend', 'line'] : frame.tailLength === undefined ? ['line', 'bend'] : ['line', 'bend', 'tail'];
   const names = pieces.flatMap(piece => section.tags.map(tag => `${feature}.${piece}.side[${tag}]`));
   const direction = inward ? -1 : 1, angular = CadNumericPolicy.relativeComparison;
   for (const piece of pieces) {
@@ -158,10 +167,14 @@ function walls(brep: Brep, feature: string, frame: Frame, section: Section, inwa
   return names;
 }
 
-/** Native evidence for paired, open line–arc and line–arc–line producers. Inputs stay unchanged. */
-export function pairedLineArcDuctEvidence(brep: Brep, path: Path, source: Source) {
+/** Common native checks retain one world frame for every wall, mouth, join and material moment. */
+function pairedMixedDuctEvidence(brep: Brep, path: Path, source: Source, arcFirst: boolean) {
   try {
-    const frame: Frame | undefined = path.controlPoints.length === 7 ? lineArcLine(path) : lineArc(path), sizes = frame && sections(source, frame), feature = brep.source.id;
+    const frame: Frame | undefined = arcFirst ? arcLine(path) : path.controlPoints.length === 7 ? lineArcLine(path) : lineArc(path);
+    // Read the sketch roll at its authored first tangent. Keep intervals in the reverse
+    // oracle's binormal, so the signed source offsets and native supports share one axis.
+    const sizes = frame && sections(source, arcFirst ? { ...frame, tangent: scale(frame.exitTangent, -1), inward: frame.exitInward } : frame);
+    const feature = brep.source.id;
     if (!frame || !sizes || brep.source.family !== 'sweep-curve' || !feature || brep.bodies.length !== 1
       || brep.bodies[0].kind !== 'solid' || brep.shells.length !== 1 || !brep.shells[0].closed
       || brep.bodies[0].shells.length !== 1 || brep.bodies[0].shells[0] !== brep.shells[0].id
@@ -172,7 +185,7 @@ export function pairedLineArcDuctEvidence(brep: Brep, path: Path, source: Source
       : { bodies: 1, shells: 1, faces: 26, loops: 30, coedges: 120, edges: 60, vertices: 36 };
     if (!report.valid || report.topology.length !== 1 || report.topology[0].genus !== 2
       || Object.entries(expected).some(([key, value]) => report.counts[key as keyof typeof expected] !== value)) return;
-    const groups = [sizes.exterior, ...sizes.apertures], wallGroups = groups.map((section, index) => walls(brep, feature, frame, section, index > 0));
+    const groups = [sizes.exterior, ...sizes.apertures], wallGroups = groups.map((section, index) => walls(brep, feature, frame, section, index > 0, arcFirst));
     if (wallGroups.some(group => !group)) return;
     const names = new Set([...wallGroups.flat(), `${feature}.start`, `${feature}.end`]);
     if (names.size !== expected.faces || new Set(brep.faces.map(face => face.name)).size !== expected.faces
@@ -199,8 +212,10 @@ export function pairedLineArcDuctEvidence(brep: Brep, path: Path, source: Source
     const caps = [];
     for (const end of ['start', 'end']) {
       const name = `${feature}.${end}`, face = brep.faces.find(face => face.name === name);
-      const start = end === 'start', center = start ? frame.start : frame.end, inward = start ? frame.inward : frame.exitInward;
-      const normal = start ? scale(frame.tangent, -1) : frame.exitTangent, piece = start ? 'line' : hasTail ? 'tail' : 'bend';
+      const start = end === 'start', first = arcFirst ? !start : start;
+      const center = first ? frame.start : frame.end, inward = first ? frame.inward : frame.exitInward;
+      const normal = arcFirst ? start ? frame.exitTangent : scale(frame.tangent, -1) : start ? scale(frame.tangent, -1) : frame.exitTangent;
+      const piece = arcFirst ? start ? 'bend' : 'line' : start ? 'line' : hasTail ? 'tail' : 'bend';
       if (!face || face.loops.length !== 3) return;
       const plane = faceGeometry(face);
       if (plane.kind !== 'plane' || len(sub(plane.n, normal)) > CadNumericPolicy.relativeComparison
@@ -234,7 +249,7 @@ export function pairedLineArcDuctEvidence(brep: Brep, path: Path, source: Source
       caps.push({ name, outerEdges: found.get(0)!, innerEdges: apertures.flatMap(aperture => aperture.edges),
         center, plane: { origin: plane.o, normal: plane.n }, apertures });
     }
-    const joins = [{ pieces: ['line', 'bend'], center: frame.join, inward: frame.inward },
+    const joins = [{ pieces: arcFirst ? ['bend', 'line'] : ['line', 'bend'], center: frame.join, inward: frame.inward },
       ...(hasTail ? [{ pieces: ['bend', 'tail'], center: frame.arcEnd!, inward: frame.exitInward }] : [])];
     const rings: string[][][] = [];
     for (const join of joins) {
@@ -280,8 +295,23 @@ export function pairedLineArcDuctEvidence(brep: Brep, path: Path, source: Source
         faces: wallGroups[index + 1]!, seams: seamGroups[index + 1], dimensions: { radial: section.radial, axial: section.axial }, axialInterval: section.interval })),
       dimensions: { pathRadius: frame.radius, leadLength: frame.leadLength, ...(hasTail ? { tailLength: frame.tailLength! } : {}), sweepRadians: frame.angle,
         exterior: { radial: sizes.exterior.radial, axial: sizes.exterior.axial }, axialWeb: sizes.axialWeb },
-      ...(hasTail ? { junctions: joins.map((join, index) => ({ pieces: join.pieces, exteriorSeams: rings[index][0], interiorSeams: rings[index].slice(1) })) } : {}),
+      ...(hasTail || arcFirst ? { junctions: joins.map((join, index) => ({ pieces: join.pieces, exteriorSeams: rings[index][0], interiorSeams: rings[index].slice(1) })) } : {}),
       volume: { analytic, native: mass.volume, method: 'quadrature' as const }, centroid: { analytic: centroid, native: mass.centroid }, maximumGapMM,
     } };
   } catch { return; }
+}
+
+/** Native evidence for paired, open line–arc and line–arc–line producers. Inputs stay unchanged. */
+export function pairedLineArcDuctEvidence(brep: Brep, path: Path, source: Source) {
+  return pairedMixedDuctEvidence(brep, path, source, false);
+}
+
+/** Native evidence in authored travel order for paired, open arc–line producers. */
+export function pairedArcLineDuctEvidence(brep: Brep, path: Path, source: Source) {
+  const evidence = pairedMixedDuctEvidence(brep, path, source, true);
+  if (!evidence) return;
+  const { pathRadius, leadLength, sweepRadians, exterior, axialWeb } = evidence.throughApertures.dimensions;
+  return { ...evidence, pathKind: 'arc-and-line' as const, throughApertures: { ...evidence.throughApertures,
+    dimensions: { pathRadius, tailLength: leadLength, sweepRadians, exterior, axialWeb },
+    junctions: evidence.throughApertures.junctions! } };
 }

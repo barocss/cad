@@ -13,7 +13,7 @@ import { isObj } from '../util/guards';
 import { canonical, canonicalOf, revisionOf } from '../util/revision';
 import { closedRectangularDuctEvidence } from './closedRectangularDuctEvidence';
 import { closedPairedRectangularDuctEvidence } from './closedPairedRectangularDuctEvidence';
-import { pairedLineArcDuctEvidence } from './pairedLineArcDuctEvidence';
+import { pairedArcLineDuctEvidence, pairedLineArcDuctEvidence } from './pairedLineArcDuctEvidence';
 import { pairedOppositeArcDuctEvidence, pairedSpacedArcDuctEvidence } from './pairedSpacedArcDuctEvidence';
 import { directInspectionRevision } from './sweepSource';
 
@@ -200,6 +200,7 @@ export async function reviewedRectangularDuctEvidence(base: StudioDoc, candidate
     if ('cavities' in source) {
       if (!closedCircle) {
         const evidence = pairedLineArcDuctEvidence(brep, path, source)
+          ?? pairedArcLineDuctEvidence(brep, path, source)
           ?? (threePieceDuct ? pairedSpacedArcDuctEvidence(brep, path, source) : pairedOppositeArcDuctEvidence(brep, path, source));
         if (!evidence) return;
         return { brep, rectangularDuct: { body, sketch: edit.sketch, path: edit.path, pathRevision: edit.pathRevision, ...evidence } };
