@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { commands, type Ctx } from '../src/app/commands';
-import { rectanglePart, type StudioDoc } from '../src/engine/doc';
+import { rectanglePart, withNode, type StudioDoc } from '../src/engine/doc';
 import { evaluateDoc, placeBody } from '../src/engine/evaluate';
 
 function quarterSector() {
@@ -62,4 +62,37 @@ test('two picked circular rims create one Constant Fillet handle on the native u
     const changed = { ...ctx, bodies: [{ ...bodies[0], mesh: { ...mesh, edges: unmatched } }] };
     assert.notDeepEqual(fillet.handles!(changed, values)[0].at, result[0].at);
   }
+});
+
+
+test('one displayed closed rim uses its original native seam for Constant Fillet creation', () => {
+  const seed = rectanglePart(8, 8, 10);
+  const doc: StudioDoc = { ...seed, nodes: [
+    { id: 'n0', kind: 'sketch', profile: 'circle', center: [0, 0], radius: 8 }, seed.nodes[1],
+  ] };
+  const result = evaluateDoc(doc, 1);
+  assert.ok(result.ok);
+  const [body] = result.bodies;
+  const fillet = commands.find(command => command.id === 'fillet')!;
+  const chamfer = commands.find(command => command.id === 'chamfer')!;
+  const near = (a: readonly number[], b: readonly number[]) => assert.ok(Math.hypot(...a.map((value, i) => value - b[i])) < 1e-12);
+  for (const [cap, z, sign] of [['top', 10, 1], ['bottom', 0, -1]] as const) {
+    const rim = body.mesh.edges.find(edge => edge.names.length === 2 && edge.names.every(name => name.includes(`n1.${cap}`)));
+    assert.ok(rim && rim.nativeFilletRim && !rim.nativeJoint && !rim.nativeFilletRim.quarter);
+    const ctx: Ctx = { doc, bodies: result.bodies, selection: { bodies: [], faces: [], edges: [{ body: 0, edge: rim.index }] } };
+    const values = { ...fillet.defaults!(ctx), radius: .6 };
+    const [handle] = fillet.handles!(ctx, values);
+    near(handle.dir, [Math.SQRT1_2, 0, sign * Math.SQRT1_2]);
+    near(handle.at, [8 + .6 * Math.SQRT1_2, 0, z + sign * .6 * Math.SQRT1_2]);
+    assert.notDeepEqual(fillet.handles!(ctx, { ...values, endRadius: 1.2 })[0].at, handle.at);
+    assert.notDeepEqual(chamfer.handles!(ctx, { distance: .6 })[0].at, handle.at);
+    const adopted = fillet.build!(ctx, values).nodes.at(-1);
+    assert.ok(adopted?.kind === 'fillet');
+    assert.deepEqual([...adopted.edges].sort(), [...rim.names].sort());
+    assert.equal(placeBody(body, [1, 0, 0, 0, 1, 0, 0, 0, 1], [5, 0, 0]).mesh.edges[rim.index].nativeFilletRim, undefined);
+  }
+  const bored = withNode(doc, { kind: 'hole', parent: { node: 1, side: 'solid' }, center: [0, 0], radius: 2 });
+  const ring = evaluateDoc(bored, 2);
+  assert.ok(ring.ok);
+  assert.ok(ring.bodies[0].mesh.edges.every(edge => !edge.nativeFilletRim));
 });

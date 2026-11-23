@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1864: [Anchor Constant Fillet creation to a complete circular rim](notes/closed-circular-fillet-creation-handle-2026-11-24/README.md), #214. Verify the original seam, end-on drag, typed parity and exact fresh Open.
 - D1863: [Extract Studio command launch context](notes/studio-command-launch-context-2026-11-24/README.md), #44. Verify the explicit cut source guard, native Split plane and annular Extrude context.
 - D1862: [Repeat an earlier rectangular cut along one quadratic path](notes/three-cut-quadratic-path-2026-11-24/README.md), #25. Verify true arc length, fixed orientation, later-cut refusal and desktop reopen.
 - D1861: [End a circular Extrude on an original annular cap](notes/circular-source-to-annular-cap-2026-11-24/README.md), #222. Verify whole-disk clearance, native target following, refusal and fresh Open.

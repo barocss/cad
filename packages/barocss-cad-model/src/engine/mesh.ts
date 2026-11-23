@@ -9,6 +9,7 @@ export { sub, cross, dot, len, unit as norm } from './vec3';
 import { sub, cross, dot, len, unit as norm } from './vec3';
 import { nativeStraightEdgeMatches } from './nativeStraightEdge';
 import { nativeCircleOf, nativeCircularFilletFrame, sameNativeCircle, type NativeCircle } from './nativeCircle';
+import { nativeClosedCircularFilletRim } from './nativeClosedCircularFilletRim';
 import { nativeCylinderAreaReader } from './nativeCylinderArea';
 import { insetOutlineProblem } from './insetOutline';
 
@@ -389,6 +390,10 @@ export function bodyMesh(brep: Brep, _revision: number, quality = 8, readBoundar
     }
     edges.push(made); if (same) same.push(made); else byPair.set(key, [made]);
     for (let k = 0; k + 1 < pts.length; k++) { pushSegment(lines, pts[k], pts[k + 1]); segmentEdge.push(index, index); }
+  }
+  if (nativePrism && brep.faces.length === 4) for (const edge of edges) {
+    const frame = nativeClosedCircularFilletRim(brep, edge, b.faces);
+    if (frame) edge.nativeFilletRim = frame;
   }
   const positions = new Float64Array(b.p), normals = new Float32Array(b.n), faceOfVertex = new Float32Array(b.f), indices = new Uint32Array(b.i);
   const min: Vec3 = [Infinity, Infinity, Infinity], max: Vec3 = [-Infinity, -Infinity, -Infinity];
