@@ -459,7 +459,7 @@ function closedRectanglePlaneBinding(edge: Curve, surface: Surface, tolerance: n
 }
 
 /** Preserve both canonical edge charts on the four annular half-walls and four cylinder half-walls. */
-function bindClosedRectangle(brep: Brep, tolerance: number, shellCount: 1 | 2): Brep | undefined {
+function bindClosedRectangle(brep: Brep, tolerance: number, shellCount: 1 | 2 | 3): Brep | undefined {
   if (brep.bodies.length !== 1 || brep.shells.length !== shellCount
     || brep.shells.some(shell => !shell.closed || shell.faces.length !== 8)
     || brep.faces.length !== 8 * shellCount || brep.coedges.length !== 32 * shellCount) return;
@@ -602,6 +602,45 @@ function rectangularOpening(rectangle: NonNullable<ReturnType<typeof rectangleSe
   };
 }
 
+type ClosedRectangularCavities = readonly [readonly ProfileSegmentInput[], readonly ProfileSegmentInput[]];
+
+/** Two closed-only bores share the radial centre and retain their separate authored axial offsets. */
+function closedRectangularCavities(rectangle: NonNullable<ReturnType<typeof rectangleSection>>,
+  holes: NonNullable<ExactSweepInput['holes']>, section: JoinedSection, tolerance: number, refuse: Refuse): ClosedRectangularCavities {
+  const unsupported = () => refuse('CAPABILITY', 'Exact closed-circle rectangular sweep needs two axis-aligned rectangular cavities.');
+  if (holes.length !== 2) return unsupported();
+  const radial = section.bendCentre[0] !== 0 ? 0 : 1, axial = 1 - radial;
+  const { min, max, halfX, halfY } = rectangle, center: XY = [(min[0] + max[0]) / 2, (min[1] + max[1]) / 2];
+  const profiles: ProfileSegmentInput[][] = [], intervals: [number, number][] = [];
+  let roundoff = 0;
+  for (const hole of holes) {
+    if (hole.length !== 4 || hole.some(segment => segment.kind !== 'line')) return unsupported();
+    const points = hole.map(segment => segment.start), [[x0, y0], [x1, y1], [x2, y2], [x3, y3]] = points;
+    const low: XY = [Math.min(x0, x1, x2, x3), Math.min(y0, y1, y2, y3)];
+    const high: XY = [Math.max(x0, x1, x2, x3), Math.max(y0, y1, y2, y3)];
+    if (high[0] - low[0] < ExtrudedProfileLimits.minimumLengthMM || high[1] - low[1] < ExtrudedProfileLimits.minimumLengthMM) return unsupported();
+    const corners = points.map(([x, y]): XY => [x === low[0] ? -1 : x === high[0] ? 1 : 0, y === low[1] ? -1 : y === high[1] ? 1 : 0]);
+    if (new Set(corners.map(([x, y]) => 2 * x + y)).size !== 4 || corners.some(([x, y], i) => {
+      const next = corners[(i + 1) % 4]; return !x || !y || (x === next[0]) === (y === next[1]);
+    })) return unsupported();
+    const margin = 8 * Number.EPSILON * Math.max(1, geometryScaleMM([min, max], points));
+    roundoff = Math.max(roundoff, margin);
+    if (Math.abs((low[radial] + high[radial]) - (min[radial] + max[radial])) > margin)
+      return refuse('GEOMETRY', 'Exact closed-circle rectangular sweep needs both cavities centered on the radial axis.');
+    const profile: ProfileSegmentInput[] = points.map(([x, y]) => ({ kind: 'line', start: [x - center[0], y - center[1]] }));
+    const cover = Math.min(low[0] - min[0], max[0] - high[0], low[1] - min[1], max[1] - high[1],
+      low[0] - center[0] + halfX, halfX - (high[0] - center[0]), low[1] - center[1] + halfY, halfY - (high[1] - center[1]));
+    if (!(cover > 10 * tolerance + 2 * margin))
+      return refuse('GEOMETRY', 'Exact closed-circle rectangular sweep needs strictly positive cover around each cavity.');
+    profiles.push(profile);
+    intervals.push([low[axial] - center[axial], high[axial] - center[axial]]);
+  }
+  const [first, second] = intervals[0][0] <= intervals[1][0] ? intervals : [intervals[1], intervals[0]];
+  if (!(second[0] - first[1] > 10 * tolerance + 2 * roundoff))
+    return refuse('GEOMETRY', 'Exact closed-circle rectangular sweep needs strictly positive axial web clearance between the cavities.');
+  return [profiles[0], profiles[1]];
+}
+
 /** A canonical bend frame can keep the section's roll only along the radial and binormal directions. */
 function rectangularElbowSection(rectangle: NonNullable<ReturnType<typeof rectangleSection>>,
   holes: NonNullable<ExactSweepInput['holes']>, axes: SweepAxes,
@@ -625,14 +664,16 @@ function rectangularElbowSection(rectangle: NonNullable<ReturnType<typeof rectan
   return refuse('CAPABILITY', `Exact ${style} sweep needs the rectangle's original axes aligned to the bend radial and binormal.`);
 }
 
-function closedRectangularRing(id: string, section: JoinedSection, tolerance: number, sideTags: SideTags | undefined, refuse: Refuse): SweepSolid {
+function closedRectangularRing(id: string, section: JoinedSection, tolerance: number, sideTags: SideTags | undefined, refuse: Refuse,
+  cavities?: ClosedRectangularCavities): SweepSolid {
   const { profile, opening, bendCentre: [dx, dy], radialReach, extent } = section, radius = Math.hypot(dx, dy);
   const clearance = () => refuse('PARAMETER', 'Exact closed-circle rectangular sweep needs radial half-width smaller than the path radius.');
   if (!(radius - radialReach > tolerance)) return clearance();
+  const holes = cavities ?? (opening ? [opening.profile] : undefined);
   const revolve: RevolveInput = { id, profile, axis: { origin: [dx, dy], direction: [-dy, dx] }, angle: 360, sideTags: sideTags?.outer,
-    ...(opening ? { holes: [opening.profile], holeTags: sideTags?.holes } : {}) };
+    ...(holes ? { holes, holeTags: sideTags?.holes } : {}) };
   const ring = revolveSweepProfile(revolve, { minimum: tolerance, refuse: clearance });
-  const brep = bindClosedRectangle(ring, 128 * Number.EPSILON * Math.max(1, radius + extent), opening ? 2 : 1);
+  const brep = bindClosedRectangle(ring, 128 * Number.EPSILON * Math.max(1, radius + extent), cavities ? 3 : opening ? 2 : 1);
   if (!brep) return refuse('GEOMETRY', 'The exact closed-circle rectangular sweep could not bind the native ring seams.');
   return { brep, mass: density => revolveMassProperties(revolve, density) };
 }
@@ -1003,9 +1044,11 @@ export function exactSweep(input: ExactSweepInput, refuse: Refuse): SweepSolid {
     if (rectangle) {
       if (closed.radius > CadNumericPolicy.coordinateAbs)
         return refuse('PARAMETER', 'Exact closed-circle sweep path radius must be at most 10000 mm.');
-      const { section, axes } = rectangularElbowSection(rectangle, holes, frame(closed.tangent), closed, refuse, 'closed-circle rectangular');
-      const result = place(closedRectangularRing(id, section, closed.tolerance, sideTags, refuse), axes, closed.start);
-      const report = checkBrep(result.brep, { strict: true }), shellCount = section.opening ? 2 : 1;
+      const paired = holes.length > 1;
+      const { section, axes } = rectangularElbowSection(rectangle, paired ? [] : holes, frame(closed.tangent), closed, refuse, 'closed-circle rectangular');
+      const cavities = paired ? closedRectangularCavities(rectangle, holes, section, closed.tolerance, refuse) : undefined;
+      const result = place(closedRectangularRing(id, section, closed.tolerance, sideTags, refuse, cavities), axes, closed.start);
+      const report = checkBrep(result.brep, { strict: true }), shellCount = cavities ? 3 : section.opening ? 2 : 1;
       if (!report.valid || report.topology.length !== 1 || report.topology[0].shells !== shellCount || report.topology[0].genus !== shellCount)
         return refuse('GEOMETRY', 'The exact closed-circle rectangular sweep did not produce one valid closed ring.');
       return result;

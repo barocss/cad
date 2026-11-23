@@ -549,10 +549,201 @@ test('closed rectangular duct refuses off-center, touching, thin, nonrectangular
   verifyRectangle(evaluateCadPart(document(joinedCircle(), rectangularDuct(4 - 1e-5, 4))).outputs[0],
     [0, 0, 0], [0, 0, 1], 20, 4, 6, 4 - 1e-5, 4);
   const two = rectangularDuct();
-  refused({ ...two, sideTags: undefined, holes: [...two.holes, ...two.holes] },
-    'CAPABILITY', /one centered rectangular opening aligned with the outer rectangle/);
+  refused({ ...two, sideTags: undefined, holes: [...two.holes, ...two.holes, ...two.holes] },
+    'CAPABILITY', /two axis-aligned rectangular cavities/);
   const diamond = [[7, -7], [8, -5], [7, -3], [6, -5]].map(start => ({ kind: 'line', start }));
   refused({ ...two, sideTags: undefined, holes: [diamond] }, 'CAPABILITY', /one centered rectangular opening aligned with the outer rectangle/);
   refused({ ...two, plane: { origin: [0, 0, 0], normal: [0, 1, 0], xAxis: [Math.SQRT1_2, 0, Math.SQRT1_2] } },
     'CAPABILITY', /rectangle's original axes aligned to the bend radial and binormal/);
+});
+
+function pairedCavities(intervals = [[-3, -1], [1, 3]], widths = [2, 2], clockwise = [true, false]) {
+  return { id: 's', kind: 'sketch', profile: 'rectangle', min: [-2, -5], max: [2, 5],
+    holes: intervals.map(([low, high], i) => {
+      const x = widths[i] / 2, corners = [[-x, low], [x, low], [x, high], [-x, high]];
+      const ordered = clockwise[i] ? [corners[0], corners[3], corners[2], corners[1]] : corners;
+      return ordered.map(start => ({ kind: 'line', start }));
+    }), sideTags: { outer: ['south', 'east', 'north', 'west'],
+      holes: [['lowerA', 'lowerB', 'lowerC', 'lowerD'], ['upperA', 'upperB', 'upperC', 'upperD']] } };
+}
+
+function verifyPaired(output, intervals = [[-3, -1], [1, 3]], axialSign = -1, widths = [2, 2]) {
+  const { brep } = output, report = checkBrep(brep, { strict: true });
+  assert.ok(report.valid, report.issues.join('\n'));
+  assert.deepEqual(report.counts, { bodies: 1, shells: 3, faces: 24, loops: 24, coedges: 96, edges: 48, vertices: 24 });
+  assert.equal(report.topology.length, 1);
+  assert.equal(report.topology[0].genus, 3);
+  assert.equal(new Set(brep.faces.map(face => face.name)).size, 24);
+  assert.ok(!brep.faces.some(face => /\.(start|end)$/.test(face.name)));
+  const density = 7.85, R = 20;
+  const parts = [{ sign: 1, width: 4, height: 10, h: 0 }, ...intervals.map(([low, high], i) =>
+    ({ sign: -1, width: widths[i], height: high - low, h: axialSign * (low + high) / 2 }))];
+  const volumes = parts.map(part => part.sign * 2 * Math.PI * R * part.width * part.height);
+  const volume = volumes.reduce((sum, value) => sum + value, 0), mass = density * .001 * volume;
+  const centroid = parts.reduce((sum, part, i) => sum + volumes[i] * part.h, 0) / volume;
+  const axialInertia = parts.reduce((sum, part, i) => sum + density * .001 * volumes[i] * (R ** 2 + part.width ** 2 / 4), 0);
+  const transverseInertia = parts.reduce((sum, part, i) => sum + density * .001 * volumes[i]
+    * ((R ** 2 + part.width ** 2 / 4) / 2 + part.height ** 2 / 12 + (part.h - centroid) ** 2), 0);
+  const shellVolumes = [];
+  let chartResidual = 0, normalResidual = 0;
+  for (const [i, shell] of brep.shells.entries()) {
+    const isolated = shellBrep(brep, shell), check = checkBrep(isolated, { strict: true });
+    assert.equal(shell.closed, true);
+    assert.ok(check.valid, check.issues.join('\n'));
+    assert.equal(check.topology[0].genus, 1);
+    assert.deepEqual(check.counts, { bodies: 1, shells: 1, faces: 8, loops: 8, coedges: 32, edges: 16, vertices: 8 });
+    const quadrature = brepQuadratureIntegrals(isolated, 8);
+    assert.equal(quadrature.meshed, false);
+    near(quadrature.integrals[0], volumes[i], 1e-8);
+    shellVolumes.push(quadrature.integrals[0]);
+    const part = parts[i], planes = isolated.faces.filter(face => faceGeometry(face).kind === 'plane');
+    assert.equal(planes.length, 4);
+    assert.equal(isolated.faces.filter(face => faceGeometry(face).kind === 'cylinder').length, 4);
+    for (const face of isolated.faces) {
+      const planar = faceGeometry(face).kind === 'plane', { u, v } = surfaceDomain(face.surface);
+      for (const s of [.13, .47, .83]) for (const t of [.17, .61]) {
+        const actual = evaluateSurfaceD1(face.surface, u[0] + s * (u[1] - u[0]), v[0] + t * (v[1] - v[0]));
+        const [x, y, z] = actual.point, rho = Math.hypot(x, y);
+        let expected;
+        if (planar) { near(Math.abs(z - part.h), part.height / 2); expected = [0, 0, Math.sign(z - part.h)]; }
+        else {
+          near(Math.abs(rho - R), part.width / 2);
+          assert.ok(Math.abs(z - part.h) <= part.height / 2 + 1e-8);
+          expected = scale([x / rho, y / rho, 0], Math.sign(rho - R));
+        }
+        if (i) expected = scale(expected, -1);
+        const outward = scale(unit(cross(actual.du, actual.dv)), face.sense === 'forward' ? 1 : -1);
+        normalResidual = Math.max(normalResidual, norm(sub(outward, expected)));
+      }
+    }
+    let sharp = 0, smooth = 0;
+    for (const edge of isolated.edges) {
+      const uses = isolated.coedges.filter(use => use.edge === edge.id), domain = curveDomain(edge.curve);
+      assert.equal(uses.length, 2);
+      for (const [index, use] of uses.entries()) {
+        assert.equal(use.twin, uses[1 - index].id);
+        assert.notEqual(use.sense, uses[1 - index].sense);
+        assert.ok(use.pcurve);
+        assert.deepEqual(curveDomain(use.pcurve), domain);
+        const face = isolated.faces.find(face => face.loops.includes(use.loop));
+        for (const fraction of [0, .19, .5, .87, 1]) {
+          const at = domain[0] + fraction * (domain[1] - domain[0]), [u, v] = evaluateCurve(use.pcurve, at);
+          chartResidual = Math.max(chartResidual, norm(sub(evaluateSurface(face.surface, u, v), evaluateCurve(edge.curve, at))));
+        }
+      }
+      const continuity = measureBrepEdgeContinuity(isolated, edge.id, { curvature: true });
+      assert.equal(continuity.status, 'measured', JSON.stringify(continuity));
+      const angle = edge.curve.degree === 2 ? 90 : 0;
+      near(continuity.minimumAngleDegrees, angle, 1e-5);
+      near(continuity.maximumAngleDegrees, angle, 1e-5);
+      if (angle) {
+        sharp++;
+        assert.deepEqual(continuity.curvature, { status: 'unavailable', reason: 'non-tangent' });
+      } else {
+        smooth++;
+        assert.equal(continuity.curvature.status, 'measured');
+        near(continuity.curvature.maximumDifference, 0);
+      }
+    }
+    assert.equal(sharp, 8);
+    assert.equal(smooth, 8);
+  }
+  near(chartResidual, 0);
+  near(normalResidual, 0);
+  const analytic = massPropertiesOf(output, density), quadrature = brepMassProperties(brep, density);
+  assert.equal(analytic.method, 'closed-form');
+  assert.equal(quadrature.method, 'quadrature');
+  for (const actual of [analytic, quadrature]) {
+    near(actual.volume, volume, 1e-8 * volume);
+    near(actual.mass, mass, 1e-8 * mass);
+    pointNear(actual.centroid, [0, 0, centroid]);
+    for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++)
+      near(actual.inertia[i][j], i === j ? i === 2 ? axialInertia : transverseInertia : 0, 1e-8 * axialInertia);
+  }
+  return { counts: report.counts, topology: report.topology, shellVolumes, analytic, quadrature,
+    pcurveGap: report.maximumPcurveGap, chartResidual, normalResidual };
+}
+
+test('two radially centered closed rectangular cavities keep three shells, both signed offsets and their tags through height edit and native reopen', t => {
+  const section = pairedCavities(), doc = document(joinedCircle(), section);
+  doc.parameters = { FirstLowY: -3, FirstHighY: -1 };
+  doc.features[0] = { ...section, holes: [section.holes[0].map(segment => ({ ...segment,
+    start: [segment.start[0], { parameter: segment.start[1] === -3 ? 'FirstLowY' : 'FirstHighY' }] })), section.holes[1]] };
+  const initial = evaluateCadPart(doc), diagnostic = verifyPaired(initial.outputs[0]);
+  near(diagnostic.analytic.volume, 1280 * Math.PI);
+  const identity = snapshot => {
+    const brep = snapshot.outputs[0].brep;
+    return { bodies: brep.bodies, shells: brep.shells,
+      faces: brep.faces.map(({ id, name, sense }) => ({ id, name, sense })), edges: brep.edges.map(({ id, name }) => ({ id, name })) };
+  };
+  for (const tag of [...section.sideTags.outer, ...section.sideTags.holes.flat()])
+    assert.equal(initial.outputs[0].brep.faces.filter(face => face.name.startsWith(`w.side[${tag}]#`)).length, 2);
+  const edited = reevaluate(initial, { parameters: { FirstLowY: -2.5, FirstHighY: -1.5 } });
+  const after = verifyPaired(edited.outputs[0], [[-2.5, -1.5], [1, 3]]);
+  near(after.analytic.volume, 1360 * Math.PI);
+  near(after.analytic.centroid[2], 2 / 17);
+  assert.deepEqual(identity(edited), identity(initial));
+  const unchanged = snapshot => snapshot.outputs[0].brep.faces.filter(face => !face.surface.id.startsWith('w_hole0_'));
+  assert.deepEqual(unchanged(edited), unchanged(initial));
+  const reopened = loadCadPart(saveCadPart(edited));
+  assert.deepEqual(reopened.document, edited.document);
+  assert.deepEqual(reopened.outputs[0].brep, edited.outputs[0].brep);
+  assert.deepEqual(reevaluate(reopened, { parameters: { FirstLowY: -3, FirstHighY: -1 } }).outputs[0].brep, initial.outputs[0].brep);
+  const reverse = joinedCircle();
+  reverse.controlPoints = reverse.controlPoints.toReversed(); reverse.weights = reverse.weights.toReversed();
+  verifyPaired(evaluateCadPart(document(reverse, pairedCavities([[-2.5, -1.5], [1, 3]], [2, 2], [false, true]))).outputs[0],
+    [[-2.5, -1.5], [1, 3]], 1);
+  const reordered = [[1, 3], [-3, -1]];
+  verifyPaired(evaluateCadPart(document(joinedCircle(), pairedCavities(reordered))).outputs[0], reordered);
+  t.diagnostic(JSON.stringify({ initial: diagnostic, edited: after, shellIdentityPreserved: true, reopenIdentical: true }));
+});
+
+test('native meridian sections keep both sealed cavities, their axial web and outer cover distinct', () => {
+  for (const edited of [false, true]) {
+    const intervals = edited ? [[-2.5, -1.5], [1, 3]] : [[-3, -1], [1, 3]];
+    const { brep } = evaluateCadPart(document(joinedCircle(), pairedCavities(intervals))).outputs[0];
+    for (const station of [-20, 20]) {
+      const rings = brep.shells.map(shell => {
+        const edges = shellBrep(brep, shell).edges.filter(({ curve }) => curve.degree === 1
+          && curve.controlPoints.every(([x, y]) => Math.abs(y) < 1e-8 && Math.sign(x) === Math.sign(station)));
+        assert.equal(edges.length, 4);
+        return edges.map(({ curve: { controlPoints: [a, b] } }) =>
+          ({ kind: 'line', a: [a[0] - station, a[2]], b: [b[0] - station, b[2]] }));
+      });
+      const region = { outer: rings[0], holes: rings.slice(1) };
+      for (const [point, expected] of [[[0, 0], 'in'], [[0, 2], 'out'], [[0, -2], 'out'], [[1.5, 2], 'in'],
+        [[0, 4], 'in'], [[0, -4], 'in'], [[2.5, 0], 'out'], [[0, 5.5], 'out'], [[2, 0], 'boundary'],
+        [[0, 5], 'boundary'], [[1, -2], 'boundary'], [[0, -1], 'boundary'], [[0, -3], 'boundary'],
+        [[0, edited ? 1.5 : 1], 'boundary'], [[0, edited ? 2.5 : 3], 'boundary'], [[0, 1.25], edited ? 'in' : 'out']])
+        assert.equal(locateInRegion(point, region, 1e-7), expected, `${station}: ${point}`);
+    }
+  }
+});
+
+test('paired closed rectangle admission enforces radial centering, cover, axial web and the two-rectangle limit without widening open elbows', () => {
+  const refused = (section, code, detail, path = joinedCircle()) => assert.throws(() => evaluateCadPart(document(path, section)),
+    error => error instanceof CadPartError && error.feature === 'w' && error.code === code && detail.test(error.message));
+  const eccentric = pairedCavities();
+  eccentric.holes[0] = eccentric.holes[0].map(segment => ({ ...segment, start: [segment.start[0] + .1, segment.start[1]] }));
+  refused(eccentric, 'GEOMETRY', /both cavities centered on the radial axis/);
+  for (const widths of [[4, 2], [4.1, 2], [4 - 1e-6, 2]])
+    refused(pairedCavities(undefined, widths), 'GEOMETRY', /strictly positive cover around each cavity/);
+  for (const intervals of [[[-5, -1], [1, 3]], [[-5 + 5e-7, -1], [1, 3]], [[-3, -1], [1, 5]]])
+    refused(pairedCavities(intervals), 'GEOMETRY', /strictly positive cover around each cavity/);
+  for (const intervals of [[[-3, 0], [0, 3]], [[-3, .1], [0, 3]], [[-3, 3], [-1, 1]], [[-3, 0], [5e-7, 3]]])
+    refused(pairedCavities(intervals), 'GEOMETRY', /strictly positive axial web clearance between the cavities/);
+  const narrowWeb = [[-3, -2.5e-6], [2.5e-6, 3]];
+  verifyPaired(evaluateCadPart(document(joinedCircle(), pairedCavities(narrowWeb))).outputs[0], narrowWeb);
+  verifyPaired(evaluateCadPart(document(joinedCircle(), pairedCavities(undefined, [4 - 1e-5, 2]))).outputs[0], undefined, -1, [4 - 1e-5, 2]);
+  const three = pairedCavities();
+  refused({ ...three, sideTags: undefined, holes: [...three.holes, three.holes[0]] }, 'CAPABILITY', /two axis-aligned rectangular cavities/);
+  const circleHole = { ...pairedCavities(), sideTags: undefined };
+  circleHole.holes[0] = [{ kind: 'arc', center: [0, -2], start: [.5, -2], direction: 'ccw' }];
+  refused(circleHole, 'CAPABILITY', /two axis-aligned rectangular cavities/);
+  const lead = { kind: 'curve', id: 'lead', degree: 2, knots: [0, 0, 0, 1, 1, 1],
+    controlPoints: [[20, -10, 0], [20, -5, 0], [20, 0, 0]], weights: [1, 1, 1] };
+  const openElbow = joinCurves(lead, quarters()[0], { curveId: 'openElbow' }).curve;
+  refused(pairedCavities(), 'CAPABILITY', /one centered rectangular opening aligned with the outer rectangle/, openElbow);
+  const oneOffset = { ...pairedCavities(), sideTags: undefined, holes: [pairedCavities().holes[0]] };
+  refused(oneOffset, 'CAPABILITY', /one centered rectangular opening aligned with the outer rectangle/);
 });
