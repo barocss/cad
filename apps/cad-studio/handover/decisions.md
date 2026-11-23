@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1766: [Verify adjacent right and oblique Sketch Fillets](notes/adjacent-right-oblique-sketch-fillets-2026-11-23/README.md), #21. Match both selection methods, shared-edge refusal, rebuilt native geometry, fresh Open and explicit Agent approval.
 - D1765: [Bind the native joints on a centered rectangular duct Intersect](notes/exact-centered-rectangular-duct-intersect-2026-11-23/README.md), #10. Measure all 24 native edges and verify both rectangular apertures through fresh Open and explicit Agent approval.
 - D1764: [Extract the Studio sketch and Direct Browser rows](notes/studio-browser-geometry-rows-2026-11-23/README.md), #44. Match selection, visibility history and Sweep retargeting through fresh Open.
 - D1763: [Review the sealed cavity in a pending exact Sweep](notes/pending-closed-rectangular-duct-review-2026-11-23/README.md), #324. Pin both shell dimensions and native volume to both Agent images and explicit Studio approval.
