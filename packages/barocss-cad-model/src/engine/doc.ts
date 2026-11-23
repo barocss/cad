@@ -921,7 +921,7 @@ export function textDocumentProblem(input: unknown): string | null {
 }
 /** Validate the public rectangular cut recipe before command, saved-file or evaluation admission. */
 export function rectangularFeaturePatternProblem(node: Record<string, unknown>, nodes: readonly ModelNode[], parameters: Record<string, number>): string | null {
-  const allowed = new Set(['kind', 'parent', 'axis', 'spacing', 'count', 'axis2', 'spacing2', 'count2', ...NODE_EXTRA_FIELDS]);
+  const allowed = new Set(['kind', 'parent', 'source', 'axis', 'spacing', 'count', 'axis2', 'spacing2', 'count2', ...NODE_EXTRA_FIELDS]);
   if (Object.keys(node).some(key => !allowed.has(key))) return '[VALUE] Rectangular cut pattern contains an unknown field.';
   if (!['x', 'y', 'z'].includes(String(node.axis)) || !['x', 'y', 'z'].includes(String(node.axis2)) || node.axis === node.axis2) return '[VALUE] Rectangular cut pattern needs two different global directions X, Y or Z.';
   const count = node.count, count2 = node.count2;
@@ -934,6 +934,32 @@ export function rectangularFeaturePatternProblem(node: Record<string, unknown>, 
   if (!textRecord(parent) || !Number.isInteger(parent.node) || parent.side !== 'solid' || Object.keys(parent).some(key => key !== 'node' && key !== 'side')) return '[BAD_REFERENCE] Rectangular cut pattern needs a solid difference reference.';
   const source = nodes[parent.node as number];
   if (source?.kind !== 'difference' || source.suppressed || !leafBodies(nodes).some(r => r.node === parent.node && r.side === 'solid')) return '[BAD_REFERENCE] Rectangular cut pattern needs a current unsuppressed difference body.';
+  return rectangularFeaturePatternSourceProblem(node.source, parent as unknown as BodyRef, nodes);
+}
+
+/** An explicit prototype is the target's direct earlier Difference; it is never consumed again. */
+export function rectangularFeaturePatternSourceProblem(prototype: unknown, parent: BodyRef, nodes: readonly ModelNode[]): string | null {
+  if (prototype !== undefined) {
+    const bad = '[BAD_REFERENCE] Rectangular cut pattern source must be the current target\'s direct earlier unsuppressed solid Difference.';
+    if (!textRecord(prototype) || !Number.isSafeInteger(prototype.node) || prototype.side !== 'solid'
+      || Object.keys(prototype).some(key => key !== 'node' && key !== 'side') || (prototype.node as number) < 0
+      || (prototype.node as number) >= parent.node) return bad;
+    const target = nodes[parent.node];
+    if (target?.kind !== 'difference' || !textRecord(target.parent) || target.parent.node !== prototype.node || target.parent.side !== 'solid') return bad;
+    let at = parent.node;
+    while (at >= (prototype.node as number)) {
+      const cut = nodes[at];
+      if (cut?.kind !== 'difference' || cut.suppressed || cut.held !== undefined
+        || !textRecord(cut.parent) || !textRecord(cut.tool)
+        || !Number.isSafeInteger(cut.parent.node) || cut.parent.node < 0 || cut.parent.node >= at || cut.parent.side !== 'solid'
+        || !Number.isSafeInteger(cut.tool.node) || cut.tool.node < 0 || cut.tool.node >= at || cut.tool.side !== 'solid') return bad;
+      const stock = nodes[cut.parent.node], tool = nodes[cut.tool.node];
+      if (!textRecord(stock) || stock.suppressed || stock.held !== undefined || !textRecord(tool) || tool.suppressed || tool.held !== undefined) return bad;
+      if (at === prototype.node) return null;
+      at = cut.parent.node;
+    }
+    return bad;
+  }
   return null;
 }
 /** Check saved and nested part recipes without geometry evaluation. */
@@ -1096,7 +1122,7 @@ type ModelNodeBase = DrivenSketchNode | RoundedRectangleInsetNode | SketchNode |
   | { kind: 'linear-feature-pattern'; parent: BodyRef; axis: Axis; spacing: Dim; count: number }
   | { kind: 'fill-feature-pattern'; parent: BodyRef; region: FillFeaturePatternRegion; anchor: readonly [number, number]; spacing: Dim; count: number; spacing2: Dim; count2: number }
   | { kind: 'curve-feature-pattern'; parent: BodyRef; path: CurveFeaturePatternPath; spacing: Dim; count: number }
-  | { kind: 'rectangular-feature-pattern'; parent: BodyRef; axis: Axis; spacing: Dim; count: number; axis2: Axis; spacing2: Dim; count2: number }
+  | { kind: 'rectangular-feature-pattern'; parent: BodyRef; source?: BodyRef; axis: Axis; spacing: Dim; count: number; axis2: Axis; spacing2: Dim; count2: number }
   /** About `axis` through `pivot` (default the origin). */
   | { kind: 'circular-pattern'; parent: BodyRef; axis: Axis; angle: number; count: number; pivot?: [Dim, Dim, Dim]; /** Authored Z spread; absent on legacy patterns. */ span?: number }
   | { kind: 'union'; left: BodyRef; right: BodyRef; made?: Made }
@@ -1699,6 +1725,7 @@ export const usesOf = (node: ModelNode, nodes?: readonly ModelNode[]): number[] 
   : node.kind === 'revolve' && node.axisRef
     ? [node.sketch, ...(nodes ? nodes.flatMap((_, i) => featureId(nodes, i) === node.axisRef!.sourceFeature ? [i] : []) : [])]
   : node.kind === 'align' ? [node.parent.node, node.target.body.node]
+  : node.kind === 'rectangular-feature-pattern' && node.source ? [node.parent.node, node.source.node]
   : node.kind === 'face-end-extrude' ? [node.sketch, node.target.body.node]
   : (node.kind === 'offset-face' || node.kind === 'replace-face') && node.target ? [node.parent.node, node.target.body.node]
   : node.kind === 'extrude' && node.cutDepth === 'through' ? throughCutSources(node, nodes) : parentsOf(node);

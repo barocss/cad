@@ -88,7 +88,8 @@ export function Hud({ filletEndpoints, store, onChange, onApply, onCancel, onFil
   const alignTargetName = typeof alignTargetFace === 'string' && alignTargetFace
     ? alignTargetBody ? `${bodyName(active.ctx.doc, alignTargetBody)} · ${alignTargetFace}` : alignTargetFace
     : null;
-  const cutSource = isCutPattern(active.cmd.id) ? cutPatternSourceLabel(active.ctx.doc.nodes, selectedCutPatternSource(active.ctx)) : null;
+  const cutSource = isCutPattern(active.cmd.id) ? cutPatternSourceLabel(active.ctx.doc.nodes,
+    active.ctx.rectangularCutSource?.node ?? selectedCutPatternSource(active.ctx)) : null;
   const fields = shownFields(active.cmd.fields?.(extrudeJoinContext(active), active.values) ?? [], active.values).filter(f =>
     !(active.fillet?.type === 'edge' && active.fillet.radiusMode === 'constant' && (f.key === 'endRadius' || f.key.startsWith('station'))));
   const applyBlocked = active.preview !== 'ok' || interiorInvalid || !!sectionProblem || draftAngleInvalid

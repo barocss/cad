@@ -131,8 +131,8 @@ export type CadPartFeature = Base & (
   | { readonly kind: 'linear-pattern'; readonly target: string; readonly axis: CadPartAxis; readonly spacing: CadPartDim; readonly count: number }
   /** Repeat the tool of the active difference producer; count includes the original cut. */
   | { readonly kind: 'linear-feature-pattern'; readonly target: string; readonly axis: CadPartAxis; readonly spacing: CadPartDim; readonly count: number }
-  /** Repeat an active difference tool on two distinct global axes; both counts include the original cut. */
-  | { readonly kind: 'rectangular-feature-pattern'; readonly target: string; readonly axis: CadPartAxis; readonly spacing: CadPartDim; readonly count: number; readonly axis2: CadPartAxis; readonly spacing2: CadPartDim; readonly count2: number }
+  /** Repeat an active difference tool, or its direct earlier rectangular difference's tool via source; both counts include the original cut. */
+  | { readonly kind: 'rectangular-feature-pattern'; readonly target: string; readonly source?: string; readonly axis: CadPartAxis; readonly spacing: CadPartDim; readonly count: number; readonly axis2: CadPartAxis; readonly spacing2: CadPartDim; readonly count2: number }
   /** Repeat the original CUT tool on a finite XY grid, masked by an inline reference-point region. */
   | { readonly kind: 'fill-feature-pattern'; readonly target: string; readonly region: FillFeaturePatternRegion; readonly anchor: readonly [number, number]; readonly spacing: CadPartDim; readonly count: number; readonly spacing2: CadPartDim; readonly count2: number }
   /** Repeat a difference's cut tool along an open polyline, with its original orientation. */

@@ -97,7 +97,7 @@ import { useDirectCurveCurvature } from './app/useDirectCurveCurvature';
 import { useNativeEdgeInspection } from './app/useNativeEdgeInspection';
 import { MeshFileDialogs } from './files/MeshFileDialogs';
 import { useRouteBundleEditor } from './state/useRouteBundleEditor';
-import { cutPatternSourceLabel, isCutPattern, selectedCutPatternSource } from './app/cutPatternSource';
+import { cutPatternSourceLabel, earlierRectangularCutSource, isCutPattern, selectedCutPatternSource } from './app/cutPatternSource';
 import { moveRenderAppearance } from './app/moveRenderAppearance';
 import { curvePatternInputKey, curvePatternDocumentProblem, directCommandDocument, insertedCurvePartProblem, prepareDirectCurveCandidate, type DirectCurveEdit } from './app/directCurveCandidate';
 import { LINKED_INSET_EXTRUDE } from './app/roundedInsetCommand';
@@ -1465,10 +1465,13 @@ export function App() {
     const family = filletType(cmd.id);
     if (family && (!fresh || busy)) { setToast({ title: 'Fillet not started', hint: 'Wait for the current part to finish evaluating.', detail: '' }); return; }
     const sourceIntent = cutSourceIntent.current;
-    if (isCutPattern(cmd.id) && sourceIntent?.doc === doc && sourceIntent.selection === selection) {
+    const explicitCut = sourceIntent?.doc === doc && sourceIntent.selection === selection ? sourceIntent.index : null;
+    const rectangularCutSource = cmd.id === 'rectangular-feature-pattern' && explicitCut !== null && marker === null
+      && !inPlaceNow.current && fresh && !busy ? earlierRectangularCutSource(ctx, explicitCut) : undefined;
+    if (isCutPattern(cmd.id) && explicitCut !== null && !rectangularCutSource) {
       const source = selectedCutPatternSource(ctx);
-      if (source !== sourceIntent.index) {
-        const earlier = cutPatternSourceLabel(doc.nodes, sourceIntent.index);
+      if (source !== explicitCut) {
+        const earlier = cutPatternSourceLabel(doc.nodes, explicitCut);
         const current = cutPatternSourceLabel(ctx.doc.nodes, source);
         setToast({ title: `${cmd.label} can’t repeat ${earlier}`, hint: current ? `Select the body to repeat ${current}.` : 'Select a current Subtract result.', detail: '' });
         return;
@@ -1522,7 +1525,8 @@ export function App() {
       && !selection.bodies.length && !selection.vertices?.length && !selection.sketches?.length && !directSel.length
       && (footprintState.current.midpointReady || footprintState.current.insetReady)
       && currentNativePlanePick(ctx, selection.faces[0], doc) ? selection.faces[0] : undefined;
-    const startCtx: Ctx = splitFace ? { ...ctx, splitPlanePick: splitFace }
+    const startCtx: Ctx = rectangularCutSource ? { ...ctx, rectangularCutSource }
+      : splitFace ? { ...ctx, splitPlanePick: splitFace }
       : cmd.id === 'bearing' ? { ...ctx, doc: { ...ctx.doc, instances: doc.instances } }
       : cmd.id === 'loft' ? { ...ctx, doc: { ...ctx.doc, direct: shownDoc.direct } }
       : cmd.id === 'hole' ? { ...ctx, holeSnapStep: snapStep }

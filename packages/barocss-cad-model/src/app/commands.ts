@@ -31,7 +31,7 @@ import { fastenerCommand } from './fasteners';
 import { mountCommand } from './mounts';
 import { fastenerSizesOf, NO_SIZES, noSizeRow } from '../engine/fastenerSizeRows';
 import { duplicateBody } from '../chat/features';
-import { HOLE_PLANE, leafBodies, planeText, withNode, type Axis, type FilletSection, type HolePattern, type ModelNode, type StudioDoc } from '../engine/doc';
+import { HOLE_PLANE, leafBodies, planeText, rectangularFeaturePatternSourceProblem, withNode, type Axis, type BodyRef, type FilletSection, type HolePattern, type ModelNode, type StudioDoc } from '../engine/doc';
 import { linearSpanPatternInput } from '../engine/linearSpanPattern';
 import { circularPatternCountRange, circularPatternStep } from '../engine/circularPatternSpan';
 import { linearSpanHandles } from './linearSpanHandles';
@@ -60,7 +60,7 @@ export interface EdgeSel { body: number; edge: number }
 export interface Selection { faces: FaceSel[]; edges: EdgeSel[]; bodies: number[]; sketches?: number[]; profileRegions?: { sketch: number; indices: number[] }; vertices?: { body: number; at: [number, number, number] }[] }
 /** `direct`: the direct curves and surfaces picked (their ids). */
 /** placedPartCount overrides the evaluated document for assembly-only availability after metadata-only edits. */
-export interface Ctx { splitSourceBounds?: { doc: StudioDoc; index: number; bounds: { min: [number, number, number]; max: [number, number, number] }; isCurrent(): boolean }; placedPartCount?: number; splitPlanePick?: FaceSel; viewportEndFace?: true; extrudeJoin?: ExtrudeJoinEvidence; extrudeJoinLooks?: Pick<StudioDoc, 'bodies'> & { nameOf?(body: BodyResult): string }; sewSnapshot?: SewSnapshot; thickenSnapshot?: ThickenSnapshot; fillPatternRegion?: FillFeaturePatternRegion; fillPatternAnchor?: readonly [number, number]; curvePatternPath?: CurveFeaturePatternPath; doc: StudioDoc; bodies: BodyResult[]; selection: Selection; pick?: [number, number, number]; holeSnapStep?: number; direct?: string[]; bearingAssembly?: BearingAssemblyInput }
+export interface Ctx { rectangularCutSource?: BodyRef; splitSourceBounds?: { doc: StudioDoc; index: number; bounds: { min: [number, number, number]; max: [number, number, number] }; isCurrent(): boolean }; placedPartCount?: number; splitPlanePick?: FaceSel; viewportEndFace?: true; extrudeJoin?: ExtrudeJoinEvidence; extrudeJoinLooks?: Pick<StudioDoc, 'bodies'> & { nameOf?(body: BodyResult): string }; sewSnapshot?: SewSnapshot; thickenSnapshot?: ThickenSnapshot; fillPatternRegion?: FillFeaturePatternRegion; fillPatternAnchor?: readonly [number, number]; curvePatternPath?: CurveFeaturePatternPath; doc: StudioDoc; bodies: BodyResult[]; selection: Selection; pick?: [number, number, number]; holeSnapStep?: number; direct?: string[]; bearingAssembly?: BearingAssemblyInput }
 
 export type Values = Record<string, number | string>;
 /** `when`: shown (and required) only for these values. */
@@ -186,6 +186,19 @@ function linearCutProblem(ctx: Ctx) {
   if (parent.side !== 'solid' || node?.kind !== 'difference' || node.suppressed || !leafBodies(ctx.doc.nodes).some(r => r.node === parent.node && r.side === parent.side))
     return refusal('BAD_REFERENCE', 'Select the current result of an unsuppressed subtract feature.');
   return null;
+}
+
+function rectangularCutSource(ctx: Ctx, parent: BodyRef): BodyRef | undefined {
+  const source = ctx.rectangularCutSource;
+  return source && source.node === parent.node && source.side === parent.side
+    && Object.keys(source).sort().join(',') === 'node,side' ? undefined : source;
+}
+
+function rectangularCutProblem(ctx: Ctx) {
+  const current = linearCutProblem(ctx); if (current) return current;
+  const parent = refOf(oneBody(ctx)!);
+  const why = rectangularFeaturePatternSourceProblem(rectangularCutSource(ctx, parent), parent, ctx.doc.nodes);
+  return why ? coded('BAD_REFERENCE', why) : null;
 }
 
 /** The current display bounds corner; Move arithmetic must not quantize authored coordinates. */
@@ -952,14 +965,14 @@ const allCommands: Command[] = [
   },
   {
     id: 'rectangular-feature-pattern', label: 'Rectangular cut pattern', icon: 'cad-pattern-linear', hint: 'Repeat the cut along two global axes', group: 'pattern', keywords: 'feature cut repeat subtract',
-    available: ctx => { const why = linearCutProblem(ctx); return why ? no(why.message) : ok; },
+    available: ctx => { const why = rectangularCutProblem(ctx); return why ? no(why.message) : ok; },
     fields: () => [{ key: 'axis', label: 'First direction', kind: 'choice', options: [{ value: 'x', label: 'X' }, { value: 'y', label: 'Y' }, { value: 'z', label: 'Z' }] },
       { key: 'spacing', label: 'First spacing', kind: 'mm', min: 0, max: 10000 }, { key: 'count', label: 'First count', kind: 'count', min: 1, max: 64 },
       { key: 'axis2', label: 'Second direction', kind: 'choice', options: [{ value: 'x', label: 'X' }, { value: 'y', label: 'Y' }, { value: 'z', label: 'Z' }] },
       { key: 'spacing2', label: 'Second spacing', kind: 'mm', min: 0, max: 10000 }, { key: 'count2', label: 'Second count', kind: 'count', min: 1, max: 64 }],
     defaults: () => ({ axis: 'x', spacing: 16, count: 3, axis2: 'y', spacing2: 16, count2: 2 }),
     build: (ctx, v) => {
-      const why = linearCutProblem(ctx); if (why) throw why;
+      const why = rectangularCutProblem(ctx); if (why) throw why;
       const axis = v.axis, spacing = Number(v.spacing), count = Number(v.count);
       const axis2 = v.axis2, spacing2 = Number(v.spacing2), count2 = Number(v.count2);
       if (axis !== 'x' && axis !== 'y' && axis !== 'z') throw refusal('VALUE', 'Direction must be X, Y or Z.');
@@ -968,7 +981,8 @@ const allCommands: Command[] = [
       if (axis2 !== 'x' && axis2 !== 'y' && axis2 !== 'z' || axis === axis2) throw refusal('VALUE', 'Select two different global directions X, Y or Z.');
       if (!Number.isFinite(spacing2) || spacing2 <= 0 || spacing2 > 10000) throw refusal('VALUE', 'Second spacing must be positive and at most 10000 mm.');
       if (!Number.isInteger(count2) || count2 < 1 || count2 > 64 || !Number.isSafeInteger(count * count2) || count * count2 > 64) throw refusal('VALUE', 'Each count must be from 1 to 64, and their product must be at most 64, including the original cut.');
-      return withNode(ctx.doc, { kind: 'rectangular-feature-pattern', parent: refOf(oneBody(ctx)!), axis, spacing, count, axis2, spacing2, count2 });
+      const parent = refOf(oneBody(ctx)!), source = rectangularCutSource(ctx, parent);
+      return withNode(ctx.doc, { kind: 'rectangular-feature-pattern', parent, ...(source ? { source: { ...source } } : {}), axis, spacing, count, axis2, spacing2, count2 });
     },
   },
   {

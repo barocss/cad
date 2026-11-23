@@ -23,6 +23,7 @@ import { booleanPolyhedra } from '../brep/polyhedral-boolean.js';
 import { booleanAnalytic, faceGeometry, splitFaceAlongCurve, splitFaceAlongIsocline } from '../brep/analytic-boolean.js';
 import { cylindricalWrapFeature } from '../features/cylindrical-wrap-feature.js';
 import { transformOperation } from './part-transform.js';
+import type { PriorRectangularCut } from './part-prior-rectangular-cut.js';
 import { prismaticDetailOperation } from './part-prismatic-detail.js';
 import { profileSolidOperation } from './part-profile-solid.js';
 import { faceFinishOperation } from './part-face-finish.js';
@@ -355,7 +356,7 @@ function evaluateWith(input: CadPartDocument, previous: Cache | undefined, optio
       const used = consumed.get(id); if (part === null) consumed.set(id, 'all'); else if (used !== 'all') consumed.set(id, (used ?? new Set()).add(part));
       return picked.filter(p => !empty(p.solid));
     };
-    const cutSource: Tools['cutSource'] = r => {
+    const cutSource: Tools['cutSource'] = (r, source) => {
       const selected = ref(r, 'target'), author = doc.features.find(f => f.id === selected.id);
       if (author?.kind !== 'difference') return fail('REFERENCE', 'feature pattern target must be a direct difference result');
       if ('suppressed' in author && author.suppressed) return fail('REFERENCE', 'feature pattern target must be an unsuppressed difference');
@@ -365,6 +366,26 @@ function evaluateWith(input: CadPartDocument, previous: Cache | undefined, optio
       // One Part may hold several B-rep bodies; count the existing representation without mutating the cached Part.
       const selectedBrep = brepOf({ solid: selected.result.parts[0].solid }, selected.id);
       if (selectedBrep.bodies.length !== 1 || selectedBrep.bodies[0].kind !== 'solid') return fail('REFERENCE', 'feature pattern target must be one nonempty solid');
+      if (source !== undefined) {
+        const previous = ref(source, 'rectangular feature pattern source'), prototype = previous.author;
+        if (selected.part !== null || previous.part !== null || source !== previous.id || author.target !== previous.id
+          || prototype?.kind !== 'difference' || ('suppressed' in prototype && prototype.suppressed) || previous.result.kind !== 'solid'
+          || previous.result.parts.length !== 1 || empty(previous.result.parts[0].solid))
+          return fail('REFERENCE', 'rectangular feature pattern source must be the current difference target\'s direct earlier unsuppressed difference');
+        const original = (reference: unknown, what: string): Part => {
+          const producer = ref(reference, what);
+          if (producer.part !== null || producer.author?.kind !== 'extrude' || ('suppressed' in producer.author && producer.author.suppressed))
+            return fail('CAPABILITY', 'rectangular feature pattern source needs original rectangular extrusions for the stock and both cutters');
+          const sketch = ref(producer.author.sketch, `${what} sketch`).author;
+          if (sketch?.kind !== 'sketch' || sketch.profile !== 'rectangle' || ('suppressed' in sketch && sketch.suppressed) || sketch.holes?.length || sketch.regions?.length)
+            return fail('CAPABILITY', 'rectangular feature pattern source needs original rectangular extrusions for the stock and both cutters');
+          const parts = solids(reference, what, true);
+          if (parts.length !== 1) return fail('REFERENCE', `${what} must be one nonempty solid`);
+          return parts[0];
+        };
+        const stock = original(prototype.target, 'source stock'), tool = original(prototype.tool, 'source tool'), other = original(author.tool, 'newer tool');
+        return { seed: solids(r, 'target')[0], tool: [tool], prior: { stock, previous: previous.result.parts[0], other } };
+      }
       // Resolve the original operands as dependencies; never replace or truncate their history.
       const base = solids(author.target, 'difference target', true), tool = solids(author.tool, 'difference tool', true);
       if (base.length !== 1) return fail('REFERENCE', 'feature pattern difference must have one base solid');
@@ -488,7 +509,7 @@ export type Tools = {
   integer: (v: unknown, what: string, lo: number, hi: number) => number; axisOf: (v: unknown) => CadPartAxis; solids: (r: unknown, what: string, allowEmpty?: boolean) => Part[];
   ref: (r: unknown, what: string) => { id: string; part: number | null; result: Result; author?: CadPartFeature };
   featureKind: (id: string) => CadPartFeature['kind'] | undefined;
-  cutSource: (r: unknown) => { seed: Part; tool: Part[] };
+  cutSource: (r: unknown, source?: unknown) => { seed: Part; tool: Part[]; prior?: PriorRectangularCut };
   fail: (code: CadPartErrorCode, detail: string) => never; at: string;
   endpointBead: (f: EndpointBead, byMember: ReadonlyMap<number, Part>, frame: string) => Result;
 };
