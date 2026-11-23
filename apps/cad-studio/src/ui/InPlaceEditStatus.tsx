@@ -1,4 +1,4 @@
-import type { MouseEventHandler, PointerEventHandler } from 'react';
+import { useLayoutEffect, useRef, type MouseEventHandler, type PointerEventHandler } from 'react';
 import { Button } from '@/components/ui/button';
 import type { InPlaceSession } from '../app/editInPlace';
 
@@ -13,7 +13,21 @@ interface InPlaceEditStatusProps {
 
 export function InPlaceEditStatus({ session, askDiscard, onFinish, onCancel, onKeepEditing, rememberFocus }: InPlaceEditStatusProps) {
   const { name, shared } = session;
-  return <div className="card in-place-bar" role="status" aria-label="Editing a part in place">
+  const status = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const bar = status.current, stage = bar?.parentElement;
+    if (!bar || !stage) return;
+    const update = () => stage.style.setProperty('--in-place-status-bottom', `${bar.offsetTop + bar.offsetHeight}px`);
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(bar);
+    return () => {
+      observer.disconnect();
+      stage.style.removeProperty('--in-place-status-bottom');
+    };
+  }, []);
+
+  return <div ref={status} className="card in-place-bar" role="status" aria-label="Editing a part in place">
     <span>Editing <b>{name}</b>{shared > 1 ? ` · shared by ${shared}` : ''}</span>
     {askDiscard ? <>
       <span className="muted">Discard your changes?</span>

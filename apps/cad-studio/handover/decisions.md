@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1785: [Keep in-place edit notices clear of Details](notes/in-place-edit-notice-clearance-2026-11-23/README.md), #44. Preserve Dismiss at two desktop widths and keep the draft, History and normal notice flows.
 - D1784: [Extract the in-place assembly edit status bar](notes/in-place-edit-status-view-2026-11-23/README.md), #44. Match Finish, blocked Save, Keep editing, Discard and fresh Open in paired desktop Studio runs.
 - D1783: [Review the two passages of a pending straight-to-arc Sweep](notes/pending-line-arc-paired-duct-review-2026-11-23/README.md), #324. Bind both cap apertures, each wall group and the native joins to the two image revisions through explicit Studio approval and fresh Open.
 - D1782: [Sweep two rectangular passages from a straight span into an arc](notes/exact-line-arc-paired-duct-2026-11-23/README.md), #10. Verify both caps, 12 native joins, aperture editing, fresh Open and explicit local Agent approval.

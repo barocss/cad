@@ -1,13 +1,13 @@
 # CAD roadmap — current status and execution order
 
-Updated 2026-11-23 · Priority authority: D520 · Latest delivery: D1784 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
+Updated 2026-11-23 · Priority authority: D520 · Latest delivery: D1785 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
 
 This is the only current status index. Detailed tracks define acceptance; the 34 stable row pages retain scope and issue navigation. Immutable decision notes retain results. Do not append chronological status paragraphs here. [D520 decision](notes/cad-roadmap-replan-2026-11-04/README.md) supersedes D445 execution order and historical next-item text, while retaining its safeguards and bounded proofs.
 
 ## Now and next
 
-- **Current position:** [D1784](notes/in-place-edit-status-view-2026-11-23/README.md), P4 row 22. The in-place edit status view moves out of App. The two shared occurrences, blocked Save, Keep editing, Discard and reopened assembly match in desktop Studio. The B06 PDF group remains held.
-- **Next MAIN:** D1785, P4 rows [15](roadmap-rows/15.md) and [20](roadmap-rows/20.md), [#44](https://github.com/barocss/cad/issues/44). Fix the reproduced overlap where expanded in-place Details cover the save-refusal notice and its Dismiss control. Compare actual desktop dismissal with draft and history intact.
+- **Current position:** [D1785](notes/in-place-edit-notice-clearance-2026-11-23/README.md), P4 rows 15 and 20. The in-place save-refusal notice stays clear of expanded Details at both tested desktop widths. Dismiss preserves the draft and History. The B06 PDF group remains held.
+- **Next MAIN:** D1786, P5 rows [07](roadmap-rows/07.md) and [30](roadmap-rows/30.md), [#10](https://github.com/barocss/cad/issues/10). Carry two separated rectangular passages through a line–arc–line Exact Sweep with straight inlet and outlet spans. Verify both end caps, the two sets of native tangent joins and editable fresh Open.
 - **Separate follow-ups:** Continue Studio App extraction in cohesive parts with affected desktop checks. [#608 Rendering](https://github.com/barocss/cad/issues/608) stays on HOLD. API inventory drift remains open. The issue tracker records [#126](https://github.com/barocss/cad/issues/126), [#613](https://github.com/barocss/cad/issues/613), [#152](https://github.com/barocss/cad/issues/152) and [#22](https://github.com/barocss/cad/issues/22) as closed.
 - **Active repository:** [barocss/cad](https://github.com/barocss/cad), based on `origin/main`. Fetch before work and preserve unexpected changes. The [migration record](../../../docs/migration/README.md) maps the former `local/cad-dev` history and issue numbers.
 - **Evidence correction:** D482 records2167 PASS/0 FAIL/2 existing SKIP in a later full-kernel run than D433. Neither result is a new full-suite PASS at this audit HEAD. [D482 record](notes/vertical-contact-refusal-2026-11-04/README.md).

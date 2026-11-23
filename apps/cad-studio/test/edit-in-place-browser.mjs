@@ -26,6 +26,9 @@ print(json.dumps({'status': 'PASS', 'productImports': 0}))
 `;
 const fixture = join(import.meta.dirname, 'fixtures', 'edit-in-place.bcad');
 const extractedStatus = process.argv.includes('--extracted-status');
+const expectCoveredNotice = process.argv.includes('--expect-covered-notice');
+const dismissNotice = process.argv.includes('--dismiss-notice');
+assert.ok(!(expectCoveredNotice && dismissNotice));
 const f = await createFlow({ name: 'edit-in-place', envFrozen: 'EDIT_IN_PLACE_SOURCE_FROZEN', output: process.argv[2], qualification: 'EDIT_IN_PLACE', oracleSource,
   limits: ['One shared definition with one extrusion width edit. The see-through context is judged from screenshots.'],
   initialFiles: ['apps/cad-studio/test/edit-in-place-browser.mjs', 'apps/cad-studio/test/flow-helper.mjs', 'apps/cad-studio/test/fixtures/edit-in-place.bcad', 'apps/cad-studio/src/app/editInPlace.ts',
@@ -34,6 +37,23 @@ const f = await createFlow({ name: 'edit-in-place', envFrozen: 'EDIT_IN_PLACE_SO
   extraFrozen: extractedStatus ? ['apps/cad-studio/src/ui/InPlaceEditStatus.tsx'] : [] });
 
 const banner = () => f.page.getByRole('status', { name: 'Editing a part in place', exact: true });
+function noticePosition(requireSeparation) {
+  const status = document.querySelector('.in-place-bar'), notice = document.querySelector('.toast-stack > .toast[role="alert"]');
+  const dismiss = notice?.querySelector('button[aria-label="Dismiss"]');
+  if (!status || !notice || !dismiss) return null;
+  const bounds = dismiss.getBoundingClientRect();
+  const target = document.elementFromPoint(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
+  const placement = {
+    statusBottom: status.getBoundingClientRect().bottom,
+    noticeTop: notice.getBoundingClientRect().top,
+    dismissTarget: dismiss.contains(target),
+    coveredByStatus: status.contains(target),
+  };
+  return requireSeparation
+    ? placement.dismissTarget
+      && Math.abs(placement.noticeTop - Math.max(status.parentElement.getBoundingClientRect().top + 144, placement.statusBottom + 8)) <= 1
+    : placement;
+}
 const pick = async name => { await f.page.locator('.ol.instance:not(.nested)').filter({ hasText: name }).first().click(); await f.page.getByRole('complementary', { name: 'Instance', exact: true }).waitFor(); };
 async function enter() {
   await pick('Cube 2'); await f.page.getByRole('complementary', { name: 'Instance', exact: true }).getByRole('button', { name: 'Edit part', exact: true }).click();
@@ -63,10 +83,47 @@ await f.run(async () => {
   f.report.observations.push({ saveRefused: notice });
   assert.equal(f.report.downloads.length, downloads, 'nothing saved during the session');
   await f.snapshot('03-save-refused');
+  if (expectCoveredNotice || dismissNotice) {
+    const draft = await f.doc();
+    const history = f.page.locator('.history .hs');
+    const historyBefore = await history.evaluateAll(steps => steps.map(step => step.getAttribute('aria-label')));
+    const placement = await f.page.evaluate(noticePosition);
+    assert.ok(placement);
+    if (expectCoveredNotice) {
+      assert.ok(placement.statusBottom > placement.noticeTop && placement.coveredByStatus && !placement.dismissTarget);
+      await f.same(draft);
+      f.report.observations.push({ label: 'details-cover-dismiss', ...placement });
+      await f.snapshot('03-covered-dismiss');
+      return;
+    }
+    const separated = async label => {
+      await f.page.waitForFunction(noticePosition, true);
+      f.report.observations.push({ label, ...await f.page.evaluate(noticePosition) });
+    };
+    await separated('expanded-at-1440');
+    await f.snapshot('03-notice-separated');
+    await details.locator('summary').click();
+    await separated('collapsed-at-1440');
+    await details.locator('summary').click();
+    await f.page.setViewportSize({ width: 1100, height: 1000 });
+    await separated('expanded-at-1100');
+    await f.snapshot('03-notice-narrow-desktop');
+    await f.page.getByRole('alert').getByRole('button', { name: 'Dismiss', exact: true }).click();
+    await f.page.getByRole('alert').filter({ hasText: 'before saving' }).waitFor({ state: 'hidden' });
+    assert.ok(await details.evaluate(element => element.open));
+    await f.same(draft);
+    assert.deepEqual(await history.evaluateAll(steps => steps.map(step => step.getAttribute('aria-label'))), historyBefore);
+    await f.page.setViewportSize({ width: 1440, height: 1000 });
+    await f.snapshot('03-notice-dismissed');
+  }
 
   f.phase = 'finish'; await banner().getByRole('button', { name: 'Finish', exact: true }).click();
   await banner().waitFor({ state: 'hidden' }); await f.page.waitForFunction(() => window.__studioDoc.instances?.length === 2, null, { timeout: 30000 }); await f.ready();
   const finished = await f.doc(); await f.snapshot('04-finished'); await f.runOracle({ doc: finished, original }, '04-finished');
+  if (dismissNotice) {
+    const top = await f.page.locator('.toast-stack').evaluate(element => Number.parseFloat(getComputedStyle(element).top));
+    assert.equal(top, 144);
+  }
 
   f.phase = 'undo, redo'; await f.undo(); await f.same(original); await f.redo(); await f.same(finished);
 
