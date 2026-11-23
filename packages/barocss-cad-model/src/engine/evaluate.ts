@@ -13,7 +13,7 @@ import { boughtOf, elementOf, type BodyElement } from './elements';
 import type { FaceTable } from '../assembly/mates';
 import { BarocssError, checkOutput, massPropertiesOf, reevaluate, exportStl, type CadPartOutput, brepSurfaceArea, cutPiece, evaluateCadPart, transformBrep, FACET_PREVIEW_TRIANGLES, type Brep, type CadPartFeatureProfile, type CadPartSnapshot, type FlatPattern, type GearPlacement, type RackPlacement, type SubdSummary, type CutPiece, exportStep } from '@barocss/cad';
 import { bodyMesh, canonicalSweepCapSamples, withoutNativeFaces, type DisplayEdge, type DisplayMesh } from './mesh';
-import { cylinderDisplayMesh } from './cylinderDisplay';
+import { cylinderDisplayMesh, steppedShaftDisplayMesh } from './cylinderDisplay';
 import { boreWallOffsetFrame } from '@barocss/cad/internal/bored-cap-offset';
 import { halfRingFilletReferenceRims } from '@barocss/cad/internal/quarter-rim-fillet';
 import { arcSweepDisplayMesh } from './arcSweepDisplay';
@@ -396,6 +396,12 @@ export function evaluateDoc(doc: StudioDoc, revision: number, quality = 8, refin
       } else if (node?.kind === 'sweep-curve' && node.mode === 'exact') {
         const { brep } = snapshot.outputs[0];
         const mesh = arcSweepMixedDisplayMesh(arcSweepDisplayMesh(body.mesh, brep), brep);
+        if (mesh !== body.mesh) result.bodies[0] = { ...body, mesh };
+      } else if (node?.kind === 'import' || (node?.kind === 'shaft' && node.steps.length === 2
+        && !node.rotation && !node.from && node.center.every(value => value === 0)
+        && !node.holes?.length && !node.chamfers?.some(Boolean)
+        && node.steps.every(step => !step.fillet && !step.undercut && !step.grooves?.length && !step.keyseats?.length))) {
+        const mesh = steppedShaftDisplayMesh(body.mesh, snapshot.outputs[0].brep, revision, node.kind === 'import' ? node.step : undefined);
         if (mesh !== body.mesh) result.bodies[0] = { ...body, mesh };
       } else if (node?.kind === 'fillet') {
         const mesh = refineSweepFillet(body.mesh, snapshot.outputs[0], doc, node);

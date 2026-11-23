@@ -3,6 +3,7 @@ import { emptyDoc, rectanglePart, withNode, type StudioDoc } from './doc';
 import { exportStudioStep, partBreps } from './evaluate';
 import { addParameters, bindParameter } from './parameters';
 import { stepLengthUnit } from './stepUnits';
+import { twoStepShaftDimensions } from './twoStepShaftGeometry';
 
 export type EditableStepCopy = { family: 'plate' | 'shaft'; doc: StudioDoc; named?: StudioDoc } | { error: string };
 
@@ -31,26 +32,6 @@ function plateRecipe(brep: Brep): StudioDoc | undefined {
   if (!(radius > 0 && left > 0 && right < width && y - radius > 0 && y + radius < depth)) return;
   return withNode(rectanglePart(width, depth, height), {
     kind: 'hole', parent: { node: 1, side: 'solid' }, center: [left + radius, y], radius,
-  });
-}
-
-function shaftRecipe(brep: Brep): StudioDoc | undefined {
-  const points = brep.vertices.map(vertex => vertex.point);
-  const levels = [...new Set(points.map(point => point[2]))].sort((a, b) => a - b);
-  if (levels.length !== 3 || levels[0] !== 0) return;
-  const groups = levels.map(z => points.filter(point => point[2] === z));
-  if (groups[0].length !== 3 || groups[1].length !== 4 || groups[2].length !== 3) return;
-  const endRadius = (group: typeof points) => {
-    if (!group.some(([x, y]) => x === 0 && y === 0)) return;
-    const seams = group.filter(([x, y]) => x > 0 && y === 0);
-    if (seams.length === 1) return seams[0][0];
-  };
-  // The positive-X seam is exact. The opposite seam can have a small Y value from the half turn.
-  const start = endRadius(groups[0]), end = endRadius(groups[2]);
-  if (!start || !end || start === end) return;
-  return withNode(emptyDoc(), {
-    kind: 'shaft', generator: 'shaft@0', center: [0, 0],
-    steps: [{ diameter: 2 * start, length: levels[1] }, { diameter: 2 * end, length: levels[2] - levels[1] }],
   });
 }
 
@@ -89,7 +70,9 @@ export function editableStepCopy(source: StudioDoc, includeNamed = false): Edita
     const family = imported.faces.length === 8 && imported.vertices.length === 12 ? 'plate'
       : imported.faces.length === 10 && imported.vertices.length === 10 ? 'shaft' : undefined;
     if (!family) return { error: unsupported };
-    const candidate = family === 'plate' ? plateRecipe(imported) : shaftRecipe(imported);
+    const shaft = family === 'shaft' ? twoStepShaftDimensions(imported) : undefined;
+    const candidate = shaft ? withNode(emptyDoc(), { kind: 'shaft', generator: 'shaft@0', center: [0, 0], steps: shaft.steps })
+      : family === 'plate' ? plateRecipe(imported) : undefined;
     if (!candidate) return { error: unsupported };
     const check = checkBrep(imported, { strict: true });
     if (!check.valid || check.topology[0]?.genus !== (family === 'plate' ? 1 : 0)) return { error: unsupported };

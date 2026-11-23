@@ -1,9 +1,11 @@
-import { faceGeometry, type Brep } from '@barocss/cad';
+import { exportStep, faceGeometry, shaftSolid, stepGeometryRecipeKey, type Brep } from '@barocss/cad';
 import { boreWallOffsetFrame } from '@barocss/cad/internal/bored-cap-offset';
 import { bodyMesh, type CylinderDisplayTier, type DisplayMesh } from './mesh';
 import { cross, len, sub, unit } from './vec3';
+import { twoStepShaftDimensions } from './twoStepShaftGeometry';
 
 const byMesh = new WeakMap<DisplayMesh, DisplayMesh>();
+const shaftByMesh = new WeakMap<DisplayMesh, { source?: string; display: DisplayMesh }>();
 const MAX_PACKET_BYTES = 192 * 1024;
 
 function chordError(mesh: DisplayMesh): number {
@@ -90,6 +92,35 @@ export function cylinderDisplayMesh(base: DisplayMesh, brep: Brep, revision: num
       || len(cross(unit(axis), a.normal)) > 1e-9 || len(cross(unit(axis), b.normal)) > 1e-9) return base;
     sweep = { centres: [a.centre, b.centre], radius: Math.max(a.radius, b.radius) + 1e-7 };
   } else if ([a, b].some(circle => Math.abs(circle.normal[2]) < 1 - 1e-10)) return base;
+  const detail = withCylinderTiers(base, brep, revision, sweep);
+  byMesh.set(base, detail);
+  return detail;
+}
+
+/** Refine only the exact two-stage Shaft and its equivalent submitted STEP representation. */
+export function steppedShaftDisplayMesh(base: DisplayMesh, brep: Brep, revision: number, source?: string): DisplayMesh {
+  const cached = shaftByMesh.get(base);
+  if (cached && cached.source === source) return cached.display;
+  shaftByMesh.set(base, { source, display: base });
+  if (source !== undefined && source.length > 96 * 1024) return base;
+  const dimensions = twoStepShaftDimensions(brep);
+  if (!dimensions) return base;
+  const { steps, height, radius } = dimensions;
+  try {
+    // Compare raw imported geometry before relying on any circle displayed by the ordinary reader.
+    if (source !== undefined) {
+      const step = exportStep(shaftSolid({ steps }).brep, { name: 'Display check' });
+      if (stepGeometryRecipeKey(source) !== stepGeometryRecipeKey(step)) return base;
+    }
+    const detail = withCylinderTiers(base, brep, revision, { centres: [[0, 0, 0], [0, 0, height]], radius: radius + 1e-7 });
+    shaftByMesh.set(base, { source, display: detail });
+    return detail;
+  } catch {
+    return base;
+  }
+}
+
+function withCylinderTiers(base: DisplayMesh, brep: Brep, revision: number, sweep?: NonNullable<DisplayMesh['cylinderDetail']>['sweep']): DisplayMesh {
   const firstError = chordError(base);
   if (!Number.isFinite(firstError) || !(firstError > 0)) return base;
   const cylinderDetail: CylinderDisplayTier[] = [];
@@ -106,7 +137,5 @@ export function cylinderDisplayMesh(base: DisplayMesh, brep: Brep, revision: num
     lastError = chordErrorMM;
   }
   if (!cylinderDetail.length) return base;
-  const detailed = { ...base, cylinderDetail: { baseChordErrorMM: firstError, tiers: cylinderDetail, ...(sweep ? { sweep } : {}) } };
-  byMesh.set(base, detailed);
-  return detailed;
+  return { ...base, cylinderDetail: { baseChordErrorMM: firstError, tiers: cylinderDetail, ...(sweep ? { sweep } : {}) } };
 }

@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1844: [Refine exact shaft rims in Studio](notes/stepped-shaft-rim-display-2026-11-24/README.md), #16. Reduce projected chord error and retain each native or imported rim owner in both desktop renderers.
 - D1843: [Reconstruct a two-step shaft from STEP](notes/editable-step-shaft-copy-2026-11-24/README.md), #320. Qualify exact stages and shoulder, editable dimensions, refusal and fresh Open in Studio.
 - D1842: [Review an editable STEP copy and include named drivers](notes/review-named-step-plate-copy-2026-11-24/README.md), #320. Verify explicit Save, Cancel, source change and three native parameter bindings through fresh Open.
 - D1841: [Save an editable copy of a STEP plate](notes/editable-step-plate-copy-2026-11-24/README.md), #320. Qualify the original solid and edits to the new Sketch, Extrude and Hole copy in desktop Studio.
