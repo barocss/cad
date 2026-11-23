@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D1819: [Add a straight outlet to the paired Exact Sweep S-bend](notes/exact-five-span-paired-s-bend-2026-11-24/README.md), #10. Certify both straight ends, 48 native joins and editable Studio persistence.
+
 - D1818: [Distinguish STL precision refusal from unavailable tessellation](notes/stl-visible-body-fallback-triage-2026-11-24/README.md), #279. Check a local model corpus and the actual Studio export path without replacing the Worker.
 
 - D1817: [Qualify annotation picking across WebGPU viewport transitions](notes/pmi-viewport-lifecycle-2026-11-24/README.md), #268. Verify camera mode, earlier-pixel rejection and actual device recovery in Studio.

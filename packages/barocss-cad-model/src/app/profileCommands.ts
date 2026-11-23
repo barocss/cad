@@ -680,6 +680,10 @@ export function sweepRepresentationLabel(mode: unknown, path?: SweepRail): strin
   // Label the authored span patterns. The kernel checks the geometry.
   if (mode === 'exact' && path?.degree === 2) {
     const { controlPoints, knots, weights } = path, first = weights[0];
+    if (controlPoints.length === 11 && weights.length === 11 && knots.length === 14 && first > 0
+      && knots[3] === knots[4] && knots[5] === knots[6] && knots[7] === knots[8] && knots[9] === knots[10]
+      && weights.every((weight, i) => i === 3 || i === 7 ? weight > 0 && weight < first : weight === first))
+      return 'Exact line–arc–line–arc–line';
     if (controlPoints.length === 9 && weights.length === 9 && knots.length === 12
       && knots[3] === knots[4] && knots[5] === knots[6] && knots[7] === knots[8]) {
       if (weights.every((weight, i) => i % 4 === 3 ? weight > 0 && weight < first : weight === first) && first > 0)

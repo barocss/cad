@@ -31,7 +31,7 @@ function arc(id, start, tangent, inward, radius, degrees) {
     curve: { kind: 'curve', id, degree: 2, knots: [0, 0, 0, 1, 1, 1], weights: [1, Math.cos(angle / 2), 1],
       controlPoints: [start, add(start, scale(tangent, radius * Math.tan(angle / 2))), end] } };
 }
-function rail({ firstAngle = 90, secondAngle = 90, firstRadius = 12, secondRadius = 18, length = 8, leadLength,
+function rail({ firstAngle = 90, secondAngle = 90, firstRadius = 12, secondRadius = 18, length = 8, leadLength, tailLength,
   start = [0, 0, 0], tangent = [1, 0, 0], inward = [0, 1, 0], turn = -1 } = {}) {
   const first = arc('first', start, tangent, inward, firstRadius, firstAngle);
   const secondStart = add(first.end, scale(first.terminal, length));
@@ -42,7 +42,10 @@ function rail({ firstAngle = 90, secondAngle = 90, firstRadius = 12, secondRadiu
   const leadStart = leadLength === undefined ? start : add(start, scale(tangent, -leadLength));
   if (leadLength !== undefined) path = joinCurves({ ...line, id: 'lead', controlPoints: [leadStart,
     add(start, scale(tangent, -leadLength / 2)), start] }, path, { curveId: 'lineArcLineArc' }).curve;
-  return { first, second, length, leadLength, leadStart, turn, axis: cross(tangent, inward), path };
+  const tailEnd = tailLength === undefined ? second.end : add(second.end, scale(second.terminal, tailLength));
+  if (tailLength !== undefined) path = joinCurves(path, { ...line, id: 'tail', controlPoints: [second.end,
+    add(second.end, scale(second.terminal, tailLength / 2)), tailEnd] }, { curveId: 'lineArcLineArcLine' }).curve;
+  return { first, second, length, leadLength, leadStart, tailLength, tailEnd, turn, axis: cross(tangent, inward), path };
 }
 const document = (path, sketch = section()) => ({ format: 'barocss-cad-part', version: 1, units: 'mm', parameters: {},
   features: [sketch, { kind: 'sweep-curve', id: 'w', sketch: 's', mode: 'exact', path }] });
@@ -50,7 +53,7 @@ const identity = snapshot => Object.fromEntries(['bodies', 'shells', 'faces', 'l
   .map(key => [key, snapshot.outputs[0].brep[key].map(({ id, name }) => [id, name])]));
 const lane = face => {
   for (let index = 0; index < 2; index++)
-    if (face.surface.id.includes(`_hole${index}_`) || ['line', 'lead'].some(piece => face.surface.id.startsWith(`w_${piece}_w0_0_${index + 1}_`))) return index + 1;
+    if (face.surface.id.includes(`_hole${index}_`) || ['line', 'lead', 'tail'].some(piece => face.surface.id.startsWith(`w_${piece}_w0_0_${index + 1}_`))) return index + 1;
   return 0;
 };
 
@@ -126,26 +129,51 @@ function verifyEnvelope(brep, path) {
         if (piece === 'second') assert.ok(projection >= lower - 1e-8);
       }
   }
+  if (path.tailLength !== undefined) {
+    const { first, second } = path, half = second.angle / 2;
+    const reverseBisector = add(scale(second.terminal, -Math.cos(half)), scale(second.exitInward, Math.sin(half)));
+    const upper = -(second.radius - 2) * Math.sin(half), lower = -upper + path.length * Math.cos(half);
+    for (const piece of ['first', 'line', 'second', 'tail'])
+      for (const face of brep.faces.filter(face => face.name.startsWith(`w.${piece}.`))) for (const point of faceSamples(brep, face)) {
+        const terminalStation = dot(sub(point, second.end), second.terminal);
+        const projection = dot(sub(point, second.center), reverseBisector);
+        if (piece === 'tail') { assert.ok(terminalStation >= -1e-8); assert.ok(projection <= upper + 1e-8); }
+        if (piece === 'second') assert.ok(terminalStation <= 1e-8);
+        if (piece === 'line') assert.ok(projection >= -upper - 1e-8);
+        if (piece === 'first') assert.ok(projection >= lower - 1e-8);
+      }
+    const useFirst = first.angle >= second.angle, bend = useFirst ? first : second;
+    const normal = useFirst ? add(scale(first.tangent, Math.cos(first.angle / 2)), scale(first.inward, Math.sin(first.angle / 2))) : reverseBisector;
+    const endUpper = -(bend.radius - 2) * Math.sin(bend.angle / 2), endLower = -endUpper + path.length * Math.cos(bend.angle / 2);
+    assert.ok(endLower > endUpper);
+    for (const piece of ['lead', 'tail']) for (const face of brep.faces.filter(face => face.name.startsWith(`w.${piece}.`)))
+      for (const point of faceSamples(brep, face)) {
+        const projection = dot(sub(point, bend.center), normal);
+        if (piece === (useFirst ? 'lead' : 'tail')) assert.ok(projection <= endUpper + 1e-8);
+        else assert.ok(projection >= endLower - 1e-8);
+      }
+  }
 }
 
 function verify(output, path, intervals = [[-3, -1], [1, 3]], widths = [2, 2], angularTolerance = 1e-8, relativeCurvatureTolerance = 0) {
-  const { brep } = output, report = checkBrep(brep, { strict: true }), hasLead = path.leadLength !== undefined;
+  const { brep } = output, report = checkBrep(brep, { strict: true }), hasLead = path.leadLength !== undefined, hasTail = path.tailLength !== undefined;
   assert.ok(report.valid, report.issues.join('\n'));
   assert.deepEqual(brep.source, { family: 'sweep-curve', id: 'w' });
-  assert.deepEqual(report.counts, hasLead ? { bodies: 1, shells: 1, faces: 50, loops: 54, coedges: 216, edges: 108, vertices: 60 }
+  assert.deepEqual(report.counts, hasTail ? { bodies: 1, shells: 1, faces: 62, loops: 66, coedges: 264, edges: 132, vertices: 72 }
+    : hasLead ? { bodies: 1, shells: 1, faces: 50, loops: 54, coedges: 216, edges: 108, vertices: 60 }
     : { bodies: 1, shells: 1, faces: 38, loops: 42, coedges: 168, edges: 84, vertices: 48 });
   assert.equal(report.topology.length, 1);
   assert.equal(report.topology[0].shells, 1);
   assert.equal(report.topology[0].genus, 2);
   assert.ok(report.maximumPcurveGap < 1e-8);
-  assert.equal(new Set(brep.faces.map(face => face.name)).size, hasLead ? 50 : 38);
+  assert.equal(new Set(brep.faces.map(face => face.name)).size, hasTail ? 62 : hasLead ? 50 : 38);
   verifyEnvelope(brep, path);
   // Integrate the authored section independently. Both lanes have zero radial first moment.
   const areas = intervals.map(([low, high], i) => widths[i] * (high - low));
   const area = 40 - areas.reduce((sum, value) => sum + value, 0);
   const radialSecond = (160 / 3 - intervals.reduce((sum, [low, high], i) => sum + widths[i] ** 3 * (high - low) / 12, 0)) / area;
   const axial = -intervals.reduce((sum, [low, high], i) => sum + areas[i] * (low + high) / 2, 0) / area;
-  const length = path.first.length + path.length + path.second.length + (path.leadLength ?? 0);
+  const length = path.first.length + path.length + path.second.length + (path.leadLength ?? 0) + (path.tailLength ?? 0);
   let moment = scale(add(path.first.end, scale(path.first.terminal, path.length / 2)), path.length);
   for (const bend of [path.first, path.second]) {
     const integralInward = sub(scale(bend.inward, Math.sin(bend.angle)), scale(bend.tangent, 1 - Math.cos(bend.angle)));
@@ -153,12 +181,13 @@ function verify(output, path, intervals = [[-3, -1], [1, 3]], widths = [2, 2], a
       bend.radius + radialSecond / bend.radius)), bend.radius));
   }
   if (hasLead) moment = add(moment, scale(add(path.first.start, scale(path.first.tangent, -path.leadLength / 2)), path.leadLength));
+  if (hasTail) moment = add(moment, scale(add(path.second.end, scale(path.second.terminal, path.tailLength / 2)), path.tailLength));
   const centroid = add(scale(moment, 1 / length), scale(path.axis, axial));
   for (const mass of [massPropertiesOf(output), brepMassProperties(brep, 1)]) {
     near(mass.volume, area * length, 1e-7);
     pointNear(mass.centroid, centroid);
   }
-  for (const piece of [...(hasLead ? ['lead'] : []), 'first', 'line', 'second']) {
+  for (const piece of [...(hasLead ? ['lead'] : []), 'first', 'line', 'second', ...(hasTail ? ['tail'] : [])]) {
     const walls = brep.faces.filter(face => face.name.startsWith(`w.${piece}.`));
     assert.equal(walls.length, 12);
     for (const index of [0, 1, 2]) assert.equal(walls.filter(face => lane(face) === index).length, 4);
@@ -170,7 +199,7 @@ function verify(output, path, intervals = [[-3, -1], [1, 3]], widths = [2, 2], a
     assert.ok(face);
     const loops = face.loops.map(id => brep.loops.find(loop => loop.id === id));
     assert.deepEqual(loops.map(loop => loop.kind).sort(), ['inner', 'inner', 'outer']);
-    const at = end === 'start' ? path.leadStart : path.second.end;
+    const at = end === 'start' ? path.leadStart : path.tailEnd;
     const tangent = end === 'start' ? path.first.tangent : path.second.terminal;
     const radial = end === 'start' ? path.first.inward : scale(path.second.exitInward, path.turn);
     if (hasLead) {
@@ -180,9 +209,9 @@ function verify(output, path, intervals = [[-3, -1], [1, 3]], widths = [2, 2], a
       const edges = capUses.map(use => brep.edges.find(edge => edge.id === use.edge));
       const chartCounts = { cap: capUses.filter(use => use.pcurve).length,
         pairedEdges: edges.filter(edge => brep.coedges.filter(use => use.edge === edge.id && use.pcurve).length === 2).length };
-      // The original prism inlet has both charts; the retained revolved outlet inherits none.
-      assert.deepEqual(chartCounts, end === 'start' ? { cap: 12, pairedEdges: 12 } : { cap: 0, pairedEdges: 0 });
-      if (end === 'start') for (const edge of edges) verifyCharts(brep, edge);
+      // Prism ends have both native charts; a retained revolved outlet inherits none.
+      assert.deepEqual(chartCounts, end === 'start' || hasTail ? { cap: 12, pairedEdges: 12 } : { cap: 0, pairedEdges: 0 });
+      if (end === 'start' || hasTail) for (const edge of edges) verifyCharts(brep, edge);
     }
     const apertureBounds = [];
     for (const loop of loops) {
@@ -200,7 +229,7 @@ function verify(output, path, intervals = [[-3, -1], [1, 3]], widths = [2, 2], a
     apertureBounds.forEach((bounds, i) => bounds.forEach((value, j) => near(value, expected[i][j])));
   }
   const shared = [];
-  for (const [piece, straight] of [['first', 'line'], ['second', 'line'], ...(hasLead ? [['first', 'lead']] : [])]) {
+  for (const [piece, straight] of [['first', 'line'], ['second', 'line'], ...(hasLead ? [['first', 'lead']] : []), ...(hasTail ? [['second', 'tail']] : [])]) {
     const seams = brep.edges.filter(edge => edge.name?.includes(`w.${piece}.`) && edge.name.includes(`w.${straight}.`));
     assert.equal(seams.length, 12);
     shared.push(...seams.map(edge => edge.id));
@@ -220,7 +249,7 @@ function verify(output, path, intervals = [[-3, -1], [1, 3]], widths = [2, 2], a
     }
     assert.deepEqual(counts, [4, 4, 4]);
   }
-  assert.equal(new Set(shared).size, hasLead ? 36 : 24);
+  assert.equal(new Set(shared).size, hasTail ? 48 : hasLead ? 36 : 24);
 }
 
 for (const turn of [-1, 1]) test(`the spaced ${turn === 1 ? 'same-turn' : 'opposite-turn'} paired duct retains both open caps, 24 exact tangent joins and independent volume`, () => {
@@ -230,14 +259,14 @@ for (const turn of [-1, 1]) test(`the spaced ${turn === 1 ? 'same-turn' : 'oppos
   assert.deepEqual(loadCadPart(saveCadPart(initial)).outputs[0].brep, initial.outputs[0].brep);
 });
 
-for (const [turn, leadLength] of [[-1, undefined], [1, undefined], [1, 10], [-1, 10]]) test(`a ${turn === 1 ? 'same-turn' : 'opposite-turn'} ${leadLength ? 'leading ' : ''}asymmetric lane edit retains authored ownership, topology IDs and the other lane through reopen`, () => {
-  const path = rail({ turn, leadLength }), sketch = section(), pieces = [...(leadLength ? ['lead'] : []), 'first', 'line', 'second'];
+for (const [turn, leadLength, tailLength] of [[-1, undefined], [1, undefined], [1, 10], [-1, 10], [-1, 10, 6]]) test(`a ${turn === 1 ? 'same-turn' : 'opposite-turn'} ${tailLength ? 'five-span ' : leadLength ? 'leading ' : ''}asymmetric lane edit retains authored ownership, topology IDs and the other lane through reopen`, () => {
+  const path = rail({ turn, leadLength, tailLength }), sketch = section(), pieces = [...(leadLength ? ['lead'] : []), 'first', 'line', 'second', ...(tailLength ? ['tail'] : [])];
   sketch.sideTags = { outer: ['e1', 'e2', 'e3', 'e4'], holes: [['e5', 'e6', 'e7', 'e8'], ['e9', 'e10', 'e11', 'e12']] };
   const initial = evaluateCadPart(document(path.path, sketch));
   const changed = { ...sketch, holes: [rectangle(2, -2.5, -1.5, true), sketch.holes[1]] };
   const edited = reevaluate(initial, { document: document(path.path, changed) });
   verify(edited.outputs[0], path, [[-2.5, -1.5], [1, 3]]);
-  near(massPropertiesOf(edited.outputs[0]).volume, 34 * (15 * Math.PI + 8 + (leadLength ?? 0)));
+  near(massPropertiesOf(edited.outputs[0]).volume, 34 * (15 * Math.PI + 8 + (leadLength ?? 0) + (tailLength ?? 0)));
   assert.deepEqual(identity(edited), identity(initial));
   for (const tag of [...sketch.sideTags.outer, ...sketch.sideTags.holes.flat()])
     assert.deepEqual(edited.outputs[0].brep.faces.filter(face => face.name.endsWith(`.side[${tag}]`)).map(face => face.name).sort(),
@@ -397,4 +426,86 @@ for (const turn of [-1, 1]) test(`leading ${turn === 1 ? 'same-turn' : 'opposite
   refused(wrongWeights, section(), 'GEOMETRY', /closed-circle sweep path must close/);
   const wrongKnots = structuredClone(path.path); wrongKnots.knots[4] += .1;
   refused(wrongKnots, section(), 'CAPABILITY', /closed-circle sweep needs one full circular path/);
+});
+
+test('five-span paired S-bends retain both charted original ends, 48 reciprocal joins and independent signed material moments', () => {
+  for (const [firstRadius, secondRadius] of [[12, 18], [18, 12]]) {
+    const path = rail({ leadLength: 10, tailLength: 6, firstRadius, secondRadius });
+    const initial = evaluateCadPart(document(path.path)), output = initial.outputs[0];
+    verify(output, path);
+    near(brepMassProperties(output.brep, 1).volume, 32 * (24 + 15 * Math.PI));
+    if (firstRadius === 12) {
+      pointNear(path.leadStart, [-10, 0, 0]); pointNear(path.tailEnd, [36, 38, 0]);
+      pointNear(brepMassProperties(output.brep, 1).centroid,
+        [(270 * Math.PI + 64) / (24 + 15 * Math.PI), (252 * Math.PI + 536) / (24 + 15 * Math.PI), 0]);
+    }
+    assert.deepEqual(loadCadPart(saveCadPart(initial)).outputs[0].brep, output.brep);
+  }
+});
+
+test('five-span S-bends keep both angular orderings, both physical signs and radial axes with long independent ends', () => {
+  for (const [firstAngle, secondAngle] of [[30, 120], [120, 30], [120, 120]])
+    for (const radialY of [false, true]) for (const polarity of [-1, 1]) {
+      const path = rail({ leadLength: 80, tailLength: 120, firstAngle, secondAngle,
+        start: [32, -14, 18], tangent: [.6, .8, 0], inward: [-.8 * polarity, .6 * polarity, 0] });
+      const intervals = [[1, 3], [-2.5, -1.5]], widths = [2, 1.5];
+      const sketch = { ...section(intervals, widths, [false, true], [21.2, -7.1]),
+        plane: { origin: [5, 4, 3], normal: path.first.tangent, xAxis: path.first.inward },
+        sideTags: { outer: ['outsideA', 'outsideB', 'outsideC', 'outsideD'],
+          holes: [['upperA', 'upperB', 'upperC', 'upperD'], ['lowerA', 'lowerB', 'lowerC', 'lowerD']] } };
+      if (radialY) {
+        sketch.segments = rectangle(10, -2, 2);
+        sketch.holes = intervals.map(([low, high], i) => rectangle(high - low, -widths[i] / 2, widths[i] / 2,
+          !!i, [-(low + high) / 2, 0]));
+        sketch.plane.xAxis = scale(path.axis, -1);
+      }
+      const initial = evaluateCadPart(document(path.path, sketch));
+      verify(initial.outputs[0], path, intervals, widths, CadNumericPolicy.relativeComparison * 180 / Math.PI);
+      assert.deepEqual(loadCadPart(saveCadPart(initial)).outputs[0].brep, initial.outputs[0].brep);
+    }
+});
+
+test('five-span S-bends keep the exact minimum positive lead and outlet in their own original frames', () => {
+  for (const options of [{ leadLength: .0001, tailLength: 6 },
+    { leadLength: 10, tailLength: .0001, start: [-30, -38, 0] }]) {
+    const path = rail(options);
+    if (options.leadLength === .0001) assert.equal(Math.hypot(...sub(path.first.start, path.leadStart)), .0001);
+    else assert.equal(Math.hypot(...sub(path.tailEnd, path.second.end)), .0001);
+    verify(evaluateCadPart(document(path.path)).outputs[0], path);
+  }
+});
+
+test('five-span S-bend refusals preserve the source for invalid original ends, profiles, turns and malformed carriers', () => {
+  const path = rail({ leadLength: 10, tailLength: 6 }), initial = evaluateCadPart(document(path.path)), saved = saveCadPart(initial);
+  const refused = (changedPath, sketch, code, message) => {
+    assert.throws(() => reevaluate(initial, { document: document(changedPath, sketch) }),
+      error => error instanceof CadPartError && error.feature === 'w' && error.code === code && message.test(error.message));
+    assert.equal(saveCadPart(initial), saved);
+  };
+  const family = /line-arc-line-arc-line sweep needs a straight lead, two opposite-turn coplanar circular arcs/;
+  refused(rail({ leadLength: 10, tailLength: 6, turn: 1 }).path, section(), 'CAPABILITY', family);
+  for (const holes of [[], [section().holes[0]], [...section().holes, section().holes[0]]])
+    refused(path.path, { ...section(), holes }, 'CAPABILITY', /line-arc-line-arc-line sweep needs two bend-aligned rectangular passages/);
+  refused(path.path, { id: 's', kind: 'sketch', profile: 'circle', center: [0, 0], radius: 2 }, 'CAPABILITY', /two bend-aligned rectangular passages/);
+  refused(path.path, section(undefined, [4, 2]), 'GEOMETRY', /line-arc-line-arc-line.*strictly positive cover/);
+  refused(path.path, section([[-3, 0], [0, 3]]), 'GEOMETRY', /line-arc-line-arc-line.*strictly positive axial web clearance/);
+  for (const radii of [{ firstRadius: 2 }, { secondRadius: 2 }])
+    refused(rail({ leadLength: 10, tailLength: 6, ...radii }).path, section(), 'PARAMETER', /line-arc-line-arc-line.*radial half-width smaller than both path radii/);
+  for (const leadLength of [0, .000099])
+    refused(rail({ leadLength, tailLength: 6 }).path, section(), 'PARAMETER', /line-arc-line-arc-line.*leading straight segment at least 0.0001 mm/);
+  for (const tailLength of [0, .000099])
+    refused(rail({ leadLength: 10, tailLength, start: [-30, -38, 0] }).path, section(), 'PARAMETER', /line-arc-line-arc-line.*outlet straight segment at least 0.0001 mm/);
+  const nonline = structuredClone(path.path); nonline.controlPoints[9][1] += .01;
+  refused(nonline, section(), 'CAPABILITY', family);
+  for (const terminal of [add(path.second.end, [-6, 0, 0]), add(path.tailEnd, [0, 1, 0])]) {
+    const kink = structuredClone(path.path); kink.controlPoints[10] = terminal;
+    kink.controlPoints[9] = scale(add(kink.controlPoints[8], terminal), .5);
+    refused(kink, section(), 'GEOMETRY', /line-arc-line-arc-line.*common forward tangent at all four joins/);
+  }
+  const weights = structuredClone(path.path); weights.weights[9] = 1.01;
+  refused(weights, section(), 'CAPABILITY', family);
+  const knots = structuredClone(path.path); knots.knots[10] += .01;
+  refused(knots, section(), 'CAPABILITY', family);
+  const nonplanar = structuredClone(path.path); nonplanar.controlPoints[7][2] += .1; nonplanar.controlPoints[8][2] += .2;
+  refused(nonplanar, section(), 'CAPABILITY', /line-arc-line-arc-line/);
 });

@@ -1,13 +1,13 @@
 # CAD roadmap — current status and execution order
 
-Updated 2026-11-24 · Priority authority: D520 · Latest delivery: D1818 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
+Updated 2026-11-24 · Priority authority: D520 · Latest delivery: D1819 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
 
 This is the only current status index. Detailed tracks define acceptance; the 34 stable row pages retain scope and issue navigation. Immutable decision notes retain results. Do not append chronological status paragraphs here. [D520 decision](notes/cad-roadmap-replan-2026-11-04/README.md) supersedes D445 execution order and historical next-item text, while retaining its safeguards and bounded proofs.
 
 ## Now and next
 
-- **Current position:** [D1818](notes/stl-visible-body-fallback-triage-2026-11-24/README.md), P2 rows 13 and 16. Studio retains the visible historical Round on four expected precision refusals and exports the ordinary Fillet. The local corpus has no eligible genuine Worker-null fallback. [#279](https://github.com/barocss/cad/issues/279) remains open at that boundary. [#229](https://github.com/barocss/cad/issues/229) is closed.
-- **Next MAIN:** D1819, P5 rows [07](roadmap-rows/07.md) and [16](roadmap-rows/16.md), [#10](https://github.com/barocss/cad/issues/10). Add a straight outlet to the bounded opposite-turn two-passage Exact Sweep so both ends have straight connections. Prove nonadjacent separation and verify the editable native result in Studio.
+- **Current position:** [D1819](notes/exact-five-span-paired-s-bend-2026-11-24/README.md), P5 rows 07 and 16. A paired Exact Sweep S-bend now has tangent straight ends at both mouths. Studio verifies 48 native joins, independent passage editing, Save/Open and local Agent acceptance. [#10](https://github.com/barocss/cad/issues/10) retains the wider frame and path scope.
+- **Next MAIN:** D1820, P5 rows [07](roadmap-rows/07.md) and [16](roadmap-rows/16.md), [#324](https://github.com/barocss/cad/issues/324). Qualify pending local Agent image review for the five-span Sweep through the original rail, both ends and 48 native joins before approval.
 - **Separate follow-ups:** Continue Studio App extraction in cohesive parts with affected desktop checks. [#608 Rendering](https://github.com/barocss/cad/issues/608) stays on HOLD. API inventory drift remains open. The issue tracker records [#126](https://github.com/barocss/cad/issues/126), [#613](https://github.com/barocss/cad/issues/613), [#152](https://github.com/barocss/cad/issues/152) and [#22](https://github.com/barocss/cad/issues/22) as closed.
 - **Active repository:** [barocss/cad](https://github.com/barocss/cad), based on `origin/main`. Fetch before work and preserve unexpected changes. The [migration record](../../../docs/migration/README.md) maps the former `local/cad-dev` history and issue numbers.
 - **Evidence correction:** D482 records2167 PASS/0 FAIL/2 existing SKIP in a later full-kernel run than D433. Neither result is a new full-suite PASS at this audit HEAD. [D482 record](notes/vertical-contact-refusal-2026-11-04/README.md).

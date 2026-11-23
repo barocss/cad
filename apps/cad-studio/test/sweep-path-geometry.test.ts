@@ -60,6 +60,16 @@ test('the closed circle option labels its stored span pattern without changing o
   assert.equal(sweepRepresentationLabel('exact', { ...circle, weights: Array(9).fill(1) }), 'Exact circular arc');
 });
 
+test('the five-span exact label identifies both straight ends without labeling an authored curved outlet as straight', () => {
+  const path = { degree: 2, controlPoints: Array.from({ length: 11 }, (_, i) => i),
+    knots: [0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 5],
+    weights: [1, 1, 1, Math.SQRT1_2, 1, 1, 1, Math.SQRT1_2, 1, 1, 1] };
+  assert.equal(sweepRepresentationLabel('exact', path), 'Exact line–arc–line–arc–line');
+  assert.equal(sweepRepresentationLabel('faceted', path), 'Faceted');
+  path.weights[9] = Math.SQRT1_2;
+  assert.equal(sweepRepresentationLabel('exact', path), 'Exact circular arc');
+});
+
 test('Sweep History displays a rectangular section with resolved sketch dimensions', () => {
   const sweep: Extract<ModelNode, { kind: 'sweep-curve' }> = {
     kind: 'sweep-curve', sketch: 0, name: 'Elbow rail', mode: 'exact',
