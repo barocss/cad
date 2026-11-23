@@ -759,12 +759,21 @@ export function isPairedElbowOutletOffsetSource(nodes: readonly unknown[], index
   return controlPoints.length === 7 || arcLine || isFiveSpanPairedElbowOffsetPath(path);
 }
 
-/** Only the original five-span outlet may bind its signed extension to another native plane. */
-export function isPairedFiveSpanOutletPlaneSource(nodes: readonly unknown[], index: number, face: string): boolean {
-  const path = pairedElbowOffsetPath(nodes, index, face, 'end');
+function isPairedFiveSpanEndPlaneSource(nodes: readonly unknown[], index: number, face: string, end: 'start' | 'end'): boolean {
+  const path = pairedElbowOffsetPath(nodes, index, face, end);
   if (!path || !isFiveSpanPairedElbowOffsetPath(path)) return false;
   const sweep = nodes[index], sketch = textRecord(sweep) ? nodes[Number(sweep.sketch)] : undefined;
   return textRecord(sketch) && !sketch.suppressed && sketch.held === undefined;
+}
+
+/** Only an original five-span straight cap may bind its signed extension to another native plane. */
+export function isPairedFiveSpanCapPlaneSource(nodes: readonly unknown[], index: number, face: string): boolean {
+  return isPairedFiveSpanEndPlaneSource(nodes, index, face, 'start') || isPairedFiveSpanEndPlaneSource(nodes, index, face, 'end');
+}
+
+/** Preserve the outlet-only authority used by the pinned Agent review. */
+export function isPairedFiveSpanOutletPlaneSource(nodes: readonly unknown[], index: number, face: string): boolean {
+  return isPairedFiveSpanEndPlaneSource(nodes, index, face, 'end');
 }
 
 /** Authored bounds for the original inlet on either supported paired path with two straight ends. */
@@ -834,8 +843,8 @@ export function directFaceDocumentProblem(input: unknown): string | null {
           || isPairedElbowInletOffsetSource(value.nodes, parentIndex, face)))
           return 'Offset face: the paired Exact Sweep needs a supported original straight end and a signed distance.';
         if (node.target !== undefined) {
-          if (!isPairedFiveSpanOutletPlaneSource(value.nodes, parentIndex, face))
-            return 'Offset face: To plane needs the original five-span paired outlet.';
+          if (!isPairedFiveSpanCapPlaneSource(value.nodes, parentIndex, face))
+            return 'Offset face: To plane needs the original five-span paired inlet or outlet.';
           const reference = value.nodes[(node.target as OffsetPlaneRef).body.node];
           if (!textRecord(reference) || reference.suppressed || reference.held !== undefined)
             return 'Offset face: the reference body must remain available and unsuppressed.';

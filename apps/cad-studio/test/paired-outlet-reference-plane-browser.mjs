@@ -9,6 +9,22 @@ const solid = node => ({ node, side: 'solid' });
 const outlet = 'n1.end';
 const agentReview = process.argv.includes('--agent-review');
 const agent = agentReview || process.argv.includes('--agent');
+const inlet = process.argv.includes('--inlet');
+assert.ok(!inlet || !agent, 'Only the original outlet has the dedicated Agent review fixture.');
+const moving = inlet ? 'n1.start' : outlet;
+const fixed = inlet ? outlet : 'n1.start';
+const dock = inlet ? {
+  donorMin: [-19, -14], donorMax: [-14, -8], sourceView: 'Left', sourcePoint: [-10, 0, 0],
+  tiltedPoint: [-16.5, -11, 14], initialView: 'Right', initialPoint: [-14, -11, 12], initialFace: 'n3.side1',
+  shift: '8', movedX: -6, retargetView: 'Left', retargetPoint: [-11, -11, 12], retargetFace: 'n3.side3',
+  collapse: 19,
+} : {
+  donorMin: [40, 52], donorMax: [45, 58], sourceView: 'Right', sourcePoint: [36, 38, 0],
+  tiltedPoint: [42.5, 55, 14], initialView: 'Left', initialPoint: [40, 55, 12], initialFace: 'n3.side3',
+  shift: '-8', movedX: 32, retargetView: 'Right', retargetPoint: [37, 55, 12], retargetFace: 'n3.side1',
+  collapse: -15,
+};
+const endpoint = inlet ? 'inlet' : 'outlet';
 const input = {
   format: 'barocss-cad-model', schema: 3, units: 'mm', parameters: {}, nextId: 5,
   nodes: [
@@ -20,7 +36,7 @@ const input = {
         controlPoints: [[-10, 0, 0], [-5, 0, 0], [0, 0, 0], [12, 0, 0], [12, 12, 0], [12, 16, 0],
           [12, 20, 0], [12, 38, 0], [30, 38, 0], [33, 38, 0], [36, 38, 0]],
         weights: [1, 1, 1, Math.SQRT1_2, 1, 1, 1, Math.SQRT1_2, 1, 1, 1] } },
-    { id: 'n2', kind: 'sketch', profile: 'rectangle', min: [40, 52], max: [45, 58] },
+    { id: 'n2', kind: 'sketch', profile: 'rectangle', min: dock.donorMin, max: dock.donorMax },
     { id: 'n3', kind: 'extrude', sketch: 2, height: 4, from: 10 },
     { id: 'n4', kind: 'translate', parent: solid(3), offset: [0, 0, 0] },
   ],
@@ -36,12 +52,12 @@ const pins = ['apps/cad-studio/test/paired-outlet-reference-plane-browser.mjs', 
     'packages/barocss-cad-model/src/chat/part/modelCandidate.ts',
     'packages/barocss-cad-model/src/chat/part/views.ts'] : [])];
 const f = await createFlow({
-  name: 'paired-outlet-reference-plane', output: process.argv[2],
-  envFrozen: agentReview ? 'D1856_SOURCE_FROZEN' : agent ? 'D1855_SOURCE_FROZEN' : 'D1854_SOURCE_FROZEN',
+  name: `paired-${endpoint}-reference-plane`, output: process.argv[2],
+  envFrozen: agentReview ? 'D1856_SOURCE_FROZEN' : agent ? 'D1855_SOURCE_FROZEN' : inlet ? 'D1858_SOURCE_FROZEN' : 'D1854_SOURCE_FROZEN',
   initialFiles: pins, requiredFrozen: pins,
   qualification: agent ? '#324 proposes a revision-bound outlet plane edit through local MCP and real Studio review.'
-    : '#17 moves the original five-span paired outlet to a live parallel native face in desktop Studio.',
-  limits: ['One original five-span S-bend, one detached native donor and the original straight outlet.'],
+    : `#17 moves the original five-span paired ${endpoint} to a live parallel native face in desktop Studio.`,
+  limits: [`One original five-span S-bend, one detached native donor and the original straight ${endpoint}.`],
   inspectorSource: `
 import { readFileSync } from 'node:fs';
 import { brepMassProperties, checkBrep, faceGeometry } from '@barocss/cad';
@@ -71,8 +87,9 @@ const out = partBreps(doc).map(({key, brep}) => {
   const display = evaluated.bodies.find(body => body.key === key)!;
   const incidence = [brep.faces, brep.edges, brep.vertices, brep.loops, brep.coedges]
     .map(records => records.map(record => [record.id, 'name' in record ? record.name : null]));
+  const { volume, centroid } = brepMassProperties(brep, 1);
   return { key, hash: digestOf(brep), incidence, planes, joins, topology: checkBrep(brep, {strict:true}),
-    mesh: display.mesh.faces.map(face => [face.name, face.index]), volume: brepMassProperties(brep,1).volume };
+    mesh: display.mesh.faces.map(face => [face.name, face.index]), volume, centroid };
 });
 console.log(JSON.stringify(out));
 `,
@@ -110,17 +127,24 @@ async function verify(label, doc, original, key, face, x) {
   assert.deepEqual(part.joins.map(joins => joins.length), [12, 12, 12, 12]);
   assert.deepEqual(part.joins, original.joins);
   assert.deepEqual(part.incidence, original.incidence);
-  assert.deepEqual(part.planes['n1.start'], original.planes['n1.start']);
-  assert.equal(part.planes[outlet].holes, 2);
+  assert.deepEqual(part.planes[fixed], original.planes[fixed]);
+  assert.equal(part.planes[moving].holes, 2);
   const plane = donor.planes[face].plane;
   near(plane.o[0], x);
-  const cap = part.planes[outlet];
+  const cap = part.planes[moving];
   near(cap.plane.o[0], x);
   cap.points.forEach(point => near(point[0], x));
-  const expected = 32 * (24 + x - 36 + 15 * Math.PI);
+  const distance = inlet ? -x - 10 : x - 36;
+  const length = 24 + 15 * Math.PI + distance;
+  const expected = 32 * length;
+  if (inlet) {
+    const centre = [(270 * Math.PI + 64 - 10 * distance - distance ** 2 / 2) / length,
+      (252 * Math.PI + 536) / length, 0];
+    part.centroid.forEach((value, axis) => near(value, centre[axis]));
+  }
   near(part.volume, expected);
   near((await f.bodies()).bodies.find(body => body.key === key).volume, expected);
-  f.report.observations.push({ label, x, donor: face, volume: part.volume, joins: 48, hash: part.hash, referenceHash: donor.hash });
+  f.report.observations.push({ label, x, donor: face, volume: part.volume, centroid: part.centroid, joins: 48, hash: part.hash, referenceHash: donor.hash });
   return { part, donor };
 }
 
@@ -180,7 +204,7 @@ async function exerciseAgent() {
   const session = { app: f.app, output: f.output, clientName: f.name };
   const reviewed = await withMcpSession(session, file, 'paired-outlet-reference', async (call, request) => {
     const description = await call('describe', { command: 'offset-face' });
-    assert.match(description.selection, /original five-span outlet accepts To plane/);
+    assert.match(description.selection, /original five-span inlet and outlet accept To plane/);
     const expectedRevision = await currentPartRevision(call);
     const command = { action: 'command', command: 'offset-face', expectedRevision,
       faces: [outlet, 'n3.side3'], values: { offsetMode: 'to-plane' } };
@@ -268,15 +292,15 @@ async function exerciseAgent() {
 await f.run(async () => {
   if (agent) return exerciseAgent();
   await f.newPage();
-  await open(input, 'paired-outlet-reference.bcad');
+  await open(input, `paired-${endpoint}-reference.bcad`);
   await f.same(input);
   const inspect = await f.inspect('original', input), original = inspect.find(record => record.key === 'b1');
   const originalDonor = inspect.find(record => record.key === 'b4');
-  const originalIndex = original.mesh.find(([name]) => name === outlet)[1];
+  const originalIndex = original.mesh.find(([name]) => name === moving)[1];
   if (await button('Ortho').getAttribute('aria-pressed') !== 'true') await button('Ortho').click();
-  await view('Right');
+  await view(dock.sourceView);
   await f.page.getByTitle('Frame all (F)', { exact: true }).click();
-  await clickWorld([36, 38, 0]);
+  await clickWorld(dock.sourcePoint);
   await f.page.waitForFunction(index => window.__studioSelection.selection.faces.some(face => face.face === index), originalIndex);
   await f.page.evaluate(() => document.activeElement?.blur());
   await f.command('Offset face');
@@ -284,16 +308,16 @@ await f.run(async () => {
   await field(panel, 'Mode').selectOption('to-plane');
   await panel.getByText('Pick a parallel face on another solid', { exact: true }).waitFor();
   await view('Top');
-  await clickWorld([42.5, 55, 14]);
+  await clickWorld(dock.tiltedPoint);
   await status(panel, 'refused');
   assert.match(await panel.locator('.hud-error').innerText(), /parallel/i);
   assert.ok(await button('Apply', panel).isDisabled());
   await f.same(input);
   await f.snapshot('01-nonparallel-refused');
-  await view('Left');
-  await clickWorld([40, 55, 12]);
+  await view(dock.initialView);
+  await clickWorld(dock.initialPoint);
   await status(panel, 'preview');
-  await panel.getByText('n3.side3', { exact: false }).waitFor();
+  await panel.getByText(dock.initialFace, { exact: false }).waitFor();
   await f.same(input);
   await button('Apply', panel).click();
   await f.changed(input);
@@ -303,38 +327,38 @@ await f.run(async () => {
   assert.deepEqual(binding.target.body, solid(4));
   assert.equal(binding.target.feature, 'n4');
   assert.ok(!Object.hasOwn(binding, 'distance'));
-  assert.equal((await verify('forward', forward, original, 'b5', 'n3.side3', 40)).donor.hash, originalDonor.hash);
+  assert.equal((await verify('forward', forward, original, 'b5', dock.initialFace, dock.initialPoint[0])).donor.hash, originalDonor.hash);
 
   await f.openFeatureEditor(4, 'move the same donor');
-  await field(f.editor(), 'ΔX').fill('-8');
+  await field(f.editor(), 'ΔX').fill(dock.shift);
   const moved = (await f.applyEditor(forward, '03-donor-moved')).doc;
   assert.deepEqual(moved.nodes[5], binding);
-  const inward = await verify('inward', moved, original, 'b5', 'n3.side3', 32);
-  await f.openFeatureEditor(5, 'edit the outlet binding');
+  const inward = await verify('inward', moved, original, 'b5', dock.initialFace, dock.movedX);
+  await f.openFeatureEditor(5, `edit the ${endpoint} binding`);
   await button('Edit offset', f.editor()).click();
   const edit = hud('Edit Offset face');
   assert.equal(await field(edit, 'Mode').inputValue(), 'to-plane');
-  await view('Right');
-  await clickWorld([37, 55, 12]);
+  await view(dock.retargetView);
+  await clickWorld(dock.retargetPoint);
   await status(edit, 'preview');
-  await edit.getByText('n3.side1', { exact: false }).waitFor();
+  await edit.getByText(dock.retargetFace, { exact: false }).waitFor();
   await button('Apply', edit).click();
   await f.changed(moved);
   const rebound = (await f.snapshot('04-other-donor-face')).doc;
   assert.equal(rebound.nodes[5].id, binding.id);
-  assert.equal(rebound.nodes[5].target.face, 'n3.side1');
-  const shifted = await verify('retarget', rebound, original, 'b5', 'n3.side1', 37);
+  assert.equal(rebound.nodes[5].target.face, dock.retargetFace);
+  const shifted = await verify('retarget', rebound, original, 'b5', dock.retargetFace, dock.retargetPoint[0]);
   assert.equal(shifted.donor.hash, inward.donor.hash);
   await f.undo();
   await f.same(moved);
   await f.redo();
   await f.same(rebound);
-  const saved = await f.save('paired-outlet-reference');
+  const saved = await f.save(`paired-${endpoint}-reference`);
   await f.freshOpen(saved.file, rebound, '05-fresh-open');
-  assert.equal((await verify('reopened', rebound, original, 'b5', 'n3.side1', 37)).part.hash, shifted.part.hash);
+  assert.equal((await verify('reopened', rebound, original, 'b5', dock.retargetFace, dock.retargetPoint[0])).part.hash, shifted.part.hash);
 
-  const collapsed = { ...rebound, nodes: rebound.nodes.map((node, index) => index === 4 ? { ...node, offset: [-15, 0, 0] } : node) };
-  await open(collapsed, 'paired-outlet-collapse.bcad');
+  const collapsed = { ...rebound, nodes: rebound.nodes.map((node, index) => index === 4 ? { ...node, offset: [dock.collapse, 0, 0] } : node) };
+  await open(collapsed, `paired-${endpoint}-collapse.bcad`);
   await f.waitToast(/Your part is unchanged/i);
   await f.same(rebound);
   await f.snapshot('06-collapse-refused');

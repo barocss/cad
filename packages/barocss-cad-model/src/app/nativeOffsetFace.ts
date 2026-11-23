@@ -7,7 +7,7 @@ import { exactPairedElbowOutletOffsetFrame } from '@barocss/cad/internal/exact-p
 import { prismWallOffsetFrame } from '@barocss/cad/internal/prism-wall-offset';
 import { fillFeaturePatternSpec } from '@barocss/cad/api';
 import { finiteBinary64Integer } from '../engine/binary64';
-import { exactSemicylinderCapSource, exactSemicylinderRadialBoreSource, exactSemicylinderSecondOffset, exactSemicylinderWallAfterReplacement, isExactCylinderFaceEditChain, isAnnularCapOffsetSource, isAnnularReplacementSource, isBoredPlateHole, isBoredPlateOffsetSource, isBoxCapOffsetSource, isCylinderReplacementSource, isPairedElbowInletOffsetSource, isPairedElbowOutletOffsetSource, isPairedFiveSpanOutletPlaneSource, isStraightHexagonalExtrusion, leafBodies, type SketchNode, type StudioDoc } from '../engine/doc';
+import { exactSemicylinderCapSource, exactSemicylinderRadialBoreSource, exactSemicylinderSecondOffset, exactSemicylinderWallAfterReplacement, isExactCylinderFaceEditChain, isAnnularCapOffsetSource, isAnnularReplacementSource, isBoredPlateHole, isBoredPlateOffsetSource, isBoxCapOffsetSource, isCylinderReplacementSource, isPairedElbowInletOffsetSource, isPairedElbowOutletOffsetSource, isPairedFiveSpanCapPlaneSource, isStraightHexagonalExtrusion, leafBodies, type SketchNode, type StudioDoc } from '../engine/doc';
 import { evaluateDoc, massOfRef, partBreps, snapshotOf, type BodyResult } from '../engine/evaluate';
 import { bodyKeyFor, featureId, withIds } from '../engine/ids';
 import { refusal } from '../engine/refusal';
@@ -390,7 +390,7 @@ export function resolveDirectOffsetFace(ctx: Ctx): {
       id: featureId(ctx.doc.nodes, ref.node), mode: 'exact', path: { kind: 'curve', id: 'path', ...node.path },
     });
     if (frame) return { parent: ref, face: display.name, ...frame,
-      allowsPlane: isPairedFiveSpanOutletPlaneSource(ctx.doc.nodes, ref.node, display.name) };
+      allowsPlane: isPairedFiveSpanCapPlaneSource(ctx.doc.nodes, ref.node, display.name) };
   }
   const bore = exactSemicylinderRadialBoreSource(ctx.doc.nodes, ref.node, ctx.doc.parameters);
   if (bore) {

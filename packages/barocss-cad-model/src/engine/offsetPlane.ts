@@ -7,7 +7,7 @@ import { annularCapReplacementFrame, boredCapReplacementFrame, circularCapReplac
 import { exactSemicylinderCapOffsetFrame, exactSemicylinderCapReplacementAfterWallFrame, exactSemicylinderCapReplacementFrame } from '@barocss/cad/internal/exact-cylinder-cap-offset';
 import { exactPairedElbowOutletOffsetFrame } from '@barocss/cad/internal/exact-paired-elbow-offset';
 import { prismCapReplacementFrame, prismWallOffsetFrame, prismWallReplacementFrame } from '@barocss/cad/internal/prism-wall-offset';
-import { exactSemicylinderCapAfterWall, exactSemicylinderCapSource, isPairedFiveSpanOutletPlaneSource, type OffsetFaceNode, type OffsetPlaneRef, type ReplaceFaceNode, type StudioDoc } from './doc';
+import { exactSemicylinderCapAfterWall, exactSemicylinderCapSource, isPairedFiveSpanCapPlaneSource, type OffsetFaceNode, type OffsetPlaneRef, type ReplaceFaceNode, type StudioDoc } from './doc';
 import { featureId } from './ids';
 import { refusal } from './refusal';
 import { cross, dot, len, sub, type Vec3 } from './vec3';
@@ -72,8 +72,8 @@ export function resolveOffsetPlaneDistance(doc: StudioDoc, binding: OffsetPlaneR
   prefix: CadPartFeature[], build?: BuildPart): number {
   const missing = (reason: string) => refusal('BAD_REFERENCE', `Offset face: ${reason}`);
   const owner = doc.nodes[node.parent.node], face = node.faces[0];
-  const pairedOutlet = isPairedFiveSpanOutletPlaneSource(doc.nodes, node.parent.node, face);
-  if (pairedOutlet) {
+  const pairedCap = isPairedFiveSpanCapPlaneSource(doc.nodes, node.parent.node, face);
+  if (pairedCap) {
     const reference = doc.nodes[binding.body.node];
     if (!reference || reference.suppressed || reference.held !== undefined || featureId(doc.nodes, binding.body.node) !== binding.feature)
       throw missing('the original reference body is missing, held, suppressed or changed.');
@@ -81,7 +81,7 @@ export function resolveOffsetPlaneDistance(doc: StudioDoc, binding: OffsetPlaneR
   const { source, target } = boundSolids(doc, binding, node.parent, prefix, missing, build);
   let frame: { anchor: Vec3; normal: Vec3 } | undefined;
   if (owner?.kind === 'sweep-curve') {
-    if (pairedOutlet) frame = exactPairedElbowOutletOffsetFrame(source, face, {
+    if (pairedCap) frame = exactPairedElbowOutletOffsetFrame(source, face, {
       id: featureId(doc.nodes, node.parent.node), mode: 'exact', path: { kind: 'curve', id: 'path', ...owner.path },
     });
   } else if (owner?.kind === 'thicken' && owner.mode === 'exact-cylinder') {

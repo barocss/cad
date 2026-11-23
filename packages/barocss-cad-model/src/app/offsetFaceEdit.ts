@@ -1,5 +1,5 @@
 import { draftedFaceOffsetFrame } from '@barocss/cad/internal/drafted-cap-offset';
-import { exactSemicylinderCapSource, exactSemicylinderSecondOffset, isAnnularCapOffsetSource, isAnnularReplacementSource, isBoredPlateHole, isBoredPlateOffsetSource, isBoxCapOffsetSource, isExactCylinderOffsetChain, isPairedFiveSpanOutletPlaneSource, offsetFaceGroup, prefixDoc, usesOf, type BodyRef, type ModelNode, type StudioDoc } from '../engine/doc';
+import { exactSemicylinderCapSource, exactSemicylinderSecondOffset, isAnnularCapOffsetSource, isAnnularReplacementSource, isBoredPlateHole, isBoredPlateOffsetSource, isBoxCapOffsetSource, isExactCylinderOffsetChain, isPairedFiveSpanCapPlaneSource, offsetFaceGroup, prefixDoc, usesOf, type BodyRef, type ModelNode, type StudioDoc } from '../engine/doc';
 import { evaluateDoc, partBreps } from '../engine/evaluate';
 import { bodyKeyFor, featureId } from '../engine/ids';
 import type { DisplayFace } from '../engine/mesh';
@@ -173,7 +173,7 @@ export function editSavedOffsetFaceCommand(doc: StudioDoc, index: number): Comma
       && node.target === undefined && exactSemicylinderSecondOffset(doc.nodes, index, doc.parameters, node.faces[0])?.mixed);
   const allowPlane = !!direct && !radial && !pairedCap && !isExactCylinderOffsetChain(doc.nodes, direct.parent.node)
     && (doc.nodes[direct.parent.node]?.kind !== 'sweep-curve'
-      || isPairedFiveSpanOutletPlaneSource(doc.nodes, direct.parent.node, direct.faces[0]))
+      || isPairedFiveSpanCapPlaneSource(doc.nodes, direct.parent.node, direct.faces[0]))
     && !isBoredPlateOffsetSource(doc.nodes, direct.parent.node) && !isBoxCapOffsetSource(doc.nodes, direct.parent.node)
     && !isAnnularCapOffsetSource(doc.nodes, direct.parent.node, doc.parameters);
   let directSource: Ctx | undefined;
