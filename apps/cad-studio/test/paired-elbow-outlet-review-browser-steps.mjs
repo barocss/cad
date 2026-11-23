@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { checkApprovedDuctReview, render } from './duct-proposal-review-browser-steps.mjs';
-import { withMcpSession } from './mcp-browser-session.mjs';
+import { checkApprovedDuctReview, checkChangedDuctPath, render } from './duct-proposal-review-browser-steps.mjs';
+import { currentPartRevision, withMcpSession } from './mcp-browser-session.mjs';
 
-export async function reviewPendingOutlet(f, file, call, request, expectedRevision) {
+export async function reviewPendingOutlet(f, file, call, request, expectedRevision, retainedRail) {
   const before = await readFile(file);
   const { proposals: [proposal] } = await call('proposals', { action: 'list' });
   assert.equal(proposal.id, 'P1');
@@ -19,6 +19,11 @@ export async function reviewPendingOutlet(f, file, call, request, expectedRevisi
     [proposal.id, proposal.modelReviewRevision, expectedRevision]);
   const evidence = meta.pairedElbowOutletOffset;
   assert.deepEqual(alternate.meta.pairedElbowOutletOffset, evidence);
+  if (retainedRail) {
+    const { direct_curves: [rail], direct_revision: directRevision } = await call('query', { action: 'summary' });
+    assert.equal(rail.id, 'rail');
+    assert.deepEqual(evidence.sourceRail, { path: rail.id, pathRevision: rail.revision, directRevision });
+  } else assert.equal(evidence.sourceRail, undefined);
   assert.deepEqual([evidence.sourceBody, evidence.body, evidence.pathKind, evidence.face, evidence.distance],
     ['b1', 'b2', 'line-arc-line', 'n1.end', -4]);
   assert.deepEqual(evidence.displacement, { normal: [0, 1, 0], vector: [0, -4, 0] });
@@ -59,8 +64,33 @@ export async function reviewPendingOutlet(f, file, call, request, expectedRevisi
 export async function checkReopenedOutlet(f, session, approved, reviewed) {
   const saved = await f.save('paired-elbow-outlet-review-approved');
   const reopened = (await f.freshOpen(saved.file, approved, '11-approved-fresh-open')).doc;
+  if (reviewed.meta.pairedElbowOutletOffset.sourceRail) {
+    await f.page.getByRole('button', { name: 'Paired duct rail', exact: true }).waitFor();
+    await f.snapshot('12-retained-rail-fresh-open');
+  }
   await withMcpSession(session, saved.file, 'reopened-outlet-review', async (call, request) => {
     await checkApprovedDuctReview(call, request, reviewed);
   });
   return reopened;
+}
+
+export async function checkChangedOutletRail(session, pending, reviewed, controlPoints) {
+  const { sourceRail } = reviewed.meta.pairedElbowOutletOffset;
+  const file = await checkChangedDuctPath(session, pending, reviewed, controlPoints, sourceRail);
+  await withMcpSession(session, file, 'outlet-changed-rail-new-proposal', async call => {
+    const expectedRevision = await currentPartRevision(call);
+    const original = pending.proposals.find(entry => entry.id === reviewed.meta.candidate.proposal);
+    const [{ args }] = original.ops;
+    const staged = await call('proposals', { action: 'propose', title: 'Review the outlet with a changed rail',
+      ops: [{ tool: 'features', args: { action: 'command', ...args, expectedRevision } }] });
+    assert.deepEqual([staged.proposal, staged.applied], ['P2', false]);
+    const { proposals } = await call('proposals', { action: 'list' });
+    const { modelReviewRevision } = proposals.find(entry => entry.id === staged.proposal);
+    const before = await readFile(file);
+    const refused = await call('query', { action: 'render', proposal: staged.proposal, expectedRevision,
+      expectedProposalRevision: modelReviewRevision }, true);
+    assert.equal(refused.code, 'MODEL_REVIEW_REPLAY_FAILED');
+    assert.match(JSON.stringify(refused), /retained Direct rail does not match/);
+    assert.deepEqual(await readFile(file), before);
+  });
 }

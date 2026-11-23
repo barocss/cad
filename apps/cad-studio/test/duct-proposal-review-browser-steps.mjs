@@ -213,8 +213,8 @@ export async function reviewPendingPairedDuct(f, call, request, expectedRevision
   return { meta, png, faces, native, reviewPin, alternate: { png: opposite.png, orientation: 'opposite' } };
 }
 
-export async function checkChangedDuctPath(session, pending, reviewed, controlPoints) {
-  const altered = structuredClone(pending), { path, pathRevision } = reviewed.meta.rectangularDuct;
+export async function checkChangedDuctPath(session, pending, reviewed, controlPoints, sourceRail = reviewed.meta.rectangularDuct) {
+  const altered = structuredClone(pending), { path, pathRevision } = sourceRail;
   const { source } = altered.direct.objects.find(object => object.id === path);
   const before = altered.direct.sources[source];
   const nextPoints = controlPoints.map(point => point.map(value => value * 2));
@@ -232,4 +232,5 @@ export async function checkChangedDuctPath(session, pending, reviewed, controlPo
     assert.equal(result.code, 'MODEL_REVIEW_PROPOSAL_STALE');
   });
   assert.equal(await readFile(file, 'utf8'), bytes);
+  return file;
 }

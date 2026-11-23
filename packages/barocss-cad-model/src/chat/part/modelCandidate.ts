@@ -64,7 +64,7 @@ export async function reviewModelCandidate(state: ChatState, args: Record<string
       : resizeEdit ? reviewedChamferResizeEvidence(state.doc, preview.doc, resizeEdit)
         : duct ? await reviewedRectangularDuctEvidence(state.doc, preview.doc, duct)
           : ductCut ? reviewedRectangularDuctIntersectionEvidence(state.doc, preview.doc, ductCut)
-            : outlet && reviewedPairedElbowOutletEvidence(state.doc, state.bodies, preview.doc, outlet);
+            : outlet && await reviewedPairedElbowOutletEvidence(state.doc, state.bodies, preview.doc, outlet);
   if (!evidence) return refuse('MODEL_REVIEW_REPLAY_FAILED', 'The native geometry of this proposal could not be verified.');
   if ('error' in evidence) return refuse('MODEL_REVIEW_REPLAY_FAILED', evidence.error);
   const { brep, ...geometry } = evidence;

@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { createFlow } from './flow-helper.mjs';
 import { currentPartRevision, withMcpSession } from './mcp-browser-session.mjs';
 import { checkSavedOutletDrag } from './paired-elbow-outlet-handle-browser-steps.mjs';
-import { checkReopenedOutlet, reviewPendingOutlet } from './paired-elbow-outlet-review-browser-steps.mjs';
+import { checkChangedOutletRail, checkReopenedOutlet, reviewPendingOutlet } from './paired-elbow-outlet-review-browser-steps.mjs';
 
 const baseline = process.argv.includes('--expect-refused');
 const reviewUnavailable = process.argv.includes('--expect-review-unavailable');
@@ -180,10 +180,11 @@ async function approveWithAgent(savedSource, original, expected) {
       assert.deepEqual(await readFile(file), beforeReview);
       f.report.observations.push({ label: 'pending-outlet-image-refused', code: refusal.code });
     }
-    if (reviewOutlet) return reviewPendingOutlet(f, file, call, request, expectedRevision);
+    if (reviewOutlet) return reviewPendingOutlet(f, file, call, request, expectedRevision, retainedRail);
   });
   const pending = JSON.parse(await readFile(file));
-  assert.deepEqual([pending.nodes, pending.outputs], [source.nodes, source.outputs]);
+  assert.deepEqual([pending.nodes, pending.outputs, pending.direct], [source.nodes, source.outputs, source.direct]);
+  if (reviewed && retainedRail) await checkChangedOutletRail(session, pending, reviewed, path.controlPoints);
   await f.freshOpen(file, pending, '08-agent-pending');
   await button('Chat').first().click();
   const card = f.page.getByRole('listitem', { name: 'Proposal P1', exact: true });
@@ -195,6 +196,7 @@ async function approveWithAgent(savedSource, original, expected) {
   await button('Accept', card).click();
   await f.changed(pending);
   const approved = (await f.snapshot('10-agent-approved')).doc;
+  assert.deepEqual(approved.direct, pending.direct);
   const result = await verify('approved-native', approved, -4, original);
   assert.equal(result.digest, expected?.digest ?? reviewed.meta.candidate.bodySha256);
   if (reviewOutlet) {
