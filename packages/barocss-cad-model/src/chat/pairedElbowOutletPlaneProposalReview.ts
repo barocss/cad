@@ -1,5 +1,5 @@
-import { CadNumericPolicy, type Brep } from '@barocss/cad';
-import { bodyKey, isPairedFiveSpanOutletPlaneSource, withNode, type BodyRef, type OffsetPlaneRef, type StudioDoc } from '../engine/doc';
+import { CadNumericPolicy } from '@barocss/cad';
+import { bodyKey, isPairedFiveSpanCapPlaneSource, withNode, type BodyRef, type OffsetPlaneRef, type StudioDoc } from '../engine/doc';
 import { partBreps, type BodyResult } from '../engine/evaluate';
 import { featureId } from '../engine/ids';
 import { offsetPlaneWitness } from '../engine/offsetPlane';
@@ -9,28 +9,21 @@ import { cross, dot, len, sub, unit } from '../engine/vec3';
 import { digestOf } from '../util/digest';
 import { isObj } from '../util/guards';
 import { canonical, canonicalOf, revisionOf } from '../util/revision';
-import { pairedElbowOutletOffsetEvidence } from './pairedElbowOutletOffsetEvidence';
+import { pairedElbowInletOffsetEvidence, pairedElbowOutletOffsetEvidence } from './pairedElbowOutletOffsetEvidence';
 import { pairedDuctSection } from './rectangularDuctProposalReview';
 
-type Member = { body: string; feature: string; face: string; faceId: Brep['faces'][number]['id']; bodySha256: string };
-type PlaneEvidence = {
-  brep: Brep;
-  pairedElbowOutletPlaneOffset: NonNullable<ReturnType<typeof pairedElbowOutletOffsetEvidence>> & {
-    sourceBody: string; body: string;
-    source: Member;
-    reference: Member & { target: OffsetPlaneRef; normalRelation: 'aligned' | 'opposed' };
-    candidate: Member;
-  };
-};
+type End = 'start' | 'end';
+type SignedEvidence = NonNullable<ReturnType<typeof pairedElbowInletOffsetEvidence | typeof pairedElbowOutletOffsetEvidence>>;
+type MeasureOffset<Evidence> = (...args: Parameters<typeof pairedElbowOutletOffsetEvidence>) => Evidence | undefined;
 
-function scope(doc: StudioDoc) {
+function scope(doc: StudioDoc, end: End) {
   if (doc.nodes.length !== 5 || doc.instances?.length || doc.direct ||
     doc.nodes.some(node => node.suppressed || node.held !== undefined)) return;
   const [sketch, sweep, donorSketch, donor, placement] = doc.nodes;
   const section = pairedDuctSection(sketch);
-  const face = `${featureId(doc.nodes, 1)}.end`;
+  const face = `${featureId(doc.nodes, 1)}.${end}`;
   if (!section || sweep?.kind !== 'sweep-curve' || sweep.sketch !== 0 ||
-    !isPairedFiveSpanOutletPlaneSource(doc.nodes, 1, face) ||
+    !isPairedFiveSpanCapPlaneSource(doc.nodes, 1, face) ||
     donorSketch?.kind !== 'sketch' || donorSketch.profile !== 'rectangle' || donorSketch.holes?.length ||
     donorSketch.regions?.length || donorSketch.plane || donorSketch.outline || donorSketch.on || donorSketch.association ||
     donorSketch.pocketFloor || donor?.kind !== 'extrude' || donor.sketch !== 2 || (donor.draft !== undefined && donor.draft !== 0) ||
@@ -50,25 +43,35 @@ function donorFace(source: NonNullable<ReturnType<typeof scope>>, face: unknown)
     .some(role => face === `${source.donorFeature}.${role}`);
 }
 
-/** Bind an original five-span outlet and a separate current rectangular donor, before native replay. */
-export function pairedElbowOutletPlaneProposal(doc: StudioDoc, proposal: Proposal) {
+function planeProposal(doc: StudioDoc, proposal: Proposal, end: End) {
   if (proposal.status !== 'open' || proposal.ops.length !== 1) return;
   const [{ tool, args }] = proposal.ops;
   if (tool !== 'run_command' || !isObj(args) || args.command !== 'offset-face' ||
     Object.keys(args).sort().join(',') !== 'command,expectedRevision,faces,values' ||
     args.expectedRevision !== revisionOf(doc) || !isObj(args.values) ||
     Object.keys(args.values).join(',') !== 'offsetMode' || args.values.offsetMode !== 'to-plane') return;
-  const source = scope(doc);
+  const source = scope(doc, end);
   if (!source || !Array.isArray(args.faces) || args.faces.length !== 2 || args.faces[0] !== source.face ||
     !donorFace(source, args.faces[1])) return;
   return { revision: digestOf(proposal), sourceRevision: args.expectedRevision, source: canonicalOf(doc),
     sourceFace: source.face, referenceFace: args.faces[1] };
 }
 
-/** Rebuild the live donor binding, then prove the complete native edit independently of the rendered view. */
-export async function reviewedPairedElbowOutletPlaneEvidence(base: StudioDoc, bodies: readonly BodyResult[], candidate: StudioDoc,
-  edit: NonNullable<ReturnType<typeof pairedElbowOutletPlaneProposal>>): Promise<PlaneEvidence | { error: string } | undefined> {
-  const source = scope(base);
+/** Bind one original five-span cap and a separate current rectangular donor before native replay. */
+export function pairedElbowOutletPlaneProposal(doc: StudioDoc, proposal: Proposal) {
+  return planeProposal(doc, proposal, 'end');
+}
+
+export function pairedElbowInletPlaneProposal(doc: StudioDoc, proposal: Proposal) {
+  return planeProposal(doc, proposal, 'start');
+}
+
+type PlaneEdit = NonNullable<ReturnType<typeof planeProposal>>;
+
+/** Rebuild the donor binding and verify the native edit independently of the rendered view. */
+function reviewedPlaneEvidence<Evidence extends SignedEvidence>(base: StudioDoc, bodies: readonly BodyResult[],
+  candidate: StudioDoc, edit: PlaneEdit, end: End, measure: MeasureOffset<Evidence>) {
+  const source = scope(base, end);
   if (!source || edit.source !== canonicalOf(base) || edit.sourceRevision !== revisionOf(base) ||
     edit.sourceFace !== source.face || !donorFace(source, edit.referenceFace) ||
     canonical(candidate.direct) !== canonical(base.direct) || candidate.format !== base.format ||
@@ -85,7 +88,8 @@ export async function reviewedPairedElbowOutletPlaneEvidence(base: StudioDoc, bo
     const plane = offsetPlaneWitness(donor, edit.referenceFace);
     if (selected.length !== 1 || reference.length !== 1 || !plane) return;
     // Authored terminal points supply an independent signed material direction. Donor sense can oppose it.
-    const points = source.path.controlPoints, anchor = points[10], normal = unit(sub(anchor, points[8]));
+    const points = source.path.controlPoints, cap = end === 'start' ? 0 : points.length - 1;
+    const anchor = points[cap], normal = unit(sub(anchor, points[end === 'start' ? 2 : cap - 2]));
     if (len(normal) === 0 || len(cross(normal, plane.normal)) > 128 * Number.EPSILON) return;
     const distance = dot(sub(plane.point, anchor), normal);
     if (!Number.isFinite(distance) || Math.abs(distance) <= CadNumericPolicy.linearTolerance) return;
@@ -98,13 +102,23 @@ export async function reviewedPairedElbowOutletPlaneEvidence(base: StudioDoc, bo
     if (output.length !== 2 || changed.length !== 1 || retained.length !== 1 || canonical(retained[0].brep) !== canonical(donor)) return;
     const brep = changed[0].brep, mouth = brep.faces.filter(face => face.name === source.face);
     if (mouth.length !== 1 || mouth[0].id !== selected[0].id) return;
-    const evidence = pairedElbowOutletOffsetEvidence(input, brep, source.path, source.section, distance);
+    const evidence = measure(input, brep, source.path, source.section, distance);
     if (!evidence || evidence.pathKind !== 'line-arc-line-arc-line' ||
       Math.abs(dot(sub(evidence.movedCap.center, plane.point), plane.normal)) > CadNumericPolicy.linearTolerance) return;
-    return { brep, pairedElbowOutletPlaneOffset: { ...evidence, sourceBody: source.body, body,
+    return { brep, evidence: { ...evidence, sourceBody: source.body, body,
       source: { body: source.body, feature: featureId(base.nodes, 1), face: source.face, faceId: selected[0].id, bodySha256: digestOf(input) },
       reference: { body: source.referenceBody, feature: source.referenceFeature, face: edit.referenceFace, faceId: reference[0].id,
-        bodySha256: digestOf(donor), target, normalRelation: dot(normal, plane.normal) < 0 ? 'opposed' : 'aligned' },
+        bodySha256: digestOf(donor), target, normalRelation: dot(normal, plane.normal) < 0 ? 'opposed' as const : 'aligned' as const },
       candidate: { body, feature: featureId(candidate.nodes, base.nodes.length), face: source.face, faceId: mouth[0].id, bodySha256: digestOf(brep) } } };
   } catch { return; }
+}
+
+export async function reviewedPairedElbowOutletPlaneEvidence(base: StudioDoc, bodies: readonly BodyResult[], candidate: StudioDoc, edit: PlaneEdit) {
+  const review = reviewedPlaneEvidence(base, bodies, candidate, edit, 'end', pairedElbowOutletOffsetEvidence);
+  return review && { brep: review.brep, pairedElbowOutletPlaneOffset: review.evidence };
+}
+
+export async function reviewedPairedElbowInletPlaneEvidence(base: StudioDoc, bodies: readonly BodyResult[], candidate: StudioDoc, edit: PlaneEdit) {
+  const review = reviewedPlaneEvidence(base, bodies, candidate, edit, 'start', pairedElbowInletOffsetEvidence);
+  return review && { brep: review.brep, pairedElbowInletPlaneOffset: review.evidence };
 }

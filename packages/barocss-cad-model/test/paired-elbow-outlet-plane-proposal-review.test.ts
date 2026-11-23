@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { checkBrep } from '@barocss/cad';
-import { pairedElbowOutletPlaneProposal, reviewedPairedElbowOutletPlaneEvidence } from '../src/chat/pairedElbowOutletPlaneProposalReview';
+import { pairedElbowInletPlaneProposal, pairedElbowOutletPlaneProposal, reviewedPairedElbowInletPlaneEvidence, reviewedPairedElbowOutletPlaneEvidence } from '../src/chat/pairedElbowOutletPlaneProposalReview';
 import { emptyDoc, withNode, type BodyRef, type StudioDoc } from '../src/engine/doc';
 import { evaluateDoc, partBreps } from '../src/engine/evaluate';
 import { offsetPlaneWitness } from '../src/engine/offsetPlane';
@@ -13,7 +13,7 @@ import { revisionOf } from '../src/util/revision';
 const solid = (node: number): BodyRef => ({ node, side: 'solid' });
 const near = (actual: number, expected: number) => assert.ok(Number.isFinite(actual) && Math.abs(actual - expected) < 1e-7, `${actual} vs ${expected}`);
 
-function document(offset = 0): StudioDoc {
+function document(offset = 0, inlet = false): StudioDoc {
   let doc = withNode(emptyDoc(), { kind: 'sketch', profile: 'rectangle', min: [-2, -5], max: [2, 5],
     holes: [-2, 2].map(y => ([[-1, y - 1], [-1, y + 1], [1, y + 1], [1, y - 1]] as [number, number][])
       .map(start => ({ kind: 'line' as const, start }))),
@@ -23,29 +23,31 @@ function document(offset = 0): StudioDoc {
       controlPoints: [[-10, 0, 0], [-5, 0, 0], [0, 0, 0], [12, 0, 0], [12, 12, 0], [12, 16, 0],
         [12, 20, 0], [12, 38, 0], [30, 38, 0], [33, 38, 0], [36, 38, 0]],
       weights: [1, 1, 1, Math.SQRT1_2, 1, 1, 1, Math.SQRT1_2, 1, 1, 1] } });
-  doc = withNode(doc, { kind: 'sketch', profile: 'rectangle', min: [40, 52], max: [45, 58] });
+  doc = withNode(doc, { kind: 'sketch', profile: 'rectangle', min: inlet ? [-19, -14] : [40, 52], max: inlet ? [-14, -8] : [45, 58] });
   doc = withNode(doc, { kind: 'extrude', sketch: 2, height: 4, from: 10 });
   doc = withNode(doc, { kind: 'translate', parent: solid(3), offset: [offset, 0, 0] });
   return { ...doc, outputs: { b1: solid(1), b4: solid(4) } };
 }
 
-function proposalFor(base: StudioDoc, referenceFace = 'n3.side3'): Proposal {
-  return { id: 'P1', title: 'Bind the original outlet to a live plane', status: 'open', by: { agent: 'chat' },
+function proposalFor(base: StudioDoc, referenceFace = 'n3.side3', sourceFace = 'n1.end'): Proposal {
+  return { id: 'P1', title: 'Bind the original cap to a live plane', status: 'open', by: { agent: 'chat' },
     at: '2026-11-24T00:00:00.000Z', base: 'test', summary: '1 added',
     ops: [{ tool: 'run_command', args: { command: 'offset-face', expectedRevision: revisionOf(base),
-      faces: ['n1.end', referenceFace], values: { offsetMode: 'to-plane' } } }],
+      faces: [sourceFace, referenceFace], values: { offsetMode: 'to-plane' } } }],
     risk: { level: 'low', features_touched: 1, references_broken: 0, hard_requirements_changed: [], approval: [] } };
 }
 
-function fixture(offset = 0, referenceFace = 'n3.side3') {
-  const base = document(offset), proposal = proposalFor(base, referenceFace);
+function fixture(offset = 0, referenceFace = 'n3.side3', inlet = false) {
+  const sourceFace = inlet ? 'n1.start' : 'n1.end';
+  const base = document(offset, inlet), proposal = proposalFor(base, referenceFace, sourceFace);
   const evaluated = evaluateDoc(base, 1); assert.ok(evaluated.ok, evaluated.ok ? '' : evaluated.error.detail);
   const original = partBreps(base), donor = original.find(output => output.key === 'b4')!.brep;
   const plane = offsetPlaneWitness(donor, referenceFace); assert.ok(plane);
   const target = { body: solid(4), feature: 'n4', face: referenceFace,
     normal: plane.normal, localAnchor: plane.localAnchor, localSupport: plane.localSupport };
-  const candidate = captureSignatures(withNode(base, { kind: 'offset-face', parent: solid(1), faces: ['n1.end'], target }), evaluated.bodies);
-  const edit = pairedElbowOutletPlaneProposal(base, proposal); assert.ok(edit);
+  const candidate = captureSignatures(withNode(base, { kind: 'offset-face', parent: solid(1), faces: [sourceFace], target }), evaluated.bodies);
+  const classify = inlet ? pairedElbowInletPlaneProposal : pairedElbowOutletPlaneProposal;
+  const edit = classify(base, proposal); assert.ok(edit);
   return { base, proposal, bodies: evaluated.bodies, original, donor, candidate, edit };
 }
 
@@ -83,6 +85,46 @@ for (const [offset, referenceFace, distance, relation] of [
     ...e.retained.inlet.outerEdges, ...e.retained.inlet.innerEdges])
     assert.equal(reviewed.brep.coedges.filter(use => use.edge === id && use.pcurve).length, 2);
   assert.deepEqual({ base: f.base, candidate: f.candidate, proposal: f.proposal }, saved);
+});
+
+for (const [offset, referenceFace, distance, relation] of [
+  [0, 'n3.side1', 4, 'opposed'], [8, 'n3.side1', -4, 'opposed'], [8, 'n3.side3', 1, 'aligned'],
+] as const) test(`linked inlet review proves ${distance} mm with ${relation} donor normal and retained native ownership`, async () => {
+  const f = fixture(offset, referenceFace, true);
+  const review = await reviewedPairedElbowInletPlaneEvidence(f.base, f.bodies, f.candidate, f.edit);
+  assert.ok(review);
+  const e = review.pairedElbowInletPlaneOffset, length = 24 + 15 * Math.PI + distance;
+  assert.equal(e.pathKind, 'line-arc-line-arc-line');
+  assert.deepEqual([e.source.body, e.source.feature, e.source.face], ['b1', 'n1', 'n1.start']);
+  assert.deepEqual([e.reference.body, e.reference.feature, e.reference.face], ['b4', 'n4', referenceFace]);
+  assert.equal(e.reference.normalRelation, relation);
+  assert.equal(e.reference.bodySha256, digestOf(f.donor));
+  assert.deepEqual(e.candidate, { body: 'b5', feature: 'n5', face: 'n1.start', faceId: e.source.faceId, bodySha256: digestOf(review.brep) });
+  assert.deepEqual(e.retained.outlet.center, [36, 38, 0]);
+  near(e.movedCap.center[0], -10 - distance); near(e.distance, distance);
+  near(e.materialChange.native, 32 * distance); near(e.volume.candidate.native, 32 * length);
+  near(e.centroid.native[0], (270 * Math.PI + 64 - 10 * distance - distance ** 2 / 2) / length);
+  near(e.centroid.native[1], (252 * Math.PI + 536) / length);
+  near(e.centroid.native[2], 0);
+  assert.equal(e.movedCap.apertures.length, 2);
+  assert.equal(new Set(e.retained.junctions!.flatMap(join => [join.exteriorSeams, ...join.interiorSeams]).flat()).size, 48);
+});
+
+test('linked inlet review refuses wrong or stale members and an altered target witness', async () => {
+  const f = fixture(0, 'n3.side1', true);
+  assert.equal(pairedElbowOutletPlaneProposal(f.base, f.proposal), undefined);
+  assert.equal(pairedElbowInletPlaneProposal(f.base, proposalFor(f.base)), undefined);
+  const tilted = pairedElbowInletPlaneProposal(f.base, proposalFor(f.base, 'n3.top', 'n1.start'));
+  assert.ok(tilted);
+  const review = (base = f.base, candidate = f.candidate, edit = f.edit) =>
+    reviewedPairedElbowInletPlaneEvidence(base, f.bodies, candidate, edit);
+  assert.equal(await review(f.base, f.candidate, tilted), undefined);
+  assert.equal(await review(document(8, true)), undefined);
+  assert.equal(await review(f.base, f.candidate, { ...f.edit, sourceFace: 'n1.end' }), undefined);
+  const changed = structuredClone(f.candidate), node = changed.nodes[5];
+  assert.ok(node.kind === 'offset-face' && node.target);
+  node.target.localSupport += 1;
+  assert.equal(await review(f.base, changed), undefined);
 });
 
 test('linked outlet classifier refuses extra operations, wrong members, unsupported sources and non-rectangular donors', () => {

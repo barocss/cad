@@ -6,7 +6,7 @@ import { revisionOf } from '../../util/revision';
 import { cornerBatchProposal, reviewedChamferResizeEvidence, reviewedCornerBatchEvidence, savedChamferResizeProposal } from '../cornerProposalReview';
 import { boredWallProposal, reviewedBoreEvidence, type ModelCandidatePin } from '../modelProposalReview';
 import { pairedElbowInletProposal, pairedElbowOutletProposal, reviewedPairedElbowInletEvidence, reviewedPairedElbowOutletEvidence } from '../pairedElbowOutletProposalReview';
-import { pairedElbowOutletPlaneProposal, reviewedPairedElbowOutletPlaneEvidence } from '../pairedElbowOutletPlaneProposalReview';
+import { pairedElbowInletPlaneProposal, pairedElbowOutletPlaneProposal, reviewedPairedElbowInletPlaneEvidence, reviewedPairedElbowOutletPlaneEvidence } from '../pairedElbowOutletPlaneProposalReview';
 import { proposalIsStale } from '../proposals';
 import { rectangularDuctProposal, reviewedRectangularDuctEvidence } from '../rectangularDuctProposalReview';
 import { rectangularDuctIntersectionProposal, reviewedRectangularDuctIntersectionEvidence } from '../rectangularDuctIntersectionProposalReview';
@@ -55,8 +55,9 @@ export async function reviewModelCandidate(state: ChatState, args: Record<string
   const outlet = pairedOffset && pairedElbowOutletProposal(state.doc, pairedOffset);
   const inlet = pairedOffset && !outlet ? pairedElbowInletProposal(state.doc, pairedOffset) : undefined;
   const outletPlane = pairedOffset && !outlet && !inlet ? pairedElbowOutletPlaneProposal(state.doc, pairedOffset) : undefined;
+  const inletPlane = pairedOffset && !outlet && !inlet && !outletPlane ? pairedElbowInletPlaneProposal(state.doc, pairedOffset) : undefined;
   const proposalRevision = boreEdit?.revision ?? cornerEdit?.revision ?? resizeEdit?.revision ?? duct?.revision ?? ductCut?.revision ??
-    outlet?.revision ?? inlet?.revision ?? outletPlane?.revision;
+    outlet?.revision ?? inlet?.revision ?? outletPlane?.revision ?? inletPlane?.revision;
   if (!pending || !proposalRevision)
     return refuse('MODEL_REVIEW_UNAVAILABLE', 'Choose a unique open proposal for a supported bored-wall Offset, sketch corner group, saved Chamfer resize, rectangular duct Sweep, duct Intersect or paired duct inlet or outlet Offset.');
   if (proposalRevision !== expectedProposalRevision || proposalIsStale(pending, requirementEvidenceRevision(state.doc)))
@@ -71,7 +72,8 @@ export async function reviewModelCandidate(state: ChatState, args: Record<string
           : ductCut ? reviewedRectangularDuctIntersectionEvidence(state.doc, preview.doc, ductCut)
             : outlet ? await reviewedPairedElbowOutletEvidence(state.doc, state.bodies, preview.doc, outlet)
               : inlet ? await reviewedPairedElbowInletEvidence(state.doc, state.bodies, preview.doc, inlet)
-                : outletPlane && await reviewedPairedElbowOutletPlaneEvidence(state.doc, state.bodies, preview.doc, outletPlane);
+                : outletPlane ? await reviewedPairedElbowOutletPlaneEvidence(state.doc, state.bodies, preview.doc, outletPlane)
+                  : inletPlane && await reviewedPairedElbowInletPlaneEvidence(state.doc, state.bodies, preview.doc, inletPlane);
   if (!evidence) return refuse('MODEL_REVIEW_REPLAY_FAILED', 'The native geometry of this proposal could not be verified.');
   if ('error' in evidence) return refuse('MODEL_REVIEW_REPLAY_FAILED', evidence.error);
   const { brep, ...geometry } = evidence;
