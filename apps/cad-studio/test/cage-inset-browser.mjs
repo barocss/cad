@@ -5,6 +5,7 @@ const f=await createFlow({name:'cage-inset',output:process.argv[2],envFrozen:'CA
  qualification:'One planar convex quad inset, baseline preview/cancel, inner face selection into existing Extrude and native persistence.',
  limits:['One regular box in actual Studio; tilted/invalid/mirror-seam fixtures are pure tests. No multi-face regions or wall thickness.']});
 const button=(name,scope=f.page)=>scope.getByRole('button',{name,exact:true});
+const topBarHistory = process.argv.includes('--topbar-history');
 const panel=()=>f.page.getByRole('complementary',{name:'Cage editor',exact:true});
 const command=async(text)=>{await f.page.getByText('barocss',{exact:true}).click();await f.command(text);};
 const state=()=>f.page.evaluate(()=>window.__studioCage());
@@ -30,7 +31,18 @@ await f.run(async()=>{
  await check(1);await f.page.getByLabel('Inset distance mm',{exact:true}).press('Escape');assert.deepEqual((await state()).cage,seed.cage);assert.equal((await state()).undo,0);
  await button('Inset face',panel()).click();await check(.5);await button('Cancel inset preview',panel()).click();assert.deepEqual((await state()).cage,seed.cage);
  await button('Inset face',panel()).click();const inset=await check(1);await f.page.waitForFunction(()=>[...document.querySelectorAll('button')].some(b=>b.textContent==='Apply inset'&&!b.disabled));await f.snapshot('inset-ready');await button('Apply inset',panel()).click();
- await button('Undo cage step',panel()).click();assert.deepEqual((await state()).cage,seed.cage);await button('Redo cage step',panel()).click();assert.deepEqual((await state()).cage,inset.cage);
+ if (topBarHistory) {
+  assert.equal(await button('Undo').getAttribute('data-tip'), 'Undo cage edit');
+  await button('Undo').click();
+  assert.deepEqual((await state()).cage,seed.cage);
+  assert.equal(await button('Redo').getAttribute('data-tip'), 'Redo cage edit');
+  await button('Redo').click();
+  assert.deepEqual((await state()).cage,inset.cage);
+  await f.same(base);
+  await f.snapshot('cage-topbar-history-redone');
+ } else {
+  await button('Undo cage step',panel()).click();assert.deepEqual((await state()).cage,seed.cage);await button('Redo cage step',panel()).click();assert.deepEqual((await state()).cage,inset.cage);
+ }
  await button('Iso').click();await f.page.waitForTimeout(250);await button('Extrude',panel()).click();const extruded=await state();assert.equal(extruded.undo,2);assert.equal(extruded.cage.faces.length,inset.cage.faces.length+4);
  const arrow=f.page.locator('.gizmo-arrow[data-gizmo="moveZ"] polygon');await arrow.waitFor();const box=await arrow.boundingBox();assert.ok(box);
  const delta=await f.page.evaluate(()=>{const a=window.__studioScreenOf([3.75,2.5,16]),b=window.__studioScreenOf([3.75,2.5,18]);return [b[0]-a[0],b[1]-a[1]];});const x=box.x+box.width/2,y=box.y+box.height/2;await f.page.mouse.move(x,y);await f.page.mouse.down();await f.page.mouse.move(x+delta[0],y+delta[1],{steps:12});await f.page.mouse.up();

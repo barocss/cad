@@ -80,6 +80,7 @@ import { useProposalPreview } from './state/useProposalPreview';
 import { ProposalBrowser } from './ui/ProposalBrowser';
 import { DeleteDependentsDialog } from './ui/DeleteDependentsDialog';
 import { useFeatureHistory } from './state/useFeatureHistory';
+import { createStudioHistoryControls } from './state/studioHistoryControls';
 import { useDocumentHistoryActions } from './state/useDocumentHistoryActions';
 import { useAlignHistoryPreview } from './app/useAlignHistoryPreview';
 import { useOppositeFlangeRadiusPreview } from './app/useOppositeFlangeRadiusPreview';
@@ -2039,28 +2040,12 @@ export function App() {
       setToast(null); setRecovery(null); setCascade(null); setMeshAsk(null); setRepairAsk(null); clearStepAsk();
     };
   }, [layout.setChatOpen, layout.setChatWidth, layout.setDockSheet]);
-  const skeletonHistoryAvailable = sketch3dInputActive && skel.session ? skel.historyAvailable : null;
-  const cageHistoryAvailable = cageInputActive && cageEd.session
-    ? { undo: cageEd.loopDraft?.kind !== 'slide' && cageEd.session.undo.length > 0, redo: cageEd.loopDraft?.kind !== 'slide' && cageEd.session.redo.length > 0 } : null;
-  const editorHistoryAvailable = sketchHistoryAvailable ?? cageHistoryAvailable ?? skeletonHistoryAvailable;
-  const replayHistory = (forward: boolean, event?: React.MouseEvent<HTMLButtonElement>) => {
-    if (cageHistoryAvailable) {
-      if (forward) cageEd.redo(); else cageEd.undo();
-      return;
-    }
-    if (skeletonHistoryAvailable) {
-      if (forward) skel.redo(); else skel.undo();
-      return;
-    }
-    if (!sketch) {
-      if (!(forward ? redo : undo).length) return;
-      workspaceModeExit.switchWhenReady(() => {
-        setEditNode(null);
-        if (forward) doRedo(); else doUndo();
-      }, { event });
-      return;
-    }
-    replaySketchHistory(forward, () => {
+  const historyControls = createStudioHistoryControls({
+    document: { current: doc, undo, redo, replay: (forward, event) => workspaceModeExit.switchWhenReady(() => {
+      setEditNode(null);
+      if (forward) doRedo(); else doUndo();
+    }, { event }) },
+    sketch: { editing: !!sketch, availability: sketchHistoryAvailable, replay: forward => replaySketchHistory(forward, () => {
       clearConstraintInspection(constraintInspection, sketch);
       twoPointSnap.cancel();
       arcExtensionSnap.cancel();
@@ -2069,8 +2054,13 @@ export function App() {
     }, plane => {
       const [min, max] = sketchRegion(bodies, plane);
       viewport.current?.frameSketch(min, max, plane);
-    });
-  };
+    }) },
+    cage: cageInputActive && cageEd.session ? { availability: {
+      undo: cageEd.loopDraft?.kind !== 'slide' && cageEd.session.undo.length > 0,
+      redo: cageEd.loopDraft?.kind !== 'slide' && cageEd.session.redo.length > 0,
+    }, undo: cageEd.undo, redo: cageEd.redo } : null,
+    skeleton: sketch3dInputActive && skel.session ? { availability: skel.historyAvailable, undo: skel.undo, redo: skel.redo } : null,
+  });
   useStudioKeyboard({
     dialog: {
       blocked: help || workspaceModeExit.pending || !!cascade, paletteOpen: palette,
@@ -2087,7 +2077,7 @@ export function App() {
       clearSelection: () => { setSelection(emptySel); setInstanceSel([]); setDirectSel([]); },
       fit: bounds => viewport.current?.fit(bounds), notice: setToast,
     },
-    drawing, save, replayHistory,
+    drawing, save, replayHistory: historyControls.replay,
     command: { active, start, apply, cancel, repeat: commandApply.requestRepeat },
     sketch: {
       current: sketch, update: setSketch, finish: finishSketch,
@@ -2731,14 +2721,6 @@ export function App() {
     if (versionsOpen) cancelLocalCandidateReview();
     setVersionsOpen(v => !v);
   };
-  const historyLabel = (action: 'Undo' | 'Redo') => {
-    if (cageHistoryAvailable) return `${action} cage edit`;
-    if (skeletonHistoryAvailable) return `${action} 3D sketch edit`;
-    if (sketch) return `${action} sketch edit`;
-    if (action === 'Undo' && undo.length) return `Undo ${describeChange(undo[undo.length - 1].doc, doc)}`;
-    if (action === 'Redo' && redo.length) return `Redo ${describeChange(doc, redo[redo.length - 1].doc)}`;
-    return `Nothing to ${action.toLowerCase()}`;
-  };
   const canExportIges = !!doc.direct?.objects.some(object => !object.hidden);
   const exportIges = async () => {
     try { downloadBytes(new TextEncoder().encode((await loadDirect()).directIGES(doc.direct!, fileName)), `${fileName}.igs`, 'model/iges'); }
@@ -2757,9 +2739,7 @@ export function App() {
             sketchButton: sketchModeButton, requestMode: requestWorkspace, requestSketch: requestSketchWorkspace,
             finishSketch, finishBlocked: !!circleChord.visible,
             focus: { remember: workspaceModeExit.rememberFocus, take: workspaceModeExit.takeFocus, dialog: workspaceModeExit.dialog } }}
-          history={{ replay: replayHistory,
-            undo: { text: historyLabel('Undo'), disabled: editorHistoryAvailable ? !editorHistoryAvailable.undo : !undo.length },
-            redo: { text: historyLabel('Redo'), disabled: editorHistoryAvailable ? !editorHistoryAvailable.redo : !redo.length } }}
+          history={historyControls}
           panels={{ chat: { open: chat, toggle: () => setChat(v => !v) },
             library: { open: libraryOpen, toggle: () => setLibraryOpen(v => !v) },
             parameters: { open: paramsOpen, toggle: () => setParamsOpen(v => !v) },

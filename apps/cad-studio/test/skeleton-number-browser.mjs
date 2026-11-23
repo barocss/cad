@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { createFlow } from './flow-helper.mjs';
 
 const baseline = process.argv[3] === '--baseline';
+const topBarHistory = process.argv.includes('--topbar-history');
 const pins = ['apps/cad-studio/test/skeleton-number-browser.mjs', 'apps/cad-studio/src/ui/SkeletonPanel.tsx',
   'apps/cad-studio/src/skeleton/useSkeletonEditor.tsx', 'packages/barocss-cad-model/src/frames/sketch3d.ts'];
 const f = await createFlow({
@@ -93,6 +94,20 @@ await f.run(async () => {
   await edit();
   assert.equal(await length.inputValue(), '40');
   await f.snapshot('03-length-reopened');
+  if (topBarHistory) {
+    await length.fill('45');
+    await length.press('Enter');
+    await f.same(doc);
+    const undo = button(f.page, 'Undo'), redo = button(f.page, 'Redo');
+    assert.equal(await undo.getAttribute('data-tip'), 'Undo 3D sketch edit');
+    await undo.click();
+    assert.equal(await length.inputValue(), '40');
+    assert.equal(await redo.getAttribute('data-tip'), 'Redo 3D sketch edit');
+    await redo.click();
+    assert.equal(await length.inputValue(), '45');
+    await f.same(doc);
+    await f.snapshot('03b-3d-sketch-topbar-redo');
+  }
   await button(panel, 'Cancel 3D sketch').click();
   f.report.observations.push({ label: 'length-recovered', acceptedMM: 40, spanMM: span, retainedAngleDeg: 90 });
 
