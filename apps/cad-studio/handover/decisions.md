@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1837: [Verify the existing static assembly replay](notes/static-assembly-replay-closeout-2026-11-24/README.md), #737. Verify the submitted scene, camera and preserved file through three paths in the #207 workflow.
 - D1836: [Identify fit changes before drawing proposal approval](notes/drawing-fit-change-proposal-review-2026-11-24/README.md), #738. Compare the original and candidate fit, verify explicit user approval and read the current SVG.
 - D1835: [Preview and explicitly reattach a lost bore diameter](notes/drawing-bore-reference-reattachment-2026-11-24/README.md), #738. Verify each same-size rim and the exact approved SVG leader through Undo, Redo and fresh Open.
 - D1834: [Replace three held Chamfer edges together](notes/triple-held-chamfer-history-replacement-2026-11-24/README.md), #20. Follow explicit History picks through a strict native rebuild, exact signatures, Undo, Redo and fresh Open.

@@ -1,13 +1,13 @@
 # CAD roadmap — current status and execution order
 
-Updated 2026-11-24 · Priority authority: D520 · Latest delivery: D1836 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
+Updated 2026-11-24 · Priority authority: D520 · Latest delivery: D1837 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
 
 This is the only current status index. Detailed tracks define acceptance; the 34 stable row pages retain scope and issue navigation. Immutable decision notes retain results. Do not append chronological status paragraphs here. [D520 decision](notes/cad-roadmap-replan-2026-11-04/README.md) supersedes D445 execution order and historical next-item text, while retaining its safeguards and bounded proofs.
 
 ## Now and next
 
-- **Current position:** [D1836](notes/drawing-fit-change-proposal-review-2026-11-24/README.md), P2 rows 11 and 13. A changed fit gets a separate indication in Studio proposal review. Explicit approval produces the independently verified current SVG. [D1835](notes/drawing-bore-reference-reattachment-2026-11-24/README.md) verifies preview and reattachment with equally sized alternatives.
-- **Next MAIN:** D1837, P3 row [10](roadmap-rows/10.md), [#737](https://github.com/barocss/cad/issues/737). Match the requested static assembly replay criteria against the existing #207 workflow. Verify the same submitted scene and preserved file through all three navigation paths.
+- **Current position:** [D1837](notes/static-assembly-replay-closeout-2026-11-24/README.md), P3 row 10. Static Assembly Steps reproduce the same submitted scene and saved camera across navigation paths. [D1836](notes/drawing-fit-change-proposal-review-2026-11-24/README.md) verifies review of a changed fit before approval and the current SVG.
+- **Next MAIN:** D1838, P5 rows [07](roadmap-rows/07.md) and [08](roadmap-rows/08.md) and P2 row [13](roadmap-rows/13.md), [#16](https://github.com/barocss/cad/issues/16). Measure current exact STEP exchange of the unequal two-guide Loft from D1280. Reuse its authored guides and independently check both caps, rational wall support and native reopen before expanding admissible profiles.
 - **Separate follow-ups:** Continue Studio App extraction in cohesive parts with affected desktop checks. [#608 Rendering](https://github.com/barocss/cad/issues/608) stays on HOLD. API inventory drift remains open. The issue tracker records [#126](https://github.com/barocss/cad/issues/126), [#613](https://github.com/barocss/cad/issues/613), [#152](https://github.com/barocss/cad/issues/152) and [#22](https://github.com/barocss/cad/issues/22) as closed.
 - **Active repository:** [barocss/cad](https://github.com/barocss/cad), based on `origin/main`. Fetch before work and preserve unexpected changes. The [migration record](../../../docs/migration/README.md) maps the former `local/cad-dev` history and issue numbers.
 - **Evidence correction:** D482 records2167 PASS/0 FAIL/2 existing SKIP in a later full-kernel run than D433. Neither result is a new full-suite PASS at this audit HEAD. [D482 record](notes/vertical-contact-refusal-2026-11-04/README.md).
