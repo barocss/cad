@@ -10,7 +10,6 @@ const reviewBaseline = process.argv.includes('--expect-cut-review-unavailable');
 const reviewCut = reviewBaseline || process.argv.includes('--review-cut');
 const cutOffset = (!paired && reviewCut) || process.argv.includes('--offset') ? 1 : 0;
 const pairedOffset = paired && cutOffset > 0;
-assert.ok(!pairedOffset || !reviewCut, 'Paired Agent image review uses the centered box.');
 const path = {
   degree: 2, knots: [0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 4],
   controlPoints: [[20, 0, 0], [20, 20, 0], [0, 20, 0], [-20, 20, 0], [-20, 0, 0],
@@ -55,7 +54,8 @@ if (paired && reviewCut && !reviewBaseline) pins.push(
 );
 const f = await createFlow({
   name: 'exact-rectangular-duct-intersection', output: process.argv[2],
-  envFrozen: pairedOffset ? 'D1776_SOURCE_FROZEN' : paired ? (reviewCut ? 'D1774_SOURCE_FROZEN' : 'D1773_SOURCE_FROZEN')
+  envFrozen: pairedOffset ? (reviewCut ? 'D1777_SOURCE_FROZEN' : 'D1776_SOURCE_FROZEN')
+    : paired ? (reviewCut ? 'D1774_SOURCE_FROZEN' : 'D1773_SOURCE_FROZEN')
     : reviewCut ? 'D1769_SOURCE_FROZEN' : cutOffset ? 'D1767_SOURCE_FROZEN' : 'D1765_SOURCE_FROZEN',
   initialFiles: pins, requiredFrozen: pins,
   qualification: paired ? `Intersect the exact two-cavity duct with a ${cutOffset ? 'positive-offset' : 'centered'} box in desktop Studio.`
@@ -337,7 +337,10 @@ function verifyOffsetReview(evidence) {
 }
 
 function verifyPairedReview(evidence, native) {
-  near(evidence.volume.analytic, 640 * Math.PI);
+  const area = (outer, inner) => segmentArea(outer, cutOffset) - segmentArea(inner, cutOffset);
+  const width = (outer, inner) => ordinate(outer, cutOffset) - ordinate(inner, cutOffset);
+  const envelopeWidth = width(22, 18), apertureWidth = width(21, 19);
+  near(evidence.volume.analytic, 10 * area(22, 18) - 4 * area(21, 19));
   assert.deepEqual(evidence.corners.slice().sort(), native.joints.map(joint => joint.edgeId).sort());
   for (const center of [evidence.centroid.analytic, evidence.centroid.native]) {
     assert.equal(center.length, 3);
@@ -350,19 +353,19 @@ function verifyPairedReview(evidence, native) {
     assert.deepEqual(cap.normal, [-1, 0, 0]);
     assert.equal(cap.outer.z.length, 2);
     cap.outer.z.forEach((value, axis) => near(value, axis ? 5 : -5));
-    near(cap.outer.width, 4);
+    near(cap.outer.width, envelopeWidth);
     near(cap.outer.height, 10);
-    near(cap.outer.signedArea, 40);
-    near(cap.materialArea, 32);
+    near(cap.outer.signedArea, 10 * envelopeWidth);
+    near(cap.materialArea, 10 * envelopeWidth - 4 * apertureWidth);
     assert.equal(cap.cavities.length, 2);
     for (const [index, aperture] of cap.cavities.entries()) {
       const interval = index ? [-3, -1] : [1, 3];
       assert.equal(aperture.owner, cap.name);
       assert.equal(aperture.z.length, 2);
       aperture.z.forEach((value, axis) => near(value, interval[axis]));
-      near(aperture.width, 2);
+      near(aperture.width, apertureWidth);
       near(aperture.height, 2);
-      near(aperture.signedArea, -4);
+      near(aperture.signedArea, -2 * apertureWidth);
       const prefix = index ? 'b-' : 'a-';
       assert.equal(aperture.walls.length, 4);
       assert.ok(aperture.walls.every(wall => wall.includes(`[${prefix}`)));
@@ -372,6 +375,19 @@ function verifyPairedReview(evidence, native) {
     rimEdges.forEach(id => allRimEdges.add(id));
   }
   assert.equal(allRimEdges.size, 24);
+  if (pairedOffset) {
+    const angles = evidence.capCylinderJointAngles;
+    const joints = native.joints.filter(joint => Math.abs(expectedAngle(native, joint.edgeId, cutOffset) - 90) > 1e-7);
+    assert.deepEqual(angles.map(joint => joint.edge).sort(), joints.map(joint => joint.edgeId).sort());
+    assert.equal(angles.length, 12);
+    for (const joint of angles) {
+      const original = joints.find(value => value.edgeId === joint.edge);
+      const expected = expectedAngle(native, joint.edge, cutOffset);
+      near(joint.expectedAngleDegrees, expected);
+      near(joint.minimumAngleDegrees, original.minimumAngleDegrees);
+      near(joint.maximumAngleDegrees, original.maximumAngleDegrees);
+    }
+  } else assert.equal(evidence.capCylinderJointAngles, undefined);
 }
 
 async function reviewPendingCut(call, request, revision, native) {
@@ -411,10 +427,10 @@ async function reviewPendingCut(call, request, revision, native) {
   assert.equal((await call('query', { ...lookup, expectedRevision: '0'.repeat(16) }, true)).code, 'MODEL_REVIEW_BASE_STALE');
   const oppositeRead = await call('query', { ...lookup, orientation: 'opposite', expectedReviewRevision: other.meta.candidate.reviewRevision });
   assert.deepEqual(oppositeRead.faces, read.faces);
-  const label = paired ? 'paired-cut' : 'offset-cut';
+  const label = pairedOffset ? 'paired-offset-cut' : paired ? 'paired-cut' : 'offset-cut';
   await writeFile(join(f.output, `${label}-agent-four-views.png`), png);
   await writeFile(join(f.output, `${label}-agent-opposite-views.png`), other.png);
-  f.report.observations.push({ label: paired ? 'paired-cut-review' : 'offset-duct-review', ...meta.candidate, revision: meta.revision, imageSha256: meta.imageSha256,
+  f.report.observations.push({ label: paired ? `${label}-review` : 'offset-duct-review', ...meta.candidate, revision: meta.revision, imageSha256: meta.imageSha256,
     oppositeImageSha256: other.meta.imageSha256, evidence });
   return { meta, png, other, lookup, faces: read.faces };
 }

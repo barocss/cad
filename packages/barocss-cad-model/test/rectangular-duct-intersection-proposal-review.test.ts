@@ -103,10 +103,40 @@ test('centered paired cut review binds four apertures to separate authored cavit
     assert.equal(reviewedRectangularDuctIntersectionEvidence(base, candidate, { ...edit, swap: !swap }), undefined);
   }
   assert.deepEqual(base, before);
-  const offset = fixture(1, 30, true);
-  assert.equal(rectangularDuctIntersectionProposal(offset, proposal(offset)), undefined);
+  const negative = fixture(-1, 30, true);
+  assert.equal(rectangularDuctIntersectionProposal(negative, proposal(negative)), undefined);
   const secondaryCut = fixture(0, 15, true);
   const edit = rectangularDuctIntersectionProposal(secondaryCut, proposal(secondaryCut));
   assert.ok(edit);
   assert.equal(reviewedRectangularDuctIntersectionEvidence(secondaryCut, withNode(secondaryCut, { kind: 'intersect', left: duct, right: box }), edit), undefined);
+});
+
+test('positive paired cut review binds actual opening widths and non-right native joints to the candidate', () => {
+  const base = fixture(1, 30, true), before = structuredClone(base);
+  const proposed = proposal(base, ['b3', 'b1']);
+  const edit = rectangularDuctIntersectionProposal(base, proposed);
+  assert.ok(edit);
+  const candidate = withNode(base, { kind: 'intersect', left: box, right: duct });
+  const review = reviewedRectangularDuctIntersectionEvidence(base, candidate, edit);
+  assert.ok(review);
+  const evidence = review.rectangularDuctIntersection;
+  assert.deepEqual([evidence.body, evidence.offset], ['b4', 1]);
+  const segment = (radius: number) => radius * radius * Math.acos(1 / radius) - Math.sqrt(radius * radius - 1);
+  const volume = 10 * (segment(22) - segment(18)) - 3 * (segment(21) - segment(19));
+  assert.ok(Math.abs(evidence.volume.native - volume) < 1e-7);
+  assert.ok('capCylinderJointAngles' in evidence && evidence.capCylinderJointAngles);
+  const joints = evidence.capCylinderJointAngles;
+  const apertureWidth = Math.sqrt(21 ** 2 - 1) - Math.sqrt(19 ** 2 - 1);
+  assert.equal(new Set(joints.map(joint => joint.edge)).size, 12);
+  assert.ok(joints.every(joint => Math.abs(joint.expectedAngleDegrees - 90) > 1 &&
+    Math.abs(joint.minimumAngleDegrees - joint.expectedAngleDegrees) < 1e-7 &&
+    Math.abs(joint.maximumAngleDegrees - joint.expectedAngleDegrees) < 1e-7));
+  for (const cap of evidence.caps) {
+    assert.ok('cavities' in cap && cap.cavities);
+    assert.ok(cap.cavities.every(aperture => Math.abs(aperture.width - apertureWidth) < 1e-7));
+  }
+  const moved = fixture(2, 30, true);
+  assert.equal(rectangularDuctIntersectionProposal(moved, proposed), undefined);
+  assert.equal(reviewedRectangularDuctIntersectionEvidence(moved, candidate, edit), undefined);
+  assert.deepEqual(base, before);
 });

@@ -27,7 +27,9 @@ function scope(doc: StudioDoc) {
     !plain(extrusion, ['kind', 'id', 'sketch', 'height', 'from', 'made'])) return;
   const [x0, y0] = box.min, [x1, y1] = box.max, { from, height } = extrusion;
   if (!finite(x0) || !finite(x1) || !finite(y0) || !finite(y1) || !finite(from) || !finite(height) ||
-    !(x1 > x0 && y1 > y0 && height > 0) || ('cavities' in section ? x0 !== 0 : x0 <= 0)) return;
+    !(x1 > x0 && y1 > y0 && height > 0)) return;
+  const supportedOffset = 'cavities' in section ? x0 === 0 || x0 > CadNumericPolicy.linearTolerance : x0 > 0;
+  if (!supportedOffset) return;
   const path = sweep.path, poles = path.controlPoints;
   if (poles.length !== 9 || poles.some(point => Math.abs(point[2]) > CadNumericPolicy.linearTolerance) ||
     Math.hypot(poles[0][0] + poles[4][0], poles[0][1] + poles[4][1]) > CadNumericPolicy.linearTolerance) return;
@@ -90,7 +92,7 @@ export function reviewedRectangularDuctIntersectionEvidence(base: StudioDoc, can
       });
       const evidence = pairedRectangularDuctIntersectionEvidence(brep, {
         pathRadius: dimensions.pathRadius, exterior: dimensions.exterior, cavities,
-      });
+      }, source.x0);
       if (evidence) return { brep, rectangularDuctIntersection: { ...pins, ...evidence } };
     }
   } catch { return; }

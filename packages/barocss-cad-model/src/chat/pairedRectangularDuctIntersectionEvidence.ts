@@ -57,10 +57,12 @@ function wallKey(face: BrepFace, section: Bounds, radius: number, group: number)
 }
 
 function capLoop(brep: Brep, face: BrepFace, id: string, group: number, side: 1 | -1,
-  radius: number, section: Bounds, walls: ReadonlyMap<string, Wall>) {
+  radius: number, section: Bounds, offset: number, walls: ReadonlyMap<string, Wall>) {
   const loop = brep.loops.find(loop => loop.id === id), geometry = faceGeometry(face);
   if (!loop || loop.face !== face.id || loop.kind !== (group === 0 ? 'outer' : 'inner') || loop.coedges.length !== 4 || geometry.kind !== 'plane') return;
-  const expectedY = [side * radius - section.radial / 2, side * radius + section.radial / 2];
+  const inner = radius - section.radial / 2, outer = radius + section.radial / 2;
+  const expectedY = offset === 0 ? [side * radius - section.radial / 2, side * radius + section.radial / 2]
+    : [side * Math.sqrt((inner - offset) * (inner + offset)), side * Math.sqrt((outer - offset) * (outer + offset))].sort((a, b) => a - b);
   const corners = new Set<string>(), edges: string[] = [], wallNames: string[] = [], wallIds: string[] = [], points: Point[] = [];
   let signedArea = 0;
   for (const id of loop.coedges) {
@@ -74,7 +76,7 @@ function capLoop(brep: Brep, face: BrepFace, id: string, group: number, side: 1 
     for (const point of [a, b]) {
       const y = near(point[1], expectedY[0]) ? 0 : near(point[1], expectedY[1]) ? 1 : undefined;
       const z = near(point[2], section.interval[0]) ? 0 : near(point[2], section.interval[1]) ? 1 : undefined;
-      if (!near(point[0], 0) || y === undefined || z === undefined) return;
+      if (!near(point[0], offset) || y === undefined || z === undefined) return;
       corners.add(`${y}:${z}`); points.push(point);
     }
     signedArea += (use.sense === 'forward' ? 1 : -1) * dot(cross(a, b), geometry.n) / 2;
@@ -83,17 +85,18 @@ function capLoop(brep: Brep, face: BrepFace, id: string, group: number, side: 1 
   if (corners.size !== 4 || new Set(edges).size !== 4 || new Set(wallNames).size !== 4 || new Set(wallIds).size !== 4) return;
   const y: [number, number] = [Math.min(...points.map(point => point[1])), Math.max(...points.map(point => point[1]))];
   const z: [number, number] = [Math.min(...points.map(point => point[2])), Math.max(...points.map(point => point[2]))];
-  const width = y[1] - y[0], height = z[1] - z[0], expectedArea = (group === 0 ? 1 : -1) * section.radial * section.axial;
+  const width = y[1] - y[0], height = z[1] - z[0], expectedArea = (group === 0 ? 1 : -1) * (offset === 0 ? section.radial : expectedY[1] - expectedY[0]) * section.axial;
   if (!(width > tolerance && height > tolerance) || Math.abs(signedArea - expectedArea) > tolerance * Math.max(1, 2 * (width + height))) return;
   return { name: `${face.name}.${group === 0 ? 'outer' : `cavity${group}`}-rim`, owner: face.name!, face: face.id,
     loop: loop.id, edges, walls: wallNames, wallIds, y, z, width, height, signedArea };
 }
 
-/** Native evidence for D1773's centered half ring. Source replay and world-Z interval conversion belong to the caller. */
-export function pairedRectangularDuctIntersectionEvidence(brep: Brep, dimensions: PairedDuctIntersectionDimensions) {
+/** Native centered/positive-offset evidence. Source replay and world-Z interval conversion belong to the caller. */
+export function pairedRectangularDuctIntersectionEvidence(brep: Brep, dimensions: PairedDuctIntersectionDimensions, offset = 0) {
   try {
     const bounds = sections(dimensions);
-    if (!bounds || brep.source.family !== 'analytic-boolean' || !brep.source.id || brep.bodies.length !== 1
+    if (!bounds || !(offset === 0 || Number.isFinite(offset) && offset > tolerance
+      && offset < dimensions.pathRadius - dimensions.exterior.radial / 2 - tolerance) || brep.source.family !== 'analytic-boolean' || !brep.source.id || brep.bodies.length !== 1
       || brep.bodies[0].kind !== 'solid' || brep.shells.length !== 1 || !brep.shells[0].closed
       || brep.faces.length !== 14 || brep.loops.length !== 18 || brep.edges.length !== 36 || brep.coedges.length !== 72
       || brep.vertices.length !== 24 || brep.faces.some(face => face.surface.kind !== 'surface' || !face.name)
@@ -105,7 +108,7 @@ export function pairedRectangularDuctIntersectionEvidence(brep: Brep, dimensions
     for (const face of brep.faces) {
       const geometry = faceGeometry(face);
       if (geometry.kind === 'plane' && near(geometry.n[0], -1) && near(Math.hypot(geometry.n[1], geometry.n[2]), 0)
-        && near(geometry.o[0], 0)) { capFaces.push(face); continue; }
+        && near(geometry.o[0], offset)) { capFaces.push(face); continue; }
       const group = bounds.findIndex(section => section.names?.has(baseName(face.name!)));
       const index = group < 0 ? 0 : group, section = bounds[index];
       const key = wallKey(face, section, dimensions.pathRadius, index);
@@ -113,7 +116,7 @@ export function pairedRectangularDuctIntersectionEvidence(brep: Brep, dimensions
       keys.add(key); wallByLoop.set(face.loops[0], { face, group: index });
     }
     if (keys.size !== 12 || capFaces.length !== 2) return;
-    const caps = [], sides = new Set<number>();
+    const caps = [], sides = new Set<number>(), capIds = new Set(offset > 0 ? capFaces.map(face => face.id) : []);
     for (const face of capFaces) {
       if (face.loops.length !== 3) return;
       const outerLoop = brep.loops.find(loop => face.loops.includes(loop.id) && loop.kind === 'outer');
@@ -122,9 +125,9 @@ export function pairedRectangularDuctIntersectionEvidence(brep: Brep, dimensions
       const point = use && brep.edges.find(edge => edge.id === use.edge)?.curve.controlPoints[0];
       if (!outerLoop || innerLoops.length !== 2 || !point || near(point[1], 0)) return;
       const side = Math.sign(point[1]) as 1 | -1;
-      const outer = capLoop(brep, face, outerLoop.id, 0, side, dimensions.pathRadius, bounds[0], wallByLoop);
+      const outer = capLoop(brep, face, outerLoop.id, 0, side, dimensions.pathRadius, bounds[0], offset, wallByLoop);
       const cavities = bounds.slice(1).map((section, index) => innerLoops.map(loop =>
-        capLoop(brep, face, loop.id, index + 1, side, dimensions.pathRadius, section, wallByLoop)).filter(rim => rim !== undefined));
+        capLoop(brep, face, loop.id, index + 1, side, dimensions.pathRadius, section, offset, wallByLoop)).filter(rim => rim !== undefined));
       if (!outer || sides.has(side) || cavities.some(matches => matches.length !== 1)) return;
       const apertures = cavities.map(matches => matches[0]), materialArea = outer.signedArea + apertures.reduce((sum, rim) => sum + rim.signedArea, 0);
       if (!(materialArea > 0 && outer.signedArea > 0 && apertures.every(rim => rim.signedArea < 0))
@@ -134,7 +137,9 @@ export function pairedRectangularDuctIntersectionEvidence(brep: Brep, dimensions
       caps.push({ name: face.name!, face: face.id, side, normal: geometry.n, outer, cavities: apertures, materialArea }); sides.add(side);
     }
     let arcs = 0, lines = 0, measuredEdges = 0, maximumAngleErrorDegrees = 0;
-    const corners: string[] = [];
+    const corners: string[] = [], capCylinderJointAngles: {
+      edge: string; expectedAngleDegrees: number; minimumAngleDegrees: number; maximumAngleDegrees: number;
+    }[] = [];
     for (const edge of brep.edges) {
       const uses = brep.coedges.filter(use => use.edge === edge.id), [start, end] = curveDomain(edge.curve);
       if (uses.length !== 2 || uses[0].twin !== uses[1].id || uses[1].twin !== uses[0].id || uses[0].sense === uses[1].sense) return;
@@ -147,28 +152,47 @@ export function pairedRectangularDuctIntersectionEvidence(brep: Brep, dimensions
         for (const fraction of [0, .17, .5, .77, 1]) {
           const at = start + (end - start) * fraction, point = evaluateCurve(edge.curve, at), [u, v] = evaluateCurve(chart, at);
           const gap = len(sub(evaluateSurface(face.surface, u, v), point));
-          if (!Number.isFinite(gap) || gap > tolerance || point[0] < -tolerance) return;
+          if (!Number.isFinite(gap) || gap > tolerance || point[0] < offset - tolerance) return;
           maximumGapMM = Math.max(maximumGapMM, gap);
         }
       }
+      const cylinder = offset > 0 ? owners.map(face => faceGeometry(face!)).find(geometry => geometry.kind === 'cylinder') : undefined;
+      const capCylinder = cylinder?.kind === 'cylinder' && owners.some(face => capIds.has(face!.id));
+      const expectedAngleDegrees = capCylinder ? Math.acos(-cylinder.out * offset / cylinder.r) * 180 / Math.PI : 90;
       const continuity = measureBrepEdgeContinuity(brep, edge.id);
       if (continuity.status !== 'measured' || !Number.isFinite(continuity.minimumAngleDegrees) || !Number.isFinite(continuity.maximumAngleDegrees)
-        || Math.abs(continuity.minimumAngleDegrees - 90) > angularTolerance || Math.abs(continuity.maximumAngleDegrees - 90) > angularTolerance) return;
+        || Math.abs(continuity.minimumAngleDegrees - expectedAngleDegrees) > angularTolerance
+        || Math.abs(continuity.maximumAngleDegrees - expectedAngleDegrees) > angularTolerance) return;
       measuredEdges++; corners.push(edge.id);
-      maximumAngleErrorDegrees = Math.max(maximumAngleErrorDegrees, Math.abs(continuity.minimumAngleDegrees - 90), Math.abs(continuity.maximumAngleDegrees - 90));
+      if (capCylinder) capCylinderJointAngles.push({ edge: edge.id, expectedAngleDegrees,
+        minimumAngleDegrees: continuity.minimumAngleDegrees, maximumAngleDegrees: continuity.maximumAngleDegrees });
+      maximumAngleErrorDegrees = Math.max(maximumAngleErrorDegrees, Math.abs(continuity.minimumAngleDegrees - expectedAngleDegrees),
+        Math.abs(continuity.maximumAngleDegrees - expectedAngleDegrees));
     }
-    if (arcs !== 12 || lines !== 24) return;
+    if (arcs !== 12 || lines !== 24 || offset > 0 && capCylinderJointAngles.length !== 12) return;
     const signed = bounds.map((section, index) => ({ ...section, sign: index === 0 ? 1 : -1 }));
     const area = signed.reduce((sum, section) => sum + section.sign * section.radial * section.axial, 0);
-    const analytic = Math.PI * dimensions.pathRadius * area;
-    const centroid: Point = [2 * signed.reduce((sum, section) => sum + section.sign * section.axial
+    let analytic = Math.PI * dimensions.pathRadius * area;
+    let centroid: Point = [2 * signed.reduce((sum, section) => sum + section.sign * section.axial
       * (dimensions.pathRadius ** 2 * section.radial + section.radial ** 3 / 12), 0) / analytic, 0,
     signed.reduce((sum, section) => sum + section.sign * section.radial * section.axial * (section.interval[0] + section.interval[1]) / 2, 0) / area];
+    if (offset > 0) {
+      const radius = dimensions.pathRadius;
+      const segment = (r: number) => r * r * Math.acos(offset / r) - offset * Math.sqrt((r - offset) * (r + offset));
+      const firstMoment = (r: number) => 2 / 3 * Math.sqrt((r - offset) * (r + offset)) ** 3;
+      const sectionIntegral = (section: Bounds, integral: (r: number) => number) => section.axial
+        * (integral(radius + section.radial / 2) - integral(radius - section.radial / 2));
+      analytic = signed.reduce((sum, section) => sum + section.sign * sectionIntegral(section, segment), 0);
+      centroid = [signed.reduce((sum, section) => sum + section.sign * sectionIntegral(section, firstMoment), 0) / analytic, 0,
+        signed.reduce((sum, section) => sum + section.sign * sectionIntegral(section, segment)
+          * (section.interval[0] + section.interval[1]) / 2, 0) / analytic];
+    }
     const native = brepMassProperties(brep, 1);
     if (!(analytic > 0 && Number.isFinite(analytic)) || native.method !== 'quadrature' || !Number.isFinite(native.volume)
       || Math.abs(native.volume - analytic) > CadNumericPolicy.relativeComparison * .1 * Math.max(1, analytic)
       || !near(len(sub(native.centroid, centroid)), 0)) return;
     return { caps: caps.sort((a, b) => a.side - b.side), volume: { analytic, native: native.volume, method: 'quadrature' as const },
-      centroid: { analytic: centroid, native: native.centroid }, maximumGapMM, measuredEdges, corners, maximumAngleErrorDegrees };
+      centroid: { analytic: centroid, native: native.centroid }, maximumGapMM, measuredEdges, corners, maximumAngleErrorDegrees,
+      ...(offset > 0 ? { capCylinderJointAngles } : {}) };
   } catch { return; }
 }

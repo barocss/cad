@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1777: [Review four apertures on a pending offset two-cavity Intersect](notes/pending-offset-paired-duct-intersect-review-2026-11-23/README.md), #324. Pin actual widths, wall ownership and twelve non-right angles through explicit Studio approval and fresh Open.
 - D1776: [Bind native joints on an offset two-cavity duct Intersect](notes/exact-offset-paired-cavity-duct-intersect-2026-11-23/README.md), #10. Preserve four apertures, exact offset angles and the edited cut through Studio fresh Open.
 - D1775: [Extract Studio History feature opening](notes/studio-history-feature-opening-2026-11-23/README.md), #44. Match draft confirmation, focus and command-editor and Flange owner navigation in paired Studio runs.
 - D1774: [Review four apertures on a pending two-cavity Intersect](notes/pending-paired-duct-intersect-review-2026-11-23/README.md), #324. The Agent certifies each rim and reproduces the reviewed images after explicit Studio approval and fresh Open.

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { checkBrep, evaluateCadPart, type Brep, type CadPartDocument, type Curve, type Point } from '@barocss/cad';
+import { checkBrep, evaluateCadPart, faceGeometry, measureBrepEdgeContinuity, type Brep, type CadPartDocument, type Curve, type Point } from '@barocss/cad';
 import { closedDuctCircle } from '../src/chat/closedRectangularDuctEvidence';
 import { closedPairedRectangularDuctEvidence } from '../src/chat/closedPairedRectangularDuctEvidence';
 import { pairedRectangularDuctIntersectionEvidence, type PairedDuctIntersectionDimensions } from '../src/chat/pairedRectangularDuctIntersectionEvidence';
@@ -12,7 +12,7 @@ const source = { outer: [4, 10], outerTags: ['e1', 'e2', 'e3', 'e4'], cavities: 
 ] };
 const near = (actual: number, expected: number, tolerance = 1e-8) => assert.ok(Number.isFinite(actual) && Math.abs(actual - expected) <= tolerance, `${actual} vs ${expected}`);
 
-function native(section = source, reversed = false, swapped = false, offset = 0) {
+function native(section = source, reversed = false, swapped = false, offset = 0, upperY = 30) {
   const points: Curve['controlPoints'] = [[20, 0, 0], [20, 20, 0], [0, 20, 0], [-20, 20, 0], [-20, 0, 0],
     [-20, -20, 0], [0, -20, 0], [20, -20, 0], [20, 0, 0]];
   const path = { degree: 2, knots: [0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 4],
@@ -24,7 +24,7 @@ function native(section = source, reversed = false, swapped = false, offset = 0)
         return (i === 0 ? corners.slice().reverse() : corners).map(start => ({ kind: 'line', start }));
       }), sideTags: { outer: section.outerTags, holes: section.cavities.map(cavity => cavity.tags) } },
     { id: 'w', kind: 'sweep-curve', sketch: 's', mode: 'exact', path },
-    { id: 'bs', kind: 'sketch', profile: 'rectangle', min: [offset, -30], max: [30, 30] },
+    { id: 'bs', kind: 'sketch', profile: 'rectangle', min: [offset, -30], max: [30, upperY] },
     { id: 'b', kind: 'extrude', sketch: 'bs', from: -6, height: 12 },
     { id: 'cut', kind: 'intersect', target: swapped ? 'b' : 'w', tool: swapped ? 'w' : 'b' },
   ] };
@@ -42,6 +42,8 @@ test('centered paired evidence binds both cap apertures to separate source walls
   const { brep, dimensions } = native(), before = structuredClone({ brep, dimensions }), fingerprint = digestOf(brep);
   const evidence = pairedRectangularDuctIntersectionEvidence(brep, dimensions);
   assert.ok(evidence);
+  assert.ok(!Object.hasOwn(evidence, 'capCylinderJointAngles'));
+  assert.equal(digestOf(evidence), '7eb4bb061f1b49407616f4e07cda5dfa53445920bed1f95eb5f9abbdbae0874e');
   assert.deepEqual(evidence.caps.map(cap => cap.side), [-1, 1]);
   assert.equal(new Set(evidence.caps.map(cap => cap.name)).size, 2);
   const rims = evidence.caps.flatMap(cap => [cap.outer, ...cap.cavities]);
@@ -136,4 +138,121 @@ test('missing or altered charts, duplicated apertures, swapped incidence and rev
     { ...brep, coedges: brep.coedges.map(candidate => candidate === use ? { ...candidate, twin: inner[1].coedges[0] } : candidate) },
   ];
   for (const changed of changes) assert.equal(pairedRectangularDuctIntersectionEvidence(changed, dimensions), undefined);
+});
+
+
+/** Integrate radial strips independently from the helper's closed-form circular segment differences. */
+function integratedMass(dimensions: PairedDuctIntersectionDimensions, offset: number) {
+  const integrate = (low: number, high: number, f: (radius: number) => number) => {
+    const n = 4096, step = (high - low) / n;
+    let sum = f(low) + f(high);
+    for (let i = 1; i < n; i++) sum += (i % 2 ? 4 : 2) * f(low + i * step);
+    return step * sum / 3;
+  };
+  let volume = 0, momentX = 0, momentZ = 0;
+  for (const [index, section] of [dimensions.exterior, ...dimensions.cavities].entries()) {
+    const sign = index === 0 ? 1 : -1, low = dimensions.pathRadius - section.radial / 2, high = dimensions.pathRadius + section.radial / 2;
+    const sectionVolume = section.axial * integrate(low, high, r => 2 * r * Math.acos(offset / r));
+    volume += sign * sectionVolume;
+    momentX += sign * section.axial * integrate(low, high, r => 2 * r * Math.sqrt(r * r - offset * offset));
+    const interval = index === 0 ? [-section.axial / 2, section.axial / 2] : dimensions.cavities[index - 1].axialInterval;
+    momentZ += sign * sectionVolume * (interval[0] + interval[1]) / 2;
+  }
+  return { volume, centroid: [momentX / volume, 0, momentZ / volume] };
+}
+
+test('positive paired offset measures both circle intersections, source-owned world-Z apertures, all 72 charts and 36 angles', t => {
+  const { brep, dimensions } = native(source, false, false, 1), before = structuredClone({ brep, dimensions });
+  const evidence = pairedRectangularDuctIntersectionEvidence(brep, dimensions, 1);
+  assert.ok(evidence);
+  assert.equal(brep.coedges.filter(use => use.pcurve).length, 72);
+  assert.equal(evidence.measuredEdges, 36); assert.equal(new Set(evidence.corners).size, 36);
+  assert.ok(evidence.maximumGapMM < 1e-10); assert.ok(evidence.maximumAngleErrorDegrees < 1e-8);
+  const joints = evidence.capCylinderJointAngles;
+  assert.ok(joints); assert.equal(joints.length, 12);
+  assert.equal(new Set(joints.map(joint => joint.edge)).size, 12);
+  const capIds = new Set(evidence.caps.map(cap => cap.face));
+  for (const edge of brep.edges) {
+    const owners = brep.coedges.filter(use => use.edge === edge.id).map(use => brep.faces.find(face => face.loops.includes(use.loop))!);
+    const cylinder = owners.map(faceGeometry).find(geometry => geometry.kind === 'cylinder');
+    const isCapCylinder = cylinder?.kind === 'cylinder' && owners.some(face => capIds.has(face.id));
+    const expected = isCapCylinder ? Math.acos(-cylinder.out / cylinder.r) * 180 / Math.PI : 90;
+    const measured = measureBrepEdgeContinuity(brep, edge.id);
+    assert.equal(measured.status, 'measured');
+    if (measured.status !== 'measured') continue;
+    near(measured.minimumAngleDegrees, expected); near(measured.maximumAngleDegrees, expected);
+    const joint: typeof joints[number] | undefined = joints.find(candidate => candidate.edge === edge.id);
+    if (isCapCylinder) {
+      assert.ok(joint); near(joint.expectedAngleDegrees, expected);
+      near(joint.minimumAngleDegrees, measured.minimumAngleDegrees); near(joint.maximumAngleDegrees, measured.maximumAngleDegrees);
+      assert.ok(Math.abs(joint.maximumAngleDegrees - 90) > 1);
+    } else assert.equal(joint, undefined);
+  }
+  for (const cap of evidence.caps) {
+    assert.deepEqual(cap.normal, [-1, 0, 0]);
+    for (const [index, rim] of [cap.outer, ...cap.cavities].entries()) {
+      const section = index === 0 ? dimensions.exterior : dimensions.cavities[index - 1];
+      const intersections = [-1, 1].map(sign => cap.side * Math.sqrt((dimensions.pathRadius + sign * section.radial / 2) ** 2 - 1)).sort((a, b) => a - b);
+      rim.y.forEach((value, i) => near(value, intersections[i]));
+      near(rim.width, intersections[1] - intersections[0]); near(rim.height, section.axial);
+      near(rim.signedArea, (index === 0 ? 1 : -1) * rim.width * section.axial);
+      for (const id of rim.edges) for (const point of brep.edges.find(edge => edge.id === id)!.curve.controlPoints) near(point[0], 1);
+      if (index > 0) {
+        assert.deepEqual(rim.z, dimensions.cavities[index - 1].axialInterval);
+        const names = new Set(dimensions.cavities[index - 1].faces.map(name => name.replace(/#\d+$/, '')));
+        assert.ok(rim.walls.every(name => names.has(name.replace(/#\d+$/, ''))));
+      }
+    }
+    assert.equal(new Set(cap.cavities.flatMap(rim => rim.wallIds)).size, 8);
+    near(cap.materialArea, cap.outer.signedArea + cap.cavities.reduce((sum, rim) => sum + rim.signedArea, 0));
+  }
+  const integrated = integratedMass(dimensions, 1);
+  near(evidence.volume.analytic, integrated.volume); near(evidence.volume.native, integrated.volume);
+  evidence.centroid.analytic.forEach((value, i) => near(value, integrated.centroid[i]));
+  evidence.centroid.native.forEach((value, i) => near(value, integrated.centroid[i]));
+  assert.deepEqual({ brep, dimensions }, before);
+  t.diagnostic(JSON.stringify(evidence));
+});
+
+test('positive paired offsets retain independent cavity dimensions, source ordering and world X/Z mass across reversed travel and operands', () => {
+  const edited = { ...source, cavities: [source.cavities[1], { ...source.cavities[0], min: [-.5, -2.5], max: [.5, -1.5] }] };
+  for (const offset of [1, 2, 15]) for (const reversed of [false, true]) for (const swapped of [false, true]) {
+    const { brep, dimensions } = native(edited, reversed, swapped, offset);
+    const evidence = pairedRectangularDuctIntersectionEvidence(brep, dimensions, offset), integrated = integratedMass(dimensions, offset);
+    assert.ok(evidence);
+    near(evidence.volume.native, integrated.volume); near(evidence.volume.analytic, integrated.volume);
+    for (let i = 0; i < 3; i++) { near(evidence.centroid.native[i], integrated.centroid[i]); near(evidence.centroid.analytic[i], integrated.centroid[i]); }
+    assert.ok((reversed ? -1 : 1) * evidence.centroid.native[2] > 0);
+    assert.equal(evidence.capCylinderJointAngles?.length, 12); assert.equal(evidence.measuredEdges, 36);
+    for (const cap of evidence.caps) {
+      for (const [index, rim] of cap.cavities.entries()) rim.z.forEach((value, i) => near(value, dimensions.cavities[index].axialInterval[i]));
+    }
+  }
+});
+
+test('positive paired evidence refuses wrong or negative offsets, a second clipping plane, stale source intervals and damaged charts', () => {
+  const { brep, dimensions } = native(source, false, false, 1);
+  for (const offset of [0, -1, 2, 18, 20, Number.NaN, Number.POSITIVE_INFINITY]) {
+    assert.equal(pairedRectangularDuctIntersectionEvidence(brep, dimensions, offset), undefined);
+  }
+  for (const offset of [-1, 1]) {
+    const clipped = native(source, false, false, offset, 20);
+    assert.equal(pairedRectangularDuctIntersectionEvidence(clipped.brep, clipped.dimensions, offset), undefined);
+  }
+  const changed = { ...dimensions, cavities: [{ ...dimensions.cavities[0], axialInterval: [-3, -1] }, dimensions.cavities[1]] };
+  assert.equal(pairedRectangularDuctIntersectionEvidence(brep, changed, 1), undefined);
+  const cap = brep.faces.find(face => face.loops.length === 3)!, inner = brep.loops.find(loop => cap.loops.includes(loop.id) && loop.kind === 'inner')!;
+  const use = brep.coedges.find(use => use.id === inner.coedges[0])!;
+  const damaged: Brep[] = [
+    { ...brep, coedges: brep.coedges.map(candidate => candidate === use ? { ...candidate, pcurve: null } : candidate) },
+    { ...brep, coedges: brep.coedges.map(candidate => candidate === use ? { ...candidate, pcurve: { ...candidate.pcurve!,
+      controlPoints: candidate.pcurve!.controlPoints.map(([x, y, z]): Point => [x + .001, y, z]) } } : candidate) },
+    { ...brep, faces: brep.faces.map(face => face === cap ? { ...face, sense: face.sense === 'forward' ? 'reversed' as const : 'forward' as const } : face) },
+    { ...brep, loops: brep.loops.map(loop => loop === inner ? { ...loop, kind: 'outer' as const } : loop) },
+    { ...brep, faces: brep.faces.map(face => face === cap ? { ...face, loops: [cap.loops[0], inner.id, inner.id] } : face) },
+    { ...brep, coedges: brep.coedges.map(candidate => candidate === use ? { ...candidate, twin: inner.coedges[2] } : candidate) },
+    { ...brep, faces: brep.faces.map(face => dimensions.cavities[0].faces.some(name => name.replace(/#\d+$/, '') === face.name!.replace(/#\d+$/, ''))
+      ? { ...face, sense: face.sense === 'forward' ? 'reversed' as const : 'forward' as const } : face) },
+  ];
+  for (const [index, changed] of damaged.entries()) assert.equal(pairedRectangularDuctIntersectionEvidence(changed, dimensions, 1), undefined, `damage ${index}`);
 });
