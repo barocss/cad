@@ -1409,6 +1409,15 @@ const pairedInletFailure: Refuse = (code, message) => { throw new BrepError(code
 /** Certified straight-cap recipes keep their original producer and native entity counts. */
 function pairedStraightCapRail(path: Curve, inlet: boolean) {
   const refuse = inlet ? pairedInletFailure : pairedOutletFailure;
+  const ended = tangentLineArcLineArcLine(path, refuse);
+  if (ended) {
+    if (inlet) return;
+    const { second } = ended;
+    const inward = unit(sub(second.toCentre, scale(second.tangent, dot(second.toCentre, second.tangent))));
+    const normal = add(scale(second.tangent, Math.cos(second.angle)), scale(inward, Math.sin(second.angle)));
+    return { length: ended.tailLength, normal, wallPiece: 'tail' as const, endpoint: path.controlPoints[10],
+      counts: { faces: 62, loops: 66, coedges: 264, edges: 132, vertices: 72 } };
+  }
   const elbow = tangentLineArcLine(path, refuse);
   if (elbow?.tailLength !== undefined) {
     const counts = { faces: 38, loops: 42, coedges: 168, edges: 84, vertices: 48 };
@@ -1422,6 +1431,37 @@ function pairedStraightCapRail(path: Curve, inlet: boolean) {
   if (!reversed) return;
   return { length: reversed.length, normal: scale(reversed.tangent, -1), wallPiece: 'line' as const,
     counts: { faces: 26, loops: 30, coedges: 120, edges: 60, vertices: 36 } };
+}
+
+/** The five-span handle requires both native charts at both original caps and every retained join. */
+function pairedEndedCharts(brep: Brep, id: string): boolean {
+  const owners = new Map(brep.faces.flatMap(face => face.loops.map(loop => [loop, face.name] as const)));
+  const byEdge = new Map<string, BrepCoedge[]>();
+  for (const use of brep.coedges) {
+    const uses = byEdge.get(use.edge) ?? [];
+    uses.push(use); byEdge.set(use.edge, uses);
+  }
+  const required = new Set<string>();
+  for (const end of ['start', 'end']) {
+    const cap = brep.faces.filter(face => face.name === `${id}.${end}`);
+    if (cap.length !== 1) return false;
+    const uses = brep.coedges.filter(use => cap[0].loops.includes(use.loop));
+    if (uses.length !== 12) return false;
+    for (const use of uses) required.add(use.edge);
+  }
+  for (const [first, second] of [['lead', 'first'], ['first', 'line'], ['line', 'second'], ['second', 'tail']]) {
+    const joins = brep.edges.filter(edge => {
+      const names = (byEdge.get(edge.id) ?? []).map(use => owners.get(use.loop));
+      return names.some(name => name?.startsWith(`${id}.${first}.`)) && names.some(name => name?.startsWith(`${id}.${second}.`));
+    });
+    if (joins.length !== 12) return false;
+    for (const edge of joins) required.add(edge.id);
+  }
+  if (required.size !== 72) return false;
+  return [...required].every(edge => {
+    const uses = byEdge.get(edge) ?? [];
+    return uses.length === 2 && uses.every(use => use.pcurve !== undefined);
+  });
 }
 
 /** Original straight caps only. Native incidence supplies the handle; the authored path supplies its rail. */
@@ -1451,7 +1491,10 @@ export function exactPairedElbowOutletOffsetFrame(brep: Brep, faceName: string,
       if (!vertex) return;
       for (let axis = 0; axis < 3; axis++) anchor[axis] += vertex.point[axis] / 4;
     }
-    if (rail.wallPiece === 'line' && len(sub(anchor, source.path.controlPoints[inlet ? 0 : source.path.controlPoints.length - 1])) > CadNumericPolicy.linearTolerance) return;
+    const endpoint = 'endpoint' in rail ? rail.endpoint
+      : rail.wallPiece === 'line' ? source.path.controlPoints[inlet ? 0 : source.path.controlPoints.length - 1] : undefined;
+    if (endpoint && len(sub(anchor, endpoint)) > CadNumericPolicy.linearTolerance) return;
+    if ('endpoint' in rail && !pairedEndedCharts(brep, source.id)) return;
     const report = checkBrep(brep, { strict: true });
     if (!report.valid || report.topology.length !== 1 || report.topology[0].genus !== 2 || report.topology[0].shells !== 1) return;
     return { anchor, normal: support.n };

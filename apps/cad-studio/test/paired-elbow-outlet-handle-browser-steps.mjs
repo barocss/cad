@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { performance } from 'node:perf_hooks';
 
-const storedDistance = -4, nextDistance = -6;
-export async function checkSavedOutletDrag(f, stored, verify, expectMissing, capCenter) {
+const storedDistance = -4;
+export async function checkSavedOutletDrag(f, stored, verify, expectMissing, capCenter, nextDistance = -6) {
   const button = (name, target = f.page) => target.getByRole('button', { name, exact: true });
   const group = () => f.page.locator('g.gizmo-handle[data-handle="d"]');
   const panel = () => f.page.getByRole('dialog', { name: 'Edit Offset face', exact: true });
@@ -59,7 +59,7 @@ export async function checkSavedOutletDrag(f, stored, verify, expectMissing, cap
     await f.page.mouse.down();
     const start = performance.now();
     await f.page.mouse.move(point[0] + travel[0], point[1] + travel[1], { steps: 7 });
-    await f.page.locator('.gizmo-readout').filter({ hasText: /Offset [−-]6 mm/ }).waitFor();
+    await f.page.locator('.gizmo-readout').filter({ hasText: new RegExp(`Offset [−-]${Math.abs(nextDistance)} mm`) }).waitFor();
     await preview();
     const previewMs = performance.now() - start;
     assert.equal(Number(await field().inputValue()), nextDistance);

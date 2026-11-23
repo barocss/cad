@@ -8,13 +8,19 @@ import { checkChangedOutletRail, checkReopenedOutlet, reviewPendingOutlet } from
 
 const arcFirst = process.argv.includes('--arc-first');
 const inlet = process.argv.includes('--inlet');
-assert.ok(!arcFirst || !inlet);
+const sBend = process.argv.includes('--s-bend');
+assert.ok([arcFirst, inlet, sBend].filter(Boolean).length <= 1);
 const baseline = process.argv.includes('--expect-refused');
 const reviewUnavailable = process.argv.includes('--expect-review-unavailable');
 const reviewOutlet = process.argv.includes('--review-outlet');
 const expectMissingHandle = process.argv.includes('--expect-history-handle-absent');
 const historyHandle = process.argv.includes('--history-handle');
-const path = arcFirst ? {
+const path = sBend ? {
+  degree: 2, knots: [0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 5],
+  controlPoints: [[-10, 0, 0], [-5, 0, 0], [0, 0, 0], [12, 0, 0], [12, 12, 0], [12, 16, 0],
+    [12, 20, 0], [12, 38, 0], [30, 38, 0], [33, 38, 0], [36, 38, 0]],
+  weights: [1, 1, 1, Math.SQRT1_2, 1, 1, 1, Math.SQRT1_2, 1, 1, 1],
+} : arcFirst ? {
   degree: 2, knots: [0, 0, 0, 1, 1, 2, 2, 2],
   controlPoints: [[20, 20, 0], [20, 0, 0], [0, 0, 0], [-5, 0, 0], [-10, 0, 0]],
   weights: [1, Math.SQRT1_2, 1, 1, 1],
@@ -23,13 +29,14 @@ const path = arcFirst ? {
   controlPoints: [[-10, 0, 0], [-5, 0, 0], [0, 0, 0], [20, 0, 0], [20, 20, 0], [20, 27, 0], [20, 34, 0]],
   weights: [1, 1, 1, Math.SQRT1_2, 1, 1, 1],
 };
-const axis = arcFirst || inlet ? 0 : 1, sign = axis === 0 ? -1 : 1;
-const spanLength = arcFirst || inlet ? 10 : 14;
+const axis = arcFirst || inlet || sBend ? 0 : 1, sign = arcFirst || inlet ? -1 : 1;
+const direction = sBend ? 'Right' : axis === 0 ? 'Left' : 'Back';
+const spanLength = sBend ? 6 : arcFirst || inlet ? 10 : 14;
 const terminal = inlet ? path.controlPoints[0] : path.controlPoints.at(-1);
 const cap = inlet ? 'n1.start' : 'n1.end';
 const fixedCap = inlet ? 'n1.end' : 'n1.start';
 const straightPiece = arcFirst || inlet ? 'line' : 'tail';
-const junctionPlanes = arcFirst ? [[0, 0]] : [[0, 0], [1, 20]];
+const junctionPlanes = sBend ? [[0, 0], [1, 12], [1, 20], [0, 30]] : arcFirst ? [[0, 0]] : [[0, 0], [1, 20]];
 const hole = center => [[-1, center - 1], [-1, center + 1], [1, center + 1], [1, center - 1]]
   .map(start => ({ kind: 'line', start }));
 const sideTags = { outer: ['e1', 'e2', 'e3', 'e4'], holes: [['e5', 'e6', 'e7', 'e8'], ['e9', 'e10', 'e11', 'e12']] };
@@ -64,7 +71,8 @@ const pins = [
   'packages/barocss-cad-model/src/chat/part/views.ts',
   'apps/cad-studio/test/paired-elbow-outlet-review-browser-steps.mjs',
   'apps/cad-studio/test/paired-elbow-outlet-handle-browser-steps.mjs',
-  ...(historyHandle || arcFirst || inlet ? ['packages/barocss-cad-model/src/app/pairedElbowOutletOffsetHandle.ts'] : []),
+  ...(historyHandle || arcFirst || inlet || sBend ? ['packages/barocss-cad-model/src/app/pairedElbowOutletOffsetHandle.ts'] : []),
+  ...(sBend ? ['packages/barocss-cad-model/src/chat/pairedElbowOutletProposalReview.ts'] : []),
   ...(reviewOutlet ? [
     'apps/cad-studio/test/duct-proposal-review-browser-steps.mjs',
     'packages/barocss-cad-model/src/chat/pairedElbowOutletOffsetEvidence.ts',
@@ -73,10 +81,10 @@ const pins = [
   ] : []),
 ];
 const f = await createFlow({
-  name: 'offset-paired-elbow-outlet', output: process.argv[2], envFrozen: inlet ? (reviewOutlet || reviewUnavailable ? 'D1809_SOURCE_FROZEN' : 'D1808_SOURCE_FROZEN') : arcFirst ? (reviewOutlet || reviewUnavailable ? 'D1806_SOURCE_FROZEN' : 'D1805_SOURCE_FROZEN') : 'D1788_SOURCE_FROZEN',
+  name: 'offset-paired-elbow-outlet', output: process.argv[2], envFrozen: sBend ? 'D1822_SOURCE_FROZEN' : inlet ? (reviewOutlet || reviewUnavailable ? 'D1809_SOURCE_FROZEN' : 'D1808_SOURCE_FROZEN') : arcFirst ? (reviewOutlet || reviewUnavailable ? 'D1806_SOURCE_FROZEN' : 'D1805_SOURCE_FROZEN') : 'D1788_SOURCE_FROZEN',
   initialFiles: pins, requiredFrozen: pins,
   qualification: `Move the original straight ${inlet ? 'inlet' : 'outlet'} cap of a paired rectangular Exact Sweep.`,
-  limits: [arcFirst ? 'Two 2 × 2 mm through passages on an R20 bend and a 10 mm straight tail. Desktop Studio WebGPU.'
+  limits: [sBend ? 'A 10 mm lead, R12/R18 opposite bends, 8 mm spacer and 6 mm outlet with two independent through passages. Desktop Studio WebGPU.' : arcFirst ? 'Two 2 × 2 mm through passages on an R20 bend and a 10 mm straight tail. Desktop Studio WebGPU.'
     : 'Two 2 × 2 mm through passages on a 10 mm straight lead, R20 bend, and a 14 mm straight tail. Desktop Studio WebGPU.'],
   inspectorSource: `
 import { readFileSync } from 'node:fs';
@@ -118,14 +126,15 @@ const hud = name => f.page.getByRole('dialog', { name, exact: true });
 const phase = (panel, value) => panel.locator('.status').filter({ hasText: new RegExp('^' + value + '$') }).waitFor();
 const distanceField = panel => panel.getByLabel('Offset', { exact: true });
 const closeTo = (actual, expected) => assert.ok(Math.abs(actual - expected) <= 1e-7, JSON.stringify({ actual, expected }));
-const initialVolume = 32 * ((arcFirst ? 10 : 24) + 10 * Math.PI);
+const initialVolume = 32 * (sBend ? 24 + 15 * Math.PI : (arcFirst ? 10 : 24) + 10 * Math.PI);
 const shiftedOutlet = (point, distance) => point.map((value, coordinate) => value + (coordinate === axis ? sign * distance : 0));
 
 async function verify(label, doc, distance, original) {
   const result = await f.inspect(label, doc);
   assert.ok(result.check.valid, result.check.issues.join('\n'));
   assert.equal(result.check.topology[0].genus, 2);
-  assert.deepEqual(result.check.counts, arcFirst
+  assert.deepEqual(result.check.counts, sBend
+    ? { bodies: 1, shells: 1, faces: 62, loops: 66, coedges: 264, edges: 132, vertices: 72 } : arcFirst
     ? { bodies: 1, shells: 1, faces: 26, loops: 30, coedges: 120, edges: 60, vertices: 36 }
     : { bodies: 1, shells: 1, faces: 38, loops: 42, coedges: 168, edges: 84, vertices: 48 });
   assert.ok(result.check.maximumPcurveGap < 1e-8);
@@ -187,6 +196,10 @@ async function approveWithAgent(savedSource, original, expected) {
     assert.deepEqual(await readFile(file), before);
     const staged = await call('proposals', { action: 'propose', title: `Move the paired ${inlet ? 'inlet' : 'outlet'} inward by 4 mm`, ops: [op] });
     assert.deepEqual([staged.proposal, staged.applied], ['P1', false]);
+    if (sBend && !reviewUnavailable && !reviewOutlet) {
+      const { proposals: [pending] } = await call('proposals', { action: 'list' });
+      assert.equal(pending.modelReviewRevision, undefined);
+    }
     if (reviewUnavailable) {
       const { proposals: [pending] } = await call('proposals', { action: 'list' });
       assert.equal(pending.modelReviewRevision, undefined);
@@ -244,13 +257,13 @@ await f.run(async () => {
 
   f.phase = `Pick the original ${inlet ? 'inlet' : 'outlet'} cap in Studio`;
   await button('View cube directions', f.page.getByRole('group', { name: 'View cube', exact: true })).click();
-  await f.page.getByRole('menuitem', { name: axis === 0 ? 'Left' : 'Back', exact: true }).click();
+  await f.page.getByRole('menuitem', { name: direction, exact: true }).click();
   if (await button('Ortho').getAttribute('aria-pressed') !== 'true') await button('Ortho').click();
   await f.page.getByTitle('Frame all (F)', { exact: true }).click();
   await f.page.waitForFunction(label => {
     const labels = [...document.querySelectorAll('.view-cube .vc-label')];
     return labels.length === 1 && labels[0].textContent === label;
-  }, axis === 0 ? 'LEFT' : 'BACK');
+  }, direction.toUpperCase());
   const pixel = await f.page.evaluate(point => window.__studioScreenOf(point), [...terminal.slice(0, 2), retainedRail ? 4 : 0]);
   assert.ok(pixel && await f.page.evaluate(point => document.elementFromPoint(...point)?.matches('canvas.vp-canvas'), pixel));
   await f.page.mouse.click(...pixel);
@@ -317,12 +330,12 @@ await f.run(async () => {
   const saved = await f.save('paired-elbow-outlet-offset');
   const reopened = (await f.freshOpen(saved.file, inward, '05-fresh-open')).doc;
   assert.equal((await verify('reopened-native', reopened, -4, original)).digest, native.digest);
-  if (expectMissingHandle || historyHandle || arcFirst || inlet) {
+  if (expectMissingHandle || historyHandle || arcFirst || inlet || sBend) {
     await checkSavedOutletDrag(f, reopened, (label, doc, distance) => verify(label, doc, distance, original),
-      expectMissingHandle, distance => shiftedOutlet(terminal, distance));
-    if (!arcFirst && !inlet) return;
+      expectMissingHandle, distance => shiftedOutlet(terminal, distance), sBend ? -5 : undefined);
+    if (!arcFirst && !inlet && !sBend) return;
   }
-  if (arcFirst || inlet) return approveWithAgent(savedSource, original, native);
+  if (arcFirst || inlet || sBend) return approveWithAgent(savedSource, original, native);
   await f.openFeatureEditor(2, 'reopened outlet offset');
   await button('Edit offset', f.editor()).click();
   const reopenedEdit = hud('Edit Offset face');

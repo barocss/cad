@@ -742,11 +742,18 @@ function pairedElbowOffsetPath(nodes: readonly unknown[], index: number, face: s
 export function isPairedElbowOutletOffsetSource(nodes: readonly unknown[], index: number, face: string): boolean {
   const path = pairedElbowOffsetPath(nodes, index, face, 'end');
   if (!path) return false;
-  const { controlPoints, weights } = path;
+  const { controlPoints, weights, knots } = path;
   const arcLine = controlPoints.length === 5 && Array.isArray(weights) && weights.length === 5
     && typeof weights[0] === 'number' && Number.isFinite(weights[0]) && weights[0] === weights[2] && weights[2] === weights[3] && weights[3] === weights[4]
     && typeof weights[1] === 'number' && weights[1] > 0 && weights[1] < weights[0];
-  return controlPoints.length === 7 || arcLine;
+  const fiveSpan = controlPoints.length === 11 && Array.isArray(weights) && weights.length === 11
+    && Array.isArray(knots) && knots.length === 14 && knots.every(Number.isFinite)
+    && typeof weights[0] === 'number' && Number.isFinite(weights[0]) && weights[0] > 0
+    && weights.every((weight, i) => i === 3 || i === 7 ? typeof weight === 'number' && weight > 0 && weight < weights[0] : weight === weights[0])
+    && knots[0] === knots[1] && knots[1] === knots[2] && knots[3] === knots[4] && knots[5] === knots[6]
+    && knots[7] === knots[8] && knots[9] === knots[10] && knots[11] === knots[12] && knots[12] === knots[13]
+    && knots[2] < knots[3] && knots[4] < knots[5] && knots[6] < knots[7] && knots[8] < knots[9] && knots[10] < knots[11];
+  return controlPoints.length === 7 || arcLine || fiveSpan;
 }
 
 /** The inlet recipe requires the paired line–arc–line path with both straight spans. */

@@ -199,7 +199,7 @@ test('Offset face: the top moved out joins material (the sides run on), moved in
   assert.equal(up.length, 1); assert.ok(Math.abs(up[0].volume! - 20 * 20 * 13) < 1e-6); assert.equal(up[0].mesh.bounds.max[2], 13);
   const down = bodiesOf(offset.build!(ctx, { d: -4 }));
   assert.ok(Math.abs(down[0].volume! - 20 * 20 * 6) < 1e-6); assert.equal(down[0].mesh.bounds.max[2], 6);
-  assert.throws(() => offset.build!(ctx, { d: 0 }), /a distance/);
+  assert.throws(() => offset.build!(ctx, { d: 0 }), { code: 'VALUE', message: /nonzero signed distance/ });
 });
 
 test('Split original-source bounds restore the handle without trusting downstream result bounds', () => {
