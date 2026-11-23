@@ -1,9 +1,11 @@
 import assert from 'node:assert/strict';
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { createFlow } from './flow-helper.mjs';
+import { createFlow, sha256 } from './flow-helper.mjs';
 import { currentPartRevision, withMcpSession } from './mcp-browser-session.mjs';
 
+const reviewBaseline = process.argv.includes('--expect-review-unavailable');
+const review = reviewBaseline || process.argv.includes('--review-pair');
 const turn = Math.atan2(3, 4);
 const pointsAt = setback => [[50, 15], [50, 45], [0, 45], [0, setback], [setback, 0],
   [30 - setback, 0], [30 + .8 * setback, .6 * setback]];
@@ -20,8 +22,15 @@ const pins = [
   'apps/cad-studio/src/sketch/cornerDraft.ts', 'apps/cad-studio/src/ui/SketchCornerTools.tsx',
   'packages/barocss-cad-model/src/sketch/chamferEdit.ts', 'packages/barocss-cad-model/src/chat/part/sketchCorner.ts',
 ];
+if (review) pins.push(
+  'packages/barocss-cad-model/src/chat/cornerProposalReview.ts',
+  'packages/barocss-cad-model/src/chat/part/modelCandidate.ts',
+  'packages/barocss-cad-model/src/chat/part/proposals.ts',
+  'packages/barocss-cad-model/src/chat/part/views.ts',
+);
 const f = await createFlow({
-  name: 'sketch-adjacent-oblique-chamfer-resize', output: process.argv[2], envFrozen: 'D1779_SOURCE_FROZEN',
+  name: 'sketch-adjacent-oblique-chamfer-resize', output: process.argv[2],
+  envFrozen: review ? 'D1780_SOURCE_FROZEN' : 'D1779_SOURCE_FROZEN',
   initialFiles: pins, requiredFrozen: pins,
   qualification: 'Resize adjacent right and oblique saved Chamfers on a shared carrier through one retained sketch edit.',
   limits: ['One independent XY outline with its anchor away from both bevels, one 10 mm Extrude, desktop WebGPU.'],
@@ -79,10 +88,73 @@ async function verify(label, doc, original, setback) {
   return native.digest;
 }
 
+async function modelImage(request, args) {
+  const response = await request('tools/call', { name: 'query', arguments: { action: 'render', ...args } });
+  assert.equal(response.isError, false, response.content[0].text);
+  const meta = JSON.parse(response.content[0].text);
+  const png = Buffer.from(response.content.find(item => item.type === 'image').data, 'base64');
+  assert.equal(png.subarray(0, 8).toString('hex'), '89504e470d0a1a0a');
+  assert.equal(meta.imageSha256, sha256(png));
+  assert.equal(Object.keys(meta.views).length, 4);
+  return { meta, png };
+}
+
+async function reviewPending(call, request, revision, expected) {
+  const { proposals: [entry] } = await call('proposals', { action: 'list' });
+  assert.equal(entry.id, 'P1');
+  assert.match(entry.modelReviewRevision, /^[0-9a-f]{64}$/);
+  const pins = { proposal: entry.id, expectedRevision: revision, expectedProposalRevision: entry.modelReviewRevision };
+  const first = await modelImage(request, pins), opposite = await modelImage(request, { ...pins, orientation: 'opposite' });
+  assert.equal(first.meta.candidate.bodySha256, expected);
+  assert.equal(opposite.meta.candidate.bodySha256, expected);
+  assert.notEqual(first.meta.candidate.reviewRevision, opposite.meta.candidate.reviewRevision);
+  const evidence = first.meta.chamferResize;
+  assert.deepEqual(opposite.meta.chamferResize, evidence);
+  assert.deepEqual([evidence.body, evidence.sketch, evidence.bevels], ['b1', 'n0', ['e6', 'e7']]);
+  const bevelFaces = ['n1.side[e6]', 'n1.side[e7]'];
+  assert.deepEqual(evidence.faces.map(face => [face.name, face.sides]),
+    [[bevelFaces[0], ['e5', 'e1']], [bevelFaces[1], ['e1', 'e2']]]);
+  for (const face of evidence.faces) {
+    near(face.before, 6);
+    near(face.after, 8);
+  }
+  const carrierFaces = ['n1.side[e5]', 'n1.side[e1]', 'n1.side[e2]'];
+  const original = await call('query', { action: 'inspect', faces: carrierFaces, expectedRevision: revision });
+  const lookup = { ...pins, action: 'inspect', faces: [...bevelFaces, ...carrierFaces],
+    expectedReviewRevision: first.meta.candidate.reviewRevision };
+  const inspection = await call('query', lookup);
+  assert.deepEqual([inspection.candidate, inspection.revision, inspection.imageSha256, inspection.chamferResize],
+    [first.meta.candidate, first.meta.revision, first.meta.imageSha256, evidence]);
+  assert.deepEqual(inspection.faces.map(face => face.name), lookup.faces);
+  const expectedNormals = [[-Math.SQRT1_2, -Math.SQRT1_2, 0], [1 / Math.sqrt(10), -3 / Math.sqrt(10), 0]];
+  for (const [index, face] of inspection.faces.slice(0, 2).entries()) {
+    assert.equal(face.geometry.kind, 'plane');
+    face.geometry.outwardNormal.forEach((value, axis) => near(value, expectedNormals[index][axis]));
+  }
+  for (const [index, face] of inspection.faces.slice(2).entries()) {
+    const before = original.faces[index].geometry, after = face.geometry;
+    assert.deepEqual([before.kind, after.kind], ['plane', 'plane']);
+    after.outwardNormal.forEach((value, axis) => near(value, before.outwardNormal[axis]));
+    near(after.point.reduce((sum, value, axis) => sum + (value - before.point[axis]) * before.outwardNormal[axis], 0), 0);
+  }
+  const oppositeRead = await call('query', { ...lookup, orientation: 'opposite', expectedReviewRevision: opposite.meta.candidate.reviewRevision });
+  assert.deepEqual(oppositeRead.faces, inspection.faces);
+  assert.deepEqual(oppositeRead.chamferResize, evidence);
+  assert.equal((await call('query', { ...lookup, orientation: 'opposite' }, true)).code, 'MODEL_REVIEW_IMAGE_STALE');
+  assert.equal((await call('query', { ...lookup, expectedProposalRevision: '0'.repeat(64) }, true)).code, 'MODEL_REVIEW_PROPOSAL_STALE');
+  assert.equal((await call('query', { ...lookup, expectedRevision: '0'.repeat(16) }, true)).code, 'MODEL_REVIEW_BASE_STALE');
+  await writeFile(join(f.output, 'saved-pair-agent-four-views.png'), first.png);
+  await writeFile(join(f.output, 'saved-pair-agent-opposite-views.png'), opposite.png);
+  f.report.observations.push({ label: 'paired-chamfer-review', ...first.meta.candidate, revision: first.meta.revision,
+    imageSha256: first.meta.imageSha256, oppositeImageSha256: opposite.meta.imageSha256, evidence });
+  return { first, opposite, lookup, faces: inspection.faces };
+}
+
 async function approve(source, expected) {
   const file = join(f.output, 'mixed-chamfer-resize-proposal.bcad'), bytes = JSON.stringify(source);
+  const session = { app: f.app, output: f.output, clientName: f.name };
   await writeFile(file, bytes);
-  await withMcpSession({ app: f.app, output: f.output, clientName: f.name }, file, 'mixed-chamfer-resize', async call => {
+  const reviewed = await withMcpSession(session, file, 'mixed-chamfer-resize', async (call, request) => {
     const fields = await call('query', { action: 'edit_fields', index: 0, includeSketchCorners: true });
     assert.equal(fields.revision, await currentPartRevision(call));
     assert.deepEqual(fields.sketchChamfers, [{ bevel: 'e6', distance: 6 }, { bevel: 'e7', distance: 6 }]);
@@ -96,6 +168,24 @@ async function approve(source, expected) {
     assert.equal(await readFile(file, 'utf8'), bytes);
     const staged = await propose(8, false);
     assert.deepEqual([staged.proposal, staged.applied], ['P1', false]);
+    if (reviewBaseline) {
+      const pending = await readFile(file);
+      const { proposals: [entry] } = await call('proposals', { action: 'list' });
+      assert.equal(entry.id, 'P1');
+      assert.equal(entry.modelReviewRevision, undefined);
+      assert.match(entry.proposalRevision, /^[0-9a-f]{64}$/);
+      const refused = await call('query', { action: 'render', proposal: entry.id, expectedRevision: fields.revision,
+        expectedProposalRevision: entry.proposalRevision }, true);
+      assert.equal(refused.code, 'MODEL_REVIEW_UNAVAILABLE');
+      assert.deepEqual(await readFile(file), pending);
+      f.report.observations.push({ label: 'paired-chamfer-review-unavailable', ...refused });
+    }
+    if (review && !reviewBaseline) {
+      const pending = await readFile(file);
+      const result = await reviewPending(call, request, fields.revision, expected);
+      assert.deepEqual(await readFile(file), pending);
+      return result;
+    }
   });
   const pending = JSON.parse(await readFile(file, 'utf8'));
   assert.deepEqual([pending.nodes, pending.outputs], [source.nodes, source.outputs]);
@@ -110,6 +200,20 @@ async function approve(source, expected) {
   await f.changed(pending);
   const approved = (await f.snapshot('10-proposal-approved')).doc;
   assert.equal(await verify('approved-native', approved, source, 8), expected);
+  if (review) {
+    const saved = await f.save('approved-mixed-d8-pair');
+    const reopened = (await f.freshOpen(saved.file, approved, '11-approved-fresh-open')).doc;
+    assert.equal(await verify('approved-reopened-native', reopened, source, 8), expected);
+    if (reviewed) await withMcpSession(session, saved.file, 'reviewed-mixed-chamfer-resize', async (call, request) => {
+      const expectedRevision = await currentPartRevision(call);
+      assert.equal(expectedRevision, reviewed.first.meta.revision);
+      assert.deepEqual((await modelImage(request, { expectedRevision })).png, reviewed.first.png);
+      assert.deepEqual((await modelImage(request, { expectedRevision, orientation: 'opposite' })).png, reviewed.opposite.png);
+      const inspection = await call('query', { action: 'inspect', faces: reviewed.lookup.faces, expectedRevision });
+      assert.deepEqual(inspection.faces, reviewed.faces);
+      assert.equal((await call('query', { ...reviewed.lookup, expectedRevision }, true)).code, 'MODEL_REVIEW_UNAVAILABLE');
+    });
+  }
 }
 
 await f.run(async () => {

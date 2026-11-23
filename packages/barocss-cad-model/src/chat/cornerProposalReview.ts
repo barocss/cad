@@ -12,6 +12,7 @@ type SidePair = [string, string];
 type Operation = 'fillet' | 'chamfer';
 type Geometry = ReturnType<typeof faceGeometry>;
 type Plane = Extract<Geometry, { kind: 'plane' }>;
+type SavedChamferSelection = { bevel: string; bevels?: never } | { bevel?: never; bevels: string[] };
 
 function scope(doc: StudioDoc) {
   const [sketch, extrude] = doc.nodes;
@@ -153,7 +154,7 @@ export function reviewedCornerBatchEvidence(base: StudioDoc, candidate: StudioDo
   return { brep: native.brep, cornerBatch: { body: result.body, sketch: edit.sketch, operation: edit.operation, size: edit.size, faces } };
 }
 
-/** Identify one pinned saved-bevel resize, plus saved neighbors on either carrier. */
+/** Identify one saved bevel or two adjacent saved bevels, plus their saved carrier neighbors. */
 export function savedChamferResizeProposal(doc: StudioDoc, proposal: Proposal) {
   if (proposal.status !== 'open' || proposal.ops.length !== 1) return;
   const [{ tool, args }] = proposal.ops;
@@ -162,30 +163,38 @@ export function savedChamferResizeProposal(doc: StudioDoc, proposal: Proposal) {
     typeof args.expectedRevision !== 'string' || !/^[a-f0-9]{16}$/.test(args.expectedRevision) ||
     args.expectedRevision !== revisionOf(doc)) return;
   const input = args.sketchChamfer, source = scope(doc);
-  if (!source || !isObj(input) || Object.keys(input).sort().join(',') !== 'bevel,distance,sketch' ||
-    input.sketch !== source.sketchId || typeof input.bevel !== 'string' || !input.bevel ||
+  if (!source || !isObj(input) || input.sketch !== source.sketchId ||
     typeof input.distance !== 'number' || !Number.isFinite(input.distance) || input.distance <= 0) return;
+  const group = Object.hasOwn(input, 'bevels');
+  if (Object.keys(input).sort().join(',') !== `${group ? 'bevels' : 'bevel'},distance,sketch`) return;
+  const bevels: unknown[] = group && Array.isArray(input.bevels) ? Array.from(input.bevels) : [input.bevel];
+  if (bevels.length !== (group ? 2 : 1) || new Set(bevels).size !== bevels.length ||
+    !bevels.every((id): id is string => typeof id === 'string' && id.length > 0)) return;
   // Tilted placement currently emits the generic `prismatic` source ID, so it cannot
   // satisfy this review's feature-owned native prism pin. Do not advertise a review.
   const plane = source.sketch.plane;
   if (plane && (plane.normal[0] !== 0 || plane.normal[1] !== 0 || plane.xAxis[2] !== 0)) return;
-  const faces = savedChamferFaces(doc, source, input.bevel, input.distance);
+  const faces = savedChamferFaces(doc, source, bevels, input.distance);
   if (!faces) return;
+  const selection: SavedChamferSelection = group ? { bevels } : { bevel: bevels[0] };
   return { revision: digestOf(proposal), sourceRevision: args.expectedRevision, source: canonicalOf(doc),
-    sketch: source.sketchId, bevel: input.bevel, distance: input.distance, faces };
+    sketch: source.sketchId, ...selection, distance: input.distance, faces };
 }
 
-function savedChamferFaces(doc: StudioDoc, source: NonNullable<ReturnType<typeof scope>>, bevel: string, distance: number) {
-  const saved = sketchEditChamfers(doc, 0), selected = saved.find(item => item.bevel === bevel);
-  if (!selected || near(selected.distance, distance)) return;
+function savedChamferFaces(doc: StudioDoc, source: NonNullable<ReturnType<typeof scope>>, bevels: string[], distance: number) {
+  if (bevels.length < 1 || bevels.length > 2 || new Set(bevels).size !== bevels.length) return;
+  const saved = sketchEditChamfers(doc, 0), selected = saved.filter(item => bevels.includes(item.bevel));
+  if (selected.length !== bevels.length || selected.every(item => near(item.distance, distance))) return;
   const sidesOf = (bevel: string): SidePair => {
     const at = source.tags.indexOf(bevel), count = source.tags.length;
     return [source.tags[(at - 1 + count) % count], source.tags[(at + 1) % count]];
   };
-  const sides = sidesOf(selected.bevel);
-  return [selected, ...saved.filter(item => item !== selected && sidesOf(item.bevel).some(side => sides.includes(side)))].map(item => ({
+  if (bevels.length === 2 && !sidesOf(bevels[0]).some(side => sidesOf(bevels[1]).includes(side))) return;
+  const sides = selected.flatMap(item => sidesOf(item.bevel));
+  return [...bevels.map(bevel => selected.find(item => item.bevel === bevel)!),
+    ...saved.filter(item => !bevels.includes(item.bevel) && sidesOf(item.bevel).some(side => sides.includes(side)))].map(item => ({
     bevel: item.bevel, sides: sidesOf(item.bevel), before: item.distance,
-    after: item === selected ? distance : item.distance,
+    after: bevels.includes(item.bevel) ? distance : item.distance,
   }));
 }
 
@@ -257,12 +266,15 @@ export function reviewedChamferResizeEvidence(base: StudioDoc, candidate: Studio
   if (!source || !result || edit.source !== canonicalOf(base) || revisionOf(base) !== edit.sourceRevision ||
     source.sketchId !== edit.sketch || result.sketchId !== edit.sketch || source.body !== result.body ||
     canonicalOf({ ...candidate, nodes: base.nodes }) !== canonicalOf(base)) return;
+  const bevels = edit.bevels ?? (typeof edit.bevel === 'string' ? [edit.bevel] : undefined);
+  if (!bevels || (edit.bevels && edit.bevel !== undefined)) return;
   // Reuse the production operation; the review does not implement a second sketch solver.
-  const replay = editSketchCorner(base, 0, 'CHAMFER', { sketch: edit.sketch, bevel: edit.bevel, distance: edit.distance });
+  const selection = edit.bevels ? { bevels: edit.bevels } : { bevel: edit.bevel };
+  const replay = editSketchCorner(base, 0, 'CHAMFER', { sketch: edit.sketch, ...selection, distance: edit.distance });
   if (!('node' in replay) || replay.node === source.sketch || canonical(replay.node) !== canonical(result.sketch) ||
     canonical(dropStaleMade(base.nodes, [result.sketch, source.extrude])[1]) !== canonical(result.extrude) ||
     canonical(source.tags) !== canonical(result.tags)) return;
-  const recognized = savedChamferFaces(base, source, edit.bevel, edit.distance);
+  const recognized = savedChamferFaces(base, source, bevels, edit.distance);
   if (!recognized || canonical(recognized) !== canonical(edit.faces)) return;
   const original = prism(base, source), native = prism(candidate, result);
   if (!original || !native) return;
@@ -271,8 +283,8 @@ export function reviewedChamferResizeEvidence(base: StudioDoc, candidate: Studio
     const before = measuredChamfer(original, face.bevel, face.sides, face.before);
     const after = measuredChamfer(native, face.bevel, face.sides, face.after);
     if (!before || !after || before.carriers.some(({ plane }, index) => !samePlane(plane, after.carriers[index].plane)) ||
-      (face.bevel !== edit.bevel && !unchangedSeams(before, after, original.brep, native.brep))) return;
+      (face.before === face.after && !unchangedSeams(before, after, original.brep, native.brep))) return;
     faces.push({ name: native.sideName(face.bevel), sides: face.sides, before: before.distance, after: after.distance });
   }
-  return { brep: native.brep, chamferResize: { body: result.body, sketch: edit.sketch, bevel: edit.bevel, faces } };
+  return { brep: native.brep, chamferResize: { body: result.body, sketch: edit.sketch, ...selection, faces } };
 }
