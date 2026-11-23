@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { evaluateCadPart, reevaluate, saveCadPart, loadCadPart, massPropertiesOf, brepMassProperties, checkBrep, faceGeometry, CadPartError } from '../dist/index.js';
+import { fillCutSnapshot, fillCutPlacements } from '../dist/features/fill-cut-pattern.js';
 
 const near = (actual, expected) => assert.ok(Number.isFinite(actual) && Math.abs(actual - expected) <= 1e-7, `${actual} vs ${expected}`);
 const document = () => ({ format: 'barocss-cad-part', version: 1, units: 'mm', parameters: {
@@ -25,6 +26,19 @@ const rectangularDocument = () => {
   Object.assign(feature(doc, 'repeat'), { kind: 'rectangular-feature-pattern', axis2: 'y', spacing2: { parameter: 'pitchY' }, count2: 2 });
   return doc;
 };
+const fillDocument = () => {
+  const doc = rectangularDocument(), node = feature(doc, 'repeat');
+  delete node.axis; delete node.axis2;
+  Object.assign(node, { kind: 'fill-feature-pattern', anchor: [10, 9],
+    region: { points: [[8, 7], [48, 7], [48, 11], [12, 11], [12, 29], [8, 29]] } });
+  return doc;
+};
+const fillCells = [[0, 0], [1, 0], [0, 1]];
+function selectedFill(doc) {
+  const node = feature(doc, 'repeat'), fail = (code, message) => { throw Object.assign(new Error(message), { code }); };
+  const own = fillCutSnapshot(node.region, node.anchor, fail);
+  return fillCutPlacements(own.region, own.anchor, doc.parameters.pitch, node.count, doc.parameters.pitchY, node.count2).map(placement => placement.suffix);
+}
 
 function bounds(brep, loop) {
   const points = loop.coedges.flatMap(id => {
@@ -35,19 +49,23 @@ function bounds(brep, loop) {
     .concat([0, 1].map(axis => Math.max(...points.map(point => point[axis]))));
 }
 
-function verify(snapshot, current = false) {
+function verify(snapshot, current = false, { cells, lastBox } = {}) {
   const doc = snapshot.document, p = doc.parameters, pattern = feature(doc, 'repeat');
   assert.equal(snapshot.outputs.length, 1);
   const output = snapshot.outputs[0], brep = output.brep, check = checkBrep(brep, { strict: true });
   assert.ok(check.valid, check.issues.join('\n')); assert.equal(output.id, 'repeat');
-  const rectangular = pattern.kind === 'rectangular-feature-pattern';
-  const holes = [[8, 26, p.newerRight, 28], current ? [p.left, p.bottom, p.right, p.top] : [42, 8, p.lastRight, 10]];
-  const prototype = current ? [42, 8, p.lastRight, 10] : [p.left, p.bottom, p.right, p.top];
-  for (let j = 0; j < (rectangular ? pattern.count2 : 1); j++) for (let k = 0; k < pattern.count; k++) {
-    const dx = (pattern.axis === 'x' ? k * p.pitch : 0) + (rectangular && pattern.axis2 === 'x' ? j * p.pitchY : 0);
-    const dy = (pattern.axis === 'y' ? k * p.pitch : 0) + (rectangular && pattern.axis2 === 'y' ? j * p.pitchY : 0);
+  const rectangular = pattern.kind === 'rectangular-feature-pattern', fill = pattern.kind === 'fill-feature-pattern';
+  const last = lastBox ?? [42, 8, p.lastRight, 10];
+  const holes = [[8, 26, p.newerRight, 28], current ? [p.left, p.bottom, p.right, p.top] : last];
+  const prototype = current ? last : [p.left, p.bottom, p.right, p.top];
+  if (fill) assert.ok(cells, 'Fill oracle supplies literal selected cells independently of the planner');
+  const expectedCells = cells ?? Array.from({ length: rectangular ? pattern.count2 : 1 }, (_, j) =>
+    Array.from({ length: pattern.count }, (_, k) => [k, j])).flat();
+  for (const [k, j] of expectedCells) {
+    const dx = (fill || pattern.axis === 'x' ? k * p.pitch : 0) + (rectangular && pattern.axis2 === 'x' ? j * p.pitchY : 0);
+    const dy = (pattern.axis === 'y' ? k * p.pitch : 0) + (fill || rectangular && pattern.axis2 === 'y' ? j * p.pitchY : 0);
     holes.push(prototype.map((value, axis) => value + (axis % 2 ? dy : dx)));
-    const suffix = k || j ? rectangular ? `@${k},${j}` : `@${k}` : '';
+    const suffix = k || j ? rectangular || fill ? `@${k},${j}` : `@${k}` : '';
     for (let side = 0; side < 4; side++) assert.ok(brep.faces.some(face => face.name === `${current ? 'lastTool' : 'olderTool'}.side${side}${suffix}`));
   }
   const n = holes.length;
@@ -203,4 +221,59 @@ test('Rectangular refuses either downstream collision and unused Z axes without 
     doc.features.splice(-1, 0, { id: 'fourth', kind: 'difference', target: 'third', tool: 'lastTool' }); feature(doc, 'repeat').target = 'fourth';
   }, 'REFERENCE');
   assert.deepEqual(verify(loadCadPart(saved)), verify(accepted));
+});
+
+test('Fill uses the captured L mask to copy only the two selected cells across both newer cuts', () => {
+  const doc = fillDocument(), before = structuredClone(doc);
+  assert.deepEqual(selectedFill(doc), ['@1,0', '@0,1']);
+  const snapshot = evaluateCadPart(doc), brep = verify(snapshot, false, { cells: fillCells }), mass = brepMassProperties(brep, 1);
+  near(mass.volume, 23560); near(mass.centroid[0], 711480 / 23560); near(mass.centroid[1], 473240 / 23560);
+  assert.ok(!brep.faces.some(face => face.name?.endsWith('@1,1')));
+  assert.ok(!brep.faces.some(face => /^(newerTool|lastTool)\..*@/.test(face.name)));
+  assert.deepEqual(doc, before); assert.deepEqual(snapshot.document.features, before.features);
+  assert.deepEqual(verify(loadCadPart(saveCadPart(snapshot)), false, { cells: fillCells }), brep);
+});
+
+test('Fill excludes mask holes and unsafe unselected cells while always retaining the three original cavities', () => {
+  const hole = fillDocument(); feature(hole, 'repeat').region.holes = [[[25, 8], [27, 8], [27, 10], [25, 10]]];
+  assert.deepEqual(selectedFill(hole), ['@0,1']);
+  verify(evaluateCadPart(hole), false, { cells: [[0, 0], [0, 1]] });
+  const excluded = fillDocument(), lastBox = [24, 16, 28, 18];
+  Object.assign(feature(excluded, 'lastSketch'), { min: lastBox.slice(0, 2), max: lastBox.slice(2) });
+  // The excluded diagonal copy would exactly overlap this last original cavity.
+  assert.deepEqual(selectedFill(excluded), ['@1,0', '@0,1']);
+  verify(evaluateCadPart(excluded), false, { cells: fillCells, lastBox });
+  const none = fillDocument(); feature(none, 'repeat').region = { points: [[1, 1], [2, 1], [2, 2], [1, 2]] };
+  assert.deepEqual(selectedFill(none), []);
+  const original = verify(evaluateCadPart(none), false, { cells: [[0, 0]] });
+  near(brepMassProperties(original, 1).volume, 23720);
+  const current = fillDocument(); delete feature(current, 'repeat').source;
+  Object.assign(feature(current, 'repeat'), { count: 1, count2: 1 });
+  verify(evaluateCadPart(current), true, { cells: [[0, 0]] });
+});
+
+test('Fill refuses selected collisions with either newer cutter and malformed bridges while Path stays direct-only', () => {
+  const accepted = evaluateCadPart(fillDocument()), saved = saveCadPart(accepted);
+  const refused = (change, code) => {
+    const doc = fillDocument(); change(doc); const before = structuredClone(doc);
+    assert.throws(() => reevaluate(accepted, { document: doc }), error => error instanceof CadPartError && error.feature === 'repeat' && error.code === code);
+    assert.deepEqual(doc, before); assert.equal(saveCadPart(accepted), saved);
+  };
+  // Both probes stay inside an arm of the L mask; they exercise physical admission, not exclusion.
+  for (const [parameter, value, selected] of [['pitch', 32, ['@1,0', '@0,1']], ['pitchY', 18, ['@1,0', '@0,1']]]) {
+    const probe = fillDocument(); probe.parameters[parameter] = value; assert.deepEqual(selectedFill(probe), selected);
+    refused(doc => { doc.parameters[parameter] = value; }, 'GEOMETRY');
+  }
+  refused(doc => { feature(doc, 'second').suppressed = true; }, 'REFERENCE');
+  refused(doc => { feature(doc, 'second').target = 'stock'; }, 'REFERENCE');
+  refused(doc => { feature(doc, 'repeat').source = 'first/0'; }, 'REFERENCE');
+  refused(doc => { Object.assign(feature(doc, 'repeat'), { count: 1, count2: 1 }); feature(doc, 'newerTool').height = 5; }, 'CAPABILITY');
+  refused(doc => {
+    doc.features.splice(-1, 0, { id: 'fourth', kind: 'difference', target: 'third', tool: 'lastTool' }); feature(doc, 'repeat').target = 'fourth';
+  }, 'REFERENCE');
+  refused(doc => {
+    const index = doc.features.findIndex(item => item.id === 'repeat');
+    doc.features[index] = { id: 'repeat', kind: 'curve-feature-pattern', target: 'third', source: 'first', spacing: 16, count: 2,
+      path: { degree: 1, knots: [0, 0, 1, 1], controlPoints: [[0, 0, 2], [16, 0, 2]], weights: [1, 1] } };
+  }, 'REFERENCE');
 });

@@ -1,5 +1,5 @@
 import { fillFeaturePatternSpec, type FillFeaturePatternRegion } from '@barocss/cad/api';
-import { directFeaturePatternSourceProblem, leafBodies, NODE_EXTRA_FIELDS, type BodyRef, type ModelNode, type StudioDoc } from './doc';
+import { leafBodies, NODE_EXTRA_FIELDS, rectangularFeaturePatternSourceProblem, type BodyRef, type ModelNode, type StudioDoc } from './doc';
 import { refusal } from './refusal';
 
 const record = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
@@ -106,7 +106,7 @@ export function fillFeaturePatternProblem(node: Record<string, unknown>, nodes: 
     if (!record(parent) || Object.keys(parent).sort().join(',') !== 'node,side' || !Number.isSafeInteger(parent.node) || parent.side !== 'solid') return '[BAD_REFERENCE] Fill cut pattern needs one solid difference reference.';
     const source = nodes[parent.node as number];
     if (source?.kind !== 'difference' || source.suppressed || !leafBodies(nodes).some(r => r.node === parent.node && r.side === 'solid')) return '[BAD_REFERENCE] Fill cut pattern needs a current unsuppressed difference body.';
-    return directFeaturePatternSourceProblem(node.source, parent as unknown as BodyRef, nodes, 'Fill cut pattern');
+    return rectangularFeaturePatternSourceProblem(node.source, parent as unknown as BodyRef, nodes, 'Fill cut pattern');
   } catch (error) { return error instanceof Error ? error.message : String(error); }
 }
 

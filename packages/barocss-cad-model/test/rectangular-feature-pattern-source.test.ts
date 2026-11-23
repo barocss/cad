@@ -278,7 +278,7 @@ test('arbitrary consumed or cross-scope sources and missing, suppressed or non-D
   assert.deepEqual(doc, before);
 });
 
-test('Linear and Rectangular can repeat the first cut on the third Difference without changing the original references', async () => {
+test('Linear, Rectangular and Fill can repeat the first cut on the third Difference without changing the original references', async () => {
   const first = part('three cuts').box({ w: 60, d: 40, h: 10 })
     .subtract(tool => tool.box({ w: 4, d: 2, h: 10, x: 8, y: 8 }));
   const second = first.subtract(tool => tool.box({ w: 6, d: 2, h: 10, x: 8, y: 26 }));
@@ -340,4 +340,31 @@ test('Linear and Rectangular can repeat the first cut on the third Difference wi
   const gridCommand = await run({ ...args, command: rectangular.id, values: { ...gridValues, source: args.values.source } });
   assert.equal(gridCommand.isError, false, gridCommand.content);
   assert.deepEqual(gridCommand.state.doc.nodes, grid.nodes);
+
+  const points: [number, number][] = [[8, 7], [48, 7], [48, 11], [12, 11], [12, 29], [8, 29]];
+  const maskDoc = withNode(doc, { kind: 'sketch', profile: 'loop', segments: points.map(start => ({ kind: 'line', start })) });
+  const mask = maskDoc.nodes.length - 1, maskContext = context(maskDoc);
+  const fillArgs = { ...args, command: 'fill-feature-pattern', expectedRevision: revisionOf(maskDoc),
+    values: { source: args.values.source, region: String(mask), anchorX: 10, anchorY: 9, spacing: 16, count: 2, spacing2: 8, count2: 2 } };
+  const fillCall = (overrides: Partial<typeof fillArgs.values> = {}) =>
+    dispatchTool({ doc: maskDoc, bodies: maskContext.bodies }, 'features', { ...fillArgs, values: { ...fillArgs.values, ...overrides } },
+      async next => evaluateDoc(next, 2));
+  const filled = await fillCall();
+  assert.equal(filled.isError, false, filled.content);
+  const fillDoc = filled.state.doc, fill = fillDoc.nodes.at(-1);
+  assert.ok(fill?.kind === 'fill-feature-pattern');
+  assert.deepEqual(fill.source, source);
+  assert.deepEqual(fill.parent, parent);
+  assert.deepEqual(fill.region, { points });
+  const fillOpened = await readStudioFile(encodeStudioFile(fillDoc));
+  assert.ok('doc' in fillOpened);
+  assert.deepEqual(fillOpened.doc, fillDoc);
+  const fillResult = evaluateDoc(fillOpened.doc, 2);
+  assert.ok(fillResult.ok, fillResult.ok ? '' : fillResult.error.detail);
+  assert.ok(Math.abs(fillResult.bodies[0].volume! - 23560) < 1e-8);
+  for (const overlap of [{ spacing: 32 }, { spacing2: 18 }]) {
+    const denied = await fillCall(overlap);
+    assert.equal(denied.isError, true, denied.content);
+    assert.equal(denied.state.doc, maskDoc);
+  }
 });

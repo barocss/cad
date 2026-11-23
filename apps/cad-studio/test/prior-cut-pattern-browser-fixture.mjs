@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 
 export const fillMask = [[4, 4], [32, 4], [32, 12], [16, 12], [16, 35], [4, 35]];
+export const threeCutFillMask = [[8, 7], [48, 7], [48, 11], [12, 11], [12, 29], [8, 29]];
 export const inspectorSource = `
 import { readFileSync } from 'node:fs';
 import { brepMassProperties, checkBrep, faceGeometry } from '@barocss/cad';
@@ -28,7 +29,7 @@ if (input.pathDocument) {
     doc = withNode(doc, { kind: 'difference', parent: ref(7), tool: ref(9) });
   }
   if (input.fill) {
-    const points: [number, number][] = ${JSON.stringify(fillMask)};
+    const points: [number, number][] = input.third ? ${JSON.stringify(threeCutFillMask)} : ${JSON.stringify(fillMask)};
     doc = withNode(doc, { kind: 'sketch', profile: 'loop', segments: points.map(start => ({ kind: 'line', start })) });
   }
   console.log(JSON.stringify(doc));

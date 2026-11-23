@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { createFlow } from './flow-helper.mjs';
 import { currentPartRevision, withMcpSession } from './mcp-browser-session.mjs';
 import { clickModelCommand } from './model-rail-helper.mjs';
-import { choosePriorCutSource, equivalent, fillMask, inspectorSource, later, newest, older, shift, verifyPriorCut } from './prior-cut-pattern-browser-fixture.mjs';
+import { choosePriorCutSource, equivalent, fillMask, inspectorSource, later, newest, older, shift, threeCutFillMask, verifyPriorCut } from './prior-cut-pattern-browser-fixture.mjs';
 
 const mode = process.argv[3];
 const workflows = {
@@ -13,6 +13,7 @@ const workflows = {
   '--linear-three': ['D1850_SOURCE_FROZEN', '#25 repeat a rectangular through-cut along a signed XY line after two newer cuts.'],
   '--rectangular-three': ['D1851_SOURCE_FROZEN', '#25 repeat the first of three rectangular through-cuts on an XY grid.'],
   '--fill': ['D1831_SOURCE_FROZEN', '#25 repeat the earlier rectangular through-cut at the captured mask cells.'],
+  '--fill-three': ['D1852_SOURCE_FROZEN', '#25 repeat the first of three rectangular through-cuts at the captured mask cells.'],
 };
 const [envFrozen, qualification] = workflows[mode] ?? [
   'D1828_SOURCE_FROZEN', '#25 repeat only the chosen earlier through-Subtract on its current same-stock result.',
@@ -34,6 +35,7 @@ const phase = (p, state) => p.locator('.status').filter({ hasText: new RegExp(`^
 const field = (p, label) => p.getByLabel(label, { exact: true });
 const grid = (box, sx) => [box, shift(box, sx, 0), shift(box, 0, 8), shift(box, sx, 8)];
 const rectangularThree = mode === '--rectangular-three';
+const fillThree = mode === '--fill-three';
 
 const native = (label, doc, openings) => verifyPriorCut(f, label, doc, openings);
 const chooseSource = entry => choosePriorCutSource(f, entry);
@@ -231,13 +233,16 @@ async function applyLinearPattern(source) {
 
 async function applyFillPattern(source) {
   const index = source.nodes.length;
+  const currentSource = fillThree ? newest : later;
+  const currentPitch = fillThree ? 6 : 16;
+  const retained = fillThree ? [older, later, newest] : [older, later];
   const open = async entry => {
     await chooseSource(entry);
     await clickModelCommand(f.page, 'Pattern', 'Fill cut pattern');
     const panel = f.page.getByRole('dialog', { name: 'Fill cut pattern', exact: true });
-    await panel.getByText(entry ? 'Subtract 1 (n4)' : 'Subtract 2 (n7)', { exact: true }).waitFor();
+    await panel.getByText(entry ? 'Subtract 1 (n4)' : fillThree ? 'Subtract 3 (n10)' : 'Subtract 2 (n7)', { exact: true }).waitFor();
     await field(panel, 'Region snapshot').selectOption(String(index - 1));
-    for (const [label, value] of [['Reference X', 10], ['Reference Y', 9], ['X spacing', 16], ['Columns', 2], ['Y spacing', 8], ['Rows', 2]])
+    for (const [label, value] of [['Reference X', 10], ['Reference Y', 9], ['X spacing', entry ? 16 : currentPitch], ['Columns', 2], ['Y spacing', 8], ['Rows', 2]])
       await field(panel, label).fill(String(value));
     return panel;
   };
@@ -248,33 +253,38 @@ async function applyFillPattern(source) {
     await f.changed(source);
     const { doc } = await f.snapshot(label), node = doc.nodes.at(-1);
     assert.deepEqual(doc.nodes.slice(0, -1), source.nodes);
-    assert.deepEqual(node.parent, { node: 7, side: 'solid' });
+    assert.deepEqual(node.parent, { node: index - 2, side: 'solid' });
     assert.deepEqual(node.source, earlier ? { node: 4, side: 'solid' } : undefined);
-    assert.deepEqual(node.region, { points: fillMask });
+    assert.deepEqual(node.region, { points: fillThree ? threeCutFillMask : fillMask });
     assert.deepEqual(node.anchor, [10, 9]);
-    assert.deepEqual([node.kind, node.spacing, node.count, node.spacing2, node.count2], ['fill-feature-pattern', 16, 2, 8, 2]);
+    assert.deepEqual([node.kind, node.spacing, node.count, node.spacing2, node.count2], ['fill-feature-pattern', earlier ? 16 : currentPitch, 2, 8, 2]);
     return doc;
   };
   const control = await applyFill(await open(null), '01-fill-current-control', false);
-  await native('fill-current-source', control, [older, later, shift(later, 16, 0), shift(later, 0, 8)]);
+  await native('fill-current-source', control, [...retained, shift(currentSource, currentPitch, 0), shift(currentSource, 0, 8)]);
   await f.undo();
   await f.same(source);
 
   const panel = await open('Browser');
   const undo = await button('Undo').getAttribute('data-tip');
-  await field(panel, 'Y spacing').fill('18');
-  await phase(panel, 'refused');
-  assert.ok(await button('Apply', panel).isDisabled());
-  await f.same(source);
-  assert.equal(await button('Undo').getAttribute('data-tip'), undo);
-  const error = panel.locator('.hud-error');
-  const details = error.locator('details:not([open]) > summary');
-  if (await details.count()) await details.click();
-  assert.match(await error.innerText(), /disjoint from the newer cut/);
-  await f.snapshot('02-fill-overlap-refused');
-  await field(panel, 'Y spacing').fill('8');
+  const overlap = async (key, invalid, restored, label) => {
+    await phase(panel, 'preview');
+    await field(panel, key).fill(String(invalid));
+    await phase(panel, 'refused');
+    assert.ok(await button('Apply', panel).isDisabled());
+    await f.same(source);
+    assert.equal(await button('Undo').getAttribute('data-tip'), undo);
+    const error = panel.locator('.hud-error');
+    const details = error.locator('details:not([open]) > summary');
+    if (await details.count()) await details.click();
+    assert.match(await error.innerText(), /disjoint from the newer cut/);
+    await f.snapshot(label);
+    await field(panel, key).fill(String(restored));
+  };
+  await overlap('Y spacing', 18, 8, '02-fill-overlap-refused');
+  if (fillThree) await overlap('X spacing', 32, 16, '02a-fill-third-cut-refused');
   const browser = await applyFill(panel, '03-fill-earlier-applied', true);
-  const openings = spacing2 => [older, later, shift(older, 16, 0), shift(older, 0, spacing2)];
+  const openings = spacing2 => [...retained, shift(older, 16, 0), shift(older, 0, spacing2)];
   await native('fill-earlier-mask-cells', browser, openings(8));
   await f.undo();
   await f.same(source);
@@ -306,8 +316,9 @@ async function applyFillPattern(source) {
 }
 
 await f.run(async () => {
-  const third = mode === '--linear-three' || rectangularThree;
-  const source = await f.inspect('seed', { fill: mode === '--fill', third });
+  const third = mode === '--linear-three' || rectangularThree || fillThree;
+  const fill = mode === '--fill' || fillThree;
+  const source = await f.inspect('seed', { fill, third });
   if (mode === '--agent') return approveAgentPattern(source);
   await f.newPage();
   await f.page.getByLabel('Model file', { exact: true }).setInputFiles({
@@ -321,7 +332,7 @@ await f.run(async () => {
   await f.page.getByTitle('Frame all (F)', { exact: true }).click();
   await native('original-through-cuts', source, third ? [older, later, newest] : [older, later]);
   if (mode === '--linear' || mode === '--linear-three') return applyLinearPattern(source);
-  if (mode === '--fill') return applyFillPattern(source);
+  if (fill) return applyFillPattern(source);
 
   const latest = await openPattern(null);
   const currentPitch = rectangularThree ? 6 : 16;

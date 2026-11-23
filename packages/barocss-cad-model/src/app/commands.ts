@@ -31,7 +31,7 @@ import { fastenerCommand } from './fasteners';
 import { mountCommand } from './mounts';
 import { fastenerSizesOf, NO_SIZES, noSizeRow } from '../engine/fastenerSizeRows';
 import { duplicateBody } from '../chat/features';
-import { HOLE_PLANE, directFeaturePatternSourceProblem, leafBodies, linearFeaturePatternSourceProblem, planeText, rectangularFeaturePatternSourceProblem, withNode, type Axis, type BodyRef, type FilletSection, type HolePattern, type ModelNode, type StudioDoc } from '../engine/doc';
+import { HOLE_PLANE, directFeaturePatternSourceProblem, leafBodies, planeText, rectangularFeaturePatternSourceProblem, withNode, type Axis, type BodyRef, type FilletSection, type HolePattern, type ModelNode, type StudioDoc } from '../engine/doc';
 import { linearSpanPatternInput } from '../engine/linearSpanPattern';
 import { circularPatternCountRange, circularPatternStep } from '../engine/circularPatternSpan';
 import { linearSpanHandles } from './linearSpanHandles';
@@ -198,9 +198,8 @@ function priorRectangularCutProblem(ctx: Ctx, label: string) {
   const current = linearCutProblem(ctx); if (current) return current;
   const parent = refOf(oneBody(ctx)!);
   const source = rectangularCutSource(ctx, parent);
-  const why = label === 'Linear cut pattern' ? linearFeaturePatternSourceProblem(source, parent, ctx.doc.nodes)
-    : label === 'Rectangular cut pattern' ? rectangularFeaturePatternSourceProblem(source, parent, ctx.doc.nodes)
-    : directFeaturePatternSourceProblem(source, parent, ctx.doc.nodes, label);
+  const why = label === 'Path cut pattern' ? directFeaturePatternSourceProblem(source, parent, ctx.doc.nodes, label)
+    : rectangularFeaturePatternSourceProblem(source, parent, ctx.doc.nodes, label);
   return why ? coded('BAD_REFERENCE', why) : null;
 }
 

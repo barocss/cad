@@ -133,7 +133,7 @@ export type CadPartFeature = Base & (
   | { readonly kind: 'linear-feature-pattern'; readonly target: string; readonly source?: string; readonly axis: CadPartAxis; readonly spacing: CadPartDim; readonly count: number }
   /** Repeat an active difference tool, or an original rectangular difference's tool across one or two newer same-stock cuts via source; both counts include the original cut. */
   | { readonly kind: 'rectangular-feature-pattern'; readonly target: string; readonly source?: string; readonly axis: CadPartAxis; readonly spacing: CadPartDim; readonly count: number; readonly axis2: CadPartAxis; readonly spacing2: CadPartDim; readonly count2: number }
-  /** Repeat the current or direct earlier rectangular CUT tool on a finite XY grid masked by an inline reference-point region. */
+  /** Repeat the current rectangular CUT tool or one across one or two newer same-stock cuts on a finite XY grid masked by an inline reference-point region. */
   | { readonly kind: 'fill-feature-pattern'; readonly target: string; readonly source?: string; readonly region: FillFeaturePatternRegion; readonly anchor: readonly [number, number]; readonly spacing: CadPartDim; readonly count: number; readonly spacing2: CadPartDim; readonly count2: number }
   /** Repeat a difference's tool, or its direct earlier rectangular tool via source, with fixed orientation on an admitted open path. */
   | { readonly kind: 'curve-feature-pattern'; readonly target: string; readonly source?: string; readonly path: RawNurbsPath; readonly spacing: CadPartDim; readonly count: number }
