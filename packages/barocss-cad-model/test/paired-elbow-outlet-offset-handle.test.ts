@@ -19,6 +19,12 @@ const arcLinePath: typeof path = {
   controlPoints: [[20, 20, 0], [20, 0, 0], [0, 0, 0], [-5, 0, 0], [-10, 0, 0]],
   weights: [1, Math.SQRT1_2, 1, 1, 1],
 };
+const sBendPath: typeof path = {
+  degree: 2, knots: [0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 5],
+  controlPoints: [[-10, 0, 0], [-5, 0, 0], [0, 0, 0], [12, 0, 0], [12, 12, 0], [12, 16, 0],
+    [12, 20, 0], [12, 38, 0], [30, 38, 0], [33, 38, 0], [36, 38, 0]],
+  weights: [1, 1, 1, Math.SQRT1_2, 1, 1, 1, Math.SQRT1_2, 1, 1, 1],
+};
 const hole = (center: number) => ([[-1, center - 1], [-1, center + 1], [1, center + 1], [1, center - 1]] as [number, number][])
   .map(start => ({ kind: 'line' as const, start }));
 function fixture(rail = path): StudioDoc {
@@ -164,5 +170,35 @@ test('the arc-first start remains outside the straight inlet recipe', () => {
   const source = fixture(arcLinePath), before = structuredClone(source);
   assert.equal(isPairedElbowInletOffsetSource(source.nodes, 1, 'n1.start'), false);
   assert.throws(() => offsetFaceCommand.build!(context(source, 'n1.start'), { d: 4 }), /\[VALUE\] Offset face: only native cardinal prism or cylinder caps are supported/);
+  assert.deepEqual(source, before);
+});
+
+test('the five-span inlet preserves its editable signed handle and original owner after native Open', async () => {
+  const source = fixture(sBendPath), before = structuredClone(source), original = context(source, 'n1.start');
+  assert.ok(isPairedElbowInletOffsetSource(source.nodes, 1, 'n1.start'));
+  assert.equal(isPairedElbowInletOffsetSource(source.nodes, 1, 'n1.end'), false);
+  const wrongKnots = fixture({ ...sBendPath, knots: sBendPath.knots.map((value, index) => index === 7 ? 2 : value) });
+  assert.equal(isPairedElbowInletOffsetSource(wrongKnots.nodes, 1, 'n1.start'), false);
+  const collapse = evaluateDoc(offsetFaceCommand.build!(original, { d: -10 }), 2);
+  assert.ok(!collapse.ok);
+  assert.match(collapse.error.detail, /retained inlet-to-bend join/);
+  for (const distance of [4, -4]) {
+    const saved = offsetFaceCommand.build!(original, { d: distance });
+    const opened = await readStudioFile(encodeStudioFile(saved));
+    assert.ok('doc' in opened);
+    assert.deepEqual(opened.doc, JSON.parse(JSON.stringify(saved)));
+    const ctx = context(opened.doc, 'n1.start');
+    const [handle] = savedPairedElbowOutletOffsetHandle(opened.doc, 2, ctx, { d: distance }, () => original);
+    assert.ok(handle);
+    assert.deepEqual(handle.at, [-10 - distance, 0, 0]);
+    handle.dir.forEach((value, axis) => near(value, [-1, 0, 0][axis]));
+    const edit = editSavedOffsetFaceCommand(opened.doc, 2);
+    assert.ok(edit?.build);
+    const reversed = edit.build(ctx, { d: -distance });
+    assert.deepEqual(reversed.nodes.slice(0, 2), source.nodes);
+    const [{ brep }] = partBreps(reversed);
+    assert.ok(checkBrep(brep, { strict: true }).valid);
+    near(brepMassProperties(brep, 1).volume, 32 * (24 + 15 * Math.PI - distance));
+  }
   assert.deepEqual(source, before);
 });

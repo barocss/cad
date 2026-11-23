@@ -1411,12 +1411,14 @@ function pairedStraightCapRail(path: Curve, inlet: boolean) {
   const refuse = inlet ? pairedInletFailure : pairedOutletFailure;
   const ended = tangentLineArcLineArcLine(path, refuse);
   if (ended) {
-    if (inlet) return;
+    const counts = { faces: 62, loops: 66, coedges: 264, edges: 132, vertices: 72 };
+    if (inlet) return { length: ended.leadLength, normal: scale(ended.first.tangent, -1), wallPiece: 'lead' as const,
+      endpoint: path.controlPoints[0], counts };
     const { second } = ended;
     const inward = unit(sub(second.toCentre, scale(second.tangent, dot(second.toCentre, second.tangent))));
     const normal = add(scale(second.tangent, Math.cos(second.angle)), scale(inward, Math.sin(second.angle)));
     return { length: ended.tailLength, normal, wallPiece: 'tail' as const, endpoint: path.controlPoints[10],
-      counts: { faces: 62, loops: 66, coedges: 264, edges: 132, vertices: 72 } };
+      counts };
   }
   const elbow = tangentLineArcLine(path, refuse);
   if (elbow?.tailLength !== undefined) {

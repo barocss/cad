@@ -9,7 +9,7 @@ import { checkChangedOutletRail, checkReopenedOutlet, reviewPendingOutlet } from
 const arcFirst = process.argv.includes('--arc-first');
 const inlet = process.argv.includes('--inlet');
 const sBend = process.argv.includes('--s-bend');
-assert.ok([arcFirst, inlet, sBend].filter(Boolean).length <= 1);
+assert.ok(!arcFirst || (!inlet && !sBend));
 const baseline = process.argv.includes('--expect-refused');
 const reviewUnavailable = process.argv.includes('--expect-review-unavailable');
 const reviewOutlet = process.argv.includes('--review-outlet');
@@ -30,12 +30,16 @@ const path = sBend ? {
   weights: [1, 1, 1, Math.SQRT1_2, 1, 1, 1],
 };
 const axis = arcFirst || inlet || sBend ? 0 : 1, sign = arcFirst || inlet ? -1 : 1;
-const direction = sBend ? 'Right' : axis === 0 ? 'Left' : 'Back';
-const spanLength = sBend ? 6 : arcFirst || inlet ? 10 : 14;
+const direction = sBend && !inlet ? 'Right' : axis === 0 ? 'Left' : 'Back';
+const spanLength = arcFirst || inlet ? 10 : sBend ? 6 : 14;
 const terminal = inlet ? path.controlPoints[0] : path.controlPoints.at(-1);
 const cap = inlet ? 'n1.start' : 'n1.end';
 const fixedCap = inlet ? 'n1.end' : 'n1.start';
-const straightPiece = arcFirst || inlet ? 'line' : 'tail';
+const straightPiece = inlet && sBend ? 'lead' : arcFirst || inlet ? 'line' : 'tail';
+const frozenEnv = sBend && inlet ? 'D1824_SOURCE_FROZEN'
+  : sBend ? (reviewOutlet || reviewUnavailable ? 'D1823_SOURCE_FROZEN' : 'D1822_SOURCE_FROZEN')
+  : inlet ? (reviewOutlet || reviewUnavailable ? 'D1809_SOURCE_FROZEN' : 'D1808_SOURCE_FROZEN')
+  : arcFirst ? (reviewOutlet || reviewUnavailable ? 'D1806_SOURCE_FROZEN' : 'D1805_SOURCE_FROZEN') : 'D1788_SOURCE_FROZEN';
 const junctionPlanes = sBend ? [[0, 0], [1, 12], [1, 20], [0, 30]] : arcFirst ? [[0, 0]] : [[0, 0], [1, 20]];
 const hole = center => [[-1, center - 1], [-1, center + 1], [1, center + 1], [1, center - 1]]
   .map(start => ({ kind: 'line', start }));
@@ -81,7 +85,7 @@ const pins = [
   ] : []),
 ];
 const f = await createFlow({
-  name: 'offset-paired-elbow-outlet', output: process.argv[2], envFrozen: sBend ? (reviewOutlet || reviewUnavailable ? 'D1823_SOURCE_FROZEN' : 'D1822_SOURCE_FROZEN') : inlet ? (reviewOutlet || reviewUnavailable ? 'D1809_SOURCE_FROZEN' : 'D1808_SOURCE_FROZEN') : arcFirst ? (reviewOutlet || reviewUnavailable ? 'D1806_SOURCE_FROZEN' : 'D1805_SOURCE_FROZEN') : 'D1788_SOURCE_FROZEN',
+  name: 'offset-paired-elbow-outlet', output: process.argv[2], envFrozen: frozenEnv,
   initialFiles: pins, requiredFrozen: pins,
   qualification: `Move the original straight ${inlet ? 'inlet' : 'outlet'} cap of a paired rectangular Exact Sweep.`,
   limits: [sBend ? 'A 10 mm lead, R12/R18 opposite bends, 8 mm spacer and 6 mm outlet with two independent through passages. Desktop Studio WebGPU.' : arcFirst ? 'Two 2 × 2 mm through passages on an R20 bend and a 10 mm straight tail. Desktop Studio WebGPU.'
@@ -127,7 +131,7 @@ const phase = (panel, value) => panel.locator('.status').filter({ hasText: new R
 const distanceField = panel => panel.getByLabel('Offset', { exact: true });
 const closeTo = (actual, expected) => assert.ok(Math.abs(actual - expected) <= 1e-7, JSON.stringify({ actual, expected }));
 const initialVolume = 32 * (sBend ? 24 + 15 * Math.PI : (arcFirst ? 10 : 24) + 10 * Math.PI);
-const shiftedOutlet = (point, distance) => point.map((value, coordinate) => value + (coordinate === axis ? sign * distance : 0));
+const shiftedCap = (point, distance) => point.map((value, coordinate) => value + (coordinate === axis ? sign * distance : 0));
 
 async function verify(label, doc, distance, original) {
   const result = await f.inspect(label, doc);
@@ -156,7 +160,7 @@ async function verify(label, doc, distance, original) {
     for (const [edgeIndex, edge] of loop.edges.entries()) {
       const prior = old.edges[edgeIndex];
       assert.deepEqual([edge.id, edge.wall, edge.bound], [prior.id, prior.wall, true]);
-      edge.points.forEach((point, i) => shiftedOutlet(prior.points[i], distance).forEach((value, coordinate) => closeTo(point[coordinate], value)));
+      edge.points.forEach((point, i) => shiftedCap(prior.points[i], distance).forEach((value, coordinate) => closeTo(point[coordinate], value)));
     }
   }
   assert.equal(result.vertices.length, original.vertices.length);
@@ -164,11 +168,14 @@ async function verify(label, doc, distance, original) {
     const prior = original.vertices[index];
     assert.equal(vertex.id, prior.id);
     const move = Math.abs(prior.point[axis] - terminal[axis]) < 1e-7;
-    shiftedOutlet(prior.point, move ? distance : 0).forEach((value, coordinate) => closeTo(vertex.point[coordinate], value));
+    shiftedCap(prior.point, move ? distance : 0).forEach((value, coordinate) => closeTo(vertex.point[coordinate], value));
   }
   const expectedVolume = initialVolume + 32 * distance;
-  const expectedCentroid = original.mass.centroid.map((value, axis) =>
-    (value * initialVolume + shiftedOutlet(terminal, distance / 2)[axis] * 32 * distance) / expectedVolume);
+  const sourceCentroid = sBend
+    ? [(270 * Math.PI + 64) / (24 + 15 * Math.PI), (252 * Math.PI + 536) / (24 + 15 * Math.PI), 0]
+    : original.mass.centroid;
+  const expectedCentroid = sourceCentroid.map((value, axis) =>
+    (value * initialVolume + shiftedCap(terminal, distance / 2)[axis] * 32 * distance) / expectedVolume);
   const { bodies } = await f.bodies();
   assert.equal(bodies.length, 1);
   for (const props of [result.mass, bodies[0]]) {
@@ -276,8 +283,9 @@ await f.run(async () => {
     await phase(panel, 'refused');
     assert.ok(await button('Apply', panel).isDisabled());
     await f.same(source);
-    f.report.observations.push({ label: 'outlet-offset-refused', text: await panel.innerText(), capIndex });
-    await f.snapshot('01-original-outlet-offset-refused');
+    const end = inlet ? 'inlet' : 'outlet';
+    f.report.observations.push({ label: `${end}-offset-refused`, text: await panel.innerText(), capIndex });
+    await f.snapshot(`01-original-${end}-offset-refused`);
     return;
   }
   await phase(panel, 'preview');
@@ -295,7 +303,7 @@ await f.run(async () => {
   assert.ok(node.sigs[cap]);
   await verify('outward-native', outward, 4, original);
 
-  await f.openFeatureEditor(2, 'open the outlet offset in History');
+  await f.openFeatureEditor(2, 'open the terminal offset in History');
   await button('Edit offset', f.editor()).click();
   const edit = hud('Edit Offset face');
   assert.equal(await edit.getByLabel('Mode', { exact: true }).count(), 0);
@@ -323,12 +331,12 @@ await f.run(async () => {
   await f.same(outward);
   await f.redo();
   await f.same(inward);
-  const saved = await f.save('paired-elbow-outlet-offset');
+  const saved = await f.save(`paired-elbow-${inlet ? 'inlet' : 'outlet'}-offset`);
   const reopened = (await f.freshOpen(saved.file, inward, '05-fresh-open')).doc;
   assert.equal((await verify('reopened-native', reopened, -4, original)).digest, native.digest);
   if (expectMissingHandle || historyHandle || arcFirst || inlet || sBend) {
     await checkSavedOutletDrag(f, reopened, (label, doc, distance) => verify(label, doc, distance, original),
-      expectMissingHandle, distance => shiftedOutlet(terminal, distance), sBend ? -5 : undefined);
+      expectMissingHandle, distance => shiftedCap(terminal, distance), sBend ? -5 : undefined);
     if (!arcFirst && !inlet && !sBend) return;
   }
   if (arcFirst || inlet || sBend) return approveWithAgent(savedSource, original, native);
