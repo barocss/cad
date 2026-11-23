@@ -11,6 +11,7 @@ import { join } from 'node:path';
 import { createFlow } from './flow-helper.mjs';
 
 const dimmed = process.env.HISTORY_EXPECT === 'dimmed';
+const verifyEditorTransition = process.argv.includes('--feature-navigation');
 const fixture = join(import.meta.dirname, 'fixtures', 'drag-preview-timing.bcad');
 const f = await createFlow({ name: 'history', envFrozen: 'HISTORY_SOURCE_FROZEN', output: process.argv[2], qualification: dimmed ? 'HISTORY_BAR_DIMMED' : 'HISTORY_BAR_MEASUREMENT',
   limits: ['1440 x 1000; one running command (Box from the palette) and one open sketch (the rail\'s Sketch).'],
@@ -47,5 +48,41 @@ await f.run(async () => {
   // Idle again: the bar takes clicks (a step opens its feature editor).
   f.phase = 'idle again'; const back = await bar(); f.report.reads.push({ when: 'idle again', ...back });
   assert.ok(back.present && !back.busy, 'the bar takes clicks again');
-  await f.openFeatureEditor(1, 'box'); await f.snapshot('03-idle-step-opens', () => ({})); await f.closeEditor();
+  await f.openFeatureEditor(1, 'box'); await f.snapshot('03-idle-step-opens', () => ({}));
+  if (verifyEditorTransition) {
+    const step = index => f.page.locator(`.history .hs[data-node-index="${index}"]`);
+    const width = f.editor().getByLabel('Width', { exact: true });
+    const prompt = f.page.getByRole('dialog', { name: 'Discard feature changes?', exact: true });
+    const focused = async target => f.page.waitForFunction(element => document.activeElement === element, await target.elementHandle());
+    assert.equal(await width.inputValue(), '60');
+    await width.fill('64');
+    await step(1).click();
+    assert.equal(await prompt.count(), 0);
+    assert.equal(await width.inputValue(), '64');
+    await width.focus();
+    await step(2).click();
+    await prompt.waitFor();
+    await f.snapshot('04-history-draft-confirmation');
+    await prompt.getByRole('button', { name: 'Keep editing', exact: true }).click();
+    await prompt.waitFor({ state: 'hidden' });
+    await focused(width);
+    assert.equal(await width.inputValue(), '64');
+    await f.same(original);
+    await f.snapshot('05-history-draft-kept');
+    await step(2).click();
+    await prompt.waitFor();
+    await prompt.getByRole('button', { name: 'Discard changes', exact: true }).click();
+    await prompt.waitFor({ state: 'hidden' });
+    await f.page.locator('.history .hs[data-node-index="2"].edit').waitFor();
+    await f.same(original);
+    await f.snapshot('06-next-feature-opened');
+    await f.closeEditor();
+    await focused(step(2));
+    await f.openFeatureEditor(1, 'unchanged box');
+    assert.equal(await width.inputValue(), '60');
+    await f.same(original);
+    f.report.observations.push({ label: 'guarded-editor-transition', keptWidth: 64, reopenedWidth: 60,
+      keptInputFocus: true, returnedHistoryFocus: true, openedNode: 2 });
+  }
+  await f.closeEditor();
 });

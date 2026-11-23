@@ -1,13 +1,13 @@
 # CAD roadmap — current status and execution order
 
-Updated 2026-11-23 · Priority authority: D520 · Latest delivery: D1774 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
+Updated 2026-11-23 · Priority authority: D520 · Latest delivery: D1775 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
 
 This is the only current status index. Detailed tracks define acceptance; the 34 stable row pages retain scope and issue navigation. Immutable decision notes retain results. Do not append chronological status paragraphs here. [D520 decision](notes/cad-roadmap-replan-2026-11-04/README.md) supersedes D445 execution order and historical next-item text, while retaining its safeguards and bounded proofs.
 
 ## Now and next
 
-- **Current position:** [D1774](notes/pending-paired-duct-intersect-review-2026-11-23/README.md), P1 rows 04 and 16. The local Agent verifies four apertures and their separate rim ownership on the centered two-cavity Intersect. Both image orientations match after explicit Studio approval and fresh Open. The B06 PDF group remains held.
-- **Next MAIN:** D1775, P4 row [22](roadmap-rows/22.md), [#44](https://github.com/barocss/cad/issues/44). Extract Studio History feature opening from App. Verify draft confirmation, focus and reopening a feature in its command editor.
+- **Current position:** [D1775](notes/studio-history-feature-opening-2026-11-23/README.md), P4 row 22. Studio History feature opening moves into the editor session module. Draft confirmation, input focus, command reopening and sheet bend owners match in actual desktop runs. The B06 PDF group remains held.
+- **Next MAIN:** D1776, P5 rows [07](roadmap-rows/07.md) and [30](roadmap-rows/30.md), [#10](https://github.com/barocss/cad/issues/10). Reproduce a positive-offset covering-box Intersect of the two-cavity Sweep. Qualify both cap apertures, exact native angles and fresh Open.
 - **Separate follow-ups:** Continue Studio App extraction in cohesive parts with affected desktop checks. [#608 Rendering](https://github.com/barocss/cad/issues/608) stays on HOLD. API inventory drift remains open. The issue tracker records [#126](https://github.com/barocss/cad/issues/126), [#613](https://github.com/barocss/cad/issues/613), [#152](https://github.com/barocss/cad/issues/152) and [#22](https://github.com/barocss/cad/issues/22) as closed.
 - **Active repository:** [barocss/cad](https://github.com/barocss/cad), based on `origin/main`. Fetch before work and preserve unexpected changes. The [migration record](../../../docs/migration/README.md) maps the former `local/cad-dev` history and issue numbers.
 - **Evidence correction:** D482 records2167 PASS/0 FAIL/2 existing SKIP in a later full-kernel run than D433. Neither result is a new full-suite PASS at this audit HEAD. [D482 record](notes/vertical-contact-refusal-2026-11-04/README.md).

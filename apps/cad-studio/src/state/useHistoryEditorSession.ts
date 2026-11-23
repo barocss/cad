@@ -1,7 +1,9 @@
-import { useCallback, useRef, useState, type RefObject } from 'react';
-import type { StudioDoc } from '@barocss/cad-model/engine/doc';
+import { useCallback, useRef, useState, type MouseEvent, type RefObject } from 'react';
+import { editCommand } from '@barocss/cad-model/app/editCommand';
+import type { ModelNode, StudioDoc } from '@barocss/cad-model/engine/doc';
 import type { Active } from '../app/commandState';
 import { returnEditorFocus } from '../ui/editorReturnFocus';
+import type { useWorkspaceModeExit } from '../ui/useWorkspaceModeExit';
 import type { OpenScope } from './openOwnership';
 
 interface HistoryOpener {
@@ -45,4 +47,48 @@ export function useHistoryEditorSession(doc: StudioDoc, openIntent: RefObject<Op
 
   return { editNode, editNodeNow, setEditNode, nodeEditorDraft, reportNodeEditorDraft, openFromHistory,
     closeHistoryEditor, restoreEditorFocusAfterClose };
+}
+
+interface HistoryFeatureNavigationOptions {
+  doc: StudioDoc;
+  editNode: number | null;
+  hasEditorDraft(): boolean;
+  readFeatureTransitionDraft(): object | null;
+  switchWhenReady: ReturnType<typeof useWorkspaceModeExit>['switchWhenReady'];
+  changes: {
+    prepare(index: number, node: ModelNode): void;
+    openCommand(command: NonNullable<ReturnType<typeof editCommand>>): void;
+    openFromHistory(index: number, opener: HTMLButtonElement): void;
+    setEditNode(index: number): void;
+  };
+}
+
+export function createHistoryFeatureNavigation({ doc, editNode, hasEditorDraft, readFeatureTransitionDraft,
+  switchWhenReady, changes }: HistoryFeatureNavigationOptions) {
+  const openHistoryFeatureAt = (index: number, event?: MouseEvent<HTMLButtonElement>, owns?: () => boolean, onOpened?: () => void) => {
+    const node = doc.nodes[index];
+    if (!node || (owns && !owns()) || (index === editNode && hasEditorDraft())) return;
+    const opener = event?.currentTarget;
+    switchWhenReady(() => {
+      if (owns && !owns()) return;
+      onOpened?.();
+      changes.prepare(index, node);
+      if (node.kind === 'text' || node.kind === 'text-relief' || node.kind === 'cylindrical-wrap' || node.kind === 'band-surface') {
+        const command = editCommand(index, doc.nodes, doc);
+        if (command) {
+          changes.openCommand(command);
+          return;
+        }
+      }
+      if (opener) changes.openFromHistory(index, opener);
+      else changes.setEditNode(index);
+    }, { event, readFeature: readFeatureTransitionDraft });
+  };
+  const openHistoryFeature = (event: MouseEvent<HTMLButtonElement>) => {
+    const raw = event.currentTarget.dataset.nodeIndex;
+    if (raw === undefined) return;
+    const index = Number(raw);
+    if (Number.isInteger(index) && index >= 0) openHistoryFeatureAt(index, event);
+  };
+  return { openHistoryFeature, openHistoryFeatureAt };
 }

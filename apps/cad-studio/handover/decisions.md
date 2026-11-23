@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1775: [Extract Studio History feature opening](notes/studio-history-feature-opening-2026-11-23/README.md), #44. Match draft confirmation, focus and command-editor and Flange owner navigation in paired Studio runs.
 - D1774: [Review four apertures on a pending two-cavity Intersect](notes/pending-paired-duct-intersect-review-2026-11-23/README.md), #324. The Agent certifies each rim and reproduces the reviewed images after explicit Studio approval and fresh Open.
 - D1773: [Bind native joints on the centered two-cavity duct Intersect](notes/exact-paired-cavity-duct-intersect-2026-11-23/README.md), #10. Both caps retain two apertures. Measure all 36 native joints and verify edited fresh Open.
 - D1772: [Review two sealed cavities in a pending exact Sweep](notes/pending-paired-cavity-sweep-review-2026-11-23/README.md), #324. Each native void and both review images match through explicit Studio approval and fresh Open.

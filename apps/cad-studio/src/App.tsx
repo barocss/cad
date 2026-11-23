@@ -24,7 +24,7 @@ import { prepareParameterHeightFinish } from './state/parameterHeightFinish';
 import { HistoryFeatureEditor } from './ui/HistoryFeatureEditor';
 import { createCommandHudActions } from './app/commandHudActions';
 import { InstanceInspector } from './ui/InstanceInspector';
-import { useHistoryEditorSession } from './state/useHistoryEditorSession';
+import { createHistoryFeatureNavigation, useHistoryEditorSession } from './state/useHistoryEditorSession';
 import { useStudioKeyboard } from './app/useStudioKeyboard';
 import { useFilletEndpointDisplay } from './state/useFilletEndpointDisplay';
 import { createCommandReferencePicking, type CommandPickScope } from './app/commandReferencePicking';
@@ -261,7 +261,6 @@ import { placeReference, readReferences } from '@barocss/cad-model/chat/referenc
 import { confirmDimension, liveDrafts } from '@barocss/cad-model/chat/drafts';
 import { DraftsPanel } from './ui/DraftsPanel';
 import { extrudeProfile, isIndependentExtrudeJoinProfile } from '@barocss/cad-model/app/profileCommands';
-import { editCommand } from '@barocss/cad-model/app/editCommand';
 import { isBodyEyeVisibilityOnly } from './state/bodyVisibilityReferenceProblems';
 import { heldDraftFacePreviewClear, heldDraftFaceWorkCurrent } from './state/heldDraftFaceSession';
 import { useHeldDraftFace } from './state/useHeldDraftFace';
@@ -1629,37 +1628,23 @@ export function App() {
     });
 
   const readFeatureTransitionDraft = () => assembly.currentDraft() ?? commandDraft() ?? nodeEditorDraft.current;
-  const openHistoryFeature = (event: React.MouseEvent<HTMLButtonElement>) => {
-    const raw = event.currentTarget.dataset.nodeIndex;
-    if (raw === undefined) return;
-    const index = Number(raw), node = doc.nodes[index];
-    if (!Number.isInteger(index) || index < 0 || !node) return;
-    openHistoryFeatureAt(index, event);
-  };
-  const openHistoryFeatureAt = (index: number, event?: React.MouseEvent<HTMLButtonElement>, owns?: () => boolean, onOpened?: () => void) => {
-    const node = doc.nodes[index];
-    if (!node || (owns && !owns()) || (index === editNode && nodeEditorDraft.current)) return;
-    const opener = event?.currentTarget;
-    workspaceModeExit.switchWhenReady(() => {
-      if (owns && !owns()) return;
-      onOpened?.();
-      projectionRequest.current++;
-      cancelNativeReview();
-      setInstanceSel([]); setDirectSel([]); assembly.cancel();
-      // Inspecting a Subtract is source intent in History just as it is in Browser.
-      cutSourceIntent.current = node.kind === 'difference' ? { doc, selection, index } : null;
-      if (node.kind === 'text' || node.kind === 'text-relief' || node.kind === 'cylindrical-wrap' || node.kind === 'band-surface') {
-        const command = editCommand(index, doc.nodes, doc);
-        if (command) {
-          // Roll forward before the deferred start, so editing retains all later authored features.
-          setMarker(null); setEditNode(null); setActive(null); setPreviewBodies(null); setRestart(command);
-          return;
-        }
-      }
-      if (opener) openFromHistory(index, opener);
-      else setEditNode(index);
-    }, { event, readFeature: readFeatureTransitionDraft });
-  };
+  const { openHistoryFeature, openHistoryFeatureAt } = createHistoryFeatureNavigation({
+    doc, editNode, hasEditorDraft: () => !!nodeEditorDraft.current, readFeatureTransitionDraft,
+    switchWhenReady: workspaceModeExit.switchWhenReady,
+    changes: {
+      prepare: (index, node) => {
+        projectionRequest.current++; cancelNativeReview();
+        setInstanceSel([]); setDirectSel([]); assembly.cancel();
+        // Inspecting a Subtract is source intent in History just as it is in Browser.
+        cutSourceIntent.current = node.kind === 'difference' ? { doc, selection, index } : null;
+      },
+      openCommand: command => {
+        // Roll forward before the deferred start, so editing retains all later authored features.
+        setMarker(null); setEditNode(null); setActive(null); setPreviewBodies(null); setRestart(command);
+      },
+      openFromHistory, setEditNode,
+    },
+  });
 
   // Shift-Enter: once the part has its new bodies (and the selection followed them), the command again.
   useEffect(() => { if (restart && !active) { setRestart(null); start(commands.find(c => c.id === restart.id) ?? restart); } }, [restart, active, start]);
