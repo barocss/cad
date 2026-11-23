@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { checkBrep, loftSolid, tessellateBrep } from '../dist/index.js';
+import { checkBrep, exportStep, importStep, loftSolid, tessellateBrep } from '../dist/index.js';
 import { tessellateTwoGuideLoftDisplay } from '../dist/internal/two-guide-loft-display.js';
+import { tessellateStepTwoGuideLoftDisplay } from '../dist/internal/two-guide-loft-step-display.js';
 
 const add = (p, q) => p.map((x, i) => x + q[i]);
 const sub = (p, q) => p.map((x, i) => x - q[i]);
@@ -167,4 +168,65 @@ test('two-guide Loft display keeps its packet bounded and refuses a mutated nati
   const model = fixture();
   model.brep.edges[8].curve.controlPoints[1][0] += 0.001;
   assert.equal(tessellateTwoGuideLoftDisplay(model.brep), undefined);
+});
+
+test('certify the unequal STEP taper for display without changing native geometry', () => {
+  for (const upperX of [16, 18]) {
+    const native = fixture({ upperX, twisted: false });
+    const bytes = exportStep(native.brep, { timestamp: '2026-11-24T00:00:00' });
+    const imported = importStep(bytes);
+    const before = structuredClone(imported);
+    const canonical = tessellateBrep(imported);
+    const packet = tessellateStepTwoGuideLoftDisplay(imported);
+    assert.ok(packet);
+    assert.ok(packet.mesh.indices.length > canonical.indices.length);
+    const original = tessellateTwoGuideLoftDisplay(native.brep);
+    for (const field of ['positions', 'indices', 'normals']) assert.deepEqual(packet.mesh[field], original.mesh[field]);
+    assert.deepEqual(packet.mesh.faces.map(f => f.faceId), imported.faces.map(f => f.id));
+    assert.deepEqual(new Set(packet.mesh.edges.map(e => e.edgeId)), new Set(imported.edges.map(e => e.id)));
+    verifySharedBoundary(imported, packet.mesh);
+    assert.deepEqual(imported, before);
+    assert.deepEqual(tessellateBrep(imported), canonical);
+    assert.equal(exportStep(imported, { timestamp: '2026-11-24T00:00:00' }),
+      exportStep(before, { timestamp: '2026-11-24T00:00:00' }));
+  }
+});
+
+test('same-count STEP control changes, false trim and twisted profiles stay on the base display', () => {
+  const imported = importStep(exportStep(fixture({ twisted: false }).brep));
+  const mutate = edit => { const shape = structuredClone(imported); edit(shape); return shape; };
+  const curves = b => b.edges.filter(e => e.curve.degree > 1);
+  const walls = b => b.faces.filter(f => f.surface.degreeV === 3);
+  const caps = b => b.faces.filter(f => f.surface.degreeV === 1);
+  // Keep a coherent boundary across both neighboring walls but break the rectangle law.
+  const coupled = mutate(b => {
+    const back = curves(b).find(e => e.curve.degree === 3);
+    const [start, middle] = back.curve.controlPoints;
+    const changed = [middle[0], middle[1] + 0.01, middle[2]];
+    back.curve.controlPoints[1] = changed;
+    let wallsChanged = 0;
+    for (const face of walls(b)) for (const row of face.surface.controlPoints) {
+      if (row[0].every((value, axis) => value === start[axis])) {
+        row[1] = [...changed];
+        wallsChanged++;
+      }
+    }
+    assert.equal(wallsChanged, 2);
+  });
+  assert.ok(checkBrep(coupled, { strict: true }).valid);
+  const cases = [
+    mutate(b => { curves(b)[0].curve.controlPoints[1][0] += 0.01; }),
+    mutate(b => { walls(b)[0].surface.weights[0][1] = 0.99; }),
+    mutate(b => { caps(b)[0].surface.controlPoints.forEach(row => row.forEach(p => { p[2] += 0.01; })); }),
+    mutate(b => { b.coedges[0].pcurve = structuredClone(fixture().brep.coedges[0].pcurve); }),
+    mutate(b => { b.coedges[0].twin = b.coedges[1].id; }),
+    coupled,
+    importStep(exportStep(fixture().brep)),
+    importStep(exportStep(fixture({ twisted: false, equal: true }).brep)),
+  ];
+  for (const candidate of cases) {
+    const before = structuredClone(candidate);
+    assert.equal(tessellateStepTwoGuideLoftDisplay(candidate), undefined);
+    assert.deepEqual(candidate, before);
+  }
 });

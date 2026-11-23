@@ -1,6 +1,7 @@
 import { CadNumericPolicy, ExtrudedProfileLimits, faceGeometry, surfaceD1Evaluator, surfaceDomain, type Brep, type BrepFace } from '@barocss/cad';
 import { compactStepTurnKind } from '@barocss/cad/internal/step-turn-display';
 import { tessellateTwoGuideLoftDisplay } from '@barocss/cad/internal/two-guide-loft-display';
+import { tessellateStepTwoGuideLoftDisplay } from '@barocss/cad/internal/two-guide-loft-step-display';
 import { bodyMesh, type DisplayMesh, type BoundedDisplayMesh, type SmoothTurnDisplayMesh, type Vec3 } from './mesh';
 import { compactTurnDisplayGrid } from './screwDisplay';
 import { cross, dot, len, scale, sub } from './vec3';
@@ -18,7 +19,7 @@ export function loftDisplayMesh(base: DisplayMesh, brep: Brep): DisplayMesh {
 }
 
 function buildDetail(base: DisplayMesh, brep: Brep): BoundedDisplayMesh | undefined {
-  const refined = tessellateTwoGuideLoftDisplay(brep);
+  const refined = brep.source.family === 'step' ? tessellateStepTwoGuideLoftDisplay(brep) : tessellateTwoGuideLoftDisplay(brep);
   if (!refined) return;
   const { mesh, error } = refined, { positions, indices } = mesh;
   if (mesh.faces.length !== base.faces.length) return;

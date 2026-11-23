@@ -330,7 +330,7 @@ function refineSmoothTurns(bodies: BodyResult[], snapshot: CadPartSnapshot, doc:
 function refineLoftBody(bodies: BodyResult[], snapshot: CadPartSnapshot, doc: StudioDoc): void {
   if (bodies.length !== 1 || snapshot.outputs.length !== 1) return;
   const body = bodies[0], node = body.ref && doc.nodes[body.ref.node];
-  if (node?.kind !== 'loft' || !node.guides) return;
+  if (node?.kind !== 'import' && (node?.kind !== 'loft' || !node.guides)) return;
   const mesh = loftDisplayMesh(body.mesh, snapshot.outputs[0].brep);
   if (mesh !== body.mesh) bodies[0] = { ...body, mesh };
 }

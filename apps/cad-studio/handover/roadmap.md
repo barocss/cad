@@ -1,13 +1,13 @@
 # CAD roadmap — current status and execution order
 
-Updated 2026-11-24 · Priority authority: D520 · Latest delivery: D1838 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
+Updated 2026-11-24 · Priority authority: D520 · Latest delivery: D1839 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
 
 This is the only current status index. Detailed tracks define acceptance; the 34 stable row pages retain scope and issue navigation. Immutable decision notes retain results. Do not append chronological status paragraphs here. [D520 decision](notes/cad-roadmap-replan-2026-11-04/README.md) supersedes D445 execution order and historical next-item text, while retaining its safeguards and bounded proofs.
 
 ## Now and next
 
-- **Current position:** [D1838](notes/two-guide-loft-taper-step-exchange-2026-11-24/README.md), P5 rows 07 and 08 and P2 row 13. The unequal two-guide Loft keeps exact AP214 geometry in both tested guide states. Studio reopened the solids with a coarser display. [D1837](notes/static-assembly-replay-closeout-2026-11-24/README.md) completes the scoped static replay in [#737](https://github.com/barocss/cad/issues/737).
-- **Next MAIN:** D1839, P4 row [06](roadmap-rows/06.md) and P2 row [13](roadmap-rows/13.md), [#16](https://github.com/barocss/cad/issues/16). Certify and refine the reopened unequal two-guide Loft display. Compare native geometry, visible rails and canonical selection at matched Studio camera positions.
+- **Current position:** [D1839](notes/two-guide-loft-step-display-2026-11-24/README.md), P4 row 06 and P2 row 13. Both tested exact STEP taper states use the refined Studio display and retain their native edge selection in WebGPU and WebGL2. [D1838](notes/two-guide-loft-taper-step-exchange-2026-11-24/README.md) verifies the round trip.
+- **Next MAIN:** D1840, P4 rows [16](roadmap-rows/16.md) and [20](roadmap-rows/20.md). Extract the App history controls around the current edit mode and document Undo/Redo. Preserve action labels, focus and ordinary Studio replay.
 - **Separate follow-ups:** Continue Studio App extraction in cohesive parts with affected desktop checks. [#608 Rendering](https://github.com/barocss/cad/issues/608) stays on HOLD. API inventory drift remains open. The issue tracker records [#126](https://github.com/barocss/cad/issues/126), [#613](https://github.com/barocss/cad/issues/613), [#152](https://github.com/barocss/cad/issues/152) and [#22](https://github.com/barocss/cad/issues/22) as closed.
 - **Active repository:** [barocss/cad](https://github.com/barocss/cad), based on `origin/main`. Fetch before work and preserve unexpected changes. The [migration record](../../../docs/migration/README.md) maps the former `local/cad-dev` history and issue numbers.
 - **Evidence correction:** D482 records2167 PASS/0 FAIL/2 existing SKIP in a later full-kernel run than D433. Neither result is a new full-suite PASS at this audit HEAD. [D482 record](notes/vertical-contact-refusal-2026-11-04/README.md).
