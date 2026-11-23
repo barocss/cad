@@ -36,8 +36,8 @@ function profile(part: Part) {
   return { outer, holes: holes as Rectangle[], z0: slab.z0, z1: slab.z1 };
 }
 
-type Pattern = 'rectangular' | 'linear' | 'fill';
-const profileRequirement = (pattern: Pattern) => `${pattern} feature pattern source needs two original upright rectangular through cuts on one rectangular stock and ${pattern === 'linear' ? 'one XY line' : pattern === 'fill' ? 'selected XY placements' : 'an XY grid'}`;
+type Pattern = 'rectangular' | 'linear' | 'fill' | 'path';
+const profileRequirement = (pattern: Pattern) => `${pattern} feature pattern source needs two original upright rectangular through cuts on one rectangular stock and ${pattern === 'linear' ? 'one XY line' : pattern === 'fill' ? 'selected XY placements' : pattern === 'path' ? 'an open XY path' : 'an XY grid'}`;
 
 /** Prove the unconditional original and precisely the captured additional placements, without clipping tools. */
 export function certifyPriorCutPlacements(seed: Part, tool: Part, prior: PriorRectangularCut,

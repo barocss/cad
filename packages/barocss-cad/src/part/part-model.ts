@@ -510,7 +510,7 @@ export type Tools = {
   integer: (v: unknown, what: string, lo: number, hi: number) => number; axisOf: (v: unknown) => CadPartAxis; solids: (r: unknown, what: string, allowEmpty?: boolean) => Part[];
   ref: (r: unknown, what: string) => { id: string; part: number | null; result: Result; author?: CadPartFeature };
   featureKind: (id: string) => CadPartFeature['kind'] | undefined;
-  cutSource: (r: unknown, source?: unknown, pattern?: 'rectangular' | 'linear' | 'fill') => { seed: Part; tool: Part[]; prior?: PriorRectangularCut };
+  cutSource: (r: unknown, source?: unknown, pattern?: 'rectangular' | 'linear' | 'fill' | 'path') => { seed: Part; tool: Part[]; prior?: PriorRectangularCut };
   fail: (code: CadPartErrorCode, detail: string) => never; at: string;
   endpointBead: (f: EndpointBead, byMember: ReadonlyMap<number, Part>, frame: string) => Result;
 };

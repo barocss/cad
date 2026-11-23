@@ -135,8 +135,8 @@ export type CadPartFeature = Base & (
   | { readonly kind: 'rectangular-feature-pattern'; readonly target: string; readonly source?: string; readonly axis: CadPartAxis; readonly spacing: CadPartDim; readonly count: number; readonly axis2: CadPartAxis; readonly spacing2: CadPartDim; readonly count2: number }
   /** Repeat the current or direct earlier rectangular CUT tool on a finite XY grid masked by an inline reference-point region. */
   | { readonly kind: 'fill-feature-pattern'; readonly target: string; readonly source?: string; readonly region: FillFeaturePatternRegion; readonly anchor: readonly [number, number]; readonly spacing: CadPartDim; readonly count: number; readonly spacing2: CadPartDim; readonly count2: number }
-  /** Repeat a difference's cut tool along an open polyline, with its original orientation. */
-  | { readonly kind: 'curve-feature-pattern'; readonly target: string; readonly path: RawNurbsPath; readonly spacing: CadPartDim; readonly count: number }
+  /** Repeat a difference's tool, or its direct earlier rectangular tool via source, with fixed orientation on an admitted open path. */
+  | { readonly kind: 'curve-feature-pattern'; readonly target: string; readonly source?: string; readonly path: RawNurbsPath; readonly spacing: CadPartDim; readonly count: number }
   /** Copies k·angle about the axis through `pivot` (about X or Y: multiples of 90°). */
   | { readonly kind: 'circular-pattern'; readonly target: string; readonly axis: CadPartAxis; readonly angle: number; readonly count: number; readonly pivot?: CadPartPoint3 }
   /**

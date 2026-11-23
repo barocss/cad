@@ -37,7 +37,7 @@ const SPECS: Record<string, Spec> = {
   align: { version: 'any', parent: 'ref', source: 'any', target: 'any', gap: 'num', lineUp: 'enum:touch|centre' },
   'linear-pattern': { parent: 'ref', axis: 'enum:x|y|z', spacing: 'dim', count: 'count' },
   'fill-feature-pattern': { parent: 'ref', 'source?': 'any', region: 'any', anchor: 'any', spacing: 'dim', count: 'positive-index', spacing2: 'dim', count2: 'positive-index' },
-  'curve-feature-pattern': { parent: 'ref', path: 'any', spacing: 'dim', count: 'positive-index' },
+  'curve-feature-pattern': { parent: 'ref', 'source?': 'any', path: 'any', spacing: 'dim', count: 'positive-index' },
   'rectangular-feature-pattern': { parent: 'ref', 'source?': 'any', axis: 'enum:x|y|z', spacing: 'dim', count: 'positive-index', axis2: 'enum:x|y|z', spacing2: 'dim', count2: 'positive-index' },
   'linear-feature-pattern': { parent: 'ref', 'source?': 'any', axis: 'enum:x|y|z', spacing: 'dim', count: 'count' },
   'circular-pattern': { parent: 'ref', axis: 'enum:x|y|z', angle: 'num', count: 'count', 'span?': 'num', 'pivot?': 'dim3' },
@@ -465,7 +465,8 @@ export function renumber(node: ModelNode, map: (i: number) => number): ModelNode
   if ((n.kind === 'sketch' || n.kind === 'driven-sketch') && n.on) (n as { on: BodyRef }).on = ref(n.on);
   if (n.kind === 'sketch' && n.association !== undefined) { parentsOf(n); n.association = { ...n.association, source: ref(n.association.source) }; }
   if (n.kind === 'align') n.target = { ...n.target, body: ref(n.target.body) };
-  if ((n.kind === 'rectangular-feature-pattern' || n.kind === 'linear-feature-pattern' || n.kind === 'fill-feature-pattern') && n.source) n.source = ref(n.source);
+  if ((n.kind === 'rectangular-feature-pattern' || n.kind === 'linear-feature-pattern' || n.kind === 'fill-feature-pattern' || n.kind === 'curve-feature-pattern') && n.source)
+    n.source = ref(n.source);
   if (n.kind === 'replace-face' || n.kind === 'face-end-extrude' || (n.kind === 'offset-face' && n.target)) n.target = { ...n.target, body: ref(n.target.body) };
   if ((n.kind === 'gear' || n.kind === 'rack' || n.kind === 'bevel-gear' || n.kind === 'worm') && n.mesh) (n as { mesh: GearMesh }).mesh = { ...n.mesh, gear: map(n.mesh.gear) };
   // (R12c.3b, D157: the shaft a key, ring or pin goes on, and a key's hub keyway.)

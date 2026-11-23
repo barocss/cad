@@ -2,12 +2,8 @@ import { refOf, selectedBodies, type Ctx } from '@barocss/cad-model/app/commands
 import type { BodyRef, ModelNode } from '@barocss/cad-model/engine/doc';
 import { featureId } from '@barocss/cad-model/engine/ids';
 
-function supportsEarlierRectangularCut(kind: string): boolean {
-  return kind === 'linear-feature-pattern' || kind === 'rectangular-feature-pattern' || kind === 'fill-feature-pattern';
-}
-
 export function isCutPattern(kind: string): boolean {
-  return supportsEarlierRectangularCut(kind) || kind === 'curve-feature-pattern';
+  return kind === 'linear-feature-pattern' || kind === 'rectangular-feature-pattern' || kind === 'fill-feature-pattern' || kind === 'curve-feature-pattern';
 }
 
 export function selectedCutPatternSource(ctx: Ctx): number | null {
@@ -19,7 +15,7 @@ export function selectedCutPatternSource(ctx: Ctx): number | null {
 
 /** Preserve the explicit earlier source while the selected body stays the current target. */
 export function earlierRectangularCutSource(ctx: Ctx, command: string, index: number): BodyRef | undefined {
-  if (!supportsEarlierRectangularCut(command)) return;
+  if (!isCutPattern(command)) return;
   const target = selectedCutPatternSource(ctx);
   const current = target === null ? undefined : ctx.doc.nodes[target], source = ctx.doc.nodes[index];
   if (current?.kind !== 'difference' || current.suppressed || source?.kind !== 'difference' || source.suppressed
@@ -32,9 +28,8 @@ export function savedCutPatternSource(node: ModelNode, nodes: readonly ModelNode
     case 'linear-feature-pattern':
     case 'rectangular-feature-pattern':
     case 'fill-feature-pattern':
-      return cutPatternSourceLabel(nodes, (node.source ?? node.parent).node);
     case 'curve-feature-pattern':
-      return cutPatternSourceLabel(nodes, node.parent.node);
+      return cutPatternSourceLabel(nodes, (node.source ?? node.parent).node);
     default:
       return null;
   }

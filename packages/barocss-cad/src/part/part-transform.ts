@@ -196,8 +196,10 @@ export function transformOperation(f: CadPartFeature & Record<string, unknown>, 
     }
     case 'curve-feature-pattern': {
       const spacing = dim(f.spacing as CadPartDim, 'spacing', true), count = integer(f.count, 'count', 1, CadPartLimits.copies);
-      const offsets = curveCutOffsets(f.path, spacing, count, CadPartLimits.length, fail);
-      const { seed, tool } = t.cutSource(f.target);
+      const source = f.source;
+      const offsets = curveCutOffsets(f.path, spacing, count, CadPartLimits.length, fail, source === undefined ? undefined : 'prior-xy-linear');
+      const { seed, tool, prior } = t.cutSource(f.target, source, 'path');
+      if (prior) certifyPriorCutPlacements(seed, tool[0], prior, offsets.slice(1), fail, 'path');
       const matrix: BrepAffine['matrix'] = [1, 0, 0, 0, 1, 0, 0, 0, 1];
       return () => {
         if (count === 1 || !tool.length) return { kind: 'solid', parts: [seed] };

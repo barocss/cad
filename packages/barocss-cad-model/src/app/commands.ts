@@ -963,13 +963,15 @@ const allCommands: Command[] = [
   },
   {
     id: 'curve-feature-pattern', label: 'Path cut pattern', icon: 'cad-pattern-linear', hint: 'Repeat a cut on an open polyline or one planar quadratic span with fixed orientation', group: 'pattern', keywords: 'curve path feature cut repeat subtract',
-    available: ctx => { const why = linearCutProblem(ctx); return why ? no(why.message) : ok; },
+    available: ctx => { const why = priorRectangularCutProblem(ctx, 'Path cut pattern'); return why ? no(why.message) : ok; },
     fields: ctx => [...(ctx.curvePatternPath ? [] : [{ key: 'path', label: 'Path', kind: 'choice' as const, options: eligibleCurvePatternPaths(ctx.doc), empty: 'Add an open polyline, straight quadratic path, or one planar quadratic span.' }]),
       { key: 'spacing', label: 'Spacing', kind: 'mm', min: 0, max: 10000 }, { key: 'count', label: 'Count', kind: 'count', min: 1, max: 64 }],
     defaults: ctx => ({ path: eligibleCurvePatternPaths(ctx.doc)[0]?.value ?? '', spacing: 8, count: 3 }),
     build: (ctx, v) => {
-      const why = linearCutProblem(ctx); if (why) throw why;
-      const node = { kind: 'curve-feature-pattern' as const, parent: refOf(oneBody(ctx)!), path: ctx.curvePatternPath ?? { objectId: String(v.path) }, spacing: Number(v.spacing), count: Number(v.count) };
+      const why = priorRectangularCutProblem(ctx, 'Path cut pattern'); if (why) throw why;
+      const parent = refOf(oneBody(ctx)!), source = rectangularCutSource(ctx, parent);
+      const node = { kind: 'curve-feature-pattern' as const, parent, ...(source ? { source } : {}),
+        path: ctx.curvePatternPath ?? { objectId: String(v.path) }, spacing: Number(v.spacing), count: Number(v.count) };
       const problem = curveFeaturePatternProblem(node, ctx.doc.nodes, ctx.doc.parameters, ctx.doc);
       if (problem) throw coded(problem.startsWith('[BAD_REFERENCE]') ? 'BAD_REFERENCE' : 'VALUE', problem);
       return withNode(ctx.doc, structuredClone(node));

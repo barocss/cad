@@ -90,7 +90,7 @@ function shiftNode(node: ModelNode, k: number, s: number): ModelNode {
     case 'loft': return { ...node, sections: node.sections.map(s => ({ ...s, sketch: s.sketch + k })), ...(node.from ? { from: node.from.map(i => i + k) } : {}) };
     case 'union': case 'intersect': return { ...node, left: ref(node.left), right: ref(node.right) };
     case 'difference': return { ...node, parent: ref(node.parent), tool: ref(node.tool) };
-    case 'linear-feature-pattern': case 'rectangular-feature-pattern': case 'fill-feature-pattern':
+    case 'linear-feature-pattern': case 'rectangular-feature-pattern': case 'fill-feature-pattern': case 'curve-feature-pattern':
       return { ...node, parent: ref(node.parent), ...(node.source ? { source: ref(node.source) } : {}) };
     case 'chamfer': case 'fillet': return { ...node, parent: ref(node.parent), edges: node.edges.map(name) };
     case 'sheet-flange': case 'sheet-corner-relief': return { ...node, parent: ref(node.parent), edges: [name(node.edges[0])] };

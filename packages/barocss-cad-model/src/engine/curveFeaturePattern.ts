@@ -1,7 +1,7 @@
 import { planCurveFeaturePatternPath, type CurveFeaturePatternPath, type RawNurbsPath } from '@barocss/cad/api';
 import { modelOf } from './direct';
 import { finiteBinary64Integer } from './binary64';
-import { leafBodies, NODE_EXTRA_FIELDS, type ModelNode, type StudioDoc } from './doc';
+import { leafBodies, NODE_EXTRA_FIELDS, rectangularFeaturePatternSourceProblem, type BodyRef, type ModelNode, type StudioDoc } from './doc';
 import { BarocssError, refusal } from './refusal';
 
 const record = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
@@ -187,7 +187,7 @@ export function eligibleCurvePatternPaths(doc: Pick<StudioDoc, 'direct'>): { val
 
 export function curveFeaturePatternProblem(node: Record<string, unknown>, nodes: readonly ModelNode[], parameters: Record<string, number>, doc?: Pick<StudioDoc, 'direct'>): string | null {
   try {
-    const allowed = new Set(['kind', 'parent', 'path', 'spacing', 'count', ...NODE_EXTRA_FIELDS]);
+    const allowed = new Set(['kind', 'parent', 'source', 'path', 'spacing', 'count', ...NODE_EXTRA_FIELDS]);
     if (Object.keys(node).some(k => !allowed.has(k))) return fail('unknown feature field.');
     const spacing = typeof node.spacing === 'number' ? node.spacing : record(node.spacing) && Object.keys(node.spacing).length === 1 && typeof node.spacing.parameter === 'string' ? parameters[node.spacing.parameter] : undefined;
     if (typeof spacing !== 'number' || !Number.isFinite(spacing) || spacing <= 0 || spacing > 10000) return fail('spacing must be positive and at most 10000 mm.');
@@ -196,12 +196,16 @@ export function curveFeaturePatternProblem(node: Record<string, unknown>, nodes:
     if (!record(parent) || Object.keys(parent).sort().join(',') !== 'node,side' || !Number.isInteger(parent.node) || parent.side !== 'solid') return '[BAD_REFERENCE] Path cut pattern needs one solid difference body.';
     const source = nodes[parent.node as number];
     if (source?.kind !== 'difference' || source.suppressed || !leafBodies(nodes).some(r => r.node === parent.node && r.side === 'solid')) return '[BAD_REFERENCE] Path cut pattern needs a current unsuppressed difference body.';
+    const prototypeProblem = rectangularFeaturePatternSourceProblem(node.source, parent as unknown as BodyRef, nodes, 'Path cut pattern');
+    if (prototypeProblem) return prototypeProblem;
     if (record(node.path) && 'objectId' in node.path && !doc) {
       ownObjectId(node.path);
       return null; // Chat structural admission; complete document admission resolves the current source.
     }
     const raw = resolveCurveFeaturePatternPathData(doc ?? {}, node.path);
-    if (singleQuadratic(raw)) {
+    if (node.source !== undefined && raw.controlPoints.some(point => point[2] !== raw.controlPoints[0][2]))
+      return fail('an earlier rectangular source needs a straight-segment path in one XY plane.');
+    if (node.source === undefined && singleQuadratic(raw)) {
       sharedPathPlan(raw, spacing, node.count);
       return null;
     }

@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1832: [Repeat the direct earlier rectangular cut along a straight-segment Path](notes/prior-path-cut-pattern-2026-11-24/README.md), #25. Verify the shared exact placement proof, Studio-authored path, spacing edit, and retained source and target.
 - D1831: [Repeat the direct earlier rectangular cut in a captured Fill mask](notes/prior-fill-cut-pattern-2026-11-24/README.md), #25. Verify selected placements, fixed original cuts and the captured mask through Studio edit and Open.
 - D1830: [Repeat the direct earlier rectangular cut along a signed line](notes/prior-linear-cut-pattern-2026-11-24/README.md), #25. Verify the separate source with signed native spacing, Studio History and fresh Open.
 - D1829: [Name the earlier rectangular cut in a local Agent proposal](notes/agent-prior-rectangular-cut-2026-11-24/README.md), #25. Verify revision-bound addressing and native geometry through explicit Studio approval and fresh Open.

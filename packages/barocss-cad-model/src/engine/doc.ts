@@ -1143,7 +1143,7 @@ type ModelNodeBase = DrivenSketchNode | RoundedRectangleInsetNode | SketchNode |
   /** Repeat a current difference's cut; spacing keeps the stored dimension reference. */
   | { kind: 'linear-feature-pattern'; parent: BodyRef; source?: BodyRef; axis: Axis; spacing: Dim; count: number }
   | { kind: 'fill-feature-pattern'; parent: BodyRef; source?: BodyRef; region: FillFeaturePatternRegion; anchor: readonly [number, number]; spacing: Dim; count: number; spacing2: Dim; count2: number }
-  | { kind: 'curve-feature-pattern'; parent: BodyRef; path: CurveFeaturePatternPath; spacing: Dim; count: number }
+  | { kind: 'curve-feature-pattern'; parent: BodyRef; source?: BodyRef; path: CurveFeaturePatternPath; spacing: Dim; count: number }
   | { kind: 'rectangular-feature-pattern'; parent: BodyRef; source?: BodyRef; axis: Axis; spacing: Dim; count: number; axis2: Axis; spacing2: Dim; count2: number }
   /** About `axis` through `pivot` (default the origin). */
   | { kind: 'circular-pattern'; parent: BodyRef; axis: Axis; angle: number; count: number; pivot?: [Dim, Dim, Dim]; /** Authored Z spread; absent on legacy patterns. */ span?: number }
@@ -1747,7 +1747,8 @@ export const usesOf = (node: ModelNode, nodes?: readonly ModelNode[]): number[] 
   : node.kind === 'revolve' && node.axisRef
     ? [node.sketch, ...(nodes ? nodes.flatMap((_, i) => featureId(nodes, i) === node.axisRef!.sourceFeature ? [i] : []) : [])]
   : node.kind === 'align' ? [node.parent.node, node.target.body.node]
-  : (node.kind === 'rectangular-feature-pattern' || node.kind === 'linear-feature-pattern' || node.kind === 'fill-feature-pattern') && node.source ? [node.parent.node, node.source.node]
+  : (node.kind === 'rectangular-feature-pattern' || node.kind === 'linear-feature-pattern' || node.kind === 'fill-feature-pattern' || node.kind === 'curve-feature-pattern') && node.source
+    ? [node.parent.node, node.source.node]
   : node.kind === 'face-end-extrude' ? [node.sketch, node.target.body.node]
   : (node.kind === 'offset-face' || node.kind === 'replace-face') && node.target ? [node.parent.node, node.target.body.node]
   : node.kind === 'extrude' && node.cutDepth === 'through' ? throughCutSources(node, nodes) : parentsOf(node);
