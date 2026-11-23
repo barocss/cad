@@ -2689,8 +2689,8 @@ export function App() {
             alignPreview: historyAlign, oppositeRadiusPreview, readAlignTargets: readAlignHistoryTargets,
             draftFaceReplacement: heldDraftFace.available ? heldDraftFace : undefined,
             edgeReplacement: finishEdgeEditor.available ? { start: finishEdgeEditor.start, cancel: finishEdgeEditor.cancel,
-              apply: finishEdgeEditor.apply, draft: finishEdgeEditor.current, paired: finishEdgeEditor.paired,
-              pair: finishEdgeEditor.pairReview, selectSlot: finishEdgeEditor.selectSlot } : undefined,
+              apply: finishEdgeEditor.apply, draft: finishEdgeEditor.current, grouped: finishEdgeEditor.grouped,
+              group: finishEdgeEditor.groupReview, selectSlot: finishEdgeEditor.selectSlot } : undefined,
             onDraft: reportNodeEditorDraft, pending: parameterEdit?.kind === 'direct',
             onDelete: opener => deleteNode(editNode, opener), onClose: () => closeHistoryEditor(() => {
               heldDraftFace.cancel();

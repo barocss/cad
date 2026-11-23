@@ -5,7 +5,6 @@ import type { BodyResult } from '@barocss/cad-model/engine/evaluate';
 import { signaturesOf } from '@barocss/cad-model/engine/rematch';
 import { sameDatumTargetSourceSig, toSig, type Problem, type Sig } from '@barocss/cad-model/engine/references';
 export type HeldFinish = Extract<ModelNode,{kind:'fillet'|'chamfer'}>;
-type HeldFinishPair = HeldFinish & { edges: [string, string] };
 export type ReplacementEndpoints = {start:Vec3;end:Vec3;stations?:{label:string;at:Vec3;fraction:number}[]};
 type Candidate = {name:string;endpoints?:ReplacementEndpoints} | {error:string};
 const point=(p:readonly number[])=>p.length===3&&p.every(Number.isFinite);
@@ -35,46 +34,54 @@ export function heldFinishReplaceable(node: ModelNode | undefined, parameters: P
       && (i===1||p.fraction-controls[i-1].fraction!>1e-9)))
   && distinct(controls[0].at,controls[last].at);
 }
-function constantPair(node: ModelNode | undefined): node is HeldFinishPair {
+function isHeldConstantFinishGroup(node: ModelNode | undefined): node is HeldFinish {
  return !!node && (node.kind === 'fillet' || node.kind === 'chamfer') && !!node.held &&
-  node.suppressed === true && node.edges.length === 2 && node.edges[0] !== node.edges[1] && !node.rematched &&
+  node.suppressed === true && !node.rematched &&
+  (node.edges.length === 2 || (node.kind === 'chamfer' && node.edges.length === 3)) &&
+  new Set(node.edges).size === node.edges.length &&
   (node.kind === 'chamfer' || (!node.radii && node.section === undefined));
 }
 
-/** Match the two current problems to the author's slot order. Both must still be held by this terminal finish. */
-export function heldFinishPairProblems(doc: StudioDoc, index: number, problems: readonly Problem[]): [Problem, Problem] | undefined {
+/** Match all current problems to the authored slot order of this terminal finish. */
+export function heldFinishGroupProblems(doc: StudioDoc, index: number, problems: readonly Problem[]): Problem[] | undefined {
  const node = doc.nodes[index];
- if (!constantPair(node) || index !== doc.nodes.length - 1 ||
+ if (!isHeldConstantFinishGroup(node) || index !== doc.nodes.length - 1 ||
      !positiveSize(node.kind === 'fillet' ? node.radius : node.distance, doc.parameters) ||
      !node.edges.every(name => node.sigs?.[name]?.k === 'line' && node.sigs[name].n === undefined)) return;
  const here = problems.filter(problem => problem.node === index);
- if (here.length !== 2) return;
- const first = here.find(problem => problem.name === node.edges[0]);
- const second = here.find(problem => problem.name === node.edges[1]);
- if (first && second && first.index !== second.index) return [first, second];
+ if (here.length !== node.edges.length || new Set(here.map(problem => problem.index)).size !== here.length) return;
+ const ordered: Problem[] = [];
+ for (const name of node.edges) {
+  const problem = here.find(problem => problem.name === name);
+  if (!problem) return;
+  ordered.push(problem);
+ }
+ return ordered;
 }
 
-export function validFinishPairEdge(edge: DisplayEdge | undefined, edges: readonly DisplayEdge[]): edge is DisplayEdge {
+export function validFinishGroupEdge(edge: DisplayEdge | undefined, edges: readonly DisplayEdge[]): edge is DisplayEdge {
  return !!edge && !!edge.nativeJoint && !!nativeLine(edge) && edge.names.length === 1 &&
   !!edge.names[0] && !edge.names[0].includes('+') && edges.includes(edge) &&
   edges.filter(member => member.names.includes(edge.names[0]) || member.nativeJoint?.edgeId === edge.nativeJoint!.edgeId).length === 1;
 }
 
-/** Both signatures come from the owned live mesh. Remove both authored aliases before writing either pick. */
-export function replaceHeldFinishPair(doc: StudioDoc, index: number, problems: readonly Problem[],
- body: BodyResult, picks: readonly [DisplayEdge | undefined, DisplayEdge | undefined]): StudioDoc | null {
+/** Each signature comes from the owned live mesh. Remove historical aliases before writing any pick. */
+export function replaceHeldFinishGroup(doc: StudioDoc, index: number, problems: readonly Problem[],
+ body: BodyResult, picks: readonly (DisplayEdge | undefined)[]): StudioDoc | null {
  const original = doc.nodes[index];
- if (!constantPair(original) || !heldFinishPairProblems(doc, index, problems)) return null;
- const [first, second] = picks, edges = body.mesh.edges;
- if (!validFinishPairEdge(first, edges) || !validFinishPairEdge(second, edges) || first === second) return null;
- const names = [first.names[0], second.names[0]];
+ if (!isHeldConstantFinishGroup(original) || !heldFinishGroupProblems(doc, index, problems) ||
+     picks.length !== original.edges.length || new Set(picks).size !== picks.length) return null;
  const signatures = signaturesOf(body).edges;
- const a = signatures.get(names[0]), b = signatures.get(names[1]);
- if (a?.kind !== 'line' || b?.kind !== 'line' || a.shared !== undefined || b.shared !== undefined) return null;
+ const names: string[] = [];
  const sigs = { ...original.sigs };
  for (const name of original.edges) delete sigs[name];
- sigs[names[0]] = toSig(a);
- sigs[names[1]] = toSig(b);
+ for (const pick of picks) {
+  if (!validFinishGroupEdge(pick, body.mesh.edges)) return null;
+  const name = pick.names[0], signature = signatures.get(name);
+  if (signature?.kind !== 'line' || signature.shared !== undefined) return null;
+  names.push(name);
+  sigs[name] = toSig(signature);
+ }
  const next = { ...original, edges: names, sigs };
  delete next.held; delete next.suppressed;
  return { ...doc, nodes: doc.nodes.map((node, i) => i === index ? next : node) };
@@ -87,7 +94,7 @@ export function heldFinishProblem(doc: StudioDoc, index: number, problems: reado
   if (node.kind === 'fillet' && node.radii && index !== doc.nodes.length - 1) return;
   return problems.find(problem => problem.node === index && problem.name === node.edges[0]);
  }
- if (!constantPair(node) || node.kind !== 'fillet' || index !== doc.nodes.length - 1 || !positiveSize(node.radius, doc.parameters)) return;
+ if (!isHeldConstantFinishGroup(node) || node.kind !== 'fillet' || index !== doc.nodes.length - 1 || !positiveSize(node.radius, doc.parameters)) return;
  const failures = problems.filter(problem => problem.node === index);
  if (failures.length !== 1) return;
  const [problem] = failures;
@@ -123,7 +130,7 @@ export function heldFinishCandidate(finish: HeldFinish, edge: DisplayEdge | unde
 export function heldFinishReplacement(doc:StudioDoc,index:number,edge:DisplayEdge,edges:readonly DisplayEdge[],signature:Sig, heldName?: string): StudioDoc | null {
  const original=doc.nodes[index];
  if (heldName !== undefined) {
-  if (!constantPair(original) || original.kind !== 'fillet' || index !== doc.nodes.length - 1 || !original.edges.includes(heldName) ||
+  if (!isHeldConstantFinishGroup(original) || original.kind !== 'fillet' || index !== doc.nodes.length - 1 || !original.edges.includes(heldName) ||
       !positiveSize(original.radius, doc.parameters) || signature.k !== 'line' || signature.n !== undefined) return null;
  } else if (!heldFinishReplaceable(original,doc.parameters)||(original.kind==='fillet'&&original.radii&&index!==doc.nodes.length-1)) return null;
  const candidate=heldFinishCandidate(original,edge,edges,doc.parameters,heldName);if('error'in candidate)return null;

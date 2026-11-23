@@ -1,0 +1,200 @@
+import assert from 'node:assert/strict';
+import { createFlow } from './flow-helper.mjs';
+
+const baseline = process.argv.includes('--baseline');
+const pins = [
+  'apps/cad-studio/test/three-held-chamfer-browser.mjs',
+  'apps/cad-studio/test/flow-helper.mjs',
+  'apps/cad-studio/src/App.tsx',
+  'apps/cad-studio/src/state/heldFinishReplacement.ts',
+  'apps/cad-studio/src/state/useHeldFinishEdge.ts',
+  'apps/cad-studio/src/ui/NodeEditor.tsx',
+  'apps/cad-studio/src/ui/ReferenceDecisions.tsx',
+  'packages/barocss-cad-model/src/engine/references.ts',
+  'packages/barocss-cad-model/src/engine/rematch.ts',
+];
+const oldNames = ['n1.side1|n1.side2', 'n1.side0|n1.side1', 'n1.side2|n1.side3'];
+const newNames = [oldNames[2], oldNames[1], 'n1.side4|n1.side5'];
+const oldPoints = [[0, -12], [20, -12], [20, 20], [15, 20], [15, 15], [5, 15], [5, 20], [0, 20]];
+const newPoints = [[0, 0], [20, 0], [20, 5], [5, 5], [5, 20], [0, 20]];
+const oldCap = [[0, -12], [18, -12], [20, -10], [20, 18], [18, 20], [17, 20], [15, 18], [15, 15], [5, 15], [5, 20], [0, 20]];
+const newCap = [[0, 0], [18, 0], [20, 2], [20, 5], [7, 5], [5, 7], [5, 20], [2, 20], [0, 18]];
+const ref = node => ({ node, side: 'solid' });
+const model = (points, edges) => ({
+  format: 'barocss-cad-model', schema: 3, units: 'mm', parameters: { Bevel: 2 },
+  nodes: [{ id: 'n0', kind: 'sketch', profile: 'polygon', points },
+    { id: 'n1', kind: 'extrude', sketch: 0, height: 3 },
+    { id: 'n2', kind: 'chamfer', parent: ref(1), edges, distance: { parameter: 'Bevel' } }],
+  outputs: { b2: ref(2) }, nextId: 3,
+});
+const f = await createFlow({
+  name: 'three-held-chamfer', output: process.argv[2], envFrozen: 'D1834_SOURCE_FROZEN',
+  qualification: 'Recover three distinct terminal Chamfer straight-edge references together through History.',
+  limits: ['The signed fixture is opened through Studio. Viewport creation of the fixture is NOT_RUN.',
+    'Three held references, one constant positive distance and one exact native source.'],
+  initialFiles: pins, requiredFrozen: pins,
+  inspectorSource: `
+import {readFileSync} from 'node:fs';
+import {partBreps,evaluatePart} from '@barocss/cad-model/engine/evaluate';
+import {captureSignatures} from '@barocss/cad-model/engine/references';
+import {checkBrep,brepMassProperties,faceGeometry} from '@barocss/cad';
+const input=JSON.parse(readFileSync(process.argv[2],'utf8'));
+function inspect(doc) {
+ return partBreps(doc).map(({brep})=>({valid:checkBrep(brep,{strict:true}).valid,
+  kinds:brep.bodies.map(b=>b.kind),...brepMassProperties(brep,1),vertices:brep.vertices.map(v=>v.point),
+  faces:brep.faces.map(face=>faceGeometry(face)),edges:brep.edges.length}));
+}
+function sign(doc) {
+ const prefix={...doc,nodes:doc.nodes.slice(0,2),outputs:{b1:{node:1,side:'solid'}}};
+ const result=evaluatePart(prefix,1);if(!result.ok)throw Error(JSON.stringify(result));
+ const signed=captureSignatures(doc,result.bodies);
+ if(Object.keys(signed.nodes[2].sigs??{}).length!==3)throw Error('Expected three native signatures');
+ return {doc:signed,native:inspect(signed)};
+}
+console.log(JSON.stringify(input.prepare?{original:sign(input.original),target:sign(input.target),wrong:sign(input.wrong)}:inspect(input)));
+`,
+});
+const button = (name, scope = f.page) => scope.getByRole('button', { name, exact: true });
+const references = () => f.page.getByRole('region', { name: 'References', exact: true });
+const near = (a, b) => assert.ok(Math.abs(a - b) < 1e-8, `${a} vs ${b}`);
+function geometry(rows, volume, centre, cap) {
+  assert.equal(rows.length, 1);
+  const [native] = rows;
+  assert.ok(native.valid);
+  assert.deepEqual(native.kinds, ['solid']);
+  assert.equal(native.method, 'planar-exact');
+  near(native.volume, volume);
+  native.centroid.forEach((value, i) => near(value, centre[i]));
+  assert.equal(native.faces.length, cap.length + 2);
+  assert.equal(native.edges, 3 * cap.length);
+  assert.equal(native.vertices.length, 2 * cap.length);
+  for (const [x, y] of cap) for (const z of [0, 3]) {
+    assert.ok(native.vertices.some(v => Math.hypot(v[0] - x, v[1] - y, v[2] - z) < 1e-8), `Missing vertex ${[x,y,z]}`);
+  }
+}
+async function open(name, doc) {
+  await f.newPage();
+  await f.page.getByLabel('Model file', { exact: true }).setInputFiles({
+    name: name + '.bcad', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(doc)),
+  });
+  await f.page.waitForFunction(label => document.querySelector('.doc-tab input')?.value === label, name);
+  await f.ready();
+}
+async function direction(name) {
+  await button('View cube directions').click();
+  await f.page.getByRole('menuitem', { name, exact: true }).click();
+  await f.page.getByTitle('Frame all (F)', { exact: true }).click();
+  await f.page.evaluate(async () => {
+    let previous, settled = 0;
+    for (let i = 0; i < 90 && settled < 4; i++) {
+      await new Promise(requestAnimationFrame);
+      const pixel = window.__studioScreenOf([5, 5, 1.5]);
+      settled = previous && Math.hypot(pixel[0] - previous[0], pixel[1] - previous[1]) < 0.01 ? settled + 1 : 0;
+      previous = pixel;
+    }
+    if (settled < 4) throw new Error('View has not settled');
+  });
+}
+async function pick(point) {
+  const pixel = await f.page.evaluate(point => window.__studioScreenOf(point), point);
+  assert.ok(await f.page.evaluate(([x, y]) => !!document.elementFromPoint(x, y)?.closest('canvas.vp-canvas'), pixel));
+  await f.page.mouse.click(...pixel);
+}
+await f.run(async () => {
+  f.phase = 'Native source, explicit target and same-volume wrong third edge';
+  const prep = await f.inspect('00-native-preflight', { prepare: true, original: model(oldPoints, oldNames),
+    target: model(newPoints, newNames), wrong: model(newPoints, [...newNames.slice(0, 2), 'n1.side3|n1.side4']) });
+  const centre = [6953 / 1038, 6953 / 1038, 1.5];
+  geometry(prep.original.native, 1752, [8687 / 876, 4891 / 1752, 1.5], oldCap);
+  geometry(prep.target.native, 519, centre, newCap);
+  near(prep.wrong.native[0].volume, 519);
+  near(prep.wrong.native[0].centroid[0], 6909 / 1038);
+  assert.throws(() => geometry(prep.wrong.native, 519, centre, newCap), assert.AssertionError);
+  await open('three-chamfers-original', prep.original.doc); await f.same(prep.original.doc);
+  assert.equal(await references().count(), 0);
+  await f.snapshot('01-three-original-chamfers');
+
+  f.phase = 'Open upstream changes with all three authored references held';
+  const changed = structuredClone(prep.original.doc);
+  changed.nodes[0].points = newPoints;
+  await open('three-chamfers-upstream-changed', changed);
+  const problems = references().getByText('Choose a reference · Feature held', { exact: true });
+  await problems.nth(2).waitFor();
+  assert.equal(await problems.count(), 3);
+  const before = await f.snapshot('02-all-three-references-held');
+  assert.deepEqual(before.doc.nodes.slice(0, 2), changed.nodes.slice(0, 2));
+  assert.deepEqual(before.doc.nodes[2].edges, oldNames);
+  assert.deepEqual(before.doc.nodes[2].sigs, changed.nodes[2].sigs);
+  assert.equal(before.doc.nodes[2].suppressed, true);
+  assert.equal(before.doc.nodes[2].rematched, undefined);
+  near(before.bodies.bodies[0].volume, 525);
+  await direction('Back right');
+  await f.openFeatureEditor(2, 'three unresolved Chamfer edges');
+  const editor = f.editor();
+  const replace = button('Replace edges', editor);
+  if (baseline) {
+    assert.equal(await replace.count(), 0);
+    assert.equal(await button('Replace edge', editor).count(), 0);
+    await f.same(before.doc);
+    await f.snapshot('03-three-edge-replacement-unavailable');
+    f.report.observations.push({ directReplacement: 'FAIL: unavailable for three held Chamfer references' });
+    return;
+  }
+  const apply = button('Apply edge replacements', editor);
+  const cancel = button('Cancel edge replacement', editor);
+  const stage = editor.getByRole('group', { name: 'Chamfer edge replacements', exact: true });
+  const nthRow = index => stage.locator('.row-actions').nth(index);
+  const duplicate = f.page.getByText('Edge not selected', { exact: true });
+  const inside = [5, 5, 1.5];
+  const outside = [20, 0, 1.5];
+  const third = [0, 20, 1.5];
+  const stagePick = async (index, point) => {
+    await pick(point);
+    await nthRow(index).getByRole('status').getByText(newNames[index], { exact: true }).waitFor();
+  };
+  const assertUnchanged = state => {
+    assert.deepEqual(state.doc, before.doc);
+    assert.deepEqual(state.bodies.bodies, before.bodies.bodies);
+    assert.deepEqual(state.history, before.history);
+    assert.deepEqual(state.selection, before.selection);
+  };
+  f.phase = 'Refuse duplicate, allow explicit third-first picking, cancel unchanged';
+  await replace.click();
+  assert.equal(await stage.locator('.row-actions').count(), 3);
+  await stagePick(0, inside);
+  await pick(inside); await duplicate.waitFor();
+  assert.ok(await apply.isDisabled());
+  await direction('Back left');
+  await button('Pick third edge', stage).click();
+  await stagePick(2, third);
+  await duplicate.waitFor({ state: 'hidden' });
+  assert.equal(await button('Pick second edge', stage).getAttribute('aria-pressed'), 'true');
+  assert.ok(await apply.isDisabled());
+  assertUnchanged(await f.snapshot('03-two-picks-third-slot-selected'));
+  await cancel.click();
+  await f.same(before.doc);
+  assertUnchanged(await f.snapshot('04-cancel-keeps-three-held'));
+
+  f.phase = 'Apply three staged edges as one native change';
+  await direction('Back right'); await replace.click(); await stagePick(0, inside);
+  await direction('Front right'); await stagePick(1, outside);
+  assert.ok(await apply.isDisabled());
+  await direction('Back left'); await stagePick(2, third);
+  assert.equal(await apply.isEnabled(), true);
+  assertUnchanged(await f.snapshot('05-three-picks-await-apply'));
+  await apply.click(); await f.changed(before.doc);
+  await references().waitFor({ state: 'hidden' });
+  const accepted = await f.snapshot('06-three-chamfers-applied');
+  assert.deepEqual(accepted.doc, prep.target.doc);
+  geometry(await f.inspect('07-applied-native', accepted.doc), 519, centre, newCap);
+  assert.equal(accepted.history.length, before.history.length);
+  await f.undo(); await f.same(before.doc); await problems.nth(2).waitFor();
+  assertUnchanged(await f.snapshot('08-undo-restores-three-held'));
+  await f.redo(); await f.same(accepted.doc); await references().waitFor({ state: 'hidden' });
+  const saved = await f.save('three-chamfers-confirmed');
+  await f.freshOpen(saved.file, accepted.doc, '09-fresh-open');
+  assert.equal(await references().count(), 0);
+  geometry(await f.inspect('10-reopened-native', await f.doc()), 519, centre, newCap);
+  f.report.observations.push({ stagedDistinctPicks: 'PASS', duplicateRefusal: 'PASS', cancelUnchanged: 'PASS',
+    exactNativeGeometry: 'PASS', undoRedoSaveOpen: 'PASS', sameVolumeWrongThirdRejectedByOracle: 'PASS' });
+});

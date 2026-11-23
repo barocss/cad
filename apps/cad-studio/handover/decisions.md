@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1834: [Replace three held Chamfer edges together](notes/triple-held-chamfer-history-replacement-2026-11-24/README.md), #20. Follow explicit History picks through a strict native rebuild, exact signatures, Undo, Redo and fresh Open.
 - D1833: [Export only visible STEP root bodies when requested](notes/visible-root-step-scope-2026-11-24/README.md), #744. Verify the default file, selected native solids, placed scope and stale preparation against independent planar readback.
 - D1832: [Repeat the direct earlier rectangular cut along a straight-segment Path](notes/prior-path-cut-pattern-2026-11-24/README.md), #25. Verify the shared exact placement proof, Studio-authored path, spacing edit, and retained source and target.
 - D1831: [Repeat the direct earlier rectangular cut in a captured Fill mask](notes/prior-fill-cut-pattern-2026-11-24/README.md), #25. Verify selected placements, fixed original cuts and the captured mask through Studio edit and Open.

@@ -1,5 +1,5 @@
-import { heldFinishPairProblems, heldFinishProblem, heldFinishCandidate, heldFinishReplacement,
-  replaceHeldFinishPair, validFinishPairEdge, type ReplacementEndpoints } from './heldFinishReplacement';
+import { heldFinishGroupProblems, heldFinishProblem, heldFinishCandidate, heldFinishReplacement,
+  replaceHeldFinishGroup, validFinishGroupEdge, type ReplacementEndpoints } from './heldFinishReplacement';
 import { useCallback, useLayoutEffect, useRef, useState } from 'react';
 import type { DisplayEdge } from '@barocss/cad-model/engine/mesh';
 import type { ModelNode, StudioDoc } from '@barocss/cad-model/engine/doc';
@@ -11,19 +11,18 @@ import type { FriendlyError } from '@barocss/cad-model/engine/errors';
 
 type Finish = Extract<ModelNode, { kind: 'fillet' | 'chamfer' }>;
 type Hit = { edge: { body: number; edge: number } | null; edgeMesh?: BodyResult['mesh']; instance?: string };
-type Slot = 0 | 1;
-type PairDraft = { slot: Slot | null; edges: [DisplayEdge | undefined, DisplayEdge | undefined]; ownsSource(): boolean };
+type GroupDraft = { slot: number | null; edges: (DisplayEdge | undefined)[]; ownsSource(): boolean };
 type Draft = { doc: StudioDoc; index: number; name: string | null; endpoints?: ReplacementEndpoints;
-  edge?: DisplayEdge; pending?: boolean; pair?: PairDraft };
-export type HeldFinishPairReview = { references: [string, string]; picks: [string | undefined, string | undefined]; slot: Slot | null };
+  edge?: DisplayEdge; pending?: boolean; group?: GroupDraft };
+export type HeldFinishGroupReview = { references: string[]; picks: (string | undefined)[]; slot: number | null };
 export interface HeldFinishEdgeEditor {
   start(): void;
   cancel(): void;
   apply(): void;
   draft: Pick<Draft, 'name' | 'endpoints' | 'pending'> | null;
-  paired?: boolean;
-  pair?: HeldFinishPairReview;
-  selectSlot?(slot: Slot): void;
+  grouped?: boolean;
+  group?: HeldFinishGroupReview;
+  selectSlot?(slot: number): void;
 }
 interface Options {
   doc: StudioDoc;
@@ -46,8 +45,8 @@ export function useHeldFinishEdge({ doc, index, problems, bodies, enabled, ownsS
   const strictSource = finish && (finish.edges.length > 1 || (finish.kind === 'fillet' && finish.radii));
   const body = strictSource && sources.length !== 1 ? undefined : sources[0];
   const problem = enabled && body && index !== null ? heldFinishProblem(doc, index, problems, body) : undefined;
-  const pair = enabled && body && index !== null ? heldFinishPairProblems(doc, index, problems) : undefined;
-  const firstProblem = pair?.[0], secondProblem = pair?.[1];
+  const group = enabled && body && index !== null ? heldFinishGroupProblems(doc, index, problems) : undefined;
+  const [firstProblem, secondProblem, thirdProblem] = group ?? [];
   const heldName = finish?.edges.length === 2 ? problem?.name : undefined;
   const [draft, setDraft] = useState<Draft | null>(null);
   const ticket = useRef<object | null>(null);
@@ -66,31 +65,34 @@ export function useHeldFinishEdge({ doc, index, problems, bodies, enabled, ownsS
     setDraft(null);
     clearFailure();
     return () => { ticket.current = null; };
-  }, [doc, index, body, problem, firstProblem, secondProblem, enabled, clearFailure]);
+  }, [doc, index, body, problem, firstProblem, secondProblem, thirdProblem, enabled, clearFailure]);
   const current = enabled && draft?.doc === doc && draft.index === index && body &&
-    (draft.pair ? pair && draft.pair.ownsSource() : problem) ? draft : null;
+    (draft.group ? group && draft.group.ownsSource() : problem) ? draft : null;
   const cancel = () => { ticket.current = null; setDraft(null); clearFailure(); };
   const start = () => {
-    if (!enabled || !body || index === null || (!problem && !pair)) return;
-    setDraft({ doc, index, name: null, pair: pair ? { slot: 0, edges: [undefined, undefined], ownsSource } : undefined });
+    if (!enabled || !body || index === null || (!problem && !group)) return;
+    setDraft({ doc, index, name: null, group: group ? { slot: 0, edges: group.map(() => undefined), ownsSource } : undefined });
   };
-  const selectSlot = (slot: Slot) => {
-    if (current?.pair && !current.pending) setDraft({ ...current, pair: { ...current.pair, slot } });
+  const selectSlot = (slot: number) => {
+    if (current?.group && !current.pending && Number.isInteger(slot) && slot >= 0 && slot < current.group.edges.length) {
+      setDraft({ ...current, group: { ...current.group, slot } });
+    }
   };
   const pick = (hit: Hit) => {
     if (!current || !body) return false;
     if (current.pending) return true;
     const edge = hit.edgeMesh === body.mesh && hit.edge && !hit.instance ? body.mesh.edges[hit.edge.edge] : undefined;
-    if (current.pair) {
-      const { slot, edges } = current.pair;
+    if (current.group) {
+      const { slot, edges } = current.group;
       if (slot === null) return true;
-      if (!validFinishPairEdge(edge, body.mesh.edges) || edges[slot === 0 ? 1 : 0] === edge) {
+      if (!validFinishGroupEdge(edge, body.mesh.edges) || edges.some((picked, i) => i !== slot && picked === edge)) {
         reportFailure({ title: 'Edge not selected', hint: 'Select a different unmerged straight edge on the body of this feature.', detail: '' });
         return true;
       }
-      const picks: PairDraft['edges'] = slot === 0 ? [edge, edges[1]] : [edges[0], edge];
+      const picks = edges.map((picked, i) => i === slot ? edge : picked);
+      const nextSlot = picks.indexOf(undefined);
       if (edges[slot] !== edge) clearFailure();
-      setDraft({ ...current, pair: { ...current.pair, edges: picks, slot: !picks[0] ? 0 : !picks[1] ? 1 : null } });
+      setDraft({ ...current, group: { ...current.group, edges: picks, slot: nextSlot === -1 ? null : nextSlot } });
       return true;
     }
     const candidate = finish && heldFinishCandidate(finish,edge,body.mesh.edges,doc.parameters,heldName);
@@ -119,11 +121,11 @@ export function useHeldFinishEdge({ doc, index, problems, bodies, enabled, ownsS
   };
   const apply = async () => {
     if (!current || current.pending || !body || !finish || !ownsSource()) return;
-    const resolved = current.pair ? pair : problem && [problem];
+    const resolved = current.group ? group : problem && [problem];
     if (!resolved) return;
-    const stillOwnsSource = current.pair?.ownsSource ?? ownsSource;
+    const stillOwnsSource = current.group?.ownsSource ?? ownsSource;
     if (!stillOwnsSource()) return;
-    const next = current.pair ? replaceHeldFinishPair(doc, current.index, resolved, body, current.pair.edges)
+    const next = current.group ? replaceHeldFinishGroup(doc, current.index, resolved, body, current.group.edges)
       : replaceSingle(current, body, finish);
     if (!next) return;
     const request = {};
@@ -143,12 +145,12 @@ export function useHeldFinishEdge({ doc, index, problems, bodies, enabled, ownsS
       }
     }
   };
-  const picks: readonly (DisplayEdge | undefined)[] = current?.pair?.edges ?? (heldName && current?.edge ? [current.edge] : []);
+  const picks: readonly (DisplayEdge | undefined)[] = current?.group?.edges ?? (heldName && current?.edge ? [current.edge] : []);
   const highlighted = picks.flatMap(edge => edge ? [edge] : []);
   const previewEdges = body && highlighted.length ? { mesh: body.mesh, edges: highlighted } : undefined;
-  const pairReview: HeldFinishPairReview | undefined = pair && current?.pair && {
-    references: [pair[0].name, pair[1].name], picks: [current.pair.edges[0]?.names[0], current.pair.edges[1]?.names[0]], slot: current.pair.slot,
+  const groupReview: HeldFinishGroupReview | undefined = group && current?.group && {
+    references: group.map(value => value.name), picks: current.group.edges.map(edge => edge?.names[0]), slot: current.group.slot,
   };
-  return { available: enabled && !!(problem || pair) && !!body, paired: !!pair, current, start, cancel, pick, apply,
-    selectSlot, pairReview, previewEdges };
+  return { available: enabled && !!(problem || group) && !!body, grouped: !!group, current, start, cancel, pick, apply,
+    selectSlot, groupReview, previewEdges };
 }

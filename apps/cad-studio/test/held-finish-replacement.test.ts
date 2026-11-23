@@ -5,8 +5,8 @@ import { evaluatePart } from '@barocss/cad-model/engine/evaluate';
 import type { DisplayEdge } from '@barocss/cad-model/engine/mesh';
 import { toSig } from '@barocss/cad-model/engine/references';
 import { signaturesOf } from '@barocss/cad-model/engine/rematch';
-import { heldFinishPairProblems, heldFinishRadiusText, heldFinishCandidate, heldFinishProblem, heldFinishReplaceable,
- heldFinishReplacement, replaceHeldFinishPair, type HeldFinish } from '../src/state/heldFinishReplacement';
+import { heldFinishGroupProblems, heldFinishRadiusText, heldFinishCandidate, heldFinishProblem, heldFinishReplaceable,
+ heldFinishReplacement, replaceHeldFinishGroup, type HeldFinish } from '../src/state/heldFinishReplacement';
 const finish:Extract<HeldFinish,{kind:'fillet'}>={id:'repair',kind:'fillet',parent:{node:1,side:'solid'},edges:['missing'],radius:1,held:'missing edge',suppressed:true,radii:[{at:[0,0,0],radius:1,atEnd:true},{at:[10,0,0],radius:3,atEnd:true}]};
 const edge:DisplayEdge={index:0,faces:[0,1],a:[0,20,10],b:[30,20,10],straight:true,axis:'x',names:['new-edge'],nativeLine:true};
 const sig={k:'curve' as const,p:[15,20,10] as [number,number,number],s:30};
@@ -90,17 +90,17 @@ for (const kind of ['fillet', 'chamfer'] as const) test(`both unresolved ${kind}
    held: finish.held, suppressed: finish.suppressed, ...stale };
  const source = withNode({ ...stock, parameters: { ...stock.parameters, Bevel: 2 } }, node);
  const problems = [b, a].map((name, index) => ({ index, name, where: 'feature 2', node: 2, candidates: [] }));
- assert.deepEqual(heldFinishPairProblems(source, 2, problems)?.map(problem => problem.name), [a, b]);
+ assert.deepEqual(heldFinishGroupProblems(source, 2, problems)?.map(problem => problem.name), [a, b]);
  if (kind === 'chamfer') {
-  assert.equal(heldFinishPairProblems({ ...source, parameters: {} }, 2, problems), undefined);
+  assert.equal(heldFinishGroupProblems({ ...source, parameters: {} }, 2, problems), undefined);
   assert.equal(heldFinishProblem(source, 2, problems.slice(0, 1), body), undefined);
  }
- assert.equal(heldFinishPairProblems({ ...source, nodes: [...source.nodes, stock.nodes[0]] }, 2, problems), undefined);
- assert.equal(replaceHeldFinishPair(source, 2, problems, body, [first, first]), null);
- assert.equal(replaceHeldFinishPair(source, 2, problems.slice(0, 1), body, [first, second]), null);
- assert.equal(replaceHeldFinishPair(source, 2, problems, body, [first, undefined]), null);
- assert.equal(replaceHeldFinishPair(source, 2, problems, body, [first, { ...second }]), null);
- const result = replaceHeldFinishPair(source, 2, problems, body, [second, first]);
+ assert.equal(heldFinishGroupProblems({ ...source, nodes: [...source.nodes, stock.nodes[0]] }, 2, problems), undefined);
+ assert.equal(replaceHeldFinishGroup(source, 2, problems, body, [first, first]), null);
+ assert.equal(replaceHeldFinishGroup(source, 2, problems.slice(0, 1), body, [first, second]), null);
+ assert.equal(replaceHeldFinishGroup(source, 2, problems, body, [first, undefined]), null);
+ assert.equal(replaceHeldFinishGroup(source, 2, problems, body, [first, { ...second }]), null);
+ const result = replaceHeldFinishGroup(source, 2, problems, body, [second, first]);
  assert.ok(result);
  const changed = result.nodes[2];
  assert.equal(changed.kind, kind);
@@ -111,6 +111,44 @@ for (const kind of ['fillet', 'chamfer'] as const) test(`both unresolved ${kind}
  assert.equal(changed.held, undefined);
  assert.equal(changed.suppressed, undefined);
  assert.deepEqual(source.nodes[2], node);
+});
+
+test('three held Chamfer slots require complete distinct native picks on the terminal source', () => {
+ const stock = rectanglePart(30, 20, 10);
+ const evaluated = evaluatePart(stock, 1);
+ assert.ok(evaluated.ok);
+ const [body] = evaluated.bodies;
+ const [first, second, third, fourth] = body.mesh.edges.filter(edge => edge.nativeLine && edge.nativeJoint && edge.names.length === 1);
+ const [a, b, c, d] = [first, second, third, fourth].map(edge => edge.names[0]);
+ const signatures = signaturesOf(body).edges;
+ const live = (name: string) => toSig(signatures.get(name)!);
+ const sigs = Object.fromEntries([a, b, c].map(name => [name, { ...live(name), s: live(name).s + 100 }]));
+ const node: Extract<HeldFinish, { kind: 'chamfer' }> = {
+  id: finish.id, kind: 'chamfer', parent: finish.parent, edges: [a, b, c], sigs,
+  distance: { parameter: 'Bevel' }, held: finish.held, suppressed: true,
+ };
+ const source = withNode({ ...stock, parameters: { Bevel: 2 } }, node);
+ const before = structuredClone(source);
+ const problems = [c, a, b].map((name, index) => ({ index, name, where: 'feature 2', node: 2, candidates: [] }));
+ assert.deepEqual(heldFinishGroupProblems(source, 2, problems), [problems[1], problems[2], problems[0]]);
+ assert.equal(heldFinishGroupProblems(source, 2, [problems[0], problems[1], { ...problems[2], index: 0 }]), undefined);
+ assert.equal(heldFinishGroupProblems(source, 2, problems.slice(1)), undefined);
+ assert.equal(heldFinishGroupProblems(withNode(stock, { ...finish, edges: node.edges, sigs, radii: undefined }), 2, problems), undefined);
+ assert.equal(heldFinishGroupProblems(withNode(stock, { ...node, edges: [a, b, c, d] }), 2, problems), undefined);
+ assert.equal(heldFinishGroupProblems({ ...source, nodes: [...source.nodes, stock.nodes[0]] }, 2, problems), undefined);
+ for (const picks of [[third, second], [third, second, undefined], [third, second, third], [third, second, { ...fourth }]]) {
+  assert.equal(replaceHeldFinishGroup(source, 2, problems, body, picks), null);
+ }
+ const accepted = replaceHeldFinishGroup(source, 2, problems, body, [third, second, fourth]);
+ assert.ok(accepted);
+ const changed = accepted.nodes[2];
+ assert.ok(changed.kind === 'chamfer');
+ assert.deepEqual(changed.edges, [c, b, d]);
+ assert.deepEqual(changed.sigs, { [c]: live(c), [b]: live(b), [d]: live(d) });
+ assert.deepEqual(changed.distance, node.distance);
+ assert.equal(changed.held, undefined);
+ assert.equal(changed.suppressed, undefined);
+ assert.deepEqual(source, before);
 });
 
 test('one and two interior positions reassign along candidate direction without changing the authored law',()=>{

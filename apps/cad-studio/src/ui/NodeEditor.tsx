@@ -348,13 +348,13 @@ export function NodeEditor({ onFilletStations, filletEndpoints, nodes, index, on
       </> : <button type="button" className="ghost" disabled={ordinaryLocked || changed || hasInvalidNumber || Object.keys(typed).length > 0 || !sameDraftScope}
         onClick={() => { retireEvaluation(); draftFaceReplacement.start(); }}>Replace face</button>)}
       {edgeReplacement && (edgeReplacement.draft ? <>
-        {edgeReplacement.pair ? <div role="group" aria-label={node?.kind === 'chamfer' ? 'Chamfer edge replacements' : 'Fillet edge replacements'}>
-          {([0, 1] as const).map(slot => <div className="row-actions" key={slot}>
-            <button className="ghost" type="button" aria-pressed={edgeReplacement.pair?.slot === slot}
+        {edgeReplacement.group ? <div role="group" aria-label={node?.kind === 'chamfer' ? 'Chamfer edge replacements' : 'Fillet edge replacements'}>
+          {edgeReplacement.group.references.map((name, slot) => <div className="row-actions" key={name}>
+            <button className="ghost" type="button" aria-pressed={edgeReplacement.group?.slot === slot}
               disabled={edgeReplacement.draft?.pending} onClick={() => edgeReplacement.selectSlot?.(slot)}>
-              {slot === 0 ? 'Pick first edge' : 'Pick second edge'}
+              {['Pick first edge', 'Pick second edge', 'Pick third edge'][slot]}
             </button>
-            <span className="small break-all" role="status">{edgeReplacement.pair?.picks[slot] ?? edgeReplacement.pair?.references[slot]}</span>
+            <span className="small break-all" role="status">{edgeReplacement.group?.picks[slot] ?? name}</span>
           </div>)}
         </div> : <span className="small break-all" role="status">{edgeReplacement.draft.name ?? 'Select an edge on the feature body.'}</span>}
         {edgeReplacement.draft.endpoints && node?.kind === 'fillet' && node.radii && <div className="small" role="status">
@@ -364,13 +364,13 @@ export function NodeEditor({ onFilletStations, filletEndpoints, nodes, index, on
           <div>End R{heldFinishRadiusText(node.radii.at(-1)!.radius,parameters)} → ({edgeReplacement.draft.endpoints.end.join(', ')})</div>
         </div>}
         <div className="row-actions">
-          <button className="primary" type="button" aria-label={edgeReplacement.paired ? 'Apply edge replacements' : 'Apply edge replacement'}
-            disabled={changed || edgeReplacement.draft.pending || (edgeReplacement.pair
-              ? !edgeReplacement.pair.picks.every(Boolean) : !edgeReplacement.draft.name)}
-            onClick={edgeReplacement.apply}>{edgeReplacement.paired ? 'Apply edges' : 'Apply edge'}</button>
+          <button className="primary" type="button" aria-label={edgeReplacement.grouped ? 'Apply edge replacements' : 'Apply edge replacement'}
+            disabled={changed || edgeReplacement.draft.pending || (edgeReplacement.group
+              ? !edgeReplacement.group.picks.every(Boolean) : !edgeReplacement.draft.name)}
+            onClick={edgeReplacement.apply}>{edgeReplacement.grouped ? 'Apply edges' : 'Apply edge'}</button>
           <button className="ghost" type="button" aria-label="Cancel edge replacement" onClick={edgeReplacement.cancel}>Cancel</button>
         </div>
-      </> : <button className="ghost" type="button" disabled={pending || changed || hasInvalidNumber || !sameDraftScope} onClick={() => { retireEvaluation(); edgeReplacement.start(); }}>{edgeReplacement.paired ? 'Replace edges' : 'Replace edge'}</button>)}
+      </> : <button className="ghost" type="button" disabled={pending || changed || hasInvalidNumber || !sameDraftScope} onClick={() => { retireEvaluation(); edgeReplacement.start(); }}>{edgeReplacement.grouped ? 'Replace edges' : 'Replace edge'}</button>)}
       {readingEnd && <div className="empty" role="status">Reading exact distance…</div>}
       {node?.kind === 'shaft' && node.steps.some(step => (step.grooves?.length ?? 0) > 1) && <p className="empty" role="status">Groove positions are editable only on steps with one groove. Moving multiple grooves past one another can change named references.</p>}
       {hasMissingNumber && <div className="hud-error" role="status">Enter a number for {missingNumbers.map(field => field.label).join(', ')}.</div>}
