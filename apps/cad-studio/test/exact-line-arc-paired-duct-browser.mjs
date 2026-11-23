@@ -76,7 +76,8 @@ const pins = [
   'packages/barocss-cad-model/src/chat/part/features.ts',
   'apps/cad-studio/test/exact-line-arc-paired-duct-browser.mjs',
 ];
-if (review || reviewBaseline) pins.push(
+const checkingReview = review || reviewBaseline;
+if (checkingReview) pins.push(
   'packages/barocss-cad-model/src/chat/rectangularDuctProposalReview.ts',
   'packages/barocss-cad-model/src/chat/part/modelCandidate.ts',
   'packages/barocss-cad-model/src/chat/part/views.ts',
@@ -84,7 +85,13 @@ if (review || reviewBaseline) pins.push(
 );
 const f = await createFlow({
   name: spaced ? 'exact-spaced-paired-duct' : 'exact-line-arc-paired-duct', output: process.argv[2],
-  envFrozen: leadOpposite ? 'D1812_SOURCE_FROZEN' : lead ? (review || reviewBaseline ? 'D1811_SOURCE_FROZEN' : 'D1810_SOURCE_FROZEN') : directSameTurn ? (review || reviewBaseline ? 'D1804_SOURCE_FROZEN' : 'D1803_SOURCE_FROZEN') : arcAndLine ? (review || reviewBaseline ? 'D1801_SOURCE_FROZEN' : 'D1800_SOURCE_FROZEN') : oppositeArcs ? (review || reviewBaseline ? 'D1799_SOURCE_FROZEN' : 'D1798_SOURCE_FROZEN') : sameTurn ? (review || reviewBaseline ? 'D1796_SOURCE_FROZEN' : 'D1795_SOURCE_FROZEN') : spaced ? (review || reviewBaseline ? 'D1794_SOURCE_FROZEN' : 'D1792_SOURCE_FROZEN') : (review || reviewBaseline)
+  envFrozen: leadOpposite ? (checkingReview ? 'D1814_SOURCE_FROZEN' : 'D1812_SOURCE_FROZEN')
+    : leadSameTurn ? (checkingReview ? 'D1811_SOURCE_FROZEN' : 'D1810_SOURCE_FROZEN')
+    : directSameTurn ? (checkingReview ? 'D1804_SOURCE_FROZEN' : 'D1803_SOURCE_FROZEN')
+    : arcAndLine ? (checkingReview ? 'D1801_SOURCE_FROZEN' : 'D1800_SOURCE_FROZEN')
+    : oppositeArcs ? (checkingReview ? 'D1799_SOURCE_FROZEN' : 'D1798_SOURCE_FROZEN')
+    : sameTurn ? (checkingReview ? 'D1796_SOURCE_FROZEN' : 'D1795_SOURCE_FROZEN')
+    : spaced ? (checkingReview ? 'D1794_SOURCE_FROZEN' : 'D1792_SOURCE_FROZEN') : checkingReview
     ? (tail ? 'D1787_SOURCE_FROZEN' : 'D1783_SOURCE_FROZEN')
     : (tail ? 'D1786_SOURCE_FROZEN' : 'D1782_SOURCE_FROZEN'),
   initialFiles: pins, requiredFrozen: pins,

@@ -73,7 +73,7 @@ function leadingSpacedArcs(path: Path): Frame | undefined {
     || !(knots[2] < knots[3] && knots[4] < knots[5] && knots[6] < knots[7] && knots[8] < knots[9])) return;
   const frame = spacedArcs({ degree, controlPoints: points.slice(2), weights: weights.slice(2), knots: [knots[3], ...knots.slice(3)] });
   const leadLength = len(sub(points[2], points[0]));
-  if (!frame || frame.turn !== 1 || !(leadLength >= minimumLengthMM)) return;
+  if (!frame || !(leadLength >= minimumLengthMM)) return;
   const extent = (poles: Point[]) => Math.max(1, ...poles.flatMap(point => point.map(Math.abs)));
   // Both straight joins constrain the tangent poles to coordinate roundoff. A linear-tolerance
   // pole-length correction could change the normalized native tangent and must not get evidence.
@@ -96,7 +96,7 @@ function leadingSpacedArcs(path: Path): Frame | undefined {
   const angular = Math.min(CadNumericPolicy.relativeComparison,
     256 * Number.EPSILON * Math.max(extent(points.slice(2)), frame.first.radius, frame.second.radius)
       / Math.min(frame.length, len(sub(points[4], points[3])), len(sub(points[7], points[6]))));
-  if (len(sub(frame.first.exitInward, frame.second.inward)) > angular) return;
+  if (len(sub(scale(frame.first.exitInward, frame.turn), frame.second.inward)) > angular) return;
   return { ...frame, leadLength, leadStart: points[0] };
 }
 
@@ -285,8 +285,12 @@ function pairedArcDuctEvidence(brep: Brep, path: Path, source: Source, direct: b
       // Compare whole-section supports along the first bend's half-angle tangent. Each angle is
       // 30..120°, so sin(half+beta) is nonnegative and its interval minimum occurs at an endpoint.
       const leadUpper = -(first.radius - reach) * Math.sin(half);
-      const secondLower = (first.radius - second.radius) * Math.sin(half) + length * Math.cos(half)
-        + (second.radius - reach) * Math.min(Math.sin(half), Math.sin(half + second.angle));
+      // For opposite turns the second-center projection is (R1+R2)sin(half)+Lcos(half).
+      // Its radial contribution is bounded below by -(R2+h)sin(half), since
+      // sin(beta-half)>=-sin(half) throughout the admitted 0..120 degree second span.
+      const secondLower = frame.turn === 1 ? (first.radius - second.radius) * Math.sin(half) + length * Math.cos(half)
+        + (second.radius - reach) * Math.min(Math.sin(half), Math.sin(half + second.angle))
+        : (first.radius - reach) * Math.sin(half) + length * Math.cos(half);
       if (report.topology[0].shells !== 1 || !(secondLower - leadUpper > 10 * tolerance + 2 * roundoff)) return;
     }
     const groups = [sizes.exterior, ...sizes.apertures], wallGroups = groups.map((section, index) => walls(brep, feature, frame, section, index > 0));
@@ -415,7 +419,7 @@ export function pairedSpacedArcDuctEvidence(brep: Brep, path: Path, source: Sour
   return pairedArcDuctEvidence(brep, path, source, false);
 }
 
-/** Native review for the original paired same-turn line–arc–line–arc route, including its charted inlet. */
+/** Native review for the original paired planar line–arc–line–arc route, including its charted inlet. */
 export function pairedLeadingSpacedArcDuctEvidence(brep: Brep, path: Path, source: Source) {
   const evidence = pairedArcDuctEvidence(brep, path, source, false, 1, true);
   if (!evidence || evidence.throughApertures.dimensions.leadLength === undefined) return;
