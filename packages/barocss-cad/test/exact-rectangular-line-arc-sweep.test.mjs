@@ -215,11 +215,12 @@ test('line-and-arc keeps positive clearances and refuses unsupported openings, r
   };
   const aperture = /one centered rectangular opening aligned with the outer rectangle/;
   const wall = /strictly positive wall clearance around the opening/;
-  for (const holes of [[rectangle(1, 2, true, [.05, 0])], [rectangle(1, 2), rectangle(.5, .5)], [rectangle(1e-5, 2)],
+  for (const holes of [[rectangle(1, 2, true, [.05, 0])], [rectangle(1e-5, 2)],
     [[{ kind: 'arc', start: [1, 0], center: [0, 0], direction: 'ccw' }]],
     [rectangle(1, 2).map(({ kind, start: [x, y] }) => ({ kind, start: [(x - y) * Math.SQRT1_2, (x + y) * Math.SQRT1_2] }))]]) {
     refuses(path, { ...duct, holes }, 'CAPABILITY', aperture);
   }
+  refuses(path, { ...duct, holes: [rectangle(1, 2), rectangle(.5, .5)] }, 'GEOMETRY', /strictly positive axial web clearance/);
   for (const width of [2, 2.01, 2 - 5e-7]) refuses(path, { ...duct, holes: [rectangle(width, 2)] }, 'GEOMETRY', wall);
   for (const radius of [2, 1.99]) refuses(rail({ radius }), duct, 'PARAMETER', /radial half-width smaller than the path radius/);
   for (const sketch of [section, duct]) refuses(path,

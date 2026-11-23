@@ -720,7 +720,7 @@ test('native meridian sections keep both sealed cavities, their axial web and ou
   }
 });
 
-test('paired closed rectangle admission enforces radial centering, cover, axial web and the two-rectangle limit without widening open elbows', () => {
+test('paired closed rectangle admission enforces radial centering, cover, axial web and the two-rectangle limit and keeps single offset openings unsupported', () => {
   const refused = (section, code, detail, path = joinedCircle()) => assert.throws(() => evaluateCadPart(document(path, section)),
     error => error instanceof CadPartError && error.feature === 'w' && error.code === code && detail.test(error.message));
   const eccentric = pairedCavities();
@@ -743,7 +743,9 @@ test('paired closed rectangle admission enforces radial centering, cover, axial 
   const lead = { kind: 'curve', id: 'lead', degree: 2, knots: [0, 0, 0, 1, 1, 1],
     controlPoints: [[20, -10, 0], [20, -5, 0], [20, 0, 0]], weights: [1, 1, 1] };
   const openElbow = joinCurves(lead, quarters()[0], { curveId: 'openElbow' }).curve;
-  refused(pairedCavities(), 'CAPABILITY', /one centered rectangular opening aligned with the outer rectangle/, openElbow);
+  const openReport = checkBrep(evaluateCadPart(document(openElbow, pairedCavities())).outputs[0].brep, { strict: true });
+  assert.ok(openReport.valid, openReport.issues.join('\n'));
+  assert.equal(openReport.topology[0].genus, 2);
   const oneOffset = { ...pairedCavities(), sideTags: undefined, holes: [pairedCavities().holes[0]] };
   refused(oneOffset, 'CAPABILITY', /one centered rectangular opening aligned with the outer rectangle/);
 });

@@ -381,8 +381,7 @@ await f.run(async () => {
     const expectedRevision = await currentPartRevision(call);
     const description = await call('describe', { command: 'sweep-curve' });
     assert.match(description.values.sketch, /one centered rectangular opening/);
-    if (lineArc) assert.match(description.values.sketch, /A line–arc path accepts [^.]* rectangle aligned with the bend frame/);
-    if (arcLine) assert.match(description.values.sketch, /An arc–line path accepts [^.]* rectangle aligned with the bend frame/);
+    if (singleJoin) assert.match(description.values.sketch, /Line–arc, arc–line,[^.]* accept [^.]* bend-aligned rectangle/);
     const summary = await call('query', { action: 'summary' });
     const rail = summary.direct_curves.find(candidate => candidate.id === railId);
     assert.ok(rail?.revision);
