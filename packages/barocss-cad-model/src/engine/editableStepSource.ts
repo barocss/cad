@@ -1,5 +1,6 @@
 import { emptyDoc, withNode, type StudioDoc } from './doc';
 import { stepLengthUnit } from './stepUnits';
+import { MM_PER_INCH } from '../util/units';
 
 export function editableStepSourceShape(doc: StudioDoc) {
   const [node, scale] = doc.nodes;
@@ -7,16 +8,18 @@ export function editableStepSourceShape(doc: StudioDoc) {
     return;
   if (doc.nodes.length === 1) return 'raw';
   if (doc.nodes.length === 2 && scale?.kind === 'scale' && !scale.suppressed && !scale.held
-    && scale.parent.node === 0 && scale.parent.side === 'solid' && scale.factor === 10
-    && scale.pivot?.length === 3 && scale.pivot.every(value => value === 0)) return 'centimetres';
+    && scale.parent.node === 0 && scale.parent.side === 'solid'
+    && scale.pivot?.length === 3 && scale.pivot.every(value => value === 0))
+    return scale.factor === 10 ? 'cm' : scale.factor === MM_PER_INCH ? 'in' : undefined;
 }
 
-/** Match Studio Open's conversion for the one new alternate profile. */
+/** Match Studio Open's conversion for the supported alternate profiles. */
 export function editableStepSource(name: string, step: string): StudioDoc {
   const source = withNode(emptyDoc(), { kind: 'import', name, step });
   try {
-    if (stepLengthUnit(step).to === 10)
-      return withNode(source, { kind: 'scale', parent: { node: 0, side: 'solid' }, factor: 10, pivot: [0, 0, 0] });
+    const { to } = stepLengthUnit(step);
+    if (to === 10 || to === MM_PER_INCH)
+      return withNode(source, { kind: 'scale', parent: { node: 0, side: 'solid' }, factor: to, pivot: [0, 0, 0] });
   } catch { /* The copy check reports unsupported units. */ }
   return source;
 }

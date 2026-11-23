@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1847: [Validate the active inch STEP conversion before reconstruction](notes/inch-step-plate-copy-2026-11-24/README.md), #320. Verify the linked 25.4 mm basis, exact native copy, refusal and Studio edits.
 - D1846: [Reconstruct an SI centimetre STEP plate in millimetres](notes/centimetre-step-plate-copy-2026-11-24/README.md), #320. Certify the active unit and exact normalized geometry; verify byte-identical native copies and edits in Studio.
 - D1845: [Review editable STEP copies through the local CLI](notes/editable-step-cli-review-2026-11-24/README.md), #320. Bind each review to original and candidate bytes, publish without replacing files and qualify native Studio edits.
 - D1844: [Refine exact shaft rims in Studio](notes/stepped-shaft-rim-display-2026-11-24/README.md), #16. Reduce projected chord error and retain each native or imported rim owner in both desktop renderers.

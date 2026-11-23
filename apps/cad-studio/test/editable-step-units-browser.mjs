@@ -3,8 +3,10 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createFlow, sha256 } from './flow-helper.mjs';
 
-const fixtures = process.argv[3];
-assert.ok(fixtures, 'Supply the millimetre and centimetre STEP fixtures.');
+const fixtures = process.argv[3], inch = process.argv.includes('--inch');
+const profile = inch ? { name: 'inch', unit: 'inches', factor: 25.4, centre: 12, wrong: 'wrong-inch-factor.step' }
+  : { name: 'centimetre', unit: 'centimetres', factor: 10, centre: 11, wrong: 'wrong-centimetre-line.step' };
+assert.ok(fixtures, 'Supply the two STEP fixtures and the CLI copy.');
 const pins = [
   'packages/barocss-cad/src/io/step-import.ts',
   'packages/barocss-cad-model/src/engine/editableStepCopy.ts',
@@ -13,10 +15,10 @@ const pins = [
   'apps/cad-studio/src/files/useModelExports.ts',
 ];
 const f = await createFlow({
-  name: 'editable-step-centimetres', output: process.argv[2], envFrozen: 'D1846_SOURCE_FROZEN',
+  name: 'editable-step-units', output: process.argv[2], envFrozen: 'EDITABLE_STEP_UNITS_SOURCE_FROZEN',
   initialFiles: pins, requiredFrozen: pins,
-  qualification: 'Compare the active centimetre STEP plate, its explicit normalizing Scale, and the editable native millimetre copy.',
-  limits: ['Exact AP214 writer-profile plate. Source centimetres use the active linked SI unit.'],
+  qualification: 'Compare an alternate STEP length context, its explicit normalizing Scale, and the editable native millimetre copy.',
+  limits: ['Exact AP214 writer-profile plate. Alternate source units use the active linked STEP context.'],
   inspectorSource: `
 import { readFileSync } from 'node:fs';
 import { checkBrep } from '@barocss/cad';
@@ -37,7 +39,7 @@ async function review() {
   await pick.click();
   await panel().waitFor();
 }
-async function check(label, doc, z, centerX = 11) {
+async function check(label, doc, z, centerX = profile.centre) {
   const native = await f.inspect(label, doc), c = 9 * Math.PI, a = 1200 - c;
   assert.ok(native.strict.valid, JSON.stringify(native.strict.issues));
   assert.equal(native.strict.topology[0].genus, 1);
@@ -52,44 +54,44 @@ async function check(label, doc, z, centerX = 11) {
 
 await f.run(async () => {
   const mmFile = join(fixtures, 'millimetre-plate.step');
-  const cmFile = join(fixtures, 'centimetre-plate.step'), original = await readFile(cmFile);
+  const alternate = join(fixtures, profile.name + '-plate.step'), original = await readFile(alternate);
   await f.newPage();
   await f.openFile(mmFile, 1);
   await check('mm-source', await f.doc(), 10);
   await f.snapshot('01-millimetre-source');
-  await f.openFile(cmFile, 2);
+  await f.openFile(alternate, 2);
   const source = await f.doc();
   assert.equal(source.nodes[0].step, original.toString());
-  assert.deepEqual(source.nodes[1], { id: 'n1', kind: 'scale', parent: { node: 0, side: 'solid' }, factor: 10, pivot: [0, 0, 0] });
-  await f.waitToast(/centimetres, scaled ×10 to millimetres/);
-  await check('cm-source', source, 10);
+  assert.deepEqual(source.nodes[1], { id: 'n1', kind: 'scale', parent: { node: 0, side: 'solid' }, factor: profile.factor, pivot: [0, 0, 0] });
+  await f.waitToast(new RegExp(profile.unit + ', scaled ×' + String(profile.factor).replace('.', '\\.') + ' to millimetres'));
+  await check('alternate-source', source, 10);
   await review();
   await panel().getByRole('checkbox', { name: 'Named thickness and hole centre', exact: true }).check();
-  await f.snapshot('02-centimetre-source-review');
+  await f.snapshot('02-alternate-source-review');
   const [download] = await Promise.all([f.page.waitForEvent('download'), button('Save copy', panel()).click()]);
   const copyFile = join(f.output, download.suggestedFilename());
   await download.saveAs(copyFile);
   const bytes = await readFile(copyFile), copy = JSON.parse(bytes);
-  assert.equal(sha256(bytes), sha256(await readFile(join(fixtures, 'cli-centimetre-copy.bcad'))));
+  assert.equal(sha256(bytes), sha256(await readFile(join(fixtures, 'cli-' + profile.name + '-copy.bcad'))));
   await f.same(source);
   assert.deepEqual(copy.nodes.map(node => node.kind), ['sketch', 'extrude', 'hole']);
-  assert.deepEqual(copy.parameters, { plateThickness: 10, holeCentreX: 11, holeCentreY: 9 });
+  assert.deepEqual(copy.parameters, { plateThickness: 10, holeCentreX: profile.centre, holeCentreY: 9 });
   await f.openFile(copyFile, 3);
   await f.same(copy);
-  await check('centimetre-copy', copy, 10);
+  await check('alternate-copy', copy, 10);
   const taller = (await f.setParameter('plateThickness', 14, '03-native-thickness-14')).doc;
   assert.deepEqual(taller.nodes, copy.nodes);
   await check('edited-copy', taller, 14);
-  const saved = await f.save('centimetre-copy-edited');
+  const saved = await f.save(profile.name + '-copy-edited');
   await f.freshOpen(saved.file, saved.doc, '04-editable-mm-reopened');
   await check('reopened-copy', saved.doc, 14);
-  await f.openFile(join(fixtures, 'wrong-centimetre-line.step'), 2);
+  await f.openFile(join(fixtures, profile.wrong), 2);
   const wrong = await f.doc(), downloads = f.report.downloads.length;
   await review();
   await panel().getByRole('alert').waitFor();
   assert.equal(await button('Save copy', panel()).isDisabled(), true);
   assert.equal(f.report.downloads.length, downloads);
   await f.same(wrong);
-  await f.snapshot('05-wrong-carrier-refused');
-  assert.deepEqual(await readFile(cmFile), original);
+  await f.snapshot('05-wrong-source-refused');
+  assert.deepEqual(await readFile(alternate), original);
 });

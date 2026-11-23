@@ -158,48 +158,87 @@ const recipeMetadata = new Set([
   'PROPERTY_DEFINITION', 'PROPERTY_DEFINITION_REPRESENTATION', 'CARTESIAN_POINT',
 ]);
 
-function centimetreRecipeRecords(data: Map<number, Entity>, contextValue: Value) {
-  const reference = (value: Value | undefined) => value && typeof value === 'object' && 'ref' in value ? value.ref : undefined;
-  const enumIs = (value: Value | undefined, label: string) => value && typeof value === 'object' && 'enum' in value && value.enum === label;
-  const context = data.get(reference(contextValue) ?? -1);
+type RecipeLengthUnit = 'cm' | 'in';
+const recipeReference = (value: Value | undefined) => value && typeof value === 'object' && 'ref' in value ? value.ref : undefined;
+const recipeEnum = (value: Value | undefined, label: string) =>
+  value != null && typeof value === 'object' && 'enum' in value && value.enum === label;
+
+function recipeSiLengthUnit(entity: Entity | undefined, prefix: 'CENTI' | 'MILLI'): boolean {
+  const parts = entity?.parts;
+  if (parts?.length !== 3) return false;
+  const [length, named, si] = parts;
+  return length.type === 'LENGTH_UNIT' && length.args.length === 0
+    && named.type === 'NAMED_UNIT' && named.args.length === 1 && named.args[0] === DERIVED
+    && si.type === 'SI_UNIT' && si.args.length === 2 && recipeEnum(si.args[0], prefix) && recipeEnum(si.args[1], 'METRE');
+}
+
+function inchRecipeUnit(data: Map<number, Entity>, unit: Entity | undefined) {
+  const parts = unit?.parts;
+  if (parts?.length !== 3) return refuse('expected an INCH conversion-based length unit');
+  const [conversion, length, named] = parts;
+  if (conversion.type !== 'CONVERSION_BASED_UNIT' || conversion.args.length !== 2 || conversion.args[0] !== 'INCH'
+    || length.type !== 'LENGTH_UNIT' || length.args.length !== 0 || named.type !== 'NAMED_UNIT' || named.args.length !== 1)
+    return refuse('expected an INCH conversion-based length unit');
+  const measureId = recipeReference(conversion.args[1]) ?? -1, dimensionId = recipeReference(named.args[0]) ?? -1;
+  const measure = data.get(measureId), dimensions = data.get(dimensionId);
+  const dimensionArgs = dimensions?.args;
+  if (dimensions?.type !== 'DIMENSIONAL_EXPONENTS' || dimensionArgs?.length !== 7
+    || dimensionArgs.some((value, index) => value !== (index === 0 ? 1 : 0)))
+    return refuse('INCH must have length dimensions');
+  const value = measure?.args[0], basisId = recipeReference(measure?.args[1]) ?? -1, basis = data.get(basisId);
+  if (measure?.type !== 'LENGTH_MEASURE_WITH_UNIT' || measure.args.length !== 2 || !value || typeof value !== 'object'
+    || !('type' in value) || value.type !== 'LENGTH_MEASURE' || value.args.length !== 1 || value.args[0] !== 25.4
+    || !basis || !recipeSiLengthUnit(basis, 'MILLI')) return refuse('INCH must use a 25.4 millimetre conversion measure');
+  return { millimetreUnit: basis, auxiliary: new Set([measureId, dimensionId, basisId]) };
+}
+
+function recipeRecordsInMillimetres(data: Map<number, Entity>, contextValue: Value, from: RecipeLengthUnit) {
+  const context = data.get(recipeReference(contextValue) ?? -1);
   const sets = context?.parts?.filter(part => part.type === 'GLOBAL_UNIT_ASSIGNED_CONTEXT');
   const units = sets?.length === 1 ? sets[0].args[0] : undefined;
   if (!Array.isArray(units)) return refuse('expected an active STEP unit context');
-  const lengths = units.map(reference).filter((id): id is number => id !== undefined
+  const lengths = units.map(recipeReference).filter((id): id is number => id !== undefined
     && !!data.get(id)?.parts?.some(part => part.type === 'LENGTH_UNIT'));
+  if (lengths.length !== 1) return refuse('expected one active STEP length unit');
   const id = lengths[0], unit = data.get(id);
-  const si = unit?.parts?.filter(part => part.type === 'SI_UNIT');
-  if (lengths.length !== 1 || si?.length !== 1 || si[0].args.length !== 2
-    || !enumIs(si[0].args[0], 'CENTI') || !enumIs(si[0].args[1], 'METRE'))
-    return refuse('expected the active SI centimetre length unit');
-  const sourceLengths = new Map<number, number>();
+  let canonicalUnit: Entity, auxiliary = new Set<number>();
+  if (from === 'cm') {
+    if (!unit || !recipeSiLengthUnit(unit, 'CENTI')) return refuse('expected the active SI centimetre length unit');
+    canonicalUnit = { ...unit, parts: unit.parts?.map(part => part.type === 'SI_UNIT'
+      ? { ...part, args: [{ enum: 'MILLI' }, part.args[1]] } : part) };
+  } else {
+    const conversion = inchRecipeUnit(data, unit);
+    canonicalUnit = conversion.millimetreUnit;
+    auxiliary = conversion.auxiliary;
+  }
+  const factor = from === 'cm' ? 10 : 25.4, sourceLengths = new Map<number, number>();
   const mm = (value: Value) => {
-    if (typeof value !== 'number' || !Number.isFinite(value * 10)) return refuse('invalid centimetre length');
-    const converted = value * 10, prior = sourceLengths.get(converted);
-    if (prior !== undefined && prior !== value) return refuse('distinct centimetre lengths collapse in millimetres');
+    if (typeof value !== 'number' || !Number.isFinite(value * factor)) return refuse('invalid STEP length');
+    const converted = value * factor, prior = sourceLengths.get(converted);
+    if (prior !== undefined && prior !== value) return refuse('distinct STEP lengths collapse in millimetres');
     sourceLengths.set(converted, value);
     return converted;
   };
-  return (number: number, entity: Entity): Entity => {
-    if (number === id) return { ...entity, parts: entity.parts?.map(part => part.type === 'SI_UNIT'
-      ? { ...part, args: [{ enum: 'MILLI' }, part.args[1]] } : part) };
+  const record = (number: number, entity: Entity): Entity => {
+    if (number === id) return canonicalUnit;
     const args = entity.args.slice();
     if (entity.type === 'CARTESIAN_POINT') {
-      if (!Array.isArray(args[1]) || args[1].length !== 3) return refuse('expected a three-dimensional centimetre point');
+      if (!Array.isArray(args[1]) || args[1].length !== 3) return refuse('expected a three-dimensional STEP point');
       args[1] = args[1].map(mm);
     } else if (entity.type === 'VECTOR') args[2] = mm(args[2]);
     else if (entity.type === 'UNCERTAINTY_MEASURE_WITH_UNIT') {
       const measure = args[0];
-      if (reference(args[1]) !== id || !measure || typeof measure !== 'object' || !('type' in measure)
-        || measure.type !== 'LENGTH_MEASURE' || measure.args.length !== 1) return refuse('expected a centimetre length uncertainty');
+      if (recipeReference(args[1]) !== id || !measure || typeof measure !== 'object' || !('type' in measure)
+        || measure.type !== 'LENGTH_MEASURE' || measure.args.length !== 1) return refuse('expected an uncertainty in the active length unit');
       args[0] = { ...measure, args: [mm(measure.args[0])] };
     } else return entity;
     return { ...entity, args };
   };
+  return { record, auxiliary };
 }
 
 /** @internal Compare the submitted writer-profile geometry before import normalizes it. */
-export function stepGeometryRecipeKey(source: string, normalizeCentimetres = false): string {
+export function stepGeometryRecipeKey(source: string, normalize?: RecipeLengthUnit): string {
   const data = parseData(source, true);
   const representations = [...data].filter(([, entity]) => entity.type === 'ADVANCED_BREP_SHAPE_REPRESENTATION');
   if (representations.length !== 1) return refuse('expected one advanced B-rep representation');
@@ -208,7 +247,7 @@ export function stepGeometryRecipeKey(source: string, normalizeCentimetres = fal
   const represented = definitions[0]?.args[1];
   if (definitions.length !== 1 || !represented || typeof represented !== 'object' || !('ref' in represented) || represented.ref !== root)
     return refuse('expected one product shape linked to the B-rep representation');
-  const normalized = normalizeCentimetres ? centimetreRecipeRecords(data, representations[0][1].args[2]) : undefined;
+  const normalized = normalize ? recipeRecordsInMillimetres(data, representations[0][1].args[2], normalize) : undefined;
 
   // Preserve reference sharing and every geometric argument. Record numbers and descriptive strings can change.
   const ids = new Map<number, number>(), records: unknown[] = [];
@@ -227,7 +266,7 @@ export function stepGeometryRecipeKey(source: string, normalizeCentimetres = fal
     if (previous !== undefined) return previous;
     const raw = data.get(id);
     if (!raw) return refuse('missing recipe geometry instance');
-    const entity = normalized?.(id, raw) ?? raw;
+    const entity = normalized?.record(id, raw) ?? raw;
     const ordinal = ids.size;
     ids.set(id, ordinal);
     records[ordinal] = [entity.type, entity.args.map(valueKey), entity.parts?.map(part => [part.type, part.args.map(valueKey)])];
@@ -235,7 +274,7 @@ export function stepGeometryRecipeKey(source: string, normalizeCentimetres = fal
   }
   visit(root);
   for (const [id, entity] of data) {
-    if (!ids.has(id) && !recipeMetadata.has(entity.type)) refuse('extra geometry or units outside the recipe representation');
+    if (!ids.has(id) && !normalized?.auxiliary.has(id) && !recipeMetadata.has(entity.type)) refuse('extra geometry or units outside the recipe representation');
   }
   return JSON.stringify(records);
 }

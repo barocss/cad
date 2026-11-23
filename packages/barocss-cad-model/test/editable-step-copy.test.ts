@@ -149,19 +149,33 @@ test('rejects other shaft geometry, including a valid same-count translation', (
   for (const variant of variants) assert.ok('error' in editableStepCopy(imported(stepOf(variant))));
 });
 
-function centimetres(step: string) {
-  const one = (value: string) => String(Number(value) / 10);
+function scaleStepLengths(step: string, factor: number) {
+  const one = (value: string) => String(Number(value) / factor);
   return step
-    .replace('SI_UNIT(.MILLI.,.METRE.)', 'SI_UNIT(.CENTI.,.METRE.)')
     .replace(/(=CARTESIAN_POINT\('',\()([^)]+)(\)\);)/g, (_, a, values, b) => a + values.split(',').map(one).join(',') + b)
     .replace(/(=VECTOR\('',#\d+,)([^)]+)(\);)/g, (_, a, value, b) => a + one(value) + b)
     .replace(/(=UNCERTAINTY_MEASURE_WITH_UNIT\(LENGTH_MEASURE\()([^)]+)(\))/g, (_, a, value, b) => a + one(value) + b);
 }
 
+function centimetres(step: string) {
+  return scaleStepLengths(step.replace('SI_UNIT(.MILLI.,.METRE.)', 'SI_UNIT(.CENTI.,.METRE.)'), 10);
+}
+
+function inches(step: string) {
+  const basis = /(#\d+)=\(LENGTH_UNIT\(\)NAMED_UNIT\(\*\)SI_UNIT\(\.MILLI\.,\.METRE\.\)\);/.exec(step)?.[1];
+  assert.ok(basis);
+  return scaleStepLengths(step, 25.4)
+    .replace('GLOBAL_UNIT_ASSIGNED_CONTEXT((' + basis + ',', 'GLOBAL_UNIT_ASSIGNED_CONTEXT((#9002,')
+    .replace(/(UNCERTAINTY_MEASURE_WITH_UNIT\(LENGTH_MEASURE\([^)]+\),)#\d+,/, (_, prefix) => prefix + '#9002,')
+    .replace(/\nENDSEC;\s*END-ISO-10303-21;/, '\n#9000=DIMENSIONAL_EXPONENTS(1.,0.,0.,0.,0.,0.,0.);\n'
+      + '#9001=LENGTH_MEASURE_WITH_UNIT(LENGTH_MEASURE(25.4),' + basis + ');\n'
+      + "#9002=(CONVERSION_BASED_UNIT('INCH',#9001)LENGTH_UNIT()NAMED_UNIT(#9000));\nENDSEC;\nEND-ISO-10303-21;");
+}
+
 test('reconstructs active SI centimetres into the same physical native millimetre plate', () => {
   const step = centimetres(geometry), source = editableStepSource('Centimetres', step), before = encodeStudioFile(source);
   assert.deepEqual(source.nodes.map(node => node.kind), ['import', 'scale']);
-  assert.equal(stepGeometryRecipeKey(step, true), stepGeometryRecipeKey(geometry));
+  assert.equal(stepGeometryRecipeKey(step, 'cm'), stepGeometryRecipeKey(geometry));
   const result = editableStepCopy(source, true);
   assert.ok('doc' in result && result.named, JSON.stringify(result));
   assert.equal(result.sourceUnit, 'cm');
@@ -180,7 +194,7 @@ test('refuses wrong active centimetre context, manual scaling and normalized car
     .replace('DATA;', 'DATA;\n#999=(LENGTH_UNIT()NAMED_UNIT(*)SI_UNIT(.MILLI.,.METRE.));')
     .replace(/GLOBAL_UNIT_ASSIGNED_CONTEXT\(\(#(\d+),/, 'GLOBAL_UNIT_ASSIGNED_CONTEXT((#$1,#999,');
   const badVector = step.replace(/(=VECTOR\('',#\d+,)[^)]+/, (_, carrier) => carrier + '56');
-  assert.notEqual(stepGeometryRecipeKey(badVector, true), stepGeometryRecipeKey(geometry));
+  assert.notEqual(stepGeometryRecipeKey(badVector, 'cm'), stepGeometryRecipeKey(geometry));
   for (const altered of [shadow, twoUnits, badVector])
     assert.ok('error' in editableStepCopy(editableStepSource('Wrong centimetre evidence', altered)));
   const source = editableStepSource('Centimetres', step), scale = source.nodes[1];
@@ -188,4 +202,36 @@ test('refuses wrong active centimetre context, manual scaling and normalized car
   assert.ok('error' in editableStepCopy({ ...source, nodes: [source.nodes[0], { ...scale, pivot: [1, 0, 0] }] }));
   assert.ok('error' in editableStepCopy(imported(step)));
   assert.ok('error' in editableStepCopy(editableStepSource('Centimetre shaft', centimetres(stepOf(shaft([20, 12], [12, 8]))))));
+});
+
+test('validates the linked inch conversion and reconstructs a native millimetre plate', () => {
+  const native = withNode(stock, { ...bore, center: [12, 9] });
+  const mm = stepOf(native), inch = inches(mm), source = editableStepSource('Inch plate', inch), before = encodeStudioFile(source);
+  assert.equal(stepGeometryRecipeKey(inch, 'in'), stepGeometryRecipeKey(mm));
+  const result = editableStepCopy(source, true);
+  assert.ok('doc' in result && result.named, JSON.stringify(result));
+  assert.equal(result.sourceUnit, 'in');
+  assert.deepEqual(result.doc.nodes, native.nodes);
+  assert.deepEqual(result.named.parameters, { plateThickness: 10, holeCentreX: 12, holeCentreY: 9 });
+  checkPhysical(source, 10, 12, 3);
+  checkPhysical(result.doc, 10, 12, 3);
+  assert.deepEqual(encodeStudioFile(source), before);
+});
+
+test('refuses named INCH without the exact linked factor, length dimensions, unit basis and uncertainty', () => {
+  const mm = stepOf(withNode(stock, { ...bore, center: [12, 9] })), inch = inches(mm);
+  for (const wrong of [
+    inch.replace('LENGTH_MEASURE(25.4)', 'LENGTH_MEASURE(25.)'),
+    inch.replace('WITH_UNIT(LENGTH_MEASURE(25.4)', 'WITH_UNIT(AREA_MEASURE(25.4)'),
+    inch.replace('DIMENSIONAL_EXPONENTS(1.', 'DIMENSIONAL_EXPONENTS(2.'),
+    inch.replace('SI_UNIT(.MILLI.,.METRE.)', 'SI_UNIT(.CENTI.,.METRE.)'),
+    inch.replace('#9002,\'\',\'\');', '#9000,\'\',\'\');'),
+    inch.replace('NAMED_UNIT(#9000)', 'NAMED_UNIT(#9002)'),
+    inch.replace('DATA;', 'DATA;\n#999=(LENGTH_UNIT()NAMED_UNIT(*)SI_UNIT(.MILLI.,.METRE.));'),
+  ]) {
+    assert.notEqual(wrong, inch);
+    assert.ok('error' in editableStepCopy(editableStepSource('Wrong inch declaration', wrong)));
+  }
+  // The same edit could round away in another path. This reconstruction must have an exact key.
+  assert.ok('error' in editableStepCopy(editableStepSource('Non-invertible fixture', inches(geometry))));
 });

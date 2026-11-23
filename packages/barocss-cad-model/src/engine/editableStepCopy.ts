@@ -5,8 +5,9 @@ import { addParameters, bindParameter } from './parameters';
 import { stepLengthUnit } from './stepUnits';
 import { editableStepSourceShape } from './editableStepSource';
 import { twoStepShaftDimensions } from './twoStepShaftGeometry';
+import { MM_PER_INCH } from '../util/units';
 
-export type EditableStepCopy = { family: 'plate' | 'shaft'; sourceUnit?: 'cm'; doc: StudioDoc; named?: StudioDoc } | { error: string };
+export type EditableStepCopy = { family: 'plate' | 'shaft'; sourceUnit?: 'cm' | 'in'; doc: StudioDoc; named?: StudioDoc } | { error: string };
 export const editableStepByteLimit = 96 * 1024;
 
 const unsupported = 'Use one STEP solid that matches a supported recipe: a rectangular plate with one through hole or a millimetre two-step shaft.';
@@ -64,16 +65,17 @@ export function editableStepCopy(source: StudioDoc, includeNamed = false): Edita
     return { error: 'This STEP file exceeds the editable copy size limit (96 KiB).' };
   try {
     const unit = stepLengthUnit(node.step);
-    const centimetres = unit.to === 10 && sourceShape === 'centimetres';
-    if (!unit.declared || !(centimetres || unit.to === 1 && sourceShape === 'raw'))
-      return { error: 'Use declared millimetres or a supported SI centimetre import.' };
-    const originalKey = stepGeometryRecipeKey(node.step, centimetres);
+    const sourceUnit = sourceShape === 'cm' && unit.to === 10 ? 'cm'
+      : sourceShape === 'in' && unit.to === MM_PER_INCH ? 'in' : undefined;
+    if (!unit.declared || !(sourceUnit || unit.to === 1 && sourceShape === 'raw'))
+      return { error: 'Use declared millimetres or a supported centimetre or inch import.' };
+    const originalKey = stepGeometryRecipeKey(node.step, sourceUnit);
     const outputs = partBreps(source);
     if (outputs.length !== 1 || !recipeTopology(outputs[0].brep)) return { error: unsupported };
     const imported = outputs[0].brep;
     const family = imported.faces.length === 8 && imported.vertices.length === 12 ? 'plate'
       : imported.faces.length === 10 && imported.vertices.length === 10 ? 'shaft' : undefined;
-    if (!family || centimetres && family !== 'plate') return { error: unsupported };
+    if (!family || sourceUnit && family !== 'plate') return { error: unsupported };
     const shaft = family === 'shaft' ? twoStepShaftDimensions(imported) : undefined;
     const candidate = shaft ? withNode(emptyDoc(), { kind: 'shaft', generator: 'shaft@0', center: [0, 0], steps: shaft.steps })
       : family === 'plate' ? plateRecipe(imported) : undefined;
@@ -83,7 +85,7 @@ export function editableStepCopy(source: StudioDoc, includeNamed = false): Edita
     const step = exportStudioStep(candidate, { name: 'Editable check' }).text;
     if (stepGeometryRecipeKey(step) !== originalKey) return { error: unsupported };
     const named = includeNamed && family === 'plate' ? withNamedDrivers(candidate, originalKey) : undefined;
-    return { family, doc: candidate, ...(centimetres ? { sourceUnit: 'cm' } : {}), ...(named ? { named } : {}) };
+    return { family, doc: candidate, ...(sourceUnit ? { sourceUnit } : {}), ...(named ? { named } : {}) };
   } catch {
     return { error: unsupported };
   }
