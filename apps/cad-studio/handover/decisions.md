@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1792: [Sweep two passages through a spaced S-bend](notes/exact-spaced-paired-duct-2026-11-23/README.md), #10. Verify both apertures at both ends, 24 native tangent joins, editable lane geometry, fresh Open and explicit local Agent approval.
 - D1791: [Review the outlet Offset with its original Direct rail](notes/paired-outlet-review-retained-rail-2026-11-23/README.md), #324. Pin the retained curve and copied path, reject changed curves, and match the approved native body and both images after fresh Open.
 - D1790: [Drag the saved paired duct outlet Offset](notes/saved-paired-elbow-outlet-handle-2026-11-23/README.md), #17. Verify native cap ownership and physical History drag through Undo, Redo and fresh Open with or without the original Direct rail.
 - D1789: [Review a pending paired duct outlet Offset](notes/pending-paired-elbow-outlet-offset-review-2026-11-23/README.md), #324. Bind both cap planes, the two passages, retained joints and signed material change to the same images through Studio approval and fresh Open.

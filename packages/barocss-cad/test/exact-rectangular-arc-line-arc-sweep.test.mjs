@@ -346,7 +346,8 @@ for (const turn of [-1, 1]) test(`the ${turn === 1 ? 'same-turn' : 'opposite-tur
     kind, start: [50 + (x - y) * Math.SQRT1_2, -30 + (x + y) * Math.SQRT1_2],
   }));
   refused(path, withHole(rotated), 'CAPABILITY', aperture);
-  refused(path, withHole(...duct.holes, rectangle(.5, .5)), 'CAPABILITY', aperture);
+  refused(path, withHole(...duct.holes, rectangle(.5, .5)), turn === -1 ? 'GEOMETRY' : 'CAPABILITY',
+    turn === -1 ? /strictly positive axial web clearance/ : aperture);
   refused(path, withHole(rectangle(1e-5, 2)), 'CAPABILITY', aperture);
   for (const width of [2, 2.01, 2 - 5e-7, 2 - 1e-6]) refused(path, withHole(rectangle(width, 2)), 'GEOMETRY', wall);
   refused(path, withHole(rectangle(1, 2, { center: [51, -30] })), 'GEOMETRY', wall);
@@ -384,7 +385,7 @@ for (const turn of [-1, 1]) test(`the ${turn === 1 ? 'same-turn' : 'opposite-tur
   const rectangle = [[49, -32], [51, -32], [51, -28], [49, -28]].map(start => ({ kind: 'line', start }));
   const circle = [{ kind: 'arc', start: [51, -30], center: [50, -30], direction: 'ccw' }];
   for (const holes of [[circle], [rectangle, circle]]) refused(path, { ...section, holes },
-    'CAPABILITY', /one centered rectangular opening aligned with the outer rectangle/);
+    'CAPABILITY', /one centered rectangular opening aligned with the outer rectangle|two axis-aligned rectangular cavities/);
   for (const radius of [2, 1.99]) for (const radii of [{ firstRadius: radius }, { secondRadius: radius }])
     refused(rail({ turn, ...radii }), section, 'PARAMETER', /rectangular arc-line-arc sweep needs radial half-width smaller than both path radii/);
   for (const options of [{ lineTangent: [1, 0, 0] }, { secondTangent: [0, -1, 0] }, { length: -8 }])
