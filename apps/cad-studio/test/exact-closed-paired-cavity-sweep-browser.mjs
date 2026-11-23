@@ -1,10 +1,13 @@
 import assert from 'node:assert/strict';
-import { copyFile, readFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import { copyFile, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createFlow } from './flow-helper.mjs';
 import { currentPartRevision, withMcpSession } from './mcp-browser-session.mjs';
 
 const baseline = process.argv.includes('--expect-refused');
+const reviewBaseline = process.argv.includes('--expect-review-unavailable');
+const review = reviewBaseline || process.argv.includes('--review-cavities');
 const railId = 'circle-rail', railName = 'Closed circular rail';
 const path = { degree: 2, knots: [0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 4],
   controlPoints: [[20, 0, 0], [20, 20, 0], [0, 20, 0], [-20, 20, 0], [-20, 0, 0],
@@ -27,11 +30,15 @@ const seed = { format: 'barocss-cad-model', schema: 3, units: 'mm', parameters: 
 const pins = [
   'packages/barocss-cad/src/brep/exact-sweep.ts', 'packages/barocss-cad/src/features/revolve.ts',
   'packages/barocss-cad-model/src/app/profileCommands.ts', 'packages/barocss-cad-model/src/engine/errors.ts',
-  'packages/barocss-cad-model/src/chat/part/features.ts', 'apps/cad-studio/test/exact-closed-paired-cavity-sweep-browser.mjs',
+  'packages/barocss-cad-model/src/chat/part/features.ts', 'packages/barocss-cad-model/src/chat/part/views.ts',
+  'packages/barocss-cad-model/src/chat/part/modelCandidate.ts', 'packages/barocss-cad-model/src/chat/part/proposals.ts',
+  'packages/barocss-cad-model/src/chat/rectangularDuctProposalReview.ts', 'packages/barocss-cad-model/src/chat/closedRectangularDuctEvidence.ts',
+  'apps/cad-studio/test/exact-closed-paired-cavity-sweep-browser.mjs',
 ];
 const f = await createFlow({
-  name: 'exact-closed-paired-cavity-sweep', output: process.argv[2], envFrozen: 'D1770_SOURCE_FROZEN',
+  name: 'exact-closed-paired-cavity-sweep', output: process.argv[2], envFrozen: review ? 'D1772_SOURCE_FROZEN' : 'D1770_SOURCE_FROZEN',
   initialFiles: pins, requiredFrozen: pins,
+  extraFrozen: review && !reviewBaseline ? ['packages/barocss-cad-model/src/chat/closedPairedRectangularDuctEvidence.ts'] : [],
   qualification: 'Sweep two separate, radially centered rectangular cavities around a closed exact circle.',
   limits: ['One R20 rail, a 4 × 10 mm rectangle and two vertically separated cavities on the default frame. Desktop WebGPU.'],
   inspectorSource: `
@@ -103,7 +110,7 @@ async function verify(label, doc, halfHeight) {
   }
   f.report.observations.push({ label, volume: native.mass.volume, centroid: native.mass.centroid, digest: native.digest,
     chartGap: native.check.maximumPcurveGap, groups });
-  return { digest: native.digest, groups };
+  return { digest: native.digest, groups, faces: native.faces };
 }
 
 async function measureInStudio({ groups }, label) {
@@ -155,10 +162,91 @@ async function showSection(doc) {
   await button('Section view').click();
 }
 
+async function modelImage(request, args) {
+  const reply = await request('tools/call', { name: 'query', arguments: { action: 'render', ...args } });
+  assert.equal(reply.isError, false, reply.content[0].text);
+  const meta = JSON.parse(reply.content[0].text);
+  const png = Buffer.from(reply.content.find(item => item.type === 'image').data, 'base64');
+  assert.equal(png.subarray(0, 8).toString('hex'), '89504e470d0a1a0a');
+  assert.equal(meta.imageSha256, createHash('sha256').update(png).digest('hex'));
+  assert.equal(Object.keys(meta.views).length, 4);
+  return { meta, png };
+}
+
+async function reviewPendingCavities(call, request, revision, expected) {
+  const { proposals: [proposal] } = await call('proposals', { action: 'list' });
+  assert.equal(proposal.id, 'P1');
+  const args = { proposal: proposal.id, expectedRevision: revision };
+  if (reviewBaseline) {
+    assert.equal(proposal.modelReviewRevision, undefined);
+    assert.match(proposal.proposalRevision, /^[0-9a-f]{64}$/);
+    const render = await call('query', { action: 'render', ...args, expectedProposalRevision: proposal.proposalRevision }, true);
+    assert.equal(render.code, 'MODEL_REVIEW_UNAVAILABLE');
+    f.report.observations.push({ label: 'paired-cavity-review-unavailable', ...render });
+    return;
+  }
+  assert.match(proposal.modelReviewRevision, /^[0-9a-f]{64}$/);
+  const pins = { ...args, expectedProposalRevision: proposal.modelReviewRevision };
+  const first = await modelImage(request, pins), opposite = await modelImage(request, { ...pins, orientation: 'opposite' });
+  const evidence = first.meta.rectangularDuct;
+  assert.deepEqual([evidence.body, evidence.sketch, evidence.path, evidence.pathKind, evidence.caps],
+    ['b1', 'n0', railId, 'closed-circle', []]);
+  const sealed = evidence.closedCavities;
+  assert.equal(sealed.cavities.length, 2);
+  assert.equal(new Set([sealed.exteriorShell, ...sealed.cavities.map(cavity => cavity.shell)]).size, 3);
+  assert.equal(sealed.exteriorFaces.length, 8);
+  assert.equal(evidence.exteriorSeams.length, 8);
+  assert.equal(evidence.interiorSeams.length, 2);
+  near(sealed.dimensions.pathRadius, 20);
+  near(sealed.dimensions.axialWeb, 2);
+  near(sealed.volume.analytic, volume(1));
+  near(sealed.volume.native, volume(1));
+  assert.ok(sealed.maximumGapMM < 1e-8);
+  for (const [index, cavity] of sealed.cavities.entries()) {
+    const names = expected.faces.filter(face => face.shell === index + 1).map(face => face.name);
+    assert.deepEqual([...cavity.faces].sort(), names.sort());
+    assert.deepEqual([cavity.seams.length, cavity.corners.length], [8, 8]);
+    const bounds = expected.faces.filter(face => face.shell === index + 1 && face.geometry.kind === 'plane').map(face => face.geometry.o[2]);
+    near(cavity.axialInterval[0], Math.min(...bounds));
+    near(cavity.axialInterval[1], Math.max(...bounds));
+    near(cavity.dimensions.radial, 2);
+    near(cavity.dimensions.axial, 2);
+    near(cavity.volume.analytic, 160 * Math.PI);
+    near(cavity.volume.native, 160 * Math.PI);
+  }
+  assert.deepEqual(opposite.meta.rectangularDuct, evidence);
+  for (const image of [first, opposite]) assert.equal(image.meta.candidate.bodySha256, expected.digest);
+  assert.notEqual(first.meta.candidate.reviewRevision, opposite.meta.candidate.reviewRevision);
+  const faces = expected.faces.filter(face => face.shell > 0 && face.geometry.kind === 'plane').map(face => face.name);
+  assert.equal(faces.length, 8);
+  const lookup = { ...pins, action: 'inspect', faces, expectedReviewRevision: first.meta.candidate.reviewRevision };
+  const read = await call('query', lookup);
+  assert.deepEqual([read.candidate, read.revision, read.imageSha256, read.rectangularDuct],
+    [first.meta.candidate, first.meta.revision, first.meta.imageSha256, evidence]);
+  assert.deepEqual(read.faces.map(face => face.name), faces);
+  for (const face of read.faces) {
+    const expectedFace = expected.faces.find(item => item.name === face.name);
+    assert.equal(face.geometry.kind, 'plane');
+    near(face.geometry.point[2], expectedFace.geometry.o[2]);
+    assert.deepEqual(face.geometry.outwardNormal, expectedFace.geometry.n);
+  }
+  assert.equal((await call('query', { ...lookup, orientation: 'opposite' }, true)).code, 'MODEL_REVIEW_IMAGE_STALE');
+  assert.equal((await call('query', { ...lookup, expectedProposalRevision: '0'.repeat(64) }, true)).code, 'MODEL_REVIEW_PROPOSAL_STALE');
+  assert.equal((await call('query', { ...lookup, expectedRevision: '0'.repeat(16) }, true)).code, 'MODEL_REVIEW_BASE_STALE');
+  const otherRead = await call('query', { ...lookup, orientation: 'opposite', expectedReviewRevision: opposite.meta.candidate.reviewRevision });
+  assert.deepEqual(otherRead.faces, read.faces);
+  await writeFile(join(f.output, 'paired-cavities-agent-four-views.png'), first.png);
+  await writeFile(join(f.output, 'paired-cavities-agent-opposite.png'), opposite.png);
+  f.report.observations.push({ label: 'paired-cavity-review', ...first.meta.candidate, revision: first.meta.revision,
+    imageSha256: first.meta.imageSha256, oppositeImageSha256: opposite.meta.imageSha256, evidence });
+  return { first, opposite, lookup, faces: read.faces };
+}
+
 async function approveWithAgent(original, expected) {
   const file = join(f.output, 'paired-cavities-agent-proposal.bcad');
+  const session = { app: f.app, output: f.output, clientName: f.name };
   await copyFile(original.file, file);
-  await withMcpSession({ app: f.app, output: f.output, clientName: f.name }, file, 'paired-cavity-proposal', async call => {
+  const reviewed = await withMcpSession(session, file, 'paired-cavity-proposal', async (call, request) => {
     const revision = await currentPartRevision(call);
     const rails = (await call('query', { action: 'summary' })).direct_curves;
     const rail = rails.find(curve => curve.id === railId);
@@ -173,6 +261,12 @@ async function approveWithAgent(original, expected) {
     assert.deepEqual(await readFile(file), before);
     const staged = await call('proposals', { action: 'propose', title: 'Sweep the exact two-cavity section', ops: [op] });
     assert.deepEqual([staged.proposal, staged.applied], ['P1', false]);
+    if (review) {
+      const pending = await readFile(file);
+      const result = await reviewPendingCavities(call, request, revision, expected);
+      assert.deepEqual(await readFile(file), pending);
+      return result;
+    }
   });
   const pending = JSON.parse(await readFile(file));
   assert.deepEqual([pending.nodes, pending.outputs], [seed.nodes, seed.outputs]);
@@ -186,7 +280,21 @@ async function approveWithAgent(original, expected) {
   await button('Accept', card).click();
   await f.changed(pending);
   const approved = (await f.snapshot('12-two-cavity-proposal-approved')).doc;
-  assert.equal((await verify('approved-native', approved, 1)).digest, expected);
+  assert.equal((await verify('approved-native', approved, 1)).digest, expected.digest);
+  if (review) {
+    const saved = await f.save('paired-cavities-reviewed');
+    const reopened = (await f.freshOpen(saved.file, approved, '13-approved-fresh-open')).doc;
+    assert.equal((await verify('approved-reopened-native', reopened, 1)).digest, expected.digest);
+    if (reviewed) await withMcpSession(session, saved.file, 'paired-cavities-reviewed', async (call, request) => {
+      const expectedRevision = await currentPartRevision(call);
+      assert.equal(expectedRevision, reviewed.first.meta.revision);
+      assert.deepEqual((await modelImage(request, { expectedRevision })).png, reviewed.first.png);
+      assert.deepEqual((await modelImage(request, { expectedRevision, orientation: 'opposite' })).png, reviewed.opposite.png);
+      const current = await call('query', { action: 'inspect', faces: reviewed.lookup.faces, expectedRevision });
+      assert.deepEqual(current.faces, reviewed.faces);
+      assert.equal((await call('query', { ...reviewed.lookup, expectedRevision }, true)).code, 'MODEL_REVIEW_UNAVAILABLE');
+    });
+  }
 }
 
 await f.run(async () => {
@@ -263,5 +371,5 @@ await f.run(async () => {
   await setBounds(-3, -1);
   const restored = (await f.finishSketch('09-two-cavity-height-restored')).doc;
   assert.equal((await verify('restored-native', restored, 1)).digest, before.digest);
-  await approveWithAgent(original, before.digest);
+  await approveWithAgent(original, before);
 });

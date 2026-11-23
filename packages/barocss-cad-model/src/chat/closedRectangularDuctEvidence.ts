@@ -15,7 +15,7 @@ const tolerance = CadNumericPolicy.linearTolerance;
 const near = (a: number, b: number) => Number.isFinite(a) && Number.isFinite(b) && Math.abs(a - b) <= tolerance;
 
 /** Read only the four rational quadrants admitted by the D1673 closed-circle producer. */
-function circle(path: Path) {
+export function closedDuctCircle(path: Path) {
   const { degree, knots, controlPoints: points, weights } = path;
   if (degree !== 2 || points.length !== 9 || weights.length !== 9 || knots.length !== 12 ||
     points.some(point => point.length !== 3 || point.some(value => !Number.isFinite(value) || Math.abs(value) > CadNumericPolicy.coordinateAbs)) ||
@@ -47,7 +47,7 @@ function circle(path: Path) {
 }
 
 /** The review scope has no sketch plane; retain the producer's projected default sketch axes. */
-function sizes(source: Source, frame: NonNullable<ReturnType<typeof circle>>) {
+function sizes(source: Source, frame: NonNullable<ReturnType<typeof closedDuctCircle>>) {
   if (source.outer.length !== 2 || source.inner.length !== 2 || [...source.outer, ...source.inner].some(size => !(size > 0 && Number.isFinite(size))) ||
     source.inner.some((size, i) => !(source.outer[i] - size > 20 * tolerance)) ||
     source.outerTags.length !== 4 || source.innerTags.length !== 4 ||
@@ -63,7 +63,7 @@ function sizes(source: Source, frame: NonNullable<ReturnType<typeof circle>>) {
     interior: { radial: source.inner[radialIndex], axial: source.inner[axialIndex] } };
 }
 
-function isolatedShell(brep: Brep, shell: BrepShell): Brep {
+export function isolatedDuctShell(brep: Brep, shell: BrepShell): Brep {
   const faces = brep.faces.filter(face => shell.faces.includes(face.id)), faceIds = new Set(faces.map(face => face.id));
   const loops = brep.loops.filter(loop => faceIds.has(loop.face)), loopIds = new Set(loops.map(loop => loop.id));
   const coedges = brep.coedges.filter(use => loopIds.has(use.loop)), edgeIds = new Set(coedges.map(use => use.edge));
@@ -73,8 +73,8 @@ function isolatedShell(brep: Brep, shell: BrepShell): Brep {
 }
 
 function walls(brep: Brep, shell: BrepShell, names: Set<string>, expected: { radial: number; axial: number },
-  frame: NonNullable<ReturnType<typeof circle>>, inward: boolean) {
-  const native = isolatedShell(brep, shell), report = checkBrep(native, { strict: true });
+  frame: NonNullable<ReturnType<typeof closedDuctCircle>>, inward: boolean) {
+  const native = isolatedDuctShell(brep, shell), report = checkBrep(native, { strict: true });
   if (!shell.closed || native.faces.length !== 8 || native.loops.length !== 8 || native.coedges.length !== 32 ||
     native.edges.length !== 16 || native.vertices.length !== 8 || !report.valid || report.topology.length !== 1 || report.topology[0].genus !== 1 ||
     new Set(native.faces.map(face => face.name)).size !== 8 || native.faces.some(face => face.surface.kind !== 'surface' || !face.name || !names.has(face.name))) return;
@@ -121,7 +121,7 @@ function walls(brep: Brep, shell: BrepShell, names: Set<string>, expected: { rad
 /** Evidence only for the source-tagged D1762 closed rectangular duct. No document or geometry changes. */
 export function closedRectangularDuctEvidence(brep: Brep, path: Path, source: Source) {
   try {
-    const frame = circle(path), dimensions = frame && sizes(source, frame);
+    const frame = closedDuctCircle(path), dimensions = frame && sizes(source, frame);
     if (!frame || !dimensions || brep.source.family !== 'sweep-curve' || !brep.source.id || brep.bodies.length !== 1 ||
       brep.bodies[0].kind !== 'solid' || brep.shells.length !== 2) return;
     const report = checkBrep(brep, { strict: true });

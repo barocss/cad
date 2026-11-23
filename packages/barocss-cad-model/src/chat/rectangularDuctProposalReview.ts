@@ -3,7 +3,7 @@ import {
   type Brep, type BrepEdge, type Point,
 } from '@barocss/cad';
 import { sweepPath } from '../app/profileCommands';
-import { withNode, type ModelNode, type StudioDoc } from '../engine/doc';
+import { withNode, type ModelNode, type SketchNode, type StudioDoc } from '../engine/doc';
 import { loadDirect } from '../engine/directModule';
 import { partBreps } from '../engine/evaluate';
 import { bodyKeyFor, featureId } from '../engine/ids';
@@ -12,6 +12,7 @@ import { digestOf } from '../util/digest';
 import { isObj } from '../util/guards';
 import { canonical, canonicalOf, revisionOf } from '../util/revision';
 import { closedRectangularDuctEvidence } from './closedRectangularDuctEvidence';
+import { closedPairedRectangularDuctEvidence } from './closedPairedRectangularDuctEvidence';
 import { directInspectionRevision } from './sweepSource';
 
 const near = (a: number, b: number) => Number.isFinite(a) && Number.isFinite(b) && Math.abs(a - b) <= CadNumericPolicy.linearTolerance;
@@ -19,15 +20,8 @@ const sub = (a: Point, b: Point): Point => [a[0] - b[0], a[1] - b[1], a[2] - b[2
 const dot = (a: Point, b: Point) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 const cross = (a: Point, b: Point): Point => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
 
-/** Read one authored, tagged rectangular wall section and its centered opening. */
-export function rectangularDuctSection(sketch: ModelNode | undefined) {
-  if (sketch?.kind !== 'sketch' || sketch.profile !== 'rectangle' || !sketch.id ||
-    sketch.suppressed || sketch.held !== undefined || sketch.on || sketch.association || sketch.pocketFloor || sketch.regions?.length || sketch.plane ||
-    ![...sketch.min, ...sketch.max].every(value => typeof value === 'number' && Number.isFinite(value)) ||
-    sketch.holes?.length !== 1 || sketch.holes[0].length !== 4) return;
-  const outer = [Number(sketch.max[0]) - Number(sketch.min[0]), Number(sketch.max[1]) - Number(sketch.min[1])];
-  const hole = sketch.holes[0];
-  if (outer.some(size => size <= 0) || hole.some(segment => segment.kind !== 'line' ||
+function rectangularOpening(hole: NonNullable<SketchNode['holes']>[number]) {
+  if (hole.length !== 4 || hole.some(segment => segment.kind !== 'line' ||
     Object.keys(segment).sort().join(',') !== 'kind,start' || !segment.start.every(value => typeof value === 'number' && Number.isFinite(value)))) return;
   const points = hole.map(segment => segment.start.map(Number));
   const min = [0, 1].map(axis => Math.min(...points.map(point => point[axis])));
@@ -35,17 +29,59 @@ export function rectangularDuctSection(sketch: ModelNode | undefined) {
   const inner = max.map((value, axis) => value - min[axis]);
   if (inner.some(size => size <= 0) || new Set(points.map(point => point.join(','))).size !== 4 ||
     points.some((point, index) => point.some((value, axis) => value !== min[axis] && value !== max[axis]) ||
-      point.filter((value, axis) => value !== points[(index + 1) % 4][axis]).length !== 1) ||
-    min.some((value, axis) => !near(value + max[axis], Number(sketch.min[axis]) + Number(sketch.max[axis])) ||
-      value - Number(sketch.min[axis]) <= CadNumericPolicy.linearTolerance || Number(sketch.max[axis]) - max[axis] <= CadNumericPolicy.linearTolerance)) return;
-  const tags = sketch.sideTags, innerTags = tags?.holes?.[0];
-  if (tags?.outer.length !== 4 || tags.regions?.length || tags.holes?.length !== 1 || innerTags?.length !== 4 ||
-    [...tags.outer, ...innerTags].some(tag => typeof tag !== 'string' || !tag) || new Set([...tags.outer, ...innerTags]).size !== 8) return;
-  return { sketchId: sketch.id, outer, inner, outerTags: tags.outer, innerTags };
+      point.filter((value, axis) => value !== points[(index + 1) % 4][axis]).length !== 1)) return;
+  return { min, max, inner };
+}
+
+function ductSection(sketch: ModelNode | undefined, holeCount: number) {
+  if (sketch?.kind !== 'sketch' || sketch.profile !== 'rectangle' || !sketch.id ||
+    sketch.suppressed || sketch.held !== undefined || sketch.on || sketch.association || sketch.pocketFloor || sketch.regions?.length || sketch.plane ||
+    ![...sketch.min, ...sketch.max].every(value => typeof value === 'number' && Number.isFinite(value)) ||
+    sketch.holes?.length !== holeCount) return;
+  const low = sketch.min.map(Number), high = sketch.max.map(Number), outer = high.map((value, axis) => value - low[axis]);
+  const tags = sketch.sideTags;
+  if (outer.some(size => size <= 0) || tags?.outer.length !== 4 || tags.regions?.length ||
+    tags.holes?.length !== holeCount || tags.holes.some(hole => hole.length !== 4)) return;
+  const names = [...tags.outer, ...tags.holes.flat()];
+  if (names.some(tag => typeof tag !== 'string' || !tag) || new Set(names).size !== names.length) return;
+  const openings = [];
+  for (const [index, loop] of sketch.holes.entries()) {
+    const opening = rectangularOpening(loop);
+    if (!opening || opening.min.some((value, axis) => value - low[axis] <= CadNumericPolicy.linearTolerance ||
+      high[axis] - opening.max[axis] <= CadNumericPolicy.linearTolerance)) return;
+    openings.push({ ...opening, tags: tags.holes[index] });
+  }
+  return { sketchId: sketch.id, outer, outerTags: tags.outer, openings, low, high };
+}
+
+/** Read one authored, tagged rectangular wall section and its centered opening. */
+export function rectangularDuctSection(sketch: ModelNode | undefined) {
+  const section = ductSection(sketch, 1);
+  if (!section) return;
+  const { sketchId, outer, outerTags, openings: [hole], low, high } = section;
+  if (hole.min.some((value, axis) => !near(value + hole.max[axis], low[axis] + high[axis]))) return;
+  return { sketchId, outer, inner: hole.inner, outerTags, innerTags: hole.tags };
+}
+
+function pairedDuctSection(sketch: ModelNode | undefined) {
+  const section = ductSection(sketch, 2);
+  if (!section) return;
+  const { sketchId, outer, outerTags, openings: [first, second], low, high } = section;
+  const separated = [0, 1].some(axial => {
+    const radial = 1 - axial;
+    const web = Math.max(first.min[axial], second.min[axial]) - Math.min(first.max[axial], second.max[axial]);
+    return web > CadNumericPolicy.linearTolerance &&
+      [first, second].every(hole => near(hole.min[radial] + hole.max[radial], low[radial] + high[radial]));
+  });
+  if (!separated) return;
+  const center = low.map((value, axis) => (value + high[axis]) / 2);
+  const relative = (points: number[]): [number, number] => [points[0] - center[0], points[1] - center[1]];
+  const cavities = [first, second].map(hole => ({ min: relative(hole.min), max: relative(hole.max), tags: hole.tags }));
+  return { sketchId, outer, outerTags, cavities };
 }
 
 function scope(doc: StudioDoc) {
-  const section = rectangularDuctSection(doc.nodes[0]);
+  const section = rectangularDuctSection(doc.nodes[0]) ?? pairedDuctSection(doc.nodes[0]);
   if (doc.nodes.length !== 1 || doc.instances?.length || Object.keys(doc.outputs).length || !section) return;
   const direct = doc.direct, visible = direct?.objects.filter(object => !object.hidden), object = visible?.[0];
   if (!direct || visible?.length !== 1 || !object || direct.objects.filter(item => item.id === object.id).length !== 1 ||
@@ -86,7 +122,7 @@ function rectangle(edges: BrepEdge[], center: Point, normal: Point, sizes: numbe
   return corners.length === 4 && lengths.sort((a, b) => a - b).every((value, index) => near(value, expected[index]));
 }
 
-function capEvidence(brep: Brep, name: string, center: Point, normal: Point, source: NonNullable<ReturnType<typeof scope>>, wallNames: (tags: string[]) => string[], requireCharts = false) {
+function capEvidence(brep: Brep, name: string, center: Point, normal: Point, source: NonNullable<ReturnType<typeof rectangularDuctSection>>, wallNames: (tags: string[]) => string[], requireCharts = false) {
   const face = brep.faces.find(item => item.name === name);
   if (!face || face.loops.length !== 2) return;
   const plane = faceGeometry(face);
@@ -158,6 +194,13 @@ export async function reviewedRectangularDuctEvidence(base: StudioDoc, candidate
     const outputs = partBreps(candidate), brep = outputs[0]?.brep, feature = featureId(candidate.nodes, 1), body = bodyKeyFor(candidate.nodes, 1);
     if (outputs.length !== 1 || outputs[0].key !== body || brep.source.family !== 'sweep-curve' || brep.source.id !== feature ||
       brep.bodies.length !== 1 || brep.bodies[0].kind !== 'solid') return;
+    if ('cavities' in source) {
+      if (!closedCircle) return;
+      const evidence = closedPairedRectangularDuctEvidence(brep, path, source);
+      if (!evidence) return;
+      return { brep, rectangularDuct: { body, sketch: edit.sketch, path: edit.path, pathRevision: edit.pathRevision,
+        pathKind: 'closed-circle' as const, caps: [], ...evidence } };
+    }
     if (closedCircle) {
       const evidence = closedRectangularDuctEvidence(brep, path, source);
       if (!evidence) return;

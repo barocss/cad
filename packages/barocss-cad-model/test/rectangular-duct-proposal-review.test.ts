@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { brepMassProperties, checkBrep, faceGeometry } from '@barocss/cad';
 import { sweepPath } from '../src/app/profileCommands';
-import { rectangularDuctProposal, reviewedRectangularDuctEvidence } from '../src/chat/rectangularDuctProposalReview';
+import { rectangularDuctProposal, rectangularDuctSection, reviewedRectangularDuctEvidence } from '../src/chat/rectangularDuctProposalReview';
 import { sweepSourceRevision } from '../src/chat/sweepSource';
 import { emptyDoc, withNode, type ModelNode } from '../src/engine/doc';
 import type { Proposal } from '../src/engine/schema/proposals';
@@ -13,6 +13,10 @@ const text = `@model rails { version:0; length-unit:mm;
   @curve #s-bend { type:nurbs; degree:2; knots:[0,0,0,1,1,2,2,2];
     control-points:[[0,0,0],[12,0,0],[12,12,0],[12,30,0],[30,30,0]];
     weights:[1,0.7071067811865476,1,0.7071067811865476,1]; } }`;
+const circle = `@model rails { version:0; length-unit:mm;
+  @curve #circle { type:nurbs; degree:2; knots:[0,0,0,1,1,2,2,3,3,4,4,4];
+    control-points:[[20,0,0],[20,20,0],[0,20,0],[-20,20,0],[-20,0,0],[-20,-20,0],[0,-20,0],[20,-20,0],[20,0,0]];
+    weights:[1,0.7071067811865476,1,0.7071067811865476,1,0.7071067811865476,1,0.7071067811865476,1]; } }`;
 
 async function fixture(railText = text, railId = 's-bend', railName = 'S-bend rail') {
   const base = { ...withNode(emptyDoc(), {
@@ -76,10 +80,6 @@ test('one pinned rectangular duct creation proves both native openings and all e
 });
 
 test('a pinned closed-circle duct can review its sealed cavity and keeps the source unchanged', async () => {
-  const circle = `@model rails { version:0; length-unit:mm;
-    @curve #circle { type:nurbs; degree:2; knots:[0,0,0,1,1,2,2,3,3,4,4,4];
-      control-points:[[20,0,0],[20,20,0],[0,20,0],[-20,20,0],[-20,0,0],[-20,-20,0],[0,-20,0],[20,-20,0],[20,0,0]];
-      weights:[1,0.7071067811865476,1,0.7071067811865476,1,0.7071067811865476,1,0.7071067811865476,1]; } }`;
   const { base, candidate, edit } = await fixture(circle, 'circle', 'Closed circle');
   const before = structuredClone(base), after = structuredClone(candidate);
   const reviewed = await reviewedRectangularDuctEvidence(base, candidate, edit);
@@ -95,6 +95,38 @@ test('a pinned closed-circle duct can review its sealed cavity and keeps the sou
   assert.equal(await reviewedRectangularDuctEvidence(base, { ...candidate, nextId: 99 }, edit), undefined);
   assert.deepEqual(base, before);
   assert.deepEqual(candidate, after);
+});
+
+test('a paired-cavity proposal binds separate axial intervals and does not enter the single-cavity Intersect scope', async () => {
+  const { base, proposal } = await fixture(circle, 'circle', 'Closed circle');
+  const start = base.nodes[0];
+  assert.ok(start.kind === 'sketch' && start.profile === 'rectangle');
+  const hole = (low: number, high: number, left = -1, right = 1) =>
+    ([[left, low], [left, high], [right, high], [right, low]] as [number, number][]).map(start => ({ kind: 'line' as const, start }));
+  const tags = { outer: ['e1', 'e2', 'e3', 'e4'], holes: [['a1', 'a2', 'a3', 'a4'], ['b1', 'b2', 'b3', 'b4']] };
+  const sketch = { ...start, min: [-2, -5], max: [2, 5], holes: [hole(-2.5, -1.5), hole(1, 3)], sideTags: tags } satisfies ModelNode;
+  const doc = { ...base, nodes: [sketch] };
+  const request = (doc: typeof base) => ({ ...proposal, ops: [{ ...proposal.ops[0], args: {
+    ...proposal.ops[0].args, expectedRevision: revisionOf(doc),
+  } }] });
+  assert.equal(rectangularDuctSection(sketch), undefined);
+  assert.equal(rectangularDuctProposal(doc, proposal), undefined);
+  const edit = rectangularDuctProposal(doc, request(doc)), copied = sweepPath(doc, ['circle']);
+  assert.ok(edit && typeof copied !== 'string');
+  const candidate = withNode(doc, { kind: 'sweep-curve', sketch: 0, name: copied.name, path: copied.path, mode: 'exact' });
+  const reviewed = await reviewedRectangularDuctEvidence(doc, candidate, edit);
+  assert.ok(reviewed && 'closedCavities' in reviewed.rectangularDuct && reviewed.rectangularDuct.closedCavities);
+  const { closedCavities } = reviewed.rectangularDuct;
+  assert.equal(closedCavities.cavities.length, 2);
+  assert.deepEqual(closedCavities.cavities.map(cavity => cavity.dimensions.axial), [1, 2]);
+  assert.ok(Math.abs(closedCavities.volume.native - 1360 * Math.PI) < 1e-7);
+  assert.ok(Math.abs(closedCavities.dimensions.axialWeb - 2.5) < 1e-7);
+  assert.equal(await reviewedRectangularDuctEvidence(doc, candidate, { ...edit, pathRevision: 'f'.repeat(64) }), undefined);
+  for (const patch of [{ holes: [hole(-3, 1), hole(1, 3)] }, { holes: [hole(-3, -1, -.75, 1.25), hole(1, 3)] },
+    { sideTags: { ...tags, holes: [tags.holes[0], tags.holes[0]] } }]) {
+    const invalid = { ...doc, nodes: [{ ...sketch, ...patch }] };
+    assert.equal(rectangularDuctProposal(invalid, request(invalid)), undefined);
+  }
 });
 
 test('closed, stale, ambiguous, dependent and unrelated Sweep proposals do not receive a duct review revision', async () => {
