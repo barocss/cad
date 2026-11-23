@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D1816: [Qualify the two-point Rectangle snap lifecycle](notes/two-point-rectangle-snap-closeout-2026-11-23/README.md), #229. Verify the remaining planes, temporary-state transitions and Project Open in Studio against the original acceptance.
+
 - D1815: [Extract Studio profile and grouped History presentation](notes/studio-profile-presentation-2026-11-23/README.md), #44. Verify region picks, linked profile refresh and grouped Fastener History in Studio.
 
 - D1814: [Review the pending four-span S-bend](notes/pending-four-span-paired-s-bend-review-2026-11-23/README.md), #324. Bind both oppositely facing mouths, 36 charted joins and native mass to the original rail and two Agent images through Studio approval and fresh Open.
