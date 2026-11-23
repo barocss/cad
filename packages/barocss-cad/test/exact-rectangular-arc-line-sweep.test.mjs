@@ -230,10 +230,12 @@ test('arc then line refuses unsupported roll, openings, walls, axis contact and 
     assert.equal(saveCadPart(initial), saved);
   };
   const center = [21.2, -7.1], aperture = /one centered rectangular opening aligned with the outer rectangle/;
-  for (const holes of [[rectangle(1, 2, false, add(center, [.05, 0]))], [rectangle(1, 2, false, center), rectangle(.5, .5)],
+  for (const holes of [[rectangle(1, 2, false, add(center, [.05, 0]))],
     [rectangle(1e-5, 2, false, center)], [[{ kind: 'arc', start: add(center, [1, 0]), center, direction: 'ccw' }]],
     [rectangle(1, 2).map(({ kind, start: [x, y] }) => ({ kind, start: add(center, [(x - y) * Math.SQRT1_2, (x + y) * Math.SQRT1_2]) }))]])
     refuses(path, { ...section, sideTags: undefined, holes }, 'CAPABILITY', aperture);
+  refuses(path, { ...section, sideTags: undefined, holes: [rectangle(1, 2, false, center), rectangle(.5, .5)] },
+    'GEOMETRY', /both cavities centered on the radial axis/);
   for (const width of [2, 2.01, 2 - 5e-7]) refuses(path, { ...section, holes: [rectangle(width, 2, false, center)] },
     'GEOMETRY', /strictly positive wall clearance around the opening/);
   for (const radius of [2, 1.99]) refuses(rail({ radius }), section, 'PARAMETER', /radial half-width smaller than the path radius/);

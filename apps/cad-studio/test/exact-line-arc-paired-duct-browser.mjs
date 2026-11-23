@@ -12,20 +12,24 @@ const tail = process.argv.includes('--straight-tail') ? 14 : 0;
 const sameTurn = process.argv.includes('--spaced-same-turn');
 const spaced = sameTurn || process.argv.includes('--spaced-opposite');
 const oppositeArcs = process.argv.includes('--opposite-arcs');
-assert.ok([spaced, !!tail, oppositeArcs].filter(Boolean).length <= 1);
+const arcAndLine = process.argv.includes('--arc-and-line');
+assert.ok([spaced, !!tail, oppositeArcs, arcAndLine].filter(Boolean).length <= 1);
+assert.ok(!arcAndLine || (!review && !reviewBaseline));
 const revolvedEnds = spaced || oppositeArcs;
 const threePieces = tail > 0 || spaced;
-const ends = [
+const forwardEnds = [
   { direction: 'Left', axis: 0, sign: -1, center: revolvedEnds ? [0, 0] : [-10, 0] },
   spaced ? { direction: sameTurn ? 'Left' : 'Right', axis: 0, sign: sameTurn ? -1 : 1, center: [sameTurn ? -6 : 30, 38] }
     : oppositeArcs ? { direction: 'Right', axis: 0, sign: 1, center: [30, 30] }
     : { direction: 'Back', axis: 1, sign: 1, center: [20, 20 + tail] },
 ];
+const ends = arcAndLine ? forwardEnds.toReversed() : forwardEnds;
 const junctionPlanes = spaced ? [[1, 12], [1, 20]] : oppositeArcs ? [[1, 12]] : tail ? [[0, 0], [1, 20]] : [[0, 0]];
 const junctions = junctionPlanes.map((_, index) => index);
-const representation = spaced ? 'Exact arc–line–arc' : oppositeArcs ? 'Exact two-arc path' : tail ? 'Exact line–arc–line' : 'Exact line and arc';
+const representation = spaced ? 'Exact arc–line–arc' : oppositeArcs ? 'Exact two-arc path' : tail ? 'Exact line–arc–line' : arcAndLine ? 'Exact arc and line' : 'Exact line and arc';
 assert.ok([baseline, reviewBaseline, review].filter(Boolean).length <= 1);
 const railName = 'Paired duct rail';
+const straightToArc = [[-10, 0, 0], [-5, 0, 0], [0, 0, 0], [20, 0, 0], [20, 20, 0]];
 const path = spaced ? {
   degree: 2, knots: [0, 0, 0, 1, 1, 2, 2, 3, 3, 3],
   controlPoints: [[0, 0, 0], [12, 0, 0], [12, 12, 0], [12, 16, 0], [12, 20, 0], [12, 38, 0], [sameTurn ? -6 : 30, 38, 0]],
@@ -40,8 +44,8 @@ const path = spaced ? {
   weights: [1, 1, 1, Math.SQRT1_2, 1, 1, 1],
 } : {
   degree: 2, knots: [0, 0, 0, 1, 1, 2, 2, 2],
-  controlPoints: [[-10, 0, 0], [-5, 0, 0], [0, 0, 0], [20, 0, 0], [20, 20, 0]],
-  weights: [1, 1, 1, Math.SQRT1_2, 1],
+  controlPoints: arcAndLine ? straightToArc.toReversed() : straightToArc,
+  weights: arcAndLine ? [1, Math.SQRT1_2, 1, 1, 1] : [1, 1, 1, Math.SQRT1_2, 1],
 };
 const hole = center => [[-1, center - 1], [-1, center + 1], [1, center + 1], [1, center - 1]]
   .map(start => ({ kind: 'line', start }));
@@ -70,7 +74,7 @@ if (review || reviewBaseline) pins.push(
 );
 const f = await createFlow({
   name: spaced ? 'exact-spaced-paired-duct' : 'exact-line-arc-paired-duct', output: process.argv[2],
-  envFrozen: oppositeArcs ? (review || reviewBaseline ? 'D1799_SOURCE_FROZEN' : 'D1798_SOURCE_FROZEN') : sameTurn ? (review || reviewBaseline ? 'D1796_SOURCE_FROZEN' : 'D1795_SOURCE_FROZEN') : spaced ? (review || reviewBaseline ? 'D1794_SOURCE_FROZEN' : 'D1792_SOURCE_FROZEN') : (review || reviewBaseline)
+  envFrozen: arcAndLine ? 'D1800_SOURCE_FROZEN' : oppositeArcs ? (review || reviewBaseline ? 'D1799_SOURCE_FROZEN' : 'D1798_SOURCE_FROZEN') : sameTurn ? (review || reviewBaseline ? 'D1796_SOURCE_FROZEN' : 'D1795_SOURCE_FROZEN') : spaced ? (review || reviewBaseline ? 'D1794_SOURCE_FROZEN' : 'D1792_SOURCE_FROZEN') : (review || reviewBaseline)
     ? (tail ? 'D1787_SOURCE_FROZEN' : 'D1783_SOURCE_FROZEN')
     : (tail ? 'D1786_SOURCE_FROZEN' : 'D1782_SOURCE_FROZEN'),
   initialFiles: pins, requiredFrozen: pins,
@@ -80,6 +84,7 @@ const f = await createFlow({
   ] : [],
   qualification: spaced ? 'Carry two rectangular passages through two bends and a straight span.'
     : oppositeArcs ? 'Sweep two rectangular passages through two directly joined opposite turns.'
+    : arcAndLine ? 'Sweep two rectangular passages from an arc into a tangent straight span.'
     : 'Sweep two rectangular passages along a straight rail into a tangent arc.',
   limits: [spaced ? 'A 4 × 10 mm section, two 2 × 2 mm lanes, R12/R18 quarter bends, an 8 mm straight span and desktop WebGPU.' : oppositeArcs ? 'A 4 × 10 mm section, two 2 × 2 mm passages, directly joined R12/R18 quarter arcs and desktop WebGPU.' : `A bend-aligned 4 × 10 mm rectangle, two axial lanes centered at ±2 mm, a 10 mm straight span and an R20 quarter arc${tail ? ' followed by a 14 mm straight span' : ''}. Desktop WebGPU.`],
   inspectorSource: `
@@ -159,7 +164,7 @@ async function verify(label, doc, firstHalfHeight) {
         assert.equal(edge.degree, 1);
         assert.ok(edge.reciprocal);
         // Revolved terminal caps use exact planar boundaries. Both stored charts are required at every internal join.
-        if (!revolvedEnds && (!start || threePieces)) assert.ok(edge.bound, 'Each terminal edge needs two native charts');
+        if (!revolvedEnds && (!start || threePieces || arcAndLine)) assert.ok(edge.bound, 'Each terminal edge needs two native charts');
         return edge.points;
       });
       const transverse = points.map(point => point[1 - axis] - ends[start ? 0 : 1].center[1 - axis]);
@@ -264,7 +269,7 @@ async function approveWithAgent(source, expected) {
   const reviewed = await withMcpSession(session, file, 'paired-duct-proposal', async (call, request) => {
     const expectedRevision = await currentPartRevision(call);
     const description = await call('describe', { command: 'sweep-curve' });
-    assert.match(description.values.sketch, oppositeArcs ? /two directly joined opposite-turn arcs accept this paired section/i : sameTurn ? /Same-turn arc–line–arc ducts also accept this paired section/ : spaced ? /opposite-turn arc–line–arc duct accepts this paired section/
+    assert.match(description.values.sketch, arcAndLine ? /arc–line duct also accepts this paired section/ : oppositeArcs ? /two directly joined opposite-turn arcs accept this paired section/i : sameTurn ? /Same-turn arc–line–arc ducts also accept this paired section/ : spaced ? /opposite-turn arc–line–arc duct accepts this paired section/
       : tail ? /line–arc–line duct also accepts this paired section/ : /line–arc ducts accept two rectangular openings/);
     const rail = (await call('query', { action: 'summary' })).direct_curves.find(curve => curve.id === 'rail');
     assert.ok(rail?.revision);
@@ -361,7 +366,7 @@ await f.run(async () => {
   const part = await f.doc();
   assert.deepEqual([part.nodes[1].kind, part.nodes[1].mode, part.nodes[1].path], ['sweep-curve', 'exact', path]);
   const original = await verify('applied-native', part, 1);
-  await showEnd('Left', '02-inlet');
+  await showEnd(ends[0].direction, '02-inlet');
   await showEnd(ends[1].direction, '03-outlet', 1);
   await inspectJoints(original.joints);
 
@@ -401,7 +406,7 @@ await f.run(async () => {
   const saved = await f.save('exact-line-arc-paired-duct');
   const reopened = (await f.freshOpen(saved.file, edited, '05-fresh-open')).doc;
   assert.equal((await verify('reopened-native', reopened, .5)).digest, narrower.digest);
-  await showEnd('Left', '06-reopened-inlet');
+  await showEnd(ends[0].direction, '06-reopened-inlet');
   await showEnd(ends[1].direction, '07-reopened-outlet', 1);
   await openFirstPassage();
   await coordinate(1, 'Y').fill('-3');

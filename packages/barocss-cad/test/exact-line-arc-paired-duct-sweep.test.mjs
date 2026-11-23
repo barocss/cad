@@ -203,7 +203,9 @@ test('paired aperture admission refuses radial offset, lost cover, touching or o
   refused(rolled, 'CAPABILITY', /original axes aligned/);
   refused(section(), 'PARAMETER', /radial half-width smaller/, rail({ radius: 2 }).path);
   const reverse = reverseCurve(path.path, { curveId: 'reverseRail' }).curve;
-  refused(section(), 'CAPABILITY', /one centered rectangular opening/, reverse);
+  const reversed = evaluateCadPart(document(reverse));
+  assert.ok(checkBrep(reversed.outputs[0].brep, { strict: true }).valid);
+  near(massPropertiesOf(reversed.outputs[0]).volume, 32 * path.length);
   const narrow = [[-3, -2.5e-6], [2.5e-6, 3]];
   verify(evaluateCadPart(document(path.path, section(narrow))).outputs[0], path, narrow);
 });

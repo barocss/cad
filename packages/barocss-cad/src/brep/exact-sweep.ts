@@ -487,7 +487,7 @@ function bindBendSections(glued: Brep, id: string, hasTail: boolean, edgeCount: 
   const edges = new Map(glued.edges.map(edge => [edge.id, edge]));
   const uses = new Map(glued.coedges.map(use => [use.id, use]));
   const bindings = new Map<string, Curve>();
-  const starts = [0, 0], ends = [0, 0];
+  const starts = edgeCount === 12 ? [0, 0, 0] : [0, 0], ends = [...starts];
   for (const use of glued.coedges) {
     const face = facesByLoop.get(use.loop), twin = use.twin ? uses.get(use.twin) : undefined;
     if (!face?.name?.startsWith(`${id}.bend.`) || !twin) continue;
@@ -502,6 +502,9 @@ function bindBendSections(glued: Brep, id: string, hasTail: boolean, edgeCount: 
     const peerPrefix = `${id}_${atEnd ? 'tail' : 'line'}_w0_0_`;
     const peerInner = peer?.id.startsWith(peerPrefix) && !peer.id.startsWith(`${peerPrefix}0_`);
     if (peer?.kind !== 'surface' || (!atCap && bore !== peerInner)) return;
+    const group = edgeCount === 12 ? surface.id.startsWith(`${id}_hole0_`) ? 1
+      : surface.id.startsWith(`${id}_hole1_`) ? 2 : 0 : bore ? 1 : 0;
+    if (edgeCount === 12 && !atCap && !peer.id.startsWith(`${peerPrefix}${group}_`)) return;
     const { u, v } = surfaceDomain(surface), row = atEnd ? surface.controlPoints.length - 1 : 0;
     const bendBinding = edgeCount !== 2 && surface.degreeU === 1 ? affinePlaneBinding(edge.curve, surface, tolerance)
       : sectionBinding(edge.curve, { degree: surface.degreeV, knots: surface.knotsV,
@@ -518,12 +521,14 @@ function bindBendSections(glued: Brep, id: string, hasTail: boolean, edgeCount: 
       if (peerBinding?.side !== (atEnd ? 'v0' : 'v1')) return;
       bindings.set(twin.id, peerBinding.pcurve);
     }
-    (atEnd ? ends : starts)[bore ? 1 : 0]++;
+    (atEnd ? ends : starts)[group]++;
   }
   const outerCount = edgeCount >= 8 ? 4 : edgeCount, innerCount = hasBore ? 2 : edgeCount >= 8 ? edgeCount - 4 : 0;
   const bindEnd = hasTail || edgeCount !== 2;
-  if (starts[0] === outerCount && starts[1] === innerCount
-    && ends[0] === (bindEnd ? outerCount : 0) && ends[1] === (bindEnd ? innerCount : 0)) return { ...glued, coedges: glued.coedges.map(use => {
+  const matched = edgeCount === 12 ? starts.every(count => count === 4) && ends.every(count => count === 4)
+    : starts[0] === outerCount && starts[1] === innerCount
+      && ends[0] === (bindEnd ? outerCount : 0) && ends[1] === (bindEnd ? innerCount : 0);
+  if (matched) return { ...glued, coedges: glued.coedges.map(use => {
     const pcurve = bindings.get(use.id);
     if (!pcurve) return use;
     const { id, edge, sense, loop, next, prev, twin } = use;
@@ -695,27 +700,39 @@ function rectangularArcLineSection(rectangle: NonNullable<ReturnType<typeof rect
   const inward = unit(sub(toCentre, scale(tangent, dot(toCentre, tangent))));
   const firstTangent = scale(add(scale(tangent, c), scale(inward, s)), -1);
   const firstInward = sub(scale(inward, c), scale(tangent, s));
-  const authored = rectangularElbowSection(rectangle, holes, frame(firstTangent),
+  const paired = holes.length > 1;
+  const authored = rectangularElbowSection(rectangle, paired ? [] : holes, frame(firstTangent),
     { ...rail, toCentre: scale(firstInward, radius) }, refuse, 'rectangular arc-and-line');
+  if (paired) authored.section = { ...authored.section, edgeCount: 12,
+    apertures: pairedRectangularApertures(rectangle, holes, authored.section, rail.tolerance, refuse, 'arc-and-line rectangular') };
   const axis = unit(cross(firstTangent, firstInward));
   const rotate = (v: Point) => add(add(scale(v, c), scale(cross(axis, v), s)), scale(axis, dot(axis, v) * (1 - c)));
   const axes: SweepAxes = [rotate(authored.axes[0]), scale(rotate(authored.axes[1]), -1), tangent];
   // A y reflection restores a right-handed frame. Reverse the edges too, keeping each loop's winding.
   const reflect = (loop: readonly ProfileSegmentInput[]): ProfileSegmentInput[] =>
     [loop[0], loop[3], loop[2], loop[1]].map(({ start: [x, y] }) => ({ kind: 'line', start: [x, -y] }));
+  const apertures = authored.section.apertures;
   const section: JoinedSection = { ...authored.section, profile: reflect(authored.section.profile),
     bendCentre: [authored.section.bendCentre[0], -authored.section.bendCentre[1]],
-    ...(authored.section.opening ? { opening: { profile: reflect(authored.section.opening.profile), clearance: authored.section.opening.clearance } } : {}) };
+    ...(authored.section.opening ? { opening: { profile: reflect(authored.section.opening.profile), clearance: authored.section.opening.clearance } } : {}),
+    ...(apertures ? { apertures: { profiles: [reflect(apertures.profiles[0]), reflect(apertures.profiles[1])] as const,
+      clearance: apertures.clearance } } : {}) };
   // Private producer tags also preserve positional side names when the document has no authored tags.
   const outerTags = ['arcLineOuter0', 'arcLineOuter1', 'arcLineOuter2', 'arcLineOuter3'];
   const holeTags = ['arcLineHole0', 'arcLineHole1', 'arcLineHole2', 'arcLineHole3'];
+  const secondHoleTags = ['arcLineHole1_0', 'arcLineHole1_1', 'arcLineHole1_2', 'arcLineHole1_3'];
   const names = new Map<string, string>();
   for (let i = 0; i < 4; i++) {
     names.set(`.side[${outerTags[i]}]`, sideTags ? `.side[${sideTags.outer[i]}]` : `.side${i}`);
     const own = sideTags?.holes?.[0];
     names.set(`.side[${holeTags[i]}]`, own ? `.side[${own[i]}]` : `.hole0.side${i}`);
+    if (paired) {
+      const secondOwn = sideTags?.holes?.[1];
+      names.set(`.side[${secondHoleTags[i]}]`, secondOwn ? `.side[${secondOwn[i]}]` : `.hole1.side${i}`);
+    }
   }
-  const tags: SideTags = { outer: [...outerTags].reverse(), ...(section.opening ? { holes: [[...holeTags].reverse()] } : {}) };
+  const tags: SideTags = { outer: [...outerTags].reverse(), ...(apertures
+    ? { holes: [[...holeTags].reverse(), [...secondHoleTags].reverse()] } : section.opening ? { holes: [[...holeTags].reverse()] } : {}) };
   return { axes, section, tags, names };
 }
 
@@ -1116,13 +1133,14 @@ export function exactSweep(input: ExactSweepInput, refuse: Refuse): SweepSolid {
       if (element.name === undefined) return element;
       let name = element.name.split('|').map(name => name === `${id}.start` ? `${id}.end`
         : name === `${id}.end` ? `${id}.start` : name).join('|');
-      if (reflected) name = name.replace(/\.side\[arcLine(?:Outer|Hole)[0-3]\]/g, token => reflected.names.get(token) ?? token);
+      if (reflected) name = name.replace(/\.side\[arcLine(?:(?:Outer|Hole)[0-3]|Hole1_[0-3])\]/g, token => reflected.names.get(token) ?? token);
       return { ...element, name };
     };
     const brep = { ...local.brep, faces: local.brep.faces.map(restoreNames), edges: local.brep.edges.map(restoreNames) };
     const result = place({ ...local, brep }, axes, arcLine.start);
     const report = checkBrep(result.brep, { strict: true });
-    if (!report.valid || report.topology.length !== 1 || report.topology[0].genus !== (bore || section.opening ? 1 : 0))
+    if (!report.valid || report.topology.length !== 1 || report.topology[0].shells !== 1
+      || report.topology[0].genus !== (section.apertures ? 2 : bore || section.opening ? 1 : 0))
       return refuse('GEOMETRY', 'The exact arc-and-line sweep did not produce a valid closed solid.');
     return result;
   }

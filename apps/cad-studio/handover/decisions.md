@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D1800: [Sweep two passages from an arc into a straight span](notes/exact-arc-line-paired-duct-2026-11-23/README.md), #10. Preserve both authored mouth identities, lane ownership, twelve charted join edges, independent edits and fresh Open.
+
 - D1799: [Review the direct paired S-bend before Agent approval](notes/pending-opposite-arc-paired-duct-review-2026-11-23/README.md), #324. Verify both mouths, 24 walls and 12 tangent joins against the two pinned images. Studio Accept, Save and fresh Open preserve the native body and PNGs.
 
 - D1798: [Sweep two passages through directly joined opposite turns](notes/exact-opposite-arc-paired-duct-2026-11-23/README.md), #10. Verify three charted join rings, both mouths, independent lane edits and fresh Open.
