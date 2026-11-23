@@ -8,34 +8,40 @@ import { currentPartRevision, withMcpSession } from './mcp-browser-session.mjs';
 const baseline = process.argv.includes('--expect-refused');
 const reviewBaseline = process.argv.includes('--expect-review-unavailable');
 const review = process.argv.includes('--review');
+const lead = process.argv.includes('--lead-same-turn') ? 10 : 0;
 const tail = process.argv.includes('--straight-tail') ? 14 : 0;
 const spacedSameTurn = process.argv.includes('--spaced-same-turn');
-const spaced = spacedSameTurn || process.argv.includes('--spaced-opposite');
+const spacedOpposite = process.argv.includes('--spaced-opposite');
+const spaced = !!lead || spacedSameTurn || spacedOpposite;
 const directSameTurn = process.argv.includes('--same-turn-arcs');
-const sameTurn = spacedSameTurn || directSameTurn;
+const sameTurn = !!lead || spacedSameTurn || directSameTurn;
 const oppositeArcs = process.argv.includes('--opposite-arcs');
 const arcAndLine = process.argv.includes('--arc-and-line');
-assert.ok([spaced, !!tail, oppositeArcs, directSameTurn, arcAndLine].filter(Boolean).length <= 1);
+assert.ok([!!lead, spacedSameTurn, spacedOpposite, !!tail, oppositeArcs, directSameTurn, arcAndLine].filter(Boolean).length <= 1);
+assert.ok(!lead || (!review && !reviewBaseline));
 const directArcs = oppositeArcs || directSameTurn;
 const revolvedEnds = spaced || directArcs;
-const threePieces = tail > 0 || spaced;
 const forwardEnds = [
-  { direction: 'Left', axis: 0, sign: -1, center: revolvedEnds ? [0, 0] : [-10, 0] },
+  { direction: 'Left', axis: 0, sign: -1, center: revolvedEnds && !lead ? [0, 0] : [-10, 0] },
   spaced ? { direction: sameTurn ? 'Left' : 'Right', axis: 0, sign: sameTurn ? -1 : 1, center: [sameTurn ? -6 : 30, 38] }
     : directArcs ? { direction: sameTurn ? 'Left' : 'Right', axis: 0, sign: sameTurn ? -1 : 1, center: [sameTurn ? -6 : 30, 30] }
     : { direction: 'Back', axis: 1, sign: 1, center: [20, 20 + tail] },
 ];
 const ends = arcAndLine ? forwardEnds.toReversed() : forwardEnds;
-const junctionPlanes = spaced ? [[1, 12], [1, 20]] : directArcs ? [[1, 12]] : tail ? [[0, 0], [1, 20]] : [[0, 0]];
+const junctionPlanes = lead ? [[0, 0], [1, 12], [1, 20]] : spaced ? [[1, 12], [1, 20]]
+  : directArcs ? [[1, 12]] : tail ? [[0, 0], [1, 20]] : [[0, 0]];
 const junctions = junctionPlanes.map((_, index) => index);
-const representation = spaced ? 'Exact arc–line–arc' : directArcs ? 'Exact two-arc path' : tail ? 'Exact line–arc–line' : arcAndLine ? 'Exact arc and line' : 'Exact line and arc';
+const representation = lead ? 'Exact line–arc–line–arc' : spaced ? 'Exact arc–line–arc'
+  : directArcs ? 'Exact two-arc path' : tail ? 'Exact line–arc–line' : arcAndLine ? 'Exact arc and line' : 'Exact line and arc';
 assert.ok([baseline, reviewBaseline, review].filter(Boolean).length <= 1);
 const railName = 'Paired duct rail';
 const straightToArc = [[-10, 0, 0], [-5, 0, 0], [0, 0, 0], [20, 0, 0], [20, 20, 0]];
+const spacedPoints = [[0, 0, 0], [12, 0, 0], [12, 12, 0], [12, 16, 0], [12, 20, 0], [12, 38, 0], [sameTurn ? -6 : 30, 38, 0]];
+const spacedWeights = [1, Math.SQRT1_2, 1, 1, 1, Math.SQRT1_2, 1];
 const path = spaced ? {
-  degree: 2, knots: [0, 0, 0, 1, 1, 2, 2, 3, 3, 3],
-  controlPoints: [[0, 0, 0], [12, 0, 0], [12, 12, 0], [12, 16, 0], [12, 20, 0], [12, 38, 0], [sameTurn ? -6 : 30, 38, 0]],
-  weights: [1, Math.SQRT1_2, 1, 1, 1, Math.SQRT1_2, 1],
+  degree: 2, knots: lead ? [0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 4] : [0, 0, 0, 1, 1, 2, 2, 3, 3, 3],
+  controlPoints: lead ? [[-lead, 0, 0], [-lead / 2, 0, 0], ...spacedPoints] : spacedPoints,
+  weights: lead ? [1, 1, ...spacedWeights] : spacedWeights,
 } : directArcs ? {
   degree: 2, knots: [0, 0, 0, 1, 1, 2, 2, 2],
   controlPoints: [[0, 0, 0], [12, 0, 0], [12, 12, 0], [12, 30, 0], [sameTurn ? -6 : 30, 30, 0]],
@@ -64,6 +70,7 @@ const seed = {
 const pins = [
   'packages/barocss-cad/src/brep/exact-sweep.ts',
   'packages/barocss-cad/src/brep/brep-glue.ts',
+  'packages/barocss-cad-model/src/app/profileCommands.ts',
   'packages/barocss-cad-model/src/engine/errors.ts',
   'packages/barocss-cad-model/src/chat/part/features.ts',
   'apps/cad-studio/test/exact-line-arc-paired-duct-browser.mjs',
@@ -76,7 +83,7 @@ if (review || reviewBaseline) pins.push(
 );
 const f = await createFlow({
   name: spaced ? 'exact-spaced-paired-duct' : 'exact-line-arc-paired-duct', output: process.argv[2],
-  envFrozen: directSameTurn ? (review || reviewBaseline ? 'D1804_SOURCE_FROZEN' : 'D1803_SOURCE_FROZEN') : arcAndLine ? (review || reviewBaseline ? 'D1801_SOURCE_FROZEN' : 'D1800_SOURCE_FROZEN') : oppositeArcs ? (review || reviewBaseline ? 'D1799_SOURCE_FROZEN' : 'D1798_SOURCE_FROZEN') : sameTurn ? (review || reviewBaseline ? 'D1796_SOURCE_FROZEN' : 'D1795_SOURCE_FROZEN') : spaced ? (review || reviewBaseline ? 'D1794_SOURCE_FROZEN' : 'D1792_SOURCE_FROZEN') : (review || reviewBaseline)
+  envFrozen: lead ? 'D1810_SOURCE_FROZEN' : directSameTurn ? (review || reviewBaseline ? 'D1804_SOURCE_FROZEN' : 'D1803_SOURCE_FROZEN') : arcAndLine ? (review || reviewBaseline ? 'D1801_SOURCE_FROZEN' : 'D1800_SOURCE_FROZEN') : oppositeArcs ? (review || reviewBaseline ? 'D1799_SOURCE_FROZEN' : 'D1798_SOURCE_FROZEN') : sameTurn ? (review || reviewBaseline ? 'D1796_SOURCE_FROZEN' : 'D1795_SOURCE_FROZEN') : spaced ? (review || reviewBaseline ? 'D1794_SOURCE_FROZEN' : 'D1792_SOURCE_FROZEN') : (review || reviewBaseline)
     ? (tail ? 'D1787_SOURCE_FROZEN' : 'D1783_SOURCE_FROZEN')
     : (tail ? 'D1786_SOURCE_FROZEN' : 'D1782_SOURCE_FROZEN'),
   initialFiles: pins, requiredFrozen: pins,
@@ -84,11 +91,12 @@ const f = await createFlow({
     'packages/barocss-cad-model/src/chat/pairedLineArcDuctEvidence.ts',
     ...(revolvedEnds ? ['packages/barocss-cad-model/src/chat/pairedSpacedArcDuctEvidence.ts'] : []),
   ] : [],
-  qualification: spaced ? 'Carry two rectangular passages through two bends and a straight span.'
+  qualification: lead ? 'Carry two rectangular passages through a straight lead, two bends and a straight spacer.'
+    : spaced ? 'Carry two rectangular passages through two bends and a straight span.'
     : directArcs ? 'Sweep two rectangular passages through two directly joined tangent bends.'
     : arcAndLine ? 'Sweep two rectangular passages from an arc into a tangent straight span.'
     : 'Sweep two rectangular passages along a straight rail into a tangent arc.',
-  limits: [spaced ? 'A 4 × 10 mm section, two 2 × 2 mm lanes, R12/R18 quarter bends, an 8 mm straight span and desktop WebGPU.' : directArcs ? 'A 4 × 10 mm section, two 2 × 2 mm passages, directly joined R12/R18 quarter arcs and desktop WebGPU.' : `A bend-aligned 4 × 10 mm rectangle, two axial lanes centered at ±2 mm, a 10 mm straight span and an R20 quarter arc${tail ? ' followed by a 14 mm straight span' : ''}. Desktop WebGPU.`],
+  limits: [spaced ? `A 4 × 10 mm section, two 2 × 2 mm lanes, R12/R18 quarter bends, an 8 mm straight span${lead ? ', a 10 mm straight lead' : ''} and desktop WebGPU.` : directArcs ? 'A 4 × 10 mm section, two 2 × 2 mm passages, directly joined R12/R18 quarter arcs and desktop WebGPU.' : `A bend-aligned 4 × 10 mm rectangle, two axial lanes centered at ±2 mm, a 10 mm straight span and an R20 quarter arc${tail ? ' followed by a 14 mm straight span' : ''}. Desktop WebGPU.`],
   inspectorSource: `
 import { readFileSync } from 'node:fs';
 import { brepMassProperties, checkBrep, faceGeometry, massPropertiesOf, measureBrepEdgeContinuity } from '@barocss/cad';
@@ -132,19 +140,19 @@ const near = (actual, expected, tolerance = 1e-7) =>
   assert.ok(Number.isFinite(actual) && Math.abs(actual - expected) <= tolerance, JSON.stringify({ actual, expected, tolerance }));
 const sortedTags = tags => [...tags].sort();
 const run = spaced ? 8 : 0;
-const pathLength = revolvedEnds ? run + 15 * Math.PI : 10 + 10 * Math.PI + tail;
+const pathLength = revolvedEnds ? lead + run + 15 * Math.PI : 10 + 10 * Math.PI + tail;
 const volumeAt = halfHeight => (36 - 4 * halfHeight) * pathLength;
 
 async function verify(label, doc, firstHalfHeight) {
   const native = await f.inspect(label, doc);
   assert.deepEqual(native.source, { family: 'sweep-curve', id: 'n1' });
   assert.ok(native.check.valid, native.check.issues.join('\n'));
-  assert.deepEqual(native.check.counts, threePieces
-    ? { bodies: 1, shells: 1, faces: 38, loops: 42, coedges: 168, edges: 84, vertices: 48 }
-    : { bodies: 1, shells: 1, faces: 26, loops: 30, coedges: 120, edges: 60, vertices: 36 });
+  const walls = 12 * (junctions.length + 1);
+  assert.deepEqual(native.check.counts, { bodies: 1, shells: 1, faces: walls + 2, loops: walls + 6,
+    coedges: 4 * walls + 24, edges: 2 * walls + 12, vertices: walls + 12 });
   assert.equal(native.check.topology[0].genus, 2);
   assert.ok(native.check.maximumPcurveGap < 1e-8);
-  assert.equal(native.wallNames.length, threePieces ? 36 : 24);
+  assert.equal(native.wallNames.length, walls);
   assert.equal(native.caps.length, 2);
   for (const cap of native.caps) {
     const start = cap.name === 'n1.start';
@@ -166,7 +174,9 @@ async function verify(label, doc, firstHalfHeight) {
         assert.equal(edge.degree, 1);
         assert.ok(edge.reciprocal);
         // Revolved terminal caps use exact planar boundaries. Both stored charts are required at every internal join.
-        if (!revolvedEnds && (!start || threePieces || arcAndLine)) assert.ok(edge.bound, 'Each terminal edge needs two native charts');
+        if ((lead && start) || (!revolvedEnds && (!start || junctions.length > 1 || arcAndLine))) {
+          assert.ok(edge.bound, 'Each terminal edge needs two native charts');
+        }
         return edge.points;
       });
       const transverse = points.map(point => point[1 - axis] - ends[start ? 0 : 1].center[1 - axis]);
@@ -193,7 +203,7 @@ async function verify(label, doc, firstHalfHeight) {
   const firstRadial = 2 * (12 + radialVariance / 12) / Math.PI;
   const secondRadial = 2 * (18 + radialVariance / 18) / Math.PI;
   const expectedCentroid = revolvedEnds ? [
-    (firstArc * firstRadial + run * 12 + secondArc * (sameTurn ? -6 + secondRadial : 30 - secondRadial)) / pathLength,
+    (firstArc * firstRadial + run * 12 + secondArc * (sameTurn ? -6 + secondRadial : 30 - secondRadial) - lead ** 2 / 2) / pathLength,
     (firstArc * (12 - firstRadial) + run * (12 + run / 2) + secondArc * (12 + run + secondRadial)) / pathLength,
     (8 * firstHalfHeight - 8) / area,
   ] : [
@@ -254,7 +264,7 @@ async function inspectJoints(joints) {
       assert.match(await result.innerText(), /Native samples\s+8/);
     }
     await result.scrollIntoViewIfNeeded();
-    await f.snapshot(threePieces ? `04-native-joins-${junction + 1}` : '04-native-joins');
+    await f.snapshot(junctions.length > 1 ? `04-native-joins-${junction + 1}` : '04-native-joins');
   }
 }
 
@@ -271,7 +281,7 @@ async function approveWithAgent(source, expected) {
   const reviewed = await withMcpSession(session, file, 'paired-duct-proposal', async (call, request) => {
     const expectedRevision = await currentPartRevision(call);
     const description = await call('describe', { command: 'sweep-curve' });
-    assert.match(description.values.sketch, directSameTurn ? /two directly joined unequal-radius same-turn arcs accept this paired section/i : arcAndLine ? /arc–line duct also accepts this paired section/ : oppositeArcs ? /two directly joined opposite-turn arcs accept this paired section/i : sameTurn ? /Same-turn arc–line–arc ducts also accept this paired section/ : spaced ? /opposite-turn arc–line–arc duct accepts this paired section/
+    assert.match(description.values.sketch, lead ? /same-turn line–arc–line–arc duct accepts this paired section/i : directSameTurn ? /two directly joined unequal-radius same-turn arcs accept this paired section/i : arcAndLine ? /arc–line duct also accepts this paired section/ : oppositeArcs ? /two directly joined opposite-turn arcs accept this paired section/i : sameTurn ? /Same-turn arc–line–arc ducts also accept this paired section/ : spaced ? /opposite-turn arc–line–arc duct accepts this paired section/
       : tail ? /line–arc–line duct also accepts this paired section/ : /line–arc ducts accept two rectangular openings/);
     const rail = (await call('query', { action: 'summary' })).direct_curves.find(curve => curve.id === 'rail');
     assert.ok(rail?.revision);
@@ -315,10 +325,11 @@ async function approveWithAgent(source, expected) {
   await f.changed(pending);
   const approved = (await f.snapshot('11-agent-approved')).doc;
   assert.equal((await verify('approved-native', approved, 1)).digest, expected.digest);
-  if (reviewed) {
+  if (reviewed || lead) {
     const saved = await f.save('paired-duct-reviewed');
     const reopened = (await f.freshOpen(saved.file, approved, '12-approved-fresh-open')).doc;
     assert.equal((await verify('approved-reopened-native', reopened, 1)).digest, expected.digest);
+    if (!reviewed) return;
     await withMcpSession(session, saved.file, 'paired-duct-approved', (call, request) => checkApprovedDuctReview(call, request, reviewed));
     await checkChangedDuctPath(session, pending, reviewed, path.controlPoints);
   }
