@@ -2,6 +2,7 @@ import { CadNumericPolicy, type Brep, type Point } from '@barocss/cad';
 import { add, len, scale, sub, unit } from '../engine/vec3';
 import { canonical } from '../util/revision';
 import { pairedArcLineDuctEvidence, pairedLineArcDuctEvidence } from './pairedLineArcDuctEvidence';
+import { pairedEndedSpacedArcDuctEvidence } from './pairedSpacedArcDuctEvidence';
 
 type Path = Parameters<typeof pairedLineArcDuctEvidence>[1];
 type Source = Parameters<typeof pairedLineArcDuctEvidence>[2];
@@ -49,10 +50,10 @@ function pairedElbowOffsetEvidence(original: Brep, candidate: Brep, path: Path, 
   try {
     if (!Number.isFinite(distance) || distance === 0 || Math.abs(distance) > CadNumericPolicy.coordinateAbs) return;
     if (inlet && path.controlPoints.length !== 7) return;
-    const arcFirst = path.controlPoints.length === 5;
-    const evidenceOf = arcFirst ? pairedArcLineDuctEvidence : pairedLineArcDuctEvidence;
+    const arcFirst = path.controlPoints.length === 5, ended = path.controlPoints.length === 11;
+    const evidenceOf = ended ? pairedEndedSpacedArcDuctEvidence : arcFirst ? pairedArcLineDuctEvidence : pairedLineArcDuctEvidence;
     const before = evidenceOf(original, path, source);
-    if (!before || before.pathKind !== (arcFirst ? 'arc-and-line' : 'line-arc-line') || !before.throughApertures.junctions) return;
+    if (!before || before.pathKind !== (ended ? 'line-arc-line-arc-line' : arcFirst ? 'arc-and-line' : 'line-arc-line') || !before.throughApertures.junctions) return;
     const length = inlet ? ('leadLength' in before.throughApertures.dimensions ? before.throughApertures.dimensions.leadLength : undefined)
       : before.throughApertures.dimensions.tailLength;
     if (length === undefined || length + distance < .0001) return;
@@ -96,7 +97,8 @@ function pairedElbowOffsetEvidence(original: Brep, candidate: Brep, path: Path, 
     if (!(sectionArea > 0 && total > 0) || !Number.isFinite(native) || Math.abs(native - analytic) > volumeTolerance
       || !pointNear(centroid, after.throughApertures.centroid.native)) return;
     return {
-      pathKind: arcFirst ? 'arc-and-line' as const : 'line-arc-line' as const, face: originalCap.name, distance, displacement: { normal, vector },
+      pathKind: ended ? 'line-arc-line-arc-line' as const : arcFirst ? 'arc-and-line' as const : 'line-arc-line' as const,
+      face: originalCap.name, distance, displacement: { normal, vector },
       originalCap, movedCap, retained: { cap: before.caps[inlet ? 1 : 0], junctions: through.junctions, faces: fixed.map(face => face.name!) },
       throughApertures: after.throughApertures,
       materialChange: { sectionArea, analytic, native, method: 'quadrature' as const },

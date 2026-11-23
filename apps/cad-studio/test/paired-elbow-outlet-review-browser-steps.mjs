@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { checkApprovedDuctReview, checkChangedDuctPath, render } from './duct-proposal-review-browser-steps.mjs';
 import { currentPartRevision, withMcpSession } from './mcp-browser-session.mjs';
 
-export async function reviewPendingOutlet(f, file, call, request, expectedRevision, retainedRail, { arcFirst, inlet }) {
+export async function reviewPendingOutlet(f, file, call, request, expectedRevision, retainedRail, { arcFirst, inlet, sBend }) {
   const before = await readFile(file);
   const { proposals: [proposal] } = await call('proposals', { action: 'list' });
   assert.equal(proposal.id, 'P1');
@@ -26,15 +26,34 @@ export async function reviewPendingOutlet(f, file, call, request, expectedRevisi
     assert.deepEqual(evidence.sourceRail, { path: rail.id, pathRevision: rail.revision, directRevision });
   } else assert.equal(evidence.sourceRail, undefined);
   assert.deepEqual([evidence.sourceBody, evidence.body, evidence.pathKind, evidence.face, evidence.distance],
-    ['b1', 'b2', arcFirst ? 'arc-and-line' : 'line-arc-line', inlet ? 'n1.start' : 'n1.end', -4]);
-  const [original, moved] = arcFirst || inlet ? [[-10, 0, 0], [-6, 0, 0]] : [[20, 34, 0], [20, 30, 0]];
-  assert.deepEqual(evidence.displacement, arcFirst || inlet ? { normal: [-1, 0, 0], vector: [4, 0, 0] }
+    ['b1', 'b2', sBend ? 'line-arc-line-arc-line' : arcFirst ? 'arc-and-line' : 'line-arc-line', inlet ? 'n1.start' : 'n1.end', -4]);
+  const [original, moved] = sBend ? [[36, 38, 0], [32, 38, 0]] : arcFirst || inlet ? [[-10, 0, 0], [-6, 0, 0]] : [[20, 34, 0], [20, 30, 0]];
+  assert.deepEqual(evidence.displacement, sBend ? { normal: [1, 0, 0], vector: [-4, 0, 0] }
+    : arcFirst || inlet ? { normal: [-1, 0, 0], vector: [4, 0, 0] }
     : { normal: [0, 1, 0], vector: [0, -4, 0] });
   assert.deepEqual([evidence.originalCap.center, evidence.movedCap.center], [original, moved]);
   assert.equal(evidence.movedCap.apertures.length, 2);
   assert.equal(evidence.throughApertures.apertures.length, 2);
   assert.deepEqual(evidence.retained.junctions, evidence.throughApertures.junctions);
-  assert.equal(evidence.retained.faces.length, arcFirst ? 13 : 25);
+  assert.equal(evidence.retained.faces.length, sBend ? 49 : arcFirst ? 13 : 25);
+  if (sBend) {
+    const joins = evidence.retained.junctions;
+    assert.deepEqual(joins.map(joint => joint.pieces), [['lead', 'first'], ['first', 'line'], ['line', 'second'], ['second', 'tail']]);
+    assert.equal(new Set(joins.flatMap(joint => joint.exteriorSeams.concat(...joint.interiorSeams))).size, 48);
+    assert.deepEqual(evidence.retained.inlet.center, [-10, 0, 0]);
+    assert.deepEqual([evidence.originalCap, evidence.movedCap, evidence.retained.inlet]
+      .map(cap => cap.apertures.map(aperture => aperture.edges.length)), [[4, 4], [4, 4], [4, 4]]);
+    assert.deepEqual([evidence.throughApertures.dimensions.leadLength, evidence.throughApertures.dimensions.tailLength], [10, 2]);
+    assert.ok(alternate.meta.views.left.visible_faces.includes('n1.start'));
+    assert.ok(meta.views.right.visible_faces.includes('n1.end'));
+    const near = (actual, expected) => assert.ok(Math.abs(actual - expected) < 1e-7, JSON.stringify({ actual, expected }));
+    const length = 20 + 15 * Math.PI;
+    near(evidence.volume.original.native, 32 * (24 + 15 * Math.PI));
+    near(evidence.volume.candidate.native, 32 * length);
+    const centroid = [(270 * Math.PI - 72) / length, (252 * Math.PI + 384) / length, 0];
+    for (const point of [evidence.centroid.analytic, evidence.centroid.native])
+      point.forEach((coordinate, index) => near(coordinate, centroid[index]));
+  }
   if (arcFirst) {
     const joins = evidence.retained.junctions;
     assert.deepEqual(joins.map(joint => joint.pieces), [['bend', 'line']]);
@@ -72,13 +91,15 @@ export async function reviewPendingOutlet(f, file, call, request, expectedRevisi
   assert.ok(Math.abs(evidence.materialChange.native + 128) < 1e-6);
   assert.ok(evidence.maximumGapMM < 1e-7);
 
-  const faces = ['n1.start', 'n1.end'], reviewPin = { ...pins, action: 'inspect', faces,
+  const faces = ['n1.start', 'n1.end'];
+  if (sBend) faces.push('n1.lead.side[e1]', 'n1.tail.side[e6]', 'n1.tail.side[e10]');
+  const reviewPin = { ...pins, action: 'inspect', faces,
     expectedReviewRevision: meta.candidate.reviewRevision };
   const native = await call('query', reviewPin);
   assert.deepEqual(native[evidenceKey], evidence);
   assert.deepEqual(native.candidate, meta.candidate);
   assert.equal(native.imageSha256, meta.imageSha256);
-  const axis = arcFirst || inlet ? 0 : 1;
+  const axis = arcFirst || inlet || sBend ? 0 : 1;
   assert.equal(native.faces.find(face => face.name === evidence.face).geometry.point[axis], moved[axis]);
   const opposite = await call('query', { ...reviewPin, orientation, expectedReviewRevision: alternate.meta.candidate.reviewRevision });
   assert.deepEqual(opposite.faces, native.faces);

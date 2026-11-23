@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D1823: [Review the five-span outlet offset before Agent approval](notes/pending-five-span-outlet-offset-review-2026-11-24/README.md), #324. Bind both pending images to the signed native offset, original Direct rail and unchanged fixed geometry.
+
 - D1822: [Offset the original outlet of a paired Exact S-bend](notes/paired-five-span-outlet-offset-2026-11-24/README.md), #17. Preserve both passages and all 48 tangent joins through a signed edit, saved handle drag and Studio reopen.
 
 - D1821: [Retire 3D annotation selection with its drawing source](notes/pmi-drawing-source-closeout-2026-11-24/README.md), #268. Repair removal and same-ID document replacement, and reconcile original desktop acceptance.

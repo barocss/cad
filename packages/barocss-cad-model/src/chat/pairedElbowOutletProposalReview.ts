@@ -30,8 +30,6 @@ function scope(doc: StudioDoc, inlet: boolean) {
     typeof doc.direct.sources[rail.source] !== 'string')) return;
   const [sketch, sweep] = doc.nodes, section = pairedDuctSection(sketch);
   if (!section || sweep?.kind !== 'sweep-curve') return;
-  // The image verifier currently has the five- and seven-pole outlet proofs.
-  if (!inlet && ![5, 7].includes(sweep.path.controlPoints.length)) return;
   const face = `${featureId(doc.nodes, 1)}.${inlet ? 'start' : 'end'}`;
   if (!(inlet ? isPairedElbowInletOffsetSource : isPairedElbowOutletOffsetSource)(doc.nodes, 1, face)) return;
   const parent: BodyRef = { node: 1, side: 'solid' }, body = bodyKey(parent, doc.nodes);
