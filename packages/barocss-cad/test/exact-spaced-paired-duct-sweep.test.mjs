@@ -245,9 +245,9 @@ for (const turn of [-1, 1]) test(`paired ${turn === 1 ? 'same-turn' : 'opposite-
   refused({ ...three, holes: [...three.holes, three.holes[0]] }, 'CAPABILITY', /two axis-aligned rectangular cavities/);
   refused({ ...section(), holes: [[{ kind: 'arc', center: [0, -2], start: [.5, -2], direction: 'ccw' }], section().holes[1]] },
     'CAPABILITY', /two axis-aligned rectangular cavities/);
-  const twoArcs = joinCurves(path.first.curve, arc('second', path.first.end, path.first.terminal,
-    scale(path.first.exitInward, -1), 18, 90).curve, { curveId: 'twoArcs' }).curve;
-  refused(section(), 'CAPABILITY', /one centered rectangular opening/, twoArcs);
+  const sameTurnArcs = joinCurves(path.first.curve, arc('second', path.first.end, path.first.terminal,
+    path.first.exitInward, 18, 90).curve, { curveId: 'twoArcs' }).curve;
+  refused(section(), 'CAPABILITY', /one centered rectangular opening/, sameTurnArcs);
   for (const radii of [{ firstRadius: 2 }, { secondRadius: 2 }])
     refused(section(), 'PARAMETER', /radial half-width smaller than both path radii/, rail({ ...radii, turn }).path);
   const narrow = [[-3, -2.5e-6], [2.5e-6, 3]];

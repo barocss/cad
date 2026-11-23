@@ -869,11 +869,11 @@ function concentricBore(disk: Circle, hole: Circle, refuse: Refuse, style = 'two
 }
 
 /** Bind each shared section edge on both native bend charts, including planar rectangle walls. */
-function bindArcPairJoin(brep: Brep, id: string, tolerance: number, hasBore: boolean, edgeCount: 2 | 4): Brep | undefined {
+function bindArcPairJoin(brep: Brep, id: string, tolerance: number, apertureCount: number, edgeCount: 2 | 4): Brep | undefined {
   const facesByLoop = new Map(brep.faces.flatMap(face => face.loops.map(loop => [loop, face] as const)));
   const edges = new Map(brep.edges.map(edge => [edge.id, edge])), uses = new Map(brep.coedges.map(use => [use.id, use]));
   const coedges: BrepCoedge[] = [];
-  let outer = 0, inner = 0;
+  const lead = Array<number>(apertureCount + 1).fill(0), tail = [...lead];
   for (const use of brep.coedges) {
     const face = facesByLoop.get(use.loop), twin = use.twin ? uses.get(use.twin) : undefined;
     const other = twin && facesByLoop.get(twin.loop);
@@ -882,9 +882,14 @@ function bindArcPairJoin(brep: Brep, id: string, tolerance: number, hasBore: boo
     if (!across) { coedges.push(use); continue; }
     const surface = face?.surface, peer = other?.surface, edge = edges.get(use.edge);
     if (surface?.kind !== 'surface' || peer?.kind !== 'surface' || !edge) return;
-    // Revolve retains its bore chart IDs even when authored side tags replace display names.
-    const bore = surface.id.startsWith(`${id}_${first ? 'first' : 'second'}_hole0_`);
-    if (bore !== peer.id.startsWith(`${id}_${first ? 'second' : 'first'}_hole0_`)) return;
+    // Revolve retains each aperture's chart IDs even when authored tags replace display names.
+    const lane = (surfaceId: string, piece: string) => {
+      for (let index = 0; index < apertureCount; index++)
+        if (surfaceId.startsWith(`${id}_${piece}_hole${index}_`)) return index + 1;
+      return 0;
+    };
+    const ring = lane(surface.id, first ? 'first' : 'second');
+    if (ring !== lane(peer.id, first ? 'second' : 'first')) return;
     const expected = first ? 'u1' : 'u0';
     let binding: Curve | undefined;
     if (edgeCount === 4 && surface.degreeU === 1) binding = affinePlaneBinding(edge.curve, surface, tolerance);
@@ -895,10 +900,9 @@ function bindArcPairJoin(brep: Brep, id: string, tolerance: number, hasBore: boo
     if (!binding) return;
     const { id: useId, edge: edgeId, sense, loop, next, prev, twin: twinId } = use;
     coedges.push({ id: useId, edge: edgeId, sense, loop, next, prev, twin: twinId, pcurve: binding });
-    if (bore) inner++;
-    else outer++;
+    (first ? lead : tail)[ring]++;
   }
-  if (outer === 2 * edgeCount && inner === (hasBore ? 2 * edgeCount : 0)) return { ...brep, coedges };
+  if (lead.every(count => count === edgeCount) && tail.every(count => count === edgeCount)) return { ...brep, coedges };
 }
 
 /** Rebind both joins on the native bend and prism charts, including affine rectangle walls. */
@@ -955,7 +959,7 @@ function arcPairSweep(id: string, arcs: NonNullable<ReturnType<typeof tangentArc
     : `Exact ${style} sweep needs both path radii larger than the profile radius.`);
   if (!(Math.min(radius, Math.hypot(sx, sy)) - radialReach > first.tolerance)) return clearance();
   const wall = apertures?.clearance ?? opening?.clearance ?? (bore ? radialReach - circleRadius(bore) : undefined);
-  const wallError = () => apertures ? refuse('GEOMETRY', 'Exact arc-line-arc rectangular sweep needs strictly positive cover and axial web clearance between its apertures.') : opening ? ductWallError(refuse)
+  const wallError = () => apertures ? refuse('GEOMETRY', `Exact ${style} rectangular sweep needs strictly positive cover and axial web clearance between its apertures.`) : opening ? ductWallError(refuse)
     : refuse('GEOMETRY', 'Exact two-arc sweep needs strictly positive wall clearance around the bore.');
   if (wall !== undefined && !(wall > 10 * first.tolerance)) return wallError();
   const holes = apertures?.profiles ?? (opening ? [opening.profile] : bore ? [[bore]] : undefined);
@@ -1000,7 +1004,7 @@ function arcPairSweep(id: string, arcs: NonNullable<ReturnType<typeof tangentArc
     secondFrame.offset, secondFrame.axes[2], roundoff, sharedSection, id);
   if (!glued) return refuse('GEOMETRY', `The exact ${style} sweep sections do not share the same ${opening ? 'outer rectangle and opening' : rectangle ? 'rectangle' : bore ? 'annulus' : 'disk'}.`);
   const brep = hasLine ? bindArcLineArcJoins(glued, id, roundoff, apertures ? 2 : hasOpening ? 1 : 0, rectangle ? 4 : 2)
-    : bindArcPairJoin(glued, id, roundoff, hasOpening, rectangle ? 4 : 2);
+    : bindArcPairJoin(glued, id, roundoff, apertures ? 2 : hasOpening ? 1 : 0, rectangle ? 4 : 2);
   const hasCap = (end: 'start' | 'end') =>
     brep?.faces.some(face => face.name === `${id}.${end}` && face.loops.length === (apertures ? 3 : hasOpening ? 2 : 1));
   if (!brep || brep.faces.length !== (hasLine ? 3 : 2) * (rectangle ? edgeCount : bore ? 4 : 2) + 2 || !hasCap('start') || !hasCap('end'))
@@ -1181,14 +1185,18 @@ export function exactSweep(input: ExactSweepInput, refuse: Refuse): SweepSolid {
     const hole = rectangle ? undefined : circularHole(holes, 'two-arc', refuse);
     const bore = hole && concentricBore(disk!, hole, refuse);
     const initial = frame(pair.first.tangent), [x, y] = initial;
+    const paired = rectangle && pair.turn === -1 && holes.length > 1;
     const joined: { axes: SweepAxes; section: JoinedSection } = rectangle
-      ? rectangularElbowSection(rectangle, holes, initial, pair.first, refuse, 'rectangular two-arc') : {
+      ? rectangularElbowSection(rectangle, paired ? [] : holes, initial, pair.first, refuse, 'rectangular two-arc') : {
       axes: initial, section: { profile: [originDisk(profileRadius!)], bendCentre: [dot(pair.first.toCentre, x), dot(pair.first.toCentre, y)] as XY,
         radialReach: profileRadius!, extent: profileRadius!, edgeCount: 2 as const },
     };
+    if (paired) joined.section = { ...joined.section, edgeCount: 12,
+      apertures: pairedRectangularApertures(rectangle, holes, joined.section, pair.first.tolerance, refuse, 'two-arc rectangular') };
     const result = place(arcPairSweep(id, pair, joined.section, bore, sideTags, refuse), joined.axes, pair.first.start);
     const report = checkBrep(result.brep, { strict: true });
-    if (!report.valid || report.topology.length !== 1 || report.topology[0].genus !== (bore || joined.section.opening ? 1 : 0))
+    if (!report.valid || report.topology.length !== 1 || report.topology[0].shells !== 1
+      || report.topology[0].genus !== (paired ? 2 : bore || joined.section.opening ? 1 : 0))
       return refuse('GEOMETRY', 'The exact two-arc sweep did not produce a valid closed solid.');
     return result;
   }

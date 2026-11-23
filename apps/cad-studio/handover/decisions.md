@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D1798: [Sweep two passages through directly joined opposite turns](notes/exact-opposite-arc-paired-duct-2026-11-23/README.md), #10. Verify three charted join rings, both mouths, independent lane edits and fresh Open.
+
 - D1797: [Extract the Studio reference-review session from App](notes/studio-reference-review-session-2026-11-23/README.md), #44. Match candidate preview, explicit confirmation, stale guards, saved files and final keyboard focus in paired desktop runs.
 
 - D1796: [Review the paired same-turn duct before Agent approval](notes/pending-same-turn-paired-duct-review-2026-11-23/README.md), #324. Bind both mouths, 36 walls and 24 charted tangent joins to independent evidence and both Agent images through explicit Studio approval and fresh Open.
