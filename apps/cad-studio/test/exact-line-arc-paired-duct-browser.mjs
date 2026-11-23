@@ -10,7 +10,7 @@ const reviewBaseline = process.argv.includes('--expect-review-unavailable');
 const review = process.argv.includes('--review');
 const tail = process.argv.includes('--straight-tail') ? 14 : 0;
 const spaced = process.argv.includes('--spaced-opposite');
-assert.ok(!spaced || (!tail && !review && !reviewBaseline));
+assert.ok(!spaced || !tail);
 const threePieces = tail > 0 || spaced;
 const ends = [
   { direction: 'Left', axis: 0, sign: -1, center: spaced ? [0, 0] : [-10, 0] },
@@ -62,11 +62,14 @@ if (review || reviewBaseline) pins.push(
 );
 const f = await createFlow({
   name: spaced ? 'exact-spaced-paired-duct' : 'exact-line-arc-paired-duct', output: process.argv[2],
-  envFrozen: spaced ? 'D1792_SOURCE_FROZEN' : (review || reviewBaseline)
+  envFrozen: spaced ? (review || reviewBaseline ? 'D1794_SOURCE_FROZEN' : 'D1792_SOURCE_FROZEN') : (review || reviewBaseline)
     ? (tail ? 'D1787_SOURCE_FROZEN' : 'D1783_SOURCE_FROZEN')
     : (tail ? 'D1786_SOURCE_FROZEN' : 'D1782_SOURCE_FROZEN'),
   initialFiles: pins, requiredFrozen: pins,
-  extraFrozen: review ? ['packages/barocss-cad-model/src/chat/pairedLineArcDuctEvidence.ts'] : [],
+  extraFrozen: review ? [
+    'packages/barocss-cad-model/src/chat/pairedLineArcDuctEvidence.ts',
+    ...(spaced ? ['packages/barocss-cad-model/src/chat/pairedSpacedArcDuctEvidence.ts'] : []),
+  ] : [],
   qualification: spaced ? 'Carry two rectangular passages through two opposite bends and a straight span.'
     : 'Sweep two rectangular passages along a straight rail into a tangent arc.',
   limits: [spaced ? 'A 4 × 10 mm section, two 2 × 2 mm lanes, R12/R18 quarter bends, an 8 mm straight span and desktop WebGPU.' : `A bend-aligned 4 × 10 mm rectangle, two axial lanes centered at ±2 mm, a 10 mm straight span and an R20 quarter arc${tail ? ' followed by a 14 mm straight span' : ''}. Desktop WebGPU.`],
@@ -276,7 +279,7 @@ async function approveWithAgent(source, expected) {
     }
     if (review) {
       const pending = await readFile(file);
-      const result = await reviewPendingPairedDuct(f, call, request, expectedRevision, rail.revision, expected, sideTags, tail);
+      const result = await reviewPendingPairedDuct(f, call, request, expectedRevision, rail.revision, expected, sideTags, { tail, spaced });
       assert.deepEqual(await readFile(file), pending);
       return result;
     }

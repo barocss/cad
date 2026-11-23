@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1794: [Review the paired spaced S-bend before Agent approval](notes/pending-spaced-paired-duct-review-2026-11-23/README.md), #324. Bind both mouths, 36 tagged walls and 24 native tangent joins to the candidate and both images through explicit Studio approval and fresh Open.
 - D1793: [Extract Studio sheet pattern ownership from App](notes/studio-sheet-pattern-ownership-2026-11-23/README.md), #44. Match shared and Flange rule ownership, bend-table acceptance and refusal, and flat-pattern fresh Open in desktop Studio.
 - D1792: [Sweep two passages through a spaced S-bend](notes/exact-spaced-paired-duct-2026-11-23/README.md), #10. Verify both apertures at both ends, 24 native tangent joins, editable lane geometry, fresh Open and explicit local Agent approval.
 - D1791: [Review the outlet Offset with its original Direct rail](notes/paired-outlet-review-retained-rail-2026-11-23/README.md), #324. Pin the retained curve and copied path, reject changed curves, and match the approved native body and both images after fresh Open.

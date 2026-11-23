@@ -14,6 +14,7 @@ import { canonical, canonicalOf, revisionOf } from '../util/revision';
 import { closedRectangularDuctEvidence } from './closedRectangularDuctEvidence';
 import { closedPairedRectangularDuctEvidence } from './closedPairedRectangularDuctEvidence';
 import { pairedLineArcDuctEvidence } from './pairedLineArcDuctEvidence';
+import { pairedSpacedArcDuctEvidence } from './pairedSpacedArcDuctEvidence';
 import { directInspectionRevision } from './sweepSource';
 
 const near = (a: number, b: number) => Number.isFinite(a) && Number.isFinite(b) && Math.abs(a - b) <= CadNumericPolicy.linearTolerance;
@@ -187,8 +188,8 @@ export async function reviewedRectangularDuctEvidence(base: StudioDoc, candidate
   if (typeof copied === 'string' || digestOf(copied.path) !== edit.pathRevision || copied.path.degree !== 2) return;
   const { path } = copied;
   const closedCircle = path.controlPoints.length === 9 && path.knots.length === 12;
-  const pairedElbow = 'cavities' in source && path.controlPoints.length === 7 && path.knots.length === 10;
-  if (!closedCircle && !pairedElbow && (path.controlPoints.length !== 5 || path.knots.length !== 8)) return;
+  const threePieceDuct = 'cavities' in source && path.controlPoints.length === 7 && path.knots.length === 10;
+  if (!closedCircle && !threePieceDuct && (path.controlPoints.length !== 5 || path.knots.length !== 8)) return;
   const expected = withNode(base, { kind: 'sweep-curve', sketch: 0, name: copied.name, path: copied.path, mode: 'exact' });
   if (canonicalOf(candidate) !== canonicalOf(expected) || candidate.nextId !== expected.nextId) return;
   try {
@@ -198,7 +199,8 @@ export async function reviewedRectangularDuctEvidence(base: StudioDoc, candidate
       brep.bodies.length !== 1 || brep.bodies[0].kind !== 'solid') return;
     if ('cavities' in source) {
       if (!closedCircle) {
-        const evidence = pairedLineArcDuctEvidence(brep, path, source);
+        const evidence = pairedLineArcDuctEvidence(brep, path, source)
+          ?? (threePieceDuct ? pairedSpacedArcDuctEvidence(brep, path, source) : undefined);
         if (!evidence) return;
         return { brep, rectangularDuct: { body, sketch: edit.sketch, path: edit.path, pathRevision: edit.pathRevision, ...evidence } };
       }
