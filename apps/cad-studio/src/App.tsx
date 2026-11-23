@@ -4,9 +4,7 @@ import { prepareParameterPatternHoleSpacing } from './state/parameterPatternHole
 import { useNamedInspection } from './state/useNamedInspection';
 import { useMeshCircleMeasurement, type MeshCircleHit } from './app/useMeshCircleMeasurement';
 import { MeshCircleInspector } from './ui/MeshCircleInspector';
-import { duplicateSelection } from './assembly/duplicateSelection';
-import { rotateSelection } from './assembly/rotateSelection';
-import { translateSelection } from './assembly/translateSelection';
+import { selectedInstanceActions } from './assembly/selectedInstanceActions';
 import { pickPlacedPart } from './assembly/groundSelection';
 import { SelectedInstancesPanel } from './ui/SelectedInstancesPanel';
 import { commitOutlineRotation } from './sketch/outlineRotationCommit';
@@ -2803,28 +2801,9 @@ export function App() {
       })()}
       {!rendering && !drawing && !sketch && !measure && !active && !assembly.draft && !bomOpen && !libraryOpen && !paramsOpen && instanceSel.length > 1
         && instanceSel.every(id => !id.includes('/') && doc.instances?.some(i => i.id === id)) && <SelectedInstancesPanel
-          doc={doc} moveBlocked={groupMoveBlocked} instances={doc.instances!.filter(i => instanceSel.includes(i.id))} onTranslate={delta => {
-            if (groupMoveBlocked || !canChangeDocument()) return false;
-            const next = translateSelection(doc, instanceSel, delta);
-            if (next.error !== undefined) { setToast({ title: 'Selected parts not moved', hint: next.error, detail: 'Nothing was changed.' }); return false; }
-            if (!next.instances.some((i, index) => i !== doc.instances![index])) return true;
-            return commitInstances(next.instances);
-          }} onRotate={value => {
-            if (groupMoveBlocked || !canChangeDocument()) return false;
-            const next = rotateSelection(doc, instanceSel, value);
-            if (next.error !== undefined) { setToast({ title: 'Selected parts not rotated', hint: next.error, detail: 'Nothing was changed.' }); return false; }
-            if (!next.instances.some((i, index) => i !== doc.instances![index])) return true;
-            return commitInstances(next.instances);
-          }} onDuplicate={delta => {
-            if (groupMoveBlocked || !canChangeDocument()) return false;
-            const next = duplicateSelection(doc, instanceSel, delta);
-            if (next.error !== undefined) { setToast({ title: 'Selected parts not duplicated', hint: next.error, detail: 'Nothing was changed.' }); return false; }
-            return commitInstances(next.instances, next.ids);
-          }} onGround={on => {
-            if (!canChangeDocument()) return;
-            const error = assembly.groundMany(instanceSel, on);
-            if (error) setToast({ title: 'Selected parts not changed', hint: error, detail: '' });
-          }} />}
+          doc={doc} moveBlocked={groupMoveBlocked} instances={doc.instances!.filter(i => instanceSel.includes(i.id))}
+          {...selectedInstanceActions({ doc, selected: instanceSel, moveBlocked: groupMoveBlocked, canChangeDocument,
+            commitInstances, groundMany: assembly.groundMany, notice: setToast })} />}
       {!rendering && !sketch && !measure && instanceSel.length === 1 && <InstanceInspector
         model={{ doc, selectedId: instanceSel[0], entry: instanceBodies.get(instanceSel[0]) }}
         bearing={{ selected: selectedBearingEdit, blocked: bomOpen || libraryOpen || paramsOpen || drawing || !!active,

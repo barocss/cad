@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1760: [Extract the selected placed part actions from Studio App](notes/studio-selected-instance-actions-2026-11-23/README.md), #44. Match Move, Rotate, Duplicate and Fix through desktop geometry, refusals, History and fresh Open.
 - D1759: [Resize a saved angle-constrained Sketch Chamfer](notes/edit-saved-oblique-sketch-chamfer-2026-11-23/README.md), #21. Verify the two setbacks through numeric and physical edits, fresh Open and explicit Agent approval.
 - D1758: [Chamfer two straight sketch sides with an authored angle](notes/create-angle-constrained-sketch-chamfer-2026-11-23/README.md), #21. Preserve equal setbacks, the original carrier angle, native extrusion and explicit Studio Agent approval.
 - D1757: [Keep the authored corner angle when creating a Sketch Fillet](notes/create-angle-constrained-sketch-fillet-2026-11-23/README.md), #21. Preserve the source carriers, replay the saved angle and resize after fresh Open.
