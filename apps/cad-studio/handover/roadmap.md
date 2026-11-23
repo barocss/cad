@@ -1,13 +1,13 @@
 # CAD roadmap — current status and execution order
 
-Updated 2026-11-23 · Priority authority: D520 · Latest delivery: D1766 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
+Updated 2026-11-23 · Priority authority: D520 · Latest delivery: D1767 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
 
 This is the only current status index. Detailed tracks define acceptance; the 34 stable row pages retain scope and issue navigation. Immutable decision notes retain results. Do not append chronological status paragraphs here. [D520 decision](notes/cad-roadmap-replan-2026-11-04/README.md) supersedes D445 execution order and historical next-item text, while retaining its safeguards and bounded proofs.
 
 ## Now and next
 
-- **Current position:** [D1766](notes/adjacent-right-oblique-sketch-fillets-2026-11-23/README.md), P1 row 09. One R6 edit rounds adjacent right and authored oblique corners by points or straight carriers. Shared-edge refusal, rebuilt native geometry, fresh Open and explicit Agent approval pass. The B06 PDF group remains held.
-- **Next MAIN:** D1767, P5 rows [07](roadmap-rows/07.md) and [30](roadmap-rows/30.md), [#10](https://github.com/barocss/cad/issues/10). Qualify the first offset clipping face on the exact rectangular duct. Check its two apertures, independently integrated volume and native joints before extending the centered binder.
+- **Current position:** [D1767](notes/exact-offset-rectangular-duct-intersect-2026-11-23/README.md), P5 rows 07 and 30. The exact rectangular duct supports the verified offset clip at x = 1 and x = 2 mm. Both apertures, measured native joints and edited fresh Open pass. The B06 PDF group remains held.
+- **Next MAIN:** D1768, P0 rows [05](roadmap-rows/05.md), [15](roadmap-rows/15.md) and [16](roadmap-rows/16.md), [#20](https://github.com/barocss/cad/issues/20). Reproduce a terminal equal-distance Chamfer with two held straight edges. Verify that History can replace both in one explicit transaction while preserving the prior body and references until Apply.
 - **Separate follow-ups:** Continue Studio App extraction in cohesive parts with affected desktop checks. [#608 Rendering](https://github.com/barocss/cad/issues/608) stays on HOLD. API inventory drift remains open. The issue tracker records [#126](https://github.com/barocss/cad/issues/126), [#613](https://github.com/barocss/cad/issues/613), [#152](https://github.com/barocss/cad/issues/152) and [#22](https://github.com/barocss/cad/issues/22) as closed.
 - **Active repository:** [barocss/cad](https://github.com/barocss/cad), based on `origin/main`. Fetch before work and preserve unexpected changes. The [migration record](../../../docs/migration/README.md) maps the former `local/cad-dev` history and issue numbers.
 - **Evidence correction:** D482 records2167 PASS/0 FAIL/2 existing SKIP in a later full-kernel run than D433. Neither result is a new full-suite PASS at this audit HEAD. [D482 record](notes/vertical-contact-refusal-2026-11-04/README.md).

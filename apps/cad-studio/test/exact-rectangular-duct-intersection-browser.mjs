@@ -5,6 +5,7 @@ import { createFlow } from './flow-helper.mjs';
 import { currentPartRevision, withMcpSession } from './mcp-browser-session.mjs';
 
 const baseline = process.argv.includes('--observe-base');
+const cutOffset = process.argv.includes('--offset') ? 1 : 0;
 const path = {
   degree: 2, knots: [0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 4],
   controlPoints: [[20, 0, 0], [20, 20, 0], [0, 20, 0], [-20, 20, 0], [-20, 0, 0],
@@ -26,10 +27,11 @@ const pins = [
 ];
 if (!baseline) pins.push('packages/barocss-cad/src/brep/exact-rectangular-duct-intersect.ts');
 const f = await createFlow({
-  name: 'exact-rectangular-duct-intersection', output: process.argv[2], envFrozen: 'D1765_SOURCE_FROZEN',
+  name: 'exact-rectangular-duct-intersection', output: process.argv[2], envFrozen: cutOffset ? 'D1767_SOURCE_FROZEN' : 'D1765_SOURCE_FROZEN',
   initialFiles: pins, requiredFrozen: pins,
-  qualification: 'Intersect one exact closed rectangular duct with a centered box in desktop Studio.',
-  limits: ['One R20 mm rail, outer 4 × 6 mm and centered 2 × 4 or 2 × 2 mm cavity, retained x ≥ 0, desktop WebGPU.'],
+  qualification: cutOffset ? 'Intersect one exact closed rectangular duct with an offset box in desktop Studio.'
+    : 'Intersect one exact closed rectangular duct with a centered box in desktop Studio.',
+  limits: [`One R20 mm rail, outer 4 × 6 mm and centered 2 × 4 or 2 × 2 mm cavity, retained x ≥ ${cutOffset}, desktop WebGPU.`],
   inspectorSource: `
 import { readFileSync } from 'node:fs';
 import { brepMassProperties, checkBrep, faceGeometry, massPropertiesOf, measureBrepEdgeContinuity } from '@barocss/cad';
@@ -87,7 +89,7 @@ async function begin() {
   await f.page.evaluate(() => document.activeElement?.blur());
   await f.command('Box');
   const box = f.page.getByRole('dialog', { name: 'Box', exact: true });
-  for (const [field, value] of Object.entries({ 'Width X': 30, 'Depth Y': 60, 'Height Z': 10, 'At X': 0, 'At Y': -30, 'At Z': -5 })) {
+  for (const [field, value] of Object.entries({ 'Width X': 30, 'Depth Y': 60, 'Height Z': 10, 'At X': cutOffset, 'At Y': -30, 'At Z': -5 })) {
     await box.getByLabel(field, { exact: true }).fill(String(value));
   }
   await box.locator('.status').filter({ hasText: /^preview$/ }).waitFor();
@@ -96,18 +98,28 @@ async function begin() {
   const boxed = (await f.snapshot('01-duct-and-box')).doc;
   assert.deepEqual(boxed.nodes.slice(0, 2), seed.nodes);
   assert.deepEqual([boxed.nodes[2].min, boxed.nodes[2].max, boxed.nodes[3].from, boxed.nodes[3].height],
-    [[0, -30], [30, 30], -5, 10]);
+    [[cutOffset, -30], [cutOffset + 30, 30], -5, 10]);
   return boxed;
 }
 
-function verifyCut(native, cavityHalfHeight) {
+const ordinate = (radius, offset) => Math.sqrt((radius - offset) * (radius + offset));
+const segmentArea = (radius, offset) => radius ** 2 * Math.acos(offset / radius) - offset * ordinate(radius, offset);
+function expectedAngle(native, edgeId, offset) {
+  const faces = native.faces.filter(face => face.loops.some(loop => loop.edges.some(edge => edge.id === edgeId)));
+  const cap = faces.find(face => face.geometry.kind === 'plane' && face.geometry.n[0] < -.99);
+  const cylinder = faces.find(face => face.geometry.kind === 'cylinder');
+  return cap && cylinder ? Math.acos(-cylinder.geometry.out * offset / cylinder.geometry.r) * 180 / Math.PI : 90;
+}
+
+function verifyCut(native, cavityHalfHeight, offset = cutOffset) {
   assert.deepEqual(native.source, { family: 'analytic-boolean', id: 'n4' });
   assert.ok(native.check.valid, native.check.issues.join('\n'));
   assert.deepEqual(native.check.counts, { bodies: 1, shells: 1, faces: 10, loops: 12, coedges: 48, edges: 24, vertices: 16 });
   assert.equal(native.check.topology[0].genus, 1);
   assert.equal(native.chartCount, native.check.counts.coedges);
   assert.ok(native.check.maximumPcurveGap < 1e-8);
-  const volume = 20 * Math.PI * (24 - 4 * cavityHalfHeight);
+  const volume = 6 * (segmentArea(22, offset) - segmentArea(18, offset))
+    - 2 * cavityHalfHeight * (segmentArea(21, offset) - segmentArea(19, offset));
   near(native.mass.volume, volume);
   near(native.quadrature.volume, volume, 1e-6);
   assert.equal(native.joints.length, 24);
@@ -117,41 +129,44 @@ function verifyCut(native, cavityHalfHeight) {
   assert.equal(caps.length, 2);
   const seen = [];
   for (const { geometry, loops } of caps) {
-    near(geometry.o[0], 0);
+    near(geometry.o[0], offset);
     assert.deepEqual(loops.map(loop => loop.kind), ['outer', 'inner']);
     const meanY = loops[0].edges.flatMap(edge => edge.points).reduce((sum, point) => sum + point[1], 0) / 8;
-    const centerY = meanY > 0 ? 20 : -20;
-    near(meanY, centerY);
-    seen.push(centerY);
+    const side = Math.sign(meanY), centerY = side * ordinate(20, offset);
+    seen.push(side);
     for (const [index, loop] of loops.entries()) {
       assert.equal(loop.edges.length, 4);
+      const halfWidth = index ? 1 : 2, halfHeight = index ? cavityHalfHeight : 3;
+      const low = ordinate(20 - halfWidth, offset), high = ordinate(20 + halfWidth, offset);
       let area = 0;
       for (const edge of loop.edges) {
         assert.equal(edge.degree, 1);
         assert.equal(edge.points.length, 2);
         assert.ok(edge.reciprocal && edge.pcurves);
         for (const [x, y, z] of edge.points) {
-          near(x, 0);
-          near(Math.abs(y - centerY), index ? 1 : 2);
-          near(Math.abs(z), index ? cavityHalfHeight : 3);
+          near(x, offset);
+          assert.equal(Math.sign(y), side);
+          near(Math.min(Math.abs(Math.abs(y) - low), Math.abs(Math.abs(y) - high)), 0);
+          near(Math.abs(z), halfHeight);
         }
         const [a, b] = edge.points;
         area -= (edge.sense === 'forward' ? 1 : -1) * ((a[1] - centerY) * b[2] - a[2] * (b[1] - centerY)) / 2;
       }
-      near(area, index ? -4 * cavityHalfHeight : 24);
+      near(area, (index ? -1 : 1) * (high - low) * 2 * halfHeight);
     }
   }
-  assert.deepEqual(seen.sort((a, b) => a - b), [-20, 20]);
+  assert.deepEqual(seen.sort((a, b) => a - b), [-1, 1]);
   for (const joint of native.joints) {
     assert.equal(joint.status, 'measured');
     assert.equal(joint.sampleCount, 8);
-    near(joint.minimumAngleDegrees, 90);
-    near(joint.maximumAngleDegrees, 90);
+    const angle = expectedAngle(native, joint.edgeId, offset);
+    near(joint.minimumAngleDegrees, angle);
+    near(joint.maximumAngleDegrees, angle);
   }
   return caps;
 }
 
-async function measureInStudio(native, caps, stage, expectRefused = false) {
+async function measureInStudio(native, caps, stage, expectRefused = false, offset = cutOffset) {
   await button('Iso', f.page.locator('.views')).click();
   await f.page.getByTitle('Frame all (F)', { exact: true }).click();
   await browser().getByRole('button', { name: /^Sweep along Closed circular rail/ }).click();
@@ -161,7 +176,10 @@ async function measureInStudio(native, caps, stage, expectRefused = false) {
   const result = panel.getByRole('status', { name: 'Edge continuity result', exact: true });
   const capEdgeIds = new Set(caps.flatMap(cap => cap.loops.flatMap(loop => loop.edges.map(edge => edge.id))));
   const corner = native.joints.find(joint => !capEdgeIds.has(joint.edgeId)).edgeId;
-  const samples = [corner, ...caps.flatMap(cap => cap.loops.map(loop => loop.edges[0].id))];
+  const samples = [corner, ...caps.flatMap(cap => cap.loops.map(loop => {
+    const vertical = loop.edges.find(edge => Math.abs(edge.points[0][1] - edge.points[1][1]) < 1e-7);
+    return (offset && vertical ? vertical : loop.edges[0]).id;
+  }))];
   for (const id of expectRefused ? samples.slice(0, 1) : samples) {
     await pick.selectOption(id);
     await button('Measure continuity', panel).click();
@@ -172,7 +190,8 @@ async function measureInStudio(native, caps, stage, expectRefused = false) {
     } else {
       const reading = result.locator('[data-continuity-angle]');
       await reading.waitFor();
-      assert.equal(await reading.textContent(), '90°');
+      const values = (await reading.innerText()).replaceAll('°', '').split(' – ').map(Number);
+      for (const value of values) near(value, expectedAngle(native, id, offset), 5.1e-7);
       assert.match(await result.innerText(), /Native samples\s+8/);
     }
   }
@@ -180,20 +199,22 @@ async function measureInStudio(native, caps, stage, expectRefused = false) {
   await f.snapshot(stage);
 }
 
-async function capRays(stage, materialZ = 2.5) {
+async function capRays(stage, materialZ = 2.5, offset = cutOffset) {
   const cube = f.page.getByRole('group', { name: 'View cube', exact: true });
   await button('View cube directions', cube).click();
   await f.page.getByRole('menuitem', { name: 'Left', exact: true }).click();
   if (await button('Ortho').getAttribute('aria-pressed') !== 'true') await button('Ortho').click();
   await f.page.waitForFunction(() => document.querySelector('.view-cube .vc-label')?.textContent === 'LEFT');
   await f.page.getByTitle('Frame all (F)', { exact: true }).click();
-  const material = [[0, -20, materialZ], [0, 20, materialZ]], cavity = [[0, -20, 0], [0, 20, 0]];
+  const station = ordinate(20, offset);
+  const material = [[offset, -station, materialZ], [offset, station, materialZ]];
+  const cavity = [[offset, -station, 0], [offset, station, 0]];
   const samples = await f.page.evaluate(points => points.map(point => window.__studioSurfacePoint(point)), [...material, ...cavity]);
   for (const [index, point] of material.entries()) {
     assert.ok(samples[index], 'A material ray hits its cap.');
     point.forEach((value, axis) => near(samples[index][axis], value, 1e-4));
   }
-  for (const point of samples.slice(2)) assert.ok(!point || point[0] > 0.1, JSON.stringify({ cavityRay: point }));
+  for (const point of samples.slice(2)) assert.ok(!point || point[0] > offset + 0.1, JSON.stringify({ cavityRay: point }));
   const filter = button('Selection filter');
   for (let i = 0; i < 6 && !(await filter.innerText()).includes('Faces'); i++) await filter.click();
   assert.match(await filter.innerText(), /Faces/);
@@ -210,6 +231,19 @@ async function capRays(stage, materialZ = 2.5) {
     await f.snapshot(stage + '-cap-' + (index + 1));
   }
   f.report.observations.push({ label: stage + '-cap-rays', samples, selected });
+}
+
+async function editOffset(previous, value, label) {
+  await f.openFeatureEditor(3);
+  await f.editor().getByLabel('Corner X', { exact: true }).fill(String(value));
+  const { doc } = await f.applyEditor(previous, label);
+  assert.deepEqual([doc.nodes[2].min, doc.nodes[2].max], [[value, -30], [value + 30, 30]]);
+  const extrude = { ...previous.nodes[3] };
+  delete extrude.made;
+  assert.deepEqual(doc.nodes[3], extrude);
+  assert.deepEqual(doc.nodes.slice(0, 2), previous.nodes.slice(0, 2));
+  assert.deepEqual(doc.nodes.slice(4), previous.nodes.slice(4));
+  return doc;
 }
 
 async function editCavity(halfHeight, label) {
@@ -295,22 +329,34 @@ await f.run(async () => {
   await measureInStudio(native, caps, '03-native-rim-continuity');
   await capRays('04-initial');
 
+  let beforeCavityEdit = cut, keptOffset = cutOffset;
+  if (cutOffset) {
+    keptOffset = 2;
+    beforeCavityEdit = await editOffset(cut, keptOffset, '05-box-offset-two');
+    const offsetNative = await f.inspect('offset-two-native', beforeCavityEdit);
+    verifyCut(offsetNative, 2, keptOffset);
+    await f.undo();
+    await f.same(cut);
+    await f.redo();
+    await f.same(beforeCavityEdit);
+  }
   const edited = await editCavity(1, '05-cavity-edited');
-  assert.deepEqual(edited.nodes.slice(1), cut.nodes.slice(1));
+  assert.deepEqual(edited.nodes.slice(1), beforeCavityEdit.nodes.slice(1));
   const editedNative = await f.inspect('edited-intersection-native', edited);
-  verifyCut(editedNative, 1);
+  verifyCut(editedNative, 1, keptOffset);
   await f.undo();
-  await f.same(cut);
+  await f.same(beforeCavityEdit);
   await f.redo();
   await f.same(edited);
-  const saved = await f.save('centered-rectangular-duct-intersection');
+  const saved = await f.save(cutOffset ? 'offset-rectangular-duct-intersection' : 'centered-rectangular-duct-intersection');
   const reopened = (await f.freshOpen(saved.file, edited, '06-fresh-open')).doc;
   const reopenedNative = await f.inspect('reopened-intersection-native', reopened);
-  const reopenedCaps = verifyCut(reopenedNative, 1);
+  const reopenedCaps = verifyCut(reopenedNative, 1, keptOffset);
   assert.equal(reopenedNative.digest, editedNative.digest);
-  await measureInStudio(reopenedNative, reopenedCaps, '06-reopened-rim-continuity');
-  await capRays('07-reopened', 1.5);
-  const restored = await editCavity(2, '08-cavity-restored');
+  await measureInStudio(reopenedNative, reopenedCaps, '06-reopened-rim-continuity', false, keptOffset);
+  await capRays('07-reopened', 1.5, keptOffset);
+  let restored = await editCavity(2, '08-cavity-restored');
+  if (cutOffset) restored = await editOffset(restored, cutOffset, '08-box-offset-restored');
   const restoredNative = await f.inspect('restored-intersection-native', restored);
   verifyCut(restoredNative, 2);
   assert.equal(restoredNative.digest, native.digest);

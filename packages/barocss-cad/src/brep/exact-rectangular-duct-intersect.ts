@@ -8,6 +8,7 @@ import { circleOf, planar } from './brep-tessellate.js';
 
 const ANGULAR = 512 * Number.EPSILON;
 const HALF_KNOTS = [0, 0, 0, .5, .5, 1, 1, 1];
+const ONE_SPAN_KNOTS = [0, 0, 0, 1, 1, 1];
 const HALF_WEIGHTS = [1, Math.SQRT1_2, 1, Math.SQRT1_2, 1];
 const Z: Point = [0, 0, 1];
 const NEGATIVE_X: Point = [-1, 0, 0];
@@ -30,20 +31,41 @@ function readPlane(face: BrepFace, roundoff: number): Plane | undefined {
   return { kind: 'plane', surface: s, height: o[2], origin: o, normal: scale(p.normal, face.sense === 'forward' ? 1 : -1) };
 }
 
-/** A complete, positive-weight half circle extruded only along Z. */
-function readCylinder(face: BrepFace, roundoff: number): Cylinder | undefined {
+/** Certify each pole of a circular arc retained by x >= offset, without changing its parameter. */
+function clippedArcMatches(surface: Surface, radius: number, offset: number, roundoff: number): boolean {
+  if (!(offset > 0 && offset < radius)) return false;
+  const y = Math.sqrt((radius - offset) * (radius + offset)), side = Math.sign(surface.controlPoints[0][0][1]);
+  const twoSpans = surface.controlPoints.length === 5, last = surface.controlPoints.length - 1;
+  const weight = twoSpans ? Math.sqrt((radius + offset) / (2 * radius)) : offset / radius;
+  const tangentY = radius * y / (radius + offset), height = surface.controlPoints[0][0][2];
+  for (const [i, row] of surface.controlPoints.entries()) {
+    const x = i === 0 || i === last ? offset : twoSpans ? radius : radius * radius / offset;
+    const ordinate = i === 0 ? y : i === last ? -y : twoSpans && i === 1 ? tangentY : twoSpans && i === 3 ? -tangentY : 0;
+    const w = i % 2 ? weight : 1;
+    if (dist(row[0], [x, side * ordinate, height]) > roundoff
+      || surface.weights[i].some(actual => Math.abs(actual - w) > ANGULAR)) return false;
+  }
+  return side !== 0;
+}
+
+/** Source half circles stay unchanged; result arcs also need the exact positive-offset pole certificate. */
+function readCylinder(face: BrepFace, roundoff: number, offset = 0): Cylinder | undefined {
   const s = face.surface;
-  if (s.kind !== 'surface' || s.degreeU !== 2 || s.degreeV !== 1 || s.controlPoints.length !== 5
-    || s.controlPoints.some(row => row.length !== 2) || s.knotsU.length !== 8
-    || !s.knotsU.every((k, i) => Math.abs(k - HALF_KNOTS[i]) <= ANGULAR)
+  if (s.kind !== 'surface' || s.degreeU !== 2 || s.degreeV !== 1
+    || (s.controlPoints.length !== 5 && !(offset > 0 && s.controlPoints.length === 3))
+    || s.controlPoints.some(row => row.length !== 2)) return;
+  const knots = s.controlPoints.length === 5 ? HALF_KNOTS : ONE_SPAN_KNOTS;
+  if (s.knotsU.length !== knots.length || !s.knotsU.every((k, i) => Math.abs(k - knots[i]) <= ANGULAR)
     || s.knotsV.length !== 4 || s.knotsV[0] !== 0 || s.knotsV[1] !== 0 || s.knotsV[2] !== 1 || s.knotsV[3] !== 1
-    || s.weights.some((row, i) => row.length !== 2 || row.some(w => Math.abs(w - HALF_WEIGHTS[i]) > ANGULAR))) return;
+    || s.weights.some((row, i) => row.length !== 2 || row.some(w => !(w > 0) || (offset === 0 && Math.abs(w - HALF_WEIGHTS[i]) > ANGULAR)))) return;
   const base: Curve = { kind: 'curve', id: 'boundary', degree: 2, knots: s.knotsU,
     controlPoints: s.controlPoints.map(row => row[0]), weights: s.weights.map(row => row[0]) };
   const circle = circleOf(base), axis = sub(s.controlPoints[0][1], s.controlPoints[0][0]);
-  if (!circle || circle.spans.length !== 2 || Math.abs(circle.spans.reduce((sum, span) => sum + span.phi, 0) - Math.PI) > ANGULAR
+  if (!circle || circle.spans.length !== (s.controlPoints.length - 1) / 2
+    || Math.abs(circle.spans.reduce((sum, span) => sum + span.phi, 0) - (offset === 0 ? Math.PI : 2 * Math.acos(offset / circle.r))) > ANGULAR
     || Math.hypot(circle.c[0], circle.c[1]) > roundoff || Math.hypot(axis[0], axis[1]) > roundoff || Math.abs(axis[2]) <= roundoff
-    || s.controlPoints.some(row => dist(sub(row[1], row[0]), axis) > roundoff)) return;
+    || s.controlPoints.some(row => dist(sub(row[1], row[0]), axis) > roundoff)
+    || (offset > 0 && !clippedArcMatches(s, circle.r, offset, roundoff))) return;
   // U follows the oriented circle, V follows its extrusion; their cross product is radial with this sign.
   const orientation = (circle.e1[0] * circle.e2[1] - circle.e1[1] * circle.e2[0]) * circle.sign * Math.sign(axis[2]);
   return { kind: 'cylinder', surface: s, radius: circle.r,
@@ -104,26 +126,28 @@ function readDuct(brep: Brep, tolerance: number): Duct | undefined {
     && report.topology[0].genus === 2 && report.maximumPcurveGap <= roundoff) return { outer, inner, roundoff };
 }
 
-/** No offset, other cutting direction or second active face is admitted. */
-function coveringBox(box: Brep, duct: Duct, tolerance: number): boolean {
+/** Retain two apertures strictly before the innermost cylinder; all other box faces stay clear. */
+function coveringBox(box: Brep, duct: Duct, tolerance: number): number | undefined {
   if (box.bodies.length !== 1 || box.shells.length !== 1 || box.faces.length !== 6 || box.loops.length !== 6
-    || box.vertices.length !== 8 || box.edges.length !== 12) return false;
+    || box.vertices.length !== 8 || box.edges.length !== 12) return;
   const limits = [0, 1, 2].map(axis => unique(box.vertices.map(vertex => vertex.point[axis]), duct.roundoff));
-  if (limits.some(values => values.length !== 2)) return false;
+  if (limits.some(values => values.length !== 2)) return;
   const [x, y, z] = limits, reach = duct.outer.radius + duct.outer.width;
-  if (Math.abs(x[0]) > duct.roundoff || !(x[1] > reach + tolerance && y[0] < -reach - tolerance && y[1] > reach + tolerance
-    && z[0] < -duct.outer.height - tolerance && z[1] > duct.outer.height + tolerance)) return false;
+  const offset = Math.abs(x[0]) <= duct.roundoff ? 0 : x[0];
+  if ((offset !== 0 && !(offset > tolerance && offset < duct.outer.radius - duct.outer.width - tolerance))
+    || !(x[1] > reach + tolerance && y[0] < -reach - tolerance && y[1] > reach + tolerance
+    && z[0] < -duct.outer.height - tolerance && z[1] > duct.outer.height + tolerance)) return;
   const sides = new Set<string>();
   for (const face of box.faces) {
     const plane = readPlane(face, duct.roundoff);
-    if (!plane || face.loops.length !== 1) return false;
+    if (!plane || face.loops.length !== 1) return;
     const axis = plane.normal.findIndex(component => Math.abs(Math.abs(component) - 1) <= ANGULAR);
-    if (axis < 0 || plane.normal.some((component, i) => i !== axis && Math.abs(component) > ANGULAR)) return false;
+    if (axis < 0 || plane.normal.some((component, i) => i !== axis && Math.abs(component) > ANGULAR)) return;
     const side = plane.normal[axis] > 0 ? 1 : 0;
-    if (Math.abs(plane.origin[axis] - limits[axis][side]) > duct.roundoff || sides.has(`${axis}:${side}`)) return false;
+    if (Math.abs(plane.origin[axis] - limits[axis][side]) > duct.roundoff || sides.has(`${axis}:${side}`)) return;
     sides.add(`${axis}:${side}`);
   }
-  return checkBrep(box, { strict: true }).valid;
+  if (checkBrep(box, { strict: true }).valid) return offset;
 }
 
 /** The same canonical rational coefficients, allowing only reversal and an affine parameter domain. */
@@ -160,10 +184,10 @@ function cylinderBinding(edge: Curve, surface: Surface, roundoff: number): Curve
   if (matches.length === 1) return matches[0];
 }
 
-/** Affine projection preserves every rational pole, knot and weight of a whole semicircular corner. */
+/** Affine projection preserves every rational pole, knot and weight of a whole circular corner. */
 function planeBinding(edge: Curve, surface: Surface, roundoff: number): Curve | undefined {
   if (edge.degree === 1) return affinePlaneBinding(edge, surface, roundoff);
-  if (edge.degree !== 2 || edge.controlPoints.length !== 5 || !circleOf(edge)) return;
+  if (edge.degree !== 2 || (edge.controlPoints.length !== 3 && edge.controlPoints.length !== 5) || !circleOf(edge)) return;
   const [[o, pv], [pu]] = surface.controlPoints, a = sub(pu, o), b = sub(pv, o);
   const aa = dot(a, a), ab = dot(a, b), bb = dot(b, b), determinant = aa * bb - ab * ab;
   if (!(determinant > ANGULAR * aa * bb)) return;
@@ -177,7 +201,11 @@ function planeBinding(edge: Curve, surface: Surface, roundoff: number): Curve | 
   return { ...edge, id: 'pcurve', controlPoints: poles };
 }
 
-function capLoop(brep: Brep, id: string, section: Section, station: number, roundoff: number): boolean {
+function capLoop(brep: Brep, id: string, section: Section, station: number, roundoff: number, offset: number): boolean {
+  const lowRadius = section.radius - section.width, highRadius = section.radius + section.width;
+  const low = Math.sqrt((lowRadius - offset) * (lowRadius + offset)), high = Math.sqrt((highRadius - offset) * (highRadius + offset));
+  const center = offset === 0 ? station : Math.sign(station) * (low + high) / 2;
+  const width = offset === 0 ? section.width : (high - low) / 2;
   const loop = brep.loops.find(candidate => candidate.id === id);
   if (!loop || loop.coedges.length !== 4) return false;
   const corners = new Set<string>();
@@ -186,8 +214,8 @@ function capLoop(brep: Brep, id: string, section: Section, station: number, roun
     if (!edge || edge.curve.degree !== 1 || edge.curve.controlPoints.length !== 2 || edge.curve.weights[0] !== edge.curve.weights[1]) return false;
     const signs: string[] = [];
     for (const point of edge.curve.controlPoints) {
-      const y = point[1] - station, z = point[2];
-      if (Math.abs(point[0]) > roundoff || Math.abs(Math.abs(y) - section.width) > roundoff || Math.abs(Math.abs(z) - section.height) > roundoff) return false;
+      const y = point[1] - center, z = point[2];
+      if (Math.abs(point[0] - offset) > roundoff || Math.abs(Math.abs(y) - width) > roundoff || Math.abs(Math.abs(z) - section.height) > roundoff) return false;
       const key = `${Math.sign(y)}:${Math.sign(z)}`;
       corners.add(key); signs.push(key);
     }
@@ -199,25 +227,25 @@ function capLoop(brep: Brep, id: string, section: Section, station: number, roun
 
 function withBinding(use: BrepCoedge, pcurve: Curve): BrepCoedge { return { ...use, pcurve }; }
 
-function repair(result: Brep, duct: Duct): Brep | undefined {
+function repair(result: Brep, duct: Duct, offset: number): Brep | undefined {
   if (result.source.family !== 'analytic-boolean' || result.bodies.length !== 1 || result.shells.length !== 1
     || result.faces.length !== 10 || result.loops.length !== 12 || result.edges.length !== 24
     || result.coedges.length !== 48 || result.vertices.length !== 16) return;
   const faces = new Map<string, Wall>(), matched = new Set<Wall>(), capStations = new Set<number>();
   for (const face of result.faces) {
-    const wall = readPlane(face, duct.roundoff) ?? readCylinder(face, duct.roundoff);
+    const wall = readPlane(face, duct.roundoff) ?? readCylinder(face, duct.roundoff, offset);
     if (!wall) return;
     for (const loop of face.loops) faces.set(loop, wall);
     if (wall.kind === 'plane' && dist(wall.normal, NEGATIVE_X) <= ANGULAR) {
-      if (face.loops.length !== 2 || Math.abs(wall.origin[0]) > duct.roundoff) return;
+      if (face.loops.length !== 2 || Math.abs(wall.origin[0] - offset) > duct.roundoff) return;
       const loops = face.loops.map(id => result.loops.find(loop => loop.id === id));
       const outer = loops.find(loop => loop?.kind === 'outer'), inner = loops.find(loop => loop?.kind === 'inner');
       if (!outer || !inner) return;
       const edges = outer.coedges.map(id => result.edges.find(edge => edge.id === result.coedges.find(use => use.id === id)?.edge));
       const sum = edges.reduce((total, edge) => total + (edge?.curve.controlPoints[0][1] ?? NaN), 0);
       const station = Math.sign(sum) * duct.outer.radius;
-      if (capStations.has(station) || !capLoop(result, outer.id, duct.outer, station, duct.roundoff)
-        || !capLoop(result, inner.id, duct.inner, station, duct.roundoff)) return;
+      if (capStations.has(station) || !capLoop(result, outer.id, duct.outer, station, duct.roundoff, offset)
+        || !capLoop(result, inner.id, duct.inner, station, duct.roundoff, offset)) return;
       capStations.add(station);
       continue;
     }
@@ -243,11 +271,13 @@ function repair(result: Brep, duct: Duct): Brep | undefined {
   if (report.valid && report.topology.length === 1 && report.topology[0].genus === 1 && report.maximumPcurveGap <= duct.roundoff) return repaired;
 }
 
-/** Bind only the already-stitched default-frame duct retained by a fully covering x≥0 box. */
+/** Bind only the already-stitched default-frame duct retained by one transverse box face. */
 export function bindHalfRectangularDuctIntersection(a: Brep, b: Brep, result: Brep, tolerance: number): Brep | undefined {
   try {
     const left = readDuct(a, tolerance), duct = left ?? readDuct(b, tolerance);
-    if (duct && coveringBox(left ? b : a, duct, tolerance)) return repair(result, duct);
+    if (!duct) return;
+    const offset = coveringBox(left ? b : a, duct, tolerance);
+    if (offset !== undefined) return repair(result, duct, offset);
   } catch (error) {
     if (error instanceof RangeError || (error instanceof BrepError && error.code !== 'INPUT')) return;
     throw error;

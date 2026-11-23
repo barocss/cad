@@ -18,35 +18,35 @@ const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a
 const pointNear = (a, b, tolerance = 1e-10) => near(norm(sub(a, b)), 0, tolerance);
 const withoutBindings = brep => ({ ...brep, coedges: brep.coedges.map(use => ({ ...use, pcurve: null })) });
 
-function document(clockwise = true) {
+function document(clockwise = true, offset = 0) {
   const poles = [[1, 0], [1, 1], [0, 1], [-1, 1], [-1, 0], [-1, -1], [0, -1], [1, -1], [1, 0]];
   const corners = [[-1, -2], [1, -2], [1, 2], [-1, 2]], ordered = clockwise ? corners.toReversed() : corners;
-  return { format: 'barocss-cad-part', version: 1, units: 'mm', parameters: { OuterLowX: -2, OuterHighX: 2, OpeningLowY: -2, OpeningHighY: 2 }, features: [
+  return { format: 'barocss-cad-part', version: 1, units: 'mm', parameters: { OuterLowX: -2, OuterHighX: 2, OpeningLowY: -2, OpeningHighY: 2, ClipX: offset }, features: [
     { id: 's', kind: 'sketch', profile: 'rectangle', min: [{ parameter: 'OuterLowX' }, -3], max: [{ parameter: 'OuterHighX' }, 3],
       holes: [ordered.map(([x, y]) => ({ kind: 'line', start: [x, { parameter: y < 0 ? 'OpeningLowY' : 'OpeningHighY' }] }))] },
     { id: 'w', kind: 'sweep-curve', sketch: 's', mode: 'exact', path: { degree: 2, knots: [0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 4],
       controlPoints: poles.map(([x, y]) => [20 * x, 20 * y, 0]), weights: poles.map((_, i) => i % 2 ? Math.SQRT1_2 : 1) } },
-    { id: 'bs', kind: 'sketch', profile: 'rectangle', min: [0, -30], max: [30, 30] },
+    { id: 'bs', kind: 'sketch', profile: 'rectangle', min: [{ parameter: 'ClipX' }, -30], max: [30, 30] },
     { id: 'b', kind: 'extrude', sketch: 'bs', from: -5, height: 10 },
     { id: 'cut', kind: 'intersect', target: 'w', tool: 'b' },
   ] };
 }
 
-function nativeCapRegion(brep, cap, station) {
+function nativeCapRegion(brep, cap, station, offset) {
   const rings = cap.loops.map(id => {
     const loop = brep.loops.find(loop => loop.id === id);
     return { kind: loop.kind, segments: loop.coedges.map(id => {
       const use = brep.coedges.find(use => use.id === id), edge = brep.edges.find(edge => edge.id === use.edge), [lo, hi] = curveDomain(edge.curve);
       assert.equal(edge.curve.degree, 1);
       const p = evaluateCurve(edge.curve, use.sense === 'forward' ? lo : hi), q = evaluateCurve(edge.curve, use.sense === 'forward' ? hi : lo);
-      near(p[0], 0); near(q[0], 0);
+      near(p[0], offset); near(q[0], offset);
       return { kind: 'line', a: [p[1] - station, p[2]], b: [q[1] - station, q[2]] };
     }) };
   });
   return { outer: rings.find(ring => ring.kind === 'outer').segments, holes: [rings.find(ring => ring.kind === 'inner').segments] };
 }
 
-function verify(snapshot, outerWidth = 4, openingHeight = 4) {
+function verify(snapshot, outerWidth = 4, openingHeight = 4, offset = 0) {
   const [output] = snapshot.outputs, { brep } = output, report = checkBrep(brep, { strict: true });
   assert.equal(output.representation, 'curved');
   assert.deepEqual(brep.source, { family: 'analytic-boolean', id: 'cut' });
@@ -55,11 +55,18 @@ function verify(snapshot, outerWidth = 4, openingHeight = 4) {
   assert.equal(report.topology[0].genus, 1);
   assert.ok(report.maximumPcurveGap < 1e-10);
   const outerArea = outerWidth * 6, innerArea = 2 * openingHeight, area = outerArea - innerArea;
-  const volume = area * 20 * Math.PI;
+  // Independent retained disk-segment areas, not the Boolean's surfaces or mass callback.
+  const yAt = radius => Math.sqrt((radius - offset) * (radius + offset));
+  const segment = radius => radius ** 2 * Math.acos(offset / radius) - offset * yAt(radius);
+  const moment = radius => 2 / 3 * yAt(radius) ** 3;
+  const volume = offset === 0 ? area * 20 * Math.PI
+    : 6 * (segment(20 + outerWidth / 2) - segment(20 - outerWidth / 2)) - openingHeight * (segment(21) - segment(19));
   near(massPropertiesOf(output).volume, volume, 2e-7);
   near(brepMassProperties(brep, 1).volume, volume, 2e-7);
   const radialMoment = (outerArea * (outerWidth / 2) ** 2 - innerArea) / 3;
-  const centroid = [2 / Math.PI * (20 + radialMoment / (20 * area)), 0, 0];
+  const centroidX = offset === 0 ? 2 / Math.PI * (20 + radialMoment / (20 * area))
+    : (6 * (moment(20 + outerWidth / 2) - moment(20 - outerWidth / 2)) - openingHeight * (moment(21) - moment(19))) / volume;
+  const centroid = [centroidX, 0, 0];
   pointNear(massPropertiesOf(output).centroid, centroid, 1e-8);
 
   const caps = brep.faces.filter(face => face.loops.length === 2), capIds = new Set(caps.map(cap => cap.id));
@@ -73,10 +80,12 @@ function verify(snapshot, outerWidth = 4, openingHeight = 4) {
     const firstUse = brep.coedges.find(use => use.id === loops[0].coedges[0]), firstEdge = brep.edges.find(edge => edge.id === firstUse.edge);
     const station = Math.sign(firstEdge.curve.controlPoints[0][1]) * 20;
     stations.push(station);
-    const region = nativeCapRegion(brep, cap, station);
+    const region = nativeCapRegion(brep, cap, station, offset), side = Math.sign(station);
+    const openingCenter = side * (yAt(19) + yAt(21)) / 2 - station;
     // Read native oriented loops: each cap has an open aperture and a material frame.
-    for (const [point, expected] of [[[0, 0], 'out'], [[(1 + outerWidth / 2) / 2, 0], 'in'],
-      [[0, (openingHeight / 2 + 3) / 2], 'in'], [[outerWidth / 2 + .5, 0], 'out'], [[1, 0], 'boundary']])
+    for (const [point, expected] of [[[openingCenter, 0], 'out'], [[side * (yAt(21) + yAt(20 + outerWidth / 2)) / 2 - station, 0], 'in'],
+      [[openingCenter, (openingHeight / 2 + 3) / 2], 'in'], [[side * (yAt(20 + outerWidth / 2) + .5) - station, 0], 'out'],
+      [[side * yAt(21) - station, 0], 'boundary']])
       assert.equal(locateInRegion(point, region, 1e-8), expected);
   }
   assert.deepEqual(stations.sort((a, b) => a - b), [-20, 20]);
@@ -106,7 +115,7 @@ function verify(snapshot, outerWidth = 4, openingHeight = 4) {
       const face = brep.faces.find(face => face.loops.includes(use.loop));
       for (const fraction of [0, .17, .5, .77, 1]) {
         const t = domain[0] + fraction * (domain[1] - domain[0]), p = evaluateCurve(edge.curve, t), [u, v] = evaluateCurve(use.pcurve, t);
-        assert.ok(p[0] >= -1e-10);
+        assert.ok(p[0] >= offset - 1e-10);
         pointNear(evaluateSurface(face.surface, u, v), p);
       }
       if (edge.curve.degree === 2 && faceGeometry(face).kind === 'plane') {
@@ -116,7 +125,11 @@ function verify(snapshot, outerWidth = 4, openingHeight = 4) {
     }
     const continuity = measureBrepEdgeContinuity(brep, edge.id);
     assert.equal(continuity.status, 'measured', JSON.stringify(continuity));
-    near(continuity.minimumAngleDegrees, 90, 1e-8); near(continuity.maximumAngleDegrees, 90, 1e-8);
+    const owners = uses.map(use => brep.faces.find(face => face.loops.includes(use.loop)));
+    const cylinder = owners.map(face => faceGeometry(face)).find(geometry => geometry.kind === 'cylinder');
+    const capCylinder = cylinder && owners.some(face => capIds.has(face.id));
+    const angle = capCylinder ? Math.acos(-cylinder.out * offset / cylinder.r) * 180 / Math.PI : 90;
+    near(continuity.minimumAngleDegrees, angle, 1e-8); near(continuity.maximumAngleDegrees, angle, 1e-8);
   }
   assert.equal(arcs, 8); assert.equal(lines, 16);
   return brep;
@@ -146,13 +159,13 @@ test('centered opening and outer width edits retain native aperture dimensions, 
   assert.deepEqual(reevaluate(reopened, { parameters: { OpeningLowY: -2, OpeningHighY: 2 } }).outputs[0].brep, initial.outputs[0].brep);
 });
 
-test('duct binding refuses missing source charts, wrong source family, offset boxes, malformed apertures and deformed cylinders', () => {
+test('duct binding refuses missing source charts, wrong source family, negative boxes, malformed apertures and deformed cylinders', () => {
   const snapshot = evaluateCadPart(document()), operands = evaluateCadPart({ ...snapshot.document, features: snapshot.document.features.slice(0, 4) });
   const source = outputOf(operands, 'w').brep, box = outputOf(operands, 'b').brep;
   const result = snapshot.outputs[0].brep, tolerance = 1e-6;
   assert.equal(bindHalfRectangularDuctIntersection(withoutBindings(source), box, result, tolerance), undefined);
   assert.equal(bindHalfRectangularDuctIntersection({ ...source, source: { family: 'manual', id: 'w' } }, box, result, tolerance), undefined);
-  const offset = evaluateCadPart({ ...document(), features: document().features.slice(0, 4).map(feature => feature.id === 'bs' ? { ...feature, min: [1, -30] } : feature) });
+  const offset = evaluateCadPart({ ...document(), features: document().features.slice(0, 4).map(feature => feature.id === 'bs' ? { ...feature, min: [-1, -30] } : feature) });
   assert.equal(bindHalfRectangularDuctIntersection(source, outputOf(offset, 'b').brep, result, tolerance), undefined);
   const loop = result.loops.find(loop => loop.kind === 'inner'), loops = result.loops.map(candidate => candidate === loop ? { ...loop, kind: 'outer' } : candidate);
   assert.equal(bindHalfRectangularDuctIntersection(source, box, { ...result, loops }, tolerance), undefined);
@@ -162,4 +175,50 @@ test('duct binding refuses missing source charts, wrong source family, offset bo
   assert.equal(bindHalfRectangularDuctIntersection(source, box, { ...result, faces }, tolerance), undefined);
   const swapped = document(); swapped.features[4] = { ...swapped.features[4], target: 'b', tool: 'w' };
   verify(evaluateCadPart(swapped));
+});
+
+test('positive x1 and x2 duct cuts retain the unchanged native circles, two apertures and signed cap angles', () => {
+  for (const offset of [1, 2, 15]) {
+    const snapshot = evaluateCadPart(document(true, offset)), brep = verify(snapshot, 4, 4, offset);
+    const operands = evaluateCadPart({ ...snapshot.document, features: snapshot.document.features.slice(0, 4) });
+    const source = outputOf(operands, 'w').brep, box = outputOf(operands, 'b').brep;
+    const original = booleanAnalytic(source, box, 'intersection', { id: 'cut', exactEdges: false });
+    assert.ok(original.coedges.every(use => !use.pcurve));
+    assert.deepEqual(withoutBindings(brep), withoutBindings(original), 'offset binding must not move any 3D data or topology');
+    const reopened = loadCadPart(saveCadPart(snapshot));
+    assert.deepEqual(reopened.outputs[0].brep, brep);
+    if (offset === 15) assert.equal(brep.edges.filter(edge => edge.curve.degree === 2 && edge.curve.controlPoints.length === 3).length, 6);
+  }
+});
+
+test('offset, opening and width edits preserve signed native joints through fresh reopen and swapped operands', () => {
+  const initial = evaluateCadPart(document(false, 1));
+  const shifted = reevaluate(initial, { parameters: { ClipX: 2 } });
+  verify(shifted, 4, 4, 2);
+  const edited = reevaluate(shifted, { parameters: { OpeningLowY: -1, OpeningHighY: 1 } });
+  verify(edited, 4, 2, 2);
+  const expanded = reevaluate(edited, { parameters: { OuterLowX: -3, OuterHighX: 3 } });
+  verify(expanded, 6, 2, 2);
+  const reopened = loadCadPart(saveCadPart(edited));
+  assert.deepEqual(reopened.outputs[0].brep, edited.outputs[0].brep);
+  assert.deepEqual(reevaluate(reopened, { parameters: { OuterLowX: -3, OuterHighX: 3 } }).outputs[0].brep, expanded.outputs[0].brep);
+  const restored = reevaluate(reopened, { parameters: { OpeningLowY: -2, OpeningHighY: 2, ClipX: 1 } });
+  assert.deepEqual(restored.outputs[0].brep, initial.outputs[0].brep);
+  const swapped = document(false, 1); swapped.features[4] = { ...swapped.features[4], target: 'b', tool: 'w' };
+  verify(evaluateCadPart(swapped), 4, 4, 1);
+});
+
+test('offset admission refuses the inner tangent limit, second active box faces and wrong rational arc weights', () => {
+  const doc = document(true, 1), snapshot = evaluateCadPart(doc), result = snapshot.outputs[0].brep;
+  const operands = evaluateCadPart({ ...doc, features: doc.features.slice(0, 4) }), source = outputOf(operands, 'w').brep;
+  const box = outputOf(operands, 'b').brep;
+  for (const patch of [{ parameters: { ...doc.parameters, ClipX: 18 } },
+    { features: doc.features.slice(0, 4).map(feature => feature.id === 'bs' ? { ...feature, max: [21, 30] } : feature) }]) {
+    const changed = evaluateCadPart({ ...doc, features: doc.features.slice(0, 4), ...patch });
+    assert.equal(bindHalfRectangularDuctIntersection(source, outputOf(changed, 'b').brep, result, 1e-6), undefined);
+  }
+  const face = result.faces.find(face => faceGeometry(face).kind === 'cylinder');
+  const weights = face.surface.weights.map((row, i) => i === 1 ? row.map(weight => weight + .001) : row);
+  const faces = result.faces.map(candidate => candidate === face ? { ...face, surface: { ...face.surface, weights } } : candidate);
+  assert.equal(bindHalfRectangularDuctIntersection(source, box, { ...result, faces }, 1e-6), undefined);
 });
