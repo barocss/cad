@@ -191,7 +191,8 @@ test('closed-circle sweep keeps the path accuracy cutoff and requires one disk c
   const refused = (path, code, detail, section) => assert.throws(() => evaluateCadPart(document(path, section)),
     error => error instanceof CadPartError && error.feature === 'w' && error.code === code && detail.test(error.message));
   for (const radius of [20, 21]) refused(circle, 'PARAMETER', /larger than the profile radius/, { ...disk, radius });
-  refused(circle, 'CAPABILITY', /one circular disk section/, { id: 's', kind: 'sketch', profile: 'rectangle', min: [-1, -1], max: [1, 1] });
+  refused(circle, 'CAPABILITY', /one circular disk or one bend-aligned rectangular section/,
+    { id: 's', kind: 'sketch', profile: 'polygon', points: [[-1, -1], [1, -1], [0, 1]] });
   refused(makerCircle([0, 0, 0], [1, 0, 0], [0, 1, 0], 3000), 'CAPABILITY', /four rational quarter spans/);
   const a = [1 / 3, -2 / 3, -2 / 3], b = [-2 / 3, 1 / 3, -2 / 3];
   const wide = joinedCircle(10100, [0, 0, 0], scale(add(a, b), Math.SQRT1_2), scale(sub(a, b), Math.SQRT1_2));
@@ -287,4 +288,158 @@ test('closed annular sweep refuses eccentric, thin, oversized and unsupported bo
   refused({ ...annulus(), sideTags: undefined, holes: [rectangle] }, 'CAPABILITY', /accepts at most one circular hole/);
   const wide = { ...path, controlPoints: path.controlPoints.map(([x, y, z]) => [x + 10000, y, z]) };
   refused(annulus(), 'PARAMETER', /path coordinates must be within/, wide);
+});
+
+const rectangle = { id: 's', kind: 'sketch', profile: 'rectangle', min: [5, -8], max: [9, -2],
+  sideTags: { outer: ['south', 'east', 'north', 'west'] } };
+
+function verifyRectangle(output, center = [0, 0, 0], normal = [0, 0, 1], R = 20, width = 4, height = 6) {
+  const { brep } = output, report = checkBrep(brep, { strict: true });
+  assert.equal(output.representation, 'curved');
+  assert.deepEqual(brep.source, { family: 'sweep-curve', id: 'w' });
+  assert.ok(report.valid, report.issues.join('\n'));
+  assert.equal(report.topology.length, 1);
+  assert.equal(report.topology[0].genus, 1);
+  assert.deepEqual(report.counts, { bodies: 1, shells: 1, faces: 8, loops: 8, coedges: 32, edges: 16, vertices: 8 });
+  assert.equal(brep.shells[0].closed, true);
+  assert.ok(report.maximumPcurveGap < 1e-8);
+  assert.ok(!brep.faces.some(face => /\.(start|end)$/.test(face.name)));
+  assert.equal(new Set(brep.faces.map(face => face.name)).size, 8);
+  const geometry = brep.faces.map(face => faceGeometry(face));
+  assert.equal(geometry.filter(face => face.kind === 'plane').length, 4);
+  assert.equal(geometry.filter(face => face.kind === 'cylinder').length, 4);
+  let normalResidual = 0, chartResidual = 0;
+  for (const face of brep.faces) {
+    const planar = faceGeometry(face).kind === 'plane', { u, v } = surfaceDomain(face.surface);
+    for (const s of [.13, .47, .83]) for (const t of [.17, .61]) {
+      const actual = evaluateSurfaceD1(face.surface, u[0] + s * (u[1] - u[0]), v[0] + t * (v[1] - v[0]));
+      const offset = sub(actual.point, center), axial = dot(offset, normal);
+      const radial = sub(offset, scale(normal, axial)), rho = norm(radial);
+      let expected;
+      if (planar) { near(Math.abs(axial), height / 2); expected = scale(normal, Math.sign(axial)); }
+      else {
+        near(Math.abs(rho - R), width / 2);
+        assert.ok(Math.abs(axial) <= height / 2 + 1e-8);
+        expected = scale(unit(radial), Math.sign(rho - R));
+      }
+      const outward = scale(unit(cross(actual.du, actual.dv)), face.sense === 'forward' ? 1 : -1);
+      normalResidual = Math.max(normalResidual, norm(sub(outward, expected)));
+    }
+  }
+  near(normalResidual, 0);
+  const corners = [], splits = [];
+  for (const edge of brep.edges) {
+    const uses = brep.coedges.filter(use => use.edge === edge.id), domain = curveDomain(edge.curve);
+    assert.equal(uses.length, 2);
+    for (const [index, use] of uses.entries()) {
+      assert.equal(use.twin, uses[1 - index].id);
+      assert.notEqual(use.sense, uses[1 - index].sense);
+      assert.ok(use.pcurve);
+      assert.deepEqual(curveDomain(use.pcurve), domain);
+      const face = brep.faces.find(face => face.loops.includes(use.loop));
+      for (const fraction of [0, .19, .5, .87, 1]) {
+        const t = domain[0] + fraction * (domain[1] - domain[0]), [u, v] = evaluateCurve(use.pcurve, t);
+        chartResidual = Math.max(chartResidual, norm(sub(evaluateSurface(face.surface, u, v), evaluateCurve(edge.curve, t))));
+      }
+    }
+    const continuity = measureBrepEdgeContinuity(brep, edge.id, { curvature: true });
+    assert.equal(continuity.status, 'measured', JSON.stringify(continuity));
+    const angle = edge.curve.degree === 2 ? 90 : 0;
+    near(continuity.minimumAngleDegrees, angle, 1e-5);
+    near(continuity.maximumAngleDegrees, angle, 1e-5);
+    if (angle) {
+      corners.push(edge.id);
+      assert.deepEqual(continuity.curvature, { status: 'unavailable', reason: 'non-tangent' });
+    } else {
+      splits.push(edge.id);
+      assert.equal(continuity.curvature.status, 'measured');
+      near(continuity.curvature.maximumDifference, 0);
+    }
+  }
+  near(chartResidual, 0);
+  assert.equal(corners.length, 8);
+  assert.equal(splits.length, 8);
+  const density = 7.85, volume = 2 * Math.PI * R * width * height, mass = density * .001 * volume;
+  const axialMoment = mass * (R ** 2 + (width / 2) ** 2);
+  const transverseMoment = mass * ((R ** 2 + (width / 2) ** 2) / 2 + height ** 2 / 12);
+  const analytic = massPropertiesOf(output, density), quadrature = brepMassProperties(brep, density);
+  assert.equal(analytic.method, 'closed-form');
+  assert.equal(quadrature.method, 'quadrature');
+  for (const actual of [analytic, quadrature]) {
+    near(actual.volume, volume, 1e-8 * volume);
+    near(actual.mass, mass, 1e-8 * mass);
+    pointNear(actual.centroid, center);
+    for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++)
+      near(actual.inertia[i][j], (i === j ? transverseMoment : 0) + (axialMoment - transverseMoment) * normal[i] * normal[j], 1e-8 * axialMoment);
+  }
+  return { counts: report.counts, topology: report.topology, pcurveGap: report.maximumPcurveGap,
+    chartResidual, normalResidual, corners: corners.length, splits: splits.length, analytic, quadrature };
+}
+
+test('R20 closed rectangular Sweep keeps all authored side tags, 90 degree corners and 0 degree split seams through width edit and native reopen', t => {
+  const doc = document(joinedCircle(), rectangle);
+  doc.parameters = { RightX: 9 };
+  doc.features[0] = { ...rectangle, max: [{ parameter: 'RightX' }, -2] };
+  const initial = evaluateCadPart(doc), diagnostic = verifyRectangle(initial.outputs[0]);
+  for (const tag of rectangle.sideTags.outer)
+    assert.equal(initial.outputs[0].brep.faces.filter(face => face.name.startsWith(`w.side[${tag}]#`)).length, 2);
+  const identity = snapshot => {
+    const brep = snapshot.outputs[0].brep;
+    return { bodies: brep.bodies, shells: brep.shells,
+      faces: brep.faces.map(({ id, name, sense }) => ({ id, name, sense })), edges: brep.edges.map(({ id, name }) => ({ id, name })) };
+  };
+  const edited = reevaluate(initial, { parameters: { RightX: 11 } });
+  verifyRectangle(edited.outputs[0], [0, 0, 0], [0, 0, 1], 20, 6, 6);
+  assert.deepEqual(identity(edited), identity(initial));
+  const reopened = loadCadPart(saveCadPart(edited));
+  assert.deepEqual(reopened.document, edited.document);
+  assert.deepEqual(reopened.outputs[0].brep, edited.outputs[0].brep);
+  assert.deepEqual(reevaluate(reopened, { parameters: { RightX: 9 } }).outputs[0].brep, initial.outputs[0].brep);
+  t.diagnostic(JSON.stringify(diagnostic));
+});
+
+test('closed rectangle supports radial-Y frame and a reversed oblique path while preserving the original profile axes', () => {
+  const swapped = { ...rectangle, min: [4, -7], max: [10, -3],
+    plane: { origin: [4, 5, 6], normal: [0, 1, 0], xAxis: [0, 0, 1] } };
+  verifyRectangle(evaluateCadPart(document(joinedCircle(), swapped)).outputs[0]);
+  const center = [32, 14, -18], e0 = [.36, .48, .8], e1 = [-.8, .6, 0], normal = cross(e0, e1);
+  const path = joinedCircle(20, center, e0, e1);
+  const section = { ...rectangle, plane: { origin: [1, 2, 3], normal: e1, xAxis: e0 } };
+  for (const reverse of [false, true]) {
+    const curve = reverse ? { ...path, controlPoints: path.controlPoints.toReversed(), weights: path.weights.toReversed(),
+      knots: path.knots.toReversed().map(knot => -knot) } : path;
+    verifyRectangle(evaluateCadPart(document(curve, section)).outputs[0], center, normal);
+  }
+});
+
+test('native meridian line sections of the closed rectangular Sweep classify material, exterior and wall boundaries', () => {
+  const { brep } = evaluateCadPart(document(joinedCircle(), rectangle)).outputs[0];
+  for (const station of [-20, 20]) {
+    const edges = brep.edges.filter(({ curve }) => curve.degree === 1
+      && curve.controlPoints.every(([x, y]) => Math.abs(y) < 1e-8 && Math.sign(x) === Math.sign(station)));
+    assert.equal(edges.length, 4);
+    const region = { outer: edges.map(({ curve: { controlPoints: [a, b] } }) =>
+      ({ kind: 'line', a: [a[0] - station, a[2]], b: [b[0] - station, b[2]] })), holes: [] };
+    for (const [point, expected] of [[[0, 0], 'in'], [[1, 2], 'in'], [[2.5, 0], 'out'], [[0, 3.5], 'out'],
+      [[2, 0], 'boundary'], [[0, 3], 'boundary']])
+      assert.equal(locateInRegion(point, region, 1e-7), expected, `${station}: ${point}`);
+  }
+});
+
+test('closed rectangular Sweep refuses axis contact, unsupported roll and every hole without changing the prior disk or annulus scope', () => {
+  const refused = (section, code, detail, curve = joinedCircle()) => assert.throws(() => evaluateCadPart(document(curve, section)),
+    error => error instanceof CadPartError && error.feature === 'w' && error.code === code && detail.test(error.message));
+  for (const halfWidth of [20 - 5e-8, 20, 21])
+    refused({ ...rectangle, min: [-halfWidth, -3], max: [halfWidth, 3] }, 'PARAMETER', /radial half-width smaller than the path radius/);
+  refused({ ...rectangle, plane: { origin: [0, 0, 0], normal: [0, 1, 0], xAxis: [Math.SQRT1_2, 0, Math.SQRT1_2] } },
+    'CAPABILITY', /rectangle's original axes aligned to the bend radial and binormal/);
+  for (const holes of [annulus(1, [7, -5]).holes,
+    [[{ kind: 'line', start: [6, -6] }, { kind: 'line', start: [8, -6] }, { kind: 'line', start: [8, -4] }, { kind: 'line', start: [6, -4] }]]])
+    refused({ ...rectangle, sideTags: undefined, holes }, 'CAPABILITY', /closed-circle rectangular sweep does not support holes/);
+  const tooWide = { ...joinedCircle(), controlPoints: joinedCircle().controlPoints.map(([x, y, z]) => [x + 10000, y, z]) };
+  refused(rectangle, 'PARAMETER', /path coordinates must be within/, tooWide);
+  const a = [1 / 3, -2 / 3, -2 / 3], b = [-2 / 3, 1 / 3, -2 / 3];
+  const wide = joinedCircle(10100, [0, 0, 0], scale(add(a, b), Math.SQRT1_2), scale(sub(a, b), Math.SQRT1_2));
+  assert.ok(wide.controlPoints.flat().every(value => Math.abs(value) < 10000));
+  refused(rectangle, 'PARAMETER', /path radius must be at most 10000/, wide);
 });

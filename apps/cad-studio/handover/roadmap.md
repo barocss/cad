@@ -1,13 +1,13 @@
 # CAD roadmap — current status and execution order
 
-Updated 2026-11-23 · Priority authority: D520 · Latest delivery: D1760 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
+Updated 2026-11-23 · Priority authority: D520 · Latest delivery: D1761 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
 
 This is the only current status index. Detailed tracks define acceptance; the 34 stable row pages retain scope and issue navigation. Immutable decision notes retain results. Do not append chronological status paragraphs here. [D520 decision](notes/cad-roadmap-replan-2026-11-04/README.md) supersedes D445 execution order and historical next-item text, while retaining its safeguards and bounded proofs.
 
 ## Now and next
 
-- **Current position:** [D1760](notes/studio-selected-instance-actions-2026-11-23/README.md), P4 row 22. Selected placed part Move, Rotate, Duplicate and Fix actions live with assembly logic. Desktop state, native files and source ownership match. [D1759](notes/edit-saved-oblique-sketch-chamfer-2026-11-23/README.md) adds saved oblique Chamfer resizing. The B06 PDF group remains held.
-- **Next MAIN:** D1761, P5 rows [07](roadmap-rows/07.md) and [30](roadmap-rows/30.md), [#10](https://github.com/barocss/cad/issues/10). Sweep one aligned solid rectangle around the existing exact closed circular path. Verify axis clearance, native cylindrical and planar walls, bound edges and editable fresh Studio Open.
+- **Current position:** [D1761](notes/exact-closed-rectangular-sweep-2026-11-23/README.md), P5 rows 07 and 30. The exact closed circle carries an aligned solid rectangle with all 16 native edges measurable and editable width after fresh Open. The B06 PDF group remains held.
+- **Next MAIN:** D1762, P5 rows [07](roadmap-rows/07.md) and [30](roadmap-rows/30.md), [#10](https://github.com/barocss/cad/issues/10). Carry one centered aligned rectangular opening around the same exact closed ring. Verify the enclosed cavity, both native shells, positive wall clearance, editable aperture and fresh Open.
 - **Separate follow-ups:** Continue Studio App extraction in cohesive parts with affected desktop checks. [#608 Rendering](https://github.com/barocss/cad/issues/608) stays on HOLD. API inventory drift remains open. The issue tracker records [#126](https://github.com/barocss/cad/issues/126), [#613](https://github.com/barocss/cad/issues/613), [#152](https://github.com/barocss/cad/issues/152) and [#22](https://github.com/barocss/cad/issues/22) as closed.
 - **Active repository:** [barocss/cad](https://github.com/barocss/cad), based on `origin/main`. Fetch before work and preserve unexpected changes. The [migration record](../../../docs/migration/README.md) maps the former `local/cad-dev` history and issue numbers.
 - **Evidence correction:** D482 records2167 PASS/0 FAIL/2 existing SKIP in a later full-kernel run than D433. Neither result is a new full-suite PASS at this audit HEAD. [D482 record](notes/vertical-contact-refusal-2026-11-04/README.md).
