@@ -2,9 +2,7 @@ import assert from 'node:assert/strict';
 import { performance } from 'node:perf_hooks';
 
 const storedDistance = -4, nextDistance = -6;
-const capCenter = distance => [20, 34 + distance, 0];
-
-export async function checkSavedOutletDrag(f, stored, verify, expectMissing) {
+export async function checkSavedOutletDrag(f, stored, verify, expectMissing, capCenter) {
   const button = (name, target = f.page) => target.getByRole('button', { name, exact: true });
   const group = () => f.page.locator('g.gizmo-handle[data-handle="d"]');
   const panel = () => f.page.getByRole('dialog', { name: 'Edit Offset face', exact: true });

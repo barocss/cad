@@ -4,6 +4,7 @@ import {
   brepMassProperties, CadPartError, checkBrep, curveDomain, evaluateCadPart, evaluateCurve, evaluateSurface,
   faceGeometry, joinCurves, loadCadPart, massPropertiesOf, measureBrepEdgeContinuity, reevaluate, reverseCurve, saveCadPart,
 } from '../dist/index.js';
+import { exactPairedElbowOutletOffsetFrame, offsetExactPairedElbowOutletIfAdmitted } from '../dist/brep/exact-sweep.js';
 
 const add = (a, b) => a.map((x, i) => x + b[i]);
 const sub = (a, b) => a.map((x, i) => x - b[i]);
@@ -215,4 +216,77 @@ test('paired arc then line refuses radial offset, cover loss, axial contact and 
   for (const degrees of [29, 121]) refused(section, 'CAPABILITY', /one circular arc from 30° to 120° followed by one straight segment/, rail({ degrees }));
   const narrow = sketch(path, { intervals: [[-3, -2.5e-6], [2.5e-6, 3]] });
   verify(evaluateCadPart(document(path.path, narrow)).outputs[0], path, narrow);
+});
+
+// Include complete native coefficients, not only the retained face's support or display name.
+const retained = brep => brep.faces.filter(face => face.name !== 'w.end' && !face.name.startsWith('w.line.')).map(face => {
+  const loops = brep.loops.filter(loop => face.loops.includes(loop.id));
+  const uses = brep.coedges.filter(use => loops.some(loop => loop.id === use.loop));
+  const edges = brep.edges.filter(edge => uses.some(use => use.edge === edge.id));
+  return { face, loops, uses, edges, vertices: brep.vertices.filter(vertex => edges.some(edge => edge.vertices.includes(vertex.id))) };
+});
+
+test('original paired arc-line outlet offsets preserve the exact inlet and bend boundaries through signed edits and fresh Open', () => {
+  const path = rail(), section = sketch(path), source = document(path.path, section), initial = evaluateCadPart(source), saved = saveCadPart(initial);
+  const offset = distance => ({ ...source, features: [...source.features,
+    { id: 'move', kind: 'offset-face', target: 'w', face: 'w.end', distance }] });
+  const originalVolume = brepMassProperties(initial.outputs[0].brep, 1).volume;
+  const frame = exactPairedElbowOutletOffsetFrame(initial.outputs[0].brep, 'w.end', { id: 'w', mode: 'exact', path: path.path });
+  assert.ok(frame); pointNear(frame.anchor, path.end); pointNear(frame.normal, path.atExit);
+  let previous = initial;
+  for (const distance of [4, -4, 4]) {
+    const changed = reevaluate(previous, { document: offset(distance) });
+    verify(changed.outputs[0], { ...path, length: path.length + distance, end: add(path.end, scale(path.atExit, distance)) }, section);
+    assert.deepEqual(identity(changed), identity(initial));
+    assert.deepEqual(retained(changed.outputs[0].brep), retained(initial.outputs[0].brep));
+    near(brepMassProperties(changed.outputs[0].brep, 1).volume - originalVolume, 32 * distance, 1e-7);
+    const reopened = loadCadPart(saveCadPart(changed));
+    assert.deepEqual(reopened.outputs[0].brep, changed.outputs[0].brep);
+    assert.deepEqual(reevaluate(reopened, { document: source }).outputs[0].brep, initial.outputs[0].brep);
+    assert.equal(saveCadPart(initial), saved); previous = reopened;
+  }
+});
+
+test('translated 30 and 120 degree paired arc-line outlet offsets preserve both radial axes, asymmetric lane ownership and independent moments', () => {
+  for (const degrees of [30, 120]) for (const radialY of [false, true]) {
+    const path = rail({ degrees }), section = sketch(path, { radialY, sign: -1, shifted: true, clockwise: [false, true],
+      intervals: [[1, 3], [-2.5, -1.5]], widths: [2, 1.5] });
+    const source = document(path.path, section), initial = evaluateCadPart(source), before = saveCadPart(initial);
+    for (const distance of [4, -4]) {
+      const changed = reevaluate(initial, { document: { ...source, features: [...source.features,
+        { id: 'move', kind: 'offset-face', target: 'w', face: 'w.end', distance }] } });
+      verify(changed.outputs[0], { ...path, length: path.length + distance, end: add(path.end, scale(path.atExit, distance)) }, section);
+      assert.deepEqual(identity(changed), identity(initial));
+      assert.deepEqual(retained(changed.outputs[0].brep), retained(initial.outputs[0].brep));
+      near(brepMassProperties(changed.outputs[0].brep, 1).volume - brepMassProperties(initial.outputs[0].brep, 1).volume, 34.5 * distance, 1e-7);
+      const reopened = loadCadPart(saveCadPart(changed));
+      assert.deepEqual(reopened.outputs[0].brep, changed.outputs[0].brep);
+      assert.deepEqual(reevaluate(reopened, { document: source }).outputs[0].brep, initial.outputs[0].brep);
+    }
+    assert.equal(saveCadPart(initial), before);
+  }
+});
+
+test('paired arc-line outlet offsets refuse collapse, wrong native caps, line-first rails and unbound coefficients without source writes', () => {
+  const path = rail(), section = sketch(path), source = document(path.path, section), initial = evaluateCadPart(source), saved = saveCadPart(initial);
+  const refused = (face, distance) => {
+    assert.throws(() => reevaluate(initial, { document: { ...source, features: [...source.features,
+      { id: 'move', kind: 'offset-face', target: 'w', face, distance }] } }), CadPartError);
+    assert.equal(saveCadPart(initial), saved);
+  };
+  for (const distance of [-10, -11, -9.99999]) refused('w.end', distance);
+  refused('w.start', 4); refused('w.line.side[outside-a]', 4); refused('w.bend.side[lower-a]', 4);
+  const brep = initial.outputs[0].brep, minimal = { id: 'w', mode: 'exact', path: path.path };
+  assert.equal(exactPairedElbowOutletOffsetFrame(brep, 'w.start', minimal), undefined);
+  assert.equal(exactPairedElbowOutletOffsetFrame(brep, 'w.end', { ...minimal, id: 'stale' }), undefined);
+  const reversed = reverseCurve(path.path, { curveId: 'lineFirst' }).curve;
+  const lineSection = { ...section, plane: { ...section.plane, normal: scale(path.atExit, -1), xAxis: path.rotate(path.inward) } };
+  const lineFirst = evaluateCadPart(document(reversed, lineSection)).outputs[0].brep;
+  assert.equal(exactPairedElbowOutletOffsetFrame(lineFirst, 'w.end', { ...minimal, path: reversed }), undefined);
+  const input = { ...minimal, outer: section.segments, holes: section.holes, sideTags: section.sideTags,
+    xAxis: section.plane.xAxis, yAxis: cross(path.tangent, section.plane.xAxis) };
+  const unbound = structuredClone(brep); unbound.vertices[0].tolerance *= 2;
+  assert.ok(checkBrep(unbound, { strict: true }).valid);
+  assert.equal(offsetExactPairedElbowOutletIfAdmitted(unbound, 'w.end', input, 4), undefined);
+  assert.deepEqual(brep, evaluateCadPart(source).outputs[0].brep);
 });

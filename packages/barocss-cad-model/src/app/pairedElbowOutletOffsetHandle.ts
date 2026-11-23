@@ -56,8 +56,9 @@ function certify(doc: StudioDoc, index: number, ctx: Ctx, source: () => Ctx): Re
   const nativeAfter = after[0].brep.faces.filter(native => native.name === faceName);
   if (nativeBefore.length !== 1 || nativeAfter.length !== 1 || nativeBefore[0].id !== face.id || nativeAfter[0].id !== face.id) return;
   const path = structuredClone(stock.path), distance = saved.distance!;
-  path.controlPoints[5] = add(path.controlPoints[5], scale(frame.normal, distance / 2));
-  path.controlPoints[6] = add(path.controlPoints[6], scale(frame.normal, distance));
+  const last = path.controlPoints.length - 1;
+  path.controlPoints[last - 1] = add(path.controlPoints[last - 1], scale(frame.normal, distance / 2));
+  path.controlPoints[last] = add(path.controlPoints[last], scale(frame.normal, distance));
   const moved = exactPairedElbowOutletOffsetFrame(after[0].brep, faceName, {
     id: featureId(doc.nodes, 1), mode: 'exact', path: { kind: 'curve', id: 'path', ...path },
   });

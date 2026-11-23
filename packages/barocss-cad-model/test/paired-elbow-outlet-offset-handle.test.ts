@@ -14,13 +14,18 @@ const path: Pick<Curve, 'degree' | 'knots' | 'controlPoints' | 'weights'> = {
   controlPoints: [[-10, 0, 0], [-5, 0, 0], [0, 0, 0], [20, 0, 0], [20, 20, 0], [20, 27, 0], [20, 34, 0]],
   weights: [1, 1, 1, Math.SQRT1_2, 1, 1, 1],
 };
+const arcLinePath: typeof path = {
+  degree: 2, knots: [0, 0, 0, 1, 1, 2, 2, 2],
+  controlPoints: [[20, 20, 0], [20, 0, 0], [0, 0, 0], [-5, 0, 0], [-10, 0, 0]],
+  weights: [1, Math.SQRT1_2, 1, 1, 1],
+};
 const hole = (center: number) => ([[-1, center - 1], [-1, center + 1], [1, center + 1], [1, center - 1]] as [number, number][])
   .map(start => ({ kind: 'line' as const, start }));
-function fixture(): StudioDoc {
+function fixture(rail = path): StudioDoc {
   return withNode(withNode(emptyDoc(), { kind: 'sketch', profile: 'rectangle', min: [-2, -5], max: [2, 5],
     holes: [hole(-2), hole(2)], sideTags: { outer: ['e1', 'e2', 'e3', 'e4'],
       holes: [['e5', 'e6', 'e7', 'e8'], ['e9', 'e10', 'e11', 'e12']] } }),
-  { kind: 'sweep-curve', sketch: 0, name: 'Paired duct rail', path, mode: 'exact' });
+  { kind: 'sweep-curve', sketch: 0, name: 'Paired duct rail', path: rail, mode: 'exact' });
 }
 function context(doc: StudioDoc): Ctx {
   const result = evaluateDoc(doc, 1);
@@ -113,4 +118,23 @@ test('saved outlet rejects stale document, changed cap, body owner and stored or
   saved.sigs['n1.end'] = { ...signature, p: [20, 30, 0] };
   assert.deepEqual(savedPairedElbowOutletOffsetHandle(doc, 2, ctx, { d: -4 }, getSource), []);
   saved.sigs['n1.end'] = signature;
+});
+
+test('arc-first outlet Offset reopens with its original signed frame and native cap handle', async () => {
+  const source = fixture(arcLinePath), original = context(source);
+  const sourceVolume = brepMassProperties(partBreps(source)[0].brep, 1).volume;
+  for (const distance of [4, -4]) {
+    const saved = offsetFaceCommand.build!(original, { d: distance });
+    const opened = await readStudioFile(encodeStudioFile(saved));
+    assert.ok('doc' in opened);
+    assert.deepEqual(opened.doc, JSON.parse(JSON.stringify(saved)));
+    const ctx = context(opened.doc);
+    const [handle] = savedPairedElbowOutletOffsetHandle(opened.doc, 2, ctx, { d: distance }, () => original);
+    assert.ok(handle);
+    handle.at.forEach((value, axis) => near(value, [-10 - distance, 0, 0][axis]));
+    handle.dir.forEach((value, axis) => near(value, [-1, 0, 0][axis]));
+    const [{ brep }] = partBreps(opened.doc);
+    near(brepMassProperties(brep, 1).volume - sourceVolume, 32 * distance);
+    assert.ok(checkBrep(brep, { strict: true }).valid);
+  }
 });

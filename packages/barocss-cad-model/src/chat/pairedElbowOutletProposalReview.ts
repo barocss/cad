@@ -26,7 +26,7 @@ function scope(doc: StudioDoc) {
   const [sketch, sweep] = doc.nodes, section = pairedDuctSection(sketch);
   if (!section || sweep?.kind !== 'sweep-curve') return;
   const face = `${featureId(doc.nodes, 1)}.end`;
-  if (!isPairedElbowOutletOffsetSource(doc.nodes, 1, face)) return;
+  if (!isPairedElbowOutletOffsetSource(doc.nodes, 1, face) || sweep.path.controlPoints.length !== 7) return;
   const parent: BodyRef = { node: 1, side: 'solid' }, body = bodyKey(parent, doc.nodes);
   if (canonical(doc.outputs) !== canonical({ [body]: parent })) return;
   return { section, path: sweep.path, face, parent, body, rail: rail?.id };

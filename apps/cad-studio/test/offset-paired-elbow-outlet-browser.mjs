@@ -6,16 +6,26 @@ import { currentPartRevision, withMcpSession } from './mcp-browser-session.mjs';
 import { checkSavedOutletDrag } from './paired-elbow-outlet-handle-browser-steps.mjs';
 import { checkChangedOutletRail, checkReopenedOutlet, reviewPendingOutlet } from './paired-elbow-outlet-review-browser-steps.mjs';
 
+const arcFirst = process.argv.includes('--arc-first');
 const baseline = process.argv.includes('--expect-refused');
 const reviewUnavailable = process.argv.includes('--expect-review-unavailable');
 const reviewOutlet = process.argv.includes('--review-outlet');
 const expectMissingHandle = process.argv.includes('--expect-history-handle-absent');
 const historyHandle = process.argv.includes('--history-handle');
-const path = {
+const path = arcFirst ? {
+  degree: 2, knots: [0, 0, 0, 1, 1, 2, 2, 2],
+  controlPoints: [[20, 20, 0], [20, 0, 0], [0, 0, 0], [-5, 0, 0], [-10, 0, 0]],
+  weights: [1, Math.SQRT1_2, 1, 1, 1],
+} : {
   degree: 2, knots: [0, 0, 0, 1, 1, 2, 2, 3, 3, 3],
   controlPoints: [[-10, 0, 0], [-5, 0, 0], [0, 0, 0], [20, 0, 0], [20, 20, 0], [20, 27, 0], [20, 34, 0]],
   weights: [1, 1, 1, Math.SQRT1_2, 1, 1, 1],
 };
+const axis = arcFirst ? 0 : 1, sign = arcFirst ? -1 : 1;
+const tailLength = arcFirst ? 10 : 14;
+const outlet = path.controlPoints.at(-1);
+const straightPiece = arcFirst ? 'line' : 'tail';
+const junctionPlanes = arcFirst ? [[0, 0]] : [[0, 0], [1, 20]];
 const hole = center => [[-1, center - 1], [-1, center + 1], [1, center + 1], [1, center - 1]]
   .map(start => ({ kind: 'line', start }));
 const sideTags = { outer: ['e1', 'e2', 'e3', 'e4'], holes: [['e5', 'e6', 'e7', 'e8'], ['e9', 'e10', 'e11', 'e12']] };
@@ -50,7 +60,7 @@ const pins = [
   'packages/barocss-cad-model/src/chat/part/views.ts',
   'apps/cad-studio/test/paired-elbow-outlet-review-browser-steps.mjs',
   'apps/cad-studio/test/paired-elbow-outlet-handle-browser-steps.mjs',
-  ...(historyHandle ? ['packages/barocss-cad-model/src/app/pairedElbowOutletOffsetHandle.ts'] : []),
+  ...(historyHandle || arcFirst ? ['packages/barocss-cad-model/src/app/pairedElbowOutletOffsetHandle.ts'] : []),
   ...(reviewOutlet ? [
     'apps/cad-studio/test/duct-proposal-review-browser-steps.mjs',
     'packages/barocss-cad-model/src/chat/pairedElbowOutletOffsetEvidence.ts',
@@ -59,10 +69,11 @@ const pins = [
   ] : []),
 ];
 const f = await createFlow({
-  name: 'offset-paired-elbow-outlet', output: process.argv[2], envFrozen: 'D1788_SOURCE_FROZEN',
+  name: 'offset-paired-elbow-outlet', output: process.argv[2], envFrozen: arcFirst ? 'D1805_SOURCE_FROZEN' : 'D1788_SOURCE_FROZEN',
   initialFiles: pins, requiredFrozen: pins,
   qualification: 'Move the original straight outlet cap of a paired rectangular Exact Sweep.',
-  limits: ['Two 2 × 2 mm through passages on a 10 mm straight lead, R20 bend, and a 14 mm straight tail. Desktop Studio WebGPU.'],
+  limits: [arcFirst ? 'Two 2 × 2 mm through passages on an R20 bend and a 10 mm straight tail. Desktop Studio WebGPU.'
+    : 'Two 2 × 2 mm through passages on a 10 mm straight lead, R20 bend, and a 14 mm straight tail. Desktop Studio WebGPU.'],
   inspectorSource: `
 import { readFileSync } from 'node:fs';
 import { brepMassProperties, checkBrep, faceGeometry, measureBrepEdgeContinuity } from '@barocss/cad';
@@ -83,7 +94,7 @@ const ends = brep.faces.filter(face => /^n1[.](start|end)$/.test(face.name)).map
     }) };
   }),
 }));
-const joins = [[0, 0], [1, 20]].flatMap(([axis, at]) => brep.edges.filter(edge =>
+const joins = ${JSON.stringify(junctionPlanes)}.flatMap(([axis, at]) => brep.edges.filter(edge =>
   edge.curve.controlPoints.every(point => Math.abs(point[axis] - at) < 1e-7)).map(edge => ({
     continuity: measureBrepEdgeContinuity(brep, edge.id, { curvature: true }),
     charts: brep.coedges.filter(use => use.edge === edge.id).map(use => use.pcurve),
@@ -92,7 +103,7 @@ const incidence = { faces: brep.faces.map(({ id, name, loops, sense }) => [id, n
   edges: brep.edges.map(({ id, name, vertices }) => [id, name, vertices]),
   coedges: brep.coedges.map(({ id, edge, loop, sense, twin }) => [id, edge, loop, sense, twin]),
   loops: brep.loops, shells: brep.shells, bodies: brep.bodies };
-const fixedSurfaces = brep.faces.filter(face => face.name !== 'n1.end' && !face.name.startsWith('n1.tail.'));
+const fixedSurfaces = brep.faces.filter(face => face.name !== 'n1.end' && !face.name.startsWith('n1.${straightPiece}.'));
 console.log(JSON.stringify({ check: checkBrep(brep, { strict: true }), mass: brepMassProperties(brep, 1),
   mesh: evaluated.ok && evaluated.bodies[0].mesh.faces.map(({ name, index }) => [name, index]),
   digest: digestOf(brep), ends, joins, incidence, fixedSurfaces, vertices: brep.vertices }));
@@ -104,24 +115,27 @@ const phase = (panel, value) => panel.locator('.status').filter({ hasText: new R
 const cap = 'n1.end';
 const distanceField = panel => panel.getByLabel('Offset', { exact: true });
 const closeTo = (actual, expected) => assert.ok(Math.abs(actual - expected) <= 1e-7, JSON.stringify({ actual, expected }));
-const initialVolume = 32 * (24 + 10 * Math.PI);
+const initialVolume = 32 * ((arcFirst ? 10 : 24) + 10 * Math.PI);
+const shiftedOutlet = (point, distance) => point.map((value, coordinate) => value + (coordinate === axis ? sign * distance : 0));
 
 async function verify(label, doc, distance, original) {
   const result = await f.inspect(label, doc);
   assert.ok(result.check.valid, result.check.issues.join('\n'));
   assert.equal(result.check.topology[0].genus, 2);
-  assert.deepEqual(result.check.counts, { bodies: 1, shells: 1, faces: 38, loops: 42, coedges: 168, edges: 84, vertices: 48 });
+  assert.deepEqual(result.check.counts, arcFirst
+    ? { bodies: 1, shells: 1, faces: 26, loops: 30, coedges: 120, edges: 60, vertices: 36 }
+    : { bodies: 1, shells: 1, faces: 38, loops: 42, coedges: 168, edges: 84, vertices: 48 });
   assert.ok(result.check.maximumPcurveGap < 1e-8);
   assert.deepEqual(result.incidence, original.incidence);
   assert.deepEqual(result.fixedSurfaces, original.fixedSurfaces);
   assert.deepEqual(result.joins, original.joins);
-  assert.equal(result.joins.length, 24);
+  assert.equal(result.joins.length, 12 * junctionPlanes.length);
   assert.ok(result.joins.every(join => join.continuity.status === 'measured'
     && Math.abs(join.continuity.maximumAngleDegrees) < 1e-6 && join.charts.every(Boolean)));
   assert.deepEqual(result.ends.find(end => end.name === 'n1.start'), original.ends.find(end => end.name === 'n1.start'));
   const oldCap = original.ends.find(end => end.name === cap), movedCap = result.ends.find(end => end.name === cap);
   assert.equal(movedCap.plane.kind, 'plane');
-  closeTo(movedCap.plane.o[1], 34 + distance);
+  closeTo(movedCap.plane.o[axis], outlet[axis] + sign * distance);
   assert.deepEqual(movedCap.plane.n, oldCap.plane.n);
   assert.deepEqual(movedCap.loops.map(loop => loop.kind).sort(), ['inner', 'inner', 'outer']);
   for (const [index, loop] of movedCap.loops.entries()) {
@@ -130,26 +144,26 @@ async function verify(label, doc, distance, original) {
     for (const [edgeIndex, edge] of loop.edges.entries()) {
       const prior = old.edges[edgeIndex];
       assert.deepEqual([edge.id, edge.wall, edge.bound], [prior.id, prior.wall, true]);
-      edge.points.forEach((point, i) => point.forEach((value, j) => closeTo(value, prior.points[i][j] + (j === 1 ? distance : 0))));
+      edge.points.forEach((point, i) => shiftedOutlet(prior.points[i], distance).forEach((value, coordinate) => closeTo(point[coordinate], value)));
     }
   }
   assert.equal(result.vertices.length, original.vertices.length);
   for (const [index, vertex] of result.vertices.entries()) {
     const prior = original.vertices[index];
     assert.equal(vertex.id, prior.id);
-    const move = Math.abs(prior.point[1] - 34) < 1e-7;
-    vertex.point.forEach((value, axis) => closeTo(value, prior.point[axis] + (axis === 1 && move ? distance : 0)));
+    const move = Math.abs(prior.point[axis] - outlet[axis]) < 1e-7;
+    shiftedOutlet(prior.point, move ? distance : 0).forEach((value, coordinate) => closeTo(vertex.point[coordinate], value));
   }
   const expectedVolume = initialVolume + 32 * distance;
   const expectedCentroid = original.mass.centroid.map((value, axis) =>
-    (value * initialVolume + [20, 34 + distance / 2, 0][axis] * 32 * distance) / expectedVolume);
+    (value * initialVolume + shiftedOutlet(outlet, distance / 2)[axis] * 32 * distance) / expectedVolume);
   const { bodies } = await f.bodies();
   assert.equal(bodies.length, 1);
   for (const props of [result.mass, bodies[0]]) {
     closeTo(props.volume, expectedVolume);
     props.centroid.forEach((value, axis) => closeTo(value, expectedCentroid[axis]));
   }
-  f.report.observations.push({ label, distance, capY: movedCap.plane.o[1], volume: result.mass.volume,
+  f.report.observations.push({ label, distance, ...(arcFirst ? { capX: movedCap.plane.o[0] } : { capY: movedCap.plane.o[1] }), volume: result.mass.volume,
     centroid: result.mass.centroid, digest: result.digest, chartGap: result.check.maximumPcurveGap });
   return result;
 }
@@ -163,13 +177,17 @@ async function approveWithAgent(savedSource, original, expected) {
     const description = await call('describe', { command: 'offset-face' });
     assert.match(description.selection, /original straight outlet/);
     const op = { tool: 'features', args: { action: 'command', command: 'offset-face', faces: [cap], values: { d: -4 }, expectedRevision } };
-    const refusal = await call('features', { action: 'batch', dryRun: true, ops: [{ ...op, args: { ...op.args, values: { d: -14 } } }] }, true);
+    const refusal = await call('features', { action: 'batch', dryRun: true, ops: [{ ...op, args: { ...op.args, values: { d: -tailLength } } }] }, true);
     assert.match(JSON.stringify(refusal), /straight outlet|tail|collaps/i);
     const dry = await call('features', { action: 'batch', dryRun: true, ops: [op] });
     assert.ok(dry.dryRun);
     assert.deepEqual(await readFile(file), before);
     const staged = await call('proposals', { action: 'propose', title: 'Move the paired outlet inward by 4 mm', ops: [op] });
     assert.deepEqual([staged.proposal, staged.applied], ['P1', false]);
+    if (arcFirst) {
+      const { proposals: [pending] } = await call('proposals', { action: 'list' });
+      assert.equal(pending.modelReviewRevision, undefined);
+    }
     if (reviewUnavailable) {
       const { proposals: [pending] } = await call('proposals', { action: 'list' });
       assert.equal(pending.modelReviewRevision, undefined);
@@ -227,14 +245,14 @@ await f.run(async () => {
 
   f.phase = 'Pick the original outlet cap in Studio';
   await button('View cube directions', f.page.getByRole('group', { name: 'View cube', exact: true })).click();
-  await f.page.getByRole('menuitem', { name: 'Back', exact: true }).click();
+  await f.page.getByRole('menuitem', { name: arcFirst ? 'Left' : 'Back', exact: true }).click();
   if (await button('Ortho').getAttribute('aria-pressed') !== 'true') await button('Ortho').click();
   await f.page.getByTitle('Frame all (F)', { exact: true }).click();
-  await f.page.waitForFunction(() => {
+  await f.page.waitForFunction(label => {
     const labels = [...document.querySelectorAll('.view-cube .vc-label')];
-    return labels.length === 1 && labels[0].textContent === 'BACK';
-  });
-  const pixel = await f.page.evaluate(point => window.__studioScreenOf(point), [20, 34, retainedRail ? 4 : 0]);
+    return labels.length === 1 && labels[0].textContent === label;
+  }, arcFirst ? 'LEFT' : 'BACK');
+  const pixel = await f.page.evaluate(point => window.__studioScreenOf(point), [...outlet.slice(0, 2), retainedRail ? 4 : 0]);
   assert.ok(pixel && await f.page.evaluate(point => document.elementFromPoint(...point)?.matches('canvas.vp-canvas'), pixel));
   await f.page.mouse.click(...pixel);
   const capIndex = original.mesh.find(([name]) => name === cap)?.[1];
@@ -275,7 +293,7 @@ await f.run(async () => {
   assert.equal(await edit.getByLabel('Mode', { exact: true }).count(), 0);
   assert.equal(await distanceField(edit).inputValue(), '4');
   const undoLabel = await button('Undo').getAttribute('data-tip');
-  await distanceField(edit).fill('-14');
+  await distanceField(edit).fill(String(-tailLength));
   await phase(edit, 'refused');
   assert.ok(await button('Apply', edit).isDisabled());
   const error = edit.locator('.hud-error');
@@ -300,8 +318,12 @@ await f.run(async () => {
   const saved = await f.save('paired-elbow-outlet-offset');
   const reopened = (await f.freshOpen(saved.file, inward, '05-fresh-open')).doc;
   assert.equal((await verify('reopened-native', reopened, -4, original)).digest, native.digest);
-  if (expectMissingHandle || historyHandle) return checkSavedOutletDrag(f, reopened,
-    (label, doc, distance) => verify(label, doc, distance, original), expectMissingHandle);
+  if (expectMissingHandle || historyHandle || arcFirst) {
+    await checkSavedOutletDrag(f, reopened, (label, doc, distance) => verify(label, doc, distance, original),
+      expectMissingHandle, distance => shiftedOutlet(outlet, distance));
+    if (!arcFirst) return;
+  }
+  if (arcFirst) return approveWithAgent(savedSource, original, native);
   await f.openFeatureEditor(2, 'reopened outlet offset');
   await button('Edit offset', f.editor()).click();
   const reopenedEdit = hud('Edit Offset face');

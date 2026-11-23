@@ -732,8 +732,13 @@ export function isPairedElbowOutletOffsetSource(nodes: readonly unknown[], index
   const sweep = nodes[index];
   if (!textRecord(sweep) || sweep.kind !== 'sweep-curve' || sweep.mode !== 'exact' || sweep.suppressed || sweep.held !== undefined
     || typeof sweep.id !== 'string' || face !== `${sweep.id}.end` || !textRecord(sweep.path)
-    || sweep.path.degree !== 2 || !Array.isArray(sweep.path.controlPoints) || sweep.path.controlPoints.length !== 7
+    || sweep.path.degree !== 2 || !Array.isArray(sweep.path.controlPoints)
     || !Number.isSafeInteger(sweep.sketch) || Number(sweep.sketch) < 0 || Number(sweep.sketch) >= index) return false;
+  const { controlPoints, weights } = sweep.path;
+  const arcLine = controlPoints.length === 5 && Array.isArray(weights) && weights.length === 5
+    && typeof weights[0] === 'number' && Number.isFinite(weights[0]) && weights[0] === weights[2] && weights[2] === weights[3] && weights[3] === weights[4]
+    && typeof weights[1] === 'number' && weights[1] > 0 && weights[1] < weights[0];
+  if (controlPoints.length !== 7 && !arcLine) return false;
   const sketch = nodes[Number(sweep.sketch)];
   return textRecord(sketch) && sketch.kind === 'sketch' && Array.isArray(sketch.holes) && sketch.holes.length === 2;
 }
