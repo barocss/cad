@@ -1,5 +1,5 @@
 import { refOf, selectedBodies, type Ctx } from '@barocss/cad-model/app/commands';
-import { directFeaturePatternSourceProblem, rectangularFeaturePatternSourceProblem, type BodyRef, type ModelNode } from '@barocss/cad-model/engine/doc';
+import { rectangularFeaturePatternSourceProblem, type BodyRef, type ModelNode } from '@barocss/cad-model/engine/doc';
 import { featureId } from '@barocss/cad-model/engine/ids';
 
 export function isCutPattern(kind: string): boolean {
@@ -19,10 +19,7 @@ export function earlierRectangularCutSource(ctx: Ctx, command: string, index: nu
   const target = selectedCutPatternSource(ctx);
   if (target === null) return;
   const parent: BodyRef = { node: target, side: 'solid' }, source: BodyRef = { node: index, side: 'solid' };
-  const problem = command === 'curve-feature-pattern'
-    ? directFeaturePatternSourceProblem(source, parent, ctx.doc.nodes, 'Path cut pattern')
-    : rectangularFeaturePatternSourceProblem(source, parent, ctx.doc.nodes);
-  if (!problem) return source;
+  if (!rectangularFeaturePatternSourceProblem(source, parent, ctx.doc.nodes)) return source;
 }
 
 export function savedCutPatternSource(node: ModelNode, nodes: readonly ModelNode[]): string | null {

@@ -1,7 +1,7 @@
 import { planCurveFeaturePatternPath, type CurveFeaturePatternPath, type RawNurbsPath } from '@barocss/cad/api';
 import { modelOf } from './direct';
 import { finiteBinary64Integer } from './binary64';
-import { directFeaturePatternSourceProblem, leafBodies, NODE_EXTRA_FIELDS, type BodyRef, type ModelNode, type StudioDoc } from './doc';
+import { leafBodies, NODE_EXTRA_FIELDS, rectangularFeaturePatternSourceProblem, type BodyRef, type ModelNode, type StudioDoc } from './doc';
 import { BarocssError, refusal } from './refusal';
 
 const record = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
@@ -196,7 +196,7 @@ export function curveFeaturePatternProblem(node: Record<string, unknown>, nodes:
     if (!record(parent) || Object.keys(parent).sort().join(',') !== 'node,side' || !Number.isInteger(parent.node) || parent.side !== 'solid') return '[BAD_REFERENCE] Path cut pattern needs one solid difference body.';
     const source = nodes[parent.node as number];
     if (source?.kind !== 'difference' || source.suppressed || !leafBodies(nodes).some(r => r.node === parent.node && r.side === 'solid')) return '[BAD_REFERENCE] Path cut pattern needs a current unsuppressed difference body.';
-    const prototypeProblem = directFeaturePatternSourceProblem(node.source, parent as unknown as BodyRef, nodes, 'Path cut pattern');
+    const prototypeProblem = rectangularFeaturePatternSourceProblem(node.source, parent as unknown as BodyRef, nodes, 'Path cut pattern');
     if (prototypeProblem) return prototypeProblem;
     if (record(node.path) && 'objectId' in node.path && !doc) {
       ownObjectId(node.path);

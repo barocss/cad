@@ -943,26 +943,13 @@ export function rectangularFeaturePatternProblem(node: Record<string, unknown>, 
 
 /** An explicit prototype is an earlier Difference; it is never consumed again. */
 export function rectangularFeaturePatternSourceProblem(prototype: unknown, parent: BodyRef, nodes: readonly ModelNode[], label = 'Rectangular cut pattern'): string | null {
-  return featurePatternSourceProblem(prototype, parent, nodes, label, 2);
-}
-
-export function directFeaturePatternSourceProblem(prototype: unknown, parent: BodyRef, nodes: readonly ModelNode[], label: string): string | null {
-  return featurePatternSourceProblem(prototype, parent, nodes, label, 1);
-}
-
-export function linearFeaturePatternSourceProblem(prototype: unknown, parent: BodyRef, nodes: readonly ModelNode[]): string | null {
-  return featurePatternSourceProblem(prototype, parent, nodes, 'Linear cut pattern', 2);
-}
-
-function featurePatternSourceProblem(prototype: unknown, parent: BodyRef, nodes: readonly ModelNode[], label: string, maxSteps: number): string | null {
   if (prototype !== undefined) {
-    const scope = maxSteps === 1 ? 'direct earlier' : 'direct earlier or next earlier';
-    const bad = `[BAD_REFERENCE] ${label} source must be the current target's ${scope} unsuppressed solid Difference.`;
+    const bad = `[BAD_REFERENCE] ${label} source must be the current target's direct earlier or next earlier unsuppressed solid Difference.`;
     if (!textRecord(prototype) || !Number.isSafeInteger(prototype.node) || prototype.side !== 'solid'
       || Object.keys(prototype).some(key => key !== 'node' && key !== 'side') || (prototype.node as number) < 0
       || (prototype.node as number) >= parent.node) return bad;
     let at = parent.node;
-    for (let step = 0; step <= maxSteps && at >= (prototype.node as number); step++) {
+    for (let step = 0; step <= 2 && at >= (prototype.node as number); step++) {
       const cut = nodes[at];
       if (cut?.kind !== 'difference' || cut.suppressed || cut.held !== undefined
         || !textRecord(cut.parent) || !textRecord(cut.tool)
@@ -993,7 +980,7 @@ export function priorLinearFeaturePatternProblem(node: Record<string, unknown>, 
   if (!textRecord(parent) || !Number.isSafeInteger(parent.node) || parent.side !== 'solid' || Object.keys(parent).some(key => key !== 'node' && key !== 'side') ||
     !leafBodies(nodes).some(ref => ref.node === parent.node && ref.side === 'solid'))
     return '[BAD_REFERENCE] Linear cut pattern needs a current solid Difference reference.';
-  return linearFeaturePatternSourceProblem(node.source, parent as unknown as BodyRef, nodes);
+  return rectangularFeaturePatternSourceProblem(node.source, parent as unknown as BodyRef, nodes, 'Linear cut pattern');
 }
 
 /** Check Rectangular and explicit-source Linear patterns in saved and nested recipes. */

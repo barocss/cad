@@ -47,7 +47,7 @@ export function certifyPriorCutPlacements(seed: Part, tool: Part, prior: PriorRe
   const bridge = prior.bridge, intermediate = bridge && profile(bridge.previous), middleTool = bridge && profile(bridge.other);
   if (!stock || !earlier || !current || !olderTool || !newerTool || stock.holes.length || olderTool.holes.length || newerTool.holes.length
     || earlier.holes.length !== 1 || current.holes.length !== (bridge ? 3 : 2)
-    || (bridge && ((pattern !== 'linear' && pattern !== 'rectangular' && pattern !== 'fill') || !intermediate || !middleTool || middleTool.holes.length || intermediate.holes.length !== 2)))
+    || (bridge && (!intermediate || !middleTool || middleTool.holes.length || intermediate.holes.length !== 2)))
     return fail('CAPABILITY', profileRequirement(pattern, !!bridge));
   const same = (a: Rectangle, b: Rectangle) => a.min.every((value, i) => value === b.min[i]) && a.max.every((value, i) => value === b.max[i]);
   const newerTools = middleTool ? [middleTool, newerTool] : [newerTool];

@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1853: [Repeat the first of three cuts along a linked XY path](notes/three-cut-path-pattern-2026-11-24/README.md), #25. Qualify a Studio-authored path, both later collisions and the retained path after fresh Open.
 - D1852: [Repeat the first of three cuts through a captured Fill mask](notes/three-cut-fill-pattern-2026-11-24/README.md), #25. Preserve the two later tools, the selected cells and the captured mask through Studio edit and reopen.
 - D1851: [Repeat the first of three cuts on a rectangular grid](notes/three-cut-rectangular-pattern-2026-11-24/README.md), #25. Both later cuts and all three new apertures keep their distinct sources through Studio edit and reopen.
 - D1850: [Repeat the first rectangular cut across two newer cuts](notes/three-cut-linear-pattern-2026-11-24/README.md), #25. Preserve every original aperture and refuse collisions before adding signed Linear copies.

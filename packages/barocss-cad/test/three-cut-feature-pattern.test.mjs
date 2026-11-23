@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { evaluateCadPart, reevaluate, saveCadPart, loadCadPart, massPropertiesOf, brepMassProperties, checkBrep, faceGeometry, CadPartError } from '../dist/index.js';
 import { fillCutSnapshot, fillCutPlacements } from '../dist/features/fill-cut-pattern.js';
+import { curveCutOffsets } from '../dist/features/curve-cut-pattern.js';
 
 const near = (actual, expected) => assert.ok(Number.isFinite(actual) && Math.abs(actual - expected) <= 1e-7, `${actual} vs ${expected}`);
 const document = () => ({ format: 'barocss-cad-part', version: 1, units: 'mm', parameters: {
@@ -39,6 +40,26 @@ function selectedFill(doc) {
   const own = fillCutSnapshot(node.region, node.anchor, fail);
   return fillCutPlacements(own.region, own.anchor, doc.parameters.pitch, node.count, doc.parameters.pitchY, node.count2).map(placement => placement.suffix);
 }
+function pathDocument(degree = 1, points = [[0, 0, 2], [16, 0, 2], [16, 24, 2]]) {
+  const doc = document(), controls = [], knots = [];
+  if (degree === 1) controls.push(...points);
+  else {
+    for (let i = 1; i < points.length; i++) {
+      if (i === 1) controls.push(points[0]);
+      controls.push(points[i - 1].map((value, axis) => (value + points[i][axis]) / 2), points[i]);
+    }
+  }
+  for (let i = 0; i <= degree; i++) knots.push(0);
+  for (let i = 1; i < points.length - 1; i++) for (let j = 0; j < degree; j++) knots.push(i);
+  for (let i = 0; i <= degree; i++) knots.push(points.length - 1);
+  doc.features[doc.features.length - 1] = { id: 'repeat', kind: 'curve-feature-pattern', target: 'third', source: 'first',
+    spacing: { parameter: 'pitch' }, count: 3, path: { degree, knots, controlPoints: controls, weights: controls.map(() => 1) } };
+  return doc;
+}
+function selectedPath(doc) {
+  const node = feature(doc, 'repeat'), fail = (code, message) => { throw Object.assign(new Error(message), { code }); };
+  return curveCutOffsets(node.path, doc.parameters.pitch, node.count, 10000, fail, 'prior-xy-linear');
+}
 
 function bounds(brep, loop) {
   const points = loop.coedges.flatMap(id => {
@@ -49,21 +70,22 @@ function bounds(brep, loop) {
     .concat([0, 1].map(axis => Math.max(...points.map(point => point[axis]))));
 }
 
-function verify(snapshot, current = false, { cells, lastBox } = {}) {
+function verify(snapshot, current = false, { cells, lastBox, offsets } = {}) {
   const doc = snapshot.document, p = doc.parameters, pattern = feature(doc, 'repeat');
   assert.equal(snapshot.outputs.length, 1);
   const output = snapshot.outputs[0], brep = output.brep, check = checkBrep(brep, { strict: true });
   assert.ok(check.valid, check.issues.join('\n')); assert.equal(output.id, 'repeat');
-  const rectangular = pattern.kind === 'rectangular-feature-pattern', fill = pattern.kind === 'fill-feature-pattern';
+  const rectangular = pattern.kind === 'rectangular-feature-pattern', fill = pattern.kind === 'fill-feature-pattern', path = pattern.kind === 'curve-feature-pattern';
   const last = lastBox ?? [42, 8, p.lastRight, 10];
   const holes = [[8, 26, p.newerRight, 28], current ? [p.left, p.bottom, p.right, p.top] : last];
   const prototype = current ? last : [p.left, p.bottom, p.right, p.top];
   if (fill) assert.ok(cells, 'Fill oracle supplies literal selected cells independently of the planner');
-  const expectedCells = cells ?? Array.from({ length: rectangular ? pattern.count2 : 1 }, (_, j) =>
+  if (path) assert.ok(offsets, 'Path oracle supplies literal offsets independently of the planner');
+  const expectedCells = path ? offsets.map((_, k) => [k, 0]) : cells ?? Array.from({ length: rectangular ? pattern.count2 : 1 }, (_, j) =>
     Array.from({ length: pattern.count }, (_, k) => [k, j])).flat();
   for (const [k, j] of expectedCells) {
-    const dx = (fill || pattern.axis === 'x' ? k * p.pitch : 0) + (rectangular && pattern.axis2 === 'x' ? j * p.pitchY : 0);
-    const dy = (pattern.axis === 'y' ? k * p.pitch : 0) + (fill || rectangular && pattern.axis2 === 'y' ? j * p.pitchY : 0);
+    const dx = path ? offsets[k][0] : (fill || pattern.axis === 'x' ? k * p.pitch : 0) + (rectangular && pattern.axis2 === 'x' ? j * p.pitchY : 0);
+    const dy = path ? offsets[k][1] : (pattern.axis === 'y' ? k * p.pitch : 0) + (fill || rectangular && pattern.axis2 === 'y' ? j * p.pitchY : 0);
     holes.push(prototype.map((value, axis) => value + (axis % 2 ? dy : dx)));
     const suffix = k || j ? rectangular || fill ? `@${k},${j}` : `@${k}` : '';
     for (let side = 0; side < 4; side++) assert.ok(brep.faces.some(face => face.name === `${current ? 'lastTool' : 'olderTool'}.side${side}${suffix}`));
@@ -252,7 +274,7 @@ test('Fill excludes mask holes and unsafe unselected cells while always retainin
   verify(evaluateCadPart(current), true, { cells: [[0, 0]] });
 });
 
-test('Fill refuses selected collisions with either newer cutter and malformed bridges while Path stays direct-only', () => {
+test('Fill refuses selected collisions with either newer cutter and malformed bridges', () => {
   const accepted = evaluateCadPart(fillDocument()), saved = saveCadPart(accepted);
   const refused = (change, code) => {
     const doc = fillDocument(); change(doc); const before = structuredClone(doc);
@@ -271,9 +293,72 @@ test('Fill refuses selected collisions with either newer cutter and malformed br
   refused(doc => {
     doc.features.splice(-1, 0, { id: 'fourth', kind: 'difference', target: 'third', tool: 'lastTool' }); feature(doc, 'repeat').target = 'fourth';
   }, 'REFERENCE');
-  refused(doc => {
-    const index = doc.features.findIndex(item => item.id === 'repeat');
-    doc.features[index] = { id: 'repeat', kind: 'curve-feature-pattern', target: 'third', source: 'first', spacing: 16, count: 2,
-      path: { degree: 1, knots: [0, 0, 1, 1], controlPoints: [[0, 0, 2], [16, 0, 2]], weights: [1, 1] } };
-  }, 'REFERENCE');
+});
+
+test('Path repeats the original across two newer cuts in both straight encodings with independent turn and pitch oracles', () => {
+  const offsets = [[0, 0, 0], [16, 0, 0], [16, 16, 0]], editedOffsets = [[0, 0, 0], [14, 0, 0], [16, 12, 0]];
+  for (const degree of [1, 2]) {
+    const doc = pathDocument(degree), before = structuredClone(doc);
+    assert.deepEqual(selectedPath(doc), offsets);
+    const snapshot = evaluateCadPart(doc), brep = verify(snapshot, false, { offsets }), mass = brepMassProperties(brep, 1);
+    near(mass.volume, 23560); near(mass.centroid[0], 710200 / 23560); near(mass.centroid[1], 472600 / 23560);
+    assert.ok(!brep.faces.some(face => /^(newerTool|lastTool)\..*@/.test(face.name)));
+    const editedDoc = structuredClone(doc); editedDoc.parameters.pitch = 14; assert.deepEqual(selectedPath(editedDoc), editedOffsets);
+    const edited = reevaluate(snapshot, { parameters: { pitch: 14 } }), changed = verify(edited, false, { offsets: editedOffsets });
+    const changedMass = brepMassProperties(changed, 1);
+    near(changedMass.centroid[0], 710360 / 23560); near(changedMass.centroid[1], 472920 / 23560);
+    assert.deepEqual(verify(loadCadPart(saveCadPart(edited)), false, { offsets: editedOffsets }), changed);
+    assert.deepEqual(doc, before); assert.deepEqual(snapshot.document.features, before.features);
+  }
+  // The product fixture also has a complete third span after the turn.
+  const three = pathDocument(2, [[0, 0, 2], [34, 0, 2], [34, 18, 2], [0, 18, 2]]);
+  three.parameters.pitch = 24;
+  verify(evaluateCadPart(three), false, { offsets: [[0, 0, 0], [24, 0, 0], [34, 14, 0]] });
+});
+
+test('Path collision probes are valid open paths and independently reach each newer cutter', () => {
+  const accepted = evaluateCadPart(pathDocument()), saved = saveCadPart(accepted);
+  for (const degree of [1, 2]) for (const [points, pitch, offsets] of [
+    [[[0, 0, 2], [32, 0, 2], [32, 24, 2]], 32, [[0, 0, 0], [32, 0, 0]]],
+    [[[0, 0, 2], [0, 18, 2], [16, 18, 2]], 18, [[0, 0, 0], [0, 18, 0]]],
+  ]) {
+    const doc = pathDocument(degree, points); doc.parameters.pitch = pitch; feature(doc, 'repeat').count = 2;
+    assert.deepEqual(selectedPath(doc), offsets);
+    const before = structuredClone(doc);
+    assert.throws(() => reevaluate(accepted, { document: doc }), error => error instanceof CadPartError && error.feature === 'repeat'
+      && error.code === 'GEOMETRY' && /disjoint from the newer cuts/.test(error.message));
+    assert.deepEqual(doc, before); assert.equal(saveCadPart(accepted), saved);
+  }
+});
+
+test('Path proves its full authored snapshot and all three original cuts even at count one, while no-source classes stay unchanged', () => {
+  const single = pathDocument(); feature(single, 'repeat').count = 1;
+  verify(evaluateCadPart(single), false, { offsets: [[0, 0, 0]] });
+  const accepted = evaluateCadPart(pathDocument()), saved = saveCadPart(accepted);
+  const refused = (doc, code) => {
+    const before = structuredClone(doc);
+    assert.throws(() => reevaluate(accepted, { document: doc }), error => error instanceof CadPartError && error.feature === 'repeat' && error.code === code);
+    assert.deepEqual(doc, before); assert.equal(saveCadPart(accepted), saved);
+  };
+  for (const degree of [1, 2]) {
+    const doc = pathDocument(degree); feature(doc, 'repeat').count = 1;
+    feature(doc, 'repeat').path.controlPoints.at(-1)[2] = 2 + 2 * Number.EPSILON;
+    refused(doc, 'CAPABILITY');
+  }
+  const curved = pathDocument(2); feature(curved, 'repeat').count = 1;
+  feature(curved, 'repeat').path.controlPoints[1][1] = 1e-12; refused(curved, 'CAPABILITY');
+  const blind = pathDocument(); feature(blind, 'repeat').count = 1; feature(blind, 'newerTool').height = 5; refused(blind, 'CAPABILITY');
+  const stale = pathDocument(); feature(stale, 'second').suppressed = true; refused(stale, 'REFERENCE');
+  const farther = pathDocument(); farther.features.splice(-1, 0, { id: 'fourth', kind: 'difference', target: 'third', tool: 'lastTool' });
+  feature(farther, 'repeat').target = 'fourth'; refused(farther, 'REFERENCE');
+  const closed = pathDocument(); feature(closed, 'repeat').count = 1;
+  feature(closed, 'repeat').path.controlPoints.at(-1).splice(0, 3, 0, 0, 2); refused(closed, 'CAPABILITY');
+  for (const raw of [
+    { degree: 2, knots: [0, 0, 0, 1, 1, 1], controlPoints: [[0, 0, 2], [8, 6, 2], [16, 0, 2]], weights: [1, 1, 1] },
+    { degree: 1, knots: [0, 0, 1, 2, 2], controlPoints: [[0, 0, 2], [16, 0, 3], [16, 24, 3]], weights: [1, 1, 1] },
+  ]) {
+    const doc = pathDocument(); delete feature(doc, 'repeat').source;
+    Object.assign(feature(doc, 'repeat'), { path: raw, count: 1 });
+    verify(evaluateCadPart(doc), true, { offsets: [[0, 0, 0]] });
+  }
 });

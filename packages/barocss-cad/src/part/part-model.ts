@@ -369,9 +369,8 @@ function evaluateWith(input: CadPartDocument, previous: Cache | undefined, optio
       if (source !== undefined) {
         const label = `${pattern} feature pattern source`;
         const previous = ref(source, label), prototype = previous.author;
-        // Linear, Rectangular and Fill may cross one additional Difference, never an arbitrary ancestry walk.
-        const bridge = (pattern === 'linear' || pattern === 'rectangular' || pattern === 'fill') && author.target !== previous.id
-          ? ref(author.target, `${label} intervening difference`) : undefined;
+        // All cut patterns may cross one additional Difference, never an arbitrary ancestry walk.
+        const bridge = author.target !== previous.id ? ref(author.target, `${label} intervening difference`) : undefined;
         const bridgePart = bridge?.result.kind === 'solid' && bridge.result.parts.length === 1 ? bridge.result.parts[0] : undefined;
         const connected = author.target === previous.id || (bridge && bridge.part === null && author.target === bridge.id
           && bridge.author?.kind === 'difference' && !('suppressed' in bridge.author && bridge.author.suppressed)

@@ -278,7 +278,7 @@ test('arbitrary consumed or cross-scope sources and missing, suppressed or non-D
   assert.deepEqual(doc, before);
 });
 
-test('Linear, Rectangular and Fill can repeat the first cut on the third Difference without changing the original references', async () => {
+test('All four cut patterns can repeat the first cut on the third Difference without changing the original references', async () => {
   const first = part('three cuts').box({ w: 60, d: 40, h: 10 })
     .subtract(tool => tool.box({ w: 4, d: 2, h: 10, x: 8, y: 8 }));
   const second = first.subtract(tool => tool.box({ w: 6, d: 2, h: 10, x: 8, y: 26 }));
@@ -367,4 +367,25 @@ test('Linear, Rectangular and Fill can repeat the first cut on the third Differe
     assert.equal(denied.isError, true, denied.content);
     assert.equal(denied.state.doc, maskDoc);
   }
+
+  const path = { degree: 1, knots: [0, 0, 1, 2, 2], points: [[0, 0, 2], [16, 0, 2], [16, 24, 2]] as [number, number, number][], weights: [1, 1, 1] };
+  const direct = importSource({ sources: {}, objects: [] }, curvesSource('first-cut-path', [path]), 'Path');
+  const pathDoc = { ...doc, direct };
+  const linked = await dispatchTool({ doc: pathDoc, bodies: context(pathDoc).bodies }, 'features', {
+    ...args, command: 'curve-feature-pattern', expectedRevision: revisionOf(pathDoc),
+    values: { source: args.values.source, path: direct.objects[0].id, spacing: 16, count: 3 },
+  }, async next => evaluateDoc(next, 2));
+  assert.equal(linked.isError, false, linked.content);
+  const pathPattern = linked.state.doc.nodes.at(-1);
+  assert.ok(pathPattern?.kind === 'curve-feature-pattern');
+  assert.deepEqual(pathPattern.path, { objectId: direct.objects[0].id });
+  assert.deepEqual(pathPattern.source, source);
+  assert.deepEqual(pathPattern.parent, parent);
+  assert.equal(checkNode(pathPattern, pathDoc.nodes, pathDoc.parameters), null);
+  const pathOpened = await readStudioFile(encodeStudioFile(linked.state.doc));
+  assert.ok('doc' in pathOpened);
+  assert.deepEqual(pathOpened.doc, linked.state.doc);
+  const pathGeometry = evaluateDoc(pathOpened.doc, 2);
+  assert.ok(pathGeometry.ok, pathGeometry.ok ? '' : pathGeometry.error.detail);
+  assert.ok(Math.abs(pathGeometry.bodies[0].volume! - 23560) < 1e-8);
 });

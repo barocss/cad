@@ -1,13 +1,13 @@
 # CAD roadmap — current status and execution order
 
-Updated 2026-11-24 · Priority authority: D520 · Latest delivery: D1852 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
+Updated 2026-11-24 · Priority authority: D520 · Latest delivery: D1853 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
 
 This is the only current status index. Detailed tracks define acceptance; the 34 stable row pages retain scope and issue navigation. Immutable decision notes retain results. Do not append chronological status paragraphs here. [D520 decision](notes/cad-roadmap-replan-2026-11-04/README.md) supersedes D445 execution order and historical next-item text, while retaining its safeguards and bounded proofs.
 
 ## Now and next
 
-- **Current position:** [D1852](notes/three-cut-fill-pattern-2026-11-24/README.md), P1 rows 15 and 16. Fill copies the first of three cuts only at the accepted cells of a captured XY mask. Studio verifies both collisions, exact apertures and the reopened mask and source.
-- **Next MAIN:** D1853, P1 rows [15](roadmap-rows/15.md) and [16](roadmap-rows/16.md), [#25](https://github.com/barocss/cad/issues/25). Repeat the first cut of the same three-cut stock along an actual linked level path. Verify both downstream collisions and retain the exact straight-path admission.
+- **Current position:** [D1853](notes/three-cut-path-pattern-2026-11-24/README.md), P1 rows 15 and 16. Linear, Rectangular, Fill and Path repeat the first of three same-stock rectangular cuts. Studio verifies the linked path, both downstream collision refusals and exact reopened source.
+- **Next MAIN:** D1854, P5 rows [16](roadmap-rows/16.md) and [31](roadmap-rows/31.md), [#17](https://github.com/barocss/cad/issues/17). Bind the original straight outlet of the certified paired S-bend to a parallel reference face using Offset face to plane. Verify reference movement and the retained joins in Studio.
 - **Separate follow-ups:** Continue Studio App extraction in cohesive parts with affected desktop checks. [#608 Rendering](https://github.com/barocss/cad/issues/608) stays on HOLD. API inventory drift remains open. The issue tracker records [#126](https://github.com/barocss/cad/issues/126), [#613](https://github.com/barocss/cad/issues/613), [#152](https://github.com/barocss/cad/issues/152) and [#22](https://github.com/barocss/cad/issues/22) as closed.
 - **Active repository:** [barocss/cad](https://github.com/barocss/cad), based on `origin/main`. Fetch before work and preserve unexpected changes. The [migration record](../../../docs/migration/README.md) maps the former `local/cad-dev` history and issue numbers.
 - **Evidence correction:** D482 records2167 PASS/0 FAIL/2 existing SKIP in a later full-kernel run than D433. Neither result is a new full-suite PASS at this audit HEAD. [D482 record](notes/vertical-contact-refusal-2026-11-04/README.md).
