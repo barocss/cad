@@ -299,3 +299,39 @@ test('paired History rejects the wrong target, cylinder, unmerged source or stor
  assert.equal(historyFilletPendingPress(handle,side,false),'consume');
  assert.equal(historyFilletPendingPress({...handle,scalarDragSession:x.evidence},side,false),undefined);
 });
+
+
+test('closed circular History binds both shared source names to one exact native rim', () => {
+  const disc: SketchNode = { kind: 'sketch', profile: 'circle', center: [0, 0], radius: 8 };
+  const x = fixture(disc, 'n1.side0#2|n1.top', .6);
+  const node = x.doc.nodes[2], stock = x.reply.bodies[0], finished = x.accepted.bodies[0];
+  assert.ok(node.kind === 'fillet' && node.sigs && finished.nativeClosedFilletTorus);
+  const torus = finished.nativeClosedFilletTorus, frame = x.evidence.frame;
+  assert.ok(frame);
+  const expected = [8 + .6 * Math.SQRT1_2, 0, 10 + .6 * Math.SQRT1_2];
+  assert.ok(Math.hypot(...frame.at.map((value, axis) => value - expected[axis])) < 1e-12);
+  assert.ok(Math.hypot(...frame.dir.map((value, axis) => value - [Math.SQRT1_2, 0, Math.SQRT1_2][axis])) < 1e-12);
+  assert.equal(torus.faces.length, 2);
+  assert.ok(torus.faces.some(member => member.faceId === x.evidence.face.id));
+  assert.deepEqual([...torus.targets].sort(), [...node.edges].sort());
+  for (const source of node.edges) assert.equal(node.sigs[source].n, 2);
+  assert.equal(ownedHistoryFilletHandle(x.evidence, x.cmd, x.ctx, x.handle, null), x.evidence);
+  assert.equal(placeBody(finished, [1,0,0,0,1,0,0,0,1], [1,0,0]).nativeClosedFilletTorus, undefined);
+  const forged = structuredClone(x.doc), changed = forged.nodes[2];
+  assert.ok(changed.kind === 'fillet' && changed.sigs);
+  changed.sigs[changed.edges[0]].p[0] += 1;
+  assert.equal(historyFilletReceipt(forged, forged, 2, x.accepted.bodies, x.reply, 3, x.current), null);
+  changed.sigs[changed.edges[0]].n = 1;
+  assert.equal(ordinaryHistoryFillet(forged, 2, x.accepted.bodies), null);
+  const wrongTorus = { ...finished, nativeClosedFilletTorus: { ...torus, majorRadius: torus.majorRadius + 1 } };
+  assert.equal(historyFilletReceipt(x.doc, x.doc, 2, [wrongTorus], x.reply, 3, x.current), null);
+  const wrongFace = { ...finished, mesh: { ...finished.mesh,
+    faces: finished.mesh.faces.map(face => face === x.evidence.face ? { ...face, id: 'borrowed-display-face' } : face) } };
+  assert.equal(historyFilletReceipt(x.doc, x.doc, 2, [wrongFace], x.reply, 3, x.current), null);
+  const sourceLost = { ...x.reply, bodies: [{ ...stock, mesh: { ...stock.mesh,
+    edges: stock.mesh.edges.map(edge => ({ ...edge, nativeFilletRim: undefined })) } }] };
+  assert.equal(historyFilletReceipt(x.doc, x.doc, 2, x.accepted.bodies, sourceLost, 3, x.current), null);
+  x.revoke();
+  assert.equal(historyFilletReceipt(x.doc, x.doc, 2, x.accepted.bodies, x.reply, 3, x.current), null);
+  assert.equal(ownedHistoryFilletHandle(x.evidence, x.cmd, x.ctx, x.handle, null), undefined);
+});

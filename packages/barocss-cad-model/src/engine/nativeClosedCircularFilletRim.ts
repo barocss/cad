@@ -13,9 +13,12 @@ export function nativeClosedCircularFilletRim(brep: Brep, edge: DisplayEdge, fac
       edge.straight || edge.names.length !== 2 || new Set(edge.names).size !== 2 || edge.nativeJoint ||
       edge.nativeFilletRim || !edge.nativeCircle || new Set(edge.faces).size !== 2 ||
       !edge.a.every((value, axis) => value === edge.b[axis])) return;
-    const id = brep.source.id;
-    const caps = brep.faces.filter(face => face.name === `${id}.bottom` || face.name === `${id}.top`);
-    const walls = brep.faces.filter(face => face.name === `${id}.side0#1` || face.name === `${id}.side0#2`);
+    // A consumed prism can be cached with a temporary source ID. Its authored face names stay stable.
+    const top = brep.faces.find(face => face.name?.endsWith('.top'));
+    const owner = top?.name?.slice(0, -'.top'.length);
+    if (!owner) return;
+    const caps = brep.faces.filter(face => face.name === `${owner}.bottom` || face === top);
+    const walls = brep.faces.filter(face => face.name === `${owner}.side0#1` || face.name === `${owner}.side0#2`);
     if (caps.length !== 2 || walls.length !== 2 || new Set(caps.map(face => face.name)).size !== 2 ||
       new Set(walls.map(face => face.name)).size !== 2) return;
     const selected = caps.filter(cap => edge.faces.some(index => faces[index]?.id === cap.id && faces[index].nativePlaneName === cap.name));

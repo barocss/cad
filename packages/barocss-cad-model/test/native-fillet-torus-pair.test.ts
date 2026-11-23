@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { brepMassProperties, checkBrep, evaluateCadPart, type CadPartDocument, type CadPartOutput } from '@barocss/cad';
-import { nativeFilletTorusOf, nativeFilletTorusPairOf } from '../src/engine/nativeFilletTorus';
+import { nativeClosedFilletTorusOf, nativeFilletTorusOf, nativeFilletTorusPairOf } from '../src/engine/nativeFilletTorus';
 import { emptyDoc, withNode, type SketchNode } from '../src/engine/doc';
 import { evaluateDoc, placeBody } from '../src/engine/evaluate';
 import { captureSignatures } from '../src/engine/references';
@@ -119,4 +119,43 @@ test('Model carries paired curved-target proof only with exact authored ownershi
     const evaluated = evaluateDoc(changed, 3);
     assert.equal(evaluated.ok ? evaluated.bodies[0].nativeFilletTorusPair : undefined, undefined);
   }
+});
+
+
+test('two native half patches certify one complete closed top blend only when the actual trims fill both charts', () => {
+  const rims = ['n1.side0#1|n1.top', 'n1.side0#2|n1.top'];
+  for (const radius of [.6, 1.5]) for (const edges of [rims, [...rims].reverse()]) {
+    const doc: CadPartDocument = { format: 'barocss-cad-part', version: 1, units: 'mm', parameters: {}, features: [
+      { id: 'n0', kind: 'sketch', profile: 'circle', center: [0, 0], radius: 8 },
+      { id: 'n1', kind: 'extrude', sketch: 'n0', height: 10 },
+      { id: 'n2', kind: 'fillet', target: 'n1', edges, radius },
+    ] };
+    const [output] = evaluateCadPart(doc).outputs, before = structuredClone(output);
+    const verified = nativeClosedFilletTorusOf(output);
+    assert.ok(verified);
+    assert.deepEqual([...verified.targets].sort(), rims);
+    assert.deepEqual(verified.faces.map(member => member.face).sort(), ['n2.face#1', 'n2.face#2']);
+    close(verified.majorRadius, 8 - radius); close(verified.radius, radius); close(verified.centre[2], 10 - radius);
+    assert.equal(nativeFilletTorusOf(output), undefined);
+    assert.equal(nativeFilletTorusPairOf(output), undefined);
+    const reject = (edit: (copy: Mutable<CadPartOutput>) => void) => {
+      const copy = structuredClone(output) as Mutable<CadPartOutput>;
+      edit(copy);
+      assert.equal(nativeClosedFilletTorusOf(copy), undefined);
+    };
+    reject(copy => { copy.filletTargets = [rims[0], rims[0]]; });
+    reject(copy => { copy.brep.faces.find(face => face.name === 'n1.top')!.name = 'borrowed.top'; });
+    reject(copy => {
+      const trim = copy.brep.edges.find(edge => edge.name?.startsWith('n2.face#1|n2.face#2'))!;
+      // Change only an interior seam pole, leaving the endpoints and display-face names in place.
+      trim.curve.controlPoints[1][2] += .01;
+    });
+    reject(copy => {
+      const patch = copy.brep.faces.find(face => face.name === 'n2.face#2')!.surface;
+      assert.equal(patch.kind, 'surface');
+      if (patch.kind === 'surface') patch.weights[2][1] += .01;
+    });
+    assert.deepEqual(output, before);
+  }
+  assert.equal(nativeClosedFilletTorusOf(fixture()), undefined);
 });

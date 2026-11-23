@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { commands, type Ctx } from '../src/app/commands';
-import { rectanglePart, withNode, type StudioDoc } from '../src/engine/doc';
-import { evaluateDoc, placeBody } from '../src/engine/evaluate';
+import { prefixDoc, rectanglePart, withNode, type StudioDoc } from '../src/engine/doc';
+import { evaluateDoc, evaluatePart, placeBody } from '../src/engine/evaluate';
 
 function quarterSector() {
   const seed = rectanglePart(8, 8, 10);
@@ -95,4 +95,20 @@ test('one displayed closed rim uses its original native seam for Constant Fillet
   const ring = evaluateDoc(bored, 2);
   assert.ok(ring.ok);
   assert.ok(ring.bodies[0].mesh.edges.every(edge => !edge.nativeFilletRim));
+});
+
+test('reusing a consumed round prism preserves its authored rim names and seam', () => {
+  const seed = rectanglePart(8, 8, 10);
+  const stock: StudioDoc = { ...seed, nodes: [
+    { id: 'n0', kind: 'sketch', profile: 'circle', center: [0, 0], radius: 8 }, seed.nodes[1],
+  ] };
+  const edges = ['n1.side0#2|n1.top', 'n1.side0#1|n1.top'];
+  const finished = withNode(stock, { kind: 'fillet', parent: { node: 1, side: 'solid' }, edges, radius: .6 });
+  assert.ok(evaluatePart(finished, 1, 8, 'refs').ok);
+  const original = evaluatePart(prefixDoc(finished, 2), 2, 8, 'refs');
+  assert.ok(original.ok);
+  const rim = original.bodies[0].mesh.edges.find(edge => edges.every(name => edge.names.includes(name)));
+  assert.ok(rim);
+  assert.ok(rim.faces.some(index => original.bodies[0].mesh.faces[index].id.startsWith('target_')));
+  assert.deepEqual(rim.nativeFilletRim?.midpoint, [8, 0, 10]);
 });

@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { createFlow } from './flow-helper.mjs';
+import { holdOriginalFilletRefs } from './hold-original-fillet-refs.mjs';
 
 const baseline = process.argv.includes('--baseline');
 const historyBaseline = process.argv.includes('--history-baseline');
@@ -13,7 +14,7 @@ const pins = [
   'packages/barocss-cad-model/src/engine/nativeCircle.ts',
   'packages/barocss-cad-model/src/engine/evaluate.ts',
 ];
-if (history) pins.push('apps/cad-studio/src/state/historyFilletRadiusReceipt.ts', 'apps/cad-studio/src/app/useHistoryFilletRadius.ts',
+if (history) pins.push('apps/cad-studio/test/hold-original-fillet-refs.mjs', 'apps/cad-studio/src/state/historyFilletRadiusReceipt.ts', 'apps/cad-studio/src/app/useHistoryFilletRadius.ts',
   'packages/barocss-cad-model/src/app/editCommand.ts');
 const inspectorSource = `
 import assert from 'node:assert/strict';
@@ -74,40 +75,6 @@ const radiusInput = () => hud().getByLabel('Radius', { exact: true });
 const handle = () => f.page.locator('g.gizmo-handle[data-handle="radius"] circle');
 const screen = point => f.page.evaluate(p => window.__studioScreenOf(p), point);
 const historyGroup = () => f.page.locator('g.gizmo-handle[data-handle="r"]');
-
-function holdOriginalRefs() {
-  const proto = Worker.prototype, post = proto.postMessage;
-  const handler = Object.getOwnPropertyDescriptor(proto, 'onmessage');
-  let armed = false, target, pending;
-  proto.postMessage = function (request, ...rest) {
-    if (armed && request?.type === 'part' && request.slot === 'refs') {
-      armed = false;
-      target = { worker: this, id: request.id, revision: request.revision };
-    }
-    return post.call(this, request, ...rest);
-  };
-  Object.defineProperty(proto, 'onmessage', {
-    configurable: true, get: handler.get,
-    set(callback) {
-      handler.set.call(this, typeof callback === 'function' ? function (event) {
-        if (target?.worker === this && event.data?.id === target.id && event.data.result) {
-          pending = { result: event.data.result, revision: target.revision, release: () => callback.call(this, event) };
-          target = undefined;
-          return;
-        }
-        return callback.call(this, event);
-      } : callback);
-    },
-  });
-  window.__quarterHistoryRefs = {
-    arm() { if (armed || target || pending) throw Error('Already holding original refs'); armed = true; },
-    read() {
-      return pending && { ok: pending.result.ok, revision: pending.revision, resultRevision: pending.result.revision,
-        key: pending.result.bodies?.[0]?.key };
-    },
-    release() { if (!pending) throw Error('Expected a real refs reply'); pending.release(); pending = undefined; },
-  };
-}
 
 async function frame(view) {
   await button(view, f.page.locator('.views')).click();
@@ -222,16 +189,16 @@ async function historyAnchor(radius) {
 async function editHistory(initial) {
   f.phase = 'measure the original arc frame and refuse the press waiting for source evidence';
   await frame('Top');
-  await f.page.evaluate(() => window.__quarterHistoryRefs.arm());
+  await f.page.evaluate(() => window.__filletHistoryRefs.arm());
   await f.openFeatureEditor(2);
-  const reply = await (await f.page.waitForFunction(() => window.__quarterHistoryRefs.read())).jsonValue();
+  const reply = await (await f.page.waitForFunction(() => window.__filletHistoryRefs.read())).jsonValue();
   assert.deepEqual(reply, { ok: true, revision: reply.revision, resultRevision: reply.revision, key: 'b1' });
   assert.equal(await historyGroup().getAttribute('aria-disabled'), 'true');
   const { actual: pendingPoint } = await historyAnchor(.6);
   await f.page.mouse.move(...pendingPoint);
   await f.page.mouse.down();
   await f.snapshot('history-arc-original-refs-pending');
-  await f.page.evaluate(() => window.__quarterHistoryRefs.release());
+  await f.page.evaluate(() => window.__filletHistoryRefs.release());
   await historyGroup().locator('title').filter({ hasText: /when viewed end-on/ }).waitFor({ state: 'attached' });
   await f.page.mouse.move(pendingPoint[0], pendingPoint[1] - 30, { steps: 6 });
   await f.page.mouse.up();
@@ -288,7 +255,7 @@ await f.run(async () => {
     const newContext = f.browser.newContext.bind(f.browser);
     f.browser.newContext = async options => {
       const context = await newContext(options);
-      await context.addInitScript(holdOriginalRefs);
+      await context.addInitScript(holdOriginalFilletRefs);
       return context;
     };
   }
