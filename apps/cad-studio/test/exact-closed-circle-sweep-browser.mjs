@@ -391,8 +391,8 @@ await f.run(async () => {
     const expectedRevision = await currentPartRevision(call);
     const description = await call('describe', { command: 'sweep-curve' });
     assert.match(description.values.representation, /closed circle.*four rational quadratic quarter spans/);
-    if (annular) assert.match(description.values.sketch, /A closed circle accepts a circular disk with an optional concentric circular bore/);
-    if (rectangular) assert.match(description.values.sketch, /A closed circle accepts [^.]*solid rectangle aligned with the bend frame/);
+    if (annular) assert.match(description.values.sketch, /A closed circle accepts a disk with an optional concentric bore/);
+    if (rectangular) assert.match(description.values.sketch, /A closed circle accepts [^.]*aligned rectangle/);
     const summary = await call('query', { action: 'summary' });
     const source = summary.direct_curves.find(candidate => candidate.id === rail.id);
     assert.ok(source?.revision);

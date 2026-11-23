@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1762: [Sweep a centered rectangular opening around a closed circle](notes/exact-closed-rectangular-duct-2026-11-23/README.md), #10. Verify both native shells, editable cavity, fresh Open and explicit Agent approval.
 - D1761: [Sweep an aligned rectangle around a closed circle](notes/exact-closed-rectangular-sweep-2026-11-23/README.md), #10. Verify eight native half-walls, all 16 edges, width editing, fresh Open and explicit Agent approval.
 - D1760: [Extract the selected placed part actions from Studio App](notes/studio-selected-instance-actions-2026-11-23/README.md), #44. Match Move, Rotate, Duplicate and Fix through desktop geometry, refusals, History and fresh Open.
 - D1759: [Resize a saved angle-constrained Sketch Chamfer](notes/edit-saved-oblique-sketch-chamfer-2026-11-23/README.md), #21. Verify the two setbacks through numeric and physical edits, fresh Open and explicit Agent approval.

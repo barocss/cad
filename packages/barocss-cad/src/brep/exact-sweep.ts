@@ -459,9 +459,10 @@ function closedRectanglePlaneBinding(edge: Curve, surface: Surface, tolerance: n
 }
 
 /** Preserve both canonical edge charts on the four annular half-walls and four cylinder half-walls. */
-function bindClosedRectangle(brep: Brep, tolerance: number): Brep | undefined {
-  if (brep.bodies.length !== 1 || brep.shells.length !== 1 || !brep.shells[0].closed
-    || brep.shells[0].faces.length !== 8 || brep.faces.length !== 8 || brep.coedges.length !== 32) return;
+function bindClosedRectangle(brep: Brep, tolerance: number, shellCount: 1 | 2): Brep | undefined {
+  if (brep.bodies.length !== 1 || brep.shells.length !== shellCount
+    || brep.shells.some(shell => !shell.closed || shell.faces.length !== 8)
+    || brep.faces.length !== 8 * shellCount || brep.coedges.length !== 32 * shellCount) return;
   const facesByLoop = new Map(brep.faces.flatMap(face => face.loops.map(loop => [loop, face] as const)));
   const edges = new Map(brep.edges.map(edge => [edge.id, edge])), bound = new Set<string>(), coedges: BrepCoedge[] = [];
   for (const { id, edge, sense, loop, next, prev, twin } of brep.coedges) {
@@ -625,12 +626,13 @@ function rectangularElbowSection(rectangle: NonNullable<ReturnType<typeof rectan
 }
 
 function closedRectangularRing(id: string, section: JoinedSection, tolerance: number, sideTags: SideTags | undefined, refuse: Refuse): SweepSolid {
-  const { profile, bendCentre: [dx, dy], radialReach, extent } = section, radius = Math.hypot(dx, dy);
+  const { profile, opening, bendCentre: [dx, dy], radialReach, extent } = section, radius = Math.hypot(dx, dy);
   const clearance = () => refuse('PARAMETER', 'Exact closed-circle rectangular sweep needs radial half-width smaller than the path radius.');
   if (!(radius - radialReach > tolerance)) return clearance();
-  const revolve: RevolveInput = { id, profile, axis: { origin: [dx, dy], direction: [-dy, dx] }, angle: 360, sideTags: sideTags?.outer };
+  const revolve: RevolveInput = { id, profile, axis: { origin: [dx, dy], direction: [-dy, dx] }, angle: 360, sideTags: sideTags?.outer,
+    ...(opening ? { holes: [opening.profile], holeTags: sideTags?.holes } : {}) };
   const ring = revolveSweepProfile(revolve, { minimum: tolerance, refuse: clearance });
-  const brep = bindClosedRectangle(ring, 128 * Number.EPSILON * Math.max(1, radius + extent));
+  const brep = bindClosedRectangle(ring, 128 * Number.EPSILON * Math.max(1, radius + extent), opening ? 2 : 1);
   if (!brep) return refuse('GEOMETRY', 'The exact closed-circle rectangular sweep could not bind the native ring seams.');
   return { brep, mass: density => revolveMassProperties(revolve, density) };
 }
@@ -999,13 +1001,12 @@ export function exactSweep(input: ExactSweepInput, refuse: Refuse): SweepSolid {
   if (closed) {
     const rectangle = profileRadius === undefined ? rectangleSection(outer) : undefined;
     if (rectangle) {
-      if (holes.length) return refuse('CAPABILITY', 'Exact closed-circle rectangular sweep does not support holes.');
       if (closed.radius > CadNumericPolicy.coordinateAbs)
         return refuse('PARAMETER', 'Exact closed-circle sweep path radius must be at most 10000 mm.');
-      const { section, axes } = rectangularElbowSection(rectangle, [], frame(closed.tangent), closed, refuse, 'closed-circle rectangular');
+      const { section, axes } = rectangularElbowSection(rectangle, holes, frame(closed.tangent), closed, refuse, 'closed-circle rectangular');
       const result = place(closedRectangularRing(id, section, closed.tolerance, sideTags, refuse), axes, closed.start);
-      const report = checkBrep(result.brep, { strict: true });
-      if (!report.valid || report.topology.length !== 1 || report.topology[0].shells !== 1 || report.topology[0].genus !== 1)
+      const report = checkBrep(result.brep, { strict: true }), shellCount = section.opening ? 2 : 1;
+      if (!report.valid || report.topology.length !== 1 || report.topology[0].shells !== shellCount || report.topology[0].genus !== shellCount)
         return refuse('GEOMETRY', 'The exact closed-circle rectangular sweep did not produce one valid closed ring.');
       return result;
     }
