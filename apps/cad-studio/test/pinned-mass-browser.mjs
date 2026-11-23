@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { createFlow } from './flow-helper.mjs';
-const pins=['apps/cad-studio/src/App.tsx','apps/cad-studio/src/viewport/Viewport.tsx','apps/cad-studio/src/app/pinnedMass.ts','apps/cad-studio/src/state/usePinnedMass.ts','apps/cad-studio/src/ui/PinnedMassControls.tsx','apps/cad-studio/test/pinned-mass-browser.mjs'];
+const pins=['apps/cad-studio/src/App.tsx','apps/cad-studio/src/app/useStudioMeasurementReadouts.tsx','apps/cad-studio/src/viewport/Viewport.tsx','apps/cad-studio/src/app/pinnedMass.ts','apps/cad-studio/src/state/usePinnedMass.ts','apps/cad-studio/src/ui/PinnedMassControls.tsx','apps/cad-studio/test/pinned-mass-browser.mjs'];
 const f=await createFlow({name:'pinned-mass',output:process.argv[2],envFrozen:'PINNED_MASS_FROZEN',initialFiles:pins,requiredFrozen:pins,
  qualification:'Two native ordinary cubes: explicit session COM, all-member hidden retention and accepted material updates.',
  limits:['Candidate failure, delayed mass delivery, project/worker reset and manufacturing previews are not exercised here. No dynamics or safety approval.'],

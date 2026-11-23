@@ -4,6 +4,7 @@ import { clickModelCommand } from './model-rail-helper.mjs';
 const f = await createFlow({
   name: 'pinned-face-save-file', output: process.argv[2], envFrozen: 'PINNED_FACE_FILE_FROZEN',
   initialFiles: ['apps/cad-studio/test/pinned-face-save-file-browser.mjs', 'apps/cad-studio/test/model-rail-helper.mjs'],
+  requiredFrozen: ['apps/cad-studio/src/App.tsx', 'apps/cad-studio/src/app/useStudioMeasurementReadouts.tsx'],
   qualification: 'Actual native download while a face measurement is pinned; independent JSON file read and fresh-context Open.',
   limits: ['Default-XY rectangular Extrude opposite caps only. No geometry accuracy, broader topology, native-folder or Worker race requalification.'],
   oracleSource: `import json,sys,hashlib

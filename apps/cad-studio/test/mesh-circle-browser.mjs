@@ -6,7 +6,7 @@ import {clickModelCommand} from './model-rail-helper.mjs';
 const repo=resolve(import.meta.dirname,'../../..'),output=process.argv[2];
 assert.ok(output&&isAbsolute(output)&&relative(repo,output).startsWith('../'),'artifacts must be outside the repository');
 const fixture='packages/barocss-cad-model/test/fixtures/block-cm.stl';
-const pins=[fixture,'apps/cad-studio/test/model-rail-helper.mjs','apps/cad-studio/test/mesh-circle-browser.mjs','apps/cad-studio/src/App.tsx',
+const pins=[fixture,'apps/cad-studio/test/model-rail-helper.mjs','apps/cad-studio/test/mesh-circle-browser.mjs','apps/cad-studio/src/App.tsx','apps/cad-studio/src/app/useStudioMeasurementReadouts.tsx',
  'apps/cad-studio/src/app/useMeshCircleMeasurement.ts','apps/cad-studio/src/ui/MeshCircleInspector.tsx','apps/cad-studio/src/ui/MeasurementInspector.tsx',
  'apps/cad-studio/src/viewport/vertexPick.ts','apps/cad-studio/src/viewport/useViewportPicking.ts',
  'packages/barocss-cad-model/src/engine/mesh.ts','packages/barocss-cad-model/src/app/meshCircle.ts'];

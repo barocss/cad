@@ -1,15 +1,11 @@
 import { useStudioSheetPatterns } from './app/useStudioSheetPatterns';
 import { prepareParameterPatternHoleSpacing } from './state/parameterPatternHoleSpacing';
 import { useNamedInspection } from './state/useNamedInspection';
-import { useMeshCircleMeasurement, type MeshCircleHit } from './app/useMeshCircleMeasurement';
-import { MeshCircleInspector } from './ui/MeshCircleInspector';
+import { useStudioMeasurementReadouts, useStudioMeasurementSession } from './app/useStudioMeasurementReadouts';
 import { selectedInstanceActions } from './assembly/selectedInstanceActions';
 import { pickPlacedPart } from './assembly/groundSelection';
 import { SelectedInstancesPanel } from './ui/SelectedInstancesPanel';
 import { commitOutlineRotation } from './sketch/outlineRotationCommit';
-import { usePinnedFaceReadout, usePinnedFaceSession } from './state/usePinnedFaceMeasurement';
-import { usePinnedMass } from './state/usePinnedMass';
-import { PinnedMassControls } from './ui/PinnedMassControls';
 import { useDirectPoleEditor } from './state/useDirectPoleEditor';
 import { SavedBezierPicker } from './ui/SavedBezierPicker';
 import { currentCoordinateFeedback } from './sketch/coordinateFeedback';
@@ -93,9 +89,9 @@ import { DirectBrowserRows, SketchBrowserRows } from './ui/BrowserGeometryRows';
 import { ModelBrowser } from './ui/ModelBrowser';
 import { RequirementsBrowser } from './ui/RequirementsBrowser';
 import { DesignHistory } from './ui/DesignHistory';
-import { MeasurementInspector, PinnedMeasurement, InterferenceInspector } from './ui/MeasurementInspector';
+import { InterferenceInspector } from './ui/MeasurementInspector';
 import { useInterferenceCheck } from './state/useInterferenceCheck';
-import { measurementLineFor, useLiveMeasurement } from './state/useLiveMeasurement';
+import { useLiveMeasurement } from './state/useLiveMeasurement';
 import { SelectionInspector } from './ui/SelectionInspector';
 import { useDirectCurveCurvature } from './app/useDirectCurveCurvature';
 import { useNativeEdgeInspection } from './app/useNativeEdgeInspection';
@@ -154,7 +150,7 @@ import type { FriendlyError } from '@barocss/cad-model/engine/errors';
 import type { Vec3 } from '@barocss/cad-model/engine/mesh';
 import { carrySelection, commands, patchValues, refOf, selectedBodies, subdNodeOf, type Command, type Ctx, type Selection, type Values } from '@barocss/cad-model/app/commands';
 import type { MeasurePick } from '@barocss/cad-model/app/measure';
-import { captureMeasureTarget, type MeasureTarget, type PlacedMeasureSource } from './app/measureTargets';
+import { captureMeasureTarget, type PlacedMeasureSource } from './app/measureTargets';
 import { hostsOf, nestedCard, renderKeysOf, singleNested, singleTop, viewportInstanceSelection } from './assembly/nestedSelection';
 import { NestedPartPanel } from './ui/NestedPartPanel';
 import { offsetFaceLaunchView } from './viewport/offsetFaceLaunchView';
@@ -702,13 +698,9 @@ export function App() {
   /** The body whose browser row the pointer is on (lit in the viewport). */
   const [rowHover, setRowHover] = useState<number | null>(null);
   const [browserOpen, setBrowserOpen] = useState(() => { try { return localStorage.getItem('cad-studio.browser') !== 'closed'; } catch { return true; } });
-  // Measuring: up to two picked faces or edges (null: not measuring).
-  const [measure, setMeasure] = useState<MeasureTarget[] | null>(null);
-  const meshCirclePick = useRef<((hit: MeshCircleHit) => boolean) | null>(null);
-  const [measurementFocus, setMeasurementFocus] = useState(false);
-  const measureNativeReady = useRef(false);
-  const pinnedFaces = usePinnedFaceSession(docGeneration, workerSession, project.view.store);
-  const clearPinnedFaces = pinnedFaces.clear;
+  const measurementSession = useStudioMeasurementSession(docGeneration, workerSession, project.view.store);
+  const { measure, setMeasure, meshCirclePick, measurementFocus, setMeasurementFocus,
+    measureNativeReady, pinnedFaces, clearPinnedFaces } = measurementSession;
   // The SubD cage editor (R8.2, D81): a session on one subd node; Done commits it (see commitRef: commit is defined below).
   const commitRef = useRef<(next: StudioDoc) => void>(() => {});
   const cageEdRef = useRef<ReturnType<typeof useCageEditor>>(null!);
@@ -2275,28 +2267,21 @@ export function App() {
   sectionPickRef.current = viewportSelection.sectionPick;
   const pinView = !rendering && !drawing && !sketch;
   const massPinView = pinView && previewMode === 'none';
-  const massPinSession = useMemo(() => ({}), [docGeneration, workerSession, project.view.store]);
-  const massPinCurrent = fresh && shownDoc === doc && marker === null && !inPlace && !doc.instances?.length && !workerFailure;
-  const massPin = usePinnedMass({ session: massPinSession, doc, bodies, current: massPinCurrent,
-    canPin: massPinView && !busy && !active && !measure && !directSel.length && !instanceSel.length
-      && !selection.faces.length && !selection.edges.length && !selection.vertices?.length,
-    selected: selection.bodies, material });
-
   const pinReady = pinView && nativeVertexReady && shownDoc === doc && !workerFailure
     && !bodyDrag && !ghost && !workingComparison && !cageEd.session && !skel.session
     && !routePanelOpen && !previewBodies && !routePreviewBodies && !halvesShownRef.current
     && viewBodies === drawnBodies && sameMeshes(drawnBodies, bodies);
-  const meshCircleSession = useMemo(() => ({}), [workerSession, docGeneration, project.view.store]);
-  const meshCircle = useMeshCircleMeasurement(doc, bodies, meshCircleSession, measure !== null, pinReady && !exploded && !assembly.draft && !stepsDisp && !isolatedInstances);
-  meshCirclePick.current = meshCircle.pick;
-  measureNativeReady.current = pinReady;
-  const pinnedReadout = usePinnedFaceReadout({
-    session: pinnedFaces, doc, bodies, ready: pinReady, picks: liveMeasurement.picks, targetCount: measure?.length,
-    isCurrent: () => measureNativeReady.current && docNow.current === doc && workerSessionNow.current === workerSession,
-    stopMeasuring: () => setMeasure(null),
+  const massPinIdle = !active && !measure && !directSel.length && !instanceSel.length;
+  const measurementReadouts = useStudioMeasurementReadouts({
+    session: measurementSession,
+    model: { doc, bodies, isCurrent: () => docNow.current === doc && workerSessionNow.current === workerSession },
+    live: liveMeasurement,
+    view: { showActive: fresh && !rendering && !sketch, showPin: pinView, nativeReady: pinReady,
+      meshCircleReady: pinReady && !exploded && !assembly.draft && !stepsDisp && !isolatedInstances, pickFilter },
+    mass: { show: massPinView, idle: massPinIdle, material, selected: selection.bodies,
+      current: fresh && shownDoc === doc && marker === null && !inPlace && !doc.instances?.length && !workerFailure,
+      canPin: massPinView && massPinIdle && !busy && !selection.faces.length && !selection.edges.length && !selection.vertices?.length },
   });
-  const measurementLine = measurementLineFor(measure ? liveMeasurement.result : pinnedReadout.result,
-    measure !== null && liveMeasurement.approximateDistance);
   const sketchTool = sketch?.tool;
   const usesNativeCrossings = sketchTool === 'rectangle' || sketchTool === 'polygon' || sketchTool === 'arc' || sketchTool === 'circle' || sketchTool === 'carc';
   const crossingBodies = usesNativeCrossings && fresh && !busy && shownDoc === doc && marker === null && !inPlace && !doc.instances?.length
@@ -2655,10 +2640,7 @@ export function App() {
         onFov={deg => { const c = viewport.current?.getCamera(); if (c) { viewport.current?.setCamera({ ...c, fovY: deg * Math.PI / 180 }); setFov(deg); } }}
         onSaveCamera={() => { const c = viewport.current?.getCamera(); if (c) commitRender({ ...render, camera: c }); }}
         onUseCamera={() => { if (render.camera) { viewport.current?.setCamera(render.camera); setFov(Math.round(render.camera.fovY * 180 / Math.PI)); } }} /></Suspense>}
-      {fresh && !rendering && !sketch && measure && meshCircle.mode && <MeshCircleInspector state={meshCircle.state} ready={meshCircle.ready} onReset={meshCircle.reset} onBack={() => { meshCircle.choose(false); setMeasure([]); }} onClose={() => { meshCircle.choose(false); setMeasure(null); }} />}
-      {fresh && !rendering && !sketch && measure && !meshCircle.mode && <MeasurementInspector onMeshCircle={() => { meshCircle.choose(true); setMeasure([]); }} pickFilter={pickFilter} targets={measure} items={liveMeasurement.items ?? []} measured={liveMeasurement.result} approximateDistance={liveMeasurement.approximateDistance} onClose={() => setMeasure(null)} onPin={pinnedReadout.pin} />}
-      {massPinView && (massPin.pinned || (!active && !measure && !directSel.length && !instanceSel.length)) && <PinnedMassControls pinned={massPin.pinned} result={massPin.result} canPin={massPin.canPin} onPin={massPin.pin} onClear={massPin.clear} />}
-      {pinView && pinnedFaces.pair && !measure && <PinnedMeasurement distance={pinnedReadout.result?.normalDistance ?? null} onClear={clearPinnedFaces} />}
+      {measurementReadouts.panel}
       {cutDraft && !rendering && !sketch && !measure && <AssemblyCutHud draft={cutDraft} instances={doc.instances ?? NO_INSTANCES} problem={cutEditor.problem()}
         onChange={cutEditor.change} onAddSelected={cutEditor.addSelected} onApply={cutEditor.apply} onCancel={cutEditor.cancel} />}
       {!rendering && !sketch && !measure && !!nestedSelected && (() => {
@@ -2825,8 +2807,8 @@ export function App() {
           const shown = selBodies.length ? selBodies : bodies, box = shown.length ? boundsOf(shown) : null;
           return box ? { ...box, label: [0, 1, 2].map(k => fmt(Math.round((box.max[k] - box.min[k]) * 100) / 100)).join(' × ') } : null;
         })() : null}
-        centreOfMass={massPinView && massPin.result?.ok ? massPin.result.centroid : null}
-        measureLine={measurementLine} />
+        centreOfMass={measurementReadouts.centreOfMass}
+        measureLine={measurementReadouts.measurementLine} />
 
       <TooltipLayer />
       <Profiler id="toolbar" onRender={onBlockRender}><nav className={'card toolbar' + (sketch ? '' : ' model-toolbar')} aria-label="Tools" hidden={rendering || drawing}>
