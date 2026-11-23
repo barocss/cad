@@ -1,18 +1,17 @@
 import { checkBrep, stepGeometryRecipeKey, type Brep } from '@barocss/cad';
-import { rectanglePart, withNode, type StudioDoc } from './doc';
+import { emptyDoc, rectanglePart, withNode, type StudioDoc } from './doc';
 import { exportStudioStep, partBreps } from './evaluate';
 import { addParameters, bindParameter } from './parameters';
 import { stepLengthUnit } from './stepUnits';
 
-export type EditableStepCopy = { doc: StudioDoc; named?: StudioDoc } | { error: string };
+export type EditableStepCopy = { family: 'plate' | 'shaft'; doc: StudioDoc; named?: StudioDoc } | { error: string };
 
-const unsupported = 'Use one millimetre STEP solid with rectangular stock on XY and one round through hole along Z. Its exact faces and boundaries must match the editable recipe.';
+const unsupported = 'Use one millimetre STEP solid that matches a supported recipe: a rectangular plate with one through hole or a two-step shaft.';
 
-function plateTopology(brep: Brep): boolean {
+function recipeTopology(brep: Brep): boolean {
   return brep.bodies.length === 1 && brep.bodies[0].kind === 'solid'
     && brep.shells.length === 1 && brep.shells[0].closed
-    && brep.faces.length === 8 && brep.loops.length === 10 && brep.coedges.length === 36
-    && brep.edges.length === 18 && brep.vertices.length === 12
+    && brep.loops.length === 10 && brep.coedges.length === 36 && brep.edges.length === 18
     && brep.coedges.every(use => use.pcurve === null);
 }
 
@@ -32,6 +31,26 @@ function plateRecipe(brep: Brep): StudioDoc | undefined {
   if (!(radius > 0 && left > 0 && right < width && y - radius > 0 && y + radius < depth)) return;
   return withNode(rectanglePart(width, depth, height), {
     kind: 'hole', parent: { node: 1, side: 'solid' }, center: [left + radius, y], radius,
+  });
+}
+
+function shaftRecipe(brep: Brep): StudioDoc | undefined {
+  const points = brep.vertices.map(vertex => vertex.point);
+  const levels = [...new Set(points.map(point => point[2]))].sort((a, b) => a - b);
+  if (levels.length !== 3 || levels[0] !== 0) return;
+  const groups = levels.map(z => points.filter(point => point[2] === z));
+  if (groups[0].length !== 3 || groups[1].length !== 4 || groups[2].length !== 3) return;
+  const endRadius = (group: typeof points) => {
+    if (!group.some(([x, y]) => x === 0 && y === 0)) return;
+    const seams = group.filter(([x, y]) => x > 0 && y === 0);
+    if (seams.length === 1) return seams[0][0];
+  };
+  // The positive-X seam is exact. The opposite seam can have a small Y value from the half turn.
+  const start = endRadius(groups[0]), end = endRadius(groups[2]);
+  if (!start || !end || start === end) return;
+  return withNode(emptyDoc(), {
+    kind: 'shaft', generator: 'shaft@0', center: [0, 0],
+    steps: [{ diameter: 2 * start, length: levels[1] }, { diameter: 2 * end, length: levels[2] - levels[1] }],
   });
 }
 
@@ -65,15 +84,19 @@ export function editableStepCopy(source: StudioDoc, includeNamed = false): Edita
     if (!unit.declared || unit.to !== 1) return { error: 'The STEP file must declare millimetres.' };
     const originalKey = stepGeometryRecipeKey(node.step);
     const outputs = partBreps(source);
-    if (outputs.length !== 1 || !plateTopology(outputs[0].brep)) return { error: unsupported };
-    const imported = outputs[0].brep, candidate = plateRecipe(imported);
+    if (outputs.length !== 1 || !recipeTopology(outputs[0].brep)) return { error: unsupported };
+    const imported = outputs[0].brep;
+    const family = imported.faces.length === 8 && imported.vertices.length === 12 ? 'plate'
+      : imported.faces.length === 10 && imported.vertices.length === 10 ? 'shaft' : undefined;
+    if (!family) return { error: unsupported };
+    const candidate = family === 'plate' ? plateRecipe(imported) : shaftRecipe(imported);
     if (!candidate) return { error: unsupported };
     const check = checkBrep(imported, { strict: true });
-    if (!check.valid || check.topology[0]?.genus !== 1) return { error: unsupported };
+    if (!check.valid || check.topology[0]?.genus !== (family === 'plate' ? 1 : 0)) return { error: unsupported };
     const step = exportStudioStep(candidate, { name: 'Editable check' }).text;
     if (stepGeometryRecipeKey(step) !== originalKey) return { error: unsupported };
-    const named = includeNamed ? withNamedDrivers(candidate, originalKey) : undefined;
-    return { doc: candidate, ...(named ? { named } : {}) };
+    const named = includeNamed && family === 'plate' ? withNamedDrivers(candidate, originalKey) : undefined;
+    return { family, doc: candidate, ...(named ? { named } : {}) };
   } catch {
     return { error: unsupported };
   }

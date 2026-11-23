@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1843: [Reconstruct a two-step shaft from STEP](notes/editable-step-shaft-copy-2026-11-24/README.md), #320. Qualify exact stages and shoulder, editable dimensions, refusal and fresh Open in Studio.
 - D1842: [Review an editable STEP copy and include named drivers](notes/review-named-step-plate-copy-2026-11-24/README.md), #320. Verify explicit Save, Cancel, source change and three native parameter bindings through fresh Open.
 - D1841: [Save an editable copy of a STEP plate](notes/editable-step-plate-copy-2026-11-24/README.md), #320. Qualify the original solid and edits to the new Sketch, Extrude and Hole copy in desktop Studio.
 - D1840: [Extract Studio history controls from App](notes/studio-history-controls-2026-11-24/README.md), #44. Verify document and draft replay, labels and native project lifecycle in desktop Studio.

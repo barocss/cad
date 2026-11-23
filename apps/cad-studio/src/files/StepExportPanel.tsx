@@ -15,7 +15,7 @@ function EditableStepCopyPanel({ controller, preview }: { controller: ModelExpor
       saveEditableCopy(new FormData(event.currentTarget).has('named'));
     }}>
       {preview.stage === 'ready' && <>
-        <div className="kv"><span>New features</span><b>Sketch, Extrude, Hole</b></div>
+        <div className="kv"><span>New features</span><b>{preview.features}</b></div>
         <p className="muted">Copies the solid geometry. Original history and metadata are not included.</p>
         {preview.parameterNames.length > 0 && <label className="kv">
           <span>Named thickness and hole centre</span> <input type="checkbox" name="named" />

@@ -101,3 +101,49 @@ test('optional named drivers bind actual feature values without changing the ini
   assert.deepEqual(read.doc.nodes, named.nodes);
   checkPhysical(read.doc, 14, 14, 3);
 });
+
+const shaft = (lower: [number, number], upper: [number, number], center: [number, number] = [0, 0]) =>
+  withNode(emptyDoc(), {
+    kind: 'shaft', generator: 'shaft@0', center,
+    steps: [lower, upper].map(([diameter, length]) => ({ diameter, length })),
+  });
+
+test('reconstructs both orders of a two-step shaft without fitting a circle', async () => {
+  for (const [d0, d1] of [[20, 12], [12, 20]]) {
+    const authored = shaft([d0, 12], [d1, 8]), source = imported(stepOf(authored));
+    const result = editableStepCopy(source, true);
+    assert.ok('doc' in result, JSON.stringify(result));
+    assert.equal(result.family, 'shaft');
+    assert.equal(result.named, undefined);
+    assert.deepEqual(result.doc.nodes, authored.nodes);
+    const reopened = await readStudioFile(encodeStudioFile(result.doc));
+    assert.ok('doc' in reopened);
+    const [base, end] = [Math.PI * (d0 / 2) ** 2 * 12, Math.PI * (d1 / 2) ** 2 * 8];
+    const expected = base + end, z = (6 * base + 16 * end) / expected;
+    for (const doc of [source, reopened.doc]) {
+      const report = evaluateDoc(doc, 1);
+      assert.ok(report.ok);
+      assert.equal(report.bodies.length, 1);
+      assert.ok(Math.abs(report.bodies[0].volume! - expected) < 1e-8);
+      assert.ok(report.bodies[0].centroid?.every((v, axis) => Math.abs(v - (axis === 2 ? z : 0)) < 1e-8));
+    }
+  }
+});
+
+test('rejects other shaft geometry, including a valid same-count translation', () => {
+  const original = shaft([20, 12], [12, 8]);
+  const feature = original.nodes[0];
+  assert.ok(feature.kind === 'shaft');
+  const variants = [
+    shaft([20, 12], [12, 8], [1, 0]),
+    { ...original, nodes: [{ ...feature, rotation: 10 }] },
+    { ...original, nodes: [{ ...feature, steps: [...feature.steps, { diameter: 10, length: 6 }] }] },
+    { ...original, nodes: [{ ...feature, chamfers: [1, 0] as [number, number] }] },
+    { ...original, nodes: [{ ...feature, steps: [{ ...feature.steps[0], fillet: 1 }, feature.steps[1]] }] },
+  ];
+  const [moved] = partBreps(imported(stepOf(variants[0])));
+  const movedCheck = checkBrep(moved.brep, { strict: true });
+  assert.ok(movedCheck.valid);
+  assert.deepEqual(movedCheck.counts, checkBrep(partBreps(imported(stepOf(original)))[0].brep).counts);
+  for (const variant of variants) assert.ok('error' in editableStepCopy(imported(stepOf(variant))));
+});

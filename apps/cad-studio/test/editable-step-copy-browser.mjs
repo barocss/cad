@@ -3,6 +3,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createFlow, sha256 } from './flow-helper.mjs';
 
+const shaftMode = process.argv.includes('--shaft');
 const pins = [
   'apps/cad-studio/test/editable-step-copy-browser.mjs',
   'apps/cad-studio/src/files/useModelExports.ts',
@@ -13,15 +14,16 @@ const pins = [
   'packages/barocss-cad/src/io/step-import.ts',
 ];
 const f = await createFlow({
-  name: 'editable-step-copy', output: process.argv[2], envFrozen: 'D1842_SOURCE_FROZEN',
+  name: 'editable-step-copy', output: process.argv[2], envFrozen: 'EDITABLE_STEP_COPY_SOURCE_FROZEN',
   initialFiles: pins, requiredFrozen: pins,
-  qualification: 'Review, cancel, invalidate and save numeric and named native copies of one anonymous STEP plate in desktop Studio.',
-  limits: ['One positive writer-profile plate; no recovery of original history, external reader, or arbitrary STEP support.'],
+  qualification: shaftMode ? 'Recover and edit the two exact axial stages of an anonymous STEP shaft in desktop Studio.'
+    : 'Review, cancel, invalidate and save numeric and named native copies of one anonymous STEP plate in desktop Studio.',
+  limits: ['One positive exact writer-profile part per run. No recovery of original history, external reader or arbitrary STEP support.'],
   inspectorSource: `
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { checkBrep, faceGeometry, massPropertiesOf } from '@barocss/cad';
-import { rectanglePart, withNode } from '@barocss/cad-model/engine/doc';
+import { emptyDoc, rectanglePart, withNode } from '@barocss/cad-model/engine/doc';
 import { exportStudioStep } from '@barocss/cad-model/engine/evaluate';
 import { partSnapshot } from '@barocss/cad-model/engine/part';
 if (process.argv[3]) {
@@ -31,6 +33,10 @@ if (process.argv[3]) {
   const plate = withNode(stock, { kind: 'hole', parent: { node: 1, side: 'solid' }, center: [11, 9], radius: 3 });
   writeFileSync(join(output, 'unlabelled.step'), stepOf(plate).replace(/#(\\d+)/g, (_, n) => '#' + (Number(n) + 1000)));
   writeFileSync(join(output, 'plain-stock.step'), stepOf(stock));
+  const axial = center => withNode(emptyDoc(), { kind: 'shaft', generator: 'shaft@0', center,
+    steps: [{ diameter: 20, length: 12 }, { diameter: 12, length: 8 }] });
+  writeFileSync(join(output, 'anonymous-shaft.step'), stepOf(axial([0, 0])).replace(/#(\\d+)/g, (_, n) => '#' + (Number(n) + 1000)));
+  writeFileSync(join(output, 'shifted-shaft.step'), stepOf(axial([1, 0])));
   console.log('{}');
 } else {
   const doc = JSON.parse(readFileSync(process.argv[2], 'utf8'));
@@ -43,6 +49,7 @@ if (process.argv[3]) {
       return [{ geometry, span: [Math.min(...heights), Math.max(...heights)] }];
     }),
     vertices: out.brep.vertices.map(vertex => vertex.point),
+    planes: out.brep.faces.map(face => faceGeometry(face)).filter(g => g.kind === 'plane'),
   }))));
 }
 `,
@@ -94,18 +101,18 @@ async function beginReview() {
   await panel.waitFor();
   return panel;
 }
-async function saveCopy(panel, file) {
+async function saveCopy(panel, file, name = 'unlabelled-editable.bcad') {
   const save = button('Save copy', panel);
   await f.page.waitForFunction(() => !document.querySelector('[aria-label="Editable STEP copy"] button[type=submit]')?.disabled);
   const [download] = await Promise.all([f.page.waitForEvent('download'), save.click()]);
-  assert.equal(download.suggestedFilename(), 'unlabelled-editable.bcad');
+  assert.equal(download.suggestedFilename(), name);
   await download.saveAs(file);
   await panel.waitFor({ state: 'hidden' });
   await f.waitToast(/Editable copy written/);
   return JSON.parse(await readFile(file, 'utf8'));
 }
 
-await f.run(async () => {
+async function plateFlow() {
   await f.inspect('00-anonymous-source-generation', {}, f.output);
   const sourceFile = join(f.output, 'unlabelled.step'), original = await readFile(sourceFile);
   await f.newPage();
@@ -227,4 +234,98 @@ await f.run(async () => {
   }
   assert.deepEqual(await readFile(sourceFile), original);
   f.report.observations.push({ sourceSHA256: sha256(original), unchanged: true });
-});
+}
+
+async function shaftPhysical(label, doc, first, second) {
+  const [r0, length0] = first, [r1, length1] = second;
+  const [out, extra] = await f.inspect(label, doc);
+  assert.ok(out && !extra);
+  assert.ok(out.check.valid, JSON.stringify(out.check.issues));
+  assert.equal(out.check.topology[0].genus, 0);
+  const v0 = Math.PI * r0 ** 2 * length0, v1 = Math.PI * r1 ** 2 * length1;
+  const volume = v0 + v1, centroid = (v0 * length0 / 2 + v1 * (length0 + length1 / 2)) / volume;
+  near(out.mass.volume, volume);
+  near(out.mass.centroid[0], 0); near(out.mass.centroid[1], 0); near(out.mass.centroid[2], centroid);
+  assert.equal(out.walls.length, 4);
+  const wallGroups = [out.walls.filter(wall => wall.span[0] === 0), out.walls.filter(wall => wall.span[0] === length0)];
+  for (const [index, walls] of wallGroups.entries()) {
+    assert.equal(walls.length, 2);
+    for (const { geometry: { c, a, r, out: sense }, span } of walls) {
+      near(c[0], 0); near(c[1], 0); near(Math.abs(a[2]), 1); near(r, index === 0 ? r0 : r1);
+      assert.equal(sense, 1);
+      assert.deepEqual(span, index === 0 ? [0, length0] : [length0, length0 + length1]);
+    }
+  }
+  const planes = out.planes.map(plane => {
+    near(Math.abs(plane.n[2]), 1);
+    return plane.o[2];
+  }).sort((a, b) => a - b);
+  assert.deepEqual(planes, [0, 0, length0, length0, length0 + length1, length0 + length1]);
+  f.report.observations.push({ label, expected: volume, volume: out.mass.volume, centroid: out.mass.centroid, planes, walls: out.walls });
+}
+
+async function shaftFlow() {
+  await f.inspect('00-shaft-geometry-only', {}, f.output);
+  const sourceFile = join(f.output, 'anonymous-shaft.step'), original = await readFile(sourceFile);
+  await f.newPage();
+  await pickFile(sourceFile, 'import');
+  const source = await f.doc();
+  assert.equal(source.nodes[0].step, original.toString());
+  await shaftPhysical('01-imported-shaft-native', source, [10, 12], [6, 8]);
+  const panel = await beginReview();
+  await panel.getByText('Shaft', { exact: true }).waitFor();
+  assert.equal(await panel.getByRole('checkbox').count(), 0);
+  assert.equal(f.report.downloads.length, 0);
+  await f.snapshot('01-source-review');
+  const copyFile = join(f.output, 'anonymous-shaft-editable.bcad');
+  const copy = await saveCopy(panel, copyFile, 'anonymous-shaft-editable.bcad');
+  await f.same(source);
+  assert.deepEqual(copy.nodes, [{ id: 'n0', kind: 'shaft', generator: 'shaft@0', center: [0, 0],
+    steps: [{ diameter: 20, length: 12 }, { diameter: 12, length: 8 }] }]);
+  await pickFile(copyFile, 'shaft');
+  await f.same(copy);
+  await shaftPhysical('02-shaft-copy-native', copy, [10, 12], [6, 8]);
+  await f.openFeatureEditor(0, 'Shaft');
+  const field = name => f.editor().getByRole('spinbutton', { name, exact: true });
+  assert.equal(await field('Step 2 Ø').inputValue(), '12');
+  assert.equal(await field('Step 1 length').inputValue(), '12');
+  await field('Step 2 Ø').fill('14');
+  await field('Step 1 length').fill('15');
+  await f.snapshot('02-shaft-step-editor');
+  const editable = (await f.applyEditor(copy, '03-steps-updated')).doc;
+  assert.deepEqual(editable.nodes, [{ ...copy.nodes[0], steps: [{ diameter: 20, length: 15 }, { diameter: 14, length: 8 }] }]);
+  await shaftPhysical('03-updated-native', editable, [10, 15], [7, 8]);
+  await f.openFeatureEditor(0, 'Equal diameters refused');
+  await field('Step 2 Ø').fill('20');
+  await button('Apply', f.editor()).click();
+  await f.editor().getByText('Kernel detail', { exact: true }).click();
+  await f.editor().getByText(/make them one step/i).waitFor();
+  await f.same(editable);
+  await f.snapshot('04-equal-diameters-refused');
+  await f.closeEditor();
+  await f.undo(); await f.same(copy);
+  await f.redo(); await f.same(editable);
+  const file = await f.save('edited-two-step-shaft');
+  await f.freshOpen(file.file, file.doc, '05-shaft-fresh-open');
+  await shaftPhysical('05-reopened-native', editable, [10, 15], [7, 8]);
+  await f.openFeatureEditor(0, 'Shaft after fresh Open');
+  await field('Step 2 length').fill('10');
+  const extended = (await f.applyEditor(editable, '06-reopened-shaft-extended')).doc;
+  await shaftPhysical('06-reopened-edit-native', extended, [10, 15], [7, 10]);
+  await pickFile(sourceFile, 'import');
+  await f.same(source);
+  assert.deepEqual(await readFile(sourceFile), original);
+  const shifted = join(f.output, 'shifted-shaft.step'), shiftedStep = await readFile(shifted, 'utf8');
+  await pickFile(shifted, 'import');
+  await f.page.waitForFunction(step => window.__studioDoc?.nodes[0]?.step === step, shiftedStep);
+  const before = await f.doc(), downloads = f.report.downloads.length;
+  const refused = await beginReview();
+  await refused.getByRole('alert').waitFor();
+  assert.equal(await button('Save copy', refused).isDisabled(), true);
+  assert.equal(f.report.downloads.length, downloads);
+  await f.same(before);
+  await f.snapshot('07-same-topology-shift-refused');
+  f.report.observations.push({ sourceSHA256: sha256(original), unchanged: true });
+}
+
+await f.run(shaftMode ? shaftFlow : plateFlow);

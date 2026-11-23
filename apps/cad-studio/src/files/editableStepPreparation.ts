@@ -5,7 +5,7 @@ import type { StepOwner } from './stepExportPreparation';
 type Owner = Pick<StepOwner, 'doc' | 'evaluated' | 'shown' | 'name' | 'fresh' | 'hasBody'>;
 export type EditableStepPreview =
   | { stage: 'checking'; name: string }
-  | { stage: 'ready'; name: string; parameterNames: readonly string[] }
+  | { stage: 'ready'; name: string; features: string; parameterNames: readonly string[] }
   | { stage: 'error'; name: string; error: string };
 
 interface Options {
@@ -42,7 +42,8 @@ export function createEditableStepPreparation(options: Options) {
     if (!owns(owner)) { cancel(); return; }
     if ('error' in copy) { options.changed({ stage: 'error', name, error: copy.error }); return; }
     request.copy = copy;
-    options.changed({ stage: 'ready', name, parameterNames: Object.keys(copy.named?.parameters ?? {}) });
+    options.changed({ stage: 'ready', name, features: copy.family === 'plate' ? 'Sketch, Extrude, Hole' : 'Shaft',
+      parameterNames: Object.keys(copy.named?.parameters ?? {}) });
   };
   const save = (named: boolean) => {
     if (!active?.copy) return;
