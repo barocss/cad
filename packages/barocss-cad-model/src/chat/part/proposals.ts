@@ -14,6 +14,7 @@ import { directReviewRevision } from '../directProposalReview';
 import { cornerBatchProposal, savedChamferResizeProposal } from '../cornerProposalReview';
 import { boredWallProposal } from '../modelProposalReview';
 import { pairedElbowInletProposal, pairedElbowOutletProposal } from '../pairedElbowOutletProposalReview';
+import { pairedElbowOutletPlaneProposal } from '../pairedElbowOutletPlaneProposalReview';
 import { rectangularDuctProposal } from '../rectangularDuctProposalReview';
 import { rectangularDuctIntersectionProposal } from '../rectangularDuctIntersectionProposalReview';
 import { DIRECT_SNAPSHOT_APPROVAL, isDirectThickenOperation, isRuledThickenOperation } from '../directThickenProposal';
@@ -412,7 +413,7 @@ async function listProposalsTool(state: ChatState, args: Record<string, unknown>
       : boredWallProposal(state.doc, p)?.revision ?? cornerBatchProposal(state.doc, p)?.revision
         ?? savedChamferResizeProposal(state.doc, p)?.revision ?? rectangularDuctProposal(state.doc, p)?.revision
         ?? rectangularDuctIntersectionProposal(state.doc, p)?.revision ?? pairedElbowOutletProposal(state.doc, p)?.revision
-        ?? pairedElbowInletProposal(state.doc, p)?.revision;
+        ?? pairedElbowInletProposal(state.doc, p)?.revision ?? pairedElbowOutletPlaneProposal(state.doc, p)?.revision;
     return { ...details, ops: ops.length, stale: proposalIsStale(p, revision),
       ...(p.status === 'open' ? { proposalRevision: proposalRevisionOf(p) } : {}),
       ...(direct ? { directReviewRevision: direct } : {}),

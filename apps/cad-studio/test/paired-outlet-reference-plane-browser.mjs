@@ -1,12 +1,14 @@
 import assert from 'node:assert/strict';
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { render } from './duct-proposal-review-browser-steps.mjs';
 import { createFlow } from './flow-helper.mjs';
 import { currentPartRevision, withMcpSession } from './mcp-browser-session.mjs';
 
 const solid = node => ({ node, side: 'solid' });
 const outlet = 'n1.end';
-const agent = process.argv.includes('--agent');
+const agentReview = process.argv.includes('--agent-review');
+const agent = agentReview || process.argv.includes('--agent');
 const input = {
   format: 'barocss-cad-model', schema: 3, units: 'mm', parameters: {}, nextId: 5,
   nodes: [
@@ -28,9 +30,14 @@ const pins = ['apps/cad-studio/test/paired-outlet-reference-plane-browser.mjs', 
   ...['engine/doc', 'engine/offsetPlane', 'app/nativeOffsetFace', 'app/offsetFaceEdit', 'app/profileCommands', 'app/offsetPlanePick']
     .map(path => `packages/barocss-cad-model/src/${path}.ts`),
   ...(agent ? ['apps/cad-studio/test/mcp-browser-session.mjs', 'apps/cad-studio/src/ui/ProposalBrowser.tsx',
-    ...['features', 'proposals'].map(file => `packages/barocss-cad-model/src/chat/part/${file}.ts`)] : [])];
+    ...['features', 'proposals'].map(file => `packages/barocss-cad-model/src/chat/part/${file}.ts`)] : []),
+  ...(agentReview ? ['apps/cad-studio/test/duct-proposal-review-browser-steps.mjs',
+    'packages/barocss-cad-model/src/chat/pairedElbowOutletPlaneProposalReview.ts',
+    'packages/barocss-cad-model/src/chat/part/modelCandidate.ts',
+    'packages/barocss-cad-model/src/chat/part/views.ts'] : [])];
 const f = await createFlow({
-  name: 'paired-outlet-reference-plane', output: process.argv[2], envFrozen: agent ? 'D1855_SOURCE_FROZEN' : 'D1854_SOURCE_FROZEN',
+  name: 'paired-outlet-reference-plane', output: process.argv[2],
+  envFrozen: agentReview ? 'D1856_SOURCE_FROZEN' : agent ? 'D1855_SOURCE_FROZEN' : 'D1854_SOURCE_FROZEN',
   initialFiles: pins, requiredFrozen: pins,
   qualification: agent ? '#324 proposes a revision-bound outlet plane edit through local MCP and real Studio review.'
     : '#17 moves the original five-span paired outlet to a live parallel native face in desktop Studio.',
@@ -117,11 +124,61 @@ async function verify(label, doc, original, key, face, x) {
   return { part, donor };
 }
 
+async function reviewAgentImages(file, call, request, expectedRevision) {
+  const bytes = await readFile(file);
+  const { proposals: [proposal] } = await call('proposals', { action: 'list' });
+  assert.match(proposal.modelReviewRevision, /^[a-f0-9]{64}$/);
+  const pins = { expectedRevision, proposal: 'P1', expectedProposalRevision: proposal.modelReviewRevision };
+  const normal = await render(request, pins), opposite = await render(request, { ...pins, orientation: 'opposite' });
+  assert.notDeepEqual(normal.png, opposite.png);
+  assert.notEqual(normal.meta.candidate.reviewRevision, opposite.meta.candidate.reviewRevision);
+  assert.equal(normal.meta.candidate.bodySha256, opposite.meta.candidate.bodySha256);
+  const geometry = normal.meta.pairedElbowOutletPlaneOffset;
+  assert.deepEqual(geometry, opposite.meta.pairedElbowOutletPlaneOffset);
+  assert.deepEqual([geometry.source.body, geometry.source.feature, geometry.source.face], ['b1', 'n1', outlet]);
+  assert.deepEqual([geometry.reference.body, geometry.reference.feature, geometry.reference.face], ['b4', 'n4', 'n3.side3']);
+  assert.deepEqual([geometry.candidate.body, geometry.candidate.feature, geometry.candidate.face], ['b5', 'n5', outlet]);
+  assert.equal(geometry.candidate.bodySha256, normal.meta.candidate.bodySha256);
+  for (const entity of [geometry.source, geometry.reference, geometry.candidate]) {
+    assert.match(entity.bodySha256, /^[a-f0-9]{64}$/);
+    assert.equal(typeof entity.faceId, 'string');
+    assert.ok(entity.faceId.length > 0);
+  }
+  assert.equal(geometry.source.faceId, geometry.candidate.faceId);
+  assert.deepEqual(geometry.reference.target.body, solid(4));
+  assert.deepEqual([geometry.originalCap.center, geometry.movedCap.center], [[36, 38, 0], [40, 38, 0]]);
+  assert.deepEqual(geometry.displacement, { normal: [1, 0, 0], vector: [4, 0, 0] });
+  assert.equal(geometry.movedCap.apertures.length, 2);
+  const joins = geometry.retained.junctions.flatMap(join => join.exteriorSeams.concat(...join.interiorSeams));
+  assert.equal(new Set(joins).size, 48);
+  near(geometry.materialChange.native, 128);
+  near(geometry.volume.candidate.native, 32 * (28 + 15 * Math.PI));
+  const inspect = { ...pins, action: 'inspect', faces: [outlet, 'n3.side3'], expectedReviewRevision: normal.meta.candidate.reviewRevision };
+  const first = await call('query', inspect), second = await call('query', { ...inspect, orientation: 'opposite',
+    expectedReviewRevision: opposite.meta.candidate.reviewRevision });
+  assert.deepEqual(first.pairedElbowOutletPlaneOffset, geometry);
+  assert.deepEqual(first.faces, second.faces);
+  assert.equal(first.imageSha256, normal.meta.imageSha256);
+  assert.equal(second.imageSha256, opposite.meta.imageSha256);
+  for (const face of first.faces) near(face.geometry.point[0], 40);
+  assert.equal(first.faces.length, 2);
+  assert.equal((await call('query', { ...inspect, orientation: 'opposite' }, true)).code, 'MODEL_REVIEW_IMAGE_STALE');
+  assert.equal((await call('query', { ...inspect, expectedProposalRevision: '0'.repeat(64) }, true)).code, 'MODEL_REVIEW_PROPOSAL_STALE');
+  assert.deepEqual(await readFile(file), bytes);
+  await writeFile(join(f.output, 'pending-reference-normal.png'), normal.png);
+  await writeFile(join(f.output, 'pending-reference-opposite.png'), opposite.png);
+  f.report.observations.push({ label: 'pinned-agent-review', geometry, pins,
+    normal: normal.meta.candidate, opposite: opposite.meta.candidate,
+    normalImage: normal.meta.imageSha256, oppositeImage: opposite.meta.imageSha256 });
+  return { geometry, inspect };
+}
+
 async function exerciseAgent() {
   const file = join(f.output, 'agent-reference-proposal.bcad'), originalBytes = Buffer.from(JSON.stringify(input));
   await writeFile(file, originalBytes);
   f.phase = 'Propose the paired native outlet through local MCP';
-  await withMcpSession({ app: f.app, output: f.output, clientName: f.name }, file, 'paired-outlet-reference', async call => {
+  const session = { app: f.app, output: f.output, clientName: f.name };
+  const reviewed = await withMcpSession(session, file, 'paired-outlet-reference', async (call, request) => {
     const description = await call('describe', { command: 'offset-face' });
     assert.match(description.selection, /original five-span outlet accepts To plane/);
     const expectedRevision = await currentPartRevision(call);
@@ -142,6 +199,7 @@ async function exerciseAgent() {
     const savedPending = await readFile(file);
     assert.match((await call('proposals', { action: 'accept', id: 'P1' }, true)).error, /user accepts.*studio/i);
     assert.deepEqual(await readFile(file), savedPending);
+    if (agentReview) return reviewAgentImages(file, call, request, expectedRevision);
   });
   const pending = JSON.parse(await readFile(file, 'utf8'));
   assert.deepEqual(pending.nodes, input.nodes);
@@ -176,6 +234,14 @@ async function exerciseAgent() {
   assert.equal(moved.nodes.length, input.nodes.length);
   assert.equal(moved.proposals[0].status, 'open');
   await f.snapshot('04-agent-stale-no-approval');
+  if (reviewed) {
+    const stale = await f.save('agent-stale-reference');
+    await withMcpSession(session, stale.file, 'stale-outlet-reference', async call => {
+      assert.equal((await call('query', reviewed.inspect, true)).code, 'MODEL_REVIEW_BASE_STALE');
+      const { proposals: [proposal] } = await call('proposals', { action: 'list' });
+      assert.equal(proposal.modelReviewRevision, undefined);
+    });
+  }
 
   const card = await openCard('05-agent-fresh-reference');
   await previewCard(card, '06-agent-preview-before-approval');
@@ -189,6 +255,11 @@ async function exerciseAgent() {
   assert.deepEqual([approved.history.at(-1).by.agent, approved.proposals[0].status], ['user', 'accepted']);
   const result = await verify('agent-approved-native', approved, original, 'b5', 'n3.side3', 40);
   assert.equal(result.donor.hash, donor.hash);
+  if (reviewed) {
+    assert.deepEqual(feature.target, reviewed.geometry.reference.target);
+    assert.equal(result.part.hash, reviewed.geometry.candidate.bodySha256);
+    assert.equal(result.donor.hash, reviewed.geometry.reference.bodySha256);
+  }
   const saved = await f.save('agent-approved-reference');
   await f.freshOpen(saved.file, approved, '08-agent-fresh-open');
   assert.equal((await verify('agent-reopened-native', approved, original, 'b5', 'n3.side3', 40)).part.hash, result.part.hash);
