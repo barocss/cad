@@ -163,7 +163,6 @@ import { NestedPartPanel } from './ui/NestedPartPanel';
 import { offsetFaceLaunchView } from './viewport/offsetFaceLaunchView';
 import { DRAG_TYPE, snapshotInstanceIsolation, type Spot, type SketchState, type ViewportHandle } from './viewport/Viewport';
 import { Button } from '@/components/ui/button';
-import { ToolIconButton } from '@/components/ui/tool-button';
 import { countRender, onBlockRender } from './devRenders';
 import { OutlinerInstances } from './ui/OutlinerInstances';
 import { OutlinerCuts } from './ui/OutlinerCuts';
@@ -189,7 +188,7 @@ import { useInstanceGizmo } from './assembly/useInstanceGizmo';
 import type { CamOptions } from './viewport/camDisplay';
 import { withPrintPreviewSettings, type PrintPreviewPatch } from './viewport/printSettings';
 import { isRefusal, refusal } from '@barocss/cad-model/engine/refusal';
-import { Icon } from './ui/atoms';
+import { StudioNoticeStack } from './ui/StudioNoticeStack';
 import { FlatPatternDialog } from './ui/FlatPatternDialog';
 import { CutListDialog } from './ui/CutListDialog';
 import { StudioTopBar } from './ui/StudioTopBar';
@@ -2979,34 +2978,19 @@ export function App() {
       {cutListView && (() => { const list = partCutList(doc, bodies, material); return list ? <CutListDialog list={list} nesting={nestCutList(doc, list)} name={fileName.replace(/[^\w.-]+/g, '_')} onClose={() => setCutListView(false)} /> : null; })()}
       {flatView && (() => { const fb = flatView.body; return sameSheetRuleSource(flatView.source, sheetRuleCurrent(), fb) && fb.flat ? <FlatPatternDialog bendActions={flangeBendActions(fb, flatView.source)} onEditSharedRules={sheetRuleAction(fb, flatView.source)} flat={fb.flat} name={`${fileName}-${bodyName(doc, fb)}`.replace(/[^\w.-]+/g, '_')} onClose={() => setFlatView(null)} /> : null; })()}
       {!workerFailure && <MeshFileDialogs controller={meshImport}><ModelExportDialogs controller={modelExports} /></MeshFileDialogs>}
-      {/* (Notices stack in one column: an Open failure still shows while a recovery copy waits for its answer.) */}
-      <div className="toast-stack">
-      {recovery && <div className="toast card recovery" role="dialog" aria-label="Recover unsaved work">
-        <Icon name="history" className="accent" />
-        <div><div className="toast-title">Unsaved work from {new Date(recovery.savedAt).toLocaleString()}</div>
-          <div className="toast-hint">“{recovery.fileName}” was not saved. Restore it, or discard the copy.</div>
-          <div className="row-actions">
-            <button className="primary" onClick={async () => {
-              if (sessionBlocked('restoring unsaved work')) return;
-              const missing = await loadRecoveryBlobs(recovery.doc);
-              if (missing.length) { setToast({ title: 'Could not restore', hint: `The copy's mesh data is gone from this browser (${missing.length} array${missing.length > 1 ? 's' : ''}). Open the mesh file again.`, detail: '' }); clearRecovery(); setRecovery(null); return; }
-              // (A whole document replaced, as New and Open do: a running command, its preview and the picks of the
-              // document shown before do not carry into the restored one. The project link is kept, as before.)
-              replaceDoc(recovery.doc, 'project'); if (docNow.current !== recovery.doc) return;
-              setFileName(recovery.fileName); settleRecovery(); setRecovery(null); setTimeout(() => viewport.current?.fit(), 300);
-            }}>Restore</button>
-            <button className="ghost" onClick={() => { settleRecovery(); setRecovery(null); void collectRecoveryBlobs(dirty ? doc : null); }}>Discard</button>
-          </div></div>
-      </div>}
-      <DeleteDependentsDialog request={cascade} onCancel={() => setCascade(null)} onDelete={deleteCascade} />
-      {toast && (workerFailure || (!cascade && !meshAsk && !repairAsk && !stepAsk && !stlAsk)) && <div className="toast card" role="alert">
-        <Icon name="info" className="accent" />
-        <div><div className="toast-title">{toast.title}</div><div className="toast-hint">{toast.hint}</div>
-          {toast.detail && <details><summary>Details</summary><code>{toast.detail}</code></details>}
-          {toast.action && <div className="row-actions"><button className="ghost" onClick={toast.action.run}>{toast.action.label}</button></div>}</div>
-        {!workerFailure && <ToolIconButton aria-label="Dismiss" onClick={() => setToast(null)}><Icon name="close" small /></ToolIconButton>}
-      </div>}
-      </div>
+      <StudioNoticeStack recovery={recovery} notice={workerFailure || (!cascade && !meshAsk && !repairAsk && !stepAsk && !stlAsk) ? toast : null}
+        restoreRecovery={async () => {
+          if (!recovery || sessionBlocked('restoring unsaved work')) return;
+          const missing = await loadRecoveryBlobs(recovery.doc);
+          if (missing.length) { setToast({ title: 'Could not restore', hint: `The copy's mesh data is gone from this browser (${missing.length} array${missing.length > 1 ? 's' : ''}). Open the mesh file again.`, detail: '' }); clearRecovery(); setRecovery(null); return; }
+          // Restore the document through the same replacement path used by New and Open.
+          replaceDoc(recovery.doc, 'project'); if (docNow.current !== recovery.doc) return;
+          setFileName(recovery.fileName); settleRecovery(); setRecovery(null); setTimeout(() => viewport.current?.fit(), 300);
+        }}
+        discardRecovery={() => { settleRecovery(); setRecovery(null); void collectRecoveryBlobs(dirty ? doc : null); }}
+        dismissNotice={workerFailure ? undefined : () => setToast(null)}>
+        <DeleteDependentsDialog request={cascade} onCancel={() => setCascade(null)} onDelete={deleteCascade} />
+      </StudioNoticeStack>
       </div>
       <Dock width={layout.dockWidth} docked={dockDocked} sheet={layout.dockSheet} onSheet={open => { if (!open) { cancelLocalCandidateReview(); cancelNativeReview(); } layout.setDockSheet(open); }}>
         {browserPlacement === 'dock' && browserPanel}

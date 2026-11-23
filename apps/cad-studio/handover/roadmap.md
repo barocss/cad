@@ -1,13 +1,13 @@
 # CAD roadmap — current status and execution order
 
-Updated 2026-11-23 · Priority authority: D520 · Latest delivery: D1780 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
+Updated 2026-11-23 · Priority authority: D520 · Latest delivery: D1781 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
 
 This is the only current status index. Detailed tracks define acceptance; the 34 stable row pages retain scope and issue navigation. Immutable decision notes retain results. Do not append chronological status paragraphs here. [D520 decision](notes/cad-roadmap-replan-2026-11-04/README.md) supersedes D445 execution order and historical next-item text, while retaining its safeguards and bounded proofs.
 
 ## Now and next
 
-- **Current position:** [D1780](notes/pending-grouped-sketch-chamfer-resize-review-2026-11-23/README.md), P1 rows 09 and 16. The local Agent reviews the grouped right and oblique saved Chamfer resize, both setbacks and their original carrier planes. Both images match the approved body after Studio fresh Open. The B06 PDF group remains held.
-- **Next MAIN:** D1781, P4 row [22](roadmap-rows/22.md), [#44](https://github.com/barocss/cad/issues/44). Extract Studio notice and unsaved recovery rendering from App. Verify click-through, dismissal and recovery on desktop.
+- **Current position:** [D1781](notes/studio-notice-recovery-rendering-2026-11-23/README.md), P4 row 22. Notice and recovery rendering move out of App. Desktop click-through, dismissal and restored history match. The B06 PDF group remains held.
+- **Next MAIN:** D1782, P5 rows [07](roadmap-rows/07.md) and [30](roadmap-rows/30.md), [#10](https://github.com/barocss/cad/issues/10). Check a line–arc Exact Sweep with two separated rectangular apertures. Verify both open ends, native joins and editing after fresh Open.
 - **Separate follow-ups:** Continue Studio App extraction in cohesive parts with affected desktop checks. [#608 Rendering](https://github.com/barocss/cad/issues/608) stays on HOLD. API inventory drift remains open. The issue tracker records [#126](https://github.com/barocss/cad/issues/126), [#613](https://github.com/barocss/cad/issues/613), [#152](https://github.com/barocss/cad/issues/152) and [#22](https://github.com/barocss/cad/issues/22) as closed.
 - **Active repository:** [barocss/cad](https://github.com/barocss/cad), based on `origin/main`. Fetch before work and preserve unexpected changes. The [migration record](../../../docs/migration/README.md) maps the former `local/cad-dev` history and issue numbers.
 - **Evidence correction:** D482 records2167 PASS/0 FAIL/2 existing SKIP in a later full-kernel run than D433. Neither result is a new full-suite PASS at this audit HEAD. [D482 record](notes/vertical-contact-refusal-2026-11-04/README.md).
