@@ -1,9 +1,10 @@
 import { checkBrep, stepGeometryRecipeKey, type Brep } from '@barocss/cad';
 import { rectanglePart, withNode, type StudioDoc } from './doc';
 import { exportStudioStep, partBreps } from './evaluate';
+import { addParameters, bindParameter } from './parameters';
 import { stepLengthUnit } from './stepUnits';
 
-export type EditableStepCopy = { doc: StudioDoc } | { error: string };
+export type EditableStepCopy = { doc: StudioDoc; named?: StudioDoc } | { error: string };
 
 const unsupported = 'Use one millimetre STEP solid with rectangular stock on XY and one round through hole along Z. Its exact faces and boundaries must match the editable recipe.';
 
@@ -34,8 +35,24 @@ function plateRecipe(brep: Brep): StudioDoc | undefined {
   });
 }
 
+function withNamedDrivers(candidate: StudioDoc, originalKey: string): StudioDoc | undefined {
+  const [, extrusion, hole] = candidate.nodes;
+  if (extrusion?.kind !== 'extrude' || typeof extrusion.height !== 'number' || hole?.kind !== 'hole') return;
+  const [x, y] = hole.center;
+  if (typeof x !== 'number' || typeof y !== 'number') return;
+  try {
+    let named = addParameters(candidate, { plateThickness: extrusion.height, holeCentreX: x, holeCentreY: y });
+    named = bindParameter(named, { feature: 1, value: 'h', parameter: 'plateThickness' });
+    named = bindParameter(named, { feature: 2, value: 'c0', parameter: 'holeCentreX' });
+    named = bindParameter(named, { feature: 2, value: 'c1', parameter: 'holeCentreY' });
+    if (stepGeometryRecipeKey(exportStudioStep(named, { name: 'Editable check' }).text) === originalKey) return named;
+  } catch {
+    // The numeric copy has its own certificate and remains available.
+  }
+}
+
 /** Produce a separate, new history only when the full imported boundary matches a native recipe. */
-export function editableStepCopy(source: StudioDoc): EditableStepCopy {
+export function editableStepCopy(source: StudioDoc, includeNamed = false): EditableStepCopy {
   const node = source.nodes[0];
   if (source.nodes.length !== 1 || node?.kind !== 'import' || (node.solids ?? 1) !== 1 || source.instances?.length)
     return { error: 'Open one STEP solid in its own document.' };
@@ -55,7 +72,8 @@ export function editableStepCopy(source: StudioDoc): EditableStepCopy {
     if (!check.valid || check.topology[0]?.genus !== 1) return { error: unsupported };
     const step = exportStudioStep(candidate, { name: 'Editable check' }).text;
     if (stepGeometryRecipeKey(step) !== originalKey) return { error: unsupported };
-    return { doc: candidate };
+    const named = includeNamed ? withNamedDrivers(candidate, originalKey) : undefined;
+    return { doc: candidate, ...(named ? { named } : {}) };
   } catch {
     return { error: unsupported };
   }

@@ -244,7 +244,7 @@ self.onmessage = (event: MessageEvent<WorkerRequest>) => {
   } else if (request.type === 'step') {
     (self as unknown as Worker).postMessage({ id: request.id, step: stepReply(receiveStepMetadata(request.doc, request.metadata), request.name, request.meshes, request.rootScope) });
   } else if (request.type === 'editableStepCopy') {
-    post({ id: request.id, copy: editableStepCopy(request.doc) });
+    post({ id: request.id, copy: editableStepCopy(request.doc, true) });
   } else {
     try {
       const bytes = stlFor(request.doc, request.key, request.options);

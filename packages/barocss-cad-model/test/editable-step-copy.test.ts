@@ -83,3 +83,21 @@ test('rejects conflicting context units, missing geometry, duplicate records and
     assert.ok('error' in editableStepCopy(imported(altered)));
   }
 });
+
+test('optional named drivers bind actual feature values without changing the initial solid', async () => {
+  const source = imported(geometry), result = editableStepCopy(source, true);
+  assert.ok('doc' in result && result.named, JSON.stringify(result));
+  const { named } = result;
+  assert.deepEqual(named.parameters, { plateThickness: 10, holeCentreX: 11, holeCentreY: 9 });
+  const [, extrude, hole] = named.nodes;
+  assert.ok(extrude.kind === 'extrude' && hole.kind === 'hole');
+  assert.deepEqual(extrude.height, { parameter: 'plateThickness' });
+  assert.deepEqual(hole.center, [{ parameter: 'holeCentreX' }, { parameter: 'holeCentreY' }]);
+  assert.equal(hole.radius, 3);
+  checkPhysical(named, 10, 11, 3);
+  const revised = { ...named, parameters: { ...named.parameters, plateThickness: 14, holeCentreX: 14 } };
+  const read = await readStudioFile(encodeStudioFile(revised));
+  assert.ok('doc' in read);
+  assert.deepEqual(read.doc.nodes, named.nodes);
+  checkPhysical(read.doc, 14, 14, 3);
+});

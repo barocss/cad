@@ -18,6 +18,7 @@ import { placedLooksOf } from '../state/useInstanceLooks';
 import type { EngineClient } from '../engine/client';
 import { downloadBytes, lumpStls, meshToStl } from '../ui/files';
 import { createStepPreparation, type StepPreview, type StepMeshes } from './stepExportPreparation';
+import { createEditableStepPreparation, type EditableStepPreview } from './editableStepPreparation';
 import { writeDocumentFile } from './documentFile';
 
 export interface ModelExportContext {
@@ -73,34 +74,27 @@ export function useModelExports({ model, engine, fileName, current, onNotice }: 
     notice: hint => stepLatest.current.onNotice({ title: 'STEP not prepared', hint, detail: '' }),
     download: (bytes, name, captured) => { downloadBytes(bytes, name, 'model/step'); const warning = draftWarning(captured); if (warning) stepLatest.current.onNotice({ title: 'STEP written as a draft', hint: warning, detail: '' }); },
   });
-  const clearStepAsk = stepControl.current.cancel;
-  useEffect(() => { stepControl.current?.reconcile(); }, [doc, evaluated, model.shown, fileName, fresh, busy, instanceBodies, model.instancesFresh]);
-  useEffect(() => () => stepControl.current?.dispose(), []);
-  const [editableCopyBusy, setEditableCopyBusy] = useState(false);
-  const editableCopyPending = useRef(false);
-  const exportEditableCopy = async () => {
-    const owner = currentStepOwner(stepLatest.current);
-    if (!owner.fresh || editableCopyPending.current) return;
-    const owns = () => {
-      const next = currentStepOwner(stepLatest.current);
-      return next.fresh && next.doc === owner.doc && next.evaluated === owner.evaluated && next.shown === owner.shown && next.name === owner.name;
-    };
-    editableCopyPending.current = true;
-    setEditableCopyBusy(true);
-    const refuse = (hint: string) => onNotice({ title: 'Could not make an editable copy', hint, detail: '' });
-    try {
-      const copy = await engine.editableStepCopy(owner.doc);
-      if (!owns()) return;
-      if ('error' in copy) { refuse(copy.error); return; }
-      writeDocumentFile(copy.doc, `${owner.name}-editable.bcad`);
-      onNotice({ title: 'Editable copy written', hint: 'Open the BCAD copy to edit the new Sketch, Extrude and Hole. The STEP document is unchanged.', detail: '' });
-    } catch (error) {
-      if (owns()) refuse(error instanceof Error ? error.message : String(error));
-    } finally {
-      editableCopyPending.current = false;
-      setEditableCopyBusy(false);
-    }
-  };
+  const [editablePreview, setEditablePreview] = useState<EditableStepPreview | null>(null);
+  const copyControl = useRef<ReturnType<typeof createEditableStepPreparation> | null>(null);
+  if (!copyControl.current) copyControl.current = createEditableStepPreparation({
+    current: () => currentStepOwner(stepLatest.current),
+    prepare: source => stepLatest.current.engine.editableStepCopy(source),
+    changed: setEditablePreview,
+    write: (candidate, name) => {
+      const notice = stepLatest.current.onNotice;
+      try {
+        writeDocumentFile(candidate, name);
+        notice({ title: 'Editable copy written', hint: 'Open the BCAD copy to edit its new features.', detail: '' });
+      } catch (error) {
+        notice({ title: 'Could not write the editable copy', hint: error instanceof Error ? error.message : String(error), detail: '' });
+      }
+    },
+  });
+  const clearStepAsk = () => { stepControl.current?.cancel(); copyControl.current?.cancel(); };
+  useEffect(() => { stepControl.current?.reconcile(); copyControl.current?.reconcile(); },
+    [doc, evaluated, model.shown, fileName, fresh, busy, instanceBodies, model.instancesFresh]);
+  useEffect(() => () => { stepControl.current?.dispose(); copyControl.current?.dispose(); }, []);
+  const reviewEditableCopy = () => { stepControl.current?.cancel(); return copyControl.current!.prepare(); };
   const [stlAsk, setStlAsk] = useState(false), [stlQuality, setStlQuality] = useState<'automatic' | '8' | '16' | '32'>('automatic'), [stlBusy, setStlBusy] = useState(false);
   const stlHasPlacedParts = model.shown.instances?.some(i => !i.hidden) ?? false;
   const stlPlacedHint = stlQuality === 'automatic' ? stlPlacedLoss : 'Draft, Standard and Fine require no visible placed parts.';
@@ -110,6 +104,7 @@ export function useModelExports({ model, engine, fileName, current, onNotice }: 
   const cancelStlExport = () => { stlGeneration.current++; stlPending.current = false; setStlBusy(false); setStlAsk(false); };
   const askStlExport = () => { stlGeneration.current++; stlPending.current = false; setStlBusy(false); setStlQuality('automatic'); setStlAsk(true); };
   const exportStepFile = async (choice?: StepMeshes, rootScope: StudioStepRootScope = 'all') => {
+    copyControl.current?.cancel();
     const meshes = choice ?? lastStepMeshes();
     try { localStorage.setItem('studio.stepMeshes', meshes); } catch { /* private mode */ }
     await stepControl.current!.prepare(meshes, rootScope);
@@ -258,10 +253,11 @@ export function useModelExports({ model, engine, fileName, current, onNotice }: 
   const changeStlQuality = (value: string) => {
     if (value === 'automatic' || value === '8' || value === '16' || value === '32') { stlGeneration.current++; setStlQuality(value); }
   };
-  return { stepAsk: !!stepPreview, stepPreview, downloadStep, stlAsk, stlQuality, stlBusy, stlLossHint, stlTargets, stlCancelButton, clearStepAsk, changeStlQuality,
+  return { stepAsk: !!stepPreview || !!editablePreview, stepPreview, downloadStep, stlAsk, stlQuality, stlBusy, stlLossHint, stlTargets, stlCancelButton, clearStepAsk, changeStlQuality,
     askStlExport, cancelStlExport, exportStepFile, exportStl, exportQuote, exportThreeMf,
+    editablePreview, saveEditableCopy: copyControl.current.save,
     editableCopy: doc.nodes.length === 1 && doc.nodes[0].kind === 'import'
-      ? { run: exportEditableCopy, disabled: busy || !fresh || editableCopyBusy } : undefined };
+      ? { run: reviewEditableCopy, disabled: busy || !fresh || editablePreview?.stage === 'checking' } : undefined };
 }
 
 export type ModelExportController = ReturnType<typeof useModelExports>;

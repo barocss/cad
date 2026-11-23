@@ -6,14 +6,16 @@ import { createFlow, sha256 } from './flow-helper.mjs';
 const pins = [
   'apps/cad-studio/test/editable-step-copy-browser.mjs',
   'apps/cad-studio/src/files/useModelExports.ts',
+  'apps/cad-studio/src/files/editableStepPreparation.ts',
+  'apps/cad-studio/src/files/StepExportPanel.tsx',
   'apps/cad-studio/src/engine/engine.worker.ts',
   'packages/barocss-cad-model/src/engine/editableStepCopy.ts',
   'packages/barocss-cad/src/io/step-import.ts',
 ];
 const f = await createFlow({
-  name: 'editable-step-copy', output: process.argv[2], envFrozen: 'D1841_SOURCE_FROZEN',
+  name: 'editable-step-copy', output: process.argv[2], envFrozen: 'D1842_SOURCE_FROZEN',
   initialFiles: pins, requiredFrozen: pins,
-  qualification: 'Edit the separate native copy of one anonymous STEP plate with one through bore in desktop Studio.',
+  qualification: 'Review, cancel, invalidate and save numeric and named native copies of one anonymous STEP plate in desktop Studio.',
   limits: ['One positive writer-profile plate; no recovery of original history, external reader, or arbitrary STEP support.'],
   inspectorSource: `
 import { readFileSync, writeFileSync } from 'node:fs';
@@ -55,7 +57,7 @@ const pickFile = async (path, kind) => {
 };
 const near = (value, expected) => assert.ok(Number.isFinite(value) && Math.abs(value - expected) < 1e-8, `${value} != ${expected}`);
 
-async function physical(label, doc, height, x, radius) {
+async function physical(label, doc, height, x, radius, y = 9) {
   const rows = await f.inspect(label, doc);
   assert.equal(rows.length, 1);
   const [out] = rows;
@@ -63,7 +65,7 @@ async function physical(label, doc, height, x, radius) {
   assert.ok(out.check.valid, JSON.stringify(out.check.issues));
   assert.equal(out.check.topology[0].genus, 1);
   near(out.mass.volume, expected);
-  const centroid = [(24000 - x * bore) / area, (18000 - 9 * bore) / area, height / 2];
+  const centroid = [(24000 - x * bore) / area, (18000 - y * bore) / area, height / 2];
   out.mass.centroid.forEach((value, i) => near(value, centroid[i]));
   const max = [40, 30, height];
   max.forEach((dimension, i) => {
@@ -72,17 +74,35 @@ async function physical(label, doc, height, x, radius) {
   });
   assert.equal(out.walls.length, 2);
   for (const { geometry: { c, a, r, out: sense }, span } of out.walls) {
-    near(c[0], x); near(c[1], 9); near(r, radius); near(Math.abs(a[2]), 1);
+    near(c[0], x); near(c[1], y); near(r, radius); near(Math.abs(a[2]), 1);
     assert.equal(sense, -1); assert.deepEqual(span, [0, height]);
   }
   f.report.observations.push({ label, expected, volume: out.mass.volume, centroid: out.mass.centroid, walls: out.walls });
 }
 
 async function editableTool() {
-  const tool = button('Save editable STEP copy');
+  const tool = button('Review editable STEP copy');
   if (!(await tool.isVisible())) await button('More tools').click();
   assert.equal(await tool.locator('[data-ui-icon="file_copy"]').count(), 1);
   return tool;
+}
+
+const reviewPanel = () => f.page.getByRole('region', { name: 'Editable STEP copy', exact: true });
+async function beginReview() {
+  await (await editableTool()).click();
+  const panel = reviewPanel();
+  await panel.waitFor();
+  return panel;
+}
+async function saveCopy(panel, file) {
+  const save = button('Save copy', panel);
+  await f.page.waitForFunction(() => !document.querySelector('[aria-label="Editable STEP copy"] button[type=submit]')?.disabled);
+  const [download] = await Promise.all([f.page.waitForEvent('download'), save.click()]);
+  assert.equal(download.suggestedFilename(), 'unlabelled-editable.bcad');
+  await download.saveAs(file);
+  await panel.waitFor({ state: 'hidden' });
+  await f.waitToast(/Editable copy written/);
+  return JSON.parse(await readFile(file, 'utf8'));
 }
 
 await f.run(async () => {
@@ -95,15 +115,30 @@ await f.run(async () => {
   assert.equal(source.nodes[0].step, original.toString());
   await physical('01-source-native', source, 10, 11, 3);
   await f.snapshot('01-imported-step');
-  const tool = await editableTool();
-  const [download] = await Promise.all([f.page.waitForEvent('download'), tool.click()]);
-  assert.equal(download.suggestedFilename(), 'unlabelled-editable.bcad');
-  const copyFile = join(f.output, download.suggestedFilename());
-  await download.saveAs(copyFile);
-  await f.waitToast(/Editable copy written/);
+  const copyFile = join(f.output, 'unlabelled-editable.bcad'), plainFile = join(f.output, 'plain-stock.step');
+  const plainBytes = await readFile(plainFile, 'utf8');
+  let panel = await beginReview();
+  await panel.getByText('Sketch, Extrude, Hole', { exact: true }).waitFor();
+  assert.equal(f.report.downloads.length, 0);
+  await f.same(source);
+  await f.snapshot('01a-review-no-download');
+  await button('Cancel', panel).click();
+  await panel.waitFor({ state: 'hidden' });
+  assert.equal(f.report.downloads.length, 0);
+  await f.same(source);
+  panel = await beginReview();
+  await panel.getByText('Sketch, Extrude, Hole', { exact: true }).waitFor();
+  await pickFile(plainFile, 'import');
+  await f.page.waitForFunction(step => window.__studioDoc?.nodes[0]?.step === step, plainBytes);
+  await panel.waitFor({ state: 'hidden' });
+  assert.equal(f.report.downloads.length, 0);
+  await f.snapshot('01b-changed-source-cancels-review');
+  await pickFile(sourceFile, 'import');
+  await f.same(source);
+  panel = await beginReview();
+  const copy = await saveCopy(panel, copyFile);
   await f.same(source);
   await f.snapshot('02-copy-written-source-unchanged');
-  const copy = JSON.parse(await readFile(copyFile, 'utf8'));
   assert.deepEqual(copy.nodes.map(node => [node.id, node.kind]), [['n0', 'sketch'], ['n1', 'extrude'], ['n2', 'hole']]);
   assert.deepEqual(copy.parameters, {});
   await pickFile(copyFile, 'hole');
@@ -130,7 +165,7 @@ await f.run(async () => {
   await f.openFeatureEditor(2, 'Hole outside stock');
   await centre.fill('80');
   await button('Apply', f.editor()).click();
-  await f.waitToast(/hole|cut|material/i);
+  await f.editor().getByText('The hole misses the body', { exact: true }).waitFor();
   await f.same(moved);
   await f.snapshot('07-refused-edit-last-good');
   await f.closeEditor();
@@ -147,8 +182,33 @@ await f.run(async () => {
   await pickFile(sourceFile, 'import');
   await f.same(source);
   assert.deepEqual(await readFile(sourceFile), original);
-  const plainFile = join(f.output, 'plain-stock.step');
-  const plainBytes = await readFile(plainFile, 'utf8');
+  panel = await beginReview();
+  const namedOption = panel.getByRole('checkbox', { name: 'Named thickness and hole centre', exact: true });
+  await namedOption.check();
+  await f.snapshot('09a-review-with-named-drivers');
+  const namedFile = join(f.output, 'named-copy.bcad');
+  const named = await saveCopy(panel, namedFile);
+  await f.same(source);
+  assert.deepEqual(named.parameters, { plateThickness: 10, holeCentreX: 11, holeCentreY: 9 });
+  assert.deepEqual(named.nodes[1].height, { parameter: 'plateThickness' });
+  assert.deepEqual(named.nodes[2].center, [{ parameter: 'holeCentreX' }, { parameter: 'holeCentreY' }]);
+  await pickFile(namedFile, 'hole');
+  await f.same(named);
+  await physical('09-named-initial', named, 10, 11, 3);
+  const thickness = (await f.setParameter('plateThickness', 16, '09b-named-thickness')).doc;
+  await physical('09-named-thickness-native', thickness, 16, 11, 3);
+  await f.setParameter('holeCentreX', 15, '09c-named-centre-x');
+  const namedX = await f.doc();
+  const namedXY = (await f.setParameter('holeCentreY', 12, '09d-named-centre-y')).doc;
+  assert.deepEqual(namedXY.nodes, named.nodes);
+  await physical('09-named-centre-native', namedXY, 16, 15, 3, 12);
+  await f.undo(); await f.same(namedX);
+  await f.redo(); await f.same(namedXY);
+  const savedNamed = await f.save('edited-named-plate');
+  await f.freshOpen(savedNamed.file, savedNamed.doc, '09e-named-copy-reopened');
+  const namedReopen = (await f.setParameter('plateThickness', 13, '09f-named-edit-after-open')).doc;
+  assert.deepEqual(namedReopen.nodes, named.nodes);
+  await physical('09-named-reopened-native', namedReopen, 13, 15, 3, 12);
   const broken = original.toString().replace(/=LINE\('',#\d+,#(\d+)\);/, "=LINE('',#999,#$1);");
   assert.notEqual(broken, original.toString());
   const brokenFile = join(f.output, 'wrong-line-carrier.step');
@@ -158,11 +218,13 @@ await f.run(async () => {
     await f.page.waitForFunction(step => window.__studioDoc?.nodes[0]?.step === step, expected);
     await f.ready();
     const unsupported = await f.doc(), before = f.report.downloads.length;
-    await (await editableTool()).click();
-    await f.waitToast(/Could not make an editable copy/);
+    const rejected = await beginReview();
+    await rejected.getByRole('alert').waitFor();
+    assert.equal(await button('Save copy', rejected).isDisabled(), true);
     await f.same(unsupported);
     assert.equal(f.report.downloads.length, before);
     await f.snapshot(label);
   }
+  assert.deepEqual(await readFile(sourceFile), original);
   f.report.observations.push({ sourceSHA256: sha256(original), unchanged: true });
 });

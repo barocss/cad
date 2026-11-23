@@ -3,9 +3,36 @@ import type { ModelExportController } from './useModelExports';
 
 const bodyCount = (count: number, label: string) => `${count} ${label} ${count === 1 ? 'body' : 'bodies'}`;
 
+function EditableStepCopyPanel({ controller, preview }: { controller: ModelExportController; preview: NonNullable<ModelExportController['editablePreview']> }) {
+  const { clearStepAsk, saveEditableCopy } = controller;
+  return <section className="card" aria-label="Editable STEP copy" onKeyDown={e => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); clearStepAsk(); } }}>
+    <div className="card-title">EDITABLE STEP COPY</div>
+    <div className="kv"><span>File</span><b>{preview.name}</b></div>
+    {preview.stage === 'checking' && <p role="status">Checking STEP geometry…</p>}
+    {preview.stage === 'error' && <p role="alert">{preview.error}</p>}
+    <form onSubmit={event => {
+      event.preventDefault();
+      saveEditableCopy(new FormData(event.currentTarget).has('named'));
+    }}>
+      {preview.stage === 'ready' && <>
+        <div className="kv"><span>New features</span><b>Sketch, Extrude, Hole</b></div>
+        <p className="muted">Copies the solid geometry. Original history and metadata are not included.</p>
+        {preview.parameterNames.length > 0 && <label className="kv">
+          <span>Named thickness and hole centre</span> <input type="checkbox" name="named" />
+        </label>}
+      </>}
+      <div className="row-actions">
+        <button type="submit" className="primary" disabled={preview.stage !== 'ready'}>Save copy</button>
+        <button type="button" className="ghost" onClick={clearStepAsk}>Cancel</button>
+      </div>
+    </form>
+  </section>;
+}
+
 /** One preparation panel in the existing right dock; only Export downloads. */
 export function StepExportPanel({ controller }: { controller: ModelExportController }) {
-  const { stepPreview: step, clearStepAsk, exportStepFile, downloadStep } = controller;
+  const { editablePreview, stepPreview: step, clearStepAsk, exportStepFile, downloadStep } = controller;
+  if (editablePreview) return <EditableStepCopyPanel controller={controller} preview={editablePreview} />;
   if (!step) return null;
   const scope = step.scope;
   const excluded = scope?.excludedHiddenRootBodies ?? 0;
