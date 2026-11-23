@@ -10,7 +10,7 @@ import { useDirectPoleEditor } from './state/useDirectPoleEditor';
 import { SavedBezierPicker } from './ui/SavedBezierPicker';
 import { currentCoordinateFeedback } from './sketch/coordinateFeedback';
 import { useSketchDraftHistory } from './sketch/useSketchDraftHistory';
-import { freeSketchProfile } from './app/freeSketchProfile';
+import { useStudioProfilePresentation } from './app/useStudioProfilePresentation';
 import { modelWheelZoomAvailable, useWheelZoomPreference } from './viewport/wheelZoomPreference';
 import { filletPickFailure } from './app/filletPickFailure';
 import { createEvaluationEvidence } from './state/evaluationEvidence';
@@ -141,7 +141,7 @@ import { supportsPlacedBoxSnapRotation } from './viewport/placedBoxSnap';
 import { contentKey, evaluationKey } from '@barocss/cad-model/engine/evalMemo';
 import { bearingEditCurrent, bearingFaceInput, captureBearingEditSession, prepareBearingEdit, type BearingEditSession } from './app/bearingEdit';
 import { resolveSkeletons, SKELETON_CODES } from '@barocss/cad-model/frames/skeleton';
-import { offsetFaceGroup, carryOver, emptyDoc, featureLabel, fmt, prefixDoc, starterDoc, type ModelNode, type SketchNode, type StudioDoc } from '@barocss/cad-model/engine/doc';
+import { carryOver, emptyDoc, featureLabel, fmt, prefixDoc, starterDoc, type ModelNode, type SketchNode, type StudioDoc } from '@barocss/cad-model/engine/doc';
 import { featureId, nextSerial } from '@barocss/cad-model/engine/ids';
 import { modelHash } from '@barocss/cad-model/chat/spec';
 import { captureSignatures, type Problem as RefProblem } from '@barocss/cad-model/engine/references';
@@ -238,7 +238,7 @@ import { sweepLinks } from '@barocss/cad-model/robot/sweep';
 import { sweepTimed } from '@barocss/cad-model/robot/ccd';
 import { Lanes } from './engine/lanes';
 import { useAssembly } from './assembly/useAssembly';
-import { pickedSketches, planeOf, unusedSketches } from '@barocss/cad-model/app/profiles';
+import { pickedSketches, planeOf } from '@barocss/cad-model/app/profiles';
 import type { Analysis } from './viewport/analysis';
 import { asSection, type AxisSection, type Section } from './viewport/sectionView';
 import { type MapKind } from './viewport/scalarMaps';
@@ -1729,21 +1729,9 @@ export function App() {
   pickRef.current = onPick;
   const finishEdgePick = finishEdgeEditor.current ? finishEdgeEditor.pick : undefined;
   const pickProfile = picking.onPickProfile;
-  // Finished sketches waiting for a feature, drawn and picked in the viewport and the History.
-  const freeSketches = useMemo(() => unusedSketches(evaluated.nodes, true), [evaluated.nodes]);
-  // The steps inside a part made in several (a bolt's head, shank and their union): one history entry, the last.
-  const innerSteps = useMemo(() => new Set(doc.nodes.flatMap((n, i) => {
-    if (!('made' in n) || !n.made?.nodes) return [];
-    if (n.made.command === 'offset-face' && !offsetFaceGroup(doc.nodes, i)) return [];
-    return Array.from({ length: n.made.nodes - 1 }, (_, k) => i - n.made!.nodes! + 1 + k);
-  })), [doc.nodes]);
-  const retainedProfiles = useMemo(() => new Set(evaluated.nodes.flatMap(node =>
-    node.kind === 'region-extrude' ? [node.sketch] : [])), [evaluated.nodes]);
-  const profiles = useMemo(() => sketch ? [] : freeSketches.map(i => {
-    const { rings, outerCount, canPickRegion } = freeSketchProfile(evaluated, i, shownDoc.parameters);
-    const pickedRegions = canPickRegion && selection.profileRegions?.sketch === i ? selection.profileRegions.indices : undefined;
-    return { id: i, rings, picked: !!selection.sketches?.includes(i), outerCount, canPickRegion, pickedRegions, retained: retainedProfiles.has(i) };
-  }), [freeSketches, evaluated, shownDoc.parameters, selection.sketches, selection.profileRegions, retainedProfiles, sketch]);
+  const { freeSketches, innerSteps, profiles } = useStudioProfilePresentation(
+    doc.nodes, evaluated, shownDoc.parameters, selection, sketch,
+  );
   // A computation running past a second can be stopped (D42: a committed Boolean on a mesh of up to 20000
   // triangles takes a few seconds): the worker restarts and the change that started it is taken back.
   const [slow, setSlow] = useState(false);

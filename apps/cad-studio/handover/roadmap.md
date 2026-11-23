@@ -1,13 +1,13 @@
 # CAD roadmap — current status and execution order
 
-Updated 2026-11-23 · Priority authority: D520 · Latest delivery: D1814 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
+Updated 2026-11-23 · Priority authority: D520 · Latest delivery: D1815 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
 
 This is the only current status index. Detailed tracks define acceptance; the 34 stable row pages retain scope and issue navigation. Immutable decision notes retain results. Do not append chronological status paragraphs here. [D520 decision](notes/cad-roadmap-replan-2026-11-04/README.md) supersedes D445 execution order and historical next-item text, while retaining its safeguards and bounded proofs.
 
 ## Now and next
 
-- **Current position:** [D1814](notes/pending-four-span-paired-s-bend-review-2026-11-23/README.md), P5 rows 07 and 16. Pending Agent review binds the four-span S-bend, both mouths and 36 charted joins to both images through explicit Studio approval and fresh Open.
-- **Next MAIN:** D1815, P4 rows [15](roadmap-rows/15.md) and [22](roadmap-rows/22.md), [#44](https://github.com/barocss/cad/issues/44). Move finished-sketch profile and grouped History presentation out of `App.tsx`. Verify profile selection, retained regions and History in desktop Studio.
+- **Current position:** [D1815](notes/studio-profile-presentation-2026-11-23/README.md), P4 rows 15 and 22. Finished-sketch profiles and grouped History presentation have a dedicated hook. Desktop Studio verifies multi-region selection, linked profile refresh and grouped Fastener History.
+- **Next MAIN:** D1816, P1 rows [09](roadmap-rows/09.md) and [15](roadmap-rows/15.md), [#229](https://github.com/barocss/cad/issues/229). Compare the two-point Rectangle snap with its original acceptance contract. Verify the remaining plane and temporary-state boundaries and decide issue closure from the observed results.
 - **Separate follow-ups:** Continue Studio App extraction in cohesive parts with affected desktop checks. [#608 Rendering](https://github.com/barocss/cad/issues/608) stays on HOLD. API inventory drift remains open. The issue tracker records [#126](https://github.com/barocss/cad/issues/126), [#613](https://github.com/barocss/cad/issues/613), [#152](https://github.com/barocss/cad/issues/152) and [#22](https://github.com/barocss/cad/issues/22) as closed.
 - **Active repository:** [barocss/cad](https://github.com/barocss/cad), based on `origin/main`. Fetch before work and preserve unexpected changes. The [migration record](../../../docs/migration/README.md) maps the former `local/cad-dev` history and issue numbers.
 - **Evidence correction:** D482 records2167 PASS/0 FAIL/2 existing SKIP in a later full-kernel run than D433. Neither result is a new full-suite PASS at this audit HEAD. [D482 record](notes/vertical-contact-refusal-2026-11-04/README.md).
@@ -42,6 +42,8 @@ P0 findings that can lose work, export stale geometry or misattribute results ta
 [Ten named scenarios B01–B10](roadmap-tracks/04-product-baseline.md) define the first mechanical-CAD target: bracket, enclosure, shaft/flange, sweep/Loft/sheet, static assembly, drawings, neutral files, project recovery, automation and Viewer/React consumers. B01 v1 has an adjudicated [12-group ledger](roadmap-tracks/09-b01-evidence-ledger.md), B02 v1 an [11-group ledger](roadmap-tracks/10-b02-evidence-ledger.md); B04 v1 is accepted26/26; B09 v1 is [accepted9/9](notes/cli-constrained-rectangle-2026-11-11/README.md) for one CLI-created constrained plate. B07 v1 is [accepted6/6](notes/b07-neutral-file-acceptance-2026-11-11/README.md) at the selected exchange profiles. Eight named scenarios have accepted v1 ledgers. B06 has a [seven-group checklist](roadmap-tracks/14-b06-evidence-ledger.md) and is pending. B05 v1 is accepted at 7/7. B08 v1 is [accepted at 6/6](roadmap-tracks/16-b08-evidence-ledger.md). B10 v1 is [accepted at 7/7](roadmap-tracks/17-b10-evidence-ledger.md). B03 remains NOT_ADJUDICATED. Do not label existing implementation missing or infer an aggregate fraction/percentage before their case matrices are known. This subset is not whole-CAD completeness. [Official-source comparison](roadmap-tracks/05-reference-review.md) distinguishes ArtCraft CADCraft, the separate CadCraft/PartCraft suite, SolidCraft and CadXStudio supplier claims. No competitor execution or parity benchmark was performed.
 
 ## GitHub requirement and issue inventory
+
+- The [current closeout queue](roadmap-tracks/18-issue-closeout.md) records 224 open issues at its November 23 snapshot, the next concrete acceptance gaps and held dependencies.
 
 The [November 20 routing snapshot](notes/open-issue-routing-2026-11-20/README.md) covers all 229 open issues in the standalone CAD repository. It links each issue to a primary route and identifies model-version tracking for agent visual review as the next AI workflow to measure (#324).
 

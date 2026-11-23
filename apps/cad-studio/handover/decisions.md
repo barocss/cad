@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D1815: [Extract Studio profile and grouped History presentation](notes/studio-profile-presentation-2026-11-23/README.md), #44. Verify region picks, linked profile refresh and grouped Fastener History in Studio.
+
 - D1814: [Review the pending four-span S-bend](notes/pending-four-span-paired-s-bend-review-2026-11-23/README.md), #324. Bind both oppositely facing mouths, 36 charted joins and native mass to the original rail and two Agent images through Studio approval and fresh Open.
 
 - D1813: [Label the display mesh face count in the Inspector](notes/inspector-mesh-face-label-2026-11-23/README.md), related #10. Verify the selected exact S-bend readout before and after fresh Open and on a new Box.
