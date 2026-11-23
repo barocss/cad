@@ -5,21 +5,32 @@ import { createFlow, sha256 } from './flow-helper.mjs';
 import { currentPartRevision, withMcpSession } from './mcp-browser-session.mjs';
 
 const baseline = process.argv.includes('--observe-base');
+const paired = process.argv.includes('--paired-cavities');
 const reviewBaseline = process.argv.includes('--expect-cut-review-unavailable');
 const reviewCut = reviewBaseline || process.argv.includes('--review-cut');
 const cutOffset = reviewCut || process.argv.includes('--offset') ? 1 : 0;
+assert.ok(!paired || cutOffset === 0, 'Paired cavity qualification uses the centered box.');
 const path = {
   degree: 2, knots: [0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 4],
   controlPoints: [[20, 0, 0], [20, 20, 0], [0, 20, 0], [-20, 20, 0], [-20, 0, 0],
     [-20, -20, 0], [0, -20, 0], [20, -20, 0], [20, 0, 0]],
   weights: Array.from({ length: 9 }, (_, index) => index % 2 ? Math.SQRT1_2 : 1),
 };
-const holeAt = halfHeight => [[-1, -halfHeight], [-1, halfHeight], [1, halfHeight], [1, -halfHeight]]
+const holeAt = (halfHeight, center = 0) => [[-1, center - halfHeight], [-1, center + halfHeight], [1, center + halfHeight], [1, center - halfHeight]]
   .map(start => ({ kind: 'line', start }));
+const exteriorHalfHeight = paired ? 5 : 3, boxHalfHeight = exteriorHalfHeight + 2;
+const initialHalfHeight = paired ? 1 : 2, editedHalfHeight = initialHalfHeight / 2;
+const firstCenter = paired ? -2 : 0;
+const cavitySections = firstHalfHeight => paired
+  ? [{ center: -2, halfHeight: firstHalfHeight }, { center: 2, halfHeight: 1 }]
+  : [{ center: 0, halfHeight: firstHalfHeight }];
+const holes = cavitySections(initialHalfHeight).map(({ center, halfHeight }) => holeAt(halfHeight, center));
+const holeTags = paired ? ['a', 'b'].map(tag => ['inner', 'bottom', 'outer', 'top'].map(side => `${tag}-${side}`))
+  : [['hole-inner', 'hole-bottom', 'hole-outer', 'hole-top']];
 const seed = { format: 'barocss-cad-model', schema: 3, units: 'mm', parameters: {}, nextId: 2,
   nodes: [
-    { id: 'n0', kind: 'sketch', profile: 'rectangle', min: [-2, -3], max: [2, 3], holes: [holeAt(2)],
-      sideTags: { outer: ['top', 'outer', 'bottom', 'inner'], holes: [['hole-inner', 'hole-bottom', 'hole-outer', 'hole-top']] } },
+    { id: 'n0', kind: 'sketch', profile: 'rectangle', min: [-2, -exteriorHalfHeight], max: [2, exteriorHalfHeight], holes,
+      sideTags: { outer: ['top', 'outer', 'bottom', 'inner'], holes: holeTags } },
     { id: 'n1', kind: 'sweep-curve', sketch: 0, name: 'Closed circular rail', path, mode: 'exact' },
   ], outputs: { b1: { node: 1, side: 'solid' } } };
 const pins = [
@@ -27,7 +38,7 @@ const pins = [
   'packages/barocss-cad/src/brep/exact-ring-intersect.ts', 'packages/barocss-cad/src/brep/edge-continuity.ts',
   'apps/cad-studio/src/App.tsx', 'apps/cad-studio/test/exact-rectangular-duct-intersection-browser.mjs',
 ];
-if (!baseline) pins.push('packages/barocss-cad/src/brep/exact-rectangular-duct-intersect.ts');
+if (!baseline || paired) pins.push('packages/barocss-cad/src/brep/exact-rectangular-duct-intersect.ts');
 if (reviewCut) pins.push(
   'packages/barocss-cad-model/src/chat/part/modelCandidate.ts',
   'packages/barocss-cad-model/src/chat/part/proposals.ts',
@@ -38,11 +49,14 @@ if (reviewCut && !reviewBaseline) pins.push(
   'packages/barocss-cad-model/src/chat/rectangularDuctIntersectionProposalReview.ts',
 );
 const f = await createFlow({
-  name: 'exact-rectangular-duct-intersection', output: process.argv[2], envFrozen: reviewCut ? 'D1769_SOURCE_FROZEN' : cutOffset ? 'D1767_SOURCE_FROZEN' : 'D1765_SOURCE_FROZEN',
+  name: 'exact-rectangular-duct-intersection', output: process.argv[2],
+  envFrozen: paired ? 'D1773_SOURCE_FROZEN' : reviewCut ? 'D1769_SOURCE_FROZEN' : cutOffset ? 'D1767_SOURCE_FROZEN' : 'D1765_SOURCE_FROZEN',
   initialFiles: pins, requiredFrozen: pins,
-  qualification: cutOffset ? 'Intersect one exact closed rectangular duct with an offset box in desktop Studio.'
-    : 'Intersect one exact closed rectangular duct with a centered box in desktop Studio.',
-  limits: [`One R20 mm rail, outer 4 × 6 mm and centered 2 × 4 or 2 × 2 mm cavity, retained x ≥ ${cutOffset}, desktop WebGPU.`],
+  qualification: paired ? 'Intersect the exact two-cavity duct with a centered box in desktop Studio.'
+    : cutOffset ? 'Intersect one exact closed rectangular duct with an offset box in desktop Studio.'
+      : 'Intersect one exact closed rectangular duct with a centered box in desktop Studio.',
+  limits: [paired ? 'One R20 mm rail, outer 4 × 10 mm and two axially separated 2 × 2 mm cavities, retained x ≥ 0, desktop WebGPU.'
+    : `One R20 mm rail, outer 4 × 6 mm and centered 2 × 4 or 2 × 2 mm cavity, retained x ≥ ${cutOffset}, desktop WebGPU.`],
   inspectorSource: `
 import { readFileSync } from 'node:fs';
 import { brepMassProperties, checkBrep, faceGeometry, massPropertiesOf, measureBrepEdgeContinuity } from '@barocss/cad';
@@ -95,12 +109,13 @@ async function begin() {
   const [chooser] = await Promise.all([f.page.waitForEvent('filechooser'), button('Open').click()]);
   await chooser.setFiles({ name: 'closed-rectangular-duct.bcad', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(seed)) });
   await f.same(seed);
-  near((await f.bodies()).bodies[0].volume, 640 * Math.PI);
+  near((await f.bodies()).bodies[0].volume, (paired ? 1280 : 640) * Math.PI);
 
   await f.page.evaluate(() => document.activeElement?.blur());
   await f.command('Box');
   const box = f.page.getByRole('dialog', { name: 'Box', exact: true });
-  for (const [field, value] of Object.entries({ 'Width X': 30, 'Depth Y': 60, 'Height Z': 10, 'At X': cutOffset, 'At Y': -30, 'At Z': -5 })) {
+  for (const [field, value] of Object.entries({ 'Width X': 30, 'Depth Y': 60, 'Height Z': 2 * boxHalfHeight,
+    'At X': cutOffset, 'At Y': -30, 'At Z': -boxHalfHeight })) {
     await box.getByLabel(field, { exact: true }).fill(String(value));
   }
   await box.locator('.status').filter({ hasText: /^preview$/ }).waitFor();
@@ -109,7 +124,7 @@ async function begin() {
   const boxed = (await f.snapshot('01-duct-and-box')).doc;
   assert.deepEqual(boxed.nodes.slice(0, 2), seed.nodes);
   assert.deepEqual([boxed.nodes[2].min, boxed.nodes[2].max, boxed.nodes[3].from, boxed.nodes[3].height],
-    [[cutOffset, -30], [cutOffset + 30, 30], -5, 10]);
+    [[cutOffset, -30], [cutOffset + 30, 30], -boxHalfHeight, 2 * boxHalfHeight]);
   return boxed;
 }
 
@@ -123,31 +138,50 @@ function expectedAngle(native, edgeId, offset) {
 }
 
 function verifyCut(native, cavityHalfHeight, offset = cutOffset) {
+  // The start tangent is +Y and sketch X is +X, so sketch Y maps to world −Z.
+  const openings = cavitySections(cavityHalfHeight).map(hole => ({ ...hole, center: -hole.center }));
+  const sectionCount = openings.length + 1, wallCount = 4 * sectionCount;
   assert.deepEqual(native.source, { family: 'analytic-boolean', id: 'n4' });
   assert.ok(native.check.valid, native.check.issues.join('\n'));
-  assert.deepEqual(native.check.counts, { bodies: 1, shells: 1, faces: 10, loops: 12, coedges: 48, edges: 24, vertices: 16 });
-  assert.equal(native.check.topology[0].genus, 1);
+  assert.deepEqual(native.check.counts, { bodies: 1, shells: 1, faces: wallCount + 2, loops: wallCount + 2 * sectionCount,
+    coedges: 24 * sectionCount, edges: 12 * sectionCount, vertices: 8 * sectionCount });
+  assert.equal(native.check.topology[0].genus, openings.length);
   assert.equal(native.chartCount, native.check.counts.coedges);
   assert.ok(native.check.maximumPcurveGap < 1e-8);
-  const volume = 6 * (segmentArea(22, offset) - segmentArea(18, offset))
-    - 2 * cavityHalfHeight * (segmentArea(21, offset) - segmentArea(19, offset));
+  const innerArea = segmentArea(21, offset) - segmentArea(19, offset);
+  const hollowHeight = openings.reduce((total, hole) => total + 2 * hole.halfHeight, 0);
+  const volume = 2 * exteriorHalfHeight * (segmentArea(22, offset) - segmentArea(18, offset)) - hollowHeight * innerArea;
   near(native.mass.volume, volume);
   near(native.quadrature.volume, volume, 1e-6);
-  assert.equal(native.joints.length, 24);
-  assert.equal(native.faces.filter(face => face.geometry.kind === 'cylinder').length, 4);
+  if (paired) {
+    const halfAnnulusMoment = (outer, inner) => 2 * (outer ** 3 - inner ** 3) / 3;
+    const x = (10 * halfAnnulusMoment(22, 18) - hollowHeight * halfAnnulusMoment(21, 19)) / volume;
+    const z = -openings.reduce((total, hole) => total + 2 * hole.halfHeight * hole.center * innerArea, 0) / volume;
+    for (const value of [native.mass, native.quadrature]) {
+      assert.equal(value.method, 'quadrature');
+      [x, 0, z].forEach((expected, axis) => near(value.centroid[axis], expected));
+    }
+  }
+  assert.equal(native.joints.length, 12 * sectionCount);
+  assert.equal(native.faces.filter(face => face.geometry.kind === 'cylinder').length, 2 * sectionCount);
 
   const caps = native.faces.filter(({ geometry }) => geometry.kind === 'plane' && geometry.n[0] < -.99);
   assert.equal(caps.length, 2);
   const seen = [];
   for (const { geometry, loops } of caps) {
     near(geometry.o[0], offset);
-    assert.deepEqual(loops.map(loop => loop.kind), ['outer', 'inner']);
+    assert.deepEqual(loops.map(loop => loop.kind), ['outer', ...openings.map(() => 'inner')]);
     const meanY = loops[0].edges.flatMap(edge => edge.points).reduce((sum, point) => sum + point[1], 0) / 8;
     const side = Math.sign(meanY), centerY = side * ordinate(20, offset);
     seen.push(side);
+    const owned = new Set();
     for (const [index, loop] of loops.entries()) {
       assert.equal(loop.edges.length, 4);
-      const halfWidth = index ? 1 : 2, halfHeight = index ? cavityHalfHeight : 3;
+      const zMean = loop.edges.flatMap(edge => edge.points).reduce((total, point) => total + point[2], 0) / 8;
+      const section = index ? openings.find(hole => Math.abs(hole.center - zMean) < 1e-7) : { center: 0, halfHeight: exteriorHalfHeight };
+      assert.ok(section && !owned.has(section));
+      owned.add(section);
+      const halfWidth = index ? 1 : 2, { halfHeight, center } = section;
       const low = ordinate(20 - halfWidth, offset), high = ordinate(20 + halfWidth, offset);
       let area = 0;
       for (const edge of loop.edges) {
@@ -158,10 +192,10 @@ function verifyCut(native, cavityHalfHeight, offset = cutOffset) {
           near(x, offset);
           assert.equal(Math.sign(y), side);
           near(Math.min(Math.abs(Math.abs(y) - low), Math.abs(Math.abs(y) - high)), 0);
-          near(Math.abs(z), halfHeight);
+          near(Math.abs(z - center), halfHeight);
         }
         const [a, b] = edge.points;
-        area -= (edge.sense === 'forward' ? 1 : -1) * ((a[1] - centerY) * b[2] - a[2] * (b[1] - centerY)) / 2;
+        area -= (edge.sense === 'forward' ? 1 : -1) * ((a[1] - centerY) * (b[2] - center) - (a[2] - center) * (b[1] - centerY)) / 2;
       }
       near(area, (index ? -1 : 1) * (high - low) * 2 * halfHeight);
     }
@@ -218,8 +252,8 @@ async function capRays(stage, materialZ = 2.5, offset = cutOffset) {
   await f.page.waitForFunction(() => document.querySelector('.view-cube .vc-label')?.textContent === 'LEFT');
   await f.page.getByTitle('Frame all (F)', { exact: true }).click();
   const station = ordinate(20, offset);
-  const material = [[offset, -station, materialZ], [offset, station, materialZ]];
-  const cavity = [[offset, -station, 0], [offset, station, 0]];
+  const material = [-station, station].map(y => [offset, y, paired ? 0 : materialZ]);
+  const cavity = [-station, station].flatMap(y => cavitySections(initialHalfHeight).map(hole => [offset, y, hole.center]));
   const samples = await f.page.evaluate(points => points.map(point => window.__studioSurfacePoint(point)), [...material, ...cavity]);
   for (const [index, point] of material.entries()) {
     assert.ok(samples[index], 'A material ray hits its cap.');
@@ -262,10 +296,10 @@ async function editCavity(halfHeight, label) {
   await f.editor().getByText('Exact closed circle', { exact: true }).waitFor();
   await button('Edit sketch', f.editor()).click();
   await f.sketchPanel().getByLabel('Active outline', { exact: true }).selectOption('1');
-  await f.sketchPanel().getByLabel('Point 1 Y', { exact: true }).fill(String(-halfHeight));
-  await f.sketchPanel().getByLabel('Point 2 Y', { exact: true }).fill(String(halfHeight));
+  await f.sketchPanel().getByLabel('Point 1 Y', { exact: true }).fill(String(firstCenter - halfHeight));
+  await f.sketchPanel().getByLabel('Point 2 Y', { exact: true }).fill(String(firstCenter + halfHeight));
   const { doc } = await f.finishSketch(label);
-  assert.deepEqual(doc.nodes[0].holes[0], holeAt(halfHeight));
+  assert.deepEqual(doc.nodes[0].holes, cavitySections(halfHeight).map(({ center, halfHeight }) => holeAt(halfHeight, center)));
   assert.deepEqual(doc.nodes[0].sideTags, seed.nodes[0].sideTags);
   return doc;
 }
@@ -385,7 +419,7 @@ async function localApproval(boxed, cut, native) {
   const { doc } = await f.snapshot('10-local-proposal-approved');
   assert.deepEqual([doc.nodes, doc.outputs], [cut.nodes, cut.outputs]);
   const approved = await f.inspect('local-approved-native', doc);
-  verifyCut(approved, 2);
+  verifyCut(approved, initialHalfHeight);
   assert.equal(approved.digest, native.digest);
   if (reviewCut) {
     const saved = await f.save('offset-cut-reviewed');
@@ -437,7 +471,7 @@ await f.run(async () => {
     }
     return;
   }
-  const caps = verifyCut(native, 2);
+  const caps = verifyCut(native, initialHalfHeight);
   await measureInStudio(native, caps, '03-native-rim-continuity');
   await capRays('04-initial');
   if (reviewCut) {
@@ -456,25 +490,26 @@ await f.run(async () => {
     await f.redo();
     await f.same(beforeCavityEdit);
   }
-  const edited = await editCavity(1, '05-cavity-edited');
+  const edited = await editCavity(editedHalfHeight, '05-cavity-edited');
   assert.deepEqual(edited.nodes.slice(1), beforeCavityEdit.nodes.slice(1));
   const editedNative = await f.inspect('edited-intersection-native', edited);
-  verifyCut(editedNative, 1, keptOffset);
+  verifyCut(editedNative, editedHalfHeight, keptOffset);
   await f.undo();
   await f.same(beforeCavityEdit);
   await f.redo();
   await f.same(edited);
-  const saved = await f.save(cutOffset ? 'offset-rectangular-duct-intersection' : 'centered-rectangular-duct-intersection');
+  const saved = await f.save(paired ? 'paired-cavity-intersection'
+    : cutOffset ? 'offset-rectangular-duct-intersection' : 'centered-rectangular-duct-intersection');
   const reopened = (await f.freshOpen(saved.file, edited, '06-fresh-open')).doc;
   const reopenedNative = await f.inspect('reopened-intersection-native', reopened);
-  const reopenedCaps = verifyCut(reopenedNative, 1, keptOffset);
+  const reopenedCaps = verifyCut(reopenedNative, editedHalfHeight, keptOffset);
   assert.equal(reopenedNative.digest, editedNative.digest);
   await measureInStudio(reopenedNative, reopenedCaps, '06-reopened-rim-continuity', false, keptOffset);
   await capRays('07-reopened', 1.5, keptOffset);
-  let restored = await editCavity(2, '08-cavity-restored');
+  let restored = await editCavity(initialHalfHeight, '08-cavity-restored');
   if (cutOffset) restored = await editOffset(restored, cutOffset, '08-box-offset-restored');
   const restoredNative = await f.inspect('restored-intersection-native', restored);
-  verifyCut(restoredNative, 2);
+  verifyCut(restoredNative, initialHalfHeight);
   assert.equal(restoredNative.digest, native.digest);
   await localApproval(boxed, cut, native);
 });

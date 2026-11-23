@@ -17,8 +17,8 @@ const dist = (a: Point, b: Point) => len(sub(a, b));
 interface Plane { kind: 'plane'; surface: Surface; height: number; normal: Point; origin: Point }
 interface Cylinder { kind: 'cylinder'; surface: Surface; radius: number; low: number; high: number; outward: number }
 type Wall = Plane | Cylinder;
-interface Section { radius: number; width: number; height: number; walls: readonly Wall[] }
-interface Duct { outer: Section; inner: Section; roundoff: number }
+interface Section { radius: number; width: number; height: number; center: number; walls: readonly Wall[] }
+interface Duct { outer: Section; inner: readonly Section[]; roundoff: number }
 
 function readPlane(face: BrepFace, roundoff: number): Plane | undefined {
   const s = face.surface;
@@ -92,41 +92,50 @@ function readSection(brep: Brep, shell: Brep['shells'][number], roundoff: number
   }
   if (planes.length !== 4 || cylinders.length !== 4) return;
   const radii = unique(cylinders.map(wall => wall.radius), roundoff), heights = unique(planes.map(wall => wall.height), roundoff);
-  if (radii.length !== 2 || heights.length !== 2 || Math.abs(heights[0] + heights[1]) > roundoff
+  if (radii.length !== 2 || heights.length !== 2
     || planes.some(wall => Math.abs(Math.abs(dot(wall.normal, Z)) - 1) > ANGULAR)
     || cylinders.some(wall => Math.abs(wall.low - heights[0]) > roundoff || Math.abs(wall.high - heights[1]) > roundoff)) return;
   for (const radius of radii) if (cylinders.filter(wall => Math.abs(wall.radius - radius) <= roundoff).length !== 2) return;
   for (const height of heights) if (planes.filter(wall => Math.abs(wall.height - height) <= roundoff).length !== 2) return;
-  return { radius: (radii[0] + radii[1]) / 2, width: (radii[1] - radii[0]) / 2, height: heights[1], walls };
+  const center = (heights[0] + heights[1]) / 2;
+  return { radius: (radii[0] + radii[1]) / 2, width: (radii[1] - radii[0]) / 2, height: heights[1] - center, center, walls };
 }
 
 function oriented(section: Section, inward: boolean, roundoff: number): boolean {
   const sign = inward ? -1 : 1;
   return section.walls.every(wall => wall.kind === 'plane'
-    ? Math.abs(dot(wall.normal, Z) - sign * Math.sign(wall.height)) <= ANGULAR
+    ? Math.abs(dot(wall.normal, Z) - sign * Math.sign(wall.height - section.center)) <= ANGULAR
     : wall.outward === sign * Math.sign(wall.radius - section.radius)
       && wall.radius > roundoff);
 }
 
-/** The existing default-frame closed rectangular duct, with exactly two centered rectangular shells. */
+/** A default-frame closed rectangular duct with one centered or two axially separated cavities. */
 function readDuct(brep: Brep, tolerance: number): Duct | undefined {
-  if (brep.source.family !== 'sweep-curve' || brep.bodies.length !== 1 || brep.shells.length !== 2
-    || brep.faces.length !== 16 || brep.loops.length !== 16 || brep.edges.length !== 32 || brep.vertices.length !== 16
-    || brep.coedges.length !== 64 || brep.coedges.some(use => !use.pcurve)) return;
+  const count = brep.shells.length;
+  if (brep.source.family !== 'sweep-curve' || brep.bodies.length !== 1 || (count !== 2 && count !== 3)
+    || brep.faces.length !== 8 * count || brep.loops.length !== 8 * count || brep.edges.length !== 16 * count || brep.vertices.length !== 8 * count
+    || brep.coedges.length !== 32 * count || brep.coedges.some(use => !use.pcurve)) return;
   const roundoff = ANGULAR * Math.max(1, geometryScaleMM(brep.vertices.map(vertex => vertex.point)),
     geometryScaleMM(brep.faces.flatMap(face => face.surface.kind === 'surface' ? face.surface.controlPoints.flat() : [])));
-  const first = readSection(brep, brep.shells[0], roundoff), second = readSection(brep, brep.shells[1], roundoff);
-  if (!first || !second) return;
-  const outer = first.width > second.width ? first : second, inner = outer === first ? second : first;
-  if (Math.abs(outer.radius - inner.radius) > roundoff || !(outer.width - inner.width > 10 * tolerance)
-    || !(outer.height - inner.height > 10 * tolerance && inner.width > tolerance && inner.height > tolerance)
-    || !(outer.radius - outer.width > tolerance) || !oriented(outer, false, roundoff) || !oriented(inner, true, roundoff)) return;
+  const sections: Section[] = [];
+  for (const shell of brep.shells) {
+    const section = readSection(brep, shell, roundoff);
+    if (!section) return;
+    sections.push(section);
+  }
+  const outer = sections.reduce((a, b) => a.width > b.width ? a : b), inner = sections.filter(section => section !== outer).sort((a, b) => a.center - b.center);
+  if (2 * Math.abs(outer.center) > roundoff || !(outer.radius - outer.width > tolerance) || !oriented(outer, false, roundoff)
+    || inner.some(section => Math.abs(outer.radius - section.radius) > roundoff || !(outer.width - section.width > 10 * tolerance)
+      || !(outer.height - Math.abs(section.center) - section.height > 10 * tolerance && section.width > tolerance && section.height > tolerance)
+      || !oriented(section, true, roundoff))) return;
+  if (inner.length === 1 ? 2 * Math.abs(inner[0].center) > roundoff
+    : !(inner[1].center - inner[1].height - inner[0].center - inner[0].height > 10 * tolerance)) return;
   const report = checkBrep(brep, { strict: true });
-  if (report.valid && report.topology.length === 1 && report.topology[0].shells === 2
-    && report.topology[0].genus === 2 && report.maximumPcurveGap <= roundoff) return { outer, inner, roundoff };
+  if (report.valid && report.topology.length === 1 && report.topology[0].shells === count
+    && report.topology[0].genus === count && report.maximumPcurveGap <= roundoff) return { outer, inner, roundoff };
 }
 
-/** Retain two apertures strictly before the innermost cylinder; all other box faces stay clear. */
+/** Retain one or two apertures per cap; paired cavities require x = 0 and all other box faces clear. */
 function coveringBox(box: Brep, duct: Duct, tolerance: number): number | undefined {
   if (box.bodies.length !== 1 || box.shells.length !== 1 || box.faces.length !== 6 || box.loops.length !== 6
     || box.vertices.length !== 8 || box.edges.length !== 12) return;
@@ -134,6 +143,7 @@ function coveringBox(box: Brep, duct: Duct, tolerance: number): number | undefin
   if (limits.some(values => values.length !== 2)) return;
   const [x, y, z] = limits, reach = duct.outer.radius + duct.outer.width;
   const offset = Math.abs(x[0]) <= duct.roundoff ? 0 : x[0];
+  if (duct.inner.length === 2 && offset !== 0) return;
   if ((offset !== 0 && !(offset > tolerance && offset < duct.outer.radius - duct.outer.width - tolerance))
     || !(x[1] > reach + tolerance && y[0] < -reach - tolerance && y[1] > reach + tolerance
     && z[0] < -duct.outer.height - tolerance && z[1] > duct.outer.height + tolerance)) return;
@@ -214,7 +224,7 @@ function capLoop(brep: Brep, id: string, section: Section, station: number, roun
     if (!edge || edge.curve.degree !== 1 || edge.curve.controlPoints.length !== 2 || edge.curve.weights[0] !== edge.curve.weights[1]) return false;
     const signs: string[] = [];
     for (const point of edge.curve.controlPoints) {
-      const y = point[1] - center, z = point[2];
+      const y = point[1] - center, z = point[2] - section.center;
       if (Math.abs(point[0] - offset) > roundoff || Math.abs(Math.abs(y) - width) > roundoff || Math.abs(Math.abs(z) - section.height) > roundoff) return false;
       const key = `${Math.sign(y)}:${Math.sign(z)}`;
       corners.add(key); signs.push(key);
@@ -228,36 +238,37 @@ function capLoop(brep: Brep, id: string, section: Section, station: number, roun
 function withBinding(use: BrepCoedge, pcurve: Curve): BrepCoedge { return { ...use, pcurve }; }
 
 function repair(result: Brep, duct: Duct, offset: number): Brep | undefined {
+  const sections = [duct.outer, ...duct.inner], count = sections.length;
   if (result.source.family !== 'analytic-boolean' || result.bodies.length !== 1 || result.shells.length !== 1
-    || result.faces.length !== 10 || result.loops.length !== 12 || result.edges.length !== 24
-    || result.coedges.length !== 48 || result.vertices.length !== 16) return;
+    || result.faces.length !== 4 * count + 2 || result.loops.length !== 6 * count || result.edges.length !== 12 * count
+    || result.coedges.length !== 24 * count || result.vertices.length !== 8 * count) return;
   const faces = new Map<string, Wall>(), matched = new Set<Wall>(), capStations = new Set<number>();
   for (const face of result.faces) {
     const wall = readPlane(face, duct.roundoff) ?? readCylinder(face, duct.roundoff, offset);
     if (!wall) return;
     for (const loop of face.loops) faces.set(loop, wall);
     if (wall.kind === 'plane' && dist(wall.normal, NEGATIVE_X) <= ANGULAR) {
-      if (face.loops.length !== 2 || Math.abs(wall.origin[0] - offset) > duct.roundoff) return;
+      if (face.loops.length !== count || Math.abs(wall.origin[0] - offset) > duct.roundoff) return;
       const loops = face.loops.map(id => result.loops.find(loop => loop.id === id));
-      const outer = loops.find(loop => loop?.kind === 'outer'), inner = loops.find(loop => loop?.kind === 'inner');
-      if (!outer || !inner) return;
-      const edges = outer.coedges.map(id => result.edges.find(edge => edge.id === result.coedges.find(use => use.id === id)?.edge));
+      const outer = loops.filter(loop => loop?.kind === 'outer'), inner = loops.filter(loop => loop?.kind === 'inner');
+      if (outer.length !== 1 || inner.length !== duct.inner.length) return;
+      const edges = outer[0]!.coedges.map(id => result.edges.find(edge => edge.id === result.coedges.find(use => use.id === id)?.edge));
       const sum = edges.reduce((total, edge) => total + (edge?.curve.controlPoints[0][1] ?? NaN), 0);
       const station = Math.sign(sum) * duct.outer.radius;
-      if (capStations.has(station) || !capLoop(result, outer.id, duct.outer, station, duct.roundoff, offset)
-        || !capLoop(result, inner.id, duct.inner, station, duct.roundoff, offset)) return;
+      if (capStations.has(station) || !capLoop(result, outer[0]!.id, duct.outer, station, duct.roundoff, offset)
+        || duct.inner.some(section => inner.filter(loop => loop && capLoop(result, loop.id, section, station, duct.roundoff, offset)).length !== 1)) return;
       capStations.add(station);
       continue;
     }
     if (face.loops.length !== 1 || result.loops.find(loop => loop.id === face.loops[0])?.coedges.length !== 4) return;
-    const candidates = duct.outer.walls.concat(duct.inner.walls).filter(original => original.kind === wall.kind && (original.kind === 'plane' && wall.kind === 'plane'
+    const candidates = sections.flatMap(section => section.walls).filter(original => original.kind === wall.kind && (original.kind === 'plane' && wall.kind === 'plane'
       ? Math.abs(original.height - wall.height) <= duct.roundoff && dist(original.normal, wall.normal) <= ANGULAR
       : original.kind === 'cylinder' && wall.kind === 'cylinder' && Math.abs(original.radius - wall.radius) <= duct.roundoff
         && Math.abs(original.low - wall.low) <= duct.roundoff && Math.abs(original.high - wall.high) <= duct.roundoff && original.outward === wall.outward));
     if (candidates.length !== 2 || candidates.some(candidate => matched.has(candidate))) return;
     for (const candidate of candidates) matched.add(candidate);
   }
-  if (matched.size !== 16 || capStations.size !== 2) return;
+  if (matched.size !== 8 * count || capStations.size !== 2) return;
   const edges = new Map(result.edges.map(edge => [edge.id, edge])), bindings = new Map<string, Curve>();
   for (const use of result.coedges) {
     const wall = faces.get(use.loop), edge = edges.get(use.edge);
@@ -268,7 +279,7 @@ function repair(result: Brep, duct: Duct, offset: number): Brep | undefined {
   }
   const coedges = result.coedges.map(use => withBinding(use, bindings.get(use.id)!)), repaired = { ...result, coedges };
   const report = checkBrep(repaired, { strict: true });
-  if (report.valid && report.topology.length === 1 && report.topology[0].genus === 1 && report.maximumPcurveGap <= duct.roundoff) return repaired;
+  if (report.valid && report.topology.length === 1 && report.topology[0].genus === duct.inner.length && report.maximumPcurveGap <= duct.roundoff) return repaired;
 }
 
 /** Bind only the already-stitched default-frame duct retained by one transverse box face. */
