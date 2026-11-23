@@ -7,7 +7,7 @@ import { checkNode, deleteFeature, featureDependents, renumber } from '../src/ch
 import { moveNode } from '../src/chat/remap';
 import { dispatchTool } from '../src/chat/tools';
 import { encodeStudioFile, readStudioFile } from '../src/engine/container';
-import { leafBodies, parentsOf, rectangularFeaturePatternProblem, rectangularPatternDocumentProblem, usesOf, type BodyRef, type ModelNode, type StudioDoc } from '../src/engine/doc';
+import { leafBodies, parentsOf, rectangularFeaturePatternProblem, rectangularPatternDocumentProblem, usesOf, withNode, type BodyRef, type ModelNode, type StudioDoc } from '../src/engine/doc';
 import { evaluateDoc, partBreps } from '../src/engine/evaluate';
 import { flattenAssembly } from '../src/engine/flatten';
 import { featureId } from '../src/engine/ids';
@@ -142,6 +142,42 @@ test('Linear commands and saved recipes keep an explicit earlier rectangular sou
     assert.ok('error' in readStudioDoc(JSON.stringify(invalid)));
   }
   assert.throws(() => linear.build!(context(doc), signed), error => isRefusal(error, 'VALUE'));
+});
+
+test('Fill captures an independent mask and lowers, saves and remaps the explicit earlier cut', async () => {
+  const { doc: original, first, target } = seed();
+  const doc = withNode(original, { kind: 'sketch', profile: 'rectangle', min: [25, 0], max: [27, 25] });
+  const mask = doc.nodes.length - 1, ctx = context(doc);
+  const result = await dispatchTool({ doc, bodies: ctx.bodies }, 'features', {
+    action: 'command', command: 'fill-feature-pattern', bodies: [ctx.bodies[0].key], expectedRevision: revisionOf(doc),
+    values: { source: featureId(doc.nodes, first), region: String(mask), anchorX: 10, anchorY: 9, spacing: 16, count: 2, spacing2: 8, count2: 2 },
+  }, async input => evaluateDoc(input, 2));
+  assert.equal(result.isError, false, result.content);
+  const made = result.state.doc, node = made.nodes.at(-1);
+  assert.ok(node?.kind === 'fill-feature-pattern');
+  assert.deepEqual(usesOf(node), [target, first]);
+  assert.deepEqual(parentsOf(node), [target]);
+  assert.equal(checkNode(node, doc.nodes, doc.parameters), null);
+  const feature = toPartDocument(made).features.at(-1);
+  assert.ok(feature?.kind === 'fill-feature-pattern');
+  assert.equal(feature.source, featureId(doc.nodes, first));
+  assert.equal(feature.target, featureId(doc.nodes, target));
+  assert.deepEqual(made.nodes.slice(0, -1), doc.nodes);
+  assert.deepEqual(renumber(node, index => index + 3), { ...node,
+    parent: { node: target + 3, side: 'solid' }, source: { node: first + 3, side: 'solid' } });
+  const host = part('host').box({ w: 4, d: 4, h: 4, x: 1000 }).doc;
+  const flattened = flattenAssembly({ ...host, instances: [{ id: 'child', name: 'Fill cut source', doc: made, position: [0, 0, 0], rotation: [0, 0, 0] }] });
+  const moved = flattened.nodes.find(node => node.kind === 'fill-feature-pattern');
+  assert.ok(moved?.kind === 'fill-feature-pattern');
+  assert.deepEqual(moved.source, { node: first + host.nodes.length, side: 'solid' });
+  assert.deepEqual(moved.parent, { node: target + host.nodes.length, side: 'solid' });
+  const opened = await readStudioFile(encodeStudioFile(made));
+  assert.ok('doc' in opened, JSON.stringify(opened));
+  assert.deepEqual(opened.doc, made);
+  const changedSketch: StudioDoc = { ...made, nodes: made.nodes.map((node, index) => index === mask ? { ...node, suppressed: true } : node) };
+  assert.deepEqual(partBreps(changedSketch)[0].brep, partBreps(made)[0].brep);
+  const invalid: Record<string, unknown> = { ...made, nodes: [...doc.nodes, { ...node, source: node.parent }] };
+  assert.ok('error' in readStudioDoc(JSON.stringify(invalid)));
 });
 
 test('source indices follow delete, move, proposal remap and placed-document flattening without becoming consumed parents', () => {

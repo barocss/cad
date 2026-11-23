@@ -182,7 +182,8 @@ export function featureOf(node: ModelNode, index: number, nodes?: readonly Model
     }
     case 'linear-feature-pattern': return { ...at, kind: 'linear-feature-pattern', target: ref(node.parent),
       ...(node.source ? { source: ref(node.source) } : {}), axis: node.axis, spacing: node.spacing, count: node.count };
-    case 'fill-feature-pattern': return { ...at, kind: 'fill-feature-pattern', target: ref(node.parent), region: node.region, anchor: node.anchor, spacing: node.spacing, count: node.count, spacing2: node.spacing2, count2: node.count2 };
+    case 'fill-feature-pattern': return { ...at, kind: 'fill-feature-pattern', target: ref(node.parent),
+      ...(node.source ? { source: ref(node.source) } : {}), region: node.region, anchor: node.anchor, spacing: node.spacing, count: node.count, spacing2: node.spacing2, count2: node.count2 };
     case 'curve-feature-pattern': return { ...at, kind: 'curve-feature-pattern', target: ref(node.parent), path: resolveCurveFeaturePatternPath(curvePathDoc, node.path), spacing: node.spacing, count: node.count };
     case 'rectangular-feature-pattern': return { ...at, kind: 'rectangular-feature-pattern', target: ref(node.parent),
       ...(node.source ? { source: ref(node.source) } : {}), axis: node.axis, spacing: node.spacing, count: node.count, axis2: node.axis2, spacing2: node.spacing2, count2: node.count2 };

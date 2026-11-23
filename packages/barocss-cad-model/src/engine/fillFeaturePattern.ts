@@ -1,5 +1,5 @@
 import { fillFeaturePatternSpec, type FillFeaturePatternRegion } from '@barocss/cad/api';
-import { leafBodies, NODE_EXTRA_FIELDS, type ModelNode, type StudioDoc } from './doc';
+import { leafBodies, NODE_EXTRA_FIELDS, rectangularFeaturePatternSourceProblem, type BodyRef, type ModelNode, type StudioDoc } from './doc';
 import { refusal } from './refusal';
 
 const record = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
@@ -98,7 +98,7 @@ export function eligibleFillPatternRegions(doc: Pick<StudioDoc, 'nodes' | 'param
 
 export function fillFeaturePatternProblem(node: Record<string, unknown>, nodes: readonly ModelNode[], parameters: Record<string, number>): string | null {
   try {
-    const allowed = new Set(['kind', 'parent', 'region', 'anchor', 'spacing', 'count', 'spacing2', 'count2', ...NODE_EXTRA_FIELDS]);
+    const allowed = new Set(['kind', 'parent', 'source', 'region', 'anchor', 'spacing', 'count', 'spacing2', 'count2', ...NODE_EXTRA_FIELDS]);
     if (Object.keys(node).some(k => !allowed.has(k))) return fail('unknown feature field.');
     // Use the same strict finite-binary64 polygon and anchor admission as the public facade.
     fillFeaturePatternSpec({ region: node.region, anchor: node.anchor, spacing: dimension(node.spacing, parameters), count: node.count, spacing2: dimension(node.spacing2, parameters), count2: node.count2 } as Parameters<typeof fillFeaturePatternSpec>[0]);
@@ -106,7 +106,7 @@ export function fillFeaturePatternProblem(node: Record<string, unknown>, nodes: 
     if (!record(parent) || Object.keys(parent).sort().join(',') !== 'node,side' || !Number.isSafeInteger(parent.node) || parent.side !== 'solid') return '[BAD_REFERENCE] Fill cut pattern needs one solid difference reference.';
     const source = nodes[parent.node as number];
     if (source?.kind !== 'difference' || source.suppressed || !leafBodies(nodes).some(r => r.node === parent.node && r.side === 'solid')) return '[BAD_REFERENCE] Fill cut pattern needs a current unsuppressed difference body.';
-    return null;
+    return rectangularFeaturePatternSourceProblem(node.source, parent as unknown as BodyRef, nodes, 'Fill cut pattern');
   } catch (error) { return error instanceof Error ? error.message : String(error); }
 }
 

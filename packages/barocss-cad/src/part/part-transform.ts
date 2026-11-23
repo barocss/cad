@@ -3,7 +3,7 @@ import { checkBrep, BrepError } from '../brep/brep-core.js';
 // Transform and pattern operation cases. Shared geometry/state stays with part-model.ts.
 import { fillCutSnapshot, fillCutPlacements } from '../features/fill-cut-pattern.js';
 import { curveCutOffsets } from '../features/curve-cut-pattern.js';
-import { certifyPriorRectangularCut } from './part-prior-rectangular-cut.js';
+import { certifyPriorCutPlacements, certifyPriorRectangularCut } from './part-prior-rectangular-cut.js';
 import { faceGeometry } from '../brep/analytic-boolean.js';
 import type { Brep, BrepFace } from '../brep/brep-core.js';
 import type { BrepAffine } from '../brep/brep-transform.js';
@@ -183,7 +183,8 @@ export function transformOperation(f: CadPartFeature & Record<string, unknown>, 
       if (count * count2 > CadPartLimits.copies) fail('INPUT', `fill feature pattern must have at most ${CadPartLimits.copies} candidate cells`);
       const snapshot = fillCutSnapshot(f.region, f.anchor, fail);
       const placements = fillCutPlacements(snapshot.region, snapshot.anchor, spacing, count, spacing2, count2);
-      const { seed, tool } = t.cutSource(f.target);
+      const { seed, tool, prior } = t.cutSource(f.target, f.source, 'fill');
+      if (prior) certifyPriorCutPlacements(seed, tool[0], prior, placements.map(placement => placement.offset), fail);
       const matrix: BrepAffine['matrix'] = [1, 0, 0, 0, 1, 0, 0, 0, 1];
       return () => {
         if (!placements.length || !tool.length) return { kind: 'solid', parts: [seed] };

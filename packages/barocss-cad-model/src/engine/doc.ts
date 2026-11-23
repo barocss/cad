@@ -981,7 +981,7 @@ export function priorLinearFeaturePatternProblem(node: Record<string, unknown>, 
   return rectangularFeaturePatternSourceProblem(node.source, parent as unknown as BodyRef, nodes, 'Linear cut pattern');
 }
 
-/** Check rectangular patterns and both consumers of the earlier rectangular source in saved and nested recipes. */
+/** Check Rectangular and explicit-source Linear patterns in saved and nested recipes. */
 export function rectangularPatternDocumentProblem(input: unknown): string | null {
   const stack: unknown[] = [input], seen = new Set<object>();
   while (stack.length) {
@@ -1142,7 +1142,7 @@ type ModelNodeBase = DrivenSketchNode | RoundedRectangleInsetNode | SketchNode |
   | { kind: 'linear-span-pattern'; parent: BodyRef; axis: Axis; span: number; count: number }
   /** Repeat a current difference's cut; spacing keeps the stored dimension reference. */
   | { kind: 'linear-feature-pattern'; parent: BodyRef; source?: BodyRef; axis: Axis; spacing: Dim; count: number }
-  | { kind: 'fill-feature-pattern'; parent: BodyRef; region: FillFeaturePatternRegion; anchor: readonly [number, number]; spacing: Dim; count: number; spacing2: Dim; count2: number }
+  | { kind: 'fill-feature-pattern'; parent: BodyRef; source?: BodyRef; region: FillFeaturePatternRegion; anchor: readonly [number, number]; spacing: Dim; count: number; spacing2: Dim; count2: number }
   | { kind: 'curve-feature-pattern'; parent: BodyRef; path: CurveFeaturePatternPath; spacing: Dim; count: number }
   | { kind: 'rectangular-feature-pattern'; parent: BodyRef; source?: BodyRef; axis: Axis; spacing: Dim; count: number; axis2: Axis; spacing2: Dim; count2: number }
   /** About `axis` through `pivot` (default the origin). */
@@ -1747,7 +1747,7 @@ export const usesOf = (node: ModelNode, nodes?: readonly ModelNode[]): number[] 
   : node.kind === 'revolve' && node.axisRef
     ? [node.sketch, ...(nodes ? nodes.flatMap((_, i) => featureId(nodes, i) === node.axisRef!.sourceFeature ? [i] : []) : [])]
   : node.kind === 'align' ? [node.parent.node, node.target.body.node]
-  : (node.kind === 'rectangular-feature-pattern' || node.kind === 'linear-feature-pattern') && node.source ? [node.parent.node, node.source.node]
+  : (node.kind === 'rectangular-feature-pattern' || node.kind === 'linear-feature-pattern' || node.kind === 'fill-feature-pattern') && node.source ? [node.parent.node, node.source.node]
   : node.kind === 'face-end-extrude' ? [node.sketch, node.target.body.node]
   : (node.kind === 'offset-face' || node.kind === 'replace-face') && node.target ? [node.parent.node, node.target.body.node]
   : node.kind === 'extrude' && node.cutDepth === 'through' ? throughCutSources(node, nodes) : parentsOf(node);

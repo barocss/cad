@@ -943,16 +943,19 @@ const allCommands: Command[] = [
   },
   {
     id: 'fill-feature-pattern', label: 'Fill cut pattern', icon: 'cad-pattern-linear', hint: 'Capture a straight world XY mask with at most 16 total vertices. Later sketch edits do not change it. The original cut stays; added reference points inside or on holes are skipped. Cuts may cross boundaries.', group: 'pattern', keywords: 'fill region feature cut repeat subtract',
-    available: ctx => { const why = linearCutProblem(ctx); return why ? no(why.message) : ok; },
+    available: ctx => { const why = priorRectangularCutProblem(ctx, 'Fill cut pattern'); return why ? no(why.message) : ok; },
     fields: ctx => [...(ctx.fillPatternRegion ? [] : [{ key: 'region', label: 'Region snapshot', kind: 'choice' as const, options: eligibleFillPatternRegions(ctx.doc), empty: 'Add a closed straight world XY sketch with at most 16 outer and hole vertices in total.' }]),
       { key: 'anchorX', label: 'Reference X', kind: 'number', min: -10000, max: 10000 }, { key: 'anchorY', label: 'Reference Y', kind: 'number', min: -10000, max: 10000 },
       { key: 'spacing', label: 'X spacing', kind: 'mm', min: 0, max: 10000 }, { key: 'count', label: 'Columns', kind: 'count', min: 1, max: 64 },
       { key: 'spacing2', label: 'Y spacing', kind: 'mm', min: 0, max: 10000 }, { key: 'count2', label: 'Rows', kind: 'count', min: 1, max: 64 }],
     defaults: ctx => ({ region: eligibleFillPatternRegions(ctx.doc)[0]?.value ?? '', anchorX: ctx.fillPatternAnchor?.[0] ?? 0, anchorY: ctx.fillPatternAnchor?.[1] ?? 0, spacing: 12, count: 4, spacing2: 10, count2: 3 }),
     build: (ctx, v) => {
-      const why = linearCutProblem(ctx); if (why) throw why;
+      const why = priorRectangularCutProblem(ctx, 'Fill cut pattern'); if (why) throw why;
       if (!ctx.fillPatternRegion && (typeof v.region !== 'string' || !/^(0|[1-9][0-9]*)$/.test(v.region))) throw refusal('VALUE', 'Select a region snapshot.');
-      const node = { kind: 'fill-feature-pattern' as const, parent: refOf(oneBody(ctx)!), region: ctx.fillPatternRegion ?? fillRegionSnapshot(ctx.doc, Number(v.region)), anchor: ctx.fillPatternAnchor ?? [Number(v.anchorX), Number(v.anchorY)] as const, spacing: Number(v.spacing), count: Number(v.count), spacing2: Number(v.spacing2), count2: Number(v.count2) };
+      const parent = refOf(oneBody(ctx)!), source = rectangularCutSource(ctx, parent);
+      const node = { kind: 'fill-feature-pattern' as const, parent, ...(source ? { source } : {}),
+        region: ctx.fillPatternRegion ?? fillRegionSnapshot(ctx.doc, Number(v.region)), anchor: ctx.fillPatternAnchor ?? [Number(v.anchorX), Number(v.anchorY)] as const,
+        spacing: Number(v.spacing), count: Number(v.count), spacing2: Number(v.spacing2), count2: Number(v.count2) };
       const problem = fillFeaturePatternProblem(node, ctx.doc.nodes, ctx.doc.parameters);
       if (problem) throw coded(problem.startsWith('[BAD_REFERENCE]') ? 'BAD_REFERENCE' : 'VALUE', problem);
       return withNode(ctx.doc, structuredClone(node));

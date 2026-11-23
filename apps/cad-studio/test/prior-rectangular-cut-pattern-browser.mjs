@@ -5,14 +5,19 @@ import { createFlow } from './flow-helper.mjs';
 import { currentPartRevision, withMcpSession } from './mcp-browser-session.mjs';
 import { clickModelCommand } from './model-rail-helper.mjs';
 
-const agent = process.argv.includes('--agent');
-const linear = process.argv.includes('--linear');
+const mode = process.argv[3];
+const workflows = {
+  '--agent': ['D1829_SOURCE_FROZEN', '#25 revision-bound local Agent proposal for the earlier through-Subtract.'],
+  '--linear': ['D1830_SOURCE_FROZEN', '#25 repeat the earlier rectangular through-cut along a signed XY line.'],
+  '--fill': ['D1831_SOURCE_FROZEN', '#25 repeat the earlier rectangular through-cut at the captured mask cells.'],
+};
+const [envFrozen, qualification] = workflows[mode] ?? [
+  'D1828_SOURCE_FROZEN', '#25 repeat only the chosen earlier through-Subtract on its current same-stock result.',
+];
+const fillMask = [[4, 4], [32, 4], [32, 12], [16, 12], [16, 35], [4, 35]];
 const f = await createFlow({
-  name: 'prior-rectangular-cut-pattern', output: process.argv[2], envFrozen: linear ? 'D1830_SOURCE_FROZEN' : agent ? 'D1829_SOURCE_FROZEN' : 'D1828_SOURCE_FROZEN',
-  qualification: linear ? '#25 repeat the earlier rectangular through-cut along a signed XY line.' :
-    agent ? '#25 revision-bound local Agent proposal for the earlier through-Subtract.' :
-    '#25 repeat only the chosen earlier through-Subtract on its current same-stock result.',
-  limits: ['One original rectangular stock and two disjoint full-height rectangular cuts, XY rectangular pattern in desktop Studio.'],
+  name: 'prior-rectangular-cut-pattern', output: process.argv[2], envFrozen, qualification,
+  limits: ['One original rectangular stock and two disjoint full-height rectangular cuts in desktop Studio.'],
   initialFiles: [import.meta.filename, 'apps/cad-studio/src/App.tsx', 'apps/cad-studio/src/app/cutPatternSource.ts',
     'apps/cad-studio/src/ui/Hud.tsx', 'apps/cad-studio/src/ui/NodeEditor.tsx', 'packages/barocss-cad-model/src/app/commands.ts',
     'packages/barocss-cad-model/src/chat/part/features.ts',
@@ -37,7 +42,12 @@ if (!input.nodes) {
   box([8, 8], [12, 10]);
   doc = withNode(doc, { kind: 'difference', parent: ref(1), tool: ref(3) });
   box([8, 26], [14, 28]);
-  console.log(JSON.stringify(withNode(doc, { kind: 'difference', parent: ref(4), tool: ref(6) })));
+  doc = withNode(doc, { kind: 'difference', parent: ref(4), tool: ref(6) });
+  if (input.fill) {
+    const points: [number, number][] = ${JSON.stringify(fillMask)};
+    doc = withNode(doc, { kind: 'sketch', profile: 'loop', segments: points.map(start => ({ kind: 'line', start })) });
+  }
+  console.log(JSON.stringify(doc));
 } else {
   const [body] = partBreps(input);
   const { brep } = body;
@@ -272,9 +282,85 @@ async function applyLinearPattern(source) {
   await f.same(edited);
 }
 
+async function applyFillPattern(source) {
+  const index = source.nodes.length;
+  const open = async entry => {
+    await chooseSource(entry);
+    await clickModelCommand(f.page, 'Pattern', 'Fill cut pattern');
+    const panel = f.page.getByRole('dialog', { name: 'Fill cut pattern', exact: true });
+    await panel.getByText(entry ? 'Subtract 1 (n4)' : 'Subtract 2 (n7)', { exact: true }).waitFor();
+    await field(panel, 'Region snapshot').selectOption(String(index - 1));
+    for (const [label, value] of [['Reference X', 10], ['Reference Y', 9], ['X spacing', 16], ['Columns', 2], ['Y spacing', 8], ['Rows', 2]])
+      await field(panel, label).fill(String(value));
+    return panel;
+  };
+  const applyFill = async (panel, label, earlier) => {
+    await phase(panel, 'preview');
+    await f.same(source);
+    await button('Apply', panel).click();
+    await f.changed(source);
+    const { doc } = await f.snapshot(label), node = doc.nodes.at(-1);
+    assert.deepEqual(doc.nodes.slice(0, -1), source.nodes);
+    assert.deepEqual(node.parent, { node: 7, side: 'solid' });
+    assert.deepEqual(node.source, earlier ? { node: 4, side: 'solid' } : undefined);
+    assert.deepEqual(node.region, { points: fillMask });
+    assert.deepEqual(node.anchor, [10, 9]);
+    assert.deepEqual([node.kind, node.spacing, node.count, node.spacing2, node.count2], ['fill-feature-pattern', 16, 2, 8, 2]);
+    return doc;
+  };
+  const control = await applyFill(await open(null), '01-fill-current-control', false);
+  await native('fill-current-source', control, [older, later, shift(later, 16, 0), shift(later, 0, 8)]);
+  await f.undo();
+  await f.same(source);
+
+  const panel = await open('Browser');
+  const undo = await button('Undo').getAttribute('data-tip');
+  await field(panel, 'Y spacing').fill('18');
+  await phase(panel, 'refused');
+  assert.ok(await button('Apply', panel).isDisabled());
+  await f.same(source);
+  assert.equal(await button('Undo').getAttribute('data-tip'), undo);
+  const error = panel.locator('.hud-error');
+  const details = error.locator('details:not([open]) > summary');
+  if (await details.count()) await details.click();
+  assert.match(await error.innerText(), /disjoint from the newer cut/);
+  await f.snapshot('02-fill-overlap-refused');
+  await field(panel, 'Y spacing').fill('8');
+  const browser = await applyFill(panel, '03-fill-earlier-applied', true);
+  const openings = spacing2 => [older, later, shift(older, 16, 0), shift(older, 0, spacing2)];
+  await native('fill-earlier-mask-cells', browser, openings(8));
+  await f.undo();
+  await f.same(source);
+  const history = await applyFill(await open('History'), '04-fill-history-applied', true);
+  assert.deepEqual(history, browser);
+
+  await f.openFeatureEditor(index, 'fill cut spacing');
+  await f.editor().getByText('Subtract 1 (n4)', { exact: true }).waitFor();
+  await field(f.editor(), 'Y spacing').fill('5');
+  const edited = (await f.applyEditor(history, '05-fill-row-spacing-edited')).doc;
+  assert.deepEqual(edited.nodes.at(-1), { ...history.nodes.at(-1), spacing2: 5 });
+  await native('fill-earlier-after-edit', edited, openings(5));
+  await f.undo();
+  await f.same(history);
+  await f.redo();
+  await f.same(edited);
+  const saved = await f.save('fill-earlier-cut');
+  await f.freshOpen(saved.file, edited, 'fill-saved-fresh-open');
+  await button('Top', f.page.locator('.views')).click();
+  await f.page.getByTitle('Frame all (F)', { exact: true }).click();
+  await native('fill-earlier-after-open', edited, openings(5));
+  await f.openFeatureEditor(index, 'fill snapshot and earlier cut');
+  await f.editor().getByText('Subtract 1 (n4)', { exact: true }).waitFor();
+  assert.equal(await field(f.editor(), 'Y spacing').inputValue(), '5');
+  assert.equal(await field(f.editor(), 'Region snapshot').locator('option:checked').textContent(), 'Current region snapshot');
+  await f.snapshot('06-fill-reopened-source');
+  await f.closeEditor();
+  await f.same(edited);
+}
+
 await f.run(async () => {
-  const source = await f.inspect('seed', {});
-  if (agent) return approveAgentPattern(source);
+  const source = await f.inspect('seed', { fill: mode === '--fill' });
+  if (mode === '--agent') return approveAgentPattern(source);
   await f.newPage();
   await f.page.getByLabel('Model file', { exact: true }).setInputFiles({
     name: 'two-rectangular-through-cuts.bcad', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(source)),
@@ -285,7 +371,8 @@ await f.run(async () => {
   await button('Top', f.page.locator('.views')).click();
   await f.page.getByTitle('Frame all (F)', { exact: true }).click();
   await native('original-two-cuts', source, [older, later]);
-  if (linear) return applyLinearPattern(source);
+  if (mode === '--linear') return applyLinearPattern(source);
+  if (mode === '--fill') return applyFillPattern(source);
 
   const latest = await openPattern(null);
   await setGrid(latest);

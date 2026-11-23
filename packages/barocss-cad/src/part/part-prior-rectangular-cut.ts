@@ -2,6 +2,7 @@ import { CadNumericPolicy } from '../numeric-policy.js';
 import type { CurveSegment2 } from '../brep/curved-arrangement.js';
 import type { Part } from './part-types.js';
 import type { Tools } from './part-model.js';
+import type { Point } from '../types.js';
 
 type Rectangle = { min: [number, number]; max: [number, number] };
 export type PriorRectangularCut = { stock: Part; previous: Part; other: Part };
@@ -35,14 +36,17 @@ function profile(part: Part) {
   return { outer, holes: holes as Rectangle[], z0: slab.z0, z1: slab.z1 };
 }
 
-/** Bind the direct two-cut history to disjoint, full-height native cavities before making any copy. */
-export function certifyPriorRectangularCut(seed: Part, tool: Part, prior: PriorRectangularCut,
-  first: number, spacing: number, count: number, second: number, spacing2: number, count2: number, fail: Tools['fail'], pattern: 'rectangular' | 'linear' = 'rectangular'): void {
+type Pattern = 'rectangular' | 'linear' | 'fill';
+const profileRequirement = (pattern: Pattern) => `${pattern} feature pattern source needs two original upright rectangular through cuts on one rectangular stock and ${pattern === 'linear' ? 'one XY line' : pattern === 'fill' ? 'selected XY placements' : 'an XY grid'}`;
+
+/** Prove the unconditional original and precisely the captured additional placements, without clipping tools. */
+export function certifyPriorCutPlacements(seed: Part, tool: Part, prior: PriorRectangularCut,
+  copyOffsets: readonly Point[], fail: Tools['fail'], pattern: Pattern = 'fill'): void {
   const label = `${pattern} feature pattern source`;
   const stock = profile(prior.stock), earlier = profile(prior.previous), current = profile(seed), olderTool = profile(tool), newerTool = profile(prior.other);
   if (!stock || !earlier || !current || !olderTool || !newerTool || stock.holes.length || olderTool.holes.length || newerTool.holes.length
-    || earlier.holes.length !== 1 || current.holes.length !== 2 || ![first, second].every(axis => axis === 0 || axis === 1))
-    return fail('CAPABILITY', `${label} needs two original upright rectangular through cuts on one rectangular stock and ${pattern === 'linear' ? 'one XY line' : 'an XY grid'}`);
+    || earlier.holes.length !== 1 || current.holes.length !== 2)
+    return fail('CAPABILITY', profileRequirement(pattern));
   const same = (a: Rectangle, b: Rectangle) => a.min.every((value, i) => value === b.min[i]) && a.max.every((value, i) => value === b.max[i]);
   if (!same(stock.outer, earlier.outer) || !same(stock.outer, current.outer)
     || earlier.z0 !== stock.z0 || earlier.z1 !== stock.z1 || current.z0 !== stock.z0 || current.z1 !== stock.z1
@@ -56,13 +60,29 @@ export function certifyPriorRectangularCut(seed: Part, tool: Part, prior: PriorR
   const separate = (a: Rectangle, b: Rectangle) => [0, 1].some(axis => b.min[axis] - a.max[axis] > margin || a.min[axis] - b.max[axis] > margin);
   if (!inside(newerTool.outer)) return fail('GEOMETRY', `${label} needs strictly interior original through cuts`);
   const placed: Rectangle[] = [];
-  for (let j = 0; j < count2; j++) for (let i = 0; i < count; i++) {
-    const offset = [0, 0]; offset[first] = spacing * i; offset[second] = spacing2 * j;
+  const place = (offset: Point) => {
+    if (offset.length !== 3 || offset[2] !== 0 || !offset.every(Number.isFinite))
+      return fail('CAPABILITY', `${label} needs finite XY copy offsets`);
     const box: Rectangle = { min: [olderTool.outer.min[0] + offset[0], olderTool.outer.min[1] + offset[1]],
       max: [olderTool.outer.max[0] + offset[0], olderTool.outer.max[1] + offset[1]] };
     if (!inside(box)) return fail('GEOMETRY', `${label} cells must stay strictly inside the original stock`);
     if (!separate(box, newerTool.outer) || placed.some(previous => !separate(box, previous)))
       return fail('GEOMETRY', `${label} cells must stay disjoint from the newer cut and every other cell`);
     placed.push(box);
+  };
+  place([0, 0, 0]);
+  for (const offset of copyOffsets) place(offset);
+}
+
+/** Existing rectangular and linear recipes retain their original row-major placement schedule and diagnostics. */
+export function certifyPriorRectangularCut(seed: Part, tool: Part, prior: PriorRectangularCut,
+  first: number, spacing: number, count: number, second: number, spacing2: number, count2: number, fail: Tools['fail'], pattern: 'rectangular' | 'linear' = 'rectangular'): void {
+  if (![first, second].every(axis => axis === 0 || axis === 1)) return fail('CAPABILITY', profileRequirement(pattern));
+  const copies: Point[] = [];
+  for (let j = 0; j < count2; j++) for (let i = 0; i < count; i++) {
+    if (!i && !j) continue;
+    const offset: Point = [0, 0, 0]; offset[first] = spacing * i; offset[second] = spacing2 * j;
+    copies.push(offset);
   }
+  certifyPriorCutPlacements(seed, tool, prior, copies, fail, pattern);
 }

@@ -2,10 +2,12 @@ import { refOf, selectedBodies, type Ctx } from '@barocss/cad-model/app/commands
 import type { BodyRef, ModelNode } from '@barocss/cad-model/engine/doc';
 import { featureId } from '@barocss/cad-model/engine/ids';
 
-const cutPatterns = new Set(['linear-feature-pattern', 'rectangular-feature-pattern', 'fill-feature-pattern', 'curve-feature-pattern']);
+function supportsEarlierRectangularCut(kind: string): boolean {
+  return kind === 'linear-feature-pattern' || kind === 'rectangular-feature-pattern' || kind === 'fill-feature-pattern';
+}
 
 export function isCutPattern(kind: string): boolean {
-  return cutPatterns.has(kind);
+  return supportsEarlierRectangularCut(kind) || kind === 'curve-feature-pattern';
 }
 
 export function selectedCutPatternSource(ctx: Ctx): number | null {
@@ -16,7 +18,8 @@ export function selectedCutPatternSource(ctx: Ctx): number | null {
 }
 
 /** Preserve the explicit earlier source while the selected body stays the current target. */
-export function earlierRectangularCutSource(ctx: Ctx, index: number): BodyRef | undefined {
+export function earlierRectangularCutSource(ctx: Ctx, command: string, index: number): BodyRef | undefined {
+  if (!supportsEarlierRectangularCut(command)) return;
   const target = selectedCutPatternSource(ctx);
   const current = target === null ? undefined : ctx.doc.nodes[target], source = ctx.doc.nodes[index];
   if (current?.kind !== 'difference' || current.suppressed || source?.kind !== 'difference' || source.suppressed
@@ -25,9 +28,16 @@ export function earlierRectangularCutSource(ctx: Ctx, index: number): BodyRef | 
 }
 
 export function savedCutPatternSource(node: ModelNode, nodes: readonly ModelNode[]): string | null {
-  if (!isCutPattern(node.kind) || !('parent' in node)) return null;
-  const earlier = (node.kind === 'rectangular-feature-pattern' || node.kind === 'linear-feature-pattern') && node.source;
-  return cutPatternSourceLabel(nodes, earlier ? earlier.node : node.parent.node);
+  switch (node.kind) {
+    case 'linear-feature-pattern':
+    case 'rectangular-feature-pattern':
+    case 'fill-feature-pattern':
+      return cutPatternSourceLabel(nodes, (node.source ?? node.parent).node);
+    case 'curve-feature-pattern':
+      return cutPatternSourceLabel(nodes, node.parent.node);
+    default:
+      return null;
+  }
 }
 
 export function cutPatternSourceLabel(nodes: readonly ModelNode[], index: number | null): string | null {

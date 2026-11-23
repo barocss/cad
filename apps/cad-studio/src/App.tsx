@@ -1466,8 +1466,8 @@ export function App() {
     if (family && (!fresh || busy)) { setToast({ title: 'Fillet not started', hint: 'Wait for the current part to finish evaluating.', detail: '' }); return; }
     const sourceIntent = cutSourceIntent.current;
     const explicitCut = sourceIntent?.doc === doc && sourceIntent.selection === selection ? sourceIntent.index : null;
-    const rectangularCutSource = (cmd.id === 'rectangular-feature-pattern' || cmd.id === 'linear-feature-pattern') && explicitCut !== null && marker === null
-      && !inPlaceNow.current && fresh && !busy ? earlierRectangularCutSource(ctx, explicitCut) : undefined;
+    const rectangularCutSource = explicitCut !== null && marker === null && !inPlaceNow.current && fresh && !busy
+      ? earlierRectangularCutSource(ctx, cmd.id, explicitCut) : undefined;
     if (isCutPattern(cmd.id) && explicitCut !== null && !rectangularCutSource) {
       const source = selectedCutPatternSource(ctx);
       if (source !== explicitCut) {
