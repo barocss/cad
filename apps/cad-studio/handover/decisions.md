@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D1813: [Label the display mesh face count in the Inspector](notes/inspector-mesh-face-label-2026-11-23/README.md), related #10. Verify the selected exact S-bend readout before and after fresh Open and on a new Box.
+
 - D1812: [Sweep paired passages through a four-span S-bend](notes/exact-four-span-paired-s-bend-2026-11-23/README.md), #10. Add two opposite-turn bends with a straight lead. Verify both mouths, 36 charted joins and independent passage edits through Studio approval and fresh Open.
 
 - D1811: [Review the pending four-span paired duct](notes/pending-four-span-paired-duct-review-2026-11-23/README.md), #324. Bind both mouths and 36 charted joins to the original rail and both Agent images through explicit approval and fresh Open.

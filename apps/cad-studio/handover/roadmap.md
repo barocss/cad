@@ -1,13 +1,13 @@
 # CAD roadmap — current status and execution order
 
-Updated 2026-11-23 · Priority authority: D520 · Latest delivery: D1812 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
+Updated 2026-11-23 · Priority authority: D520 · Latest delivery: D1813 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
 
 This is the only current status index. Detailed tracks define acceptance; the 34 stable row pages retain scope and issue navigation. Immutable decision notes retain results. Do not append chronological status paragraphs here. [D520 decision](notes/cad-roadmap-replan-2026-11-04/README.md) supersedes D445 execution order and historical next-item text, while retaining its safeguards and bounded proofs.
 
 ## Now and next
 
-- **Current position:** [D1812](notes/exact-four-span-paired-s-bend-2026-11-23/README.md), P5 rows 07 and 16. Exact Sweep carries two rectangular passages through a planar S-bend with a straight lead. Both mouths, 36 charted joints, passage edits and explicit Agent approval pass through Studio fresh Open.
-- **Next MAIN:** D1813, P0 rows [15](roadmap-rows/15.md) and [16](roadmap-rows/16.md). Show the source of the body Inspector face count. The D1812 Studio capture shows a 32-face display mesh for a 50-face native exact body under the generic `Faces` label. Verify the specific readout in desktop Studio, then return to P5 pending Agent review for the four-span S-bend.
+- **Current position:** [D1813](notes/inspector-mesh-face-label-2026-11-23/README.md), P0 rows 15 and 16. Studio labels the body Inspector value as Mesh faces. The S-bend from [D1812](notes/exact-four-span-paired-s-bend-2026-11-23/README.md) shows 32 mesh faces and retains its 50-face native B-rep through fresh Open.
+- **Next MAIN:** D1814, P5 rows [07](roadmap-rows/07.md) and [16](roadmap-rows/16.md), [#324](https://github.com/barocss/cad/issues/324). Verify pending local Agent review for the four-span S-bend. Bind both mouths, all 36 joins and original rail to both pinned images through explicit Studio approval and fresh Open.
 - **Separate follow-ups:** Continue Studio App extraction in cohesive parts with affected desktop checks. [#608 Rendering](https://github.com/barocss/cad/issues/608) stays on HOLD. API inventory drift remains open. The issue tracker records [#126](https://github.com/barocss/cad/issues/126), [#613](https://github.com/barocss/cad/issues/613), [#152](https://github.com/barocss/cad/issues/152) and [#22](https://github.com/barocss/cad/issues/22) as closed.
 - **Active repository:** [barocss/cad](https://github.com/barocss/cad), based on `origin/main`. Fetch before work and preserve unexpected changes. The [migration record](../../../docs/migration/README.md) maps the former `local/cad-dev` history and issue numbers.
 - **Evidence correction:** D482 records2167 PASS/0 FAIL/2 existing SKIP in a later full-kernel run than D433. Neither result is a new full-suite PASS at this audit HEAD. [D482 record](notes/vertical-contact-refusal-2026-11-04/README.md).
