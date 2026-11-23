@@ -25,11 +25,13 @@ assert doc['nodes'] == original['nodes'], 'the base part untouched'
 print(json.dumps({'status': 'PASS', 'productImports': 0}))
 `;
 const fixture = join(import.meta.dirname, 'fixtures', 'edit-in-place.bcad');
+const extractedStatus = process.argv.includes('--extracted-status');
 const f = await createFlow({ name: 'edit-in-place', envFrozen: 'EDIT_IN_PLACE_SOURCE_FROZEN', output: process.argv[2], qualification: 'EDIT_IN_PLACE', oracleSource,
-  limits: ['One shared definition with one feature edited (extrude height); the see-through context is judged from screenshots.'],
+  limits: ['One shared definition with one extrusion width edit. The see-through context is judged from screenshots.'],
   initialFiles: ['apps/cad-studio/test/edit-in-place-browser.mjs', 'apps/cad-studio/test/flow-helper.mjs', 'apps/cad-studio/test/fixtures/edit-in-place.bcad', 'apps/cad-studio/src/app/editInPlace.ts',
     'apps/cad-studio/src/App.tsx', 'packages/barocss-cad-model/src/assembly/definitions.ts'],
-  requiredFrozen: ['apps/cad-studio/src/app/editInPlace.ts'] });
+  requiredFrozen: ['apps/cad-studio/src/app/editInPlace.ts'],
+  extraFrozen: extractedStatus ? ['apps/cad-studio/src/ui/InPlaceEditStatus.tsx'] : [] });
 
 const banner = () => f.page.getByRole('status', { name: 'Editing a part in place', exact: true });
 const pick = async name => { await f.page.locator('.ol.instance:not(.nested)').filter({ hasText: name }).first().click(); await f.page.getByRole('complementary', { name: 'Instance', exact: true }).waitFor(); };
@@ -49,10 +51,18 @@ await f.run(async () => {
   f.phase = 'enter'; await enter();
   const text = await banner().textContent(); f.report.observations.push({ banner: text }); assert.match(text, /Editing Cube 2 · shared by 2/);
   const partDoc = await f.doc(); assert.equal(partDoc.nodes.length, 2, 'the working document is the cube definition'); await f.snapshot('02-in-place');
+  const details = banner().locator('details');
+  await details.locator('summary').click();
+  assert.ok(await details.evaluate(element => element.open));
+  assert.match(await details.innerText(), /Finish updates all 2 instances in one step/);
+  await f.snapshot('02-details');
 
   f.phase = 'edit and Cmd+S refused'; await widthTo(30); await f.snapshot('03-width-30');
   const downloads = f.report.downloads.length; await f.page.evaluate(() => document.activeElement?.blur()); await f.page.keyboard.press('Meta+s');
-  const notice = await f.waitToast(/[Ff]inish/); f.report.observations.push({ saveRefused: notice }); assert.equal(f.report.downloads.length, downloads, 'nothing saved during the session'); await f.dismissToasts();
+  const notice = await f.waitToast(/before saving/);
+  f.report.observations.push({ saveRefused: notice });
+  assert.equal(f.report.downloads.length, downloads, 'nothing saved during the session');
+  await f.snapshot('03-save-refused');
 
   f.phase = 'finish'; await banner().getByRole('button', { name: 'Finish', exact: true }).click();
   await banner().waitFor({ state: 'hidden' }); await f.page.waitForFunction(() => window.__studioDoc.instances?.length === 2, null, { timeout: 30000 }); await f.ready();
@@ -60,7 +70,21 @@ await f.run(async () => {
 
   f.phase = 'undo, redo'; await f.undo(); await f.same(original); await f.redo(); await f.same(finished);
 
-  f.phase = 'cancel discards'; await enter(); await widthTo(45);
-  await banner().getByRole('button', { name: 'Cancel', exact: true }).click(); await banner().getByRole('button', { name: 'Discard', exact: true }).click();
-  await banner().waitFor({ state: 'hidden' }); await f.same(finished); await f.snapshot('05-discarded');
+  f.phase = 'cancel and keep the draft'; await enter(); await widthTo(45);
+  const draft = await f.doc();
+  const statusAction = name => banner().getByRole('button', { name, exact: true });
+  await statusAction('Cancel').click();
+  await statusAction('Discard').waitFor();
+  await f.same(draft);
+  await f.snapshot('05-discard-offered');
+  await statusAction('Keep editing').click();
+  await statusAction('Finish').waitFor();
+  await f.same(draft);
+  await f.snapshot('06-keep-editing');
+
+  f.phase = 'discard the draft'; await statusAction('Cancel').click(); await statusAction('Discard').click();
+  await banner().waitFor({ state: 'hidden' }); await f.same(finished); await f.snapshot('07-discarded');
+  const saved = await f.save('in-place-finished');
+  const reopened = (await f.freshOpen(saved.file, finished, '08-fresh-open')).doc;
+  await f.runOracle({ doc: reopened, original }, '08-fresh-open');
 });

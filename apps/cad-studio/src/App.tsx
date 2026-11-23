@@ -162,7 +162,6 @@ import { hostsOf, nestedCard, renderKeysOf, singleNested, singleTop, viewportIns
 import { NestedPartPanel } from './ui/NestedPartPanel';
 import { offsetFaceLaunchView } from './viewport/offsetFaceLaunchView';
 import { DRAG_TYPE, snapshotInstanceIsolation, type Spot, type SketchState, type ViewportHandle } from './viewport/Viewport';
-import { Button } from '@/components/ui/button';
 import { countRender, onBlockRender } from './devRenders';
 import { OutlinerInstances } from './ui/OutlinerInstances';
 import { OutlinerCuts } from './ui/OutlinerCuts';
@@ -189,6 +188,7 @@ import type { CamOptions } from './viewport/camDisplay';
 import { withPrintPreviewSettings, type PrintPreviewPatch } from './viewport/printSettings';
 import { isRefusal, refusal } from '@barocss/cad-model/engine/refusal';
 import { StudioNoticeStack } from './ui/StudioNoticeStack';
+import { InPlaceEditStatus } from './ui/InPlaceEditStatus';
 import { FlatPatternDialog } from './ui/FlatPatternDialog';
 import { CutListDialog } from './ui/CutListDialog';
 import { StudioTopBar } from './ui/StudioTopBar';
@@ -2940,19 +2940,9 @@ export function App() {
         layout={historyLayout.bar} actions={{ pickProfile, openHistorySketch: openFromHistory, setMarker, setHistoryMenu,
           openHistoryFeature, rememberFocus: workspaceModeExit.rememberFocus, takeFocus: workspaceModeExit.takeFocus }} />}</Profiler>
 
-      {inPlace && <div className="card in-place-bar" role="status" aria-label="Editing a part in place">
-        <span>Editing <b>{inPlace.name}</b>{inPlace.shared > 1 ? ` · shared by ${inPlace.shared}` : ''}</span>
-        {askDiscard ? <>
-          <span className="muted">Discard your changes?</span>
-          <Button size="sm" variant="default" onClick={cancelInPlaceSession}>Discard</Button>
-          <Button size="sm" variant="ghost" onClick={() => setAskDiscard(false)}>Keep editing</Button>
-        </> : <>
-          <Button size="sm" variant="default" onClick={finishInPlaceSession}>Finish</Button>
-          <Button size="sm" variant="ghost" onPointerDown={workspaceModeExit.rememberFocus} onClick={cancelInPlaceSession}>Cancel</Button>
-        </>}
-        <details className="in-place-details"><summary>Details</summary>
-          <div className="muted small">The other parts are shown see-through where they are relative to this one. Finish updates {inPlace.shared > 1 ? `all ${inPlace.shared} instances` : 'the part'} in one step (Undo restores the assembly). Saving and opening are off until then.</div></details>
-      </div>}
+      {inPlace && <InPlaceEditStatus session={inPlace} askDiscard={askDiscard}
+        onFinish={finishInPlaceSession} onCancel={cancelInPlaceSession}
+        onKeepEditing={() => setAskDiscard(false)} rememberFocus={workspaceModeExit.rememberFocus} />}
       {stage !== null ? <div className="card work-bar" role="status" aria-label="Working"><span className="mono">Working… {stage}</span>
         <button className="ghost small" aria-label="Cancel the computation" title="Stop it: nothing changes" onClick={stopStage}>Cancel</button></div>
       : busy && slow && <div className="card work-bar" role="status" aria-label="Working"><span className="mono">Working…</span>
