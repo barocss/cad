@@ -6,7 +6,7 @@ import { arcOf, outlineSegments } from './profile';
 import { matchesPinnedRound, preparePinnedLineArcRound } from './internal/pinnedLineArcRound';
 import { settleShape } from './settle';
 import type { SketchShape } from './types';
-import type { SketchRule } from './terms';
+import { edgeAngle, type SketchRule } from './terms';
 import { hvOf } from './rules';
 import { arcMeetsOtherOutline, sideMeetsOtherOutline } from './trim';
 import { r6Signed as r6 } from '../util/round';
@@ -130,9 +130,12 @@ export function chamferCorner(s: Polygon, i: number, distance: number): { shape:
 
   const hv = hvOf(s);
   const candidate = replaceCorner({ ...s, hv }, i, A, B, 0, true);
-  const angleAtCorner = s.rules?.some(rule => rule.kind === 'angle' &&
+  const angleAtCorner = s.rules?.find(rule => rule.kind === 'angle' &&
     ((rule.a === prev && rule.b === i) || (rule.a === i && rule.b === prev)));
-  if (angleAtCorner || s.tangents?.includes(i) || (s.rules?.length ?? 0) !== (candidate.rules?.length ?? 0) ||
+  const obliqueAngle = angleAtCorner?.kind === 'angle' && Number.isFinite(angleAtCorner.value)
+    && angleAtCorner.value > 0 && angleAtCorner.value < 180 && Math.abs(angleAtCorner.value - 90) * Math.PI / 180 > 1e-6
+    && Math.abs(edgeAngle(s.points, prev, i).degrees - angleAtCorner.value) * Math.PI / 180 <= 1e-6 ? angleAtCorner.value : undefined;
+  if ((angleAtCorner && obliqueAngle === undefined) || s.tangents?.includes(i) || (s.rules?.length ?? 0) !== (candidate.rules?.length ?? 0) ||
     s.lengths?.[prev] !== undefined || s.lengths?.[i] !== undefined)
     return { error: 'Remove the constraints on this corner or the trimmed lengths before chamfering.' };
   const perpendicularCarriers = s.rules?.some(rule => rule.kind === 'perpendicular' &&
@@ -143,6 +146,10 @@ export function chamferCorner(s: Polygon, i: number, distance: number): { shape:
     // The native angle rule takes its sign from this seed; no pointer constraint is persisted.
     candidate.lengths = { ...candidate.lengths, [i]: distance * Math.SQRT2 };
     candidate.rules = [...(candidate.rules ?? []), { kind: 'angle', a: i === 0 ? n : prev, b: i, value: 135 }];
+  } else if (obliqueAngle !== undefined) {
+    // The carried angle holds the two lines. These two dimensions retain equal setbacks.
+    candidate.lengths = { ...candidate.lengths, [i]: delta(A, B) };
+    candidate.rules = [...(candidate.rules ?? []), { kind: 'angle', a: i === 0 ? n : prev, b: i, value: (180 + obliqueAngle) / 2 }];
   }
   const { shape, error } = settleShape(candidate, s);
   if (error || shape?.kind !== 'polygon') return { error: error ?? 'The chamfer could not be settled.' };
@@ -215,9 +222,9 @@ function replaceCorner(s: Polygon, i: number, A: P2, B: P2, bulge: number, chamf
       case 'ctan': return [prev, i].includes(rule.edge) ? [] : [{ ...rule, edge: seg(rule.edge) }];
       case 'symmetric': return pt(rule.a) < 0 || pt(rule.b) < 0 || (!chamfer && [prev, i].includes(rule.line)) ? [] : [{ ...rule, a: pt(rule.a), b: pt(rule.b), line: seg(rule.line) }];
       case 'angle': {
-        // These carriers shared the removed corner. Once separated by a Fillet, the same
+        // These carriers shared the removed corner. Once separated by a new edge, the same
         // physical included angle is stored between drawn directions (terms.edgeAngle).
-        const separated = !chamfer && ((rule.a === prev && rule.b === i) || (rule.a === i && rule.b === prev));
+        const separated = (rule.a === prev && rule.b === i) || (rule.a === i && rule.b === prev);
         return [{ ...rule, a: seg(rule.a), b: seg(rule.b), value: separated ? 180 - rule.value : rule.value }];
       }
       default: return [{ ...rule, a: seg(rule.a), b: seg(rule.b) }];

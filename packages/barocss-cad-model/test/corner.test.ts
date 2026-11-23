@@ -773,5 +773,99 @@ test('removed wraparound angle is converted while unrelated angle values and ref
   assert.deepEqual(source, before);
   const locked = { ...base, lengths: { 0: 30 } }, lockedBefore = structuredClone(locked);
   assert.ok('error' in roundStraightCornerForEdit(locked, 1, 6)); assert.deepEqual(locked, lockedBefore);
-  assert.ok('error' in chamferCorner(base, 1, 6), 'Chamfer keeps its existing angle ownership refusal');
+  const incompatible = { ...base, rules: base.rules!.map((rule, i) => i === 2 && rule.kind === 'angle' ? { ...rule, value: 140 } : rule) };
+  assert.ok('error' in chamferCorner(incompatible, 1, 6), 'Chamfer refuses an incompatible carrier angle');
+});
+
+function nativeStraightChamfer(shape: Polygon, expectedVolume: number) {
+  const saved = profileOf([shape]); assert.ok('node' in saved);
+  const reopened = sketchShapes(saved.node).shape; assert.equal(reopened?.kind, 'polygon');
+  const stored = reopened as Polygon;
+  assert.deepEqual(stored.points, shape.points); assert.deepEqual(stored.rules, shape.rules);
+  assert.deepEqual(stored.lengths, shape.lengths); assert.deepEqual(stored.ids, saved.node.sideTags!.outer);
+  const body = partSnapshot(withNode(withNode(emptyDoc(), saved.node), { kind: 'extrude', sketch: 0, height: 10 })).outputs[0];
+  assert.ok(body && checkBrep(body.brep, { strict: true }).valid);
+  near(massPropertiesOf(body).volume, expectedVolume, 2e-6);
+  for (const [i, id] of saved.node.sideTags!.outer.entries()) {
+    const faces = body.brep.faces.filter(face => face.name === `n1.side[${id}]`); assert.equal(faces.length, 1);
+    const wall = faceGeometry(faces[0]); assert.equal(wall.kind, 'plane');
+    const a = shape.points[i], b = shape.points[(i + 1) % shape.points.length];
+    const dx = b[0] - a[0], dy = b[1] - a[1], length = Math.hypot(dx, dy);
+    near(((wall.o[0] - a[0]) * dy - (wall.o[1] - a[1]) * dx) / length, 0);
+    near((wall.n[0] * dx + wall.n[1] * dy) / length, 0); near(wall.n[2], 0);
+  }
+  return stored;
+}
+
+test('authored oblique Chamfer retains equal D6 setbacks, carrier angles and native walls', () => {
+  const degrees = Math.atan2(3, 4) * 180 / Math.PI;
+  for (const reflected of [false, true]) for (const reversedRule of [false, true]) {
+    const source = angleConstrainedCorner(reflected, reversedRule), before = structuredClone(source);
+    const result = chamferCorner(source, 1, 6); assert.ok('shape' in result, 'error' in result ? result.error : '');
+    const shape = result.shape, sign = reflected ? -1 : 1;
+    assert.deepEqual(shape.points, [[0, 0], [24, 0], [34.8, 3.6 * sign], [50, 15 * sign], [50, 45 * sign], [0, 45 * sign]]);
+    assert.deepEqual(shape.ids, ['e1', '', 'e2', 'e3', 'e4', 'e5']);
+    assert.deepEqual(shape.rules, [source.rules![0], { kind: 'fix', point: 3, at: [...source.points[2]] },
+      { kind: 'angle', a: reversedRule ? 2 : 0, b: reversedRule ? 0 : 2, value: 180 - (180 - degrees) },
+      { kind: 'angle', a: 0, b: 4, value: 180 }, { kind: 'angle', a: 2, b: 3, value: 90 + degrees },
+      { kind: 'angle', a: 0, b: 1, value: 180 - degrees / 2 }]);
+    // Independent 3:4:5 geometry: contacts are six units along [−1,0] and [4/5,3/5].
+    near(Math.hypot(shape.points[1][0] - 30, shape.points[1][1]), 6);
+    near(Math.hypot(shape.points[2][0] - 30, shape.points[2][1]), 6);
+    near(shape.lengths![1], 3.6 * Math.sqrt(10));
+    const dx = shape.points[2][0] - shape.points[1][0], dy = shape.points[2][1] - shape.points[1][1];
+    near(dx / Math.hypot(dx, dy), 3 / Math.sqrt(10)); near(dy / Math.hypot(dx, dy), sign / Math.sqrt(10));
+    const stored = nativeStraightChamfer(shape, 10 * (2100 - 6 * 6 * 0.6 / 2));
+    assert.deepEqual(stored.ids, ['e1', 'e6', 'e2', 'e3', 'e4', 'e5']);
+    assert.deepEqual(source, before);
+  }
+});
+
+test('authored oblique Chamfer preserves reflected reflex and wraparound branches', () => {
+  for (const reflected of [false, true]) {
+    const sign = reflected ? -1 : 1;
+    const points: P2[] = [[0, 0], [60, 0], [60, 45], [40, 45], [40, 20], [20, 5], [0, 5]];
+    if (reflected) for (const point of points) point[1] = point[1] ? -point[1] : 0;
+    const source: Polygon = { kind: 'polygon', closed: true, points, ids: ['e1', 'e2', 'e3', 'e4', 'e5', 'e6', 'e7'],
+      hv: { h: [0, 2, 5], v: [1, 3, 6] }, rules: [
+        ...[0, 3, 5].map(point => ({ kind: 'fix' as const, point, at: [...points[point]] as P2 })),
+        { kind: 'angle', a: 3, b: 4, value: 180 - Math.atan2(4, 3) * 180 / Math.PI },
+      ] };
+    const before = structuredClone(source), result = chamferCorner(source, 4, 6);
+    assert.ok('shape' in result, 'error' in result ? result.error : '');
+    nearPoint(result.shape.points[4], [40, 26 * sign]); nearPoint(result.shape.points[5], [35.2, 16.4 * sign]);
+    near(result.shape.lengths![4], 4.8 * Math.sqrt(5));
+    nativeStraightChamfer(result.shape, 10 * (1250 + 6 * 6 * 0.8 / 2)); assert.deepEqual(source, before);
+  }
+  const base = angleConstrainedCorner(), shift = (i: number) => (i + 4) % 5;
+  const source: Polygon = { ...base, points: [...base.points.slice(1), base.points[0]], ids: [...base.ids!.slice(1), base.ids![0]],
+    hv: { h: base.hv!.h.map(shift), v: base.hv!.v.map(shift) },
+    rules: base.rules!.map(rule => rule.kind === 'fix' ? { ...rule, point: shift(rule.point) }
+      : rule.kind === 'angle' ? { ...rule, a: shift(rule.a), b: shift(rule.b) } : rule) };
+  const before = structuredClone(source), result = chamferCorner(source, 0, 6);
+  assert.ok('shape' in result, 'error' in result ? result.error : '');
+  assert.deepEqual(result.shape.points, [[24, 0], [34.8, 3.6], [50, 15], [50, 45], [0, 45], [0, 0]]);
+  assert.deepEqual(result.shape.rules!.at(-1), { kind: 'angle', a: 5, b: 0, value: 180 - Math.atan2(3, 4) * 90 / Math.PI });
+  nativeStraightChamfer(result.shape, 20892); assert.deepEqual(source, before);
+});
+
+test('oblique Chamfer refuses incompatible angles, consumed sides and lost driving inputs atomically', () => {
+  const source = angleConstrainedCorner();
+  for (const value of [NaN, Infinity, 0, 180, 90, 140]) {
+    const invalid = { ...source, rules: source.rules!.map((rule, i) => i === 2 && rule.kind === 'angle' ? { ...rule, value } : rule) };
+    const before = structuredClone(invalid); assert.ok('error' in chamferCorner(invalid, 1, 6)); assert.deepEqual(invalid, before);
+  }
+  const cases: Polygon[] = [{ ...source, lengths: { 0: 30 } },
+    { ...source, rules: [...source.rules!, { kind: 'fix', point: 1, at: [30, 0] }] },
+    { ...source, circles: [{ c: [29, 1.65], r: 0.1 }], circleIds: ['e6'] },
+  ];
+  for (const invalid of cases) {
+    const before = structuredClone(invalid); assert.ok('error' in chamferCorner(invalid, 1, 6)); assert.deepEqual(invalid, before);
+  }
+  const before = structuredClone(source);
+  for (const value of [NaN, Infinity, -1, 0, 25, 30]) {
+    assert.ok('error' in chamferCorner(source, 1, value)); assert.deepEqual(source, before);
+  }
+  const rightAngle = { ...rectangle, rules: [...rectangle.rules!, { kind: 'angle' as const, a: 0, b: 1, value: 90 }] };
+  assert.ok('error' in chamferCorner(rightAngle, 1, 6), 'Authored right-angle admission stays outside this change');
 });
