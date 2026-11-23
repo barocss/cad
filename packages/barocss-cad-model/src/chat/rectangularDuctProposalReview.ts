@@ -63,7 +63,7 @@ export function rectangularDuctSection(sketch: ModelNode | undefined) {
   return { sketchId, outer, inner: hole.inner, outerTags, innerTags: hole.tags };
 }
 
-function pairedDuctSection(sketch: ModelNode | undefined) {
+export function pairedDuctSection(sketch: ModelNode | undefined) {
   const section = ductSection(sketch, 2);
   if (!section) return;
   const { sketchId, outer, outerTags, openings: [first, second], low, high } = section;

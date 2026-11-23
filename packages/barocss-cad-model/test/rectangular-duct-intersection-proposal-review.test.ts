@@ -9,11 +9,15 @@ import { revisionOf } from '../src/util/revision';
 const duct: BodyRef = { node: 1, side: 'solid' };
 const box: BodyRef = { node: 3, side: 'solid' };
 
-function fixture(offset = 1, upperY = 30) {
+function fixture(offset = 1, upperY = 30, paired = false) {
+  const profile = (low: number, high: number) =>
+    ([[-1, low], [-1, high], [1, high], [1, low]] as [number, number][]).map(start => ({ kind: 'line' as const, start }));
+  const halfHeight = paired ? 5 : 3;
   const section = withNode(emptyDoc(), {
-    kind: 'sketch', profile: 'rectangle', min: [-2, -3], max: [2, 3],
-    holes: [[[-1, -2], [-1, 2], [1, 2], [1, -2]].map(start => ({ kind: 'line' as const, start: start as [number, number] }))],
-    sideTags: { outer: ['e1', 'e2', 'e3', 'e4'], holes: [['e5', 'e6', 'e7', 'e8']] },
+    kind: 'sketch', profile: 'rectangle', min: [-2, -halfHeight], max: [2, halfHeight],
+    holes: paired ? [profile(-2.5, -1.5), profile(1, 3)] : [profile(-2, 2)],
+    sideTags: { outer: ['e1', 'e2', 'e3', 'e4'], holes: paired
+      ? [['a1', 'a2', 'a3', 'a4'], ['b1', 'b2', 'b3', 'b4']] : [['e5', 'e6', 'e7', 'e8']] },
   });
   const swept = withNode(section, {
     kind: 'sweep-curve', sketch: 0, mode: 'exact', name: 'Closed ring',
@@ -22,7 +26,7 @@ function fixture(offset = 1, upperY = 30) {
     ], weights: [1, Math.SQRT1_2, 1, Math.SQRT1_2, 1, Math.SQRT1_2, 1, Math.SQRT1_2, 1] },
   });
   const boxProfile = withNode(swept, { kind: 'sketch', profile: 'rectangle', min: [offset, -30], max: [offset + 30, upperY] });
-  return withNode(boxProfile, { kind: 'extrude', sketch: 2, from: -5, height: 10 });
+  return withNode(boxProfile, { kind: 'extrude', sketch: 2, from: -(halfHeight + 2), height: 2 * (halfHeight + 2) });
 }
 
 function proposal(doc: StudioDoc, bodies = ['b1', 'b3']): Proposal {
@@ -47,7 +51,7 @@ test('one pinned exact offset duct Intersect reviews both native apertures and a
     assert.deepEqual([evidence.body, evidence.duct, evidence.box, evidence.offset], ['b4', 'b1', 'b3', 1]);
     assert.equal(evidence.caps.length, 2);
     assert.ok(Math.abs(evidence.volume.native - 973.2961147758438) < 1e-7);
-    assert.ok(evidence.caps.every(cap => cap.outer.edges.length === 4 && cap.inner.edges.length === 4));
+    assert.ok(evidence.caps.every(cap => 'inner' in cap && cap.outer.edges.length === 4 && cap.inner?.edges.length === 4));
     assert.equal(reviewedRectangularDuctIntersectionEvidence(base, candidate, { ...edit, swap: !swap }), undefined);
     assert.equal(reviewedRectangularDuctIntersectionEvidence(base, { ...candidate, nextId: 99 }, edit), undefined);
   }
@@ -70,4 +74,39 @@ test('offset duct review rejects wrong ownership, stale revisions and a box that
   const smallEdit = rectangularDuctIntersectionProposal(small, proposal(small));
   assert.ok(smallEdit);
   assert.equal(reviewedRectangularDuctIntersectionEvidence(small, withNode(small, { kind: 'intersect', left: duct, right: box }), smallEdit), undefined);
+});
+
+test('centered paired cut review binds four apertures to separate authored cavities for either operand order', () => {
+  const base = fixture(0, 30, true), before = structuredClone(base);
+  for (const swap of [false, true]) {
+    const proposed = proposal(base, swap ? ['b3', 'b1'] : ['b1', 'b3']);
+    const edit = rectangularDuctIntersectionProposal(base, proposed);
+    assert.ok(edit);
+    const candidate = withNode(base, { kind: 'intersect', left: swap ? box : duct, right: swap ? duct : box });
+    const review = reviewedRectangularDuctIntersectionEvidence(base, candidate, edit);
+    assert.ok(review);
+    const evidence = review.rectangularDuctIntersection;
+    assert.deepEqual([evidence.body, evidence.duct, evidence.box, evidence.offset], ['b4', 'b1', 'b3', 0]);
+    assert.ok(Math.abs(evidence.volume.native - 680 * Math.PI) < 1e-7);
+    assert.equal(evidence.measuredEdges, 36);
+    assert.equal(evidence.caps.length, 2);
+    for (const cap of evidence.caps) {
+      assert.ok('cavities' in cap && cap.cavities);
+      assert.equal(cap.cavities.length, 2);
+      for (const [index, aperture] of cap.cavities.entries()) {
+        const expected = index ? [-3, -1] : [1.5, 2.5], tag = index ? 'b' : 'a';
+        aperture.z.forEach((bound, axis) => assert.ok(Math.abs(bound - expected[axis]) < 1e-7));
+        assert.equal(aperture.owner, cap.name);
+        assert.ok(aperture.walls.every(name => name.includes(`[${tag}`)));
+      }
+    }
+    assert.equal(reviewedRectangularDuctIntersectionEvidence(base, candidate, { ...edit, swap: !swap }), undefined);
+  }
+  assert.deepEqual(base, before);
+  const offset = fixture(1, 30, true);
+  assert.equal(rectangularDuctIntersectionProposal(offset, proposal(offset)), undefined);
+  const secondaryCut = fixture(0, 15, true);
+  const edit = rectangularDuctIntersectionProposal(secondaryCut, proposal(secondaryCut));
+  assert.ok(edit);
+  assert.equal(reviewedRectangularDuctIntersectionEvidence(secondaryCut, withNode(secondaryCut, { kind: 'intersect', left: duct, right: box }), edit), undefined);
 });

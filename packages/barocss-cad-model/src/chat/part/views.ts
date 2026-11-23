@@ -62,9 +62,10 @@ const renderViewsTool: PartHandler = async (state, args, evaluate, _options, dis
     if ('refusal' in review) return review.refusal;
     const { image, ...views } = review.result;
     const duct = 'rectangularDuct' in review.geometry ? review.geometry.rectangularDuct : undefined;
+    const intersection = 'rectangularDuctIntersection' in review.geometry ? review.geometry.rectangularDuctIntersection : undefined;
     const label = duct
       ? ('closedCavities' in duct && duct.closedCavities ? 'Closed duct with two sealed cavities' : `Rectangular ${duct.pathKind ?? 'S-bend'} duct`)
-      : 'rectangularDuctIntersection' in review.geometry ? 'Offset rectangular duct Intersect'
+      : intersection ? (intersection.offset === 0 ? 'Centered two-cavity duct Intersect' : 'Offset rectangular duct Intersect')
         : 'chamferResize' in review.geometry ? 'Saved Chamfer resize'
           : 'cornerBatch' in review.geometry ? 'Sketch corner proposal' : 'Bored wall proposal';
     return { state, content: json({ revision: review.revision, ...views, candidate: review.candidate, ...review.geometry }),
