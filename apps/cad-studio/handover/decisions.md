@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D1812: [Sweep paired passages through a four-span S-bend](notes/exact-four-span-paired-s-bend-2026-11-23/README.md), #10. Add two opposite-turn bends with a straight lead. Verify both mouths, 36 charted joins and independent passage edits through Studio approval and fresh Open.
+
 - D1811: [Review the pending four-span paired duct](notes/pending-four-span-paired-duct-review-2026-11-23/README.md), #324. Bind both mouths and 36 charted joins to the original rail and both Agent images through explicit approval and fresh Open.
 
 - D1810: [Sweep two rectangular passages through four planar spans](notes/exact-four-span-paired-duct-sweep-2026-11-23/README.md), #10. Verify both mouths and 36 charted joints through Studio edits, local Agent approval and fresh Open.

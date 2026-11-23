@@ -886,7 +886,7 @@ function tangentLineArcLineArc(path: Curve, refuse: Refuse) {
     || knots[0] !== knots[1] || knots[1] !== knots[2] || knots[3] !== knots[4] || knots[5] !== knots[6]
     || knots[7] !== knots[8] || knots[9] !== knots[10] || knots[10] !== knots[11]
     || !(knots[2] < knots[3] && knots[4] < knots[5] && knots[6] < knots[7] && knots[8] < knots[9])) return;
-  const unsupported = () => refuse('CAPABILITY', 'Exact line-arc-line-arc sweep needs a straight lead followed by two coplanar same-turn circular arcs separated by one straight segment.');
+  const unsupported = () => refuse('CAPABILITY', 'Exact line-arc-line-arc sweep needs a straight lead followed by two coplanar circular arcs separated by one straight segment.');
   const tolerance = pathTolerance(path, refuse), lead = linearSpan(poles[0], poles[1], poles[2]);
   if (lead.length < ExtrudedProfileLimits.minimumLengthMM)
     return refuse('PARAMETER', 'Exact line-arc-line-arc sweep needs a leading straight segment at least 0.0001 mm long.');
@@ -895,7 +895,7 @@ function tangentLineArcLineArc(path: Curve, refuse: Refuse) {
     .replace('both joins', 'all three joins'));
   const spaced = tangentArcLineArc({ ...path, controlPoints: poles.slice(2), weights: weights.slice(2),
     knots: [knots[3], ...knots.slice(3)] }, railRefuse);
-  if (!spaced || spaced.turn !== 1) return unsupported();
+  if (!spaced) return unsupported();
   if (!tangentMatches(lead, spaced.first.tangent, sub(poles[3], poles[2]), geometryScaleMM(poles), tolerance))
     return refuse('GEOMETRY', 'The exact line-arc-line-arc sweep path must meet with a common forward tangent at all three joins.');
   return { ...spaced, leadLength: lead.length };
@@ -1073,12 +1073,16 @@ function leadingSpacedArcSweep(id: string, rail: NonNullable<ReturnType<typeof t
   const roundoff = 128 * Number.EPSILON * Math.max(1, first.radius, second.radius, extent, length, leadLength);
   const half = first.angle / 2;
   // Project onto the first bend's half-angle tangent through its center. The lead's maximum is
-  // -(R1-h)sin(half). On the second bend the projection is (R1-R2)sin(half)+Lcos(half)
+  // -(R1-h)sin(half). On a same-turn second bend the projection is (R1-R2)sin(half)+Lcos(half)
   // +(R2-q)sin(half+beta). Here |q|<=h and 0<half+beta<=pi, whose sine minimum is at an endpoint.
   // The spacer is separately ahead of this plane and the first bend shares only the lead's cap.
+  // For opposite turns, the second center projects to (R1+R2)sin(half)+Lcos(half).
+  // Since sin(beta-half)>=-sin(half) for 0<=beta<=120 degrees and 15<=half<=60 degrees,
+  // its entire section projects no lower than (R1-h)sin(half)+Lcos(half).
   const leadUpper = -(first.radius - radialReach) * Math.sin(half);
-  const secondLower = (first.radius - second.radius) * Math.sin(half) + length * Math.cos(half)
-    + (second.radius - radialReach) * Math.min(Math.sin(half), Math.sin(half + second.angle));
+  const secondLower = rail.turn === 1 ? (first.radius - second.radius) * Math.sin(half) + length * Math.cos(half)
+    + (second.radius - radialReach) * Math.min(Math.sin(half), Math.sin(half + second.angle))
+    : (first.radius - radialReach) * Math.sin(half) + length * Math.cos(half);
   if (!(secondLower - leadUpper > 10 * first.tolerance + 2 * roundoff))
     return refuse('GEOMETRY', 'Exact line-arc-line-arc sweep cannot certify separation of the inlet and second bend.');
   const existing = arcPairSweep(id, rail, section, undefined, tags, refuse);

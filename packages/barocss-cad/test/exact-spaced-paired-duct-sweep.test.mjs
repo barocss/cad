@@ -113,8 +113,9 @@ function verifyEnvelope(brep, path) {
     const { first, second } = path, half = first.angle / 2;
     const bisector = add(scale(first.tangent, Math.cos(half)), scale(first.inward, Math.sin(half)));
     const upper = -(first.radius - 2) * Math.sin(half);
-    const lower = (first.radius - second.radius) * Math.sin(half) + path.length * Math.cos(half)
-      + (second.radius - 2) * Math.min(Math.sin(half), Math.sin(half + second.angle));
+    const lower = path.turn === 1 ? (first.radius - second.radius) * Math.sin(half) + path.length * Math.cos(half)
+      + (second.radius - 2) * Math.min(Math.sin(half), Math.sin(half + second.angle))
+      : (first.radius - 2) * Math.sin(half) + path.length * Math.cos(half);
     assert.ok(lower > upper);
     for (const piece of ['lead', 'first', 'line', 'second']) for (const face of brep.faces.filter(face => face.name.startsWith(`w.${piece}.`)))
       for (const point of faceSamples(brep, face)) {
@@ -229,7 +230,7 @@ for (const turn of [-1, 1]) test(`the spaced ${turn === 1 ? 'same-turn' : 'oppos
   assert.deepEqual(loadCadPart(saveCadPart(initial)).outputs[0].brep, initial.outputs[0].brep);
 });
 
-for (const [turn, leadLength] of [[-1, undefined], [1, undefined], [1, 10]]) test(`a ${turn === 1 ? 'same-turn' : 'opposite-turn'} ${leadLength ? 'leading ' : ''}asymmetric lane edit retains authored ownership, topology IDs and the other lane through reopen`, () => {
+for (const [turn, leadLength] of [[-1, undefined], [1, undefined], [1, 10], [-1, 10]]) test(`a ${turn === 1 ? 'same-turn' : 'opposite-turn'} ${leadLength ? 'leading ' : ''}asymmetric lane edit retains authored ownership, topology IDs and the other lane through reopen`, () => {
   const path = rail({ turn, leadLength }), sketch = section(), pieces = [...(leadLength ? ['lead'] : []), 'first', 'line', 'second'];
   sketch.sideTags = { outer: ['e1', 'e2', 'e3', 'e4'], holes: [['e5', 'e6', 'e7', 'e8'], ['e9', 'e10', 'e11', 'e12']] };
   const initial = evaluateCadPart(document(path.path, sketch));
@@ -320,17 +321,18 @@ for (const turn of [-1, 1]) test(`the paired ${turn === 1 ? 'same-turn' : 'oppos
       && /straight segment at least 0.0001 mm/.test(error.message));
 });
 
-test('a ten millimetre lead and same-turn quarter bends keep three charted joins and independent exact material moments', () => {
+for (const turn of [-1, 1]) test(`a ten millimetre lead and ${turn === 1 ? 'same-turn' : 'opposite-turn'} quarter bends keep three charted joins and independent exact material moments`, () => {
   for (const [firstRadius, secondRadius] of [[12, 18], [18, 12]]) {
-    const path = rail({ turn: 1, leadLength: 10, firstRadius, secondRadius });
+    const path = rail({ turn, leadLength: 10, firstRadius, secondRadius });
     const initial = evaluateCadPart(document(path.path)), output = initial.outputs[0];
     verify(output, path);
     near(massPropertiesOf(output).volume, 32 * (18 + 15 * Math.PI));
     if (firstRadius === 12) {
-      pointNear(path.leadStart, [-10, 0, 0]); pointNear(path.second.end, [-6, 38, 0]);
+      pointNear(path.leadStart, [-10, 0, 0]); pointNear(path.second.end, [turn === 1 ? -6 : 30, 38, 0]);
+      pointNear(faceGeometry(output.brep.faces.find(face => face.name === 'w.end')).n, [-turn, 0, 0]);
       const length = 18 + 15 * Math.PI;
       pointNear(brepMassProperties(output.brep, 1).centroid,
-        [(514 + 19 / 6 - 54 * Math.PI) / length, (252 * Math.PI + 308) / length, 0]);
+        [(turn === 1 ? 514 + 19 / 6 - 54 * Math.PI : 270 * Math.PI - 134) / length, (252 * Math.PI + 308) / length, 0]);
       // Lead upper=-5sqrt(2), second lower=9sqrt(2): a 14sqrt(2) mm support gap.
       near(14 * Math.SQRT2, (12 - 18) * Math.SQRT1_2 + 8 * Math.SQRT1_2 + 16 * Math.SQRT1_2 + 10 * Math.SQRT1_2);
     }
@@ -338,10 +340,10 @@ test('a ten millimetre lead and same-turn quarter bends keep three charted joins
   }
 });
 
-test('leading same-turn ducts keep translated oblique arc limits, radial X and Y, reordered lanes and admitted rounded weights', () => {
-  for (const [firstAngle, secondAngle] of [[30, 120], [120, 30], [120, 120]]) for (const radialY of [false, true]) {
-    const path = rail({ turn: 1, leadLength: 10, firstAngle, secondAngle,
-      start: [32, -14, 18], tangent: [.6, .8, 0], inward: [-.8, .6, 0] });
+for (const turn of [-1, 1]) test(`leading ${turn === 1 ? 'same-turn' : 'opposite-turn'} ducts keep translated oblique arc limits, radial X and Y, reordered lanes and admitted rounded weights`, () => {
+  for (const [firstAngle, secondAngle] of [[30, 120], [120, 30], [120, 120]]) for (const radialY of [false, true]) for (const polarity of [-1, 1]) {
+    const path = rail({ turn, leadLength: 10, firstAngle, secondAngle,
+      start: [32, -14, 18], tangent: [.6, .8, 0], inward: [-.8 * polarity, .6 * polarity, 0] });
     const intervals = [[1, 3], [-2.5, -1.5]], widths = [2, 1.5];
     const sketch = { ...section(intervals, widths, [false, true], [21.2, -7.1]),
       plane: { origin: [5, 4, 3], normal: path.first.tangent, xAxis: path.first.inward },
@@ -363,8 +365,8 @@ test('leading same-turn ducts keep translated oblique arc limits, radial X and Y
   }
 });
 
-test('leading paired ducts refuse lost cover, wrong profiles, malformed rails and uncertified remote separation without source changes', () => {
-  const path = rail({ turn: 1, leadLength: 10 }), initial = evaluateCadPart(document(path.path)), saved = saveCadPart(initial);
+for (const turn of [-1, 1]) test(`leading ${turn === 1 ? 'same-turn' : 'opposite-turn'} paired ducts refuse lost cover, wrong profiles and malformed rails without source changes`, () => {
+  const path = rail({ turn, leadLength: 10 }), initial = evaluateCadPart(document(path.path)), saved = saveCadPart(initial);
   const refused = (changedPath, sketch, code, message) => {
     assert.throws(() => reevaluate(initial, { document: document(changedPath, sketch) }),
       error => error instanceof CadPartError && error.feature === 'w' && error.code === code && message.test(error.message));
@@ -378,7 +380,7 @@ test('leading paired ducts refuse lost cover, wrong profiles, malformed rails an
   refused(path.path, section(undefined, [4, 2]), 'GEOMETRY', /strictly positive cover/);
   refused(path.path, section([[-3, 0], [0, 3]]), 'GEOMETRY', /strictly positive axial web clearance/);
   for (const radii of [{ firstRadius: 2 }, { secondRadius: 2 }])
-    refused(rail({ turn: 1, leadLength: 10, ...radii }).path, section(), 'PARAMETER', /radial half-width smaller than both path radii/);
+    refused(rail({ turn, leadLength: 10, ...radii }).path, section(), 'PARAMETER', /radial half-width smaller than both path radii/);
   const nonline = structuredClone(path.path); nonline.controlPoints[1][1] += .01;
   refused(nonline, section(), 'CAPABILITY', /line-arc-line-arc sweep needs a straight lead/);
   const collapsed = structuredClone(path.path); collapsed.controlPoints[0] = [...collapsed.controlPoints[2]]; collapsed.controlPoints[1] = [...collapsed.controlPoints[2]];
@@ -387,10 +389,10 @@ test('leading paired ducts refuse lost cover, wrong profiles, malformed rails an
   refused(kink, section(), 'GEOMETRY', /common forward tangent at all three joins/);
   const nonplanar = structuredClone(path.path); nonplanar.controlPoints[7][2] += .1; nonplanar.controlPoints[8][2] += .2;
   refused(nonplanar, section(), 'CAPABILITY', /line-arc-line-arc/);
-  refused(rail({ turn: -1, leadLength: 10 }).path, section(), 'CAPABILITY', /same-turn circular arcs/);
   // A large returning bend fails this bounded support certificate. No broader overlap claim is made.
-  refused(rail({ turn: 1, leadLength: 10, firstAngle: 120, secondAngle: 120, secondRadius: 100 }).path,
-    section(), 'GEOMETRY', /cannot certify separation of the inlet and second bend/);
+  const returning = rail({ turn, leadLength: 10, firstAngle: 120, secondAngle: 120, secondRadius: 100 });
+  if (turn === 1) refused(returning.path, section(), 'GEOMETRY', /cannot certify separation of the inlet and second bend/);
+  else verify(evaluateCadPart(document(returning.path)).outputs[0], returning);
   const wrongWeights = structuredClone(path.path); wrongWeights.weights[3] = 1;
   refused(wrongWeights, section(), 'GEOMETRY', /closed-circle sweep path must close/);
   const wrongKnots = structuredClone(path.path); wrongKnots.knots[4] += .1;

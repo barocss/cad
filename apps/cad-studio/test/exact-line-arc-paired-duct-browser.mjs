@@ -8,16 +8,18 @@ import { currentPartRevision, withMcpSession } from './mcp-browser-session.mjs';
 const baseline = process.argv.includes('--expect-refused');
 const reviewBaseline = process.argv.includes('--expect-review-unavailable');
 const review = process.argv.includes('--review');
-const lead = process.argv.includes('--lead-same-turn') ? 10 : 0;
+const leadSameTurn = process.argv.includes('--lead-same-turn');
+const leadOpposite = process.argv.includes('--lead-opposite');
+const lead = leadSameTurn || leadOpposite ? 10 : 0;
 const tail = process.argv.includes('--straight-tail') ? 14 : 0;
 const spacedSameTurn = process.argv.includes('--spaced-same-turn');
 const spacedOpposite = process.argv.includes('--spaced-opposite');
 const spaced = !!lead || spacedSameTurn || spacedOpposite;
 const directSameTurn = process.argv.includes('--same-turn-arcs');
-const sameTurn = !!lead || spacedSameTurn || directSameTurn;
+const sameTurn = leadSameTurn || spacedSameTurn || directSameTurn;
 const oppositeArcs = process.argv.includes('--opposite-arcs');
 const arcAndLine = process.argv.includes('--arc-and-line');
-assert.ok([!!lead, spacedSameTurn, spacedOpposite, !!tail, oppositeArcs, directSameTurn, arcAndLine].filter(Boolean).length <= 1);
+assert.ok([leadSameTurn, leadOpposite, spacedSameTurn, spacedOpposite, !!tail, oppositeArcs, directSameTurn, arcAndLine].filter(Boolean).length <= 1);
 const directArcs = oppositeArcs || directSameTurn;
 const revolvedEnds = spaced || directArcs;
 const forwardEnds = [
@@ -82,7 +84,7 @@ if (review || reviewBaseline) pins.push(
 );
 const f = await createFlow({
   name: spaced ? 'exact-spaced-paired-duct' : 'exact-line-arc-paired-duct', output: process.argv[2],
-  envFrozen: lead ? (review || reviewBaseline ? 'D1811_SOURCE_FROZEN' : 'D1810_SOURCE_FROZEN') : directSameTurn ? (review || reviewBaseline ? 'D1804_SOURCE_FROZEN' : 'D1803_SOURCE_FROZEN') : arcAndLine ? (review || reviewBaseline ? 'D1801_SOURCE_FROZEN' : 'D1800_SOURCE_FROZEN') : oppositeArcs ? (review || reviewBaseline ? 'D1799_SOURCE_FROZEN' : 'D1798_SOURCE_FROZEN') : sameTurn ? (review || reviewBaseline ? 'D1796_SOURCE_FROZEN' : 'D1795_SOURCE_FROZEN') : spaced ? (review || reviewBaseline ? 'D1794_SOURCE_FROZEN' : 'D1792_SOURCE_FROZEN') : (review || reviewBaseline)
+  envFrozen: leadOpposite ? 'D1812_SOURCE_FROZEN' : lead ? (review || reviewBaseline ? 'D1811_SOURCE_FROZEN' : 'D1810_SOURCE_FROZEN') : directSameTurn ? (review || reviewBaseline ? 'D1804_SOURCE_FROZEN' : 'D1803_SOURCE_FROZEN') : arcAndLine ? (review || reviewBaseline ? 'D1801_SOURCE_FROZEN' : 'D1800_SOURCE_FROZEN') : oppositeArcs ? (review || reviewBaseline ? 'D1799_SOURCE_FROZEN' : 'D1798_SOURCE_FROZEN') : sameTurn ? (review || reviewBaseline ? 'D1796_SOURCE_FROZEN' : 'D1795_SOURCE_FROZEN') : spaced ? (review || reviewBaseline ? 'D1794_SOURCE_FROZEN' : 'D1792_SOURCE_FROZEN') : (review || reviewBaseline)
     ? (tail ? 'D1787_SOURCE_FROZEN' : 'D1783_SOURCE_FROZEN')
     : (tail ? 'D1786_SOURCE_FROZEN' : 'D1782_SOURCE_FROZEN'),
   initialFiles: pins, requiredFrozen: pins,
@@ -90,7 +92,7 @@ const f = await createFlow({
     'packages/barocss-cad-model/src/chat/pairedLineArcDuctEvidence.ts',
     ...(revolvedEnds ? ['packages/barocss-cad-model/src/chat/pairedSpacedArcDuctEvidence.ts'] : []),
   ] : [],
-  qualification: lead ? 'Carry two rectangular passages through a straight lead, two bends and a straight spacer.'
+  qualification: lead ? `Carry two rectangular passages through a straight lead and two ${sameTurn ? 'same-turn' : 'opposite-turn'} bends with a straight spacer.`
     : spaced ? 'Carry two rectangular passages through two bends and a straight span.'
     : directArcs ? 'Sweep two rectangular passages through two directly joined tangent bends.'
     : arcAndLine ? 'Sweep two rectangular passages from an arc into a tangent straight span.'
@@ -280,7 +282,7 @@ async function approveWithAgent(source, expected) {
   const reviewed = await withMcpSession(session, file, 'paired-duct-proposal', async (call, request) => {
     const expectedRevision = await currentPartRevision(call);
     const description = await call('describe', { command: 'sweep-curve' });
-    assert.match(description.values.sketch, lead ? /same-turn line–arc–line–arc duct accepts this paired section/i : directSameTurn ? /two directly joined unequal-radius same-turn arcs accept this paired section/i : arcAndLine ? /arc–line duct also accepts this paired section/ : oppositeArcs ? /two directly joined opposite-turn arcs accept this paired section/i : sameTurn ? /Same-turn arc–line–arc ducts also accept this paired section/ : spaced ? /opposite-turn arc–line–arc duct accepts this paired section/
+    assert.match(description.values.sketch, lead ? /line–arc–line–arc ducts accept this paired section with same-turn or opposite-turn bends/i : directSameTurn ? /two directly joined unequal-radius same-turn arcs accept this paired section/i : arcAndLine ? /arc–line duct also accepts this paired section/ : oppositeArcs ? /two directly joined opposite-turn arcs accept this paired section/i : sameTurn ? /Same-turn arc–line–arc ducts also accept this paired section/ : spaced ? /opposite-turn arc–line–arc duct accepts this paired section/
       : tail ? /line–arc–line duct also accepts this paired section/ : /line–arc ducts accept two rectangular openings/);
     const rail = (await call('query', { action: 'summary' })).direct_curves.find(curve => curve.id === 'rail');
     assert.ok(rail?.revision);
@@ -364,7 +366,13 @@ await f.run(async () => {
   await hud().locator('.hud-step').getByText(representation, { exact: true }).waitFor();
   if (baseline) {
     await hud().locator('.status').filter({ hasText: /^refused$/ }).waitFor();
-    assert.match(await hud().innerText(), /centered rectangular opening/);
+    if (leadOpposite) {
+      const details = hud().locator('.hud-error details:not([open]) > summary');
+      if (await details.count()) await details.click();
+    }
+    assert.match(await hud().innerText(), leadOpposite
+      ? /two coplanar same-turn circular arcs/
+      : /centered rectangular opening/);
     assert.ok(await button('Apply', hud()).isDisabled());
     await f.same(seed);
     f.report.observations.push({ label: 'original-refusal', text: await hud().innerText() });
