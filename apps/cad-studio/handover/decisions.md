@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D1818: [Distinguish STL precision refusal from unavailable tessellation](notes/stl-visible-body-fallback-triage-2026-11-24/README.md), #279. Check a local model corpus and the actual Studio export path without replacing the Worker.
+
 - D1817: [Qualify annotation picking across WebGPU viewport transitions](notes/pmi-viewport-lifecycle-2026-11-24/README.md), #268. Verify camera mode, earlier-pixel rejection and actual device recovery in Studio.
 
 - D1816: [Qualify the two-point Rectangle snap lifecycle](notes/two-point-rectangle-snap-closeout-2026-11-23/README.md), #229. Verify the remaining planes, temporary-state transitions and Project Open in Studio against the original acceptance.
