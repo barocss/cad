@@ -96,3 +96,51 @@ export function useWorkspaceModeExit(sketch: SketchState | null, sketchGeneratio
 
   return { pending: !!current, hasDraft: () => !!(sketchDraft || featureDraft()), rememberFocus, takeFocus, switchWhenReady, dialog };
 }
+
+type WorkspaceMode = 'Model' | 'Drawing' | 'Render';
+
+interface WorkspaceNavigationOptions {
+  switchWhenReady: ReturnType<typeof useWorkspaceModeExit>['switchWhenReady'];
+  readCommandDraft(): object | null;
+  hasEditorDraft(): boolean;
+  hasSketch: boolean;
+  sketchButton: RefObject<HTMLButtonElement | null>;
+  showSketch(): void;
+  changes: {
+    clearSketch(): void;
+    discardFeatureDraft(): void;
+    clearMeasurement(): void;
+    closeFeatureEditor(): void;
+    stopPlayback(): void;
+    setRendering(value: boolean): void;
+    setDrawing(value: boolean): void;
+  };
+}
+
+export function createWorkspaceNavigation({ switchWhenReady, readCommandDraft, hasEditorDraft, hasSketch,
+  sketchButton, showSketch, changes }: WorkspaceNavigationOptions) {
+  const showWorkspace = (mode: WorkspaceMode) => {
+    changes.clearSketch();
+    if (mode !== 'Model') {
+      changes.discardFeatureDraft();
+      changes.clearMeasurement();
+    }
+    if (mode === 'Render' && hasEditorDraft()) changes.closeFeatureEditor();
+    if (mode !== 'Render') changes.stopPlayback();
+    changes.setRendering(mode === 'Render');
+    changes.setDrawing(mode === 'Drawing');
+  };
+  const requestWorkspace = (mode: WorkspaceMode, event: MouseEvent<HTMLButtonElement>) =>
+    switchWhenReady(() => showWorkspace(mode), {
+      event, ...(mode === 'Model' ? { readFeature: () => null } : mode === 'Drawing' ? { readFeature: readCommandDraft } : {}),
+    });
+  const requestSketchWorkspace = (event: MouseEvent<HTMLButtonElement>) => {
+    if (hasSketch) return;
+    switchWhenReady(() => {
+      if (hasEditorDraft()) changes.closeFeatureEditor();
+      showSketch();
+    }, { event, destinationFocus: sketchButton.current });
+  };
+
+  return { showWorkspace, requestWorkspace, requestSketchWorkspace };
+}

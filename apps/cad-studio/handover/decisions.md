@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1771: [Extract Studio workspace navigation](notes/studio-workspace-navigation-2026-11-23/README.md), #44. Match draft protection, focus and mode transitions in paired Studio runs.
 - D1770: [Sweep two sealed rectangular cavities around a closed circle](notes/exact-closed-paired-cavity-sweep-2026-11-23/README.md), #10. Verify three native shells, separate cavity edits and fresh Open with explicit local Agent approval.
 - D1769: [Review native apertures on a pending offset duct Intersect](notes/pending-offset-duct-intersect-review-2026-11-23/README.md), #324. Pin both measured cap apertures and native volume to the Agent images and explicit Studio approval.
 - D1768: [Replace both held edges of one saved Chamfer](notes/dual-held-chamfer-history-replacement-2026-11-23/README.md), #20. Verify explicit two-slot Apply, obsolete duplicate notice retirement and both native bevels after fresh Open.

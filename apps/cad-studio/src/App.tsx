@@ -81,7 +81,7 @@ import { useInsetRelink } from './sketch/useInsetRelink';
 import { useMidpointSketch } from './sketch/useMidpointSketch';
 import { useSketchActions } from './sketch/useSketchActions';
 import { clearConstraintInspection, createConstraintInspection } from './sketch/constraintInspection';
-import { useWorkspaceModeExit } from './ui/useWorkspaceModeExit';
+import { createWorkspaceNavigation, useWorkspaceModeExit } from './ui/useWorkspaceModeExit';
 import { useProposalPreview } from './state/useProposalPreview';
 import { ProposalBrowser } from './ui/ProposalBrowser';
 import { DeleteDependentsDialog } from './ui/DeleteDependentsDialog';
@@ -2109,25 +2109,13 @@ export function App() {
     useSpecificationActions({ doc, bodies, commit, engine, revision, setToast, setChat, setChatOutbox });
   // The references marked matched again (until confirmed), and the user's say on them and on the problems.
   const refMarks = useMemo(() => markedReferences(doc), [doc]);
-  const showWorkspace = (mode: 'Model' | 'Drawing' | 'Render') => {
-    setSketch(null);
-    if (mode !== 'Model') { discardFeatureDraft(); setMeasure(null); }
-    if (mode === 'Render' && nodeEditorDraft.current) setEditNode(null);
-    if (mode !== 'Render') setPlaying(false);
-    setRendering(mode === 'Render');
-    setDrawing(mode === 'Drawing');
-  };
-  const requestWorkspace = (mode: Parameters<typeof showWorkspace>[0], event: React.MouseEvent<HTMLButtonElement>) =>
-    workspaceModeExit.switchWhenReady(() => showWorkspace(mode), {
-      event, ...(mode === 'Model' ? { readFeature: () => null } : mode === 'Drawing' ? { readFeature: commandDraft } : {}),
-    });
-  const requestSketchWorkspace = (event: React.MouseEvent<HTMLButtonElement>) => {
-    if (!sketch) workspaceModeExit.switchWhenReady(() => {
-      if (nodeEditorDraft.current) setEditNode(null);
-      startRef.current(commands.find(c => c.id === 'sketch')!);
-    },
-      { event, destinationFocus: sketchModeButton.current });
-  };
+  const { showWorkspace, requestWorkspace, requestSketchWorkspace } = createWorkspaceNavigation({
+    switchWhenReady: workspaceModeExit.switchWhenReady, readCommandDraft: commandDraft,
+    hasEditorDraft: () => !!nodeEditorDraft.current, hasSketch: !!sketch, sketchButton: sketchModeButton,
+    showSketch: () => startRef.current(commands.find(command => command.id === 'sketch')!),
+    changes: { clearSketch: () => setSketch(null), discardFeatureDraft, clearMeasurement: () => setMeasure(null),
+      closeFeatureEditor: () => setEditNode(null), stopPlayback: () => setPlaying(false), setRendering, setDrawing },
+  });
   const previewReference = createReferencePreview({
     model: { doc, bodies, ready: fresh && !busy, edgeBlocked: () => !!(section || previewBodies || sketch || mateFaces) },
     owner: { document: docNow, switchDrawing: ready => workspaceModeExit.switchWhenReady(ready, { readFeature: commandDraft }) },
