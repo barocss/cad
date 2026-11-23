@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1867: [Refuse unsupported STEP cone angle units](notes/step-cone-angle-unit-admission-2026-11-24/README.md), #277. Reproduce wrong native geometry, verify ownership-based admission and preserve the current Studio document on refusal.
 - D1866: [Verify linked annular Extrude in STEP](notes/annular-extrusion-step-2026-11-24/README.md), #222. Read both actual Studio export states independently and verify native target edit and STEP import after fresh Open.
 - D1865: [Anchor the saved closed-rim Fillet to its original seam](notes/closed-circular-fillet-history-handle-2026-11-24/README.md), #214. Verify both exact native halves, end-on History drag, typed parity, fresh Open and refusal of a late source reply.
 - D1864: [Anchor Constant Fillet creation to a complete circular rim](notes/closed-circular-fillet-creation-handle-2026-11-24/README.md), #214. Verify the original seam, end-on drag, typed parity and exact fresh Open.

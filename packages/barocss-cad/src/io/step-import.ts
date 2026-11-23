@@ -463,6 +463,62 @@ function coneRecord(e: Entity, type: string, count: number): void {
 function coneBoolean(value: Value): void {
   if (!value || typeof value !== 'object' || !('enum' in value) || value.enum !== 'T' && value.enum !== 'F') refuse('OFFSET_SURFACE exact-zero cone orientation must be BOOLEAN T or F');
 }
+
+/** A cone semi-angle is in radians. Consult only contexts that own the imported solid directly. */
+function checkConeAngleUnits(data: ReadonlyMap<number, Entity>): (solid: number) => void {
+  let contexts: Map<number, Set<number | undefined>> | undefined;
+  const checked = new Set<number>();
+  const ambiguous = () => refuse('CONICAL_SURFACE plane-angle unit declaration is missing or ambiguous in its representation context');
+  return solid => {
+    if (checked.has(solid)) return;
+    if (!contexts) {
+      contexts = new Map();
+      for (const entity of data.values()) {
+        const representation = entity.parts?.find(part => part.type === 'REPRESENTATION') ?? entity;
+        if (representation.type !== 'REPRESENTATION' && representation.type !== 'SHAPE_REPRESENTATION' &&
+            !representation.type.endsWith('_SHAPE_REPRESENTATION')) continue;
+        const [, items, context] = representation.args;
+        if (!Array.isArray(items)) continue;
+        for (const item of items) {
+          const number = recipeReference(item);
+          if (number === undefined) continue;
+          const type = data.get(number)?.type;
+          if (type !== 'MANIFOLD_SOLID_BREP' && type !== 'BREP_WITH_VOIDS') continue;
+          const owners = contexts.get(number) ?? new Set();
+          owners.add(recipeReference(context));
+          contexts.set(number, owners);
+        }
+      }
+    }
+    for (const owner of contexts.get(solid) ?? []) {
+      const context = data.get(owner ?? -1);
+      if (!context) return ambiguous();
+      const contextParts = context.parts ?? [context];
+      if (!contextParts.some(part => ['REPRESENTATION_CONTEXT', 'GEOMETRIC_REPRESENTATION_CONTEXT',
+        'GLOBAL_UNIT_ASSIGNED_CONTEXT'].includes(part.type))) return ambiguous();
+      const assignments = contextParts.filter(part => part.type === 'GLOBAL_UNIT_ASSIGNED_CONTEXT');
+      if (!assignments.length) continue;
+      const units = assignments[0].args[0];
+      if (assignments.length !== 1 || assignments[0].args.length !== 1 || !Array.isArray(units)) return ambiguous();
+      let declared = false;
+      for (const ref of units) {
+        const unit = data.get(recipeReference(ref) ?? -1);
+        if (!unit) return ambiguous();
+        const parts = unit.parts ?? [unit];
+        const angles = parts.filter(part => part.type === 'PLANE_ANGLE_UNIT');
+        if (!angles.length) continue;
+        if (declared || angles.length !== 1 || angles[0].args.length !== 0 ||
+            parts.some(part => part.type === 'LENGTH_UNIT' || part.type === 'SOLID_ANGLE_UNIT')) return ambiguous();
+        declared = true;
+        const si = parts.filter(part => part.type === 'SI_UNIT');
+        if (si.length !== 1 || si[0].args.length !== 2 || si[0].args[0] !== null ||
+            !recipeEnum(si[0].args[1], 'RADIAN') || parts.some(part => part.type === 'CONVERSION_BASED_UNIT'))
+          return refuse('CONICAL_SURFACE plane-angle unit is not supported. Use radians for the cone semi-angle');
+      }
+    }
+    checked.add(solid);
+  };
+}
 function conePoint(e: Entity, direction = false): void {
   coneRecord(e, direction ? 'DIRECTION' : 'CARTESIAN_POINT', 2);
   const p = e.args[1];
@@ -551,6 +607,7 @@ interface IFace { id: string; sd: SurfDef; same: boolean; loops: { outer: boolea
 /** Reads the solids of a STEP file as one B-rep. */
 export function importStep(source: string, options: { readonly id?: string } = {}): Brep {
   const data = parseData(source), id = options.id ?? 'step';
+  const requireRadianCone = checkConeAngleUnits(data);
   let trackOffsets = false; for (const entity of data.values()) if (entity.type === 'OFFSET_SURFACE') { trackOffsets = true; break; }
   const get = (v: Value | undefined): Entity => { if (!v || typeof v !== 'object' || !('ref' in v)) refuse('expected a reference'); const e = data.get((v as { ref: number }).ref); if (!e) refuse(`#${(v as { ref: number }).ref} is missing`); return e!; };
   const refNo = (v: Value) => (v as { ref: number }).ref, num = (v: Value) => v as number, list = (v: Value) => v as Value[], flag = (v: Value) => (v as { enum: string }).enum === 'T';
@@ -705,13 +762,14 @@ export function importStep(source: string, options: { readonly id?: string } = {
   // Surfaces.
   const offsetDefinitions = new Set<SurfDef>(), offsetPatches = new Map<Surface, OffsetSupport>();
   const coneIdentities = new Set<SurfDef>(), coneIdentityPatches = new WeakSet<Surface>();
-  const surfDefOf = (e: Entity): SurfDef => {
+  const surfDefOf = (e: Entity, solid: number): SurfDef => {
     if (e.type === 'OFFSET_SURFACE') {
       if (e.args.length !== 4 || typeof e.args[0] !== 'string' || typeof e.args[2] !== 'number' || !Number.isFinite(e.args[2])) refuse('OFFSET_SURFACE requires a string name, finite numeric distance and four attributes');
       const logical = e.args[3];
       if (!logical || typeof logical !== 'object' || !('enum' in logical) || !['T', 'F', 'U'].includes(logical.enum)) refuse('OFFSET_SURFACE self_intersect must be LOGICAL T, F or U');
       const base = get(e.args[1]);
       if (base.type === 'CONICAL_SURFACE' && e.zeroOffsetDistance) {
+        requireRadianCone(solid);
         coneRecord(base, 'CONICAL_SURFACE', 4); coneFrame(base.args[1], get);
         const r = base.args[2], angle = base.args[3];
         if (typeof r !== 'number' || !Number.isFinite(r) || typeof angle !== 'number' || !Number.isFinite(angle)) refuse('OFFSET_SURFACE exact-zero cone requires finite radius and semi-angle');
@@ -749,7 +807,10 @@ export function importStep(source: string, options: { readonly id?: string } = {
     }
     if (e.type === 'PLANE') return { kind: 'plane', f: frameOf(e.args[1]) };
     if (e.type === 'CYLINDRICAL_SURFACE') return { kind: 'cylinder', f: frameOf(e.args[1]), r: num(e.args[2]) };
-    if (e.type === 'CONICAL_SURFACE') return { kind: 'cone', f: frameOf(e.args[1]), r: num(e.args[2]), tan: Math.tan(num(e.args[3])) };
+    if (e.type === 'CONICAL_SURFACE') {
+      requireRadianCone(solid);
+      return { kind: 'cone', f: frameOf(e.args[1]), r: num(e.args[2]), tan: Math.tan(num(e.args[3])) };
+    }
     if (e.type === 'SPHERICAL_SURFACE') return { kind: 'sphere', f: frameOf(e.args[1]), r: num(e.args[2]) };
     if (e.type === 'TOROIDAL_SURFACE') return { kind: 'torus', f: frameOf(e.args[1]), R: num(e.args[2]), r: num(e.args[3]) };
     if (e.type === 'B_SPLINE_SURFACE_WITH_KNOTS') {
@@ -792,9 +853,9 @@ export function importStep(source: string, options: { readonly id?: string } = {
 
   // Faces and bodies.
   const faces: IFace[] = [];
-  const faceOf = (v: Value, k: number): IFace => {
+  const faceOf = (v: Value, k: number, solid: number): IFace => {
     const e = get(v); if (e.type !== 'ADVANCED_FACE' && e.type !== 'FACE_SURFACE') refuse(`${e.type} faces are not supported`);
-    const sd = surfDefOf(get(e.args[2])), offset = offsetDefinitions.has(sd), coneIdentity = coneIdentities.has(sd);
+    const sd = surfDefOf(get(e.args[2]), solid), offset = offsetDefinitions.has(sd), coneIdentity = coneIdentities.has(sd);
     if (coneIdentity) { coneRecord(e, e.type, 4); if (!Array.isArray(e.args[1])) refuse('OFFSET_SURFACE exact-zero cone face requires a bound list'); }
     if (offset) {
       const sense = e.args[3];
@@ -844,7 +905,7 @@ export function importStep(source: string, options: { readonly id?: string } = {
       if (!Array.isArray(shellFaces) || shellFaces.length === 0) return refuse(`CLOSED_SHELL #${ref} requires a non-empty face set`);
       // (One at a time: a big file's faces spread into one call would overflow the stack.)
       const fs = shellFaces.map(fv => {
-        const f = faceOf(fv, k++);
+        const f = faceOf(fv, k++, n);
         if (hasVoids && usedFaces.has(refNo(fv))) refuse(`BREP_WITH_VOIDS #${n} references face #${refNo(fv)} more than once`);
         if (hasVoids) usedFaces.add(refNo(fv));
         faces.push(f);

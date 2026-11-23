@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 // Shared kernel fixture is JavaScript; this test adds no duplicate geometry factory.
 // @ts-expect-error The test-only .mjs factory has no TypeScript declaration.
 import { planeOffsetStep, cylinderOffsetStep, unsupportedOffsetStep } from '../../barocss-cad/test/step-offset-fixtures.mjs';
+// @ts-expect-error The test-only .mjs factory has no TypeScript declaration.
+import { coneAngleFixture } from '../../barocss-cad/test/step-cone-angle-fixtures.mjs';
 import { emptyDoc, withNode, type StudioDoc } from '../src/engine/doc';
 import { evaluatePart, partBreps } from '../src/engine/evaluate';
 import { stepLengthUnit } from '../src/engine/stepUnits';
@@ -16,6 +18,19 @@ function imported(step: string): StudioDoc {
   if (unit.to !== 1) doc = withNode(doc, { kind: 'scale', parent: { node: 0, side: 'solid' }, factor: unit.to, pivot: [0, 0, 0] });
   return doc;
 }
+
+test('STEP cone angle refusal survives Model lowering without modifying its source', () => {
+  const valid = imported(coneAngleFixture('radian'));
+  const invalid = imported(coneAngleFixture('degree', 1, true));
+  const before = structuredClone(invalid);
+  const ready = evaluatePart(valid, 1, 8, 'read');
+  assert.ok(ready.ok);
+  assert.equal(ready.bodies.length, 1);
+  const refused = evaluatePart(invalid, 2, 8, 'read');
+  assert.equal(refused.ok, false);
+  if (!refused.ok) assert.match(refused.error.detail, /CONICAL_SURFACE plane-angle unit is not supported/);
+  assert.deepEqual(invalid, before);
+});
 function volumeNear(actual: number, expected: number) {
   const error = Math.abs(actual - expected);
   assert.ok(error <= 1e-5 && error / Math.abs(expected) <= 1e-9, JSON.stringify({ actual, expected, error }));
