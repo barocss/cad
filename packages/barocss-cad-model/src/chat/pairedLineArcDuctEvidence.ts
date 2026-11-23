@@ -49,7 +49,23 @@ function lineArc(path: Path) {
   const exitInward = sub(scale(inward, Math.cos(angle)), scale(tangent, Math.sin(angle)));
   return { start, join, end, tangent, inward, axis, center, radius, angle, leadLength, exitTangent, exitInward };
 }
-type Frame = NonNullable<ReturnType<typeof lineArc>>;
+/** Independently recover both straight spans without changing the admitted lead-only oracle. */
+function lineArcLine(path: Path) {
+  const { degree, knots, controlPoints: points, weights } = path;
+  if (degree !== 2 || points.length !== 7 || weights.length !== 7 || knots.length !== 10
+    || points.some(point => point.length !== 3 || point.some(value => !Number.isFinite(value) || Math.abs(value) > CadNumericPolicy.coordinateAbs))
+    || weights.some(value => !Number.isFinite(value) || value <= 0) || knots.some(value => !Number.isFinite(value))
+    || weights[4] !== weights[5] || weights[5] !== weights[6]
+    || knots[5] !== knots[6] || knots[7] !== knots[8] || knots[8] !== knots[9] || !(knots[6] < knots[7])) return;
+  const frame = lineArc({ degree, knots: [...knots.slice(0, 7), knots[6]], controlPoints: points.slice(0, 5), weights: weights.slice(0, 5) });
+  if (!frame) return;
+  const [arcEnd, middle, end] = points.slice(4), tailLength = len(sub(end, arcEnd));
+  if (!(tailLength >= minimumLengthMM)
+    || .5 * len(sub(middle, scale(add(arcEnd, end), .5))) > tolerance
+    || !pointNear(sub(end, arcEnd), scale(frame.exitTangent, tailLength))) return;
+  return { ...frame, arcEnd, end, tailLength };
+}
+type Frame = NonNullable<ReturnType<typeof lineArc>> & { arcEnd?: Point; tailLength?: number };
 
 function sections(source: Source, frame: Frame) {
   const finite = (value: number) => Number.isFinite(value) && Math.abs(value) <= CadNumericPolicy.coordinateAbs;
@@ -106,11 +122,13 @@ function rectangle(edges: BrepEdge[], center: Point, inward: Point, axis: Point,
   return corners.size === 4 && sides.size === 4;
 }
 
-/** No generic/fitted wall supports: each tagged lane has four lead planes and two bend planes/cylinders. */
+/** No generic/fitted wall supports: verify every tagged straight plane and bend plane/cylinder. */
 function walls(brep: Brep, feature: string, frame: Frame, section: Section, inward: boolean) {
-  const names = ['line', 'bend'].flatMap(piece => section.tags.map(tag => `${feature}.${piece}.side[${tag}]`));
+  const pieces = frame.tailLength === undefined ? ['line', 'bend'] : ['line', 'bend', 'tail'];
+  const names = pieces.flatMap(piece => section.tags.map(tag => `${feature}.${piece}.side[${tag}]`));
   const direction = inward ? -1 : 1, angular = CadNumericPolicy.relativeComparison;
-  for (const piece of ['line', 'bend']) {
+  for (const piece of pieces) {
+    const radial = piece === 'tail' ? frame.exitInward : frame.inward, center = piece === 'tail' ? frame.arcEnd! : frame.join;
     const found = new Set<string>();
     for (const name of names.filter(name => name.startsWith(`${feature}.${piece}.`))) {
       const face = brep.faces.find(face => face.name === name);
@@ -120,11 +138,11 @@ function walls(brep: Brep, feature: string, frame: Frame, section: Section, inwa
       if (geometry.kind === 'plane') {
         for (const [index, height] of section.interval.entries()) {
           if (len(sub(geometry.n, scale(frame.axis, direction * (index ? 1 : -1)))) <= angular
-            && near(dot(sub(geometry.o, frame.join), frame.axis), height)) side = `axial${index}`;
+            && near(dot(sub(geometry.o, center), frame.axis), height)) side = `axial${index}`;
         }
-        if (piece === 'line') for (const index of [0, 1]) {
-          if (len(sub(geometry.n, scale(frame.inward, direction * (index ? 1 : -1)))) <= angular
-            && near(dot(sub(geometry.o, frame.join), frame.inward), (index ? 1 : -1) * section.radial / 2)) side = `radial${index}`;
+        if (piece !== 'bend') for (const index of [0, 1]) {
+          if (len(sub(geometry.n, scale(radial, direction * (index ? 1 : -1)))) <= angular
+            && near(dot(sub(geometry.o, center), radial), (index ? 1 : -1) * section.radial / 2)) side = `radial${index}`;
         }
       } else if (piece === 'bend' && geometry.kind === 'cylinder'
         && len(cross(geometry.a, frame.axis)) <= angular && near(Math.abs(dot(geometry.a, frame.axis)), 1)
@@ -140,21 +158,24 @@ function walls(brep: Brep, feature: string, frame: Frame, section: Section, inwa
   return names;
 }
 
-/** Native evidence for only the D1782 paired, open straight-to-arc producer. Inputs stay unchanged. */
+/** Native evidence for paired, open line–arc and line–arc–line producers. Inputs stay unchanged. */
 export function pairedLineArcDuctEvidence(brep: Brep, path: Path, source: Source) {
   try {
-    const frame = lineArc(path), sizes = frame && sections(source, frame), feature = brep.source.id;
+    const frame: Frame | undefined = path.controlPoints.length === 7 ? lineArcLine(path) : lineArc(path), sizes = frame && sections(source, frame), feature = brep.source.id;
     if (!frame || !sizes || brep.source.family !== 'sweep-curve' || !feature || brep.bodies.length !== 1
       || brep.bodies[0].kind !== 'solid' || brep.shells.length !== 1 || !brep.shells[0].closed
       || brep.bodies[0].shells.length !== 1 || brep.bodies[0].shells[0] !== brep.shells[0].id
       || brep.shells[0].body !== brep.bodies[0].id) return;
-    const report = checkBrep(brep, { strict: true }), expected = { bodies: 1, shells: 1, faces: 26, loops: 30, coedges: 120, edges: 60, vertices: 36 };
+    const hasTail = frame.tailLength !== undefined;
+    const report = checkBrep(brep, { strict: true }), expected = hasTail
+      ? { bodies: 1, shells: 1, faces: 38, loops: 42, coedges: 168, edges: 84, vertices: 48 }
+      : { bodies: 1, shells: 1, faces: 26, loops: 30, coedges: 120, edges: 60, vertices: 36 };
     if (!report.valid || report.topology.length !== 1 || report.topology[0].genus !== 2
       || Object.entries(expected).some(([key, value]) => report.counts[key as keyof typeof expected] !== value)) return;
     const groups = [sizes.exterior, ...sizes.apertures], wallGroups = groups.map((section, index) => walls(brep, feature, frame, section, index > 0));
     if (wallGroups.some(group => !group)) return;
     const names = new Set([...wallGroups.flat(), `${feature}.start`, `${feature}.end`]);
-    if (names.size !== 26 || new Set(brep.faces.map(face => face.name)).size !== 26
+    if (names.size !== expected.faces || new Set(brep.faces.map(face => face.name)).size !== expected.faces
       || brep.faces.some(face => !face.name || !names.has(face.name) || face.shell !== brep.shells[0].id)) return;
     let maximumGapMM = Math.max(report.maximumVertexGap, report.maximumPcurveGap, report.maximumEdgeSurfaceGap);
     const peers = (edge: BrepEdge, requireCharts: boolean) => {
@@ -179,7 +200,7 @@ export function pairedLineArcDuctEvidence(brep: Brep, path: Path, source: Source
     for (const end of ['start', 'end']) {
       const name = `${feature}.${end}`, face = brep.faces.find(face => face.name === name);
       const start = end === 'start', center = start ? frame.start : frame.end, inward = start ? frame.inward : frame.exitInward;
-      const normal = start ? scale(frame.tangent, -1) : frame.exitTangent, piece = start ? 'line' : 'bend';
+      const normal = start ? scale(frame.tangent, -1) : frame.exitTangent, piece = start ? 'line' : hasTail ? 'tail' : 'bend';
       if (!face || face.loops.length !== 3) return;
       const plane = faceGeometry(face);
       if (plane.kind !== 'plane' || len(sub(plane.n, normal)) > CadNumericPolicy.relativeComparison
@@ -213,27 +234,34 @@ export function pairedLineArcDuctEvidence(brep: Brep, path: Path, source: Source
       caps.push({ name, outerEdges: found.get(0)!, innerEdges: apertures.flatMap(aperture => aperture.edges),
         center, plane: { origin: plane.o, normal: plane.n }, apertures });
     }
-    const seamGroups: string[][] = [];
-    for (const section of groups) {
-      const edges: BrepEdge[] = [];
-      for (const tag of section.tags) {
-        const names = ['line', 'bend'].map(piece => `${feature}.${piece}.side[${tag}]`);
-        const matches = brep.edges.filter(edge => edge.name === names.join('|') || edge.name === names.slice().reverse().join('|'));
-        if (matches.length !== 1) return;
-        const [edge] = matches, uses = peers(edge, true);
-        if (!uses || new Set(uses.map(use => brep.faces.find(face => face.loops.includes(use.loop))?.name)).size !== 2
-          || uses.some(use => !names.includes(brep.faces.find(face => face.loops.includes(use.loop))?.name ?? ''))) return;
-        const continuity = measureBrepEdgeContinuity(brep, edge.id), angular = CadNumericPolicy.relativeComparison * 180 / Math.PI;
-        if (continuity.status !== 'measured' || !Number.isFinite(continuity.minimumAngleDegrees) || !Number.isFinite(continuity.maximumAngleDegrees)
-          || Math.abs(continuity.minimumAngleDegrees) > angular || Math.abs(continuity.maximumAngleDegrees) > angular) return;
-        edges.push(edge);
+    const joins = [{ pieces: ['line', 'bend'], center: frame.join, inward: frame.inward },
+      ...(hasTail ? [{ pieces: ['bend', 'tail'], center: frame.arcEnd!, inward: frame.exitInward }] : [])];
+    const rings: string[][][] = [];
+    for (const join of joins) {
+      const seamGroups: string[][] = [];
+      for (const section of groups) {
+        const edges: BrepEdge[] = [];
+        for (const tag of section.tags) {
+          const names = join.pieces.map(piece => `${feature}.${piece}.side[${tag}]`);
+          const matches = brep.edges.filter(edge => edge.name === names.join('|') || edge.name === names.slice().reverse().join('|'));
+          if (matches.length !== 1) return;
+          const [edge] = matches, uses = peers(edge, true);
+          if (!uses || new Set(uses.map(use => brep.faces.find(face => face.loops.includes(use.loop))?.name)).size !== 2
+            || uses.some(use => !names.includes(brep.faces.find(face => face.loops.includes(use.loop))?.name ?? ''))) return;
+          const continuity = measureBrepEdgeContinuity(brep, edge.id), angular = CadNumericPolicy.relativeComparison * 180 / Math.PI;
+          if (continuity.status !== 'measured' || !Number.isFinite(continuity.minimumAngleDegrees) || !Number.isFinite(continuity.maximumAngleDegrees)
+            || Math.abs(continuity.minimumAngleDegrees) > angular || Math.abs(continuity.maximumAngleDegrees) > angular) return;
+          edges.push(edge);
+        }
+        if (!rectangle(edges, join.center, join.inward, frame.axis, section)) return;
+        seamGroups.push(edges.map(edge => edge.id));
       }
-      if (!rectangle(edges, frame.join, frame.inward, frame.axis, section)) return;
-      seamGroups.push(edges.map(edge => edge.id));
+      rings.push(seamGroups);
     }
-    if (new Set(seamGroups.flat()).size !== 12) return;
+    if (new Set(rings.flat(2)).size !== (hasTail ? 24 : 12)) return;
+    const seamGroups = groups.map((_, index) => rings.flatMap(ring => ring[index]));
     const areaOf = (section: Section) => section.radial * section.axial, area = areaOf(sizes.exterior) - sizes.apertures.reduce((sum, section) => sum + areaOf(section), 0);
-    const length = frame.leadLength + frame.radius * frame.angle, analytic = area * length, mass = brepMassProperties(brep, 1);
+    const length = frame.leadLength + frame.radius * frame.angle + (frame.tailLength ?? 0), analytic = area * length, mass = brepMassProperties(brep, 1);
     const radialMoment = (areaOf(sizes.exterior) * sizes.exterior.radial ** 2
       - sizes.apertures.reduce((sum, section) => sum + areaOf(section) * section.radial ** 2, 0)) / (12 * area);
     const axialMean = -sizes.apertures.reduce((sum, section) => sum + areaOf(section) * (section.interval[0] + section.interval[1]) / 2, 0) / area;
@@ -241,15 +269,18 @@ export function pairedLineArcDuctEvidence(brep: Brep, path: Path, source: Source
     const leadCenter = add(frame.join, scale(frame.tangent, -frame.leadLength / 2));
     const bendCenter = add(frame.join, add(scale(frame.tangent, meanRadius * (1 - Math.cos(frame.angle)) / frame.angle),
       scale(frame.inward, frame.radius - meanRadius * Math.sin(frame.angle) / frame.angle)));
-    const centroid = add(scale(add(scale(leadCenter, frame.leadLength), scale(bendCenter, frame.radius * frame.angle)), 1 / length), scale(frame.axis, axialMean));
+    const firstMoment = add(scale(leadCenter, frame.leadLength), scale(bendCenter, frame.radius * frame.angle));
+    const centroid = add(scale(hasTail ? add(firstMoment, scale(add(frame.arcEnd!, scale(frame.exitTangent, frame.tailLength! / 2)), frame.tailLength!))
+      : firstMoment, 1 / length), scale(frame.axis, axialMean));
     if (!(analytic > 0) || mass.method !== 'quadrature' || !Number.isFinite(mass.volume)
       || Math.abs(mass.volume - analytic) > CadNumericPolicy.relativeComparison * .1 * Math.max(1, analytic)
       || !pointNear(mass.centroid, centroid) || !(maximumGapMM <= tolerance)) return;
-    return { pathKind: 'line-and-arc' as const, caps, exteriorSeams: seamGroups[0], interiorSeams: seamGroups.slice(1), throughApertures: {
+    return { pathKind: hasTail ? 'line-arc-line' as const : 'line-and-arc' as const, caps, exteriorSeams: seamGroups[0], interiorSeams: seamGroups.slice(1), throughApertures: {
       exteriorFaces: wallGroups[0]!, apertures: sizes.apertures.map((section, index) => ({ index, tags: [...section.tags],
         faces: wallGroups[index + 1]!, seams: seamGroups[index + 1], dimensions: { radial: section.radial, axial: section.axial }, axialInterval: section.interval })),
-      dimensions: { pathRadius: frame.radius, leadLength: frame.leadLength, sweepRadians: frame.angle,
+      dimensions: { pathRadius: frame.radius, leadLength: frame.leadLength, ...(hasTail ? { tailLength: frame.tailLength! } : {}), sweepRadians: frame.angle,
         exterior: { radial: sizes.exterior.radial, axial: sizes.exterior.axial }, axialWeb: sizes.axialWeb },
+      ...(hasTail ? { junctions: joins.map((join, index) => ({ pieces: join.pieces, exteriorSeams: rings[index][0], interiorSeams: rings[index].slice(1) })) } : {}),
       volume: { analytic, native: mass.volume, method: 'quadrature' as const }, centroid: { analytic: centroid, native: mass.centroid }, maximumGapMM,
     } };
   } catch { return; }

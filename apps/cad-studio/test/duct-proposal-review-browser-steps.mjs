@@ -109,7 +109,7 @@ export async function checkApprovedDuctReview(call, request, reviewed) {
   assert.equal((await call('query', { ...reviewed.reviewPin, expectedRevision }, true)).code, 'MODEL_REVIEW_UNAVAILABLE');
 }
 
-export async function reviewPendingPairedDuct(f, call, request, expectedRevision, pathRevision, expected, sideTags) {
+export async function reviewPendingPairedDuct(f, call, request, expectedRevision, pathRevision, expected, sideTags, tail) {
   const { proposals: [proposal] } = await call('proposals', { action: 'list' });
   assert.equal(proposal.id, 'P1');
   assert.match(proposal.modelReviewRevision, /^[0-9a-f]{64}$/);
@@ -118,7 +118,7 @@ export async function reviewPendingPairedDuct(f, call, request, expectedRevision
   const opposite = await render(request, { ...pins, orientation: 'opposite' });
   const evidence = meta.rectangularDuct;
   assert.deepEqual([evidence.body, evidence.sketch, evidence.path, evidence.pathRevision, evidence.pathKind],
-    ['b1', 'n0', 'rail', pathRevision, 'line-and-arc']);
+    ['b1', 'n0', 'rail', pathRevision, tail ? 'line-arc-line' : 'line-and-arc']);
   assert.deepEqual(opposite.meta.rectangularDuct, evidence);
   assert.notEqual(opposite.meta.imageSha256, meta.imageSha256);
   assert.notEqual(opposite.meta.candidate.reviewRevision, meta.candidate.reviewRevision);
@@ -134,16 +134,20 @@ export async function reviewPendingPairedDuct(f, call, request, expectedRevision
   const near = (actual, value) => assert.ok(Math.abs(actual - value) < 1e-7, JSON.stringify({ actual, value }));
   const pointNear = (actual, value) => actual.forEach((coordinate, axis) => near(coordinate, value[axis]));
   const ownedBy = (names, tags) => names.some(name => tags.includes(tagOf(name)));
-  const seamIds = tags => expected.joints.filter(joint => ownedBy(joint.faces.map(face => face.name), tags)).map(joint => joint.edgeId);
+  const seamIds = (tags, junction) => expected.joints
+    .filter(joint => (junction === undefined || joint.junction === junction) && ownedBy(joint.faces.map(face => face.name), tags))
+    .map(joint => joint.edgeId);
   const wallNames = tags => expected.wallNames.filter(name => tags.includes(tagOf(name)));
   const paired = evidence.throughApertures;
   const { dimensions, volume, centroid } = paired;
   near(dimensions.pathRadius, 20);
   near(dimensions.leadLength, 10);
+  if (tail) near(dimensions.tailLength, tail);
+  else assert.equal(dimensions.tailLength, undefined);
   near(dimensions.sweepRadians, Math.PI / 2);
   near(dimensions.axialWeb, 2);
   assert.deepEqual(dimensions.exterior, { radial: 4, axial: 10 });
-  near(volume.analytic, 32 * (10 + 10 * Math.PI));
+  near(volume.analytic, 32 * (10 + 10 * Math.PI + tail));
   near(volume.native, expected.quadrature.volume);
   pointNear(centroid.analytic, expected.quadrature.centroid);
   pointNear(centroid.native, expected.quadrature.centroid);
@@ -158,9 +162,18 @@ export async function reviewPendingPairedDuct(f, call, request, expectedRevision
     assert.deepEqual(sorted(aperture.seams), sorted(seamIds(tags)));
     assert.deepEqual(sorted(evidence.interiorSeams[index]), sorted(aperture.seams));
   }
+  if (tail) {
+    const pieces = [['line', 'bend'], ['bend', 'tail']];
+    assert.deepEqual(paired.junctions.map(joint => joint.pieces), pieces);
+    for (const [index, joint] of paired.junctions.entries()) {
+      assert.deepEqual(sorted(joint.exteriorSeams), sorted(seamIds(sideTags.outer, index)));
+      assert.deepEqual(joint.interiorSeams.map(sorted), sideTags.holes.map(tags => sorted(seamIds(tags, index))));
+    }
+  } else assert.equal(paired.junctions, undefined);
   assert.deepEqual(evidence.caps.map(cap => cap.name), ['n1.start', 'n1.end']);
   for (const cap of evidence.caps) {
     const native = expected.caps.find(value => value.name === cap.name);
+    pointNear(cap.center, cap.name === 'n1.start' ? [-10, 0, 0] : [20, 20 + tail, 0]);
     pointNear(cap.plane.origin, native.plane.o);
     pointNear(cap.plane.normal, native.plane.n);
     const loopIds = tags => sorted(native.loops.find(loop => ownedBy(loop.edges.map(edge => edge.side), tags)).edges.map(edge => edge.id));
@@ -176,6 +189,7 @@ export async function reviewPendingPairedDuct(f, call, request, expectedRevision
   }
 
   const faces = ['n1.start', 'n1.end', 'n1.line.side[e6]', 'n1.bend.side[e8]', 'n1.line.side[e10]', 'n1.bend.side[e12]'];
+  if (tail) faces.push('n1.tail.side[e6]', 'n1.tail.side[e10]');
   const reviewPin = { ...pins, action: 'inspect', faces, expectedReviewRevision: meta.candidate.reviewRevision };
   const native = await call('query', reviewPin);
   assert.deepEqual([native.candidate, native.revision, native.imageSha256, native.rectangularDuct],

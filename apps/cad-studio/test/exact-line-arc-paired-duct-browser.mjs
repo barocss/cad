@@ -10,7 +10,6 @@ const reviewBaseline = process.argv.includes('--expect-review-unavailable');
 const review = process.argv.includes('--review');
 const tail = process.argv.includes('--straight-tail') ? 14 : 0;
 assert.ok([baseline, reviewBaseline, review].filter(Boolean).length <= 1);
-assert.ok(!tail || !(review || reviewBaseline));
 const railName = 'Paired duct rail';
 const path = tail ? {
   degree: 2, knots: [0, 0, 0, 1, 1, 2, 2, 3, 3, 3],
@@ -48,7 +47,9 @@ if (review || reviewBaseline) pins.push(
 );
 const f = await createFlow({
   name: 'exact-line-arc-paired-duct', output: process.argv[2],
-  envFrozen: tail ? 'D1786_SOURCE_FROZEN' : review || reviewBaseline ? 'D1783_SOURCE_FROZEN' : 'D1782_SOURCE_FROZEN',
+  envFrozen: (review || reviewBaseline)
+    ? (tail ? 'D1787_SOURCE_FROZEN' : 'D1783_SOURCE_FROZEN')
+    : (tail ? 'D1786_SOURCE_FROZEN' : 'D1782_SOURCE_FROZEN'),
   initialFiles: pins, requiredFrozen: pins,
   extraFrozen: review ? ['packages/barocss-cad-model/src/chat/pairedLineArcDuctEvidence.ts'] : [],
   qualification: 'Sweep two rectangular passages along a straight rail into a tangent arc.',
@@ -251,7 +252,7 @@ async function approveWithAgent(source, expected) {
     }
     if (review) {
       const pending = await readFile(file);
-      const result = await reviewPendingPairedDuct(f, call, request, expectedRevision, rail.revision, expected, sideTags);
+      const result = await reviewPendingPairedDuct(f, call, request, expectedRevision, rail.revision, expected, sideTags, tail);
       assert.deepEqual(await readFile(file), pending);
       return result;
     }

@@ -197,3 +197,118 @@ test('valid moved solids, swapped lane wall names, missing terminal charts and c
     { ...brep, bodies: [{ ...brep.bodies[0], shells: [] }] },
   ]) assert.equal(pairedLineArcDuctEvidence(changed, curve, source), undefined);
 });
+
+function elbow(degrees = 90, entry: Point = [0, 0, 0], tangent: Point = [1, 0, 0], inward: Point = [0, 1, 0]): Path {
+  const lead = path(degrees, entry, tangent, inward), angle = degrees * Math.PI / 180;
+  const exit = add(scale(tangent, Math.cos(angle)), scale(inward, Math.sin(angle))), end = lead.controlPoints[4];
+  return { ...lead, knots: [0, 0, 0, 1, 1, 2, 2, 3, 3, 3], weights: [...lead.weights, 1, 1],
+    controlPoints: [...lead.controlPoints, add(end, scale(exit, 7)), add(end, scale(exit, 14))] };
+}
+
+test('paired elbow certifies both physical mouths, both twelve-edge G1 junctions and independent volume and centroid', () => {
+  const curve = elbow(), brep = native(curve), before = structuredClone({ brep, curve, source });
+  const evidence = pairedLineArcDuctEvidence(brep, curve, source);
+  assert.ok(evidence);
+  assert.equal(evidence.pathKind, 'line-arc-line');
+  const report = checkBrep(brep, { strict: true });
+  assert.deepEqual(report.counts, { bodies: 1, shells: 1, faces: 38, loops: 42, coedges: 168, edges: 84, vertices: 48 });
+  assert.deepEqual(report.topology.map(item => item.genus), [2]);
+  assert.deepEqual(evidence.caps.map(cap => [cap.name, cap.outerEdges.length, cap.innerEdges.length]), [['w.start', 4, 8], ['w.end', 4, 8]]);
+  evidence.caps[0].center.forEach((value, axis) => near(value, [-10, 0, 0][axis]));
+  evidence.caps[1].center.forEach((value, axis) => near(value, [20, 34, 0][axis]));
+  evidence.caps[0].plane.normal.forEach((value, axis) => near(value, [-1, 0, 0][axis]));
+  evidence.caps[1].plane.normal.forEach((value, axis) => near(value, [0, 1, 0][axis]));
+  const through = evidence.throughApertures;
+  near(through.dimensions.tailLength!, 14);
+  assert.equal(through.exteriorFaces.length, 12);
+  assert.deepEqual(through.apertures.map(aperture => [aperture.faces.length, aperture.seams.length]), [[12, 8], [12, 8]]);
+  assert.equal(evidence.exteriorSeams.length, 8);
+  assert.deepEqual(evidence.interiorSeams.map(ids => ids.length), [8, 8]);
+  const junctions = through.junctions;
+  assert.ok(junctions);
+  assert.deepEqual(junctions.map(join => join.pieces), [['line', 'bend'], ['bend', 'tail']]);
+  assert.equal(new Set(junctions.flatMap(join => [join.exteriorSeams, ...join.interiorSeams]).flat()).size, 24);
+  for (const join of junctions) {
+    assert.equal(join.exteriorSeams.length, 4);
+    assert.deepEqual(join.interiorSeams.map(ids => ids.length), [4, 4]);
+    for (const [lane, ids] of [join.exteriorSeams, ...join.interiorSeams].entries()) {
+      const tags = lane ? source.cavities[lane - 1].tags : source.outerTags;
+      for (const [side, id] of ids.entries()) {
+        const edge = brep.edges.find(edge => edge.id === id)!;
+        assert.ok(edge.name === join.pieces.map(piece => `w.${piece}.side[${tags[side]}]`).join('|')
+          || edge.name === [...join.pieces].reverse().map(piece => `w.${piece}.side[${tags[side]}]`).join('|'));
+      }
+    }
+  }
+  const length = 24 + 10 * Math.PI;
+  near(through.volume.native, 32 * length); near(through.volume.analytic, 32 * length);
+  // Direct quarter-ring first moments: integral (R-q)^2 dq dz / A = R^2 + 19/12.
+  // The two prisms contribute (-50,0) and (280,378) per unit section area.
+  const centroid = [(230 + 400 + 19 / 12) / length, (200 * Math.PI - 400 - 19 / 12 + 378) / length, 0];
+  through.centroid.native.forEach((value, axis) => near(value, centroid[axis]));
+  through.centroid.analytic.forEach((value, axis) => near(value, centroid[axis]));
+  assert.ok(through.maximumGapMM < 1e-10);
+  assert.deepEqual({ brep, curve, source }, before);
+});
+
+test('paired elbow retains authored lane ownership for asymmetric edits, reordered holes and non-default world frames', () => {
+  const edited: Source = { ...source, cavities: [{ ...source.cavities[0], min: [-.75, -2.5], max: [.75, -1.5] }, source.cavities[1]] };
+  const reordered = { ...edited, cavities: [...edited.cavities].reverse() };
+  for (const section of [edited, reordered]) {
+    const curve = elbow(), evidence = pairedLineArcDuctEvidence(native(curve, section, [false, true]), curve, section);
+    assert.ok(evidence);
+    near(evidence.throughApertures.volume.native, 34.5 * (24 + 10 * Math.PI));
+    near(evidence.throughApertures.centroid.native[2], -5 / 34.5);
+    assert.deepEqual(evidence.throughApertures.apertures.map(aperture => aperture.tags), section.cavities.map(cavity => cavity.tags));
+  }
+  for (const degrees of [30, 120]) {
+    const curve = elbow(degrees, [32, -14, 18], [.6, .8, 0], [-.8, .6, 0]);
+    const evidence = pairedLineArcDuctEvidence(native(curve), curve, source);
+    assert.ok(evidence, `${degrees} degrees`);
+    near(evidence.throughApertures.volume.native, 32 * (24 + 20 * degrees * Math.PI / 180));
+  }
+  const swapped = { ...source, outer: [10, 4], cavities: source.cavities.map(cavity => ({ ...cavity,
+    min: [cavity.min[1], cavity.min[0]], max: [cavity.max[1], cavity.max[0]],
+  })) };
+  const curve = elbow(90, [8, 3, -2], [0, 0, 1], [0, 1, 0]);
+  assert.ok(pairedLineArcDuctEvidence(native(curve, swapped), curve, swapped));
+});
+
+test('paired elbow handles reversed seam storage and refuses missing charts, wrong lane walls and changed tail geometry', () => {
+  const curve = elbow(), original = native(curve), evidence = pairedLineArcDuctEvidence(original, curve, source);
+  assert.ok(evidence?.throughApertures.junctions);
+  const reverse = (curve: Curve) => reverseCurve(curve, { curveId: `${curve.id}_reversed` }).curve;
+  const ids = new Set([...evidence.exteriorSeams, ...evidence.interiorSeams.flat()]);
+  const reversed: Brep = { ...original, faces: [...original.faces].reverse(), loops: [...original.loops].reverse(),
+    edges: original.edges.map(edge => ids.has(edge.id) ? { ...edge, curve: reverse(edge.curve), vertices: [edge.vertices[1], edge.vertices[0]] } : edge),
+    coedges: original.coedges.map(use => ids.has(use.edge) ? { ...use, sense: use.sense === 'forward' ? 'reversed' : 'forward', pcurve: use.pcurve && reverse(use.pcurve) } : use),
+  };
+  assert.ok(checkBrep(reversed, { strict: true }).valid);
+  assert.ok(pairedLineArcDuctEvidence(reversed, curve, source));
+  for (const affected of [evidence.caps[1].innerEdges, ...evidence.throughApertures.junctions.map(join => join.interiorSeams[0])]) {
+    const selected = new Set(affected);
+    const missing = { ...original, coedges: original.coedges.map(use => selected.has(use.edge) ? { ...use, pcurve: null } : use) };
+    const shifted = { ...original, coedges: original.coedges.map(use => selected.has(use.edge) && use.pcurve ? { ...use,
+      pcurve: { ...use.pcurve, controlPoints: use.pcurve.controlPoints.map(([u, v, z]): Point => [u + .01, v, z]) } } : use) };
+    for (const brep of [missing, shifted]) assert.equal(pairedLineArcDuctEvidence(brep, curve, source), undefined);
+  }
+  const wrongTail = { ...original, faces: original.faces.map(face => {
+    if (!face.name?.startsWith('w.tail.')) return face;
+    const tag = source.cavities[0].tags.findIndex(tag => face.name!.endsWith(`.side[${tag}]`));
+    const other = source.cavities[1].tags.findIndex(tag => face.name!.endsWith(`.side[${tag}]`));
+    return tag >= 0 ? { ...face, name: face.name.replace(source.cavities[0].tags[tag], source.cavities[1].tags[tag]) }
+      : other >= 0 ? { ...face, name: face.name.replace(source.cavities[1].tags[other], source.cavities[0].tags[other]) } : face;
+  }) };
+  assert.ok(checkBrep(wrongTail, { strict: true }).valid);
+  assert.equal(pairedLineArcDuctEvidence(wrongTail, curve, source), undefined);
+  const moved = transformBrep(original, { matrix: [1, 0, 0, 0, 1, 0, 0, 0, 1], offset: [0, .01, 0] });
+  assert.equal(pairedLineArcDuctEvidence(moved, curve, source), undefined);
+  const variants: Path[] = [];
+  for (const [pole, axis, delta] of [[5, 0, .01], [6, 0, .01], [6, 1, -28], [6, 1, .01], [6, 2, Number.NaN]]) {
+    const changed = structuredClone(curve); changed.controlPoints[pole][axis] += delta; variants.push(changed);
+  }
+  variants.push({ ...curve, weights: [...curve.weights.slice(0, 6), 2] },
+    { ...curve, knots: [0, 0, 0, 1, 1, 2, 2, 3, 3.1, 3.1] });
+  for (const changed of variants) assert.equal(pairedLineArcDuctEvidence(original, changed, source), undefined);
+  assert.equal(pairedLineArcDuctEvidence(original, curve, { ...source, outer: [4.1, 10] }), undefined);
+});
