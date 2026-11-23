@@ -13,6 +13,7 @@ import { isObj } from '../util/guards';
 import { canonical, canonicalOf, revisionOf } from '../util/revision';
 import { closedRectangularDuctEvidence } from './closedRectangularDuctEvidence';
 import { closedPairedRectangularDuctEvidence } from './closedPairedRectangularDuctEvidence';
+import { pairedLineArcDuctEvidence } from './pairedLineArcDuctEvidence';
 import { directInspectionRevision } from './sweepSource';
 
 const near = (a: number, b: number) => Number.isFinite(a) && Number.isFinite(b) && Math.abs(a - b) <= CadNumericPolicy.linearTolerance;
@@ -195,7 +196,11 @@ export async function reviewedRectangularDuctEvidence(base: StudioDoc, candidate
     if (outputs.length !== 1 || outputs[0].key !== body || brep.source.family !== 'sweep-curve' || brep.source.id !== feature ||
       brep.bodies.length !== 1 || brep.bodies[0].kind !== 'solid') return;
     if ('cavities' in source) {
-      if (!closedCircle) return;
+      if (!closedCircle) {
+        const evidence = pairedLineArcDuctEvidence(brep, path, source);
+        if (!evidence) return;
+        return { brep, rectangularDuct: { body, sketch: edit.sketch, path: edit.path, pathRevision: edit.pathRevision, ...evidence } };
+      }
       const evidence = closedPairedRectangularDuctEvidence(brep, path, source);
       if (!evidence) return;
       return { brep, rectangularDuct: { body, sketch: edit.sketch, path: edit.path, pathRevision: edit.pathRevision,

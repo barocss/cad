@@ -1,13 +1,13 @@
 # CAD roadmap — current status and execution order
 
-Updated 2026-11-23 · Priority authority: D520 · Latest delivery: D1782 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
+Updated 2026-11-23 · Priority authority: D520 · Latest delivery: D1783 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
 
 This is the only current status index. Detailed tracks define acceptance; the 34 stable row pages retain scope and issue navigation. Immutable decision notes retain results. Do not append chronological status paragraphs here. [D520 decision](notes/cad-roadmap-replan-2026-11-04/README.md) supersedes D445 execution order and historical next-item text, while retaining its safeguards and bounded proofs.
 
 ## Now and next
 
-- **Current position:** [D1782](notes/exact-line-arc-paired-duct-2026-11-23/README.md), P5 rows 07 and 30. A straight-to-arc Exact Sweep carries two separated rectangular passages through both open caps. Twelve native joins, aperture editing, fresh Open and explicit local Agent approval pass. The B06 PDF group remains held.
-- **Next MAIN:** D1783, P5 rows [07](roadmap-rows/07.md) and [16](roadmap-rows/16.md), [#324](https://github.com/barocss/cad/issues/324). Bind a pending paired-duct Sweep review to both native cap apertures, each wall and its joins. Verify the two image orientations, explicit approval and fresh Open.
+- **Current position:** [D1783](notes/pending-line-arc-paired-duct-review-2026-11-23/README.md), P5 rows 07 and 16. Pending Agent review links both open passages to the exact cap loops, wall groups and joins. Both images, native inspection and the approved Studio part agree after fresh Open. The B06 PDF group remains held.
+- **Next MAIN:** D1784, P4 row [22](roadmap-rows/22.md), [#44](https://github.com/barocss/cad/issues/44). Extract the in-place assembly editing status bar from App. Compare shared-instance Finish, blocked Save during editing, Cancel, Keep editing and Discard in desktop Studio.
 - **Separate follow-ups:** Continue Studio App extraction in cohesive parts with affected desktop checks. [#608 Rendering](https://github.com/barocss/cad/issues/608) stays on HOLD. API inventory drift remains open. The issue tracker records [#126](https://github.com/barocss/cad/issues/126), [#613](https://github.com/barocss/cad/issues/613), [#152](https://github.com/barocss/cad/issues/152) and [#22](https://github.com/barocss/cad/issues/22) as closed.
 - **Active repository:** [barocss/cad](https://github.com/barocss/cad), based on `origin/main`. Fetch before work and preserve unexpected changes. The [migration record](../../../docs/migration/README.md) maps the former `local/cad-dev` history and issue numbers.
 - **Evidence correction:** D482 records2167 PASS/0 FAIL/2 existing SKIP in a later full-kernel run than D433. Neither result is a new full-suite PASS at this audit HEAD. [D482 record](notes/vertical-contact-refusal-2026-11-04/README.md).

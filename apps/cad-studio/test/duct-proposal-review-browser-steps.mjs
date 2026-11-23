@@ -109,6 +109,96 @@ export async function checkApprovedDuctReview(call, request, reviewed) {
   assert.equal((await call('query', { ...reviewed.reviewPin, expectedRevision }, true)).code, 'MODEL_REVIEW_UNAVAILABLE');
 }
 
+export async function reviewPendingPairedDuct(f, call, request, expectedRevision, pathRevision, expected, sideTags) {
+  const { proposals: [proposal] } = await call('proposals', { action: 'list' });
+  assert.equal(proposal.id, 'P1');
+  assert.match(proposal.modelReviewRevision, /^[0-9a-f]{64}$/);
+  const pins = { expectedRevision, proposal: proposal.id, expectedProposalRevision: proposal.modelReviewRevision };
+  const { meta, png } = await render(request, pins);
+  const opposite = await render(request, { ...pins, orientation: 'opposite' });
+  const evidence = meta.rectangularDuct;
+  assert.deepEqual([evidence.body, evidence.sketch, evidence.path, evidence.pathRevision, evidence.pathKind],
+    ['b1', 'n0', 'rail', pathRevision, 'line-and-arc']);
+  assert.deepEqual(opposite.meta.rectangularDuct, evidence);
+  assert.notEqual(opposite.meta.imageSha256, meta.imageSha256);
+  assert.notEqual(opposite.meta.candidate.reviewRevision, meta.candidate.reviewRevision);
+  for (const review of [meta, opposite.meta]) {
+    assert.deepEqual([review.candidate.proposal, review.candidate.baseRevision, review.candidate.bodySha256],
+      [proposal.id, expectedRevision, expected.digest]);
+  }
+  assert.ok(opposite.meta.views.left.visible_faces.includes('n1.start'));
+  assert.ok(opposite.meta.views.back.visible_faces.includes('n1.end'));
+
+  const tagOf = name => name.match(/\[(e\d+)\]$/)?.[1];
+  const sorted = values => values.toSorted();
+  const near = (actual, value) => assert.ok(Math.abs(actual - value) < 1e-7, JSON.stringify({ actual, value }));
+  const pointNear = (actual, value) => actual.forEach((coordinate, axis) => near(coordinate, value[axis]));
+  const ownedBy = (names, tags) => names.some(name => tags.includes(tagOf(name)));
+  const seamIds = tags => expected.joints.filter(joint => ownedBy(joint.faces.map(face => face.name), tags)).map(joint => joint.edgeId);
+  const wallNames = tags => expected.wallNames.filter(name => tags.includes(tagOf(name)));
+  const paired = evidence.throughApertures;
+  const { dimensions, volume, centroid } = paired;
+  near(dimensions.pathRadius, 20);
+  near(dimensions.leadLength, 10);
+  near(dimensions.sweepRadians, Math.PI / 2);
+  near(dimensions.axialWeb, 2);
+  assert.deepEqual(dimensions.exterior, { radial: 4, axial: 10 });
+  near(volume.analytic, 32 * (10 + 10 * Math.PI));
+  near(volume.native, expected.quadrature.volume);
+  pointNear(centroid.analytic, expected.quadrature.centroid);
+  pointNear(centroid.native, expected.quadrature.centroid);
+  assert.ok(paired.maximumGapMM < 1e-8);
+  assert.deepEqual(sorted(paired.exteriorFaces), sorted(wallNames(sideTags.outer)));
+  assert.deepEqual(sorted(evidence.exteriorSeams), sorted(seamIds(sideTags.outer)));
+  assert.equal(paired.apertures.length, 2);
+  for (const [index, tags] of sideTags.holes.entries()) {
+    const aperture = paired.apertures[index];
+    assert.deepEqual([aperture.index, aperture.tags, aperture.dimensions], [index, tags, { radial: 2, axial: 2 }]);
+    assert.deepEqual(sorted(aperture.faces), sorted(wallNames(tags)));
+    assert.deepEqual(sorted(aperture.seams), sorted(seamIds(tags)));
+    assert.deepEqual(sorted(evidence.interiorSeams[index]), sorted(aperture.seams));
+  }
+  assert.deepEqual(evidence.caps.map(cap => cap.name), ['n1.start', 'n1.end']);
+  for (const cap of evidence.caps) {
+    const native = expected.caps.find(value => value.name === cap.name);
+    pointNear(cap.plane.origin, native.plane.o);
+    pointNear(cap.plane.normal, native.plane.n);
+    const loopIds = tags => sorted(native.loops.find(loop => ownedBy(loop.edges.map(edge => edge.side), tags)).edges.map(edge => edge.id));
+    assert.deepEqual(sorted(cap.outerEdges), loopIds(sideTags.outer));
+    assert.equal(cap.apertures.length, 2);
+    for (const [index, tags] of sideTags.holes.entries()) {
+      const aperture = cap.apertures[index];
+      assert.deepEqual([aperture.index, aperture.tags, aperture.dimensions], [index, tags, { radial: 2, axial: 2 }]);
+      assert.deepEqual(sorted(aperture.edges), loopIds(tags));
+      pointNear(aperture.center, [...cap.center.slice(0, 2), index ? 2 : -2]);
+    }
+    assert.deepEqual(cap.innerEdges, cap.apertures.flatMap(aperture => aperture.edges));
+  }
+
+  const faces = ['n1.start', 'n1.end', 'n1.line.side[e6]', 'n1.bend.side[e8]', 'n1.line.side[e10]', 'n1.bend.side[e12]'];
+  const reviewPin = { ...pins, action: 'inspect', faces, expectedReviewRevision: meta.candidate.reviewRevision };
+  const native = await call('query', reviewPin);
+  assert.deepEqual([native.candidate, native.revision, native.imageSha256, native.rectangularDuct],
+    [meta.candidate, meta.revision, meta.imageSha256, evidence]);
+  assert.deepEqual(native.faces.map(face => [face.name, face.geometry.kind]), faces.map(name => [name, 'plane']));
+  for (const face of native.faces) {
+    const plane = expected.wallPlanes.find(value => value.name === face.name)?.plane
+      ?? expected.caps.find(value => value.name === face.name).plane;
+    pointNear(face.geometry.outwardNormal, plane.n);
+    near(face.geometry.point.reduce((sum, value, axis) => sum + (value - plane.o[axis]) * plane.n[axis], 0), 0);
+  }
+  assert.equal((await call('query', { ...reviewPin, orientation: 'opposite' }, true)).code, 'MODEL_REVIEW_IMAGE_STALE');
+  assert.equal((await call('query', { ...reviewPin, expectedProposalRevision: '0'.repeat(64) }, true)).code, 'MODEL_REVIEW_PROPOSAL_STALE');
+  assert.equal((await call('query', { ...reviewPin, expectedRevision: '0'.repeat(16) }, true)).code, 'MODEL_REVIEW_BASE_STALE');
+  const otherRead = await call('query', { ...reviewPin, orientation: 'opposite', expectedReviewRevision: opposite.meta.candidate.reviewRevision });
+  assert.deepEqual(otherRead.faces, native.faces);
+  await writeFile(join(f.output, 'paired-duct-four-views.png'), png);
+  await writeFile(join(f.output, 'paired-duct-opposite.png'), opposite.png);
+  f.report.observations.push({ label: 'pending-paired-duct-review', ...meta.candidate, imageSha256: meta.imageSha256,
+    oppositeImageSha256: opposite.meta.imageSha256, evidence });
+  return { meta, png, faces, native, reviewPin, alternate: { png: opposite.png, orientation: 'opposite' } };
+}
+
 export async function checkChangedDuctPath(session, pending, reviewed, controlPoints) {
   const altered = structuredClone(pending), { path, pathRevision } = reviewed.meta.rectangularDuct;
   const { source } = altered.direct.objects.find(object => object.id === path);

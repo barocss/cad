@@ -1,10 +1,14 @@
 import assert from 'node:assert/strict';
 import { copyFile, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { checkApprovedDuctReview, checkChangedDuctPath, reviewPendingPairedDuct } from './duct-proposal-review-browser-steps.mjs';
 import { createFlow } from './flow-helper.mjs';
 import { currentPartRevision, withMcpSession } from './mcp-browser-session.mjs';
 
 const baseline = process.argv.includes('--expect-refused');
+const reviewBaseline = process.argv.includes('--expect-review-unavailable');
+const review = process.argv.includes('--review');
+assert.ok([baseline, reviewBaseline, review].filter(Boolean).length <= 1);
 const railName = 'Paired duct rail';
 const path = {
   degree: 2, knots: [0, 0, 0, 1, 1, 2, 2, 2],
@@ -30,9 +34,16 @@ const pins = [
   'packages/barocss-cad-model/src/chat/part/features.ts',
   'apps/cad-studio/test/exact-line-arc-paired-duct-browser.mjs',
 ];
+if (review || reviewBaseline) pins.push(
+  'packages/barocss-cad-model/src/chat/rectangularDuctProposalReview.ts',
+  'packages/barocss-cad-model/src/chat/part/modelCandidate.ts',
+  'packages/barocss-cad-model/src/chat/part/views.ts',
+  'apps/cad-studio/test/duct-proposal-review-browser-steps.mjs',
+);
 const f = await createFlow({
-  name: 'exact-line-arc-paired-duct', output: process.argv[2], envFrozen: 'D1782_SOURCE_FROZEN',
+  name: 'exact-line-arc-paired-duct', output: process.argv[2], envFrozen: review || reviewBaseline ? 'D1783_SOURCE_FROZEN' : 'D1782_SOURCE_FROZEN',
   initialFiles: pins, requiredFrozen: pins,
+  extraFrozen: review ? ['packages/barocss-cad-model/src/chat/pairedLineArcDuctEvidence.ts'] : [],
   qualification: 'Sweep two rectangular passages along a straight rail into a tangent arc.',
   limits: ['A bend-aligned 4 × 10 mm rectangle, two axial lanes centered at ±2 mm, a 10 mm straight span and an R20 quarter arc. Desktop WebGPU.'],
   inspectorSource: `
@@ -51,7 +62,7 @@ const caps = brep.faces.filter(face => /^n1[.](start|end)$/.test(face.name)).map
     const loop = loops.get(id);
     return { kind: loop.kind, edges: loop.coedges.map(id => {
       const use = uses.get(id), twin = uses.get(use.twin), edge = edges.get(use.edge);
-      return { side: faces.get(loops.get(twin.loop).face).name, bound: !!use.pcurve && !!twin.pcurve,
+      return { id: edge.id, side: faces.get(loops.get(twin.loop).face).name, bound: !!use.pcurve && !!twin.pcurve,
         reciprocal: twin.twin === id && twin.edge === use.edge && twin.sense !== use.sense,
         degree: edge.curve.degree, points: edge.curve.controlPoints };
     }) };
@@ -63,6 +74,8 @@ const joints = brep.edges.filter(edge => edge.curve.controlPoints.every(point =>
 }));
 console.log(JSON.stringify({ source: brep.source, check: checkBrep(brep, { strict: true }), caps, joints,
   wallNames: brep.faces.filter(face => face.name.includes('.side[')).map(face => face.name),
+  wallPlanes: brep.faces.filter(face => face.name.includes('.side[')).map(face => ({ name: face.name, plane: faceGeometry(face) }))
+    .filter(item => item.plane.kind === 'plane'),
   mass: massPropertiesOf(output), quadrature: brepMassProperties(brep, 1), digest: digestOf(brep) }));
 `,
 });
@@ -193,8 +206,9 @@ async function openFirstPassage() {
 
 async function approveWithAgent(source, expected) {
   const file = join(f.output, 'paired-duct-agent-proposal.bcad');
+  const session = { app: f.app, output: f.output, clientName: f.name };
   await copyFile(source.file, file);
-  await withMcpSession({ app: f.app, output: f.output, clientName: f.name }, file, 'paired-duct-proposal', async call => {
+  const reviewed = await withMcpSession(session, file, 'paired-duct-proposal', async (call, request) => {
     const expectedRevision = await currentPartRevision(call);
     const description = await call('describe', { command: 'sweep-curve' });
     assert.match(description.values.sketch, /line–arc ducts accept two rectangular openings/);
@@ -208,6 +222,23 @@ async function approveWithAgent(source, expected) {
     assert.deepEqual(await readFile(file), before);
     const staged = await call('proposals', { action: 'propose', title: 'Sweep the exact paired duct', ops: [op] });
     assert.deepEqual([staged.proposal, staged.applied], ['P1', false]);
+    if (reviewBaseline) {
+      const pending = await readFile(file);
+      const { proposals: [proposal] } = await call('proposals', { action: 'list' });
+      assert.equal(proposal.id, 'P1');
+      assert.match(proposal.modelReviewRevision, /^[a-f\d]{64}$/);
+      const result = await call('query', { action: 'render', proposal: 'P1', expectedRevision,
+        expectedProposalRevision: proposal.modelReviewRevision }, true);
+      assert.equal(result.code, 'MODEL_REVIEW_REPLAY_FAILED');
+      assert.deepEqual(await readFile(file), pending);
+      f.report.observations.push({ label: 'paired-duct-image-review-unavailable', result });
+    }
+    if (review) {
+      const pending = await readFile(file);
+      const result = await reviewPendingPairedDuct(f, call, request, expectedRevision, rail.revision, expected, sideTags);
+      assert.deepEqual(await readFile(file), pending);
+      return result;
+    }
   });
   const pending = JSON.parse(await readFile(file));
   assert.deepEqual([pending.nodes, pending.outputs], [seed.nodes, seed.outputs]);
@@ -218,10 +249,18 @@ async function approveWithAgent(source, expected) {
   await button('Hide', card).waitFor();
   await f.same(pending);
   await f.snapshot('10-agent-preview');
+  if (reviewBaseline) return;
   await button('Accept', card).click();
   await f.changed(pending);
   const approved = (await f.snapshot('11-agent-approved')).doc;
   assert.equal((await verify('approved-native', approved, 1)).digest, expected.digest);
+  if (reviewed) {
+    const saved = await f.save('paired-duct-reviewed');
+    const reopened = (await f.freshOpen(saved.file, approved, '12-approved-fresh-open')).doc;
+    assert.equal((await verify('approved-reopened-native', reopened, 1)).digest, expected.digest);
+    await withMcpSession(session, saved.file, 'paired-duct-approved', (call, request) => checkApprovedDuctReview(call, request, reviewed));
+    await checkChangedDuctPath(session, pending, reviewed, path.controlPoints);
+  }
 }
 
 await f.run(async () => {
@@ -241,6 +280,10 @@ await f.run(async () => {
   await chooser.setFiles({ name: 'paired-duct-source.bcad', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(seed)) });
   await f.same(seed);
   const source = baseline ? undefined : await f.save('paired-duct-source');
+  if (reviewBaseline) {
+    await approveWithAgent(source);
+    return;
+  }
   f.phase = 'Apply the paired duct Sweep';
   await button('Sketch 1', browser()).click();
   await button(railName, browser()).click();

@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1783: [Review the two passages of a pending straight-to-arc Sweep](notes/pending-line-arc-paired-duct-review-2026-11-23/README.md), #324. Bind both cap apertures, each wall group and the native joins to the two image revisions through explicit Studio approval and fresh Open.
 - D1782: [Sweep two rectangular passages from a straight span into an arc](notes/exact-line-arc-paired-duct-2026-11-23/README.md), #10. Verify both caps, 12 native joins, aperture editing, fresh Open and explicit local Agent approval.
 - D1781: [Extract Studio notice and recovery rendering](notes/studio-notice-recovery-rendering-2026-11-23/README.md), #44. Match click-through, dismissal, recovery and document state in paired Studio runs.
 - D1780: [Review a pending resize of two saved Sketch Chamfers](notes/pending-grouped-sketch-chamfer-resize-review-2026-11-23/README.md), #324. Pin both native bevels and their carrier planes through explicit Studio approval and fresh Open.

@@ -251,3 +251,41 @@ test('an arc-and-line duct binds both mouth names to travel order and certifies 
   assert.ok(Math.abs(brepMassProperties(brep, 1).volume - 16 * (10 + 10 * Math.PI)) < 1e-7);
   assert.equal(await reviewedRectangularDuctEvidence(base, candidate, { ...edit, pathRevision: 'b'.repeat(64) }), undefined);
 });
+
+test('a paired line-and-arc proposal binds two authored through apertures to both mouths and the exact read pins', async () => {
+  const railText = `@model rails { version:0; length-unit:mm;
+    @curve #line-arc { type:nurbs; degree:2; knots:[0,0,0,1,1,2,2,2];
+      control-points:[[-10,0,0],[-5,0,0],[0,0,0],[20,0,0],[20,20,0]];
+      weights:[1,1,1,${Math.SQRT1_2},1]; } }`;
+  const { base, proposal } = await fixture(railText, 'line-arc', 'Line and arc rail');
+  const sketch = base.nodes[0];
+  assert.ok(sketch.kind === 'sketch' && sketch.profile === 'rectangle');
+  const hole = (low: number, high: number) => ([[ -1, low ], [ -1, high ], [ 1, high ], [ 1, low ]] as [number, number][])
+    .map(start => ({ kind: 'line' as const, start }));
+  const section = { ...sketch, min: [-2, -5], max: [2, 5], holes: [hole(-3, -1), hole(1, 3)],
+    sideTags: { outer: ['e1', 'e2', 'e3', 'e4'], holes: [['e5', 'e6', 'e7', 'e8'], ['e9', 'e10', 'e11', 'e12']] } } satisfies ModelNode;
+  const doc = { ...base, nodes: [section] }, request = { ...proposal, ops: [{ ...proposal.ops[0], args: {
+    ...proposal.ops[0].args, expectedRevision: revisionOf(doc),
+  } }] };
+  const edit = rectangularDuctProposal(doc, request), copied = sweepPath(doc, ['line-arc']);
+  assert.ok(edit && typeof copied !== 'string');
+  const candidate = withNode(doc, { kind: 'sweep-curve', sketch: 0, name: copied.name, path: copied.path, mode: 'exact' });
+  const before = structuredClone({ doc, candidate }), reviewed = await reviewedRectangularDuctEvidence(doc, candidate, edit);
+  assert.ok(reviewed && 'throughApertures' in reviewed.rectangularDuct && reviewed.rectangularDuct.throughApertures);
+  const { rectangularDuct: duct } = reviewed;
+  assert.equal(duct.pathKind, 'line-and-arc');
+  assert.deepEqual(duct.caps.map(cap => [cap.name, cap.outerEdges.length, cap.innerEdges.length]), [['n1.start', 4, 8], ['n1.end', 4, 8]]);
+  const through = reviewed.rectangularDuct.throughApertures;
+  assert.deepEqual(through.apertures.map(aperture => [aperture.index, aperture.faces.length, aperture.seams.length]), [[0, 8, 4], [1, 8, 4]]);
+  assert.ok(Math.abs(through.volume.native - 32 * (10 + 10 * Math.PI)) < 1e-7);
+  assert.equal(await reviewedRectangularDuctEvidence(doc, candidate, { ...edit, pathRevision: 'f'.repeat(64) }), undefined);
+  assert.equal(await reviewedRectangularDuctEvidence(doc, candidate, { ...edit, directRevision: 'f'.repeat(16) }), undefined);
+  assert.equal(await reviewedRectangularDuctEvidence(doc, { ...candidate, nextId: 99 }, edit), undefined);
+  assert.equal(await reviewedRectangularDuctEvidence(doc, { ...candidate, direct: { ...doc.direct, sources: { rails: railText + '\n' } } }, edit), undefined);
+  const sweep = candidate.nodes[1];
+  assert.ok(sweep.kind === 'sweep-curve');
+  const changed = { ...sweep.path, controlPoints: sweep.path.controlPoints.map(point => [...point] as [number, number, number]) };
+  changed.controlPoints[4][2] += .01;
+  assert.equal(await reviewedRectangularDuctEvidence(doc, { ...candidate, nodes: [section, { ...sweep, path: changed }] }, edit), undefined);
+  assert.deepEqual({ doc, candidate }, before);
+});
