@@ -139,9 +139,10 @@ import { usePlacedBodyEvaluation, type PlacedBodyMap } from './app/usePlacedBody
 import { acceptedPlacedSketchSnaps } from './viewport/placedSketchSnaps';
 import { supportsPlacedBoxSnapRotation } from './viewport/placedBoxSnap';
 import { contentKey, evaluationKey } from '@barocss/cad-model/engine/evalMemo';
-import { bearingEditCurrent, bearingFaceInput, captureBearingEditSession, prepareBearingEdit, type BearingEditSession } from './app/bearingEdit';
+import { bearingFaceInput } from './app/bearingEdit';
+import { usePlacedBearingEditor } from './app/usePlacedBearingEditor';
 import { resolveSkeletons, SKELETON_CODES } from '@barocss/cad-model/frames/skeleton';
-import { carryOver, emptyDoc, featureLabel, fmt, prefixDoc, starterDoc, type ModelNode, type SketchNode, type StudioDoc } from '@barocss/cad-model/engine/doc';
+import { carryOver, emptyDoc, featureLabel, fmt, prefixDoc, starterDoc, type SketchNode, type StudioDoc } from '@barocss/cad-model/engine/doc';
 import { featureId, nextSerial } from '@barocss/cad-model/engine/ids';
 import { modelHash } from '@barocss/cad-model/chat/spec';
 import { captureSignatures, type Problem as RefProblem } from '@barocss/cad-model/engine/references';
@@ -631,20 +632,8 @@ export function App() {
   const [mouldSpread, setMouldSpread] = useState(0);
   const halvesShownRef = useRef(false);
   const [ao, setAo] = useState(true);
-  const [instanceEdit, setInstanceEdit] = useState<{ owner: string; index: number } | null>(null);
-  const [instanceEditPending, setInstanceEditPending] = useState(false);
-  // A changed selection invalidates a pending edit even if the user selects the same occurrence again.
-  /** The O9 lanes App's worker requests go on (R4b): a reply overtaken on its lane comes back stale. */
+  /** App worker requests use independent lanes. */
   const lanes = useMemo(() => new Lanes(), []);
-  const bearingEditScope = useRef({ doc, instanceSel, instanceEdit, editNode });
-  if (bearingEditScope.current.doc !== doc || bearingEditScope.current.instanceSel !== instanceSel || bearingEditScope.current.instanceEdit !== instanceEdit || bearingEditScope.current.editNode !== editNode) bearingEditScope.current = { doc, instanceSel, instanceEdit, editNode };
-  // (R4b: the bearing edit on its O9 lane — the document, the selection or the edit changing makes a reply on it stale.)
-  useEffect(() => { lanes.cancel('bearing-edit'); setInstanceEditPending(false); }, [doc, instanceSel, instanceEdit]);
-  const selectedBearingEdit = useMemo(() => {
-    if (!instanceEdit || instanceSel.length !== 1 || instanceSel[0] !== instanceEdit.owner) return null;
-    try { return { session: captureBearingEditSession(doc, instanceEdit.owner, instanceEdit.index), error: null }; }
-    catch (error) { return { session: null, error: error instanceof Error ? error.message : String(error) }; }
-  }, [doc, instanceSel, instanceEdit]);
   /** The body whose name is being typed in the browser (its key). */
   const [renaming, setRenaming] = useState<string | null>(null);
   /** Bodies whose features the browser lists under them (by key). */
@@ -716,6 +705,8 @@ export function App() {
   const lastEvalMs = useRef(0);
   const [menu, setMenu] = useState<ViewportMenu | null>(null);
   const revision = useRef(1);
+  const bearingEditor = usePlacedBearingEditor({ doc, instanceSel, editNode, engine, lanes, revision, onNotice: setToast });
+  const { instanceEdit, setInstanceEdit, scope: bearingEditScope } = bearingEditor;
   const evaluateVersion = useCallback((input: StudioDoc) => engine.part(input, revision.current++, 'read'), [engine]);
   const requestNativeOpen = useRef<(accept: () => void, focus: HTMLElement | null) => void>(() => {});
   requestNativeOpen.current = (accept, focus) => workspaceModeExit.switchWhenReady(accept, { originFocus: focus });
@@ -1101,24 +1092,6 @@ export function App() {
     if (select) setInstanceSel(select);
     return true;
   }, [doc, marker, acceptanceScope]);
-  const applyInstanceBearing = async (session: BearingEditSession, nodes: ModelNode[]) => {
-    const scope = bearingEditScope.current;
-    if (!bearingEditCurrent(session, scope.doc, scope.instanceSel, scope.instanceEdit)) return;
-    setInstanceEditPending(true);
-    // (Its refusal, thrown, comes back on the lane as its result: a stale one, like a stale reply, says nothing.)
-    const at = revision.current++, reply = await lanes.run('bearing-edit', { revision: at, source: session.owner }, async () => {
-      try { const prepared = prepareBearingEdit(session, nodes); return { prepared, result: await engine.part(prepared.view, at) }; }
-      catch (error) { return { error }; }
-    });
-    if (reply.stale) return;
-    setInstanceEditPending(false);
-    const out = reply.result, current = bearingEditScope.current;
-    if ('error' in out) { if (current === scope) setToast({ title: 'Bearing not changed', hint: out.error instanceof Error ? out.error.message : String(out.error), detail: '' }); return; }
-    if (current !== scope || !bearingEditCurrent(session, current.doc, current.instanceSel, current.instanceEdit)) return;
-    if (!out.result.ok) { setToast(out.result.error); return; }
-    if (!commitInstances(out.prepared.root.instances!, [session.owner])) return;
-    setInstanceEdit(null);
-  };
   const { instanceSources, sceneInstanceBodies, renderGeometryReady } = usePlacedBodyEvaluation({
     model: { doc, shown: shownDoc, current: docNow, currentShown: shownDocNow },
     worker: { client: engine, lanes, revision, session: workerSession, currentSession: workerSessionNow },
@@ -1219,7 +1192,7 @@ export function App() {
   const pickInstanceRow = useCallback((id: string, additive = false) => { setSelection(emptySel); setDirectSel([]); setInstanceSel(previous => pickPlacedPart(previous.filter(value => doc.instances?.some(i => i.id === value)), id, additive)); setInstanceEdit(null); }, [doc.instances]);
   const { shown: stepsShown, openPanel: openSteps, display: stepsDisp, panelProps: stepsPanel } = useAssemblyStepReview({
     doc, docGeneration, viewport, explodeStore, commit, onNotice: setToast,
-    selection: { selectedParts: instanceSel, editor: instanceEdit, editorPending: instanceEditPending, pickPart: pickInstanceRow },
+    selection: { selectedParts: instanceSel, editor: instanceEdit, editorPending: bearingEditor.pending, pickPart: pickInstanceRow },
     source: { docNow, openIntent, workerSessionNow, workerSession, opening: () => project.opening() },
     available: !bomOpen && !libraryOpen && !paramsOpen && !variantsOpen && !rebuildOpen && !rendering && !drawing && !sketch && !active,
   });
@@ -2566,8 +2539,9 @@ export function App() {
             commitInstances, groundMany: assembly.groundMany, notice: setToast })} />}
       {!rendering && !sketch && !measure && instanceSel.length === 1 && <InstanceInspector
         model={{ doc, selectedId: instanceSel[0], entry: instanceBodies.get(instanceSel[0]) }}
-        bearing={{ selected: selectedBearingEdit, blocked: bomOpen || libraryOpen || paramsOpen || drawing || !!active,
-          pending: instanceEditPending, close: () => setInstanceEdit(null), apply: applyInstanceBearing }}
+        bearing={{ selected: bearingEditor.selected, blocked: bomOpen || libraryOpen || paramsOpen || drawing || !!active,
+          pending: bearingEditor.pending, close: () => setInstanceEdit(null),
+          apply: (session, nodes) => bearingEditor.apply(session, nodes, commitInstances) }}
         assembly={assembly} changes={{ commitInstances, commitParts, commitAssembly, patternEdit, startInPlace,
           clearSelection: () => setInstanceSel([]) }} onNotice={setToast} />}
       {!rendering && !sketch && !measure && jointTree && !assembly.draft && !instanceSel.length && <RobotInspector controller={robotExports} motion={joints} loopMotionContext={loopMotionContext} chosenMotion={chosenMotion}
