@@ -129,8 +129,8 @@ export type CadPartFeature = Base & (
   | { readonly kind: 'scale'; readonly target: string; readonly factor: number; readonly pivot?: CadPartPoint3 }
   /** `count` copies (the original included) joined into one body. */
   | { readonly kind: 'linear-pattern'; readonly target: string; readonly axis: CadPartAxis; readonly spacing: CadPartDim; readonly count: number }
-  /** Repeat the tool of the active difference producer; count includes the original cut. */
-  | { readonly kind: 'linear-feature-pattern'; readonly target: string; readonly axis: CadPartAxis; readonly spacing: CadPartDim; readonly count: number }
+  /** Repeat an active difference tool, or its direct earlier rectangular difference's tool via source; count includes the original cut. */
+  | { readonly kind: 'linear-feature-pattern'; readonly target: string; readonly source?: string; readonly axis: CadPartAxis; readonly spacing: CadPartDim; readonly count: number }
   /** Repeat an active difference tool, or its direct earlier rectangular difference's tool via source; both counts include the original cut. */
   | { readonly kind: 'rectangular-feature-pattern'; readonly target: string; readonly source?: string; readonly axis: CadPartAxis; readonly spacing: CadPartDim; readonly count: number; readonly axis2: CadPartAxis; readonly spacing2: CadPartDim; readonly count2: number }
   /** Repeat the original CUT tool on a finite XY grid, masked by an inline reference-point region. */

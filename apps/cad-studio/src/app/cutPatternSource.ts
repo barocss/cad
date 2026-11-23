@@ -26,7 +26,8 @@ export function earlierRectangularCutSource(ctx: Ctx, index: number): BodyRef | 
 
 export function savedCutPatternSource(node: ModelNode, nodes: readonly ModelNode[]): string | null {
   if (!isCutPattern(node.kind) || !('parent' in node)) return null;
-  return cutPatternSourceLabel(nodes, node.kind === 'rectangular-feature-pattern' && node.source ? node.source.node : node.parent.node);
+  const earlier = (node.kind === 'rectangular-feature-pattern' || node.kind === 'linear-feature-pattern') && node.source;
+  return cutPatternSourceLabel(nodes, earlier ? earlier.node : node.parent.node);
 }
 
 export function cutPatternSourceLabel(nodes: readonly ModelNode[], index: number | null): string | null {

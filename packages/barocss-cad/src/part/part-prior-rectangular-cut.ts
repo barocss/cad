@@ -37,31 +37,32 @@ function profile(part: Part) {
 
 /** Bind the direct two-cut history to disjoint, full-height native cavities before making any copy. */
 export function certifyPriorRectangularCut(seed: Part, tool: Part, prior: PriorRectangularCut,
-  first: number, spacing: number, count: number, second: number, spacing2: number, count2: number, fail: Tools['fail']): void {
+  first: number, spacing: number, count: number, second: number, spacing2: number, count2: number, fail: Tools['fail'], pattern: 'rectangular' | 'linear' = 'rectangular'): void {
+  const label = `${pattern} feature pattern source`;
   const stock = profile(prior.stock), earlier = profile(prior.previous), current = profile(seed), olderTool = profile(tool), newerTool = profile(prior.other);
   if (!stock || !earlier || !current || !olderTool || !newerTool || stock.holes.length || olderTool.holes.length || newerTool.holes.length
     || earlier.holes.length !== 1 || current.holes.length !== 2 || ![first, second].every(axis => axis === 0 || axis === 1))
-    return fail('CAPABILITY', 'rectangular feature pattern source needs two original upright rectangular through cuts on one rectangular stock and an XY grid');
+    return fail('CAPABILITY', `${label} needs two original upright rectangular through cuts on one rectangular stock and ${pattern === 'linear' ? 'one XY line' : 'an XY grid'}`);
   const same = (a: Rectangle, b: Rectangle) => a.min.every((value, i) => value === b.min[i]) && a.max.every((value, i) => value === b.max[i]);
   if (!same(stock.outer, earlier.outer) || !same(stock.outer, current.outer)
     || earlier.z0 !== stock.z0 || earlier.z1 !== stock.z1 || current.z0 !== stock.z0 || current.z1 !== stock.z1
     || olderTool.z0 > stock.z0 || olderTool.z1 < stock.z1 || newerTool.z0 > stock.z0 || newerTool.z1 < stock.z1
     || !same(earlier.holes[0], olderTool.outer)
     || current.holes.filter(hole => same(hole, olderTool.outer)).length !== 1 || current.holes.filter(hole => same(hole, newerTool.outer)).length !== 1)
-    return fail('CAPABILITY', 'rectangular feature pattern source must retain both original full-height rectangular cavities in the current stock');
+    return fail('CAPABILITY', `${label} must retain both original full-height rectangular cavities in the current stock`);
   const margin = 10 * CadNumericPolicy.linearTolerance;
   const inside = (box: Rectangle) => box.min.every((value, axis) => value - stock.outer.min[axis] > margin
     && stock.outer.max[axis] - box.max[axis] > margin);
   const separate = (a: Rectangle, b: Rectangle) => [0, 1].some(axis => b.min[axis] - a.max[axis] > margin || a.min[axis] - b.max[axis] > margin);
-  if (!inside(newerTool.outer)) return fail('GEOMETRY', 'rectangular feature pattern source needs strictly interior original through cuts');
+  if (!inside(newerTool.outer)) return fail('GEOMETRY', `${label} needs strictly interior original through cuts`);
   const placed: Rectangle[] = [];
   for (let j = 0; j < count2; j++) for (let i = 0; i < count; i++) {
     const offset = [0, 0]; offset[first] = spacing * i; offset[second] = spacing2 * j;
     const box: Rectangle = { min: [olderTool.outer.min[0] + offset[0], olderTool.outer.min[1] + offset[1]],
       max: [olderTool.outer.max[0] + offset[0], olderTool.outer.max[1] + offset[1]] };
-    if (!inside(box)) return fail('GEOMETRY', 'rectangular feature pattern source cells must stay strictly inside the original stock');
+    if (!inside(box)) return fail('GEOMETRY', `${label} cells must stay strictly inside the original stock`);
     if (!separate(box, newerTool.outer) || placed.some(previous => !separate(box, previous)))
-      return fail('GEOMETRY', 'rectangular feature pattern source cells must stay disjoint from the newer cut and every other cell');
+      return fail('GEOMETRY', `${label} cells must stay disjoint from the newer cut and every other cell`);
     placed.push(box);
   }
 }

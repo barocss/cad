@@ -1144,7 +1144,7 @@ function editFieldsRaw(nodes: Nodes, i: number, bearingAssembly?: BearingAssembl
       number('count2', 'Second count', undefined, n => (n as typeof node).count2, (n, v) => ({ ...(n as typeof node), count2: v }));
       break;
     case 'linear-feature-pattern':
-      out.push({ kind: 'choice', key: 'axis', label: 'Direction', options: axes(['x', 'y', 'z']), get: n => self<typeof node>(n).axis, set: (n, v) => replace(n, i, { ...self<typeof node>(n), axis: v as Axis }) });
+      out.push({ kind: 'choice', key: 'axis', label: 'Direction', options: axes(node.source ? ['x', 'y'] : ['x', 'y', 'z']), get: n => self<typeof node>(n).axis, set: (n, v) => replace(n, i, { ...self<typeof node>(n), axis: v as Axis }) });
       number('spacing', 'Spacing', 'mm', n => num((n as typeof node).spacing), (n, v) => ({ ...(n as typeof node), spacing: v }));
       number('count', 'Count', undefined, n => (n as typeof node).count, (n, v) => ({ ...(n as typeof node), count: v }));
       break;

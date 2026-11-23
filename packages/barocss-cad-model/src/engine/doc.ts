@@ -938,9 +938,9 @@ export function rectangularFeaturePatternProblem(node: Record<string, unknown>, 
 }
 
 /** An explicit prototype is the target's direct earlier Difference; it is never consumed again. */
-export function rectangularFeaturePatternSourceProblem(prototype: unknown, parent: BodyRef, nodes: readonly ModelNode[]): string | null {
+export function rectangularFeaturePatternSourceProblem(prototype: unknown, parent: BodyRef, nodes: readonly ModelNode[], label = 'Rectangular cut pattern'): string | null {
   if (prototype !== undefined) {
-    const bad = '[BAD_REFERENCE] Rectangular cut pattern source must be the current target\'s direct earlier unsuppressed solid Difference.';
+    const bad = `[BAD_REFERENCE] ${label} source must be the current target's direct earlier unsuppressed solid Difference.`;
     if (!textRecord(prototype) || !Number.isSafeInteger(prototype.node) || prototype.side !== 'solid'
       || Object.keys(prototype).some(key => key !== 'node' && key !== 'side') || (prototype.node as number) < 0
       || (prototype.node as number) >= parent.node) return bad;
@@ -962,7 +962,26 @@ export function rectangularFeaturePatternSourceProblem(prototype: unknown, paren
   }
   return null;
 }
-/** Check saved and nested part recipes without geometry evaluation. */
+
+/** Validate only the explicit-source Linear recipe. Earlier documents keep their existing admission. */
+export function priorLinearFeaturePatternProblem(node: Record<string, unknown>, nodes: readonly ModelNode[], parameters: Record<string, number>): string | null {
+  const allowed = new Set(['kind', 'parent', 'source', 'axis', 'spacing', 'count', ...NODE_EXTRA_FIELDS]);
+  if (Object.keys(node).some(key => !allowed.has(key))) return '[VALUE] Linear cut pattern contains an unknown field.';
+  if (node.axis !== 'x' && node.axis !== 'y') return '[VALUE] An earlier Linear cut pattern source needs direction X or Y.';
+  if (typeof node.count !== 'number' || !Number.isSafeInteger(node.count) || node.count < 2 || node.count > 64)
+    return '[VALUE] Linear cut pattern count must be a whole number from 2 to 64 including the original cut.';
+  const dim = node.spacing;
+  const spacing = typeof dim === 'number' ? dim : textRecord(dim) && typeof dim.parameter === 'string' && Object.keys(dim).length === 1 ? parameters[dim.parameter] : undefined;
+  if (typeof spacing !== 'number' || !Number.isFinite(spacing) || spacing === 0 || Math.abs(spacing) > 10000)
+    return '[VALUE] Linear cut pattern spacing must be nonzero with magnitude at most 10000.';
+  const parent = node.parent;
+  if (!textRecord(parent) || !Number.isSafeInteger(parent.node) || parent.side !== 'solid' || Object.keys(parent).some(key => key !== 'node' && key !== 'side') ||
+    !leafBodies(nodes).some(ref => ref.node === parent.node && ref.side === 'solid'))
+    return '[BAD_REFERENCE] Linear cut pattern needs a current solid Difference reference.';
+  return rectangularFeaturePatternSourceProblem(node.source, parent as unknown as BodyRef, nodes, 'Linear cut pattern');
+}
+
+/** Check rectangular patterns and both consumers of the earlier rectangular source in saved and nested recipes. */
 export function rectangularPatternDocumentProblem(input: unknown): string | null {
   const stack: unknown[] = [input], seen = new Set<object>();
   while (stack.length) {
@@ -973,8 +992,11 @@ export function rectangularPatternDocumentProblem(input: unknown): string | null
     const parameters = textRecord(value.parameters) ? value.parameters as Record<string, number> : {};
     if (Array.isArray(value.nodes)) for (let i = 0; i < value.nodes.length; i++) {
       const node = value.nodes[i];
-      if (!textRecord(node) || node.kind !== 'rectangular-feature-pattern' || node.suppressed === true) continue;
-      const why = rectangularFeaturePatternProblem(node, value.nodes.slice(0, i) as ModelNode[], parameters);
+      if (!textRecord(node) || node.suppressed === true) continue;
+      const validate = node.kind === 'rectangular-feature-pattern' ? rectangularFeaturePatternProblem
+        : node.kind === 'linear-feature-pattern' && node.source !== undefined ? priorLinearFeaturePatternProblem : null;
+      if (!validate) continue;
+      const why = validate(node, value.nodes.slice(0, i) as ModelNode[], parameters);
       if (why) return why;
     }
     if (Array.isArray(value.instances)) for (const instance of value.instances) if (textRecord(instance)) stack.push(instance.doc);
@@ -1119,7 +1141,7 @@ type ModelNodeBase = DrivenSketchNode | RoundedRectangleInsetNode | SketchNode |
   | { kind: 'linear-pattern'; parent: BodyRef; axis: Axis; spacing: Dim; count: number }
   | { kind: 'linear-span-pattern'; parent: BodyRef; axis: Axis; span: number; count: number }
   /** Repeat a current difference's cut; spacing keeps the stored dimension reference. */
-  | { kind: 'linear-feature-pattern'; parent: BodyRef; axis: Axis; spacing: Dim; count: number }
+  | { kind: 'linear-feature-pattern'; parent: BodyRef; source?: BodyRef; axis: Axis; spacing: Dim; count: number }
   | { kind: 'fill-feature-pattern'; parent: BodyRef; region: FillFeaturePatternRegion; anchor: readonly [number, number]; spacing: Dim; count: number; spacing2: Dim; count2: number }
   | { kind: 'curve-feature-pattern'; parent: BodyRef; path: CurveFeaturePatternPath; spacing: Dim; count: number }
   | { kind: 'rectangular-feature-pattern'; parent: BodyRef; source?: BodyRef; axis: Axis; spacing: Dim; count: number; axis2: Axis; spacing2: Dim; count2: number }
@@ -1725,7 +1747,7 @@ export const usesOf = (node: ModelNode, nodes?: readonly ModelNode[]): number[] 
   : node.kind === 'revolve' && node.axisRef
     ? [node.sketch, ...(nodes ? nodes.flatMap((_, i) => featureId(nodes, i) === node.axisRef!.sourceFeature ? [i] : []) : [])]
   : node.kind === 'align' ? [node.parent.node, node.target.body.node]
-  : node.kind === 'rectangular-feature-pattern' && node.source ? [node.parent.node, node.source.node]
+  : (node.kind === 'rectangular-feature-pattern' || node.kind === 'linear-feature-pattern') && node.source ? [node.parent.node, node.source.node]
   : node.kind === 'face-end-extrude' ? [node.sketch, node.target.body.node]
   : (node.kind === 'offset-face' || node.kind === 'replace-face') && node.target ? [node.parent.node, node.target.body.node]
   : node.kind === 'extrude' && node.cutDepth === 'through' ? throughCutSources(node, nodes) : parentsOf(node);

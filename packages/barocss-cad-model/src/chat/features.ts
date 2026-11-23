@@ -12,7 +12,7 @@ import { curveFeaturePatternProblem } from '../engine/curveFeaturePattern';
 // (engine/ids.ts), so they stay as they are.
 import { type BoundConstraint3D, type V3 } from '../frames/sketch3d';
 import { boundConstraints, boundRefusal, followersOf, SKELETON_CODES } from '../frames/skeleton';
-import { offsetFaceGroup, offsetFaceNodeProblem, rectangularFeaturePatternProblem, frameGeometry, cylindricalWrapNodeProblem, bandSurfaceNodeProblem, textNodeProblem, textReliefNodeProblem, leafBodies, parentsOf, prefixDoc, usesOf, type BodyRef, type GearMesh, type ModelNode, type PartInstance, type StudioDoc } from '../engine/doc';
+import { offsetFaceGroup, offsetFaceNodeProblem, priorLinearFeaturePatternProblem, rectangularFeaturePatternProblem, frameGeometry, cylindricalWrapNodeProblem, bandSurfaceNodeProblem, textNodeProblem, textReliefNodeProblem, leafBodies, parentsOf, prefixDoc, usesOf, type BodyRef, type GearMesh, type ModelNode, type PartInstance, type StudioDoc } from '../engine/doc';
 import { BASE, mateLabel } from '../assembly/mates';
 import type { CentreRef, DimPoint, DrawingDimension } from '../drawing/types';
 import { bodyKeyFor, bodyNodeOf, featureId, nextSerial, nodesOfName, renameFeatureIds, serialOf } from '../engine/ids';
@@ -39,7 +39,7 @@ const SPECS: Record<string, Spec> = {
   'fill-feature-pattern': { parent: 'ref', region: 'any', anchor: 'any', spacing: 'dim', count: 'positive-index', spacing2: 'dim', count2: 'positive-index' },
   'curve-feature-pattern': { parent: 'ref', path: 'any', spacing: 'dim', count: 'positive-index' },
   'rectangular-feature-pattern': { parent: 'ref', 'source?': 'any', axis: 'enum:x|y|z', spacing: 'dim', count: 'positive-index', axis2: 'enum:x|y|z', spacing2: 'dim', count2: 'positive-index' },
-  'linear-feature-pattern': { parent: 'ref', axis: 'enum:x|y|z', spacing: 'dim', count: 'count' },
+  'linear-feature-pattern': { parent: 'ref', 'source?': 'any', axis: 'enum:x|y|z', spacing: 'dim', count: 'count' },
   'circular-pattern': { parent: 'ref', axis: 'enum:x|y|z', angle: 'num', count: 'count', 'span?': 'num', 'pivot?': 'dim3' },
   union: { left: 'ref', right: 'ref' },
   intersect: { left: 'ref', right: 'ref' },
@@ -216,6 +216,7 @@ export function checkNode(node: unknown, nodes: readonly ModelNode[], parameters
   if (kind === 'curve-feature-pattern') return curveFeaturePatternProblem(node, nodes, parameters);
   if (kind === 'rectangular-feature-pattern') return rectangularFeaturePatternProblem(node, nodes, parameters);
   if (kind === 'linear-feature-pattern') {
+    if (node.source !== undefined) return priorLinearFeaturePatternProblem(node, nodes, parameters);
     const parent = node.parent as unknown as BodyRef, source = nodes[parent.node];
     if (parent.side !== 'solid' || source?.kind !== 'difference' || source.suppressed === true) return '[BAD_REFERENCE] A linear feature pattern needs a current unsuppressed difference body.';
     if ((node.count as number) > 64) return 'linear-feature-pattern.count: a whole number from 2 to 64';
@@ -464,7 +465,7 @@ export function renumber(node: ModelNode, map: (i: number) => number): ModelNode
   if ((n.kind === 'sketch' || n.kind === 'driven-sketch') && n.on) (n as { on: BodyRef }).on = ref(n.on);
   if (n.kind === 'sketch' && n.association !== undefined) { parentsOf(n); n.association = { ...n.association, source: ref(n.association.source) }; }
   if (n.kind === 'align') n.target = { ...n.target, body: ref(n.target.body) };
-  if (n.kind === 'rectangular-feature-pattern' && n.source) n.source = ref(n.source);
+  if ((n.kind === 'rectangular-feature-pattern' || n.kind === 'linear-feature-pattern') && n.source) n.source = ref(n.source);
   if (n.kind === 'replace-face' || n.kind === 'face-end-extrude' || (n.kind === 'offset-face' && n.target)) n.target = { ...n.target, body: ref(n.target.body) };
   if ((n.kind === 'gear' || n.kind === 'rack' || n.kind === 'bevel-gear' || n.kind === 'worm') && n.mesh) (n as { mesh: GearMesh }).mesh = { ...n.mesh, gear: map(n.mesh.gear) };
   // (R12c.3b, D157: the shaft a key, ring or pin goes on, and a key's hub keyway.)

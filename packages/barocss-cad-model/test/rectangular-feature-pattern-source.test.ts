@@ -54,7 +54,7 @@ test('explicit earlier rectangular prototype preserves the later Difference targ
   assert.deepEqual(ctx, before);
 });
 
-test('omitted source and an explicit current intent keep legacy node bytes and other cut-pattern commands unchanged', () => {
+test('omitted source and an explicit current intent keep legacy rectangular and linear node bytes unchanged', () => {
   const first = part('legacy').box({ w: 60, d: 40, h: 10 }).subtract(tool => tool.box({ w: 4, d: 4, h: 10, x: 8, y: 8 }));
   const ctx = context(first.doc), cmd = command(), parent = { node: first.doc.nodes.length - 1, side: 'solid' as const };
   const legacy = cmd.build!(ctx, { ...values }), current = cmd.build!({ ...ctx, rectangularCutSource: parent }, { ...values });
@@ -63,7 +63,7 @@ test('omitted source and an explicit current intent keep legacy node bytes and o
   assert.equal(Object.hasOwn(feature, 'source'), false);
   const linear = commands.find(command => command.id === 'linear-feature-pattern'); assert.ok(linear?.build);
   assert.deepEqual(linear.build(ctx, { axis: 'x', spacing: 16, count: 3 }),
-    linear.build({ ...ctx, rectangularCutSource: { node: 999, side: 'negative' } }, { axis: 'x', spacing: 16, count: 3 }));
+    linear.build({ ...ctx, rectangularCutSource: parent }, { axis: 'x', spacing: 16, count: 3 }));
 });
 
 test('the Agent command binds an explicit earlier cut to one current body and revision', async () => {
@@ -92,6 +92,56 @@ test('the Agent command binds an explicit earlier cut to one current body and re
     assert.equal(refused.state.doc, doc);
   }
   assert.deepEqual(doc, before);
+});
+
+test('Linear commands and saved recipes keep an explicit earlier rectangular source through signed spacing and remapping', async () => {
+  const { doc, first, target, ctx } = authored(), linear = commands.find(command => command.id === 'linear-feature-pattern');
+  assert.ok(linear?.build);
+  const sourceId = featureId(doc.nodes, first), body = ctx.bodies[0].key;
+  const signed = { axis: 'x', spacing: -5, count: 2 };
+  const make = (overrides: Record<string, unknown>) => dispatchTool({ doc, bodies: ctx.bodies }, 'features', {
+    action: 'command', command: linear.id, bodies: [body], expectedRevision: revisionOf(doc),
+    values: { source: sourceId, ...signed, ...overrides },
+  }, async input => evaluateDoc(input, 2));
+  const result = await make({});
+  assert.equal(result.isError, false, result.content);
+  const made = result.state.doc, node = made.nodes.at(-1);
+  assert.ok(node?.kind === 'linear-feature-pattern');
+  assert.deepEqual(node.source, { node: first, side: 'solid' });
+  assert.deepEqual(node.parent, { node: target, side: 'solid' });
+  assert.deepEqual(usesOf(node), [target, first]);
+  assert.deepEqual(parentsOf(node), [target]);
+  const feature = toPartDocument(made).features.at(-1);
+  assert.ok(feature?.kind === 'linear-feature-pattern');
+  assert.equal(feature.source, sourceId);
+  assert.equal(feature.target, featureId(doc.nodes, target));
+  assert.equal(checkNode(node, doc.nodes, doc.parameters), null);
+  assert.deepEqual(renumber(node, index => index + 3), { ...node,
+    parent: { node: target + 3, side: 'solid' }, source: { node: first + 3, side: 'solid' } });
+  const host = part('host').box({ w: 4, d: 4, h: 4, x: 1000 }).doc;
+  const flat = flattenAssembly({ ...host, instances: [{ id: 'child', name: 'Linear cut source', doc: made, position: [0, 0, 0], rotation: [0, 0, 0] }] });
+  const shifted = flat.nodes.find(node => node.kind === 'linear-feature-pattern');
+  assert.ok(shifted?.kind === 'linear-feature-pattern');
+  assert.deepEqual(shifted.parent, { node: target + host.nodes.length, side: 'solid' });
+  assert.deepEqual(shifted.source, { node: first + host.nodes.length, side: 'solid' });
+  const opened = await readStudioFile(encodeStudioFile(made));
+  assert.ok('doc' in opened, JSON.stringify(opened));
+  assert.deepEqual(opened.doc, made);
+  assert.deepEqual(made.nodes.slice(0, -1), doc.nodes);
+  const native = evaluateDoc(made, 3);
+  assert.ok(native.ok, native.ok ? '' : native.error.detail);
+  assert.ok(native.bodies[0].volume !== null && Math.abs(native.bodies[0].volume - 23520) < 1e-8);
+  for (const values of [{ spacing: 0 }, { axis: 'z' }, { source: featureId(doc.nodes, target) }]) {
+    const refused = await make(values);
+    assert.equal(refused.isError, true, refused.content);
+    assert.equal(refused.state.doc, doc);
+  }
+  for (const override of [{ axis: 'z' }, { spacing: 0 }, { source: node.parent }, { source: null }]) {
+    const invalid: Record<string, unknown> = { ...made, nodes: [...doc.nodes, { ...node, ...override }] };
+    assert.ok(rectangularPatternDocumentProblem(invalid));
+    assert.ok('error' in readStudioDoc(JSON.stringify(invalid)));
+  }
+  assert.throws(() => linear.build!(context(doc), signed), error => isRefusal(error, 'VALUE'));
 });
 
 test('source indices follow delete, move, proposal remap and placed-document flattening without becoming consumed parents', () => {

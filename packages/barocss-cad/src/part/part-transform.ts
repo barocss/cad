@@ -137,8 +137,10 @@ export function transformOperation(f: CadPartFeature & Record<string, unknown>, 
       }));
     }
     case 'linear-feature-pattern': {
-      const { seed, tool } = t.cutSource(f.target), axis = axisOf(f.axis), spacing = dim(f.spacing as CadPartDim, 'spacing'), count = integer(f.count, 'count', 1, CadPartLimits.copies);
+      const { seed, tool, prior } = t.cutSource(f.target, f.source, 'linear'), axis = axisOf(f.axis), spacing = dim(f.spacing as CadPartDim, 'spacing'), count = integer(f.count, 'count', 1, CadPartLimits.copies);
       if (spacing === 0) fail('PARAMETER', 'spacing must not be zero');
+      // One member in the unused direction reuses the exact same native interior/disjointness proof.
+      if (prior) certifyPriorRectangularCut(seed, tool[0], prior, 'xyz'.indexOf(axis), spacing, count, axis === 'x' ? 1 : 0, 0, 1, fail, 'linear');
       return () => {
         if (count === 1 || !tool.length) return { kind: 'solid', parts: [seed] };
         const joined = tool.slice(1).reduce<Solid>((acc, p) => boolean(acc, p.solid, 'union', at), tool[0].solid);

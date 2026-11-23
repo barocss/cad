@@ -194,10 +194,10 @@ function rectangularCutSource(ctx: Ctx, parent: BodyRef): BodyRef | undefined {
     && Object.keys(source).sort().join(',') === 'node,side' ? undefined : source;
 }
 
-function rectangularCutProblem(ctx: Ctx) {
+function priorRectangularCutProblem(ctx: Ctx, label: string) {
   const current = linearCutProblem(ctx); if (current) return current;
   const parent = refOf(oneBody(ctx)!);
-  const why = rectangularFeaturePatternSourceProblem(rectangularCutSource(ctx, parent), parent, ctx.doc.nodes);
+  const why = rectangularFeaturePatternSourceProblem(rectangularCutSource(ctx, parent), parent, ctx.doc.nodes, label);
   return why ? coded('BAD_REFERENCE', why) : null;
 }
 
@@ -919,17 +919,26 @@ const allCommands: Command[] = [
   },
   {
     id: 'linear-feature-pattern', label: 'Linear cut pattern', icon: 'cad-pattern-linear', hint: 'Repeat the cut along an axis', group: 'pattern', keywords: 'feature cut repeat subtract',
-    available: ctx => { const why = linearCutProblem(ctx); return why ? no(why.message) : ok; },
-    fields: () => [{ key: 'axis', label: 'Direction', kind: 'choice', options: [{ value: 'x', label: 'X' }, { value: 'y', label: 'Y' }, { value: 'z', label: 'Z' }] },
-      { key: 'spacing', label: 'Spacing', kind: 'mm', min: 0, max: 10000 }, { key: 'count', label: 'Count', kind: 'count', min: 2, max: 64 }],
+    available: ctx => { const why = priorRectangularCutProblem(ctx, 'Linear cut pattern'); return why ? no(why.message) : ok; },
+    fields: ctx => {
+      const body = oneBody(ctx), earlier = body && rectangularCutSource(ctx, refOf(body));
+      const options = [{ value: 'x', label: 'X' }, { value: 'y', label: 'Y' }];
+      if (!earlier) options.push({ value: 'z', label: 'Z' });
+      return [{ key: 'axis', label: 'Direction', kind: 'choice', options },
+        { key: 'spacing', label: 'Spacing', kind: 'mm', min: earlier ? -10000 : 0, max: 10000 },
+        { key: 'count', label: 'Count', kind: 'count', min: 2, max: 64 }];
+    },
     defaults: () => ({ axis: 'x', spacing: 20, count: 3 }),
     build: (ctx, v) => {
-      const why = linearCutProblem(ctx); if (why) throw why;
+      const why = priorRectangularCutProblem(ctx, 'Linear cut pattern'); if (why) throw why;
+      const parent = refOf(oneBody(ctx)!), source = rectangularCutSource(ctx, parent);
       const axis = v.axis, spacing = Number(v.spacing), count = Number(v.count);
       if (axis !== 'x' && axis !== 'y' && axis !== 'z') throw refusal('VALUE', 'Direction must be X, Y or Z.');
-      if (!Number.isFinite(spacing) || spacing <= 0 || spacing > 10000) throw refusal('VALUE', 'Spacing must be positive and at most 10000 mm.');
+      if (source && axis === 'z') throw refusal('VALUE', 'An earlier Linear cut pattern source needs direction X or Y.');
+      if (!Number.isFinite(spacing) || spacing === 0 || Math.abs(spacing) > 10000 || !source && spacing < 0)
+        throw refusal('VALUE', source ? 'Spacing must be nonzero with magnitude at most 10000 mm.' : 'Spacing must be positive and at most 10000 mm.');
       if (!Number.isInteger(count) || count < 2 || count > 64) throw refusal('VALUE', 'Count must be a whole number from 2 to 64, including the original cut.');
-      return withNode(ctx.doc, { kind: 'linear-feature-pattern', parent: refOf(oneBody(ctx)!), axis, spacing, count });
+      return withNode(ctx.doc, { kind: 'linear-feature-pattern', parent, ...(source ? { source: { ...source } } : {}), axis, spacing, count });
     },
   },
   {
@@ -965,14 +974,14 @@ const allCommands: Command[] = [
   },
   {
     id: 'rectangular-feature-pattern', label: 'Rectangular cut pattern', icon: 'cad-pattern-linear', hint: 'Repeat the cut along two global axes', group: 'pattern', keywords: 'feature cut repeat subtract',
-    available: ctx => { const why = rectangularCutProblem(ctx); return why ? no(why.message) : ok; },
+    available: ctx => { const why = priorRectangularCutProblem(ctx, 'Rectangular cut pattern'); return why ? no(why.message) : ok; },
     fields: () => [{ key: 'axis', label: 'First direction', kind: 'choice', options: [{ value: 'x', label: 'X' }, { value: 'y', label: 'Y' }, { value: 'z', label: 'Z' }] },
       { key: 'spacing', label: 'First spacing', kind: 'mm', min: 0, max: 10000 }, { key: 'count', label: 'First count', kind: 'count', min: 1, max: 64 },
       { key: 'axis2', label: 'Second direction', kind: 'choice', options: [{ value: 'x', label: 'X' }, { value: 'y', label: 'Y' }, { value: 'z', label: 'Z' }] },
       { key: 'spacing2', label: 'Second spacing', kind: 'mm', min: 0, max: 10000 }, { key: 'count2', label: 'Second count', kind: 'count', min: 1, max: 64 }],
     defaults: () => ({ axis: 'x', spacing: 16, count: 3, axis2: 'y', spacing2: 16, count2: 2 }),
     build: (ctx, v) => {
-      const why = rectangularCutProblem(ctx); if (why) throw why;
+      const why = priorRectangularCutProblem(ctx, 'Rectangular cut pattern'); if (why) throw why;
       const axis = v.axis, spacing = Number(v.spacing), count = Number(v.count);
       const axis2 = v.axis2, spacing2 = Number(v.spacing2), count2 = Number(v.count2);
       if (axis !== 'x' && axis !== 'y' && axis !== 'z') throw refusal('VALUE', 'Direction must be X, Y or Z.');

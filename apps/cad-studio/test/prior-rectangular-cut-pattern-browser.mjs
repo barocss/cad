@@ -6,9 +6,11 @@ import { currentPartRevision, withMcpSession } from './mcp-browser-session.mjs';
 import { clickModelCommand } from './model-rail-helper.mjs';
 
 const agent = process.argv.includes('--agent');
+const linear = process.argv.includes('--linear');
 const f = await createFlow({
-  name: 'prior-rectangular-cut-pattern', output: process.argv[2], envFrozen: agent ? 'D1829_SOURCE_FROZEN' : 'D1828_SOURCE_FROZEN',
-  qualification: agent ? '#25 revision-bound local Agent proposal for the earlier through-Subtract.' :
+  name: 'prior-rectangular-cut-pattern', output: process.argv[2], envFrozen: linear ? 'D1830_SOURCE_FROZEN' : agent ? 'D1829_SOURCE_FROZEN' : 'D1828_SOURCE_FROZEN',
+  qualification: linear ? '#25 repeat the earlier rectangular through-cut along a signed XY line.' :
+    agent ? '#25 revision-bound local Agent proposal for the earlier through-Subtract.' :
     '#25 repeat only the chosen earlier through-Subtract on its current same-stock result.',
   limits: ['One original rectangular stock and two disjoint full-height rectangular cuts, XY rectangular pattern in desktop Studio.'],
   initialFiles: [import.meta.filename, 'apps/cad-studio/src/App.tsx', 'apps/cad-studio/src/app/cutPatternSource.ts',
@@ -199,6 +201,77 @@ async function approveAgentPattern(source) {
   await f.snapshot('04-agent-reopened');
 }
 
+async function applyLinearPattern(source) {
+  const open = async entry => {
+    await chooseSource(entry);
+    await clickModelCommand(f.page, 'Pattern', 'Linear cut pattern');
+    const panel = f.page.getByRole('dialog', { name: 'Linear cut pattern', exact: true });
+    await panel.getByText(entry ? 'Subtract 1 (n4)' : 'Subtract 2 (n7)', { exact: true }).waitFor();
+    await field(panel, 'Count').fill('2');
+    await field(panel, 'Spacing').fill('16');
+    return panel;
+  };
+  const applyLinear = async (panel, label, earlier) => {
+    await phase(panel, 'preview');
+    await f.same(source);
+    await button('Apply', panel).click();
+    await f.changed(source);
+    const { doc } = await f.snapshot(label), node = doc.nodes.at(-1);
+    assert.deepEqual(doc.nodes.slice(0, -1), source.nodes);
+    assert.deepEqual(node.parent, { node: 7, side: 'solid' });
+    assert.deepEqual(node.source, earlier ? { node: 4, side: 'solid' } : undefined);
+    assert.deepEqual([node.kind, node.axis, node.spacing, node.count], ['linear-feature-pattern', 'x', 16, 2]);
+    return doc;
+  };
+  const control = await applyLinear(await open(null), '01-linear-current-control', false);
+  await native('linear-current-source', control, [older, later, shift(later, 16, 0)]);
+  await f.undo();
+  await f.same(source);
+
+  const panel = await open('Browser');
+  const undo = await button('Undo').getAttribute('data-tip');
+  for (const spacing of [0, -8, -3]) {
+    await field(panel, 'Spacing').fill(String(spacing));
+    await phase(panel, 'refused');
+    assert.ok(await button('Apply', panel).isDisabled());
+    await f.same(source);
+    assert.equal(await button('Undo').getAttribute('data-tip'), undo);
+  }
+  await f.snapshot('02-linear-overlap-refused');
+  await field(panel, 'Spacing').fill('16');
+  const browser = await applyLinear(panel, '03-linear-earlier-positive', true);
+  const positive = [older, later, shift(older, 16, 0)];
+  await native('linear-positive', browser, positive);
+  await f.undo();
+  await f.same(source);
+  const history = await applyLinear(await open('History'), '04-linear-history-applied', true);
+  assert.deepEqual(history, browser);
+
+  await f.openFeatureEditor(8, 'linear cut spacing');
+  await f.editor().getByText('Subtract 1 (n4)', { exact: true }).waitFor();
+  await field(f.editor(), 'Spacing').fill('-6');
+  const edited = (await f.applyEditor(history, '05-linear-earlier-negative')).doc;
+  assert.deepEqual(edited.nodes.at(-1), { ...history.nodes.at(-1), spacing: -6 });
+  const negative = [older, later, shift(older, -6, 0)];
+  await native('linear-negative', edited, negative);
+  await f.undo();
+  await f.same(history);
+  await native('linear-undo-positive', history, positive);
+  await f.redo();
+  await f.same(edited);
+  const saved = await f.save('linear-earlier-cut');
+  await f.freshOpen(saved.file, edited, 'linear-saved-fresh-open');
+  await button('Top', f.page.locator('.views')).click();
+  await f.page.getByTitle('Frame all (F)', { exact: true }).click();
+  await native('linear-reopened-negative', edited, negative);
+  await f.openFeatureEditor(8, 'retained linear cut source');
+  await f.editor().getByText('Subtract 1 (n4)', { exact: true }).waitFor();
+  assert.equal(await field(f.editor(), 'Spacing').inputValue(), '-6');
+  await f.snapshot('06-linear-reopened-source');
+  await f.closeEditor();
+  await f.same(edited);
+}
+
 await f.run(async () => {
   const source = await f.inspect('seed', {});
   if (agent) return approveAgentPattern(source);
@@ -212,6 +285,7 @@ await f.run(async () => {
   await button('Top', f.page.locator('.views')).click();
   await f.page.getByTitle('Frame all (F)', { exact: true }).click();
   await native('original-two-cuts', source, [older, later]);
+  if (linear) return applyLinearPattern(source);
 
   const latest = await openPattern(null);
   await setGrid(latest);
