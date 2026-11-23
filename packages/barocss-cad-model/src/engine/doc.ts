@@ -934,11 +934,19 @@ export function rectangularFeaturePatternProblem(node: Record<string, unknown>, 
   if (!textRecord(parent) || !Number.isInteger(parent.node) || parent.side !== 'solid' || Object.keys(parent).some(key => key !== 'node' && key !== 'side')) return '[BAD_REFERENCE] Rectangular cut pattern needs a solid difference reference.';
   const source = nodes[parent.node as number];
   if (source?.kind !== 'difference' || source.suppressed || !leafBodies(nodes).some(r => r.node === parent.node && r.side === 'solid')) return '[BAD_REFERENCE] Rectangular cut pattern needs a current unsuppressed difference body.';
-  return rectangularFeaturePatternSourceProblem(node.source, parent as unknown as BodyRef, nodes);
+  const problem = rectangularFeaturePatternSourceProblem(node.source, parent as unknown as BodyRef, nodes);
+  if (problem) return problem;
+  if (node.source !== undefined && (node.axis === 'z' || node.axis2 === 'z'))
+    return '[VALUE] An earlier Rectangular cut pattern source needs both X and Y directions.';
+  return null;
 }
 
 /** An explicit prototype is an earlier Difference; it is never consumed again. */
 export function rectangularFeaturePatternSourceProblem(prototype: unknown, parent: BodyRef, nodes: readonly ModelNode[], label = 'Rectangular cut pattern'): string | null {
+  return featurePatternSourceProblem(prototype, parent, nodes, label, 2);
+}
+
+export function directFeaturePatternSourceProblem(prototype: unknown, parent: BodyRef, nodes: readonly ModelNode[], label: string): string | null {
   return featurePatternSourceProblem(prototype, parent, nodes, label, 1);
 }
 

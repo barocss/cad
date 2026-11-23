@@ -272,12 +272,13 @@ test('arbitrary consumed or cross-scope sources and missing, suppressed or non-D
   ];
   for (const nodes of variants) assert.ok(rectangularFeaturePatternProblem(node, nodes, doc.parameters));
   const third = part('three cuts', doc).subtract(tool => tool.box({ w: 4, d: 4, h: 10, x: 52, y: 4 })).doc;
-  assert.ok(rectangularFeaturePatternProblem({ ...node, parent: { node: third.nodes.length - 1, side: 'solid' } }, third.nodes, third.parameters),
-    'a more distant ancestor is not the kernel direct-source contract');
+  const fourth = part('four cuts', third).subtract(tool => tool.box({ w: 4, d: 4, h: 10, x: 4, y: 28 })).doc;
+  assert.ok(rectangularFeaturePatternProblem({ ...node, parent: { node: fourth.nodes.length - 1, side: 'solid' } }, fourth.nodes, fourth.parameters),
+    'the source cannot cross three newer cuts');
   assert.deepEqual(doc, before);
 });
 
-test('Linear can repeat the first rectangular cut on the third Difference without changing the original references', async () => {
+test('Linear and Rectangular can repeat the first cut on the third Difference without changing the original references', async () => {
   const first = part('three cuts').box({ w: 60, d: 40, h: 10 })
     .subtract(tool => tool.box({ w: 4, d: 2, h: 10, x: 8, y: 8 }));
   const second = first.subtract(tool => tool.box({ w: 6, d: 2, h: 10, x: 8, y: 26 }));
@@ -285,11 +286,11 @@ test('Linear can repeat the first rectangular cut on the third Difference withou
   const ref = (node: number): BodyRef => ({ node, side: 'solid' });
   const source = ref(first.doc.nodes.length - 1), parent = ref(doc.nodes.length - 1);
   const ctx = { ...context(doc), rectangularCutSource: source };
-  const command = commands.find(command => command.id === 'linear-feature-pattern');
-  assert.ok(command?.build);
-  assert.equal(command.available(ctx).ok, true);
+  const linear = commands.find(command => command.id === 'linear-feature-pattern');
+  assert.ok(linear?.build);
+  assert.equal(linear.available(ctx).ok, true);
   const values = { axis: 'x', spacing: 16, count: 2 };
-  const made = command.build(ctx, values), node = made.nodes.at(-1);
+  const made = linear.build(ctx, values), node = made.nodes.at(-1);
   assert.ok(node?.kind === 'linear-feature-pattern');
   assert.deepEqual(node.source, source);
   assert.deepEqual(node.parent, parent);
@@ -304,7 +305,7 @@ test('Linear can repeat the first rectangular cut on the third Difference withou
   assert.ok(geometry.ok, geometry.ok ? '' : geometry.error.detail);
   assert.ok(Math.abs(geometry.bodies[0].volume! - (24000 - (8 + 12 + 8 + 8) * 10)) < 1e-8);
 
-  const args = { action: 'command', command: command.id, expectedRevision: revisionOf(doc),
+  const args = { action: 'command', command: linear.id, expectedRevision: revisionOf(doc),
     bodies: [ctx.bodies[0].key], values: { ...values, source: featureId(doc.nodes, source.node) } };
   const run = (input: typeof args) => dispatchTool({ doc, bodies: ctx.bodies }, 'features', input,
     async next => evaluateDoc(next, 2));
@@ -319,6 +320,24 @@ test('Linear can repeat the first rectangular cut on the third Difference withou
   assert.ok(priorLinearFeaturePatternProblem(node, invalid, doc.parameters));
   const fourth = part('four cuts', doc).subtract(tool => tool.box({ w: 2, d: 2, h: 10, x: 42, y: 26 })).doc;
   assert.ok(priorLinearFeaturePatternProblem({ ...node, parent: ref(fourth.nodes.length - 1) }, fourth.nodes, fourth.parameters));
-  assert.ok(rectangularFeaturePatternProblem({ ...node, kind: 'rectangular-feature-pattern', axis2: 'y', spacing2: 8, count2: 2 },
-    doc.nodes, doc.parameters));
+  const rectangular = command();
+  const gridValues = { ...values, axis2: 'y', spacing2: 8, count2: 2 };
+  assert.equal(rectangular.available(ctx).ok, true);
+  const grid = rectangular.build!(ctx, gridValues);
+  const gridNode = grid.nodes.at(-1);
+  assert.ok(gridNode?.kind === 'rectangular-feature-pattern');
+  assert.deepEqual(gridNode.source, source);
+  assert.deepEqual(gridNode.parent, parent);
+  assert.equal(checkNode(gridNode, doc.nodes, doc.parameters), null);
+  for (const axis of [{ axis: 'z', count: 1 }, { axis2: 'z', count2: 1 }])
+    assert.match(rectangularFeaturePatternProblem({ ...gridNode, ...axis }, doc.nodes, doc.parameters)!, /needs both X and Y/);
+  const gridOpened = await readStudioFile(encodeStudioFile(grid));
+  assert.ok('doc' in gridOpened);
+  assert.deepEqual(gridOpened.doc, grid);
+  const gridGeometry = evaluateDoc(gridOpened.doc, 2);
+  assert.ok(gridGeometry.ok, gridGeometry.ok ? '' : gridGeometry.error.detail);
+  assert.ok(Math.abs(gridGeometry.bodies[0].volume! - (24000 - (8 + 12 + 8 + 3 * 8) * 10)) < 1e-8);
+  const gridCommand = await run({ ...args, command: rectangular.id, values: { ...gridValues, source: args.values.source } });
+  assert.equal(gridCommand.isError, false, gridCommand.content);
+  assert.deepEqual(gridCommand.state.doc.nodes, grid.nodes);
 });

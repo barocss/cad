@@ -369,8 +369,9 @@ function evaluateWith(input: CadPartDocument, previous: Cache | undefined, optio
       if (source !== undefined) {
         const label = `${pattern} feature pattern source`;
         const previous = ref(source, label), prototype = previous.author;
-        // Linear alone may cross exactly one additional original Difference, never an arbitrary ancestry walk.
-        const bridge = pattern === 'linear' && author.target !== previous.id ? ref(author.target, `${label} intervening difference`) : undefined;
+        // Linear and Rectangular may cross one additional original Difference, never an arbitrary ancestry walk.
+        const bridge = (pattern === 'linear' || pattern === 'rectangular') && author.target !== previous.id
+          ? ref(author.target, `${label} intervening difference`) : undefined;
         const bridgePart = bridge?.result.kind === 'solid' && bridge.result.parts.length === 1 ? bridge.result.parts[0] : undefined;
         const connected = author.target === previous.id || (bridge && bridge.part === null && author.target === bridge.id
           && bridge.author?.kind === 'difference' && !('suppressed' in bridge.author && bridge.author.suppressed)
@@ -378,7 +379,7 @@ function evaluateWith(input: CadPartDocument, previous: Cache | undefined, optio
         if (selected.part !== null || previous.part !== null || source !== previous.id || !connected
           || prototype?.kind !== 'difference' || ('suppressed' in prototype && prototype.suppressed) || previous.result.kind !== 'solid'
           || previous.result.parts.length !== 1 || empty(previous.result.parts[0].solid))
-          return fail('REFERENCE', `${label} must be the current difference target's direct earlier unsuppressed difference${bridge ? '; Linear also supports its second ancestor through one intervening unsuppressed difference' : ''}`);
+          return fail('REFERENCE', `${label} must be the current difference target's direct earlier unsuppressed difference${bridge ? `; ${pattern === 'linear' ? 'Linear' : 'Rectangular'} also supports its second ancestor through one intervening unsuppressed difference` : ''}`);
         const original = (reference: unknown, what: string): Part => {
           const producer = ref(reference, what);
           if (producer.part !== null || producer.author?.kind !== 'extrude' || ('suppressed' in producer.author && producer.author.suppressed))

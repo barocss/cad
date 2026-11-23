@@ -20,6 +20,11 @@ const document = () => ({ format: 'barocss-cad-part', version: 1, units: 'mm', p
   { id: 'repeat', kind: 'linear-feature-pattern', target: 'third', source: 'first', axis: 'x', spacing: { parameter: 'pitch' }, count: 2 },
 ] });
 const feature = (doc, id) => doc.features.find(item => item.id === id);
+const rectangularDocument = () => {
+  const doc = document(); doc.parameters.pitchY = 8;
+  Object.assign(feature(doc, 'repeat'), { kind: 'rectangular-feature-pattern', axis2: 'y', spacing2: { parameter: 'pitchY' }, count2: 2 });
+  return doc;
+};
 
 function bounds(brep, loop) {
   const points = loop.coedges.flatMap(id => {
@@ -30,16 +35,20 @@ function bounds(brep, loop) {
     .concat([0, 1].map(axis => Math.max(...points.map(point => point[axis]))));
 }
 
-function verify(snapshot) {
+function verify(snapshot, current = false) {
   const doc = snapshot.document, p = doc.parameters, pattern = feature(doc, 'repeat');
   assert.equal(snapshot.outputs.length, 1);
   const output = snapshot.outputs[0], brep = output.brep, check = checkBrep(brep, { strict: true });
   assert.ok(check.valid, check.issues.join('\n')); assert.equal(output.id, 'repeat');
-  const holes = [[8, 26, p.newerRight, 28], [42, 8, p.lastRight, 10]];
-  for (let k = 0; k < pattern.count; k++) {
-    const dx = pattern.axis === 'x' ? k * p.pitch : 0, dy = pattern.axis === 'y' ? k * p.pitch : 0;
-    holes.push([p.left + dx, p.bottom + dy, p.right + dx, p.top + dy]);
-    for (let side = 0; side < 4; side++) assert.ok(brep.faces.some(face => face.name === `olderTool.side${side}${k ? `@${k}` : ''}`));
+  const rectangular = pattern.kind === 'rectangular-feature-pattern';
+  const holes = [[8, 26, p.newerRight, 28], current ? [p.left, p.bottom, p.right, p.top] : [42, 8, p.lastRight, 10]];
+  const prototype = current ? [42, 8, p.lastRight, 10] : [p.left, p.bottom, p.right, p.top];
+  for (let j = 0; j < (rectangular ? pattern.count2 : 1); j++) for (let k = 0; k < pattern.count; k++) {
+    const dx = (pattern.axis === 'x' ? k * p.pitch : 0) + (rectangular && pattern.axis2 === 'x' ? j * p.pitchY : 0);
+    const dy = (pattern.axis === 'y' ? k * p.pitch : 0) + (rectangular && pattern.axis2 === 'y' ? j * p.pitchY : 0);
+    holes.push(prototype.map((value, axis) => value + (axis % 2 ? dy : dx)));
+    const suffix = k || j ? rectangular ? `@${k},${j}` : `@${k}` : '';
+    for (let side = 0; side < 4; side++) assert.ok(brep.faces.some(face => face.name === `${current ? 'lastTool' : 'olderTool'}.side${side}${suffix}`));
   }
   const n = holes.length;
   assert.equal(check.topology[0].genus, n);
@@ -134,6 +143,64 @@ test('invalid intervening history, unsupported tools, distant sources and collis
   refused(doc => { Object.assign(feature(doc, 'repeat'), { count: 1, axis: 'z' }); });
   for (const pitch of [2, 4, 32, 50, -16]) refused(doc => { doc.parameters.pitch = pitch; });
   refused(doc => { feature(doc, 'repeat').axis = 'y'; doc.parameters.pitch = 18; });
-  // Other pattern families keep their direct-source boundary.
-  refused(doc => { Object.assign(feature(doc, 'repeat'), { kind: 'rectangular-feature-pattern', axis2: 'y', spacing2: 8, count2: 1 }); });
+});
+
+test('Rectangular repeats the same three-cut source with six exact cavities in either XY ordering and signed grids', () => {
+  for (const edits of [{}, { axis: 'y', axis2: 'x', pitch: 8, pitchY: 16 },
+    { left: 24, right: 28, bottom: 16, top: 18, pitch: -16, pitchY: -8 }]) {
+    const doc = rectangularDocument(), { axis, axis2, ...parameters } = edits;
+    if (axis) Object.assign(feature(doc, 'repeat'), { axis, axis2 });
+    Object.assign(doc.parameters, parameters);
+    const before = structuredClone(doc), snapshot = evaluateCadPart(doc), brep = verify(snapshot), mass = brepMassProperties(brep, 1);
+    near(mass.volume, 23480); near(mass.centroid[0], 709400 / 23480); near(mass.centroid[1], 471880 / 23480);
+    assert.ok(!brep.faces.some(face => /^(newerTool|lastTool)\..*@/.test(face.name)));
+    assert.deepEqual(doc, before); assert.deepEqual(snapshot.document.features, before.features);
+    assert.deepEqual(verify(loadCadPart(saveCadPart(snapshot))), brep);
+  }
+});
+
+test('Rectangular keeps single-cell proofs, current-tool legacy and each tool and pitch dependency', () => {
+  const accepted = evaluateCadPart(rectangularDocument()), saved = saveCadPart(accepted), names = accepted.outputs[0].brep.faces.map(face => face.name).sort();
+  for (const parameters of [{ right: 14 }, { newerRight: 16 }, { lastRight: 48 }, { pitch: 20 }, { pitchY: 10 }]) {
+    const edited = reevaluate(accepted, { parameters }), brep = verify(edited);
+    assert.deepEqual(brep.faces.map(face => face.name).sort(), names);
+    assert.deepEqual(verify(loadCadPart(saveCadPart(edited))), brep);
+  }
+  for (const [count, count2] of [[1, 1], [1, 2], [2, 1]]) {
+    const doc = rectangularDocument(); Object.assign(feature(doc, 'repeat'), { count, count2 });
+    const brep = verify(evaluateCadPart(doc));
+    near(brepMassProperties(brep, 1).volume, count * count2 === 1 ? 23720 : 23640);
+  }
+  const current = rectangularDocument(); delete feature(current, 'repeat').source; current.parameters.pitch = 6;
+  const brep = verify(evaluateCadPart(current), true);
+  near(brepMassProperties(brep, 1).volume, 23480);
+  assert.ok(!brep.faces.some(face => face.name?.startsWith('olderTool.side0@')));
+  // The no-source count-one contract still permits an unused Z direction.
+  Object.assign(feature(current, 'repeat'), { axis2: 'z', count: 1, count2: 1 }); verify(evaluateCadPart(current), true);
+  assert.equal(saveCadPart(accepted), saved);
+});
+
+test('Rectangular refuses either downstream collision and unused Z axes without altering the accepted grid', () => {
+  const accepted = evaluateCadPart(rectangularDocument()), saved = saveCadPart(accepted);
+  const refused = (change, code) => {
+    const doc = rectangularDocument(); change(doc); const before = structuredClone(doc);
+    assert.throws(() => reevaluate(accepted, { document: doc }), error => error instanceof CadPartError && error.feature === 'repeat'
+      && (!code || error.code === code));
+    assert.deepEqual(doc, before); assert.equal(saveCadPart(accepted), saved);
+  };
+  // The first control reaches the last cutter; the second reaches the intervening cutter.
+  refused(doc => { doc.parameters.pitch = 32; }, 'GEOMETRY');
+  refused(doc => { doc.parameters.pitchY = 18; }, 'GEOMETRY');
+  for (const [count, count2] of [[1, 1], [1, 2], [2, 1]]) {
+    refused(doc => { Object.assign(feature(doc, 'repeat'), { axis: 'z', count, count2 }); }, 'CAPABILITY');
+    refused(doc => { Object.assign(feature(doc, 'repeat'), { axis2: 'z', count, count2 }); }, 'CAPABILITY');
+  }
+  refused(doc => { feature(doc, 'second').suppressed = true; }, 'REFERENCE');
+  refused(doc => { feature(doc, 'second').target = 'stock'; }, 'REFERENCE');
+  refused(doc => { feature(doc, 'repeat').source = 'first/0'; }, 'REFERENCE');
+  refused(doc => { Object.assign(feature(doc, 'repeat'), { count: 1, count2: 1 }); feature(doc, 'newerTool').height = 5; }, 'CAPABILITY');
+  refused(doc => {
+    doc.features.splice(-1, 0, { id: 'fourth', kind: 'difference', target: 'third', tool: 'lastTool' }); feature(doc, 'repeat').target = 'fourth';
+  }, 'REFERENCE');
+  assert.deepEqual(verify(loadCadPart(saved)), verify(accepted));
 });

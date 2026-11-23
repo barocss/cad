@@ -11,6 +11,7 @@ const workflows = {
   '--agent': ['D1829_SOURCE_FROZEN', '#25 revision-bound local Agent proposal for the earlier through-Subtract.'],
   '--linear': ['D1830_SOURCE_FROZEN', '#25 repeat the earlier rectangular through-cut along a signed XY line.'],
   '--linear-three': ['D1850_SOURCE_FROZEN', '#25 repeat a rectangular through-cut along a signed XY line after two newer cuts.'],
+  '--rectangular-three': ['D1851_SOURCE_FROZEN', '#25 repeat the first of three rectangular through-cuts on an XY grid.'],
   '--fill': ['D1831_SOURCE_FROZEN', '#25 repeat the earlier rectangular through-cut at the captured mask cells.'],
 };
 const [envFrozen, qualification] = workflows[mode] ?? [
@@ -32,6 +33,7 @@ const hud = () => f.page.getByRole('dialog', { name: 'Rectangular cut pattern', 
 const phase = (p, state) => p.locator('.status').filter({ hasText: new RegExp(`^${state}$`) }).waitFor();
 const field = (p, label) => p.getByLabel(label, { exact: true });
 const grid = (box, sx) => [box, shift(box, sx, 0), shift(box, 0, 8), shift(box, sx, 8)];
+const rectangularThree = mode === '--rectangular-three';
 
 const native = (label, doc, openings) => verifyPriorCut(f, label, doc, openings);
 const chooseSource = entry => choosePriorCutSource(f, entry);
@@ -41,8 +43,10 @@ async function openPattern(entry) {
   await clickModelCommand(f.page, 'Pattern', 'Rectangular cut pattern');
   const p = hud();
   await p.waitFor();
-  const source = entry ? 'Subtract 1 (n4)' : 'Subtract 2 (n7)';
+  const source = entry ? 'Subtract 1 (n4)' : rectangularThree ? 'Subtract 3 (n10)' : 'Subtract 2 (n7)';
   await p.getByText(source, { exact: true }).waitFor();
+  assert.equal(await field(p, 'First direction').locator('option[value="z"]').count(), entry ? 0 : 1);
+  assert.equal(await field(p, 'Second direction').locator('option[value="z"]').count(), entry ? 0 : 1);
   return p;
 }
 
@@ -52,16 +56,16 @@ async function setGrid(p, secondSpacing = 8) {
   await field(p, 'Second count').fill('2');
 }
 
-async function apply(p, before, label, usesEarlier) {
+async function apply(p, before, label, usesEarlier, firstSpacing = 16) {
   await phase(p, 'preview');
   await f.same(before);
   await button('Apply', p).click();
   await f.changed(before);
   const doc = (await f.snapshot(label)).doc, pattern = doc.nodes.at(-1);
   assert.deepEqual(doc.nodes.slice(0, -1), before.nodes);
-  assert.deepEqual(pattern.parent, { node: 7, side: 'solid' });
+  assert.deepEqual(pattern.parent, { node: before.nodes.length - 1, side: 'solid' });
   assert.deepEqual(pattern.source, usesEarlier ? { node: 4, side: 'solid' } : undefined);
-  assert.deepEqual([pattern.axis, pattern.spacing, pattern.count, pattern.axis2, pattern.spacing2, pattern.count2], ['x', 16, 2, 'y', 8, 2]);
+  assert.deepEqual([pattern.axis, pattern.spacing, pattern.count, pattern.axis2, pattern.spacing2, pattern.count2], ['x', firstSpacing, 2, 'y', 8, 2]);
   return doc;
 }
 
@@ -302,7 +306,7 @@ async function applyFillPattern(source) {
 }
 
 await f.run(async () => {
-  const third = mode === '--linear-three';
+  const third = mode === '--linear-three' || rectangularThree;
   const source = await f.inspect('seed', { fill: mode === '--fill', third });
   if (mode === '--agent') return approveAgentPattern(source);
   await f.newPage();
@@ -316,13 +320,15 @@ await f.run(async () => {
   await button('Top', f.page.locator('.views')).click();
   await f.page.getByTitle('Frame all (F)', { exact: true }).click();
   await native('original-through-cuts', source, third ? [older, later, newest] : [older, later]);
-  if (mode === '--linear' || third) return applyLinearPattern(source);
+  if (mode === '--linear' || mode === '--linear-three') return applyLinearPattern(source);
   if (mode === '--fill') return applyFillPattern(source);
 
   const latest = await openPattern(null);
+  const currentPitch = rectangularThree ? 6 : 16;
+  await field(latest, 'First spacing').fill(String(currentPitch));
   await setGrid(latest);
-  const latestDoc = await apply(latest, source, '01-current-cut-control', false);
-  await native('current-source', latestDoc, [older, ...grid(later, 16)]);
+  const latestDoc = await apply(latest, source, '01-current-cut-control', false, currentPitch);
+  await native('current-source', latestDoc, rectangularThree ? [older, later, ...grid(newest, currentPitch)] : [older, ...grid(later, currentPitch)]);
   await f.undo();
   await f.same(source);
 
@@ -340,9 +346,20 @@ await f.run(async () => {
   await f.snapshot('02-overlap-refused');
   await setGrid(fromBrowser);
   await phase(fromBrowser, 'preview');
+  if (rectangularThree) {
+    await field(fromBrowser, 'First spacing').fill('32');
+    await phase(fromBrowser, 'refused');
+    assert.ok(await button('Apply', fromBrowser).isDisabled());
+    await f.same(source);
+    assert.equal(await button('Undo').getAttribute('data-tip'), undo);
+    await f.snapshot('02a-overlap-third-cut-refused');
+    await field(fromBrowser, 'First spacing').fill('16');
+    await phase(fromBrowser, 'preview');
+  }
+  const originals = rectangularThree ? [later, newest] : [later];
   await f.snapshot('03-earlier-cut-preview');
   const browserDoc = await apply(fromBrowser, source, '04-earlier-cut-applied', true);
-  await native('earlier-source-browser', browserDoc, [...grid(older, 16), later]);
+  await native('earlier-source-browser', browserDoc, [...grid(older, 16), ...originals]);
   await f.undo();
   await f.same(source);
 
@@ -350,22 +367,22 @@ await f.run(async () => {
   await setGrid(fromHistory);
   const historyDoc = await apply(fromHistory, source, '05-earlier-cut-history', true);
   assert.deepEqual(historyDoc, browserDoc);
-  await native('earlier-source-history', historyDoc, [...grid(older, 16), later]);
+  await native('earlier-source-history', historyDoc, [...grid(older, 16), ...originals]);
 
-  await f.openFeatureEditor(8, 'rectangular cut spacing');
+  await f.openFeatureEditor(source.nodes.length, 'rectangular cut spacing');
   await f.editor().getByText('Subtract 1 (n4)', { exact: true }).waitFor();
   await field(f.editor(), 'First spacing').fill('18');
   const edited = (await f.applyEditor(historyDoc, '06-first-spacing-edited')).doc;
   assert.deepEqual(edited.nodes.at(-1), { ...historyDoc.nodes.at(-1), spacing: 18 });
-  await native('after-spacing-edit', edited, [...grid(older, 18), later]);
+  await native('after-spacing-edit', edited, [...grid(older, 18), ...originals]);
   await f.undo();
   await f.same(historyDoc);
   await f.redo();
   await f.same(edited);
   const stored = await f.save('earlier-cut-pattern');
   await f.freshOpen(stored.file, edited, '07-saved-earlier-cut-fresh-open');
-  await native('after-fresh-open', edited, [...grid(older, 18), later]);
-  await f.openFeatureEditor(8, 'retained earlier source');
+  await native('after-fresh-open', edited, [...grid(older, 18), ...originals]);
+  await f.openFeatureEditor(source.nodes.length, 'retained earlier source');
   await f.editor().getByText('Subtract 1 (n4)', { exact: true }).waitFor();
   assert.equal(await field(f.editor(), 'First spacing').inputValue(), '18');
   await f.snapshot('08-reopened-earlier-source');

@@ -31,7 +31,7 @@ import { fastenerCommand } from './fasteners';
 import { mountCommand } from './mounts';
 import { fastenerSizesOf, NO_SIZES, noSizeRow } from '../engine/fastenerSizeRows';
 import { duplicateBody } from '../chat/features';
-import { HOLE_PLANE, leafBodies, linearFeaturePatternSourceProblem, planeText, rectangularFeaturePatternSourceProblem, withNode, type Axis, type BodyRef, type FilletSection, type HolePattern, type ModelNode, type StudioDoc } from '../engine/doc';
+import { HOLE_PLANE, directFeaturePatternSourceProblem, leafBodies, linearFeaturePatternSourceProblem, planeText, rectangularFeaturePatternSourceProblem, withNode, type Axis, type BodyRef, type FilletSection, type HolePattern, type ModelNode, type StudioDoc } from '../engine/doc';
 import { linearSpanPatternInput } from '../engine/linearSpanPattern';
 import { circularPatternCountRange, circularPatternStep } from '../engine/circularPatternSpan';
 import { linearSpanHandles } from './linearSpanHandles';
@@ -199,7 +199,8 @@ function priorRectangularCutProblem(ctx: Ctx, label: string) {
   const parent = refOf(oneBody(ctx)!);
   const source = rectangularCutSource(ctx, parent);
   const why = label === 'Linear cut pattern' ? linearFeaturePatternSourceProblem(source, parent, ctx.doc.nodes)
-    : rectangularFeaturePatternSourceProblem(source, parent, ctx.doc.nodes, label);
+    : label === 'Rectangular cut pattern' ? rectangularFeaturePatternSourceProblem(source, parent, ctx.doc.nodes)
+    : directFeaturePatternSourceProblem(source, parent, ctx.doc.nodes, label);
   return why ? coded('BAD_REFERENCE', why) : null;
 }
 
@@ -982,10 +983,17 @@ const allCommands: Command[] = [
   {
     id: 'rectangular-feature-pattern', label: 'Rectangular cut pattern', icon: 'cad-pattern-linear', hint: 'Repeat the cut along two global axes', group: 'pattern', keywords: 'feature cut repeat subtract',
     available: ctx => { const why = priorRectangularCutProblem(ctx, 'Rectangular cut pattern'); return why ? no(why.message) : ok; },
-    fields: () => [{ key: 'axis', label: 'First direction', kind: 'choice', options: [{ value: 'x', label: 'X' }, { value: 'y', label: 'Y' }, { value: 'z', label: 'Z' }] },
-      { key: 'spacing', label: 'First spacing', kind: 'mm', min: 0, max: 10000 }, { key: 'count', label: 'First count', kind: 'count', min: 1, max: 64 },
-      { key: 'axis2', label: 'Second direction', kind: 'choice', options: [{ value: 'x', label: 'X' }, { value: 'y', label: 'Y' }, { value: 'z', label: 'Z' }] },
-      { key: 'spacing2', label: 'Second spacing', kind: 'mm', min: 0, max: 10000 }, { key: 'count2', label: 'Second count', kind: 'count', min: 1, max: 64 }],
+    fields: ctx => {
+      const body = oneBody(ctx), earlier = body && rectangularCutSource(ctx, refOf(body));
+      const options = [{ value: 'x', label: 'X' }, { value: 'y', label: 'Y' }];
+      if (!earlier) options.push({ value: 'z', label: 'Z' });
+      return [
+        { key: 'axis', label: 'First direction', kind: 'choice', options },
+        { key: 'spacing', label: 'First spacing', kind: 'mm', min: 0, max: 10000 }, { key: 'count', label: 'First count', kind: 'count', min: 1, max: 64 },
+        { key: 'axis2', label: 'Second direction', kind: 'choice', options },
+        { key: 'spacing2', label: 'Second spacing', kind: 'mm', min: 0, max: 10000 }, { key: 'count2', label: 'Second count', kind: 'count', min: 1, max: 64 },
+      ];
+    },
     defaults: () => ({ axis: 'x', spacing: 16, count: 3, axis2: 'y', spacing2: 16, count2: 2 }),
     build: (ctx, v) => {
       const why = priorRectangularCutProblem(ctx, 'Rectangular cut pattern'); if (why) throw why;
@@ -998,6 +1006,7 @@ const allCommands: Command[] = [
       if (!Number.isFinite(spacing2) || spacing2 <= 0 || spacing2 > 10000) throw refusal('VALUE', 'Second spacing must be positive and at most 10000 mm.');
       if (!Number.isInteger(count2) || count2 < 1 || count2 > 64 || !Number.isSafeInteger(count * count2) || count * count2 > 64) throw refusal('VALUE', 'Each count must be from 1 to 64, and their product must be at most 64, including the original cut.');
       const parent = refOf(oneBody(ctx)!), source = rectangularCutSource(ctx, parent);
+      if (source && (axis === 'z' || axis2 === 'z')) throw refusal('VALUE', 'An earlier Rectangular cut pattern source needs both X and Y directions.');
       return withNode(ctx.doc, { kind: 'rectangular-feature-pattern', parent, ...(source ? { source: { ...source } } : {}), axis, spacing, count, axis2, spacing2, count2 });
     },
   },
