@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { checkBrep, evaluateCadPart, type Brep, type CadPartDocument, type Curve, type Point } from '@barocss/cad';
-import { pairedElbowOutletOffsetEvidence } from '../src/chat/pairedElbowOutletOffsetEvidence';
-import { pairedElbowOutletProposal, reviewedPairedElbowOutletEvidence } from '../src/chat/pairedElbowOutletProposalReview';
+import { pairedElbowInletOffsetEvidence, pairedElbowOutletOffsetEvidence } from '../src/chat/pairedElbowOutletOffsetEvidence';
+import { pairedElbowInletProposal, pairedElbowOutletProposal, reviewedPairedElbowInletEvidence, reviewedPairedElbowOutletEvidence } from '../src/chat/pairedElbowOutletProposalReview';
 import { emptyDoc, withNode, type StudioDoc } from '../src/engine/doc';
 import { evaluateDoc } from '../src/engine/evaluate';
 import { captureSignatures } from '../src/engine/references';
@@ -30,7 +30,7 @@ function rail(degrees = 90, entry: Point = [0, 0, 0], tangent: Point = [1, 0, 0]
   ] };
 }
 
-function native(path: Path, distance?: number, source = section): Brep {
+function native(path: Path, distance?: number, source = section, inlet = false): Brep {
   const document: CadPartDocument = { format: 'barocss-cad-part', version: 1, units: 'mm', parameters: {}, features: [
     { id: 's', kind: 'sketch', profile: 'rectangle', min: [-source.outer[0] / 2, -source.outer[1] / 2], max: [source.outer[0] / 2, source.outer[1] / 2],
       holes: source.cavities.map(({ min, max }, index) => {
@@ -38,7 +38,7 @@ function native(path: Path, distance?: number, source = section): Brep {
         return (index ? points : [points[0], points[3], points[2], points[1]]).map(start => ({ kind: 'line', start }));
       }), sideTags: { outer: source.outerTags, holes: source.cavities.map(cavity => cavity.tags) } },
     { id: 'w', kind: 'sweep-curve', sketch: 's', path, mode: 'exact' },
-    ...(distance === undefined ? [] : [{ id: 'move', kind: 'offset-face' as const, target: 'w', face: 'w.end', distance }]),
+    ...(distance === undefined ? [] : [{ id: 'move', kind: 'offset-face' as const, target: 'w', face: `w.${inlet ? 'start' : 'end'}`, distance }]),
   ] };
   return evaluateCadPart(document).outputs[0].brep;
 }
@@ -139,6 +139,16 @@ function arcRail(degrees = 90, entry: Point = [0, 0, 0], tangent: Point = [1, 0,
 }
 const pointNear = (actual: Point, expected: Point) => actual.forEach((value, axis) => near(value, expected[axis]));
 
+function refuseChangedCharts(original: Brep, candidate: Brep, path: Path, source: typeof section, distance: number,
+  evidenceOf: (...args: Parameters<typeof pairedElbowOutletOffsetEvidence>) => unknown, ids: string[]) {
+  for (const id of ids) for (const selected of candidate.coedges.filter(use => use.edge === id)) {
+    const missing = { ...candidate, coedges: candidate.coedges.map(use => use.id === selected.id ? { ...use, pcurve: null } : use) };
+    const shifted = { ...candidate, coedges: candidate.coedges.map(use => use.id === selected.id && use.pcurve ? { ...use,
+      pcurve: { ...use.pcurve, controlPoints: use.pcurve.controlPoints.map(([u, v, z]): Point => [u + .01, v, z]) } } : use) };
+    for (const changed of [missing, shifted]) assert.equal(evidenceOf(original, changed, path, source, distance), undefined);
+  }
+}
+
 test('arc-line signed outlet review retains the inlet and twelve charted joins with exact independent quarter moments', () => {
   const path = arcRail(), original = native(path), before = structuredClone({ path, original, section });
   for (const distance of [4, -4, 4]) {
@@ -198,13 +208,7 @@ test('arc-line outlet evidence refuses missing cap or join charts, swapped lanes
   const ids = [...evidence.originalCap.outerEdges, ...evidence.originalCap.innerEdges,
     ...evidence.retained.inlet.outerEdges, ...evidence.retained.inlet.innerEdges,
     ...evidence.retained.junctions.flatMap(join => [join.exteriorSeams, ...join.interiorSeams]).flat()];
-  for (const id of ids) {
-    const selected = candidate.coedges.find(use => use.edge === id)!.id;
-    const missing = { ...candidate, coedges: candidate.coedges.map(use => use.id === selected ? { ...use, pcurve: null } : use) };
-    const shifted = { ...candidate, coedges: candidate.coedges.map(use => use.id === selected && use.pcurve ? { ...use,
-      pcurve: { ...use.pcurve, controlPoints: use.pcurve.controlPoints.map(([u, v, z]): Point => [u + .01, v, z]) } } : use) };
-    for (const changed of [missing, shifted]) assert.equal(pairedElbowOutletOffsetEvidence(original, changed, path, section, -4), undefined);
-  }
+  refuseChangedCharts(original, candidate, path, section, -4, pairedElbowOutletOffsetEvidence, ids);
   const swapped = { ...candidate, faces: candidate.faces.map(face => {
     if (!face.name?.startsWith('w.line.')) return face;
     const first = section.cavities[0].tags.findIndex(tag => face.name!.endsWith(`.side[${tag}]`));
@@ -228,12 +232,88 @@ test('arc-line outlet evidence refuses missing cap or join charts, swapped lanes
   assert.equal(pairedElbowOutletOffsetEvidence(native(forward), candidate, forward, section, -4), undefined);
 });
 
+test('signed original inlet evidence binds both mouths, all twenty-four joins and independent quarter moments', () => {
+  const path = rail(), original = native(path), saved = structuredClone({ original, path, section });
+  for (const distance of [4, -4, 4]) {
+    const candidate = native(path, distance, section, true), before = structuredClone(candidate);
+    const evidence = pairedElbowInletOffsetEvidence(original, candidate, path, section, distance);
+    assert.ok(evidence); assert.equal(evidence.pathKind, 'line-arc-line'); assert.equal(evidence.face, 'w.start');
+    pointNear(evidence.displacement.normal, [-1, 0, 0]); pointNear(evidence.displacement.vector, [-distance, 0, 0]);
+    pointNear(evidence.originalCap.center, [-10, 0, 0]); pointNear(evidence.movedCap.center, [-10 - distance, 0, 0]);
+    pointNear(evidence.retained.outlet.center, [20, 34, 0]); pointNear(evidence.retained.outlet.plane.normal, [0, 1, 0]);
+    assert.deepEqual(evidence.originalCap.outerEdges, evidence.movedCap.outerEdges);
+    assert.deepEqual(evidence.originalCap.innerEdges, evidence.movedCap.innerEdges);
+    assert.deepEqual(evidence.movedCap.apertures.map(aperture => aperture.tags), section.cavities.map(cavity => cavity.tags));
+    assert.deepEqual(evidence.retained.junctions!.map(join => join.pieces), [['line', 'bend'], ['bend', 'tail']]);
+    assert.deepEqual(evidence.retained.junctions, evidence.throughApertures.junctions);
+    assert.equal(new Set(evidence.retained.junctions!.flatMap(join => [join.exteriorSeams, ...join.interiorSeams]).flat()).size, 24);
+    assert.equal(evidence.retained.faces.length, 25);
+    near(evidence.throughApertures.dimensions.leadLength!, 10 + distance); near(evidence.throughApertures.dimensions.tailLength!, 14);
+    near(evidence.materialChange.sectionArea, 32); near(evidence.materialChange.analytic, 32 * distance); near(evidence.materialChange.native, 32 * distance);
+    const length = 24 + 10 * Math.PI + distance;
+    near(evidence.volume.candidate.native, 32 * length);
+    // Lead moment is -50 - 10d - d²/2; bend and tail contribute 400 + 19/12 and 280.
+    const centroid: Point = [(630 + 19 / 12 - 10 * distance - distance ** 2 / 2) / length, (200 * Math.PI - 22 - 19 / 12) / length, 0];
+    pointNear(evidence.centroid.analytic, centroid); pointNear(evidence.centroid.native, centroid);
+    assert.equal(evidence.materialChange.method, 'quadrature'); assert.ok(evidence.maximumGapMM < 1e-10);
+    assert.equal(pairedElbowOutletOffsetEvidence(original, candidate, path, section, distance), undefined);
+    assert.deepEqual(candidate, before);
+  }
+  assert.deepEqual({ original, path, section }, saved);
+});
+
+test('inlet evidence retains asymmetric lane order and translated 30 and 120 degree radial X and Y frames', () => {
+  const edited = { ...section, cavities: [{ ...section.cavities[0], min: [-.75, -2.5], max: [.75, -1.5] }, section.cavities[1]] };
+  for (const lanes of [edited, { ...edited, cavities: [...edited.cavities].reverse() }]) {
+    const radialYSource = { ...lanes, outer: [10, 4], cavities: lanes.cavities.map(cavity => ({ ...cavity,
+      min: [cavity.min[1], cavity.min[0]], max: [cavity.max[1], cavity.max[0]],
+    })) };
+    for (const degrees of [30, 120]) for (const radialY of [false, true]) for (const distance of [4, -4]) {
+      const path = rail(degrees, [32, -14, 18], radialY ? [0, 0, 1] : [.6, .8, 0], radialY ? [0, 1, 0] : [-.8, .6, 0]);
+      const source = radialY ? radialYSource : lanes;
+      const evidence = pairedElbowInletOffsetEvidence(native(path, undefined, source), native(path, distance, source, true), path, source, distance);
+      assert.ok(evidence, `${degrees} radialY=${radialY} distance=${distance}`);
+      near(evidence.materialChange.sectionArea, 34.5); near(evidence.materialChange.native, 34.5 * distance);
+      near(evidence.throughApertures.dimensions.leadLength!, 10 + distance); near(evidence.throughApertures.dimensions.tailLength!, 14);
+      assert.deepEqual(evidence.movedCap.apertures.map(aperture => aperture.tags), source.cavities.map(cavity => cavity.tags));
+    }
+  }
+});
+
+test('inlet evidence refuses either chart at both mouths and all joins, changed retained coefficients and wrong signed intent', () => {
+  const path = rail(), original = native(path), candidate = native(path, -4, section, true);
+  const evidence = pairedElbowInletOffsetEvidence(original, candidate, path, section, -4); assert.ok(evidence);
+  const ids = [...evidence.movedCap.outerEdges, ...evidence.movedCap.innerEdges,
+    ...evidence.retained.outlet.outerEdges, ...evidence.retained.outlet.innerEdges,
+    ...evidence.retained.junctions!.flatMap(join => [join.exteriorSeams, ...join.interiorSeams]).flat()];
+  refuseChangedCharts(original, candidate, path, section, -4, pairedElbowInletOffsetEvidence, ids);
+  const retainedFace = candidate.faces.find(face => face.name?.startsWith('w.bend.') && face.surface.kind === 'surface')!;
+  const coefficients = { ...candidate, faces: candidate.faces.map(face => face.id === retainedFace.id && face.surface.kind === 'surface'
+    ? { ...face, surface: { ...face.surface, weights: face.surface.weights.map(row => row.map(weight => 2 * weight)) } } : face) };
+  assert.ok(checkBrep(coefficients, { strict: true }).valid);
+  assert.equal(pairedElbowInletOffsetEvidence(original, coefficients, path, section, -4), undefined);
+  const reordered = { ...candidate, faces: [...candidate.faces].reverse() };
+  assert.ok(checkBrep(reordered, { strict: true }).valid);
+  assert.equal(pairedElbowInletOffsetEvidence(original, reordered, path, section, -4), undefined);
+  for (const distance of [0, 4, -10, -11, -9.99999, Number.NaN, Number.POSITIVE_INFINITY])
+    assert.equal(pairedElbowInletOffsetEvidence(original, candidate, path, section, distance), undefined);
+  assert.equal(pairedElbowInletOffsetEvidence(original, native(path, -4), path, section, -4), undefined);
+  assert.equal(pairedElbowInletOffsetEvidence(original, candidate, path, { ...section, outer: [4.1, 10] }, -4), undefined);
+  const wrongOwners = { ...section, cavities: section.cavities.map((cavity, index) => ({ ...cavity, tags: section.cavities[1 - index].tags })) };
+  assert.equal(pairedElbowInletOffsetEvidence(original, candidate, path, wrongOwners, -4), undefined);
+  const changed = structuredClone(path); changed.controlPoints[5][1] += 2; changed.controlPoints[6][1] += 4;
+  assert.equal(pairedElbowInletOffsetEvidence(original, native(changed, -4, section, true), path, section, -4), undefined);
+  assert.equal(pairedElbowInletOffsetEvidence(original, candidate, changed, section, -4), undefined);
+  for (const five of [arcRail(), { ...arcRail(), controlPoints: [...arcRail().controlPoints].reverse(), weights: [...arcRail().weights].reverse() }])
+    assert.equal(pairedElbowInletOffsetEvidence(native(five), candidate, five, section, -4), undefined);
+});
+
 const railText = (path: Path) => `@model rails { version:0; length-unit:mm;
   @curve #rail { type:nurbs; degree:2; knots:${JSON.stringify(path.knots)};
     control-points:${JSON.stringify(path.controlPoints)}; weights:${JSON.stringify(path.weights)}; } }`;
 
-function proposalFixture(retainedRail = false) {
-  const path = arcRail();
+function proposalFixture(retainedRail = false, inlet = false, distance = -4) {
+  const path = inlet ? rail() : arcRail(), face = `n1.${inlet ? 'start' : 'end'}`;
   const plain = withNode(withNode(emptyDoc(), { kind: 'sketch', profile: 'rectangle', min: [-2, -5], max: [2, 5],
     holes: section.cavities.map(({ min, max }, index) => {
       const points: [number, number][] = [[min[0], min[1]], [max[0], min[1]], [max[0], max[1]], [min[0], max[1]]];
@@ -243,37 +323,49 @@ function proposalFixture(retainedRail = false) {
   const base: StudioDoc = retainedRail ? { ...plain, direct: { sources: { rails: railText(path) },
     objects: [{ id: 'rail', name: 'Paired duct rail', source: 'rails', geometry: 'rail' }] } } : plain;
   const evaluated = evaluateDoc(base, 1); assert.ok(evaluated.ok, evaluated.ok ? '' : evaluated.error.detail);
-  const candidate = captureSignatures(withNode(base, { kind: 'offset-face', parent: { node: 1, side: 'solid' }, faces: ['n1.end'], distance: -4 }), evaluated.bodies);
+  const candidate = captureSignatures(withNode(base, { kind: 'offset-face', parent: { node: 1, side: 'solid' }, faces: [face], distance }), evaluated.bodies);
   const proposal: Proposal = { id: 'P1', title: 'Move the straight outlet', status: 'open', by: { agent: 'chat' },
     at: '2026-11-23T00:00:00.000Z', base: 'test', summary: '1 added',
-    ops: [{ tool: 'run_command', args: { command: 'offset-face', expectedRevision: revisionOf(base), faces: ['n1.end'], values: { d: -4 } } }],
+    ops: [{ tool: 'run_command', args: { command: 'offset-face', expectedRevision: revisionOf(base), faces: [face], values: { d: distance } } }],
     risk: { level: 'low', features_touched: 1, references_broken: 0, hard_requirements_changed: [], approval: [] } };
   return { base, candidate, proposal, bodies: evaluated.bodies, path };
 }
 
-for (const retainedRail of [false, true]) test(`arc-line pending outlet review binds ${retainedRail ? 'the unchanged retained rail' : 'a no-rail document'} and refuses changed source or candidate pins`, async () => {
-  const { base, candidate, proposal, bodies, path } = proposalFixture(retainedRail), before = structuredClone({ base, candidate });
-  const edit = pairedElbowOutletProposal(base, proposal); assert.ok(edit);
-  const reviewed = await reviewedPairedElbowOutletEvidence(base, bodies, candidate, edit);
+for (const inlet of [false, true]) for (const retainedRail of [false, true]) test(`pending ${inlet ? 'line-arc-line inlet' : 'arc-line outlet'} review binds ${retainedRail ? 'the unchanged retained rail' : 'a no-rail document'} and refuses changed source or candidate pins`, async () => {
+  const proposalOf = inlet ? pairedElbowInletProposal : pairedElbowOutletProposal;
+  const review = inlet ? reviewedPairedElbowInletEvidence : reviewedPairedElbowOutletEvidence;
+  const { base, candidate, proposal, bodies, path } = proposalFixture(retainedRail, inlet), before = structuredClone({ base, candidate });
+  const edit = proposalOf(base, proposal); assert.ok(edit);
+  const reviewed = await review(base, bodies, candidate, edit);
   assert.ok(reviewed && !('error' in reviewed));
-  const evidence = reviewed.pairedElbowOutletOffset;
-  assert.deepEqual([evidence.sourceBody, evidence.body, evidence.pathKind, evidence.face], ['b1', 'b2', 'arc-and-line', 'n1.end']);
+  const evidence = 'pairedElbowInletOffset' in reviewed ? reviewed.pairedElbowInletOffset : reviewed.pairedElbowOutletOffset;
+  assert.deepEqual([evidence.sourceBody, evidence.body, evidence.pathKind, evidence.face], ['b1', 'b2', inlet ? 'line-arc-line' : 'arc-and-line', inlet ? 'n1.start' : 'n1.end']);
+  assert.deepEqual(Object.keys(evidence.retained), [inlet ? 'outlet' : 'inlet', 'junctions', 'faces']);
   if (retainedRail) assert.deepEqual(evidence.sourceRail, { path: 'rail', pathRevision: digestOf(path), directRevision: edit.directRevision });
   else assert.equal(evidence.sourceRail, undefined);
-  assert.equal(await reviewedPairedElbowOutletEvidence(base, bodies, candidate, { ...edit, sourceRevision: 'stale' }), undefined);
+  assert.equal(await review(base, bodies, candidate, { ...edit, sourceRevision: 'stale' }), undefined);
   assert.ok(candidate.nextId !== undefined);
-  assert.equal(await reviewedPairedElbowOutletEvidence(base, bodies, { ...candidate, nextId: candidate.nextId + 1 }, edit), undefined);
-  const wrongFace = { ...proposal, ops: [{ ...proposal.ops[0], args: { ...proposal.ops[0].args, faces: ['n1.start'] } }] };
-  assert.equal(pairedElbowOutletProposal(base, wrongFace), undefined);
+  assert.equal(await review(base, bodies, { ...candidate, nextId: candidate.nextId + 1 }, edit), undefined);
+  const wrongFace = { ...proposal, ops: [{ ...proposal.ops[0], args: { ...proposal.ops[0].args, faces: [inlet ? 'n1.end' : 'n1.start'] } }] };
+  assert.equal(proposalOf(base, wrongFace), undefined);
   if (retainedRail && base.direct) {
     const moved = structuredClone(path); moved.controlPoints[3][0] -= .5; moved.controlPoints[4][0] -= 1;
     const wrong: StudioDoc = { ...base, direct: { ...base.direct, sources: { rails: railText(moved) } } };
     const fresh = { ...proposal, ops: [{ ...proposal.ops[0], args: { ...proposal.ops[0].args, expectedRevision: revisionOf(wrong) } }] };
-    const wrongEdit = pairedElbowOutletProposal(wrong, fresh); assert.ok(wrongEdit);
+    const wrongEdit = proposalOf(wrong, fresh); assert.ok(wrongEdit);
     const wrongCandidate = { ...candidate, direct: wrong.direct };
-    assert.deepEqual(await reviewedPairedElbowOutletEvidence(wrong, bodies, wrongCandidate, wrongEdit),
+    assert.deepEqual(await review(wrong, bodies, wrongCandidate, wrongEdit),
       { error: 'The retained Direct rail does not match the path copied into the Sweep.' });
-    assert.equal(await reviewedPairedElbowOutletEvidence(wrong, bodies, wrongCandidate, edit), undefined);
+    assert.equal(await review(wrong, bodies, wrongCandidate, edit), undefined);
+  }
+  if (inlet) {
+    const extended = proposalFixture(retainedRail, true, 4), extendedEdit = pairedElbowInletProposal(extended.base, extended.proposal);
+    assert.ok(extendedEdit);
+    const positive = await reviewedPairedElbowInletEvidence(extended.base, extended.bodies, extended.candidate, extendedEdit);
+    assert.ok(positive && !('error' in positive)); near(positive.pairedElbowInletOffset.materialChange.native, 128);
+    const unrelated = proposalFixture(retainedRail);
+    assert.equal(pairedElbowInletProposal(unrelated.base, { ...unrelated.proposal, ops: [{ ...unrelated.proposal.ops[0],
+      args: { ...unrelated.proposal.ops[0].args, faces: ['n1.start'] } }] }), undefined);
   }
   assert.deepEqual({ base, candidate }, before);
 });

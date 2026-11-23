@@ -68,6 +68,7 @@ const renderViewsTool: PartHandler = async (state, args, evaluate, _options, dis
       : intersection ? ('centroid' in intersection
         ? `${intersection.offset === 0 ? 'Centered' : 'Offset'} two-cavity duct Intersect` : 'Offset rectangular duct Intersect')
         : 'pairedElbowOutletOffset' in review.geometry ? 'Paired duct outlet Offset'
+          : 'pairedElbowInletOffset' in review.geometry ? 'Paired duct inlet Offset'
           : 'chamferResize' in review.geometry ? 'Saved Chamfer resize'
           : 'cornerBatch' in review.geometry ? 'Sketch corner proposal' : 'Bored wall proposal';
     return { state, content: json({ revision: review.revision, ...views, candidate: review.candidate, ...review.geometry }),

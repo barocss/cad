@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D1809: [Review a pending paired duct inlet Offset](notes/pending-paired-inlet-offset-review-2026-11-23/README.md), #324. Bind the moved inlet, retained outlet, signed material change and both images to the original rail and explicit Studio approval.
+
 - D1808: [Move the original straight inlet of a paired Sweep](notes/paired-straight-inlet-offset-2026-11-23/README.md), #17. Move the inlet cap and retain the bend, outlet, both passages and all 24 charted joins through Studio edit, drag and fresh Open.
 
 - D1807: [Extract Studio named inspection ownership](notes/studio-named-inspection-ownership-2026-11-23/README.md), #44. Match 17 paired camera, visibility, Update, Restore and fresh Open checkpoints with identical native Save bytes.
