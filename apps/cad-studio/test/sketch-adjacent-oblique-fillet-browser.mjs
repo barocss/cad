@@ -5,6 +5,11 @@ import { createFlow } from './flow-helper.mjs';
 import { currentPartRevision, withMcpSession } from './mcp-browser-session.mjs';
 
 const baseline = process.argv.includes('--observe-base');
+const chamfer = process.argv.includes('--chamfer');
+const operation = chamfer ? 'Chamfer' : 'Fillet';
+const sizeLabel = chamfer ? 'Distance' : 'Radius';
+const sizeMark = chamfer ? 'd' : 'r';
+const excessiveSize = chamfer ? 16 : 24;
 const turn = Math.atan2(3, 4);
 const points = [[0, 0], [30, 0], [50, 15], [50, 45], [0, 45]];
 const shape = { kind: 'polygon', closed: true, points, hv: { h: [0, 3], v: [2, 4] },
@@ -20,9 +25,10 @@ const pins = [
   'packages/barocss-cad-model/src/chat/part/sketchCorner.ts',
 ];
 const f = await createFlow({
-  name: 'sketch-adjacent-oblique-fillet', output: process.argv[2], envFrozen: 'D1766_SOURCE_FROZEN',
+  name: `sketch-adjacent-oblique-${operation.toLowerCase()}`, output: process.argv[2],
+  envFrozen: chamfer ? 'D1778_SOURCE_FROZEN' : 'D1766_SOURCE_FROZEN',
   initialFiles: pins, requiredFrozen: pins,
-  qualification: 'Round adjacent right and authored oblique corners while retaining their shared straight side.',
+  qualification: `${operation} adjacent right and authored oblique corners while retaining their shared straight side.`,
   limits: ['One independent XY outline and one 10 mm Extrude, desktop WebGPU.'],
   inspectorSource: `
 import assert from 'node:assert/strict';
@@ -46,10 +52,11 @@ if (JSON.parse(process.argv[3] ?? 'false')) {
 `,
 });
 const button = (name, scope = f.page) => scope.getByRole('button', { name, exact: true });
-const controls = () => f.sketchPanel().getByRole('group', { name: 'Fillet', exact: true });
+const controls = () => f.sketchPanel().getByRole('group', { name: operation, exact: true });
 const preview = () => f.page.locator('.sk-corner-preview');
-const radius = () => controls().getByLabel('Radius', { exact: true });
-const acceptedPoints = [[0, 6], [6, 0], [28, 0], [31.6, 1.2], ...points.slice(2)];
+const size = () => controls().getByLabel(sizeLabel, { exact: true });
+const contacts = chamfer ? [[24, 0], [34.8, 3.6]] : [[28, 0], [31.6, 1.2]];
+const acceptedPoints = [[0, 6], [6, 0], ...contacts, ...points.slice(2)];
 const acceptedTags = ['e6', 'e1', 'e7', 'e2', 'e3', 'e4', 'e5'];
 const near = (actual, expected, tolerance = 1e-7) =>
   assert.ok(Number.isFinite(actual) && Math.abs(actual - expected) <= tolerance, JSON.stringify({ actual, expected, tolerance }));
@@ -85,19 +92,36 @@ function verifyPair(source, rounded, native) {
   const sketch = rounded.nodes[0], outline = sketch.outline;
   assert.deepEqual(outline.points, acceptedPoints);
   assert.deepEqual(sketch.sideTags.outer, acceptedTags);
-  assert.deepEqual(outline.radii, { 0: 6, 2: 6 });
-  assert.deepEqual(outline.tangents, [0, 1, 2, 3]);
+  if (!chamfer) {
+    assert.deepEqual(outline.radii, { 0: 6, 2: 6 });
+    assert.deepEqual(outline.tangents, [0, 1, 2, 3]);
+  }
   assert.deepEqual(outline.rules.filter(rule => rule.kind === 'fix'), [
     { kind: 'fix', point: 4, at: [50, 15] }, { kind: 'fix', point: 6, at: [0, 45] },
   ]);
   const angle = outline.rules.find(rule => rule.kind === 'angle');
   assert.deepEqual([angle.a, angle.b], [1, 3]);
   near(angle.value, turn * 180 / Math.PI);
-  assert.equal(outline.points[2][0] - outline.points[1][0], 22);
+  assert.equal(outline.points[2][0] - outline.points[1][0], chamfer ? 18 : 22);
   assert.deepEqual([rounded.nodes[1], rounded.outputs], [source.nodes[1], source.outputs]);
   assert.ok(native.valid, native.issues.join('\n'));
   const wallByName = new Map(native.walls);
   assert.equal(wallByName.get('n1.side[e1]').kind, 'plane');
+  if (chamfer) {
+    const right = outline.rules.find(rule => rule.kind === 'angle' && rule.a === 6 && rule.b === 0);
+    const oblique = outline.rules.find(rule => rule.kind === 'angle' && rule.a === 1 && rule.b === 2);
+    near(right.value, 135);
+    near(oblique.value, 180 - turn * 90 / Math.PI);
+    near(outline.lengths[0], 6 * Math.SQRT2);
+    near(outline.lengths[2], 12 * Math.cos(turn / 2));
+    for (const [tag, normal] of [['e6', [-Math.SQRT1_2, -Math.SQRT1_2, 0]], ['e7', [1 / Math.sqrt(10), -3 / Math.sqrt(10), 0]]]) {
+      const wall = wallByName.get(`n1.side[${tag}]`);
+      assert.equal(wall.kind, 'plane');
+      wall.n.forEach((value, axis) => near(value, normal[axis]));
+    }
+    near(native.volume, 21000 - 10 * 6 ** 2 / 2 * (1 + Math.sin(turn)));
+    return;
+  }
   for (const [tag, x] of [['e6', 6], ['e7', 28]]) {
     const wall = wallByName.get(`n1.side[${tag}]`);
     assert.equal(wall.kind, 'cylinder');
@@ -117,18 +141,19 @@ async function selectWithShift(picks) {
 }
 
 async function approveWithAgent(source, native) {
-  const file = join(f.output, 'adjacent-angle-fillet-proposal.bcad');
+  const file = join(f.output, `adjacent-angle-${operation.toLowerCase()}-proposal.bcad`);
   const bytes = JSON.stringify(source);
   await writeFile(file, bytes);
-  await withMcpSession({ app: f.app, output: f.output, clientName: f.name }, file, 'adjacent-fillets', async call => {
+  await withMcpSession({ app: f.app, output: f.output, clientName: f.name }, file, `adjacent-${operation.toLowerCase()}s`, async call => {
     const fields = await call('query', { action: 'edit_fields', index: 0, includeSketchCorners: true });
     assert.equal(fields.revision, await currentPartRevision(call));
     const corners = fields.sketchCorners.filter(({ point }) => point[1] === 0 && [0, 30].includes(point[0])).map(item => item.sides);
     assert.deepEqual(corners, [['e5', 'e1'], ['e1', 'e2']]);
     const input = value => ({ tool: 'features', args: { action: 'edit', index: 0, expectedRevision: fields.revision,
-      sketchRound: { sketch: fields.id, corners, radius: value } } });
-    const propose = (value, error) => call('proposals', { action: 'propose', title: 'Round the adjacent sketch corners', ops: [input(value)] }, error);
-    assert.match((await propose(24, true)).error, /shared edge/i);
+      ...(chamfer ? { sketchChamfer: { sketch: fields.id, corners, distance: value } }
+        : { sketchRound: { sketch: fields.id, corners, radius: value } }) } });
+    const propose = (value, error) => call('proposals', { action: 'propose', title: `${chamfer ? 'Chamfer' : 'Round'} the adjacent sketch corners`, ops: [input(value)] }, error);
+    assert.match((await propose(excessiveSize, true)).error, /shared edge/i);
     assert.equal(await readFile(file, 'utf8'), bytes);
     const dry = await call('features', { action: 'batch', dryRun: true, ops: [input(6)] });
     assert.ok(dry.dryRun);
@@ -164,37 +189,37 @@ await f.run(async () => {
   await selectWithShift(points.slice(0, 2));
   assert.deepEqual(await f.page.locator('.vp-overlay .sk-pick-point.on').evaluateAll(nodes => nodes.map(node => node.dataset.sketchEntity)),
     ['point:0', 'point:1']);
-  await button('Fillet').click();
+  await button(operation).click();
   const apply = button('Apply', controls());
   if (!baseline) {
-    await radius().fill('24');
+    await size().fill(String(excessiveSize));
     await controls().getByRole('alert').getByText(/too little of a shared edge/i).waitFor();
     await preview().first().waitFor({ state: 'hidden' });
     assert.ok(await apply.isDisabled());
     await f.same(source);
-    await f.snapshot('02-r24-shared-carrier-refused');
+    await f.snapshot(`02-${sizeMark}${excessiveSize}-shared-carrier-refused`);
   }
-  await radius().fill('6');
+  await size().fill('6');
   await f.same(source);
-  const previewState = await f.snapshot('02-r6-preview-or-refusal');
+  const previewState = await f.snapshot(`02-${sizeMark}6-preview-or-refusal`);
   if (!await apply.isEnabled()) {
-    f.report.observations.push({ label: 'r6-refused', sketch: previewState.sketchPanel, alert: previewState.sketchAlert });
-    assert.ok(baseline, 'Both adjacent R6 rounds should fit.');
+    f.report.observations.push({ label: `${sizeMark}6-refused`, sketch: previewState.sketchPanel, alert: previewState.sketchAlert });
+    assert.ok(baseline, `The adjacent ${operation} pair should fit at size 6.`);
     return;
   }
   await preview().first().waitFor();
   await apply.click();
-  const rounded = (await f.finishSketch('03-adjacent-fillets-finished')).doc;
+  const rounded = (await f.finishSketch(`03-adjacent-${operation.toLowerCase()}s-finished`)).doc;
   const native = await f.inspect('rounded-native', rounded);
-  f.report.observations.push({ label: 'r6-accepted', outline: rounded.nodes[0].outline, native });
+  f.report.observations.push({ label: `${sizeMark}6-accepted`, outline: rounded.nodes[0].outline, native });
   if (baseline) return;
   verifyPair(source, rounded, native);
   await f.undo();
   await f.same(source);
   await f.redo();
   await f.same(rounded);
-  const saved = await f.save('adjacent-angle-fillets');
-  const reopened = (await f.freshOpen(saved.file, rounded, '04-r6-fresh-open')).doc;
+  const saved = await f.save(`adjacent-angle-${operation.toLowerCase()}s`);
+  const reopened = (await f.freshOpen(saved.file, rounded, `04-${sizeMark}6-fresh-open`)).doc;
   const reopenedNative = await f.inspect('reopened-native', reopened);
   verifyPair(source, reopened, reopenedNative);
   assert.equal(reopenedNative.digest, native.digest);
@@ -205,8 +230,8 @@ await f.run(async () => {
   await selectWithShift([[0, 20], [15, 0], [40, 7.5]]);
   const selected = f.page.locator('.vp-overlay .sk-pick-edge.on');
   assert.deepEqual(await selected.evaluateAll(nodes => nodes.map(node => node.dataset.sketchEntity).sort()), ['edge:0', 'edge:1', 'edge:4']);
-  await button('Fillet').click();
-  await radius().fill('6');
+  await button(operation).click();
+  await size().fill('6');
   await preview().first().waitFor();
   await f.same(source);
   await f.snapshot('06-three-carriers-preview');
