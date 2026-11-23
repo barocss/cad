@@ -709,9 +709,13 @@ export function partBreps(doc: StudioDoc): { key: string; brep: Brep }[] {
   return snapshotOf(doc).outputs.map(o => ({ key: bodyKeyOf(o.id, doc.nodes), brep: o.brep }));
 }
 
-/** How a StudioDoc is written as STEP: the file's name; how mesh bodies are written (R3.5); the file's time. */
+export type StudioStepRootScope = 'all' | 'visible';
+
+/** How a StudioDoc is written as STEP, including the optional root visibility scope. */
 export interface StudioStepOptions {
   name: string;
+  /** Root outputs to include. The default includes hidden roots. Placed occurrences always follow placement visibility. */
+  rootScope?: StudioStepRootScope;
   /** auto, tessellated or planar (STEP export option, R3.5). */
   meshes?: 'auto' | 'tessellated' | 'planar';
   /** The file's time (ISO 8601, seconds), so a test or a doc writes the same bytes each time; left out: now (R7 finding). */
@@ -719,9 +723,11 @@ export interface StudioStepOptions {
 }
 /** A StudioDoc's STEP file: its text, the source revision it names (O9), and what was left out. */
 export interface StudioStepScope {
-  /** Included root Model outputs, regardless of their stored visibility. */
+  /** Included root Model outputs and how many included roots are hidden. */
   rootBodies: number;
   hiddenRootBodies: number;
+  /** Hidden root outputs excluded by the visible-root option. */
+  excludedHiddenRootBodies?: number;
   /** Included placed Model outputs; a single output may contain several native bodies. */
   placedBodies: number;
   /** Visible top-level occurrences contributing at least one included output. */
@@ -782,9 +788,11 @@ function stepProfileLosses(doc: StudioDoc): string[] {
  * refusal while writing is passed through.
  */
 export function exportStudioStep(doc: StudioDoc, options: StudioStepOptions): StudioStep {
-  const { name, meshes } = options;
+  const { name, meshes, rootScope = 'all' } = options;
+  if (rootScope !== 'all' && rootScope !== 'visible') throw refusal('VALUE', 'Select a valid STEP root body scope.');
   const breps: Brep[] = [], left: string[] = [], sheets: string[] = [];
   const scope: StudioStepScope = { rootBodies: 0, hiddenRootBodies: 0, placedBodies: 0, occurrences: 0, nativeBodies: 0 };
+  let excludedHiddenRootBodies = 0;
   const take = (d: StudioDoc, outputs: CadPartSnapshot['outputs'], prefix: string) => {
     for (const o of outputs) {
       const at = keyed(o.id, d.nodes), r = at.ref;
@@ -792,11 +800,13 @@ export function exportStudioStep(doc: StudioDoc, options: StudioStepOptions): St
       else if (r && roleOf(d.nodes[r.node])) left.push(`${prefix}${bodyKeyOf(o.id, d.nodes)}`);
       else {
         const look = r && /^b\d+(_.+)?$/.test(at.key) ? bodyKey(bodyLookRef(d.nodes, r), d.nodes) : at.key;
+        const hidden = !!d.bodies?.[look]?.hidden;
+        if (rootScope === 'visible' && hidden) { excludedHiddenRootBodies++; continue; }
         const label = d.bodies?.[look]?.name;
         requireStepGeometry(o.brep, `${prefix}${label ? label + ' ' : ''}(${at.key})`, !!r && d.nodes[r.node]?.kind === 'scale');
         breps.push(o.brep);
         scope.rootBodies++; scope.nativeBodies += o.brep.bodies.length;
-        if (d.bodies?.[look]?.hidden) scope.hiddenRootBodies++;
+        if (hidden) scope.hiddenRootBodies++;
       }
     }
   };
@@ -820,7 +830,11 @@ export function exportStudioStep(doc: StudioDoc, options: StudioStepOptions): St
     }
     if (included) scope.occurrences++;
   }
-  if (!breps.length) throw refusal('NO_BODY', sheets.length && !left.length ? `Only band sheets: STEP of band sheets is not supported yet, and there is no other body to export (${sheets.join(', ')}).` : left.length ? 'Only infill bodies: STEP carries the exact part, and there is none to export.' : 'There is no body to export.');
+  if (!breps.length) {
+    if (excludedHiddenRootBodies) throw refusal('NO_BODY', 'There are no visible root or placed bodies to export.');
+    throw refusal('NO_BODY', sheets.length && !left.length ? `Only band sheets: STEP of band sheets is not supported yet, and there is no other body to export (${sheets.join(', ')}).` : left.length ? 'Only infill bodies: STEP carries the exact part, and there is none to export.' : 'There is no body to export.');
+  }
+  if (rootScope === 'visible') scope.excludedHiddenRootBodies = excludedHiddenRootBodies;
   const nativeNameLosses = stepNativeNameLosses(breps);
   // (O9: the header names the source revision the file was made from.)
   const source = revisionOf(doc), text = exportStep(breps, { name, description: ['BaroCSS CAD part', `source revision ${source}`], ...(meshes ? { meshes } : {}), ...(options.timestamp ? { timestamp: options.timestamp } : {}) });

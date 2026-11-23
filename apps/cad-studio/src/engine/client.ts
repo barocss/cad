@@ -2,7 +2,7 @@ import type { DrawingBodySelector } from '@barocss/cad-model/drawing/scope';
 import type { NativeEdgeCurveReply } from '@barocss/cad-model/engine/nativeEdgeCurve';
 import type { ContinuityReply, ContinuityRequest } from '@barocss/cad-model/engine/edgeContinuity';
 import { rememberFaceTable } from '@barocss/cad-model/assembly/faces';
-import type { EvalResult, PartSlot, VolumeEvaluation, StudioStep } from '@barocss/cad-model/engine/evaluate';
+import type { EvalResult, PartSlot, VolumeEvaluation, StudioStep, StudioStepRootScope } from '@barocss/cad-model/engine/evaluate';
 import { MeshReceiver, type WireResult } from '@barocss/cad-model/engine/meshWire';
 import type { DisplayMesh } from '@barocss/cad-model/engine/mesh';
 /** A proposal's diff as the viewport overlays it (G12). */
@@ -399,11 +399,11 @@ export class EngineClient {
     });
   }
 
-  step(doc: StudioDoc, name: string, meshes?: 'auto' | 'tessellated' | 'planar'): Promise<StudioStep | { error: string }> {
+  step(doc: StudioDoc, name: string, meshes?: 'auto' | 'tessellated' | 'planar', rootScope?: StudioStepRootScope): Promise<StudioStep | { error: string }> {
     const id = this.next++;
     return new Promise(resolve => {
       this.pending.set(id, data => resolve((data as { step: StudioStep | { error: string } }).step));
-      this.post(id, () => ({ type: 'step', id, doc: this.wire!.pack(doc), metadata: stepMetadata(doc), name, ...(meshes ? { meshes } : {}) }));
+      this.post(id, () => ({ type: 'step', id, doc: this.wire!.pack(doc), metadata: stepMetadata(doc), name, ...(meshes ? { meshes } : {}), rootScope }));
     });
   }
 

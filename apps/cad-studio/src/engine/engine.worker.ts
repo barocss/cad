@@ -1,7 +1,7 @@
 import type { DrawingBodySelector } from '@barocss/cad-model/drawing/scope';
 import { readNativeEdgeCurve } from '@barocss/cad-model/engine/nativeEdgeCurve';
 /// <reference lib="webworker" />
-import { brepsFor, deferMasses, evaluateDoc, evaluatePart, evaluatePlaced, evaluatePreview, evaluateVolumes, massOfRef, shareMeshes, exportStudioStep, stlFor, type BodyResult, type EvalResult, type PartSlot } from '@barocss/cad-model/engine/evaluate';
+import { brepsFor, deferMasses, evaluateDoc, evaluatePart, evaluatePlaced, evaluatePreview, evaluateVolumes, massOfRef, shareMeshes, exportStudioStep, stlFor, type BodyResult, type EvalResult, type PartSlot, type StudioStepRootScope } from '@barocss/cad-model/engine/evaluate';
 import { nativeMassEnvelope, type NativeMassEnvelope, type NativeMassSource } from '@barocss/cad-model/engine/nativeMassWire';
 import { MeshSender } from '@barocss/cad-model/engine/meshWire';
 import { bodyKeyOf, currentFaceEndDistance, partSnapshot, resolveAssociativeSketch } from '@barocss/cad-model/engine/part';
@@ -25,8 +25,8 @@ import type { StudioDoc } from '@barocss/cad-model/engine/doc';
 import { checkOutput, diagnoseMesh, massPropertiesOf, repairMesh, stepMeshes, stepSizeProblem, stepTessellatedChars, type MeshRepairSteps } from '@barocss/cad';
 
 /** The STEP reply over the wire: the file, or the refusal's words (R7.3c: exportStudioStep throws; the wire keeps `{ error }`). */
-function stepReply(doc: StudioDoc, name: string, meshes?: 'auto' | 'tessellated' | 'planar'): ReturnType<typeof exportStudioStep> | { error: string } {
-  try { return exportStudioStep(doc, { name, ...(meshes ? { meshes } : {}) }); } catch (e) { return { error: e instanceof Error ? e.message : String(e) }; }
+function stepReply(doc: StudioDoc, name: string, meshes?: 'auto' | 'tessellated' | 'planar', rootScope?: StudioStepRootScope): ReturnType<typeof exportStudioStep> | { error: string } {
+  try { return exportStudioStep(doc, { name, meshes, rootScope }); } catch (e) { return { error: e instanceof Error ? e.message : String(e) }; }
 }
 
 export type WorkerRequest =
@@ -49,7 +49,7 @@ export type WorkerRequest =
   | { type: 'proposalDiff'; id: number; doc: WireDoc; proposed: WireDoc; revision: number; key: { revision: string; proposal: string } }
   | { type: 'proposalDrawingCallouts'; id: number; doc: WireDoc; proposed: WireDoc }
   | { type: 'stl'; id: number; doc: WireDoc; key: string; options?: { segmentsPerQuarter: number } }
-  | { type: 'step'; id: number; doc: WireDoc; metadata: StepMetadata; name: string; meshes?: 'auto' | 'tessellated' | 'planar' }
+  | { type: 'step'; id: number; doc: WireDoc; metadata: StepMetadata; name: string; meshes?: 'auto' | 'tessellated' | 'planar'; rootScope?: StudioStepRootScope }
   /** A STEP file's meshes when it holds nothing else (R3.5), for the repair gate. */
   | { type: 'stepMeshes'; id: number; step: string }
   | { type: 'drawing'; id: number; doc: WireDoc; options?: { tangentEdges?: boolean; sections?: DrawingSection[]; orientation?: 'x+' | 'y+' | 'x-'; made?: boolean; body?: DrawingBodySelector } }
@@ -240,7 +240,7 @@ self.onmessage = (event: MessageEvent<WorkerRequest>) => {
     if (drawing.ok && request.options?.sections?.length) drawing.sections = sectionsCut(request.doc, request.options.sections, request.options.orientation, made);
     (self as unknown as Worker).postMessage({ id: request.id, drawing });
   } else if (request.type === 'step') {
-    (self as unknown as Worker).postMessage({ id: request.id, step: stepReply(receiveStepMetadata(request.doc, request.metadata), request.name, request.meshes) });
+    (self as unknown as Worker).postMessage({ id: request.id, step: stepReply(receiveStepMetadata(request.doc, request.metadata), request.name, request.meshes, request.rootScope) });
   } else {
     try {
       const bytes = stlFor(request.doc, request.key, request.options);

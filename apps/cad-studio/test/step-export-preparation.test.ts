@@ -4,11 +4,11 @@ import { emptyDoc } from '@barocss/cad-model/engine/doc';
 import { createStepPreparation, type StepOwner, type StepPreview } from '../src/files/stepExportPreparation';
 const text = "FILE_SCHEMA(('AUTOMOTIVE_DESIGN')); geometry";
 function setup() {
-  const doc = emptyDoc(); let owner: StepOwner = { doc, shown: doc, evaluated: doc, name: 'part', fresh: true, hasBody: true, hasMeshes: true };
+  const doc = emptyDoc(); let owner: StepOwner = { doc, shown: doc, evaluated: doc, name: 'part', fresh: true, hasBody: true, hasMeshes: true, hasVisibleMeshes: false };
   let preview: StepPreview | null = null;
-  const jobs: { doc: typeof doc; meshes: string; resolve(value: { text: string; omitted?: string[]; scope?: NonNullable<StepPreview['scope']> } | { error: string }): void; reject(error: Error): void }[] = [];
+  const jobs: { doc: typeof doc; meshes: string; rootScope: StepPreview['rootScope']; resolve(value: { text: string; omitted?: string[]; scope?: NonNullable<StepPreview['scope']> } | { error: string }): void; reject(error: Error): void }[] = [];
   const downloads: { bytes: Uint8Array; name: string; doc: unknown }[] = [], notices: string[] = [];
-  const control = createStepPreparation({ current: () => owner, changed: value => { preview = value; }, notice: value => notices.push(value), step: (doc, _name, meshes) => new Promise((resolve, reject) => jobs.push({ doc, meshes, resolve, reject })), download: (bytes, name, doc) => downloads.push({ bytes, name, doc }) });
+  const control = createStepPreparation({ current: () => owner, changed: value => { preview = value; }, notice: value => notices.push(value), step: (doc, _name, meshes, rootScope) => new Promise((resolve, reject) => jobs.push({ doc, meshes, rootScope, resolve, reject })), download: (bytes, name, doc) => downloads.push({ bytes, name, doc }) });
   return { control, jobs, downloads, notices, get preview() { return preview; }, get owner() { return owner; }, set owner(value) { owner = value; } };
 }
 test('prepare reports actual losses and requires an explicit current download without mutating the document', async () => {
@@ -51,11 +51,46 @@ test('shown variant placements and current decoration own the payload while eval
   s.jobs[0].resolve({ text, omitted: ['Current decoration loss'] }); await work; assert.deepEqual(s.preview?.losses, ['Current decoration loss']);
 });
 
- test('scope travels with current prepared bytes and is cleared on visibility edits', async () => {
+test('scope travels with current prepared bytes and is cleared on visibility edits', async () => {
   const s = setup(), work = s.control.prepare();
   const scope = { rootBodies: 2, hiddenRootBodies: 1, placedBodies: 3, occurrences: 1, nativeBodies: 5 };
   s.jobs[0].resolve({ text, scope }); await work;
   assert.deepEqual(s.preview?.scope, scope); assert.notEqual(s.preview?.scope, scope);
   s.owner = { ...s.owner, shown: { ...s.owner.shown, bodies: { b0: { hidden: true } } } };
   s.control.reconcile(); assert.equal(s.preview, null); s.control.download(); assert.equal(s.downloads.length, 0);
+});
+
+const visibleScope = { rootBodies: 1, hiddenRootBodies: 0, excludedHiddenRootBodies: 1, placedBodies: 0, occurrences: 0, nativeBodies: 1 };
+
+test('a scope switch clears older bytes and late replies and hides excluded mesh choices', async () => {
+  const s = setup(), previous = s.control.prepare(), next = s.control.prepare('auto', 'visible');
+  assert.deepEqual(s.jobs.map(job => job.rootScope), ['all', 'visible']);
+  assert.equal(s.preview?.rootScope, 'visible');
+  assert.equal(s.preview?.hasMeshes, false);
+  s.jobs[0].resolve({ text: 'obsolete STEP including hidden roots' });
+  await previous;
+  s.control.download();
+  assert.equal(s.preview?.stage, 'preparing');
+  assert.equal(s.downloads.length, 0);
+  s.jobs[1].resolve({ text, scope: visibleScope });
+  await next;
+  assert.deepEqual(s.preview?.scope, visibleScope);
+  s.control.download();
+  assert.equal(new TextDecoder().decode(s.downloads[0].bytes), text);
+});
+
+test('visible scope rejects replies without matching exclusion counts and ignores stale same-count visibility swaps', async () => {
+  const s = setup(), wrong = s.control.prepare('auto', 'visible');
+  s.jobs[0].resolve({ text, scope: { ...visibleScope, hiddenRootBodies: 1 } });
+  await wrong;
+  assert.equal(s.preview?.stage, 'error');
+  assert.match(s.preview!.error!, /selected root body scope/);
+  s.owner = { ...s.owner, shown: { ...s.owner.shown, bodies: { b0: { hidden: false }, b1: { hidden: true } } } };
+  const old = s.control.prepare('auto', 'visible');
+  s.owner = { ...s.owner, shown: { ...s.owner.shown, bodies: { b0: { hidden: true }, b1: { hidden: false } } } };
+  s.jobs[1].resolve({ text, scope: visibleScope });
+  await old;
+  assert.equal(s.preview, null);
+  s.control.download();
+  assert.equal(s.downloads.length, 0);
 });

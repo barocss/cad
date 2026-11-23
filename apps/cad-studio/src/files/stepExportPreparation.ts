@@ -1,13 +1,13 @@
 // Private Studio preparation state. Bytes stay here until the explicit download action.
-import type { StudioStep } from '@barocss/cad-model/engine/evaluate';
+import type { StudioStep, StudioStepRootScope } from '@barocss/cad-model/engine/evaluate';
 import type { StudioDoc } from '@barocss/cad-model/engine/doc';
 export type StepMeshes = 'auto' | 'tessellated' | 'planar';
-export interface StepOwner { doc: StudioDoc; shown: StudioDoc; evaluated: StudioDoc; name: string; fresh: boolean; hasBody: boolean; hasMeshes: boolean }
-export interface StepPreview { name: string; meshes: StepMeshes; hasMeshes: boolean; stage: 'preparing' | 'ready' | 'error'; profile: string; losses: readonly string[]; error?: string; size?: number; scope?: StudioStep['scope'] }
+export interface StepOwner { doc: StudioDoc; shown: StudioDoc; evaluated: StudioDoc; name: string; fresh: boolean; hasBody: boolean; hasMeshes: boolean; hasVisibleMeshes: boolean }
+export interface StepPreview { name: string; meshes: StepMeshes; rootScope: StudioStepRootScope; hasMeshes: boolean; stage: 'preparing' | 'ready' | 'error'; profile: string; losses: readonly string[]; error?: string; size?: number; scope?: StudioStep['scope'] }
 type StepResult = { text: string; omitted?: string[]; scope?: StudioStep['scope'] } | { error: string };
 interface Options {
   current(): StepOwner;
-  step(doc: StudioDoc, name: string, meshes: StepMeshes): Promise<StepResult>;
+  step(doc: StudioDoc, name: string, meshes: StepMeshes, rootScope: StudioStepRootScope): Promise<StepResult>;
   changed(value: StepPreview | null): void;
   notice(hint: string): void;
   download(bytes: Uint8Array, name: string, doc: StudioDoc): void;
@@ -24,17 +24,22 @@ export function createStepPreparation(options: Options) {
   const discard = () => { generation++; captured = null; bytes = null; preview = null; };
   const cancel = () => { discard(); options.changed(null); };
   const reconcile = () => { if (captured && !sameOwner(captured, options.current())) cancel(); };
-  const prepare = async (meshes: StepMeshes = 'auto') => {
+  const prepare = async (meshes: StepMeshes = 'auto', rootScope: StudioStepRootScope = 'all') => {
     discard(); const owner = options.current(), ticket = generation;
     if (!owner.fresh || !owner.hasBody) { options.changed(null); options.notice(!owner.fresh ? 'Wait for the current design and its placed parts to finish evaluating.' : 'There is no exportable body in the current design.'); return; }
     captured = owner;
-    const pending: StepPreview = { name: owner.name, meshes, hasMeshes: owner.hasMeshes, stage: 'preparing', profile: 'Preparing STEP geometry · mm', losses: [] };
+    const pending: StepPreview = { name: owner.name, meshes, rootScope, hasMeshes: rootScope === 'visible' ? owner.hasVisibleMeshes : owner.hasMeshes,
+      stage: 'preparing', profile: 'Preparing STEP geometry · mm', losses: [] };
     publish(pending);
     try {
-      const result = await options.step({ ...owner.shown, nodes: owner.evaluated.nodes, outputs: owner.evaluated.outputs }, owner.name, meshes);
+      const result = await options.step({ ...owner.shown, nodes: owner.evaluated.nodes, outputs: owner.evaluated.outputs }, owner.name, meshes, rootScope);
       if (generation !== ticket) return;
       if (!sameOwner(owner, options.current())) { cancel(); return; }
       if ('error' in result) { publish({ ...pending, stage: 'error', error: result.error }); return; }
+      const visible = result.scope?.excludedHiddenRootBodies !== undefined;
+      if (visible !== (rootScope === 'visible') || visible && result.scope?.hiddenRootBodies !== 0) {
+        publish({ ...pending, stage: 'error', error: 'Prepared STEP geometry does not match the selected root body scope.' }); return;
+      }
       bytes = new TextEncoder().encode(result.text);
       publish({ ...pending, stage: 'ready', profile: profile(result.text), losses: [...(result.omitted ?? [])], size: bytes.byteLength, scope: result.scope ? { ...result.scope } : undefined });
     } catch (error) {

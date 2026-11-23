@@ -4,7 +4,7 @@ import { printSourceScope } from '../viewport/printSettings';
 import { bodyTopologyLabel, nativeBoundaryLabel } from '../ui/bodyTopologyLabel';
 import { useEffect, useRef, useState, type RefObject } from 'react';
 import type { StudioDoc } from '@barocss/cad-model/engine/doc';
-import { evaluateDoc, type BodyResult } from '@barocss/cad-model/engine/evaluate';
+import { evaluateDoc, type BodyResult, type StudioStepRootScope } from '@barocss/cad-model/engine/evaluate';
 import type { FriendlyError } from '@barocss/cad-model/engine/errors';
 import { bodyName, lookOf } from '@barocss/cad-model/app/bodies';
 import { draftWarning } from '@barocss/cad-model/chat/drafts';
@@ -42,10 +42,13 @@ export interface ModelExportOptions {
 
 function currentStepOwner(s: { model: ModelExportContext; fileName: string; current: ModelExportOptions['current'] }) {
   const visible = (s.model.shown.instances ?? []).filter(i => !i.hidden);
-  const all = [...s.model.bodies, ...visible.flatMap(i => s.model.instanceBodies.get(i.id)?.bodies ?? [])];
+  const placed = visible.flatMap(i => s.model.instanceBodies.get(i.id)?.bodies ?? []);
+  const all = [...s.model.bodies, ...placed];
+  const mesh = (body: BodyResult) => body.family === 'faceted' && body.role !== 'infill';
   return { doc: s.current.doc.current, shown: s.current.shown.current, evaluated: s.current.evaluated.current, name: s.current.name?.current ?? s.fileName,
     fresh: s.model.fresh && s.model.instancesFresh && !s.model.busy && s.current.doc.current === s.model.doc && s.current.evaluated.current === s.model.evaluated && s.current.shown.current === s.model.shown,
-    hasBody: all.some(b => b.role !== 'infill' && !b.band), hasMeshes: all.some(b => b.family === 'faceted' && b.role !== 'infill') };
+    hasBody: all.some(b => b.role !== 'infill' && !b.band), hasMeshes: all.some(mesh),
+    hasVisibleMeshes: placed.some(mesh) || s.model.bodies.some(b => mesh(b) && !lookOf(s.model.shown, b).hidden) };
 }
 const stlMeshLoss = 'Triangles only. Coordinates use millimetres. STL leaves out the unit setting, colours, body names and editable CAD data.';
 const stlPlacedLoss = 'Visible placed parts are omitted. Automatic writes root bodies only.';
@@ -65,7 +68,7 @@ export function useModelExports({ model, engine, fileName, current, onNotice }: 
   const stepControl = useRef<ReturnType<typeof createStepPreparation> | null>(null);
   if (!stepControl.current) stepControl.current = createStepPreparation({
     current: () => currentStepOwner(stepLatest.current),
-    step: (d, name, meshes) => stepLatest.current.engine.step(d, name, meshes), changed: setStepPreview,
+    step: (d, name, meshes, rootScope) => stepLatest.current.engine.step(d, name, meshes, rootScope), changed: setStepPreview,
     notice: hint => stepLatest.current.onNotice({ title: 'STEP not prepared', hint, detail: '' }),
     download: (bytes, name, captured) => { downloadBytes(bytes, name, 'model/step'); const warning = draftWarning(captured); if (warning) stepLatest.current.onNotice({ title: 'STEP written as a draft', hint: warning, detail: '' }); },
   });
@@ -80,10 +83,10 @@ export function useModelExports({ model, engine, fileName, current, onNotice }: 
   const stlGeneration = useRef(0), stlPending = useRef(false), stlCancelButton = useRef<HTMLButtonElement>(null);
   const cancelStlExport = () => { stlGeneration.current++; stlPending.current = false; setStlBusy(false); setStlAsk(false); };
   const askStlExport = () => { stlGeneration.current++; stlPending.current = false; setStlBusy(false); setStlQuality('automatic'); setStlAsk(true); };
-  const exportStepFile = async (choice?: StepMeshes) => {
+  const exportStepFile = async (choice?: StepMeshes, rootScope: StudioStepRootScope = 'all') => {
     const meshes = choice ?? lastStepMeshes();
     try { localStorage.setItem('studio.stepMeshes', meshes); } catch { /* private mode */ }
-    await stepControl.current!.prepare(meshes);
+    await stepControl.current!.prepare(meshes, rootScope);
   };
   const downloadStep = stepControl.current.download;
   const exportStl = async () => {
