@@ -21,6 +21,7 @@ import { revolutionOf, profileCrossings, onPatch, patchMargin, type Revolution }
 import { curvePiece, curveReversed } from '../nurbs/curves/curve-segment.js';
 import { BrepError, buildBrep, checkBrep, isFacetFace, lineCurve, nurbsOf as surfaceOfFace, type Brep, type BrepFace } from './brep-core.js';
 import { bindHalfRingIntersection } from './exact-ring-intersect.js';
+import { bindHalfRectangularDuctIntersection } from './exact-rectangular-duct-intersect.js';
 import { affinePlaneBinding } from './affine-plane-binding.js';
 import { facetPlane } from '../mesh/facet-patch.js';
 import { circleOf, polesOf, tessellateBrep } from './brep-tessellate.js';
@@ -1629,7 +1630,7 @@ function analyticBoolean(a: Brep, b: Brep, operation: AnalyticBooleanOperation, 
   const inputTol = Math.max(0, ...[a, b].flatMap(x => [...x.edges.map(e => e.tolerance), ...x.vertices.map(v => v.tolerance)]));
   const stitched = stitch(mergePieces(kept, tol, trace), id, tol, options.exactEdges !== false, inputTol, undefined, edgeFit, frozen, trace);
   const result = operation === 'intersection' && options.exactEdges !== false
-    ? bindHalfRingIntersection(a, b, stitched, tol) ?? stitched : stitched;
+    ? bindHalfRingIntersection(a, b, stitched, tol) ?? bindHalfRectangularDuctIntersection(a, b, stitched, tol) ?? stitched : stitched;
   if (trace && result !== stitched) {
     // The qualified rebind preserves all stitched face IDs, including each face's source attribution.
     const sources = trace.results.get(stitched);

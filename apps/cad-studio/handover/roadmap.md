@@ -1,13 +1,13 @@
 # CAD roadmap — current status and execution order
 
-Updated 2026-11-23 · Priority authority: D520 · Latest delivery: D1764 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
+Updated 2026-11-23 · Priority authority: D520 · Latest delivery: D1765 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
 
 This is the only current status index. Detailed tracks define acceptance; the 34 stable row pages retain scope and issue navigation. Immutable decision notes retain results. Do not append chronological status paragraphs here. [D520 decision](notes/cad-roadmap-replan-2026-11-04/README.md) supersedes D445 execution order and historical next-item text, while retaining its safeguards and bounded proofs.
 
 ## Now and next
 
-- **Current position:** [D1764](notes/studio-browser-geometry-rows-2026-11-23/README.md), P4 row 22. Studio Sketch and Direct Browser rows now have their own component module. Desktop selections, visibility history and Sweep reauthoring match. The B06 PDF group remains held.
-- **Next MAIN:** D1765, P5 rows [07](roadmap-rows/07.md) and [30](roadmap-rows/30.md), [#10](https://github.com/barocss/cad/issues/10). Reproduce a centered box Intersect on the exact closed rectangular duct. Verify both exposed rectangular apertures and native cap and seam continuity if supported.
+- **Current position:** [D1765](notes/exact-centered-rectangular-duct-intersect-2026-11-23/README.md), P5 rows 07 and 30. The centered box Intersect on the exact closed rectangular duct exposes both apertures. All 24 native joints measure 90°, with cavity editing and fresh Open verified. The B06 PDF group remains held.
+- **Next MAIN:** D1766, P1 row [09](roadmap-rows/09.md), [#21](https://github.com/barocss/cad/issues/21). Apply one Sketch Fillet radius to adjacent right and authored oblique straight corners. Verify both arcs, the retained shared carrier, atomic size refusal and a rebuilt part.
 - **Separate follow-ups:** Continue Studio App extraction in cohesive parts with affected desktop checks. [#608 Rendering](https://github.com/barocss/cad/issues/608) stays on HOLD. API inventory drift remains open. The issue tracker records [#126](https://github.com/barocss/cad/issues/126), [#613](https://github.com/barocss/cad/issues/613), [#152](https://github.com/barocss/cad/issues/152) and [#22](https://github.com/barocss/cad/issues/22) as closed.
 - **Active repository:** [barocss/cad](https://github.com/barocss/cad), based on `origin/main`. Fetch before work and preserve unexpected changes. The [migration record](../../../docs/migration/README.md) maps the former `local/cad-dev` history and issue numbers.
 - **Evidence correction:** D482 records2167 PASS/0 FAIL/2 existing SKIP in a later full-kernel run than D433. Neither result is a new full-suite PASS at this audit HEAD. [D482 record](notes/vertical-contact-refusal-2026-11-04/README.md).
