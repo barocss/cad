@@ -1,10 +1,13 @@
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createFlow } from './flow-helper.mjs';
 
 const polygonSource = process.argv.includes('--polygon');
 const circleSource = process.argv.includes('--circle');
+const exchange = process.argv.includes('--step');
+assert.ok(!exchange || circleSource, 'The STEP oracle requires the circular profile.');
 assert.ok(!polygonSource || !circleSource, 'Choose only one source profile.');
 const profile = circleSource ? 'circle' : polygonSource ? 'polygon' : 'rectangle';
 const pins = [
@@ -13,10 +16,20 @@ const pins = [
   'packages/barocss-cad-model/src/app/extrudeEndFacePick.ts',
   'packages/barocss-cad-model/src/engine/faceEndExtrude.ts',
 ];
+if (exchange) pins.push(
+  'apps/cad-studio/test/annular-face-step-oracle.py',
+  'apps/cad-studio/test/smooth-turn-step-oracle.py',
+  'apps/cad-studio/test/part21-prism-check.py',
+  'apps/cad-studio/src/files/useModelExports.ts',
+  'apps/cad-studio/src/files/StepExportPanel.tsx',
+  'apps/cad-studio/src/files/importedFile.ts',
+  'packages/barocss-cad/src/io/step.ts',
+);
 const f = await createFlow({
-  name: 'annular-face-end-extrude', output: process.argv[2], envFrozen: circleSource ? 'D1861_SOURCE_FROZEN' : polygonSource ? 'D1621_SOURCE_FROZEN' : 'D1609_SOURCE_FROZEN',
+  name: 'annular-face-end-extrude', output: process.argv[2], envFrozen: exchange ? 'D1866_SOURCE_FROZEN' : circleSource ? 'D1861_SOURCE_FROZEN' : polygonSource ? 'D1621_SOURCE_FROZEN' : 'D1609_SOURCE_FROZEN',
   initialFiles: pins, requiredFrozen: pins,
-  qualification: 'Select the original lower annular face in Studio. Refuse a footprint over the bore and retain the exact accepted target through History and Open.',
+  qualification: exchange ? 'Export two current annulus and post states from Studio, read the STEP bytes independently, and reopen the native and exchanged models.'
+    : 'Select the original lower annular face in Studio. Refuse a footprint over the bore and retain the exact accepted target through History and Open.',
   limits: [`One upright tube with a 12 mm outer radius and a centred 4 mm through bore, and one horizontal ${profile} profile.`],
   inspectorSource: `
 import { readFileSync } from 'node:fs';
@@ -139,10 +152,75 @@ async function inspect(label, doc, z) {
   return native;
 }
 
+function captureLocalStep() {
+  const blobs = new Map(), create = URL.createObjectURL, click = HTMLAnchorElement.prototype.click;
+  window.__annularStepBlobs = [];
+  URL.createObjectURL = function (blob) {
+    const url = create.call(URL, blob);
+    if (blob instanceof Blob && blob.type === 'model/step') blobs.set(url, blob);
+    return url;
+  };
+  HTMLAnchorElement.prototype.click = function () {
+    const blob = blobs.get(this.href);
+    if (!blob || !/\.step$/.test(this.download)) return click.call(this);
+    blobs.delete(this.href);
+    void blob.text().then(text => window.__annularStepBlobs.push(text));
+  };
+}
+
+async function exportStep(doc, z) {
+  f.phase = `Export the two current solids at Z${z}`;
+  await button(f.page.locator('.views'), 'Iso').click();
+  await f.page.getByTitle('Frame all (F)', { exact: true }).click();
+  const exportAction = button(f.page, 'Export STEP');
+  if (await exportAction.count()) await exportAction.click();
+  else {
+    await button(f.page, 'More tools').click();
+    await f.page.getByRole('menuitem', { name: 'Export STEP', exact: true }).click();
+  }
+  const panel = f.page.getByRole('region', { name: 'STEP export', exact: true });
+  assert.match(await panel.getByLabel('STEP included bodies', { exact: true }).innerText(), /2 output bodies: 2 root bodies/);
+  assert.match(await panel.getByLabel('STEP loss report', { exact: true }).innerText(), /Native feature history is not included/);
+  await f.snapshot(`05-step-export-z${z}`);
+  const count = await f.page.evaluate(() => window.__annularStepBlobs.length);
+  await button(panel, 'Export').click();
+  await f.page.waitForFunction(before => window.__annularStepBlobs.length === before + 1, count);
+  const bytes = await f.page.evaluate(() => window.__annularStepBlobs.at(-1));
+  const file = join(f.output, `annulus-and-post-${z}.step`);
+  await writeFile(file, bytes);
+  const oracle = spawnSync('python3', ['-I', join(import.meta.dirname, 'annular-face-step-oracle.py'), file, String(z)], { encoding: 'utf8' });
+  assert.equal(oracle.status, 0, oracle.stderr);
+  const read = JSON.parse(oracle.stdout);
+  assert.equal(read.status, 'PASS');
+  assert.deepEqual(read.negativeControls, ['wrong-active-unit', 'incorrect-end-station', 'inner-loop-as-outer', 'displaced-axial-seam']);
+  f.report.observations.push({ label: `independent STEP Z${z}`, ...read });
+  await f.same(doc);
+  return { file, read };
+}
+
+async function reopenStep({ file, read }, z) {
+  await f.newPage();
+  f.phase = `Open the actual STEP file at Z${z}`;
+  await f.openFile(file, 1);
+  const doc = await f.doc();
+  assert.equal(doc.nodes[0].kind, 'import');
+  assert.equal(doc.nodes[0].solids, 2);
+  assert.equal(doc.units, 'mm');
+  assert.equal(Object.keys(doc.outputs).length, 2);
+  const observed = (await f.bodies()).bodies.map(body => body.volume).sort((a, b) => a - b);
+  const expected = read.solids.map(body => body.volumeMM3).sort((a, b) => a - b);
+  assert.equal(observed.length, 2);
+  observed.forEach((volume, i) => near(volume, expected[i], 1e-5));
+  await f.waitToast(/2 solids, in millimetres/);
+  await f.page.getByTitle('Frame all (F)', { exact: true }).click();
+  await f.snapshot(`06-step-open-z${z}`);
+}
+
 await f.run(async () => {
   const newContext = f.browser.newContext.bind(f.browser);
   f.browser.newContext = async options => {
     const context = await newContext({ ...options, serviceWorkers: 'block' });
+    if (exchange) await context.addInitScript(captureLocalStep);
     const origin = new URL(f.server.resolvedUrls.local[0]).origin;
     await context.route('**/*', route => {
       const url = new URL(route.request().url());
@@ -206,6 +284,7 @@ await f.run(async () => {
   await f.same(source);
   await f.redo();
   await f.same(authored);
+  const stepBefore = exchange ? await exportStep(authored, originalZ) : undefined;
 
   f.phase = 'move the target start and retain the same cap through Save and Open';
   await f.openFeatureEditor(1, 'annular target start');
@@ -219,7 +298,18 @@ await f.run(async () => {
   await button(f.page.locator('.views'), 'Iso').click();
   await f.page.getByTitle('Frame all (F)', { exact: true }).click();
   await f.snapshot('03-associative-height');
+  const stepAfter = exchange ? await exportStep(moved, nextZ) : undefined;
   const saved = await f.save('post-to-annular-face');
   await f.freshOpen(saved.file, moved, '04-reopened-annular-post');
   assert.deepEqual(await inspect('reopened-native-annulus', moved, nextZ), after);
+  if (stepBefore && stepAfter) {
+    await f.openFeatureEditor(1, 'reopened annular target start');
+    await field(f.editor(), 'Start Z').fill(String(originalZ));
+    await button(f.editor(), 'Apply').click();
+    await f.same(authored);
+    await inspect('reopened-target-edited-back', authored, originalZ);
+    await f.snapshot('04b-reopened-target-edited-back');
+    await reopenStep(stepBefore, originalZ);
+    await reopenStep(stepAfter, nextZ);
+  }
 });
