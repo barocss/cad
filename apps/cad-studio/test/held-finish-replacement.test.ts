@@ -5,8 +5,8 @@ import { evaluatePart } from '@barocss/cad-model/engine/evaluate';
 import type { DisplayEdge } from '@barocss/cad-model/engine/mesh';
 import { toSig } from '@barocss/cad-model/engine/references';
 import { signaturesOf } from '@barocss/cad-model/engine/rematch';
-import { heldFilletPairProblems, heldFinishRadiusText, heldFinishCandidate, heldFinishProblem, heldFinishReplaceable,
- heldFinishReplacement, replaceHeldFilletPair, type HeldFinish } from '../src/state/heldFinishReplacement';
+import { heldFinishPairProblems, heldFinishRadiusText, heldFinishCandidate, heldFinishProblem, heldFinishReplaceable,
+ heldFinishReplacement, replaceHeldFinishPair, type HeldFinish } from '../src/state/heldFinishReplacement';
 const finish:Extract<HeldFinish,{kind:'fillet'}>={id:'repair',kind:'fillet',parent:{node:1,side:'solid'},edges:['missing'],radius:1,held:'missing edge',suppressed:true,radii:[{at:[0,0,0],radius:1,atEnd:true},{at:[10,0,0],radius:3,atEnd:true}]};
 const edge:DisplayEdge={index:0,faces:[0,1],a:[0,20,10],b:[30,20,10],straight:true,axis:'x',names:['new-edge'],nativeLine:true};
 const sig={k:'curve' as const,p:[15,20,10] as [number,number,number],s:30};
@@ -75,7 +75,7 @@ test('paired Constant Fillet replaces only the held slot and its signature', () 
  }
 });
 
-test('both unresolved Fillet slots accept crossed aliases in one replacement and refuse duplicates', () => {
+for (const kind of ['fillet', 'chamfer'] as const) test(`both unresolved ${kind} slots accept crossed aliases in one replacement and refuse duplicates`, () => {
  const stock = rectanglePart(30, 20, 10);
  const evaluated = evaluatePart(stock, 1);
  assert.ok(evaluated.ok);
@@ -84,19 +84,28 @@ test('both unresolved Fillet slots accept crossed aliases in one replacement and
  const [a, b] = [first.names[0], second.names[0]];
  const signatures = signaturesOf(body).edges;
  const liveA = toSig(signatures.get(a)!), liveB = toSig(signatures.get(b)!);
- const node = { ...finish, radii: undefined, edges: [a, b], sigs: { [a]: { ...liveA, s: 99 }, [b]: { ...liveB, s: 98 } } };
- const source = withNode(stock, node);
+ const stale = { edges: [a, b], sigs: { [a]: { ...liveA, s: 99 }, [b]: { ...liveB, s: 98 } } };
+ const node: HeldFinish = kind === 'fillet' ? { ...finish, ...stale, radii: undefined }
+  : { id: finish.id, kind, parent: finish.parent, distance: { parameter: 'Bevel' },
+   held: finish.held, suppressed: finish.suppressed, ...stale };
+ const source = withNode({ ...stock, parameters: { ...stock.parameters, Bevel: 2 } }, node);
  const problems = [b, a].map((name, index) => ({ index, name, where: 'feature 2', node: 2, candidates: [] }));
- assert.deepEqual(heldFilletPairProblems(source, 2, problems)?.map(problem => problem.name), [a, b]);
- assert.equal(replaceHeldFilletPair(source, 2, problems, body, [first, first]), null);
- assert.equal(replaceHeldFilletPair(source, 2, problems.slice(0, 1), body, [first, second]), null);
- assert.equal(replaceHeldFilletPair(source, 2, problems, body, [first, undefined]), null);
- assert.equal(replaceHeldFilletPair(source, 2, problems, body, [first, { ...second }]), null);
- const result = replaceHeldFilletPair(source, 2, problems, body, [second, first]);
+ assert.deepEqual(heldFinishPairProblems(source, 2, problems)?.map(problem => problem.name), [a, b]);
+ if (kind === 'chamfer') {
+  assert.equal(heldFinishPairProblems({ ...source, parameters: {} }, 2, problems), undefined);
+  assert.equal(heldFinishProblem(source, 2, problems.slice(0, 1), body), undefined);
+ }
+ assert.equal(heldFinishPairProblems({ ...source, nodes: [...source.nodes, stock.nodes[0]] }, 2, problems), undefined);
+ assert.equal(replaceHeldFinishPair(source, 2, problems, body, [first, first]), null);
+ assert.equal(replaceHeldFinishPair(source, 2, problems.slice(0, 1), body, [first, second]), null);
+ assert.equal(replaceHeldFinishPair(source, 2, problems, body, [first, undefined]), null);
+ assert.equal(replaceHeldFinishPair(source, 2, problems, body, [first, { ...second }]), null);
+ const result = replaceHeldFinishPair(source, 2, problems, body, [second, first]);
  assert.ok(result);
  const changed = result.nodes[2];
- assert.equal(changed.kind, 'fillet');
- if (changed.kind !== 'fillet') return;
+ assert.equal(changed.kind, kind);
+ assert.ok(changed.kind === 'chamfer' || changed.kind === 'fillet');
+ if (changed.kind === 'chamfer') assert.deepEqual(changed.distance, { parameter: 'Bevel' });
  assert.deepEqual(changed.edges, [b, a]);
  assert.deepEqual(changed.sigs, { [a]: liveA, [b]: liveB });
  assert.equal(changed.held, undefined);

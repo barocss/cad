@@ -1,5 +1,5 @@
-import { heldFilletPairProblems, heldFinishProblem, heldFinishCandidate, heldFinishReplacement,
-  replaceHeldFilletPair, validFilletPairEdge, type ReplacementEndpoints } from './heldFinishReplacement';
+import { heldFinishPairProblems, heldFinishProblem, heldFinishCandidate, heldFinishReplacement,
+  replaceHeldFinishPair, validFinishPairEdge, type ReplacementEndpoints } from './heldFinishReplacement';
 import { useCallback, useLayoutEffect, useRef, useState } from 'react';
 import type { DisplayEdge } from '@barocss/cad-model/engine/mesh';
 import type { ModelNode, StudioDoc } from '@barocss/cad-model/engine/doc';
@@ -15,14 +15,14 @@ type Slot = 0 | 1;
 type PairDraft = { slot: Slot | null; edges: [DisplayEdge | undefined, DisplayEdge | undefined]; ownsSource(): boolean };
 type Draft = { doc: StudioDoc; index: number; name: string | null; endpoints?: ReplacementEndpoints;
   edge?: DisplayEdge; pending?: boolean; pair?: PairDraft };
-export type HeldFilletPairReview = { references: [string, string]; picks: [string | undefined, string | undefined]; slot: Slot | null };
+export type HeldFinishPairReview = { references: [string, string]; picks: [string | undefined, string | undefined]; slot: Slot | null };
 export interface HeldFinishEdgeEditor {
   start(): void;
   cancel(): void;
   apply(): void;
   draft: Pick<Draft, 'name' | 'endpoints' | 'pending'> | null;
   paired?: boolean;
-  pair?: HeldFilletPairReview;
+  pair?: HeldFinishPairReview;
   selectSlot?(slot: Slot): void;
 }
 interface Options {
@@ -46,7 +46,7 @@ export function useHeldFinishEdge({ doc, index, problems, bodies, enabled, ownsS
   const strictSource = finish && (finish.edges.length > 1 || (finish.kind === 'fillet' && finish.radii));
   const body = strictSource && sources.length !== 1 ? undefined : sources[0];
   const problem = enabled && body && index !== null ? heldFinishProblem(doc, index, problems, body) : undefined;
-  const pair = enabled && body && index !== null ? heldFilletPairProblems(doc, index, problems) : undefined;
+  const pair = enabled && body && index !== null ? heldFinishPairProblems(doc, index, problems) : undefined;
   const firstProblem = pair?.[0], secondProblem = pair?.[1];
   const heldName = finish?.edges.length === 2 ? problem?.name : undefined;
   const [draft, setDraft] = useState<Draft | null>(null);
@@ -84,8 +84,8 @@ export function useHeldFinishEdge({ doc, index, problems, bodies, enabled, ownsS
     if (current.pair) {
       const { slot, edges } = current.pair;
       if (slot === null) return true;
-      if (!validFilletPairEdge(edge, body.mesh.edges) || edges[slot === 0 ? 1 : 0] === edge) {
-        notice({ title: 'Edge not selected', hint: 'Select a different unmerged straight edge on the body of this feature.', detail: '' });
+      if (!validFinishPairEdge(edge, body.mesh.edges) || edges[slot === 0 ? 1 : 0] === edge) {
+        reportFailure({ title: 'Edge not selected', hint: 'Select a different unmerged straight edge on the body of this feature.', detail: '' });
         return true;
       }
       const picks: PairDraft['edges'] = slot === 0 ? [edge, edges[1]] : [edges[0], edge];
@@ -123,7 +123,7 @@ export function useHeldFinishEdge({ doc, index, problems, bodies, enabled, ownsS
     if (!resolved) return;
     const stillOwnsSource = current.pair?.ownsSource ?? ownsSource;
     if (!stillOwnsSource()) return;
-    const next = current.pair ? replaceHeldFilletPair(doc, current.index, resolved, body, current.pair.edges)
+    const next = current.pair ? replaceHeldFinishPair(doc, current.index, resolved, body, current.pair.edges)
       : replaceSingle(current, body, finish);
     if (!next) return;
     const request = {};
@@ -146,7 +146,7 @@ export function useHeldFinishEdge({ doc, index, problems, bodies, enabled, ownsS
   const picks: readonly (DisplayEdge | undefined)[] = current?.pair?.edges ?? (heldName && current?.edge ? [current.edge] : []);
   const highlighted = picks.flatMap(edge => edge ? [edge] : []);
   const previewEdges = body && highlighted.length ? { mesh: body.mesh, edges: highlighted } : undefined;
-  const pairReview: HeldFilletPairReview | undefined = pair && current?.pair && {
+  const pairReview: HeldFinishPairReview | undefined = pair && current?.pair && {
     references: [pair[0].name, pair[1].name], picks: [current.pair.edges[0]?.names[0], current.pair.edges[1]?.names[0]], slot: current.pair.slot,
   };
   return { available: enabled && !!(problem || pair) && !!body, paired: !!pair, current, start, cancel, pick, apply,

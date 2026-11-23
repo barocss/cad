@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1768: [Replace both held edges of one saved Chamfer](notes/dual-held-chamfer-history-replacement-2026-11-23/README.md), #20. Verify explicit two-slot Apply, obsolete duplicate notice retirement and both native bevels after fresh Open.
 - D1767: [Bind native joints on an offset rectangular duct Intersect](notes/exact-offset-rectangular-duct-intersect-2026-11-23/README.md), #10. Verify both offset apertures, signed cap angles and edited fresh Open.
 - D1766: [Verify adjacent right and oblique Sketch Fillets](notes/adjacent-right-oblique-sketch-fillets-2026-11-23/README.md), #21. Match both selection methods, shared-edge refusal, rebuilt native geometry, fresh Open and explicit Agent approval.
 - D1765: [Bind the native joints on a centered rectangular duct Intersect](notes/exact-centered-rectangular-duct-intersect-2026-11-23/README.md), #10. Measure all 24 native edges and verify both rectangular apertures through fresh Open and explicit Agent approval.

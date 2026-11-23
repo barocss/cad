@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { createFlow } from './flow-helper.mjs';
 
+const chamfer = process.argv.includes('--chamfer');
+const finishName = chamfer ? 'Chamfer' : 'Fillet';
 const manualBase = process.argv.includes('--manual-base');
 const manual = process.argv.includes('--manual');
 const dualBase = process.argv.includes('--dual-base');
@@ -32,17 +34,18 @@ const model = (points, edges) => ({
   format: 'barocss-cad-model', schema: 3, units: 'mm', parameters: {},
   nodes: [{ id: 'n0', kind: 'sketch', profile: 'polygon', points },
     { id: 'n1', kind: 'extrude', sketch: 0, height },
-    { id: 'n2', kind: 'fillet', parent: ref(1), edges, radius: 2 }],
+    chamfer ? { id: 'n2', kind: 'chamfer', parent: ref(1), edges, distance: 2 }
+      : { id: 'n2', kind: 'fillet', parent: ref(1), edges, radius: 2 }],
   outputs: { b2: ref(2) }, nextId: 3,
 });
 const f = await createFlow({
-  name: 'two-edge-concave-reference', output: process.argv[2],
-  envFrozen: 'TWO_EDGE_CONCAVE_REFERENCE_SOURCE_FROZEN', initialFiles: pins, requiredFrozen: pins,
+  name: chamfer ? 'two-edge-chamfer-reference' : 'two-edge-concave-reference', output: process.argv[2],
+  envFrozen: chamfer ? 'D1768_SOURCE_FROZEN' : 'TWO_EDGE_CONCAVE_REFERENCE_SOURCE_FROZEN', initialFiles: pins, requiredFrozen: pins,
   qualification: nativeRefusal ? 'Keep both held references after a native Fillet refusal and recover in the same review.'
-    : dual ? 'Recover both changed edges of a saved two-edge constant Fillet together.'
+    : dual ? `Recover both changed edges of a saved two-edge ${finishName} together.`
     : 'Recover one changed edge of a two-edge constant Fillet, with the other native line unchanged.',
   limits: ['Source model opened through the supported file UI. Creation by viewport is NOT_RUN.',
-    'Native original and explicit target must pass before browser claims. Varying or shaped Fillets and Chamfers are excluded.',
+    'Native original and explicit target must pass before browser claims. Terminal straight-edge pairs at one constant size.',
     'The inner corner is an explicit replacement target.'],
   inspectorSource: `
 import {readFileSync} from 'node:fs';
@@ -68,6 +71,18 @@ const xyz = (a, b) => Math.hypot(...a.map((v, i) => v - b[i])) < 1e-8;
 function geometry(rows, volume, corners) {
   assert.equal(rows.length, 1); const n = rows[0];
   assert.ok(n.valid); assert.deepEqual(n.kinds, ['solid']); near(n.volume, volume);
+  if (chamfer) {
+    for (const { contacts } of corners) {
+      const p = contacts.map(([x, y]) => [x, y, 0]);
+      const planar = n.faces.filter(face => face.kind === 'plane' && Math.abs(face.n[2]) < 1e-8
+        && Math.abs(Math.abs(face.n[0]) - Math.SQRT1_2) < 1e-8 && Math.abs(Math.abs(face.n[1]) - Math.SQRT1_2) < 1e-8
+        && p.every(a => Math.abs(a.reduce((sum, value, axis) => sum + (value - face.o[axis]) * face.n[axis], 0)) < 1e-8));
+      assert.equal(planar.length, 1, JSON.stringify(contacts));
+      for (const [x, y] of contacts) for (const z of [0, height])
+        assert.ok(n.vertices.some(v => xyz(v, [x, y, z])), `missing bevel contact ${[x, y, z]}`);
+    }
+    return;
+  }
   const cylinders = n.faces.filter(face => face.kind === 'cylinder');
   assert.equal(cylinders.length, corners.length);
   for (const { centre, contacts } of corners) {
@@ -131,9 +146,10 @@ await f.run(async () => {
     old: model(oldPoints, [oldEdge, retained]), target: model(newPoints, [desired, retained]),
     single: model(oldPoints, [oldEdge]), reject: nativeRefusal ? model(newPoints, [desired, frontTop]) : undefined });
   const oldVolume = (350 - 20 * oldBottom) * height;
-  geometry(prep.old.native, oldVolume - 2 * height * (4 - Math.PI), [sourceConvex, oldTop]);
+  const removedVolume = height * (chamfer ? 2 : 4 - Math.PI);
+  geometry(prep.old.native, oldVolume - 2 * removedVolume, [sourceConvex, oldTop]);
   geometry(prep.target.native, targetVolume, [convex, concave]);
-  geometry(prep.single.native, oldVolume - height * (4 - Math.PI), [oldTop]);
+  geometry(prep.single.native, oldVolume - removedVolume, [oldTop]);
   if (nativeRefusal) {
     assert.equal(prep.refusal.ok, false);
     assert.match(prep.refusal.error.detail, /RADIUS_EXCEEDS_FACE.*n1\.side0\|n1\.top.*walls of 1 and 5 mm/);
@@ -160,7 +176,7 @@ await f.run(async () => {
   f.report.observations.push({ candidates: rows, held: before.doc.nodes[2].held, rematched: before.doc.nodes[2].rematched ?? null, historicalSignatures: before.doc.nodes[2].sigs });
   await f.snapshot('03-all-reference-candidates');
   if (dualBase) {
-    await f.openFeatureEditor(2, 'two unresolved Fillet edges');
+    await f.openFeatureEditor(2, `two unresolved ${finishName} edges`);
     await f.editor().scrollIntoViewIfNeeded();
     assert.equal(await button('Replace edge', f.editor()).count(), 0);
     assert.equal(await button('Replace edges', f.editor()).count(), 0);
@@ -174,10 +190,11 @@ await f.run(async () => {
     const replace = button('Replace edges', editor);
     const apply = button('Apply edge replacements', editor);
     const cancel = button('Cancel edge replacement', editor);
-    const stage = editor.getByRole('group', { name: 'Fillet edge replacements', exact: true });
+    const duplicateNotice = f.page.getByText('Edge not selected', { exact: true });
+    const stage = editor.getByRole('group', { name: `${finishName} edge replacements`, exact: true });
     const inside = [5, 5, height / 2], outside = [20, 0, height / 2];
     await direction('Back right');
-    await f.openFeatureEditor(2, 'two unresolved Fillet edges');
+    await f.openFeatureEditor(2, `two unresolved ${finishName} edges`);
     await replace.click();
     await pick(inside); await stage.getByText(desired, { exact: true }).waitFor();
     assert.ok(await apply.isDisabled());
@@ -188,9 +205,15 @@ await f.run(async () => {
     await stage.getByText(desired, { exact: true }).waitFor();
     await f.same(before.doc);
     await cancel.click(); await f.same(before.doc);
+    if (chamfer) await duplicateNotice.waitFor({ state: 'hidden' });
     assert.deepEqual((await f.snapshot('04-dual-cancel-keeps-both-held')).history, before.history);
     await replace.click();
     await pick(inside); await stage.getByText(desired, { exact: true }).waitFor();
+    if (chamfer) {
+      await pick(inside);
+      await duplicateNotice.waitFor();
+      assert.ok(await apply.isDisabled());
+    }
     await direction('Front right');
     const failure = f.page.getByText('Edge replacement not applied', { exact: true });
     if (nativeRefusal) {
@@ -209,6 +232,7 @@ await f.run(async () => {
       await button('Pick second edge', stage).click();
     }
     await pick(outside);
+    if (chamfer) await duplicateNotice.waitFor({ state: 'hidden' });
     await f.page.waitForFunction(() => document.querySelector('button[aria-label="Apply edge replacements"]')?.disabled === false);
     const preview = await f.snapshot('05-two-explicit-uncommitted-picks');
     assert.deepEqual(preview.doc, before.doc);
@@ -227,7 +251,7 @@ await f.run(async () => {
     assert.equal(await refs().getByText('Choose a reference · Feature held', { exact: true }).count(), 2);
     assert.deepEqual((await f.snapshot('08-undo-restores-two-problems')).history, before.history);
     if (nativeRefusal && !expectStaleNotice) {
-      await direction('Back right'); await f.openFeatureEditor(2, 'two unresolved Fillet edges'); await replace.click();
+      await direction('Back right'); await f.openFeatureEditor(2, `two unresolved ${finishName} edges`); await replace.click();
       await pick(inside); await stage.getByText(desired, { exact: true }).waitFor();
       await direction('Front right'); await pick([10, 0, height]); await stage.getByText(frontTop, { exact: true }).waitFor();
       await apply.click(); await failure.waitFor(); await cancel.click(); await failure.waitFor({ state: 'hidden' });

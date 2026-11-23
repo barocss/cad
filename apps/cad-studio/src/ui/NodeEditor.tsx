@@ -348,7 +348,7 @@ export function NodeEditor({ onFilletStations, filletEndpoints, nodes, index, on
       </> : <button type="button" className="ghost" disabled={ordinaryLocked || changed || hasInvalidNumber || Object.keys(typed).length > 0 || !sameDraftScope}
         onClick={() => { retireEvaluation(); draftFaceReplacement.start(); }}>Replace face</button>)}
       {edgeReplacement && (edgeReplacement.draft ? <>
-        {edgeReplacement.pair ? <div role="group" aria-label="Fillet edge replacements">
+        {edgeReplacement.pair ? <div role="group" aria-label={node?.kind === 'chamfer' ? 'Chamfer edge replacements' : 'Fillet edge replacements'}>
           {([0, 1] as const).map(slot => <div className="row-actions" key={slot}>
             <button className="ghost" type="button" aria-pressed={edgeReplacement.pair?.slot === slot}
               disabled={edgeReplacement.draft?.pending} onClick={() => edgeReplacement.selectSlot?.(slot)}>
