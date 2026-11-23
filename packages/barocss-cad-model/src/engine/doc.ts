@@ -727,20 +727,38 @@ function deleteFaceRecipeProblem(node: Record<string, unknown>, nodes: readonly 
   return null;
 }
 
-/** Authored bounds for the original outlet recipe. The kernel verifies the native geometry. */
-export function isPairedElbowOutletOffsetSource(nodes: readonly unknown[], index: number, face: string): boolean {
+function pairedElbowOffsetPath(nodes: readonly unknown[], index: number, face: string, end: 'start' | 'end') {
   const sweep = nodes[index];
   if (!textRecord(sweep) || sweep.kind !== 'sweep-curve' || sweep.mode !== 'exact' || sweep.suppressed || sweep.held !== undefined
-    || typeof sweep.id !== 'string' || face !== `${sweep.id}.end` || !textRecord(sweep.path)
+    || typeof sweep.id !== 'string' || face !== `${sweep.id}.${end}` || !textRecord(sweep.path)
     || sweep.path.degree !== 2 || !Array.isArray(sweep.path.controlPoints)
-    || !Number.isSafeInteger(sweep.sketch) || Number(sweep.sketch) < 0 || Number(sweep.sketch) >= index) return false;
-  const { controlPoints, weights } = sweep.path;
+    || !Number.isSafeInteger(sweep.sketch) || Number(sweep.sketch) < 0 || Number(sweep.sketch) >= index) return;
+  const sketch = nodes[Number(sweep.sketch)];
+  if (!textRecord(sketch) || sketch.kind !== 'sketch' || !Array.isArray(sketch.holes) || sketch.holes.length !== 2) return;
+  return { controlPoints: sweep.path.controlPoints, weights: sweep.path.weights, knots: sweep.path.knots };
+}
+
+/** Authored bounds for the original outlet recipe. The kernel verifies the native geometry. */
+export function isPairedElbowOutletOffsetSource(nodes: readonly unknown[], index: number, face: string): boolean {
+  const path = pairedElbowOffsetPath(nodes, index, face, 'end');
+  if (!path) return false;
+  const { controlPoints, weights } = path;
   const arcLine = controlPoints.length === 5 && Array.isArray(weights) && weights.length === 5
     && typeof weights[0] === 'number' && Number.isFinite(weights[0]) && weights[0] === weights[2] && weights[2] === weights[3] && weights[3] === weights[4]
     && typeof weights[1] === 'number' && weights[1] > 0 && weights[1] < weights[0];
-  if (controlPoints.length !== 7 && !arcLine) return false;
-  const sketch = nodes[Number(sweep.sketch)];
-  return textRecord(sketch) && sketch.kind === 'sketch' && Array.isArray(sketch.holes) && sketch.holes.length === 2;
+  return controlPoints.length === 7 || arcLine;
+}
+
+/** The inlet recipe requires the paired line–arc–line path with both straight spans. */
+export function isPairedElbowInletOffsetSource(nodes: readonly unknown[], index: number, face: string): boolean {
+  const path = pairedElbowOffsetPath(nodes, index, face, 'start');
+  if (!path || path.controlPoints.length !== 7 || !Array.isArray(path.weights) || path.weights.length !== 7
+    || !Array.isArray(path.knots) || path.knots.length !== 10 || !path.knots.every(Number.isFinite)) return false;
+  const [weight, , , arc] = path.weights, knots = path.knots;
+  return typeof weight === 'number' && Number.isFinite(weight) && typeof arc === 'number' && arc > 0 && arc < weight
+    && path.weights.every((value, index) => index === 3 || value === weight)
+    && knots[0] === knots[1] && knots[1] === knots[2] && knots[3] === knots[4] && knots[5] === knots[6]
+    && knots[7] === knots[8] && knots[8] === knots[9] && knots[2] < knots[3] && knots[4] < knots[5] && knots[6] < knots[7];
 }
 
 /** Check raw face-edit recipes in the root model and its placed or pending part definitions. */
@@ -792,8 +810,9 @@ export function directFaceDocumentProblem(input: unknown): string | null {
       const parent = value.nodes[parentIndex];
       if (!textRecord(parent)) return 'Offset face: a supported solid parent is required.';
       if (parent.kind === 'sweep-curve') {
-        if (signature.k !== 'plane' || node.target !== undefined || !isPairedElbowOutletOffsetSource(value.nodes, parentIndex, face))
-          return 'Offset face: the paired Exact Sweep needs its original straight outlet and a signed distance.';
+        if (signature.k !== 'plane' || node.target !== undefined || !(isPairedElbowOutletOffsetSource(value.nodes, parentIndex, face)
+          || isPairedElbowInletOffsetSource(value.nodes, parentIndex, face)))
+          return 'Offset face: the paired Exact Sweep needs a supported original straight end and a signed distance.';
         continue;
       }
       if (isExactCylinderThicken(parent)) {

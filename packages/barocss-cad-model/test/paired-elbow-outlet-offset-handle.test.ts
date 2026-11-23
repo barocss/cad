@@ -6,7 +6,7 @@ import { editSavedOffsetFaceCommand } from '../src/app/offsetFaceEdit';
 import { savedPairedElbowOutletOffsetHandle } from '../src/app/pairedElbowOutletOffsetHandle';
 import { offsetFaceCommand } from '../src/app/profileCommands';
 import { encodeStudioFile, readStudioFile } from '../src/engine/container';
-import { emptyDoc, prefixDoc, withNode, type StudioDoc } from '../src/engine/doc';
+import { emptyDoc, isPairedElbowInletOffsetSource, prefixDoc, withNode, type StudioDoc } from '../src/engine/doc';
 import { evaluateDoc, partBreps } from '../src/engine/evaluate';
 
 const path: Pick<Curve, 'degree' | 'knots' | 'controlPoints' | 'weights'> = {
@@ -27,11 +27,11 @@ function fixture(rail = path): StudioDoc {
       holes: [['e5', 'e6', 'e7', 'e8'], ['e9', 'e10', 'e11', 'e12']] } }),
   { kind: 'sweep-curve', sketch: 0, name: 'Paired duct rail', path: rail, mode: 'exact' });
 }
-function context(doc: StudioDoc): Ctx {
+function context(doc: StudioDoc, name = 'n1.end'): Ctx {
   const result = evaluateDoc(doc, 1);
   assert.ok(result.ok, result.ok ? '' : result.error.detail);
   assert.equal(result.bodies.length, 1);
-  const face = result.bodies[0].mesh.faces.findIndex(candidate => candidate.name === 'n1.end');
+  const face = result.bodies[0].mesh.faces.findIndex(candidate => candidate.name === name);
   assert.ok(face >= 0);
   return { doc, bodies: result.bodies, selection: { faces: [{ body: 0, face }], edges: [], bodies: [] } };
 }
@@ -137,4 +137,32 @@ test('arc-first outlet Offset reopens with its original signed frame and native 
     near(brepMassProperties(brep, 1).volume - sourceVolume, 32 * distance);
     assert.ok(checkBrep(brep, { strict: true }).valid);
   }
+});
+
+test('the straight inlet reopens with its original outward frame and an editable signed handle', async () => {
+  const source = fixture(), before = structuredClone(source), original = context(source, 'n1.start');
+  assert.ok(isPairedElbowInletOffsetSource(source.nodes, 1, 'n1.start'));
+  assert.equal(isPairedElbowInletOffsetSource(source.nodes, 1, 'n1.end'), false);
+  const volume = brepMassProperties(partBreps(source)[0].brep, 1).volume;
+  for (const distance of [4, -4]) {
+    const saved = offsetFaceCommand.build!(original, { d: distance });
+    const opened = await readStudioFile(encodeStudioFile(saved));
+    assert.ok('doc' in opened);
+    assert.deepEqual(opened.doc, JSON.parse(JSON.stringify(saved)));
+    const [handle] = savedPairedElbowOutletOffsetHandle(opened.doc, 2, context(opened.doc, 'n1.start'), { d: distance }, () => original);
+    assert.ok(handle);
+    handle.at.forEach((value, axis) => near(value, [-10 - distance, 0, 0][axis]));
+    handle.dir.forEach((value, axis) => near(value, [-1, 0, 0][axis]));
+    const [{ brep }] = partBreps(opened.doc);
+    assert.ok(checkBrep(brep, { strict: true }).valid);
+    near(brepMassProperties(brep, 1).volume - volume, 32 * distance);
+  }
+  assert.deepEqual(source, before);
+});
+
+test('the arc-first start remains outside the straight inlet recipe', () => {
+  const source = fixture(arcLinePath), before = structuredClone(source);
+  assert.equal(isPairedElbowInletOffsetSource(source.nodes, 1, 'n1.start'), false);
+  assert.throws(() => offsetFaceCommand.build!(context(source, 'n1.start'), { d: 4 }), /\[VALUE\] Offset face: only native cardinal prism or cylinder caps are supported/);
+  assert.deepEqual(source, before);
 });

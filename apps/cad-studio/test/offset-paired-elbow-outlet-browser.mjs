@@ -7,6 +7,8 @@ import { checkSavedOutletDrag } from './paired-elbow-outlet-handle-browser-steps
 import { checkChangedOutletRail, checkReopenedOutlet, reviewPendingOutlet } from './paired-elbow-outlet-review-browser-steps.mjs';
 
 const arcFirst = process.argv.includes('--arc-first');
+const inlet = process.argv.includes('--inlet');
+assert.ok(!arcFirst || !inlet);
 const baseline = process.argv.includes('--expect-refused');
 const reviewUnavailable = process.argv.includes('--expect-review-unavailable');
 const reviewOutlet = process.argv.includes('--review-outlet');
@@ -21,10 +23,12 @@ const path = arcFirst ? {
   controlPoints: [[-10, 0, 0], [-5, 0, 0], [0, 0, 0], [20, 0, 0], [20, 20, 0], [20, 27, 0], [20, 34, 0]],
   weights: [1, 1, 1, Math.SQRT1_2, 1, 1, 1],
 };
-const axis = arcFirst ? 0 : 1, sign = arcFirst ? -1 : 1;
-const tailLength = arcFirst ? 10 : 14;
-const outlet = path.controlPoints.at(-1);
-const straightPiece = arcFirst ? 'line' : 'tail';
+const axis = arcFirst || inlet ? 0 : 1, sign = axis === 0 ? -1 : 1;
+const spanLength = arcFirst || inlet ? 10 : 14;
+const terminal = inlet ? path.controlPoints[0] : path.controlPoints.at(-1);
+const cap = inlet ? 'n1.start' : 'n1.end';
+const fixedCap = inlet ? 'n1.end' : 'n1.start';
+const straightPiece = arcFirst || inlet ? 'line' : 'tail';
 const junctionPlanes = arcFirst ? [[0, 0]] : [[0, 0], [1, 20]];
 const hole = center => [[-1, center - 1], [-1, center + 1], [1, center + 1], [1, center - 1]]
   .map(start => ({ kind: 'line', start }));
@@ -60,7 +64,7 @@ const pins = [
   'packages/barocss-cad-model/src/chat/part/views.ts',
   'apps/cad-studio/test/paired-elbow-outlet-review-browser-steps.mjs',
   'apps/cad-studio/test/paired-elbow-outlet-handle-browser-steps.mjs',
-  ...(historyHandle || arcFirst ? ['packages/barocss-cad-model/src/app/pairedElbowOutletOffsetHandle.ts'] : []),
+  ...(historyHandle || arcFirst || inlet ? ['packages/barocss-cad-model/src/app/pairedElbowOutletOffsetHandle.ts'] : []),
   ...(reviewOutlet ? [
     'apps/cad-studio/test/duct-proposal-review-browser-steps.mjs',
     'packages/barocss-cad-model/src/chat/pairedElbowOutletOffsetEvidence.ts',
@@ -69,9 +73,9 @@ const pins = [
   ] : []),
 ];
 const f = await createFlow({
-  name: 'offset-paired-elbow-outlet', output: process.argv[2], envFrozen: arcFirst ? (reviewOutlet || reviewUnavailable ? 'D1806_SOURCE_FROZEN' : 'D1805_SOURCE_FROZEN') : 'D1788_SOURCE_FROZEN',
+  name: 'offset-paired-elbow-outlet', output: process.argv[2], envFrozen: inlet ? 'D1808_SOURCE_FROZEN' : arcFirst ? (reviewOutlet || reviewUnavailable ? 'D1806_SOURCE_FROZEN' : 'D1805_SOURCE_FROZEN') : 'D1788_SOURCE_FROZEN',
   initialFiles: pins, requiredFrozen: pins,
-  qualification: 'Move the original straight outlet cap of a paired rectangular Exact Sweep.',
+  qualification: `Move the original straight ${inlet ? 'inlet' : 'outlet'} cap of a paired rectangular Exact Sweep.`,
   limits: [arcFirst ? 'Two 2 × 2 mm through passages on an R20 bend and a 10 mm straight tail. Desktop Studio WebGPU.'
     : 'Two 2 × 2 mm through passages on a 10 mm straight lead, R20 bend, and a 14 mm straight tail. Desktop Studio WebGPU.'],
   inspectorSource: `
@@ -103,7 +107,7 @@ const incidence = { faces: brep.faces.map(({ id, name, loops, sense }) => [id, n
   edges: brep.edges.map(({ id, name, vertices }) => [id, name, vertices]),
   coedges: brep.coedges.map(({ id, edge, loop, sense, twin }) => [id, edge, loop, sense, twin]),
   loops: brep.loops, shells: brep.shells, bodies: brep.bodies };
-const fixedSurfaces = brep.faces.filter(face => face.name !== 'n1.end' && !face.name.startsWith('n1.${straightPiece}.'));
+const fixedSurfaces = brep.faces.filter(face => face.name !== '${cap}' && !face.name.startsWith('n1.${straightPiece}.'));
 console.log(JSON.stringify({ check: checkBrep(brep, { strict: true }), mass: brepMassProperties(brep, 1),
   mesh: evaluated.ok && evaluated.bodies[0].mesh.faces.map(({ name, index }) => [name, index]),
   digest: digestOf(brep), ends, joins, incidence, fixedSurfaces, vertices: brep.vertices }));
@@ -112,7 +116,6 @@ console.log(JSON.stringify({ check: checkBrep(brep, { strict: true }), mass: bre
 const button = (name, scope = f.page) => scope.getByRole('button', { name, exact: true });
 const hud = name => f.page.getByRole('dialog', { name, exact: true });
 const phase = (panel, value) => panel.locator('.status').filter({ hasText: new RegExp('^' + value + '$') }).waitFor();
-const cap = 'n1.end';
 const distanceField = panel => panel.getByLabel('Offset', { exact: true });
 const closeTo = (actual, expected) => assert.ok(Math.abs(actual - expected) <= 1e-7, JSON.stringify({ actual, expected }));
 const initialVolume = 32 * ((arcFirst ? 10 : 24) + 10 * Math.PI);
@@ -132,10 +135,10 @@ async function verify(label, doc, distance, original) {
   assert.equal(result.joins.length, 12 * junctionPlanes.length);
   assert.ok(result.joins.every(join => join.continuity.status === 'measured'
     && Math.abs(join.continuity.maximumAngleDegrees) < 1e-6 && join.charts.every(Boolean)));
-  assert.deepEqual(result.ends.find(end => end.name === 'n1.start'), original.ends.find(end => end.name === 'n1.start'));
+  assert.deepEqual(result.ends.find(end => end.name === fixedCap), original.ends.find(end => end.name === fixedCap));
   const oldCap = original.ends.find(end => end.name === cap), movedCap = result.ends.find(end => end.name === cap);
   assert.equal(movedCap.plane.kind, 'plane');
-  closeTo(movedCap.plane.o[axis], outlet[axis] + sign * distance);
+  closeTo(movedCap.plane.o[axis], terminal[axis] + sign * distance);
   assert.deepEqual(movedCap.plane.n, oldCap.plane.n);
   assert.deepEqual(movedCap.loops.map(loop => loop.kind).sort(), ['inner', 'inner', 'outer']);
   for (const [index, loop] of movedCap.loops.entries()) {
@@ -151,19 +154,19 @@ async function verify(label, doc, distance, original) {
   for (const [index, vertex] of result.vertices.entries()) {
     const prior = original.vertices[index];
     assert.equal(vertex.id, prior.id);
-    const move = Math.abs(prior.point[axis] - outlet[axis]) < 1e-7;
+    const move = Math.abs(prior.point[axis] - terminal[axis]) < 1e-7;
     shiftedOutlet(prior.point, move ? distance : 0).forEach((value, coordinate) => closeTo(vertex.point[coordinate], value));
   }
   const expectedVolume = initialVolume + 32 * distance;
   const expectedCentroid = original.mass.centroid.map((value, axis) =>
-    (value * initialVolume + shiftedOutlet(outlet, distance / 2)[axis] * 32 * distance) / expectedVolume);
+    (value * initialVolume + shiftedOutlet(terminal, distance / 2)[axis] * 32 * distance) / expectedVolume);
   const { bodies } = await f.bodies();
   assert.equal(bodies.length, 1);
   for (const props of [result.mass, bodies[0]]) {
     closeTo(props.volume, expectedVolume);
     props.centroid.forEach((value, axis) => closeTo(value, expectedCentroid[axis]));
   }
-  f.report.observations.push({ label, distance, ...(arcFirst ? { capX: movedCap.plane.o[0] } : { capY: movedCap.plane.o[1] }), volume: result.mass.volume,
+  f.report.observations.push({ label, distance, ...(axis === 0 ? { capX: movedCap.plane.o[0] } : { capY: movedCap.plane.o[1] }), volume: result.mass.volume,
     centroid: result.mass.centroid, digest: result.digest, chartGap: result.check.maximumPcurveGap });
   return result;
 }
@@ -175,15 +178,19 @@ async function approveWithAgent(savedSource, original, expected) {
   const reviewed = await withMcpSession(session, file, 'outlet-offset', async (call, request) => {
     const expectedRevision = await currentPartRevision(call), before = await readFile(file);
     const description = await call('describe', { command: 'offset-face' });
-    assert.match(description.selection, /original straight outlet/);
+    assert.match(description.selection, inlet ? /original straight inlet/ : /original straight outlet/);
     const op = { tool: 'features', args: { action: 'command', command: 'offset-face', faces: [cap], values: { d: -4 }, expectedRevision } };
-    const refusal = await call('features', { action: 'batch', dryRun: true, ops: [{ ...op, args: { ...op.args, values: { d: -tailLength } } }] }, true);
-    assert.match(JSON.stringify(refusal), /straight outlet|tail|collaps/i);
+    const refusal = await call('features', { action: 'batch', dryRun: true, ops: [{ ...op, args: { ...op.args, values: { d: -spanLength } } }] }, true);
+    assert.match(JSON.stringify(refusal), /straight (inlet|outlet)|span|tail|collaps/i);
     const dry = await call('features', { action: 'batch', dryRun: true, ops: [op] });
     assert.ok(dry.dryRun);
     assert.deepEqual(await readFile(file), before);
-    const staged = await call('proposals', { action: 'propose', title: 'Move the paired outlet inward by 4 mm', ops: [op] });
+    const staged = await call('proposals', { action: 'propose', title: `Move the paired ${inlet ? 'inlet' : 'outlet'} inward by 4 mm`, ops: [op] });
     assert.deepEqual([staged.proposal, staged.applied], ['P1', false]);
+    if (inlet) {
+      const { proposals: [pending] } = await call('proposals', { action: 'list' });
+      assert.equal(pending.modelReviewRevision, undefined);
+    }
     if (reviewUnavailable) {
       const { proposals: [pending] } = await call('proposals', { action: 'list' });
       assert.equal(pending.modelReviewRevision, undefined);
@@ -239,16 +246,16 @@ await f.run(async () => {
   const savedSource = baseline ? undefined : await f.save('paired-elbow-source');
   if (reviewUnavailable || reviewOutlet) return approveWithAgent(savedSource, original);
 
-  f.phase = 'Pick the original outlet cap in Studio';
+  f.phase = `Pick the original ${inlet ? 'inlet' : 'outlet'} cap in Studio`;
   await button('View cube directions', f.page.getByRole('group', { name: 'View cube', exact: true })).click();
-  await f.page.getByRole('menuitem', { name: arcFirst ? 'Left' : 'Back', exact: true }).click();
+  await f.page.getByRole('menuitem', { name: axis === 0 ? 'Left' : 'Back', exact: true }).click();
   if (await button('Ortho').getAttribute('aria-pressed') !== 'true') await button('Ortho').click();
   await f.page.getByTitle('Frame all (F)', { exact: true }).click();
   await f.page.waitForFunction(label => {
     const labels = [...document.querySelectorAll('.view-cube .vc-label')];
     return labels.length === 1 && labels[0].textContent === label;
-  }, arcFirst ? 'LEFT' : 'BACK');
-  const pixel = await f.page.evaluate(point => window.__studioScreenOf(point), [...outlet.slice(0, 2), retainedRail ? 4 : 0]);
+  }, axis === 0 ? 'LEFT' : 'BACK');
+  const pixel = await f.page.evaluate(point => window.__studioScreenOf(point), [...terminal.slice(0, 2), retainedRail ? 4 : 0]);
   assert.ok(pixel && await f.page.evaluate(point => document.elementFromPoint(...point)?.matches('canvas.vp-canvas'), pixel));
   await f.page.mouse.click(...pixel);
   const capIndex = original.mesh.find(([name]) => name === cap)?.[1];
@@ -256,7 +263,7 @@ await f.run(async () => {
   await f.page.waitForFunction(index => window.__studioSelection.selection.faces.length === 1
     && window.__studioSelection.selection.faces[0].face === index, capIndex);
 
-  f.phase = 'Open Offset face on the original outlet';
+  f.phase = `Open Offset face on the original ${inlet ? 'inlet' : 'outlet'}`;
   await f.page.evaluate(() => document.activeElement?.blur());
   await f.command('Offset face');
   const panel = hud('Offset face');
@@ -289,13 +296,13 @@ await f.run(async () => {
   assert.equal(await edit.getByLabel('Mode', { exact: true }).count(), 0);
   assert.equal(await distanceField(edit).inputValue(), '4');
   const undoLabel = await button('Undo').getAttribute('data-tip');
-  await distanceField(edit).fill(String(-tailLength));
+  await distanceField(edit).fill(String(-spanLength));
   await phase(edit, 'refused');
   assert.ok(await button('Apply', edit).isDisabled());
   const error = edit.locator('.hud-error');
   const details = error.locator('details:not([open]) > summary');
   if (await details.count()) await details.click();
-  assert.match(await error.innerText(), /straight outlet|tail|collaps/i);
+  assert.match(await error.innerText(), /straight (inlet|outlet)|span|tail|collaps/i);
   assert.equal(await button('Undo').getAttribute('data-tip'), undoLabel);
   await f.same(outward);
   await f.snapshot('03-collapse-refused');
@@ -314,12 +321,12 @@ await f.run(async () => {
   const saved = await f.save('paired-elbow-outlet-offset');
   const reopened = (await f.freshOpen(saved.file, inward, '05-fresh-open')).doc;
   assert.equal((await verify('reopened-native', reopened, -4, original)).digest, native.digest);
-  if (expectMissingHandle || historyHandle || arcFirst) {
+  if (expectMissingHandle || historyHandle || arcFirst || inlet) {
     await checkSavedOutletDrag(f, reopened, (label, doc, distance) => verify(label, doc, distance, original),
-      expectMissingHandle, distance => shiftedOutlet(outlet, distance));
-    if (!arcFirst) return;
+      expectMissingHandle, distance => shiftedOutlet(terminal, distance));
+    if (!arcFirst && !inlet) return;
   }
-  if (arcFirst) return approveWithAgent(savedSource, original, native);
+  if (arcFirst || inlet) return approveWithAgent(savedSource, original, native);
   await f.openFeatureEditor(2, 'reopened outlet offset');
   await button('Edit offset', f.editor()).click();
   const reopenedEdit = hud('Edit Offset face');

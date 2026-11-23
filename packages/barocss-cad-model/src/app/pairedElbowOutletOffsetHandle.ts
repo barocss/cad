@@ -1,6 +1,6 @@
 import { CadNumericPolicy, type Brep } from '@barocss/cad';
 import { exactPairedElbowOutletOffsetFrame } from '@barocss/cad/internal/exact-paired-elbow-offset';
-import { isPairedElbowOutletOffsetSource, type StudioDoc } from '../engine/doc';
+import { isPairedElbowInletOffsetSource, isPairedElbowOutletOffsetSource, type StudioDoc } from '../engine/doc';
 import { partBreps, type BodyResult } from '../engine/evaluate';
 import { bodyKeyFor, featureId } from '../engine/ids';
 import { toSig } from '../engine/references';
@@ -56,9 +56,11 @@ function certify(doc: StudioDoc, index: number, ctx: Ctx, source: () => Ctx): Re
   const nativeAfter = after[0].brep.faces.filter(native => native.name === faceName);
   if (nativeBefore.length !== 1 || nativeAfter.length !== 1 || nativeBefore[0].id !== face.id || nativeAfter[0].id !== face.id) return;
   const path = structuredClone(stock.path), distance = saved.distance!;
-  const last = path.controlPoints.length - 1;
-  path.controlPoints[last - 1] = add(path.controlPoints[last - 1], scale(frame.normal, distance / 2));
-  path.controlPoints[last] = add(path.controlPoints[last], scale(frame.normal, distance));
+  const inlet = isPairedElbowInletOffsetSource(doc.nodes, 1, faceName);
+  const end = inlet ? 0 : path.controlPoints.length - 1;
+  const adjacent = inlet ? 1 : end - 1;
+  path.controlPoints[adjacent] = add(path.controlPoints[adjacent], scale(frame.normal, distance / 2));
+  path.controlPoints[end] = add(path.controlPoints[end], scale(frame.normal, distance));
   const moved = exactPairedElbowOutletOffsetFrame(after[0].brep, faceName, {
     id: featureId(doc.nodes, 1), mode: 'exact', path: { kind: 'curve', id: 'path', ...path },
   });
@@ -82,7 +84,8 @@ export function savedPairedElbowOutletOffsetHandle(doc: StudioDoc, index: number
     || typeof saved.distance !== 'number' || !Number.isFinite(saved.distance) || saved.distance === 0
     || !Number.isFinite(distance) || Math.sign(distance) !== Math.sign(saved.distance)
     || stock.kind !== 'sweep-curve' || stock.sketch !== 0 || sketch.kind !== 'sketch' || sketch.suppressed || sketch.held !== undefined
-    || !isPairedElbowOutletOffsetSource(doc.nodes, 1, saved.faces[0])) return [];
+    || !(isPairedElbowOutletOffsetSource(doc.nodes, 1, saved.faces[0])
+      || isPairedElbowInletOffsetSource(doc.nodes, 1, saved.faces[0]))) return [];
   const ids = doc.nodes.map((_, slot) => featureId(doc.nodes, slot)), key = bodyKeyFor(doc.nodes, index, 'solid');
   if (new Set(ids).size !== 3 || doc.outputs[key]?.node !== index || doc.outputs[key]?.side !== 'solid') return [];
   const body = ctx.bodies[0];

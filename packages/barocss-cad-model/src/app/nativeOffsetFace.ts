@@ -7,7 +7,7 @@ import { exactPairedElbowOutletOffsetFrame } from '@barocss/cad/internal/exact-p
 import { prismWallOffsetFrame } from '@barocss/cad/internal/prism-wall-offset';
 import { fillFeaturePatternSpec } from '@barocss/cad/api';
 import { finiteBinary64Integer } from '../engine/binary64';
-import { exactSemicylinderCapSource, exactSemicylinderRadialBoreSource, exactSemicylinderSecondOffset, exactSemicylinderWallAfterReplacement, isExactCylinderFaceEditChain, isAnnularCapOffsetSource, isAnnularReplacementSource, isBoredPlateHole, isBoredPlateOffsetSource, isBoxCapOffsetSource, isCylinderReplacementSource, isPairedElbowOutletOffsetSource, isStraightHexagonalExtrusion, leafBodies, type SketchNode, type StudioDoc } from '../engine/doc';
+import { exactSemicylinderCapSource, exactSemicylinderRadialBoreSource, exactSemicylinderSecondOffset, exactSemicylinderWallAfterReplacement, isExactCylinderFaceEditChain, isAnnularCapOffsetSource, isAnnularReplacementSource, isBoredPlateHole, isBoredPlateOffsetSource, isBoxCapOffsetSource, isCylinderReplacementSource, isPairedElbowInletOffsetSource, isPairedElbowOutletOffsetSource, isStraightHexagonalExtrusion, leafBodies, type SketchNode, type StudioDoc } from '../engine/doc';
 import { evaluateDoc, massOfRef, partBreps, snapshotOf, type BodyResult } from '../engine/evaluate';
 import { bodyKeyFor, featureId, withIds } from '../engine/ids';
 import { refusal } from '../engine/refusal';
@@ -382,7 +382,8 @@ export function resolveDirectOffsetFace(ctx: Ctx): {
   if (ref.side !== 'solid') return undefined;
   const node = ctx.doc.nodes[ref.node];
   if (node?.kind === 'sweep-curve' && display.exact?.kind === 'plane'
-    && isPairedElbowOutletOffsetSource(ctx.doc.nodes, ref.node, display.name)) {
+    && (isPairedElbowOutletOffsetSource(ctx.doc.nodes, ref.node, display.name)
+      || isPairedElbowInletOffsetSource(ctx.doc.nodes, ref.node, display.name))) {
     currentOffsetBody(ctx.doc, body);
     const { brep } = nativeOffsetBody(ctx, body, display);
     const frame = exactPairedElbowOutletOffsetFrame(brep, display.name, {

@@ -1248,30 +1248,35 @@ export function exactSweep(input: ExactSweepInput, refuse: Refuse): SweepSolid {
 
 type PairedElbowOutletSource = Pick<ExactSweepInput, 'id' | 'mode' | 'path'>;
 const pairedOutletFailure: Refuse = (code, message) => { throw new BrepError(code === 'GEOMETRY' ? 'GEOMETRY' : 'INPUT', `Exact paired elbow outlet offset: ${message}`); };
+const pairedInletFailure: Refuse = (code, message) => { throw new BrepError(code === 'GEOMETRY' ? 'GEOMETRY' : 'INPUT', `Exact paired elbow inlet offset: ${message}`); };
 
-/** The two certified outlet recipes keep their original producer and native entity counts. */
-function pairedOutletRail(path: Curve) {
-  const elbow = tangentLineArcLine(path, pairedOutletFailure);
+/** Certified straight-cap recipes keep their original producer and native entity counts. */
+function pairedStraightCapRail(path: Curve, inlet: boolean) {
+  const refuse = inlet ? pairedInletFailure : pairedOutletFailure;
+  const elbow = tangentLineArcLine(path, refuse);
   if (elbow?.tailLength !== undefined) {
+    const counts = { faces: 38, loops: 42, coedges: 168, edges: 84, vertices: 48 };
+    if (inlet) return { length: elbow.length, normal: scale(elbow.tangent, -1), wallPiece: 'line' as const, counts };
     const inward = unit(sub(elbow.toCentre, scale(elbow.tangent, dot(elbow.toCentre, elbow.tangent))));
     const normal = add(scale(elbow.tangent, Math.cos(elbow.angle)), scale(inward, Math.sin(elbow.angle)));
-    return { length: elbow.tailLength, normal, wallPiece: 'tail' as const,
-      counts: { faces: 38, loops: 42, coedges: 168, edges: 84, vertices: 48 } };
+    return { length: elbow.tailLength, normal, wallPiece: 'tail' as const, counts };
   }
+  if (inlet) return;
   const reversed = tangentArcLine(path, pairedOutletFailure);
   if (!reversed) return;
   return { length: reversed.length, normal: scale(reversed.tangent, -1), wallPiece: 'line' as const,
     counts: { faces: 26, loops: 30, coedges: 120, edges: 60, vertices: 36 } };
 }
 
-/** The original terminal cap only. Native incidence supplies the handle; the authored path supplies its rail. */
+/** Original straight caps only. Native incidence supplies the handle; the authored path supplies its rail. */
 export function exactPairedElbowOutletOffsetFrame(brep: Brep, faceName: string,
   source: PairedElbowOutletSource): { anchor: Point; normal: Point } | undefined {
   try {
-    if (source.mode !== 'exact' || faceName !== `${source.id}.end` || brep.source?.family !== 'sweep-curve'
+    const inlet = faceName === `${source.id}.start`;
+    if (source.mode !== 'exact' || (!inlet && faceName !== `${source.id}.end`) || brep.source?.family !== 'sweep-curve'
       || brep.source.id !== source.id) return;
     validateCurve(source.path);
-    const rail = pairedOutletRail(source.path);
+    const rail = pairedStraightCapRail(source.path, inlet);
     if (!rail || Object.entries(rail.counts).some(([key, count]) => brep[key as keyof typeof rail.counts].length !== count)) return;
     const matches = brep.faces.filter(face => face.name === faceName), cap = matches[0];
     if (matches.length !== 1 || cap.loops.length !== 3) return;
@@ -1290,7 +1295,7 @@ export function exactPairedElbowOutletOffsetFrame(brep: Brep, faceName: string,
       if (!vertex) return;
       for (let axis = 0; axis < 3; axis++) anchor[axis] += vertex.point[axis] / 4;
     }
-    if (rail.wallPiece === 'line' && len(sub(anchor, source.path.controlPoints[source.path.controlPoints.length - 1])) > CadNumericPolicy.linearTolerance) return;
+    if (rail.wallPiece === 'line' && len(sub(anchor, source.path.controlPoints[inlet ? 0 : source.path.controlPoints.length - 1])) > CadNumericPolicy.linearTolerance) return;
     const report = checkBrep(brep, { strict: true });
     if (!report.valid || report.topology.length !== 1 || report.topology[0].genus !== 2 || report.topology[0].shells !== 1) return;
     return { anchor, normal: support.n };
@@ -1309,38 +1314,40 @@ function retainedElbowBoundary(before: Brep, after: Brep, face: Brep['faces'][nu
     && before.vertices.every(vertex => !vertices.has(vertex.id) || same(vertex, after.vertices.find(value => value.id === vertex.id)));
 }
 
-/** Continue only the original straight outlet. Replaying the authored producer binds every original native coefficient. */
+/** Continue only an admitted original straight cap. Replaying its producer binds every original native coefficient. */
 export function offsetExactPairedElbowOutletIfAdmitted(brep: Brep, faceName: string,
   source: ExactSweepInput, distance: number): Brep | undefined {
   const frame = exactPairedElbowOutletOffsetFrame(brep, faceName, source);
   if (!frame || source.outer.length !== 4 || source.outer.some(segment => segment.kind !== 'line')
     || source.holes?.length !== 2 || source.holes.some(loop => loop.length !== 4 || loop.some(segment => segment.kind !== 'line'))) return;
-  const original = exactSweep(source, pairedOutletFailure).brep;
+  const inlet = faceName === `${source.id}.start`, refuse = inlet ? pairedInletFailure : pairedOutletFailure;
+  const original = exactSweep(source, refuse).brep;
   if (JSON.stringify(original) !== JSON.stringify(brep)) return;
   if (!Number.isFinite(distance) || distance === 0 || Math.abs(distance) > CadNumericPolicy.coordinateAbs)
-    return pairedOutletFailure('PARAMETER', 'distance must be nonzero and within the modeling range.');
-  const rail = pairedOutletRail(source.path)!;
+    return refuse('PARAMETER', 'distance must be nonzero and within the modeling range.');
+  const rail = pairedStraightCapRail(source.path, inlet)!;
   const length = rail.length + distance;
   if (!(length >= ExtrudedProfileLimits.minimumLengthMM))
-    return pairedOutletFailure('GEOMETRY', 'the offset would reach or cross the retained bend-to-outlet join.');
-  const path = structuredClone(source.path), last = path.controlPoints.length - 1, normal = unit(sub(source.path.controlPoints[last], source.path.controlPoints[last - 2]));
-  path.controlPoints[last - 1] = add(path.controlPoints[last - 1], scale(normal, distance / 2));
-  path.controlPoints[last] = add(path.controlPoints[last], scale(normal, distance));
-  if (path.controlPoints[last].every((value, axis) => value === source.path.controlPoints[last][axis]))
-    return pairedOutletFailure('GEOMETRY', 'distance is too small to move the outlet.');
-  const candidate = exactSweep({ ...source, path }, pairedOutletFailure).brep;
+    return refuse('GEOMETRY', inlet ? 'the offset would reach or cross the retained inlet-to-bend join.' : 'the offset would reach or cross the retained bend-to-outlet join.');
+  const path = structuredClone(source.path), end = inlet ? 0 : path.controlPoints.length - 1, middle = inlet ? 1 : end - 1;
+  const normal = unit(sub(source.path.controlPoints[end], source.path.controlPoints[inlet ? 2 : end - 2]));
+  path.controlPoints[middle] = add(path.controlPoints[middle], scale(normal, distance / 2));
+  path.controlPoints[end] = add(path.controlPoints[end], scale(normal, distance));
+  if (path.controlPoints[end].every((value, axis) => value === source.path.controlPoints[end][axis]))
+    return refuse('GEOMETRY', inlet ? 'distance is too small to move the inlet.' : 'distance is too small to move the outlet.');
+  const candidate = exactSweep({ ...source, path }, refuse).brep;
   const keys = ['bodies', 'shells', 'faces', 'loops', 'coedges', 'edges', 'vertices'] as const;
   for (const key of keys) {
     const identity = (value: { id: string; name?: string }) => [value.id, value.name];
     if (JSON.stringify(brep[key].map(identity)) !== JSON.stringify(candidate[key].map(identity)))
-      return pairedOutletFailure('GEOMETRY', 'the offset cannot preserve the original native names and incidence.');
+      return refuse('GEOMETRY', 'the offset cannot preserve the original native names and incidence.');
   }
   for (const face of brep.faces) if (face.name !== faceName && !face.name?.startsWith(`${source.id}.${rail.wallPiece}.`)
     && !retainedElbowBoundary(brep, candidate, face))
-    return pairedOutletFailure('GEOMETRY', 'the offset cannot preserve the inlet, bend and tangent joins.');
+    return refuse('GEOMETRY', inlet ? 'the offset cannot preserve the bend, outlet and tangent joins.' : 'the offset cannot preserve the inlet, bend and tangent joins.');
   const next = exactPairedElbowOutletOffsetFrame(candidate, faceName, { ...source, path });
   const expected = add(frame.anchor, scale(frame.normal, distance));
   if (!next || len(sub(next.anchor, expected)) > linearToleranceMM(geometryScaleMM(candidate.vertices.map(vertex => vertex.point))))
-    return pairedOutletFailure('GEOMETRY', 'the terminal cap cannot preserve the signed native displacement.');
+    return refuse('GEOMETRY', 'the terminal cap cannot preserve the signed native displacement.');
   return candidate;
 }

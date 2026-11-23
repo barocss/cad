@@ -316,7 +316,8 @@ test('original paired elbow outlet signed offsets preserve both apertures, nativ
   }
   const inlet = shifted(4);
   inlet.features.at(-1).face = 'w.start';
-  assert.throws(() => evaluateCadPart(inlet), CadPartError);
+  verify(evaluateCadPart(inlet).outputs[0], { ...path, lead: path.lead + 4, length: path.length + 4,
+    start: add(path.start, scale(path.tangent, -4)) });
   const wall = shifted(4);
   wall.features.at(-1).face = 'w.tail.side[o0]';
   assert.throws(() => evaluateCadPart(wall), CadPartError);
@@ -338,13 +339,14 @@ test('translated original paired elbow outlet frames and signed offsets retain a
 });
 
 
-test('paired elbow outlet native handle excludes other caps, old profile families and unbound body coefficients', () => {
+test('paired elbow straight cap frames exclude old profile families and unbound body coefficients', () => {
   const path = rail({ tail: 14 }), sketch = section(), original = evaluateCadPart(document(path.path, sketch)).outputs[0].brep;
   const source = { id: 'w', mode: 'exact', path: path.path };
   const handle = exactPairedElbowOutletOffsetFrame(original, 'w.end', source);
   pointNear(handle.anchor, path.end);
   pointNear(handle.normal, path.terminal);
-  assert.equal(exactPairedElbowOutletOffsetFrame(original, 'w.start', source), undefined);
+  const inlet = exactPairedElbowOutletOffsetFrame(original, 'w.start', source);
+  pointNear(inlet.anchor, path.start); pointNear(inlet.normal, scale(path.tangent, -1));
   assert.equal(exactPairedElbowOutletOffsetFrame(original, 'w.end', { ...source, id: 'stale' }), undefined);
   assert.equal(exactPairedElbowOutletOffsetFrame(original, 'w.end', { ...source, mode: 'exact-straight' }), undefined);
   for (const holes of [[], [rectangle(1, -1, 1)]]) {
@@ -357,4 +359,99 @@ test('paired elbow outlet native handle excludes other caps, old profile familie
   assert.ok(checkBrep(unbound, { strict: true }).valid);
   assert.equal(offsetExactPairedElbowOutletIfAdmitted(unbound, 'w.end', input, 4), undefined);
   assert.deepEqual(original, evaluateCadPart(document(path.path, sketch)).outputs[0].brep);
+});
+
+const retainedFromInlet = brep => brep.faces.filter(face => face.name !== 'w.start' && !face.name.startsWith('w.line.')).map(face => {
+  const loops = brep.loops.filter(loop => face.loops.includes(loop.id));
+  const uses = brep.coedges.filter(use => loops.some(loop => loop.id === use.loop));
+  const edges = brep.edges.filter(edge => uses.some(use => use.edge === edge.id));
+  return { face, loops, uses, edges, vertices: brep.vertices.filter(vertex => edges.some(edge => edge.vertices.includes(vertex.id))) };
+});
+
+test('original paired elbow inlet signed offsets retain both joins, bend and outlet coefficients with independent mass and fresh Open', () => {
+  const path = rail({ tail: 14 }), sketch = section(), source = document(path.path, sketch), initial = evaluateCadPart(source), saved = saveCadPart(initial);
+  const shifted = distance => ({ ...source, features: [...source.features,
+    { id: 'move', kind: 'offset-face', target: 'w', face: 'w.start', distance }] });
+  let previous = initial;
+  for (const distance of [4, -4, 4]) {
+    const changed = reevaluate(previous, { document: shifted(distance) }), brep = changed.outputs[0].brep;
+    verify(changed.outputs[0], { ...path, lead: path.lead + distance, length: path.length + distance,
+      start: add(path.start, scale(path.tangent, -distance)) });
+    assert.deepEqual(identity(changed), identity(initial));
+    assert.deepEqual(retainedFromInlet(brep), retainedFromInlet(initial.outputs[0].brep));
+    assert.equal(retainedFromInlet(brep).length, 25);
+    const cap = exactPairedElbowOutletOffsetFrame(brep, 'w.start', { id: 'w', mode: 'exact', path: {
+      ...path.path, controlPoints: path.path.controlPoints.map((point, index) => index < 2 ? add(point, scale(path.tangent, -distance * (index ? .5 : 1))) : point),
+    } });
+    assert.ok(cap); pointNear(cap.anchor, [-10 - distance, 0, 0]); pointNear(cap.normal, [-1, 0, 0]);
+    const props = brepMassProperties(brep, 1), length = 24 + 10 * Math.PI + distance;
+    near(props.volume, 32 * length);
+    pointNear(props.centroid, [(630 + 19 / 12 - 10 * distance - distance ** 2 / 2) / length,
+      (200 * Math.PI - 22 - 19 / 12) / length, 0]);
+    const reopened = loadCadPart(saveCadPart(changed));
+    assert.deepEqual(reopened.outputs[0].brep, brep);
+    assert.deepEqual(reevaluate(reopened, { document: source }).outputs[0].brep, initial.outputs[0].brep);
+    assert.equal(saveCadPart(initial), saved); previous = reopened;
+  }
+});
+
+test('translated 30 and 120 degree paired inlet offsets retain both radial axes, asymmetric lane IDs and complete fixed boundaries', () => {
+  for (const degrees of [30, 120]) for (const radialY of [false, true]) {
+    const path = rail({ degrees, tail: 14, entry: [32, -14, 18], tangent: [.6, .8, 0], inward: [-.8, .6, 0] });
+    const intervals = [[1, 3], [-2.5, -1.5]], widths = [2, 1.5];
+    const sketch = { ...section(intervals, widths, [false, true], [21.2, -7.1]),
+      plane: { origin: [5, 4, 3], normal: path.tangent, xAxis: path.inward } };
+    sketch.sideTags = { outer: ['o0', 'o1', 'o2', 'o3'], holes: [['a0', 'a1', 'a2', 'a3'], ['b0', 'b1', 'b2', 'b3']] };
+    if (radialY) {
+      sketch.segments = rectangle(5, -2, 2);
+      sketch.holes = intervals.map(([low, high], index) => rectangle((high - low) / 2, -widths[index] / 2, widths[index] / 2,
+        !!index, [-(low + high) / 2, 0]));
+      sketch.plane.xAxis = scale(path.axis, -1);
+    }
+    const source = document(path.path, sketch), initial = evaluateCadPart(source), saved = saveCadPart(initial);
+    for (const distance of [4, -4]) {
+      const changed = reevaluate(initial, { document: { ...source, features: [...source.features,
+        { id: 'move', kind: 'offset-face', target: 'w', face: 'w.start', distance }] } });
+      verify(changed.outputs[0], { ...path, lead: path.lead + distance, length: path.length + distance,
+        start: add(path.start, scale(path.tangent, -distance)) }, intervals, widths);
+      assert.deepEqual(identity(changed), identity(initial));
+      assert.deepEqual(retainedFromInlet(changed.outputs[0].brep), retainedFromInlet(initial.outputs[0].brep));
+      near(brepMassProperties(changed.outputs[0].brep, 1).volume - brepMassProperties(initial.outputs[0].brep, 1).volume, 34.5 * distance, 1e-7);
+      const reopened = loadCadPart(saveCadPart(changed));
+      assert.deepEqual(reopened.outputs[0].brep, changed.outputs[0].brep);
+      assert.deepEqual(reevaluate(reopened, { document: source }).outputs[0].brep, initial.outputs[0].brep);
+    }
+    assert.equal(saveCadPart(initial), saved);
+  }
+});
+
+test('paired inlet offsets refuse collapse, unrelated five-point caps, walls, stale paths and unbound native coefficients without source changes', () => {
+  const path = rail({ tail: 14 }), sketch = section(), source = document(path.path, sketch), initial = evaluateCadPart(source), saved = saveCadPart(initial);
+  const original = initial.outputs[0].brep, recipe = { id: 'w', mode: 'exact', path: path.path };
+  for (const distance of [-10, -11, -9.99999]) {
+    assert.throws(() => reevaluate(initial, { document: { ...source, features: [...source.features,
+      { id: 'move', kind: 'offset-face', target: 'w', face: 'w.start', distance }] } }),
+    error => error instanceof CadPartError && error.code === 'GEOMETRY' && /retained inlet-to-bend join/.test(error.message));
+    assert.equal(saveCadPart(initial), saved);
+  }
+  assert.equal(exactPairedElbowOutletOffsetFrame(original, 'w.start', { ...recipe, id: 'stale' }), undefined);
+  assert.equal(exactPairedElbowOutletOffsetFrame(original, 'w.start', { ...recipe, mode: 'exact-straight' }), undefined);
+  assert.equal(exactPairedElbowOutletOffsetFrame(original, 'w.line.side0', recipe), undefined);
+  for (const holes of [[], [rectangle(1, -1, 1)]]) {
+    const other = evaluateCadPart(document(path.path, { ...sketch, holes })).outputs[0].brep;
+    assert.equal(exactPairedElbowOutletOffsetFrame(other, 'w.start', recipe), undefined);
+  }
+  const leadOnly = rail(), leadNative = evaluateCadPart(document(leadOnly.path)).outputs[0].brep;
+  assert.equal(exactPairedElbowOutletOffsetFrame(leadNative, 'w.start', { ...recipe, path: leadOnly.path }), undefined);
+  const arcFirst = reverseCurve(leadOnly.path, { curveId: 'arcFirst' }).curve, arcNative = evaluateCadPart(document(arcFirst)).outputs[0].brep;
+  assert.equal(exactPairedElbowOutletOffsetFrame(arcNative, 'w.start', { ...recipe, path: arcFirst }), undefined);
+  const input = { ...recipe, outer: sketch.segments, holes: sketch.holes, xAxis: [1, 0, 0], yAxis: [0, 1, 0] };
+  const stalePath = structuredClone(path.path);
+  stalePath.controlPoints[5] = add(stalePath.controlPoints[5], scale(path.terminal, 2));
+  stalePath.controlPoints[6] = add(stalePath.controlPoints[6], scale(path.terminal, 4));
+  assert.equal(offsetExactPairedElbowOutletIfAdmitted(original, 'w.start', { ...input, path: stalePath }, 4), undefined);
+  const unbound = structuredClone(original); unbound.vertices[0].tolerance *= 2;
+  assert.ok(checkBrep(unbound, { strict: true }).valid);
+  assert.equal(offsetExactPairedElbowOutletIfAdmitted(unbound, 'w.start', input, 4), undefined);
+  assert.deepEqual(original, evaluateCadPart(source).outputs[0].brep);
 });
