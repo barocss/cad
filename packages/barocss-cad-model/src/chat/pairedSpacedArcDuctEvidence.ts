@@ -51,10 +51,11 @@ function spacedArcs(path: Path) {
   if (!first || !second || !(length >= minimumLengthMM)
     || .5 * len(sub(points[3], scale(add(points[2], points[4]), .5))) > tolerance) return;
   const tangent = unit(sub(points[4], points[2])), angular = CadNumericPolicy.relativeComparison;
+  const turn = dot(first.exitInward, second.inward) > 0 ? 1 : -1;
   if (len(sub(tangent, first.exitTangent)) > angular || len(sub(tangent, second.tangent)) > angular
     || !pointNear(sub(points[4], points[2]), scale(first.exitTangent, length))
-    || 2 * second.radius * (len(add(first.exitInward, second.inward)) + len(sub(first.exitTangent, second.tangent))) > tolerance) return;
-  return { first, second, length, start: first.start, end: second.end, tangent: first.tangent, inward: first.inward,
+    || 2 * second.radius * (len(sub(scale(first.exitInward, turn), second.inward)) + len(sub(first.exitTangent, second.tangent))) > tolerance) return;
+  return { first, second, length, turn, start: first.start, end: second.end, tangent: first.tangent, inward: first.inward,
     axis: unit(cross(first.tangent, first.inward)), radius: Math.min(first.radius, second.radius) };
 }
 type Frame = NonNullable<ReturnType<typeof spacedArcs>>;
@@ -114,7 +115,7 @@ function rectangle(edges: BrepEdge[], center: Point, inward: Point, axis: Point,
   return corners.size === 4 && sides.size === 4;
 }
 
-/** Check all 36 named wall supports, including the reversed radial ray of the second bend. */
+/** Check all 36 named wall supports against the authored turn of the second bend. */
 function walls(brep: Brep, feature: string, frame: Frame, section: Section, inward: boolean) {
   const pieces = ['first', 'line', 'second'], direction = inward ? -1 : 1;
   const angular = CadNumericPolicy.relativeComparison;
@@ -122,7 +123,7 @@ function walls(brep: Brep, feature: string, frame: Frame, section: Section, inwa
   for (const piece of pieces) {
     const bend = piece === 'first' ? frame.first : frame.second;
     const radial = piece === 'first' ? frame.inward : frame.first.exitInward;
-    const center = piece === 'first' ? frame.start : frame.first.end, turn = piece === 'second' ? -1 : 1;
+    const center = piece === 'first' ? frame.start : frame.first.end, turn = piece === 'second' ? frame.turn : 1;
     const found = new Set<string>();
     for (const name of names.filter(name => name.startsWith(`${feature}.${piece}.`))) {
       const face = brep.faces.find(face => face.name === name);
@@ -152,7 +153,7 @@ function walls(brep: Brep, feature: string, frame: Frame, section: Section, inwa
   return names;
 }
 
-/** Native review for exactly two passages on the opposite-turn arc–line–arc producer. */
+/** Native review for exactly two passages on the same- or opposite-turn arc–line–arc producer. */
 export function pairedSpacedArcDuctEvidence(brep: Brep, path: Path, source: Source) {
   try {
     const frame = spacedArcs(path), sizes = frame && sections(source, frame), feature = brep.source.id;
@@ -192,7 +193,7 @@ export function pairedSpacedArcDuctEvidence(brep: Brep, path: Path, source: Sour
     const caps = [];
     for (const end of ['start', 'end']) {
       const name = `${feature}.${end}`, face = brep.faces.find(face => face.name === name), start = end === 'start';
-      const center = start ? frame.start : frame.end, radial = start ? frame.inward : scale(frame.second.exitInward, -1);
+      const center = start ? frame.start : frame.end, radial = start ? frame.inward : scale(frame.second.exitInward, frame.turn);
       const normal = start ? scale(frame.tangent, -1) : frame.second.exitTangent, piece = start ? 'first' : 'second';
       if (!face || face.loops.length !== 3) return;
       const plane = faceGeometry(face);

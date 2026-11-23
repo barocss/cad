@@ -109,7 +109,7 @@ export async function checkApprovedDuctReview(call, request, reviewed) {
   assert.equal((await call('query', { ...reviewed.reviewPin, expectedRevision }, true)).code, 'MODEL_REVIEW_UNAVAILABLE');
 }
 
-export async function reviewPendingPairedDuct(f, call, request, expectedRevision, pathRevision, expected, sideTags, { tail, spaced }) {
+export async function reviewPendingPairedDuct(f, call, request, expectedRevision, pathRevision, expected, sideTags, { tail, spaced, sameTurn }) {
   const { proposals: [proposal] } = await call('proposals', { action: 'list' });
   assert.equal(proposal.id, 'P1');
   assert.match(proposal.modelReviewRevision, /^[0-9a-f]{64}$/);
@@ -127,7 +127,7 @@ export async function reviewPendingPairedDuct(f, call, request, expectedRevision
       [proposal.id, expectedRevision, expected.digest]);
   }
   assert.ok(opposite.meta.views.left.visible_faces.includes('n1.start'));
-  assert.ok((spaced ? meta.views.right : opposite.meta.views.back).visible_faces.includes('n1.end'));
+  assert.ok((sameTurn ? opposite.meta.views.left : spaced ? meta.views.right : opposite.meta.views.back).visible_faces.includes('n1.end'));
 
   const tagOf = name => name.match(/\[(e\d+)\]$/)?.[1];
   const sorted = values => values.toSorted();
@@ -181,7 +181,7 @@ export async function reviewPendingPairedDuct(f, call, request, expectedRevision
   assert.deepEqual(evidence.caps.map(cap => cap.name), ['n1.start', 'n1.end']);
   for (const cap of evidence.caps) {
     const native = expected.caps.find(value => value.name === cap.name);
-    const centers = spaced ? [[0, 0, 0], [30, 38, 0]] : [[-10, 0, 0], [20, 20 + tail, 0]];
+    const centers = spaced ? [[0, 0, 0], [sameTurn ? -6 : 30, 38, 0]] : [[-10, 0, 0], [20, 20 + tail, 0]];
     pointNear(cap.center, centers[cap.name === 'n1.start' ? 0 : 1]);
     pointNear(cap.plane.origin, native.plane.o);
     pointNear(cap.plane.normal, native.plane.n);

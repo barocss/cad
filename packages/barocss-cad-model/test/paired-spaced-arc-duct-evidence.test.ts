@@ -39,8 +39,8 @@ function native(curve = path(), section = source, clockwise = [true, false]): Br
   return evaluateCadPart(document).outputs[0].brep;
 }
 
-test('spaced paired review certifies two physical mouths, 36 tagged walls, both twelve-edge charted joins and independent mass without mutation', () => {
-  const curve = path(), brep = native(curve), before = structuredClone({ brep, curve, source });
+for (const turn of [-1, 1]) test(`spaced ${turn === 1 ? 'same-turn' : 'opposite-turn'} paired review certifies both mouths, all 36 walls and 24 charted joins with independent mass without mutation`, () => {
+  const curve = path(90, 90, undefined, undefined, undefined, turn), brep = native(curve), before = structuredClone({ brep, curve, source });
   const evidence = pairedSpacedArcDuctEvidence(brep, curve, source);
   assert.ok(evidence);
   assert.equal(evidence.pathKind, 'arc-line-arc');
@@ -49,8 +49,8 @@ test('spaced paired review certifies two physical mouths, 36 tagged walls, both 
   assert.deepEqual(report.topology.map(item => item.genus), [2]);
   const caps: NonNullable<ReturnType<typeof pairedSpacedArcDuctEvidence>>['caps'] = evidence.caps;
   assert.deepEqual(caps.map(cap => [cap.name, cap.outerEdges.length, cap.innerEdges.length]), [['w.start', 4, 8], ['w.end', 4, 8]]);
-  pointNear(caps[0].center, [0, 0, 0]); pointNear(caps[1].center, [30, 38, 0]);
-  pointNear(caps[0].plane.normal, [-1, 0, 0]); pointNear(caps[1].plane.normal, [1, 0, 0]);
+  pointNear(caps[0].center, [0, 0, 0]); pointNear(caps[1].center, [turn === 1 ? -6 : 30, 38, 0]);
+  pointNear(caps[0].plane.normal, [-1, 0, 0]); pointNear(caps[1].plane.normal, [-turn, 0, 0]);
   const through = evidence.throughApertures;
   near(through.dimensions.firstRadius, 12); near(through.dimensions.secondRadius, 18); near(through.dimensions.lineLength, 8);
   near(through.dimensions.firstSweepRadians, Math.PI / 2); near(through.dimensions.secondSweepRadians, Math.PI / 2);
@@ -80,28 +80,38 @@ test('spaced paired review certifies two physical mouths, 36 tagged walls, both 
   const length = 15 * Math.PI + 8;
   near(through.volume.analytic, 32 * length); near(through.volume.native, 32 * length);
   // Sum the two quarter-annulus moments and the straight prism independently.
-  // Equal opposite quarter turns cancel the section radial-second-moment terms.
-  const centroid: Point = [(270 * Math.PI - 84) / length, (252 * Math.PI + 308) / length, 0];
+  // The section radial second moment per unit area is 19/12 mm². Its X terms
+  // cancel for opposite turns and add twice for same turns; the Y terms cancel.
+  const centroid: Point = [(turn === 1 ? 564 + 19 / 6 - 54 * Math.PI : 270 * Math.PI - 84) / length,
+    (252 * Math.PI + 308) / length, 0];
   pointNear(through.centroid.analytic, centroid); pointNear(through.centroid.native, centroid);
   assert.equal(through.volume.method, 'quadrature'); assert.ok(through.maximumGapMM < 1e-10);
   assert.deepEqual({ brep, curve, source }, before);
 });
 
-test('asymmetric lanes and reversed authored order retain ownership, arbitrary winding and center of gravity', () => {
+for (const turn of [-1, 1]) test(`${turn === 1 ? 'same-turn' : 'opposite-turn'} asymmetric lanes and reversed authored order retain ownership, arbitrary winding and center of gravity`, () => {
   const edited: Source = { ...source, cavities: [{ ...source.cavities[0], min: [-.75, -2.5], max: [.75, -1.5] }, source.cavities[1]] };
   for (const section of [edited, { ...edited, cavities: [...edited.cavities].reverse() }]) for (const clockwise of [[true, false], [false, true]]) {
-    const curve = path(), evidence = pairedSpacedArcDuctEvidence(native(curve, section, clockwise), curve, section);
+    const curve = path(90, 90, undefined, undefined, undefined, turn), evidence = pairedSpacedArcDuctEvidence(native(curve, section, clockwise), curve, section);
     assert.ok(evidence);
     near(evidence.throughApertures.volume.native, 34.5 * (15 * Math.PI + 8));
     near(evidence.throughApertures.centroid.native[2], -5 / 34.5);
     assert.deepEqual(evidence.throughApertures.apertures.map(aperture => aperture.tags), section.cavities.map(cavity => cavity.tags));
     assert.deepEqual(evidence.caps[1].apertures.map(aperture => aperture.tags), section.cavities.map(cavity => cavity.tags));
   }
+  const curve = path(90, 90, undefined, undefined, undefined, turn), before = native(curve), after = native(curve, edited);
+  for (const key of ['bodies', 'shells', 'faces', 'loops', 'coedges', 'edges', 'vertices'] as const)
+    assert.deepEqual(after[key].map(item => item.id), before[key].map(item => item.id));
+  const unchangedTags = [...source.outerTags, ...source.cavities[1].tags];
+  const unchangedWalls = (brep: Brep) => brep.faces.filter(face => unchangedTags.some(tag => face.name?.endsWith(`.side[${tag}]`)));
+  assert.deepEqual(unchangedWalls(after), unchangedWalls(before));
+  assert.equal(pairedSpacedArcDuctEvidence(before, curve, edited), undefined);
+  assert.equal(pairedSpacedArcDuctEvidence(after, curve, source), undefined);
 });
 
-test('translated oblique 30 and 120 degree carriers and radial sketch Y use the source world frame', () => {
+for (const turn of [-1, 1]) test(`translated oblique ${turn === 1 ? 'same-turn' : 'opposite-turn'} 30 and 120 degree carriers and radial sketch Y use the source world frame`, () => {
   for (const [first, second] of [[30, 120], [120, 30]]) {
-    const curve = path(first, second, [32, -14, 18], [.6, .8, 0], [-.8, .6, 0]);
+    const curve = path(first, second, [32, -14, 18], [.6, .8, 0], [-.8, .6, 0], turn);
     const evidence = pairedSpacedArcDuctEvidence(native(curve), curve, source);
     assert.ok(evidence);
     near(evidence.throughApertures.volume.native, 32 * (8 + (12 * first + 18 * second) * Math.PI / 180));
@@ -110,13 +120,13 @@ test('translated oblique 30 and 120 degree carriers and radial sketch Y use the 
   const swapped = { ...source, outer: [10, 4], cavities: source.cavities.map(cavity => ({ ...cavity,
     min: [cavity.min[1], cavity.min[0]], max: [cavity.max[1], cavity.max[0]],
   })) };
-  const curve = path(90, 90, [8, 3, -2], [0, 0, 1], [0, 1, 0]);
+  const curve = path(90, 90, [8, 3, -2], [0, 0, 1], [0, 1, 0], turn);
   const evidence = pairedSpacedArcDuctEvidence(native(curve, swapped), curve, swapped);
   assert.ok(evidence); assert.deepEqual(evidence.throughApertures.dimensions.exterior, { radial: 4, axial: 10 });
 });
 
-test('reversed native join curves and arbitrary storage order retain both charted groups', () => {
-  const curve = path(), original = native(curve), evidence = pairedSpacedArcDuctEvidence(original, curve, source);
+for (const turn of [-1, 1]) test(`${turn === 1 ? 'same-turn' : 'opposite-turn'} reversed native join curves and arbitrary storage order retain both charted groups`, () => {
+  const curve = path(90, 90, undefined, undefined, undefined, turn), original = native(curve), evidence = pairedSpacedArcDuctEvidence(original, curve, source);
   assert.ok(evidence);
   const ids = new Set([...evidence.exteriorSeams, ...evidence.interiorSeams.flat()]);
   const reverse = (curve: Curve) => reverseCurve(curve, { curveId: `${curve.id}_reversed` }).curve;
@@ -127,13 +137,12 @@ test('reversed native join curves and arbitrary storage order retain both charte
   assert.ok(checkBrep(brep, { strict: true }).valid); assert.ok(pairedSpacedArcDuctEvidence(brep, curve, source));
 });
 
-test('missing or shifted charts on either join fail closed while absent physical terminal pairs remain qualified', () => {
-  const curve = path(), original = native(curve), evidence = pairedSpacedArcDuctEvidence(original, curve, source);
+for (const turn of [-1, 1]) test(`${turn === 1 ? 'same-turn' : 'opposite-turn'} missing or shifted charts at each of the 24 joins fail closed while absent terminal pairs remain qualified`, () => {
+  const curve = path(90, 90, undefined, undefined, undefined, turn), original = native(curve), evidence = pairedSpacedArcDuctEvidence(original, curve, source);
   assert.ok(evidence);
-  for (const join of evidence.throughApertures.junctions) for (const ids of [join.exteriorSeams, ...join.interiorSeams]) {
-    const selected = new Set(ids);
-    const missing = { ...original, coedges: original.coedges.map(use => selected.has(use.edge) ? { ...use, pcurve: null } : use) };
-    const shifted = { ...original, coedges: original.coedges.map(use => selected.has(use.edge) && use.pcurve ? { ...use,
+  for (const join of evidence.throughApertures.junctions) for (const id of [join.exteriorSeams, ...join.interiorSeams].flat()) {
+    const missing = { ...original, coedges: original.coedges.map(use => use.edge === id ? { ...use, pcurve: null } : use) };
+    const shifted = { ...original, coedges: original.coedges.map(use => use.edge === id && use.pcurve ? { ...use,
       pcurve: { ...use.pcurve, controlPoints: use.pcurve.controlPoints.map(([u, v, z]): Point => [u + .01, v, z]) } } : use) };
     for (const changed of [missing, shifted]) assert.equal(pairedSpacedArcDuctEvidence(changed, curve, source), undefined);
   }
@@ -142,8 +151,8 @@ test('missing or shifted charts on either join fail closed while absent physical
   assert.ok(pairedSpacedArcDuctEvidence(absent, curve, source));
 });
 
-test('moved geometry, swapped lane walls, wrong native ownership and changed source bounds fail closed', () => {
-  const curve = path(), brep = native(curve);
+for (const turn of [-1, 1]) test(`${turn === 1 ? 'same-turn' : 'opposite-turn'} moved geometry, swapped lane walls, wrong native ownership and changed source bounds fail closed`, () => {
+  const curve = path(90, 90, undefined, undefined, undefined, turn), brep = native(curve);
   const swapped = { ...brep, faces: brep.faces.map(face => {
     const tags = source.cavities.map(cavity => cavity.tags.findIndex(tag => face.name?.endsWith(`.side[${tag}]`)));
     if (tags[0] >= 0) return { ...face, name: face.name!.replace(source.cavities[0].tags[tags[0]], source.cavities[1].tags[tags[0]]) };
@@ -166,8 +175,10 @@ test('moved geometry, swapped lane walls, wrong native ownership and changed sou
   for (const section of sources) assert.equal(pairedSpacedArcDuctEvidence(brep, curve, section), undefined);
 });
 
-test('same-turn, out-of-range, kinked, malformed and displaced input rails cannot receive evidence', () => {
-  const curve = path(), brep = native(curve), variants: Path[] = [path(90, 90, undefined, undefined, undefined, 1), path(29, 90), path(90, 121)];
+for (const turn of [-1, 1]) test(`${turn === 1 ? 'same-turn' : 'opposite-turn'} out-of-range, kinked, malformed and displaced input rails cannot receive evidence`, () => {
+  const curve = path(90, 90, undefined, undefined, undefined, turn), brep = native(curve);
+  const variants: Path[] = [path(90, 90, undefined, undefined, undefined, -turn),
+    path(29, 90, undefined, undefined, undefined, turn), path(90, 121, undefined, undefined, undefined, turn)];
   for (const [pole, axis, delta] of [[1, 1, .01], [3, 0, .01], [4, 0, .01], [5, 2, .01], [6, 2, Number.NaN]]) {
     const changed = structuredClone(curve); changed.controlPoints[pole][axis] += delta; variants.push(changed);
   }
