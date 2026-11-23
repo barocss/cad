@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { evaluatePart, placeBody, type BodyResult } from '@barocss/cad-model/engine/evaluate';
-import type { StudioDoc } from '@barocss/cad-model/engine/doc';
+import { rectanglePart, type StudioDoc } from '@barocss/cad-model/engine/doc';
 import { tablesFor } from '@barocss/cad-model/assembly/faces';
 import { solveDoc } from '@barocss/cad-model/assembly/edit';
 import { rotationMatrix } from '@barocss/cad-model/engine/placement';
@@ -78,7 +78,7 @@ function fakeViewer() {
     remove() { log.removed++; }
   }
   // (A geometry made by createGeometry is shared by the meshes added on it; add() with plain arrays makes its own.)
-  const geometry = (input?: unknown) => { log.geometries++; return { input, shared: false, setColors() { log.colors++; }, setUVs() {}, dispose() { log.disposed++; } }; };
+  const geometry = (input?: unknown) => { log.geometries++; return { input, shared: false, disposed: false, setColors() { log.colors++; }, setUVs() {}, dispose() { this.disposed = true; log.disposed++; } }; };
   const viewer = {
     add(input: { shared?: boolean } & Record<string, unknown>, o: { name?: string; transform?: ArrayLike<number> } = {}) {
       log.added++;
@@ -195,5 +195,43 @@ test('G10 copies share a tessellation: four turned copies one geometry, each dra
   // All gone: every geometry released.
   r.setInstances([], []);
   assert.equal(log.disposed, log.geometries, `${log.disposed} of ${log.geometries} released`);
+});
+
+test('an edge-free shared surface survives selection swaps and removal of the other placed owner', () => {
+  const result = evaluatePart(rectanglePart(16, 16, 10), 1);
+  assert.ok(result.ok);
+  const base = result.bodies[0];
+  const body = { ...base, mesh: { ...base.mesh, edgeLines: new Float64Array(), edgeOfSegment: new Float32Array() } };
+  const offset: [number, number, number] = [50, 0, 0];
+  const items = [
+    { id: 'a', bodies: [body], placement: poseMatrix(undefined, undefined) },
+    { id: 'b', bodies: [placeBody({ ...body, mesh: { ...body.mesh, positions: body.mesh.positions.slice(),
+      normals: body.mesh.normals.slice() } }, [1, 0, 0, 0, 1, 0, 0, 0, 1], offset)], placement: poseMatrix(undefined, offset) },
+  ];
+  const { viewer, log } = fakeViewer();
+  const renderer = new (GpuRenderer as unknown as new (canvas: unknown, viewer: unknown) => GpuRenderer)({}, viewer);
+  const current = () => (renderer as unknown as { instances: { surfaces: { geometry: { disposed: boolean } }[] }[] }).instances;
+  const surface = (index: number) => current()[index].surfaces[0].geometry;
+  renderer.setInstances(items, []);
+  const shared = surface(0);
+  assert.equal(surface(1), shared, 'both occurrences start with one shared surface');
+  renderer.setInstances(items, ['b']);
+  assert.notEqual(surface(1), shared);
+  renderer.setInstances(items, ['a']);
+  assert.equal(surface(1), shared);
+  assert.equal(shared.disposed, false, 'the second owner can draw the exact same live geometry');
+  renderer.setInstances([items[1]], ['b']);
+  assert.notEqual(surface(0), shared);
+  assert.equal(shared.disposed, false, 'a temporarily private owner may still switch back');
+  renderer.setInstances([items[1]], []);
+  assert.equal(surface(0), shared);
+  assert.equal(shared.disposed, false);
+  renderer.setInstances([items[1]], ['b']);
+  const privateSurface = surface(0);
+  assert.notEqual(privateSurface, shared);
+  renderer.setInstances([], []);
+  assert.equal(shared.disposed, true);
+  assert.equal(privateSurface.disposed, true);
+  assert.equal(log.disposed, log.geometries);
 });
 

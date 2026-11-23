@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1869: [Keep shared placed surfaces alive through selection changes](notes/placed-shared-surface-ownership-2026-11-24/README.md), #44. Fix released geometry on the unchanged peer and verify its actual native-face picks, project reopen and 24-copy control.
 - D1868: [Extract the placed bearing editor](notes/placed-bearing-editor-extraction-2026-11-24/README.md), #44. Verify delayed owner retirement and native edit/reopen. Reproduce the separate existing peer display defect on both App versions.
 - D1867: [Refuse unsupported STEP cone angle units](notes/step-cone-angle-unit-admission-2026-11-24/README.md), #277. Reproduce wrong native geometry, verify ownership-based admission and preserve the current Studio document on refusal.
 - D1866: [Verify linked annular Extrude in STEP](notes/annular-extrusion-step-2026-11-24/README.md), #222. Read both actual Studio export states independently and verify native target edit and STEP import after fresh Open.

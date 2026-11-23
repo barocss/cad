@@ -98,7 +98,7 @@ interface PlacedInstance {
   shapes: (Shape | null)[]; shareT: Float64Array[]; sharing: boolean[]; edgeBody: number[]; edgeSharing: boolean[]; bodies: BodyResult[];
 }
 /** Copies' one tessellation (G10): a reference copy's display mesh, the inverse of its placement, the geometries made from it and the meshes drawing them. */
-interface Shape { key: string; ref: DisplayMesh; inverse: Float64Array; surface: Geometry; edges: Geometry | null; users: Set<Mesh>; colorKey: string | null }
+interface Shape { key: string; ref: DisplayMesh; inverse: Float64Array; surface: Geometry; edges: Geometry | null; owners: number; colorKey: string | null }
 interface Body { result: BodyResult; surface: Mesh; edges: Mesh | null; highlights: Mesh[]; geometries: Geometry[]; sig: MeshSignature; state: string; tile?: number; runs: FaceRuns; painted: Painted | null }
 
 /** Owned upload inputs. Callers can reuse or mutate their buffers after a previous set. */
@@ -1012,19 +1012,22 @@ export class GpuRenderer implements ViewRenderer {
   /** The shape a body is a copy of under its placement P, and the matrix that moves the shape's geometry onto it; or a new shape with it as the reference. */
   private shapeOf(mesh: DisplayMesh, P: Float64Array, owned: DisplayMesh, previous?: Shape | null): { shape: Shape; T: Float64Array } {
     const key = topologyKey(mesh), list = this.shapes.get(key) ?? [];
-    for (const shape of list) { if (shape === previous) continue; const T = multiply(P, shape.inverse); if (movedCopy(shape.ref, mesh, T)) return { shape, T }; }
+    for (const shape of list) {
+      if (shape === previous) continue;
+      const T = multiply(P, shape.inverse);
+      if (movedCopy(shape.ref, mesh, T)) { shape.owners++; return { shape, T }; }
+    }
     const shape: Shape = {
-      key, ref: owned, inverse: invert(P), users: new Set(), colorKey: null,
+      key, ref: owned, inverse: invert(P), owners: 1, colorKey: null,
       surface: this.viewer.createGeometry({ positions: mesh.positions, normals: mesh.normals, indices: mesh.indices }),
       edges: mesh.edgeLines.length ? this.viewer.createGeometry({ positions: mesh.edgeLines, topology: 'lines' }) : null,
     };
     list.push(shape); this.shapes.set(key, list);
     return { shape, T: multiply(P, shape.inverse) };
   }
-  /** A mesh no longer drawing a shape: the shape's geometries released with its last one. */
-  private release(shape: Shape, m: Mesh): void {
-    shape.users.delete(m);
-    if (shape.users.size) return;
+  /** Each placed body retains its shape even when it temporarily draws a private surface. */
+  private releaseShape(shape: Shape): void {
+    if (--shape.owners > 0) return;
     shape.surface.dispose(); shape.edges?.dispose();
     const list = this.shapes.get(shape.key)?.filter(x => x !== shape) ?? [];
     if (list.length) this.shapes.set(shape.key, list); else this.shapes.delete(shape.key);
@@ -1087,13 +1090,14 @@ export class GpuRenderer implements ViewRenderer {
     return out;
   }
   private privateSurface(id: string, mesh: DisplayMesh): Mesh { return this.viewer.add({ positions: mesh.positions, normals: mesh.normals, indices: mesh.indices }, { name: 'inst:' + id }); }
-  private sharedSurface(id: string, shape: Shape): Mesh { const m = this.viewer.add(shape.surface, { name: 'inst:' + id }); shape.users.add(m); return m; }
+  private sharedSurface(id: string, shape: Shape): Mesh { return this.viewer.add(shape.surface, { name: 'inst:' + id }); }
   private privateEdges(id: string, mesh: DisplayMesh): Mesh { return this.viewer.add({ positions: mesh.edgeLines, topology: 'lines' }, { name: 'inst:' + id, material: { color: this.theme.edge, unlit: true, lineWidth: 1.2 }, castShadow: false, pickable: false }); }
-  private sharedEdges(id: string, shape: Shape): Mesh { const m = this.viewer.add(shape.edges!, { name: 'inst:' + id, material: { color: this.theme.edge, unlit: true, lineWidth: 1.2 }, castShadow: false, pickable: false }); shape.users.add(m); return m; }
+  private sharedEdges(id: string, shape: Shape): Mesh { return this.viewer.add(shape.edges!, { name: 'inst:' + id, material: { color: this.theme.edge, unlit: true, lineWidth: 1.2 }, castShadow: false, pickable: false }); }
 
   private dropInstance(it: PlacedInstance): void {
-    it.surfaces.forEach((m, bi) => { m.remove(); if (it.sharing[bi]) this.release(it.shapes[bi]!, m); else m.geometry.dispose(); });
-    it.edges.forEach((m, k) => { m.remove(); if (it.edgeSharing[k]) this.release(it.shapes[it.edgeBody[k]]!, m); else m.geometry.dispose(); });
+    it.surfaces.forEach((m, bi) => { m.remove(); if (!it.sharing[bi]) m.geometry.dispose(); });
+    it.edges.forEach((m, k) => { m.remove(); if (!it.edgeSharing[k]) m.geometry.dispose(); });
+    for (const shape of it.shapes) if (shape) this.releaseShape(shape);
     if (it.threads) { it.threads.remove(); it.threads.geometry.dispose(); }
   }
 
@@ -1122,7 +1126,7 @@ export class GpuRenderer implements ViewRenderer {
     for (const { it, bi, share } of want) {
       if (it.sharing[bi] === share) continue;
       const shape = it.shapes[bi]!, old = it.surfaces[bi];
-      old.remove(); if (it.sharing[bi]) this.release(shape, old); else old.geometry.dispose();
+      old.remove(); if (!it.sharing[bi]) old.geometry.dispose();
       it.surfaces[bi] = share ? this.sharedSurface(it.id, shape) : this.privateSurface(it.id, it.bodies[bi].mesh);
       it.sharing[bi] = share;
       swapped = true;

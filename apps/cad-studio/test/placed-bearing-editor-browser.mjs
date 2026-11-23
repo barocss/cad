@@ -21,6 +21,7 @@ const inputs = [
   'apps/cad-studio/src/app/bearingEdit.ts',
   'apps/cad-studio/src/app/usePlacedBearingEditor.ts',
   'apps/cad-studio/src/ui/InstanceInspector.tsx',
+  'apps/cad-studio/src/viewport/gpuRenderer.ts',
 ];
 const flow = await createFlow({
   name: 'placed-bearing-editor', output: process.argv[2], envFrozen: 'D1868_SOURCE_FROZEN',
@@ -170,6 +171,7 @@ await flow.run(async () => {
   await flow.page.waitForFunction(before => JSON.stringify(window.__studioInstanceBounds()) === before, JSON.stringify(geometry));
   await flow.page.getByTitle('Frame all (F)', { exact: true }).click();
   assert.deepEqual(await flow.inspect('reopened-native', accepted), after);
+  if (peerHits) assert.deepEqual(await readPeerBearing('peer bearing after fresh Open'), peerHits);
   await edit('inst2');
   const retained = editor().getByLabel('Housing', { exact: true });
   assert.match(await retained.locator('option:checked').innerText(), /^inst1 \/ b1:/);
