@@ -1,18 +1,31 @@
 import assert from 'node:assert/strict';
-import { relative, resolve } from 'node:path';
+import { execFileSync } from 'node:child_process';
+import { writeFile } from 'node:fs/promises';
+import { join, relative, resolve } from 'node:path';
 import { createFlow } from './flow-helper.mjs';
 import { twoGuideInspector } from './loft-two-guides-oracle.mjs';
 
+const stepExchange = process.argv.includes('--step');
 const output = resolve(process.argv[2]);
 assert.ok(relative(resolve(import.meta.dirname, '../../..'), output).startsWith('../'));
 const pins = [
   'apps/cad-studio/test/two-guide-loft-taper-browser.mjs', 'apps/cad-studio/test/loft-two-guides-oracle.mjs',
   'packages/barocss-cad/src/features/loft-two-guides.ts', 'packages/barocss-cad-model/src/app/profileCommands.ts',
   'packages/barocss-cad-model/src/app/editFields.ts', 'packages/barocss-cad-model/src/engine/part.ts',
+  ...(stepExchange ? [
+    'apps/cad-studio/test/two-guide-loft-step-oracle.py',
+    'apps/cad-studio/test/smooth-turn-step-oracle.py',
+    'apps/cad-studio/test/part21-prism-check.py',
+    'apps/cad-studio/src/files/useModelExports.ts',
+    'apps/cad-studio/src/files/StepExportPanel.tsx',
+    'packages/barocss-cad/src/io/step.ts',
+    'packages/barocss-cad/src/io/step-import.ts',
+  ] : []),
 ];
 const f = await createFlow({
   name: 'two-guide-loft-taper', output, envFrozen: 'D1280_SOURCE_FROZEN', initialFiles: pins, requiredFrozen: pins,
-  qualification: 'Build and edit a two-guide Loft between rectangular sections of different widths and depths.',
+  qualification: stepExchange ? 'Author, edit, export and reopen the two exact unequal two-guide Loft sizes.'
+    : 'Build and edit a two-guide Loft between rectangular sections of different widths and depths.',
   limits: ['10 × 6 and 14 × 4 mm rectangular sections, 12 mm apart, with linear depth-to-width ratio.'],
   inspectorSource: twoGuideInspector,
 });
@@ -42,9 +55,10 @@ const hud = () => f.page.getByRole('dialog', { name: 'Loft', exact: true });
 const near = (a, b) => Math.abs(a - b) < 1e-8;
 const nearPoint = (a, b) => a.length === 3 && a.every((x, k) => near(x, b[k]));
 async function verify(doc, middleX, label) {
-  const loft = doc.nodes.at(-1);
-  assert.deepEqual(loft.guides[0].controlPoints, [[0, 0, 0], [2, 0, 6], [0, 0, 12]]);
-  assert.deepEqual(loft.guides[1].controlPoints, [[10, 0, 0], [middleX, 0, 6], [14, 0, 12]]);
+  const guides = [[[0, 0, 0], [2, 0, 6], [0, 0, 12]], [[10, 0, 0], [middleX, 0, 6], [14, 0, 12]]];
+  const feature = doc.nodes.at(-1);
+  if (feature.kind === 'loft') assert.deepEqual(feature.guides.map(guide => guide.controlPoints), guides);
+  else assert.equal(feature.kind, 'import');
   const actual = await f.inspect(label, doc);
   assert.ok(actual.report.valid, JSON.stringify(actual.report.issues));
   assert.equal(actual.report.counts.faces, 6);
@@ -58,7 +72,7 @@ async function verify(doc, middleX, label) {
   assert.ok(nearPoint(actual.mass.inertia.map((row, i) => row[i]), expected.inertiaDiagonal));
   const left = actual.edges.find(edge => nearPoint(edge.controls[0], [0, 0, 0]));
   const right = actual.edges.find(edge => nearPoint(edge.controls[0], [10, 0, 0]));
-  assert.deepEqual([left.controls, right.controls], loft.guides.map(g => g.controlPoints));
+  assert.deepEqual([left.controls, right.controls], guides);
   assert.equal(left.uses, 2);
   assert.equal(right.uses, 2);
   assert.equal(actual.sides.length, 4);
@@ -80,11 +94,70 @@ async function verify(doc, middleX, label) {
   return actual;
 }
 
+async function exportTaper(doc, middle, label) {
+  f.phase = 'Prepare exact STEP for guide control X' + middle;
+  await f.page.waitForFunction(() => window.__studioLoftDisplay?.(0)?.triangles > 0);
+  const display = await f.page.evaluate(() => window.__studioLoftDisplay(0));
+  assert.ok(display.triangles > display.baseTriangles && display.error <= 0.01);
+  await button('Export STEP').click();
+  const panel = f.page.getByLabel('STEP export', { exact: true });
+  await panel.getByLabel('STEP loss report', { exact: true }).waitFor();
+  assert.match(await panel.innerText(), /STEP AP214 · B-rep geometry · mm/);
+  assert.match(await panel.innerText(), /native feature history/i);
+  assert.match(await panel.getByLabel('STEP included bodies').innerText(), /^1 output bod(?:y|ies)\b/);
+  await f.snapshot(label + '-step-ready');
+  await button('Export', panel).click();
+  await panel.waitFor({ state: 'hidden' });
+  const text = await f.page.evaluate(() => window.taperStepOutput);
+  assert.ok(text?.startsWith('ISO-10303-21;'));
+  const path = join(f.output, label + '.step');
+  await writeFile(path, text);
+  await f.same(doc);
+  const oracle = join(f.app, 'test/two-guide-loft-step-oracle.py');
+  const independent = JSON.parse(execFileSync('python3', ['-BI', oracle, path, String(middle)], { encoding: 'utf8' }));
+  assert.equal(independent.status, 'PASS');
+  assert.throws(() => execFileSync('python3', ['-BI', oracle, path, middle === 16 ? '18' : '16'], { stdio: 'pipe' }));
+  f.report.observations.push({ label, independent, wrongGuideControlDetected: true, nativeDisplay: display });
+  return { path, text, middle, label };
+}
+
+async function openTaper({ path, text, middle, label }) {
+  f.phase = 'Fresh Studio Open of exact generated STEP bytes';
+  await f.newPage();
+  await f.openFile(path, 1);
+  const imported = await f.doc();
+  assert.equal(imported.nodes[0].step, text);
+  assert.equal(imported.nodes[0].kind, 'import');
+  assert.equal(imported.nodes[0].solids ?? 1, 1);
+  assert.ok(!imported.direct && !imported.history?.length);
+  const actual = await verify(imported, middle, label + '-reopened-native');
+  assert.deepEqual(actual.report.counts, { bodies: 1, shells: 1, faces: 6, loops: 6, coedges: 24, edges: 12, vertices: 8 });
+  const display = await f.page.evaluate(() => window.__studioLoftDisplay?.(0) ?? null);
+  f.report.observations.push({ label, importedDisplay: display });
+  await button('Iso').click();
+  await f.page.getByTitle('Frame all (F)', { exact: true }).click();
+  await f.snapshot(label + '-step-opened');
+}
+
 await f.run(async () => {
   const origin = new URL(f.server.resolvedUrls.local[0]).origin;
   const newContext = f.browser.newContext.bind(f.browser);
   f.browser.newContext = async options => {
     const context = await newContext({ ...options, serviceWorkers: 'block' });
+    if (stepExchange) await context.addInitScript(() => {
+      const urls = new Map(), originalUrl = URL.createObjectURL, originalClick = HTMLAnchorElement.prototype.click;
+      URL.createObjectURL = function (blob) {
+        const url = originalUrl.call(URL, blob);
+        urls.set(url, blob);
+        return url;
+      };
+      HTMLAnchorElement.prototype.click = function () {
+        const blob = urls.get(this.href);
+        if (!blob || !this.download.endsWith('.step')) return originalClick.call(this);
+        urls.delete(this.href);
+        window.taperStepOutput = blob.text();
+      };
+    });
     await context.route('**/*', route => {
       const url = new URL(route.request().url());
       if (url.hostname === 'fonts.googleapis.com') return route.fulfill({ contentType: 'text/css', body: '' });
@@ -113,6 +186,7 @@ await f.run(async () => {
     await f.page.waitForFunction(() => window.__studioLoftDisplay?.()?.triangles > 0);
   }
   await f.snapshot('original');
+  const exported = stepExchange ? [await exportTaper(made, 16, 'initial-taper')] : [];
 
   f.phase = 'Edit the second guide and check that both authored sections stay exact';
   await f.openFeatureEditor(4, 'Loft with unequal sections');
@@ -130,4 +204,9 @@ await f.run(async () => {
   await f.editor().getByText('Guide 1 · (0, 0, 0) → (0, 0, 12) mm', { exact: true }).waitFor();
   await f.editor().getByText('Guide 2 · (10, 0, 0) → (14, 0, 12) mm', { exact: true }).waitFor();
   await f.snapshot('reopened-guide-history');
+  if (stepExchange) {
+    await f.closeEditor();
+    exported.push(await exportTaper(await f.doc(), 18, 'edited-taper'));
+    for (const file of exported) await openTaper(file);
+  }
 });

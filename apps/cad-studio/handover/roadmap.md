@@ -1,13 +1,13 @@
 # CAD roadmap — current status and execution order
 
-Updated 2026-11-24 · Priority authority: D520 · Latest delivery: D1837 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
+Updated 2026-11-24 · Priority authority: D520 · Latest delivery: D1838 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
 
 This is the only current status index. Detailed tracks define acceptance; the 34 stable row pages retain scope and issue navigation. Immutable decision notes retain results. Do not append chronological status paragraphs here. [D520 decision](notes/cad-roadmap-replan-2026-11-04/README.md) supersedes D445 execution order and historical next-item text, while retaining its safeguards and bounded proofs.
 
 ## Now and next
 
-- **Current position:** [D1837](notes/static-assembly-replay-closeout-2026-11-24/README.md), P3 row 10. Static Assembly Steps reproduce the same submitted scene and saved camera across navigation paths. [D1836](notes/drawing-fit-change-proposal-review-2026-11-24/README.md) verifies review of a changed fit before approval and the current SVG.
-- **Next MAIN:** D1838, P5 rows [07](roadmap-rows/07.md) and [08](roadmap-rows/08.md) and P2 row [13](roadmap-rows/13.md), [#16](https://github.com/barocss/cad/issues/16). Measure current exact STEP exchange of the unequal two-guide Loft from D1280. Reuse its authored guides and independently check both caps, rational wall support and native reopen before expanding admissible profiles.
+- **Current position:** [D1838](notes/two-guide-loft-taper-step-exchange-2026-11-24/README.md), P5 rows 07 and 08 and P2 row 13. The unequal two-guide Loft keeps exact AP214 geometry in both tested guide states. Studio reopened the solids with a coarser display. [D1837](notes/static-assembly-replay-closeout-2026-11-24/README.md) completes the scoped static replay in [#737](https://github.com/barocss/cad/issues/737).
+- **Next MAIN:** D1839, P4 row [06](roadmap-rows/06.md) and P2 row [13](roadmap-rows/13.md), [#16](https://github.com/barocss/cad/issues/16). Certify and refine the reopened unequal two-guide Loft display. Compare native geometry, visible rails and canonical selection at matched Studio camera positions.
 - **Separate follow-ups:** Continue Studio App extraction in cohesive parts with affected desktop checks. [#608 Rendering](https://github.com/barocss/cad/issues/608) stays on HOLD. API inventory drift remains open. The issue tracker records [#126](https://github.com/barocss/cad/issues/126), [#613](https://github.com/barocss/cad/issues/613), [#152](https://github.com/barocss/cad/issues/152) and [#22](https://github.com/barocss/cad/issues/22) as closed.
 - **Active repository:** [barocss/cad](https://github.com/barocss/cad), based on `origin/main`. Fetch before work and preserve unexpected changes. The [migration record](../../../docs/migration/README.md) maps the former `local/cad-dev` history and issue numbers.
 - **Evidence correction:** D482 records2167 PASS/0 FAIL/2 existing SKIP in a later full-kernel run than D433. Neither result is a new full-suite PASS at this audit HEAD. [D482 record](notes/vertical-contact-refusal-2026-11-04/README.md).
@@ -43,7 +43,7 @@ P0 findings that can lose work, export stale geometry or misattribute results ta
 
 ## GitHub requirement and issue inventory
 
-- The [current closeout queue](roadmap-tracks/18-issue-closeout.md) records 220 open issues after five completed closures and one new research proposal, with remaining acceptance gaps and held dependencies.
+- The [current closeout queue](roadmap-tracks/18-issue-closeout.md) records 218 open issues after seven completed closures and one new research proposal, with remaining acceptance gaps and held dependencies.
 
 The [November 20 routing snapshot](notes/open-issue-routing-2026-11-20/README.md) covers all 229 open issues in the standalone CAD repository. It links each issue to a primary route and identifies model-version tracking for agent visual review as the next AI workflow to measure (#324).
 
