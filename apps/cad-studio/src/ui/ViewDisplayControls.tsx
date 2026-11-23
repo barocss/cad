@@ -1,5 +1,5 @@
 import { NamedInspectionViews } from './NamedInspectionViews';
-import type { useNamedInspection } from '../state/useNamedInspection';
+import type { useStudioInspectionViews } from '../app/useStudioInspectionViews';
 import { Profiler, useState, type ComponentProps, type Dispatch, type KeyboardEvent, type RefObject, type SetStateAction } from 'react';
 import { Button } from '@/components/ui/button';
 import { fmt, type StudioDoc } from '@barocss/cad-model/engine/doc';
@@ -96,8 +96,7 @@ export interface ViewPickingControls {
 }
 
 export interface ViewDisplayControlsProps {
-  inspection?: ReturnType<typeof useNamedInspection>;
-  inspectionSelectedKeys?: readonly string[];
+  inspection?: ReturnType<typeof useStudioInspectionViews>;
   doc: StudioDoc;
   viewport: RefObject<ViewportHandle | null>;
   cornerRight: RefObject<HTMLDivElement | null>;
@@ -110,7 +109,7 @@ export interface ViewDisplayControlsProps {
 }
 
 /** The existing corner view/display controls; all state and viewport ownership remain in App. */
-export function ViewDisplayControls({ inspection, inspectionSelectedKeys = [], doc, viewport, cornerRight, display, view, section: sectionState, analysis: analysisState, picking, explodeStore }: ViewDisplayControlsProps) {
+export function ViewDisplayControls({ inspection, doc, viewport, cornerRight, display, view, section: sectionState, analysis: analysisState, picking, explodeStore }: ViewDisplayControlsProps) {
   const { displayOpen, setDisplayOpen, displayMode, setDisplayMode, effectiveDisplayMode, displayScopeReason,
     displayModeReason, displayModeNotice, clearDisplayModeFailure, isolatedInstances, setIsolatedInstances, isolationReason, isolationSelection } = display;
   const { ortho, sketching, ao, setAo, theme, setTheme, rendering, printing, viewBackend, wheelZoom, sketchReopenCamera, fitActiveSketch } = view;
@@ -146,7 +145,7 @@ export function ViewDisplayControls({ inspection, inspectionSelectedKeys = [], d
         {displayOpen && <div className="previews" role="group" aria-label="Previews">
         {/* (G21's display mode and isolate, in the column too: the Views row stays as narrow as the history bar assumes.) */}
         <div className="card views display" role="group" aria-label="Display">
-          {inspection && <NamedInspectionViews inspection={inspection} selectedKeys={inspectionSelectedKeys} />}
+          {inspection && <NamedInspectionViews inspection={inspection} selectedKeys={inspection.selectedKeys} />}
           {wheelZoom && <Button size="sm" variant={wheelZoom.enabled ? 'default' : 'ghost'} aria-label="Reverse wheel zoom" aria-pressed={wheelZoom.enabled}
             title="Reverse unmodified wheel zoom, including touchpad scrolling, in Model and Sketch only. Modified wheel gestures and Drawing are unchanged."
             onPointerDown={event => event.preventDefault()} onKeyDown={keepViewToggleKeys}

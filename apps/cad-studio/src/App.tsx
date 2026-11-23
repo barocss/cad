@@ -1,6 +1,6 @@
 import { useStudioSheetPatterns } from './app/useStudioSheetPatterns';
 import { prepareParameterPatternHoleSpacing } from './state/parameterPatternHoleSpacing';
-import { useNamedInspection } from './state/useNamedInspection';
+import { useStudioInspectionViews } from './app/useStudioInspectionViews';
 import { useStudioMeasurementReadouts, useStudioMeasurementSession } from './app/useStudioMeasurementReadouts';
 import { selectedInstanceActions } from './assembly/selectedInstanceActions';
 import { pickPlacedPart } from './assembly/groundSelection';
@@ -2160,22 +2160,17 @@ export function App() {
   const historyPreviewBodies = (heldDraftFace.view?.kind === 'ready' ? heldDraftFace.view.bodies : null)
     ?? alignPreviewBodies ?? oppositeRadiusPreviewBodies;
   const shownPreviewBodies = previewBodies ?? historyPreviewBodies;
-  // Session-only inspection never enters document/history or the export source.
-  const inspectionOwner = useMemo(() => ({}), [docGeneration, workerSession, project.view.store, doc, evaluated]);
-  const inspectionBodies = useMemo(() => bodies.map(body => ({ key: body.key, mesh: body.mesh, hidden: !!lookOf(doc, body).hidden })), [bodies, doc]);
-  const inspectionReason = !viewBackend || !fresh || busy || workerFailure || shownDoc !== doc
-    ? 'Wait for the current Model result.'
-    : rendering || drawing || sketch || active || measure || section || marker !== null || variants.showing
-      || previewMode !== 'none' || shownPreviewBodies || routePreviewBodies || ghost || compareOverlay
-      || inPlace || cageEd.session || skel.session || assembly.draft || exploded || bodyDrag || instDrag
-      || isolatedInstances || doc.instances?.length || directShown.length || viewAnalysis || mapKind
-      || editNode !== null || routePanelOpen || routeVisualDoc || animatedAt || !bodies.length || bodies.some(body => body.topology?.kind !== 'solid' || body.ref?.side !== 'solid'
-        || !doc.nodes[body.ref.node]?.id || doc.nodes[body.ref.node]?.held || doc.nodes[body.ref.node]?.suppressed)
-      ? 'Inspection views require ordinary base solids in idle Model view.' : undefined;
-  const inspectionOpenIntent = openIntent.current;
-  const inspection = useNamedInspection({ owner: inspectionOwner, bodies: inspectionBodies, reason: inspectionReason,
-    isCurrent: () => docNow.current === doc && workerSessionNow.current === workerSession && openIntent.current === inspectionOpenIntent && !project.opening(),
-    getCamera: () => viewport.current?.getCamera() ?? null });
+  const inspection = useStudioInspectionViews({
+    model: { doc, evaluated, bodies, selected: selection.bodies },
+    session: { generation: docGeneration, worker: workerSession, project: project.view.store },
+    availability: { pending: !!(!viewBackend || !fresh || busy || workerFailure || shownDoc !== doc),
+      blocked: !!(rendering || drawing || sketch || active || measure || section || marker !== null || variants.showing
+        || previewMode !== 'none' || shownPreviewBodies || routePreviewBodies || ghost || compareOverlay
+        || inPlace || cageEd.session || skel.session || assembly.draft || exploded || bodyDrag || instDrag
+        || isolatedInstances || directShown.length || viewAnalysis || mapKind || editNode !== null || routePanelOpen || routeVisualDoc || animatedAt) },
+    live: { doc: docNow, worker: workerSessionNow, open: openIntent, opening: () => project.opening() },
+    getCamera: () => viewport.current?.getCamera() ?? null,
+  });
   const appearance = useModelAppearance({ model: { doc, evaluated, bodies }, preview: { active, previewBodies: shownPreviewBodies, routePreviewBodies, ghost, proposalOverlay, compareOverlay },
     display: { inspectionVisibleKeys: inspection.visibleKeys, bodyDrag: !!bodyDrag, section: !!section, sketch: !!sketch, sectionBodies, sectionExactShown, sectionExact, animatedAt } });
   const { drawnBodies, shownBodies, animatedOffsets, bodyColors, hiddenBodies, faceColors, proposalTint, placeSkip } = appearance;
@@ -2845,7 +2840,7 @@ export function App() {
         <span className="mono muted">{busy ? (slow ? 'Working…' : 'Computing…') : modelUnavailable ? (bodies.length ? 'Previous result · model evaluation failed' : 'Model evaluation failed') : `${ortho ? 'Orthographic' : 'Perspective'} · ${bodyTopologyCounts(shownBodies)} · ${Math.round(lastMs)} ms`}{!modelUnavailable && <CursorReadout sink={cursorSink} />}</span>
       </div>
 
-      <ViewDisplayControls inspection={inspection} inspectionSelectedKeys={selection.bodies.flatMap(index => bodies[index] ? [bodies[index].key] : [])} doc={doc} viewport={viewport} cornerRight={historyLayout.cornerRight}
+      <ViewDisplayControls inspection={inspection} doc={doc} viewport={viewport} cornerRight={historyLayout.cornerRight}
         display={{ ...viewDisplay.controls, isolatedInstances, setIsolatedInstances, isolationReason, isolationSelection }}
         view={{ ortho, sketching: !!sketch, wheelZoom: modelWheelZoom, sketchReopenCamera, fitActiveSketch: sketchActions.fitActiveSketch, ao, setAo, theme, setTheme, rendering, printing: !!printing, viewBackend }}
         section={{ section, documentSession: docGeneration, setSection, sectionHatchOn, setSectionHatchOn, sectionBox, sectionFacePick, setSectionFacePick, sketchSection, cameraEye, sectionExclusion: sectionExclusionControls }}

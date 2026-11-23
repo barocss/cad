@@ -45,15 +45,15 @@ await f.run(async()=>{
  await apply('A top').click();await button('Section view').click();await settle();assert.equal(await apply('A top').isDisabled(),true);assert.equal(await button('Restore inspection view').isDisabled(),true);await f.snapshot('06-section-blocked');await button('Section view').click();await settle();assert.equal(await apply('A top').isDisabled(),false);assert.equal(await button('Restore inspection view').isDisabled(),true);await top();await pick(35,'b3');assert.deepEqual(await invariant(),original);
  // Real fast user clicks: last published camera and mask must win together.
  await display();
- const allBox=await apply('All oblique').boundingBox(),aBox=await apply('A top').boundingBox();assert.ok(allBox&&aBox);
- const clickAt=async(box,label)=>{
+ const clickAt=async(locator,label)=>{
+  const box=await locator.boundingBox();assert.ok(box);
   const point=[box.x+box.width/2,box.y+box.height/2];
   const target=await f.page.evaluate(([x,y])=>{const e=document.elementFromPoint(x,y)?.closest('button,[role="menuitem"]');return e?.getAttribute('aria-label')??e?.textContent?.trim();},point);
   assert.equal(target,label,'real click reaches the intended control');
   await f.page.mouse.click(...point);
  };
  const rapidStart=await f.page.evaluate(()=>performance.now());
- await clickAt(allBox,'Apply inspection view All oblique');await clickAt(aBox,'Apply inspection view A top');await clickAt(allBox,'Apply inspection view All oblique');await clickAt(aBox,'Apply inspection view A top');
+ await clickAt(apply('All oblique'),'Apply inspection view All oblique');await clickAt(apply('A top'),'Apply inspection view A top');await clickAt(apply('All oblique'),'Apply inspection view All oblique');await clickAt(apply('A top'),'Apply inspection view A top');
  const rapidMs=await f.page.evaluate(t=>performance.now()-t,rapidStart);
  await cameraEquals(subsetCamera);await pick(35,null);await pick(5,'b1');
  f.report.observations.push({boundary:'four real consecutive Apply clicks, last subset wins',elapsedMs:rapidMs});
@@ -62,12 +62,11 @@ await f.run(async()=>{
  await apply('All oblique').click();await cameraEquals(allCamera);
  await button('View cube directions').click();
  const front=f.page.getByRole('menuitem',{name:'Front',exact:true});await front.waitFor();
- const frontBox=await front.boundingBox(),applyBox=await apply('A top').boundingBox();assert.ok(frontBox&&applyBox);
  const turnStart=await f.page.evaluate(()=>performance.now());
- await clickAt(frontBox,'Front');
+ await clickAt(front,'Front');
  await f.page.waitForFunction(c=>{const n=window.__studioCamera();return n.yaw!==c.yaw&&Math.abs(n.pitch)>1e-6;},allCamera,{timeout:200});
  const intermediate=await camera();assert.notDeepEqual(intermediate,allCamera);assert.ok(Math.abs(intermediate.pitch)>1e-6,'easing has not reached Front');
- await clickAt(applyBox,'Apply inspection view A top');
+ await clickAt(apply('A top'),'Apply inspection view A top');
  const takeoverMs=await f.page.evaluate(t=>performance.now()-t,turnStart);
  assert.ok(takeoverMs<260,'fixture must Apply before the ViewCube easing completes');
  await cameraEquals(subsetCamera);await f.page.waitForTimeout(400);await cameraEquals(subsetCamera);

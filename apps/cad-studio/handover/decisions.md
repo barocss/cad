@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D1807: [Extract Studio named inspection ownership](notes/studio-named-inspection-ownership-2026-11-23/README.md), #44. Match 17 paired camera, visibility, Update, Restore and fresh Open checkpoints with identical native Save bytes.
+
 - D1806: [Review a pending arc-first paired duct outlet Offset](notes/pending-arc-first-outlet-offset-review-2026-11-23/README.md), #324. Bind both apertures, the original rail, the retained bend and both Agent images through explicit Studio approval and fresh Open.
 
 - D1805: [Move the straight outlet after an arc-first paired Sweep](notes/paired-arc-line-outlet-offset-2026-11-23/README.md), #17. Move the signed cap while keeping both passages and retained native boundaries. Verify saved handle drag, Studio fresh Open and local Agent approval.
