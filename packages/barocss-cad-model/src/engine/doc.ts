@@ -759,6 +759,14 @@ export function isPairedElbowOutletOffsetSource(nodes: readonly unknown[], index
   return controlPoints.length === 7 || arcLine || isFiveSpanPairedElbowOffsetPath(path);
 }
 
+/** Only the original five-span outlet may bind its signed extension to another native plane. */
+export function isPairedFiveSpanOutletPlaneSource(nodes: readonly unknown[], index: number, face: string): boolean {
+  const path = pairedElbowOffsetPath(nodes, index, face, 'end');
+  if (!path || !isFiveSpanPairedElbowOffsetPath(path)) return false;
+  const sweep = nodes[index], sketch = textRecord(sweep) ? nodes[Number(sweep.sketch)] : undefined;
+  return textRecord(sketch) && !sketch.suppressed && sketch.held === undefined;
+}
+
 /** Authored bounds for the original inlet on either supported paired path with two straight ends. */
 export function isPairedElbowInletOffsetSource(nodes: readonly unknown[], index: number, face: string): boolean {
   const path = pairedElbowOffsetPath(nodes, index, face, 'start');
@@ -822,9 +830,16 @@ export function directFaceDocumentProblem(input: unknown): string | null {
       const parent = value.nodes[parentIndex];
       if (!textRecord(parent)) return 'Offset face: a supported solid parent is required.';
       if (parent.kind === 'sweep-curve') {
-        if (signature.k !== 'plane' || node.target !== undefined || !(isPairedElbowOutletOffsetSource(value.nodes, parentIndex, face)
+        if (signature.k !== 'plane' || !(isPairedElbowOutletOffsetSource(value.nodes, parentIndex, face)
           || isPairedElbowInletOffsetSource(value.nodes, parentIndex, face)))
           return 'Offset face: the paired Exact Sweep needs a supported original straight end and a signed distance.';
+        if (node.target !== undefined) {
+          if (!isPairedFiveSpanOutletPlaneSource(value.nodes, parentIndex, face))
+            return 'Offset face: To plane needs the original five-span paired outlet.';
+          const reference = value.nodes[(node.target as OffsetPlaneRef).body.node];
+          if (!textRecord(reference) || reference.suppressed || reference.held !== undefined)
+            return 'Offset face: the reference body must remain available and unsuppressed.';
+        }
         continue;
       }
       if (isExactCylinderThicken(parent)) {

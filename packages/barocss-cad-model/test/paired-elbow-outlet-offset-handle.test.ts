@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { brepMassProperties, checkBrep, type Curve } from '@barocss/cad';
+import { brepMassProperties, checkBrep, faceGeometry, type Curve } from '@barocss/cad';
 import type { Ctx } from '../src/app/commands';
 import { editSavedOffsetFaceCommand } from '../src/app/offsetFaceEdit';
 import { savedPairedElbowOutletOffsetHandle } from '../src/app/pairedElbowOutletOffsetHandle';
 import { offsetFaceCommand } from '../src/app/profileCommands';
 import { encodeStudioFile, readStudioFile } from '../src/engine/container';
-import { emptyDoc, isPairedElbowInletOffsetSource, prefixDoc, withNode, type StudioDoc } from '../src/engine/doc';
+import { emptyDoc, isPairedElbowInletOffsetSource, offsetFaceDocumentProblem, parentsOf, prefixDoc, usesOf, withNode, type StudioDoc } from '../src/engine/doc';
 import { evaluateDoc, partBreps } from '../src/engine/evaluate';
 
 const path: Pick<Curve, 'degree' | 'knots' | 'controlPoints' | 'weights'> = {
@@ -54,6 +54,98 @@ function checkHandle(doc: StudioDoc, distance: number, savedDistance: number) {
     distance < 0 ? Math.max(-.1, distance, savedDistance) : Math.min(.1, distance, savedDistance));
   return { ctx, original, handle };
 }
+
+function outletAndDonor(rail = sBendPath) {
+  let doc = withNode(fixture(rail), { kind: 'sketch', profile: 'rectangle', min: [40, 52], max: [44, 58] });
+  doc = withNode(doc, { kind: 'extrude', sketch: 2, height: 4, from: 10 });
+  return withNode(doc, { kind: 'translate', parent: { node: 3, side: 'solid' }, offset: [0, 0, 0] });
+}
+
+function pickedPair(doc: StudioDoc, sourceFace = 'n1.end', referenceFace = 'n3.side3') {
+  const result = evaluateDoc(doc, 1);
+  assert.ok(result.ok, result.ok ? '' : result.error.detail);
+  const find = (key: string, name: string) => {
+    const body = result.bodies.findIndex(value => value.key === key);
+    const match = result.bodies[body]?.mesh.faces.find(face => face.name === name);
+    assert.ok(match, name);
+    return { body, face: match.index };
+  };
+  const ctx: Ctx = { doc, bodies: result.bodies, selection: { faces: [find('b1', sourceFace)], edges: [], bodies: [] } };
+  return { ctx, donor: find('b4', referenceFace) };
+}
+
+test('a parallel native reference drives the original five-span outlet through signed reevaluation, History and reopen', async () => {
+  const original = outletAndDonor(), { ctx, donor } = pickedPair(original);
+  const picked = offsetFaceCommand.onPick!(ctx, { offsetMode: 'to-plane' }, { face: donor, edge: null });
+  assert.ok(picked && !picked.error);
+  const linked = offsetFaceCommand.build!(ctx, picked), node = linked.nodes[5];
+  assert.ok(node.kind === 'offset-face' && node.target);
+  assert.equal(node.target.feature, 'n4');
+  assert.equal(node.target.face, 'n3.side3');
+  assert.deepEqual(usesOf(node), [1, 4]);
+  assert.deepEqual(parentsOf(node), [1]);
+  assert.equal(offsetFaceDocumentProblem(linked), null);
+  assert.ok(!Object.hasOwn(node, 'distance'));
+  const donorBefore = partBreps(original).find(body => body.key === 'b4')!.brep;
+  assert.deepEqual(partBreps(linked).find(body => body.key === 'b4')!.brep, donorBefore);
+  const nativeCheck = (doc: StudioDoc, x: number) => {
+    const bodies = partBreps(doc), body = bodies.find(record => record.key === 'b5')!.brep;
+    const sign = x - 36, direct = offsetFaceCommand.build!(ctx, { d: sign });
+    assert.deepEqual(body, partBreps(direct).find(record => record.key === 'b5')!.brep);
+    const report = checkBrep(body, { strict: true });
+    assert.ok(report.valid);
+    assert.deepEqual(report.counts, { bodies: 1, shells: 1, faces: 62, loops: 66, coedges: 264, edges: 132, vertices: 72 });
+    assert.equal(report.topology[0].genus, 2);
+    const cap = body.faces.find(face => face.name === 'n1.end')!, plane = faceGeometry(cap);
+    assert.ok(plane.kind === 'plane' && cap.loops.length === 3);
+    near(plane.o[0], x);
+    near(brepMassProperties(body, 1).volume, 32 * (24 + sign + 15 * Math.PI));
+  };
+  nativeCheck(linked, 40);
+  const moved = { ...linked, nodes: linked.nodes.map((node, index) => index === 4 && node.kind === 'translate'
+    ? { ...node, offset: [-8, 0, 0] as [number, number, number] } : node) };
+  assert.deepEqual(moved.nodes[5], node);
+  nativeCheck(moved, 32);
+  const history = editSavedOffsetFaceCommand(moved, 5)!;
+  const current = evaluateDoc(moved, 1);
+  assert.ok(current.ok);
+  const historyCtx: Ctx = { doc: moved, bodies: current.bodies, selection: { faces: [], edges: [], bodies: [] } };
+  assert.equal(history.defaults!(historyCtx).offsetMode, 'to-plane');
+  assert.equal(history.build!(historyCtx, history.defaults!(historyCtx)), moved);
+  const opened = await readStudioFile(encodeStudioFile(moved));
+  assert.ok('doc' in opened);
+  assert.deepEqual(opened.doc, JSON.parse(JSON.stringify(moved)));
+  nativeCheck(opened.doc, 32);
+});
+
+test('the outlet refuses a nonparallel or exhausted reference and leaves shorter sweeps and the inlet distance-only', () => {
+  const original = outletAndDonor();
+  const bind = (doc: StudioDoc, face = 'n3.side3') => {
+    const { ctx, donor } = pickedPair(doc, 'n1.end', face);
+    const picked = offsetFaceCommand.onPick!(ctx, { offsetMode: 'to-plane' }, { face: donor, edge: null });
+    assert.ok(picked && !picked.error);
+    return offsetFaceCommand.build!(ctx, picked);
+  };
+  const before = structuredClone(original), linked = bind(original);
+  const result = evaluateDoc(bind(original, 'n3.top'), 1);
+  assert.ok(!result.ok && /parallel/i.test(result.error.detail));
+  for (const [offset, error] of [[-4, /same plane/i], [-10, /retained bend-to-outlet join/i]] as const) {
+    const next = { ...linked, nodes: linked.nodes.map((node, index) => index === 4 && node.kind === 'translate'
+      ? { ...node, offset: [offset, 0, 0] as [number, number, number] } : node) };
+    const denied = evaluateDoc(next, 1);
+    assert.ok(!denied.ok && error.test(denied.error.detail));
+  }
+  const node = linked.nodes[5];
+  assert.ok(node.kind === 'offset-face' && node.target);
+  const stale = { ...linked, nodes: [...linked.nodes.slice(0, 5), { ...node, target: { ...node.target, localSupport: node.target.localSupport + 1 } }] };
+  const staleResult = evaluateDoc(stale, 1);
+  assert.ok(!staleResult.ok && /original reference face changed/i.test(staleResult.error.detail));
+  for (const [doc, face] of [[outletAndDonor(path), 'n1.end'], [original, 'n1.start']] as const) {
+    const { ctx } = pickedPair(doc, face);
+    assert.ok(!offsetFaceCommand.fields!(ctx).some(field => field.key === 'offsetMode'));
+  }
+  assert.deepEqual(original, before);
+});
 
 test('saved paired outlet uses its original signed origin, cached native receipt and typed reverse', () => {
   const source = fixture(), sourceBefore = structuredClone(source), original = context(source);

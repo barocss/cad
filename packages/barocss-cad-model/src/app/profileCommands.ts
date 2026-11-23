@@ -7,7 +7,7 @@ import type { BodyResult, VolumeEvaluation } from '../engine/evaluate';
 // (a picked profile pulled along its normal), Revolve (turned about a sketch axis), Pipe (carried along
 // runs and bends) and Loft (through two or more picked sections). A profile drawn on a body's face joins
 // that body by default; Operation can make a new body or cut it instead.
-import { exactSemicylinderCapSource, exactSemicylinderRadialBoreSource, exactSemicylinderSecondOffset, exactSemicylinderWallAfterReplacement, featureLabel, isExactCylinderFaceEditChain, offsetFaceEndLabel, isAnnularReplacementSource, isBoredPlateHole, isBoredPlateOffsetSource, isBoxCapOffsetSource, isCylinderReplacementSource, isStraightHexagonalExtrusion, prefixDoc, withNode, type BodyRef, type ModelNode, type SketchNode, type StudioDoc } from '../engine/doc';
+import { exactSemicylinderCapSource, exactSemicylinderRadialBoreSource, exactSemicylinderSecondOffset, exactSemicylinderWallAfterReplacement, featureLabel, isExactCylinderFaceEditChain, offsetFaceEndLabel, isAnnularReplacementSource, isBoredPlateHole, isBoredPlateOffsetSource, isBoxCapOffsetSource, isCylinderReplacementSource, isPairedFiveSpanOutletPlaneSource, isStraightHexagonalExtrusion, prefixDoc, withNode, type BodyRef, type ModelNode, type SketchNode, type StudioDoc } from '../engine/doc';
 import type { Vec3 } from '../engine/mesh';
 import { toLocal, toWorld } from '../sketch/plane';
 import { boundParameters, framedLoftSections, loftSections, pickedSketches, planeOf, profileMiddle, twoGuideLoftSections } from './profiles';
@@ -346,6 +346,8 @@ function offsetPlaneAvailable(ctx: Ctx): boolean {
   if (!node || !face?.exact || ref.side !== 'solid' || isExactCylinderFaceEditChain(ctx.doc.nodes, ref.node)) return false;
   if (node.kind === 'thicken' && node.mode === 'exact-cylinder')
     return face.exact.kind === 'plane' && !!exactSemicylinderCapSource(ctx.doc.nodes, ref.node, ctx.doc.parameters)?.faces.includes(face.name);
+  if (node.kind === 'sweep-curve')
+    return face.exact.kind === 'plane' && isPairedFiveSpanOutletPlaneSource(ctx.doc.nodes, ref.node, face.name);
   return node.kind === 'draft' || (node.kind === 'offset-face' && !isBoredPlateOffsetSource(ctx.doc.nodes, ref.node) &&
     !isBoxCapOffsetSource(ctx.doc.nodes, ref.node)) || (node.kind === 'extrude' &&
     (!!node.draft || (face.nativeAxisPlane?.axis !== 'z' && isStraightHexagonalExtrusion(ctx.doc.nodes, node))));

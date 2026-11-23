@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1854: [Bind the original five-span outlet to a parallel native reference](notes/five-span-outlet-reference-plane-2026-11-24/README.md), #17. Move the reference, reselect its other face and preserve both passages and all 48 joins in Studio.
 - D1853: [Repeat the first of three cuts along a linked XY path](notes/three-cut-path-pattern-2026-11-24/README.md), #25. Qualify a Studio-authored path, both later collisions and the retained path after fresh Open.
 - D1852: [Repeat the first of three cuts through a captured Fill mask](notes/three-cut-fill-pattern-2026-11-24/README.md), #25. Preserve the two later tools, the selected cells and the captured mask through Studio edit and reopen.
 - D1851: [Repeat the first of three cuts on a rectangular grid](notes/three-cut-rectangular-pattern-2026-11-24/README.md), #25. Both later cuts and all three new apertures keep their distinct sources through Studio edit and reopen.
