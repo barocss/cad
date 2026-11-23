@@ -3,9 +3,13 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createFlow, sha256 } from './flow-helper.mjs';
 
+const reattach = process.argv.includes('--reattach');
 const pins = [
   'apps/cad-studio/test/drawing-bore-regeneration-browser.mjs',
   'apps/cad-studio/src/ui/DrawingWorkspace.tsx',
+  'apps/cad-studio/src/state/referenceDecisions.ts',
+  'apps/cad-studio/src/ui/ReferenceDecisions.tsx',
+  'apps/cad-studio/src/ui/drawing/referenceCandidate.ts',
   'apps/cad-studio/src/ui/drawing/DimensionsList.tsx',
   'apps/cad-studio/src/ui/drawing/ExportActions.tsx',
   'packages/barocss-cad-model/src/engine/references.ts',
@@ -15,7 +19,8 @@ const pins = [
 const f = await createFlow({
   name: 'drawing-bore-regeneration', output: process.argv[2], envFrozen: 'DRAWING_BORE_FROZEN',
   initialFiles: pins, requiredFrozen: pins,
-  qualification: 'Regenerate one authored diameter and retain its identity when two matching nominal bores remain.',
+  qualification: reattach ? 'Preview both equal bores, explicitly reattach the lost callout and verify its SVG leader.'
+    : 'Regenerate one authored diameter and retain its identity when two matching nominal bores remain.',
   limits: ['One A4 part sheet, three through holes, authored symmetric tolerance and SVG.'],
   oracleSource: String.raw`
 import collections
@@ -46,22 +51,34 @@ for path in top.findall(ns + 'path'):
     circles[(round((x0 + x1) / 2 - min(xs), 4), round(y0 - min(ys), 4), rx)] += 1
 expected = collections.Counter({(22, 20, 5): 2, (58, 20, 5): 2})
 target = input['diameter']
-if target is not None:
+anchor_x = input['anchorX']
+if anchor_x == 40:
     expected[(40, 20, target / 2)] = 2
 assert circles == expected, (circles, expected)
 groups = [g for g in svg.iter(ns + 'g') if g.get('class') == 'dimension']
 if target is None:
     assert groups == [], [g.attrib for g in groups]
     texts = []
+    tip = None
 else:
     group, = groups
     assert group.get('data-dim') == input['id'] and group.get('data-view') == 'top'
     texts = [''.join(t.itertext()) for t in group.iter(ns + 'text')]
     merged = ' '.join(texts)
     assert merged == f'Ø{target}.000 THRU ±0.125', texts
+    # The first dimension line starts at the rim and ends at the manual label location.
+    # Check its endpoint against the independently measured centre of the approved hole.
+    leader = group.find(ns + 'line')
+    x1, y1, x2, y2 = [float(leader.get(key)) for key in ('x1', 'y1', 'x2', 'y2')]
+    centre = (min(xs) + anchor_x, min(ys) + 20)
+    dx, dy = x2 - centre[0], y2 - centre[1]
+    distance = math.hypot(dx, dy)
+    assert distance > target / 2 + 1
+    tip = [x1, y1]
+    assert math.hypot(x1 - centre[0] - dx / distance * target / 2, y1 - centre[1] - dy / distance * target / 2) <= 0.00015, (tip, centre, target)
 revision, = [''.join(t.itertext()) for t in svg.iter(ns + 'text') if (t.text or '').startswith('SRC ')]
 assert re.fullmatch(r'SRC [0-9a-f]{16}', revision), revision
-print(json.dumps(dict(status='PASS', revision=revision, radiusCounts=sorted([list(k) + [v] for k, v in circles.items()]), texts=texts)))
+print(json.dumps(dict(status='PASS', revision=revision, radiusCounts=sorted([list(k) + [v] for k, v in circles.items()]), texts=texts, tip=tip)))
 `,
 });
 
@@ -104,7 +121,7 @@ async function modelPoint(u, v) {
   return point;
 }
 
-async function readSheet(label, original, diameter) {
+async function readSheet(label, original, diameter, anchorX = diameter === null ? null : 40) {
   f.phase = label;
   await f.page.waitForFunction(({ id, diameter }) => {
     const d = window.__studioDrawing?.()?.dimensions.find(d => d.id === id);
@@ -119,7 +136,7 @@ async function readSheet(label, original, diameter) {
     [original.id, original.edge, original.near, original.place, original.tol]);
   assert.equal(saved.was, undefined);
   assert.equal(state.bodies.bodies.length, 1);
-  const expectedVolume = 80 * 40 * 8 - 8 * Math.PI * (50 + (diameter === null ? 0 : diameter ** 2 / 4));
+  const expectedVolume = 80 * 40 * 8 - 8 * Math.PI * (50 + (anchorX === 40 ? diameter ** 2 / 4 : 0));
   const volume = state.bodies.bodies[0].volume;
   assert.ok(near(volume, expectedVolume), JSON.stringify({ volume, expectedVolume }));
   const lost = state.drawingSheet.issues.filter(issue => issue.code === 'DIMENSION_LOST');
@@ -129,7 +146,7 @@ async function readSheet(label, original, diameter) {
   const file = join(f.output, label + '.svg');
   await download.saveAs(file);
   const bytes = await readFile(file);
-  const checked = await f.runOracle({ svg: bytes.toString('utf8'), id: original.id, diameter }, label);
+  const checked = await f.runOracle({ svg: bytes.toString('utf8'), id: original.id, diameter, anchorX }, label);
   f.report.files.push({ label, bytes: bytes.length, sha256: sha256(bytes) });
   f.report.observations.push({ label, volume, expectedVolume, ...checked });
   return checked;
@@ -197,10 +214,88 @@ await f.run(async () => {
   const lost = await f.save('bore-source-suppressed');
   await fresh(lost.file, suppressed);
   await drawing();
-  const references = f.page.getByRole('region', { name: 'References', exact: true });
-  await references.getByText(/1 need a choice/).waitFor();
-  const choices = await references.getByRole('button', { name: /^Preview candidate \d+$/ }).count();
+  const references = () => f.page.getByRole('region', { name: 'References', exact: true });
+  await references().getByText(/1 need a choice/).waitFor();
+  const choices = await references().getByRole('button', { name: /^Preview candidate \d+$/ }).count();
   assert.ok(choices >= 2, 'The lost callout needs an explicit choice');
   f.report.observations.push({ label: 'reopened-reference-choice', choices });
   assert.deepEqual(await readSheet('reopened-lost-diameter-sheet', dimension, null), missing);
+  if (!reattach) return;
+
+  f.phase = 'Inspect each visible candidate without committing the lost reference';
+  const beforePreview = await f.snapshot('reattach-01-start-lost');
+  const previewState = f.page.getByRole('status', { name: 'Reference preview', exact: true });
+  const overlay = f.page.locator('g[aria-label="Reference candidate preview"]');
+  const historyControls = () => f.page.evaluate(() => ['Undo', 'Redo'].map(label => {
+    const control = document.querySelector('button[aria-label="' + label + '"]');
+    return [control.disabled, control.getAttribute('data-tip')];
+  }));
+  const beforeControls = await historyControls();
+  const candidates = new Map();
+  for (let i = 1; i <= choices; i++) {
+    await button('Preview candidate ' + i, references()).click();
+    await previewState.waitFor();
+    const state = await f.snapshot('reattach-preview-' + i);
+    assert.deepEqual(state.doc, beforePreview.doc);
+    assert.deepEqual(state.history, beforePreview.history);
+    assert.deepEqual(state.bodies.bodies, beforePreview.bodies.bodies);
+    assert.deepEqual(await historyControls(), beforeControls);
+    const message = await previewState.textContent();
+    if (!message.startsWith('Candidate ' + i + ' highlighted')) {
+      assert.match(message, /^Reference preview unavailable: the candidate (has no visible segments|is not in this view)/);
+      assert.equal(await overlay.count(), 0);
+      continue;
+    }
+    const x = await top().evaluate(view => Math.min(...[...view.querySelectorAll('line')].flatMap(line => ['x1', 'x2'].map(attr => Number(line.getAttribute(attr))))));
+    const arcs = await overlay.locator('path').evaluateAll(paths => paths.map(path => path.getAttribute('d')));
+    assert.ok(arcs.length);
+    const centres = arcs.map(arc => {
+      const m = /^M([\d.-]+) [\d.-]+A5 5 0 0 [01] ([\d.-]+) [\d.-]+$/.exec(arc);
+      assert.ok(m, arc);
+      return Math.round((Number(m[1]) + Number(m[2])) / 2 - x);
+    });
+    assert.ok(centres.every(centre => centre === centres[0]));
+    candidates.set(centres[0], i);
+  }
+  assert.deepEqual([...candidates.keys()].sort((a, b) => a - b), [22, 58]);
+  const chosen = candidates.get(58);
+  await references().locator('details summary').click();
+  const candidatePrefix = 'Candidate ' + chosen + ': ';
+  const candidateName = (await references().getByText(new RegExp('^' + candidatePrefix)).textContent()).trim().slice(candidatePrefix.length);
+  await button('Preview candidate ' + chosen, references()).click();
+  await overlay.waitFor();
+  await f.snapshot('reattach-02-approved-candidate-preview');
+
+  f.phase = 'Explicitly reattach to the right-hand bore and export its exact leader';
+  await button('Use candidate ' + chosen, references()).click();
+  await f.changed(beforePreview.doc);
+  await references().waitFor({ state: 'hidden' });
+  const repaired = await f.doc(), [attached] = repaired.drawing.dimensions;
+  assert.deepEqual(repaired.nodes, suppressed.nodes);
+  assert.deepEqual(repaired.drawing, { ...suppressed.drawing, dimensions: [
+    { ...dimension, edge: attached.edge, sig: attached.sig },
+  ] });
+  assert.equal(attached.edge, candidateName);
+  assert.match(attached.edge, /(?:^|\|)n3\.side/);
+  assert.equal(attached.was, undefined);
+  assert.notDeepEqual(attached.sig, dimension.sig);
+  const right = await readSheet('reattach-03-current-right-bore', attached, 10, 58);
+  assert.equal(right.revision, missing.revision, 'The model remains the same');
+  await f.undo();
+  await f.same(beforePreview.doc);
+  await references().waitFor();
+  assert.deepEqual(await readSheet('reattach-04-undo-restores-unresolved', dimension, null), missing);
+  await f.redo();
+  await f.same(repaired);
+  await references().waitFor({ state: 'hidden' });
+  assert.deepEqual(await readSheet('reattach-05-redo-right-bore', attached, 10, 58), right);
+  await button('Model').click();
+  const persisted = await f.save('drawing-reference-reattached');
+  await fresh(persisted.file, repaired);
+  await drawing();
+  assert.equal(await references().count(), 0);
+  assert.deepEqual(await readSheet('reattach-06-reopened-right-bore', attached, 10, 58), right);
+  f.report.observations.push({ reattachedCandidate: chosen, sameSizeCandidateCentres: [...candidates.keys()],
+    confirmedEdge: attached.edge, preservedTolerance: attached.tol, preservedPlacement: attached.place });
+
 });

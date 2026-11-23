@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1835: [Preview and explicitly reattach a lost bore diameter](notes/drawing-bore-reference-reattachment-2026-11-24/README.md), #738. Verify each same-size rim and the exact approved SVG leader through Undo, Redo and fresh Open.
 - D1834: [Replace three held Chamfer edges together](notes/triple-held-chamfer-history-replacement-2026-11-24/README.md), #20. Follow explicit History picks through a strict native rebuild, exact signatures, Undo, Redo and fresh Open.
 - D1833: [Export only visible STEP root bodies when requested](notes/visible-root-step-scope-2026-11-24/README.md), #744. Verify the default file, selected native solids, placed scope and stale preparation against independent planar readback.
 - D1832: [Repeat the direct earlier rectangular cut along a straight-segment Path](notes/prior-path-cut-pattern-2026-11-24/README.md), #25. Verify the shared exact placement proof, Studio-authored path, spacing edit, and retained source and target.
