@@ -613,7 +613,6 @@ export function App() {
   const [camOptions, setCamOptions] = useState<CamOptions>({ setup: 0, progress: 0, cellPitch: 0.5 });
   // (G24: the drawing's annotations on the model, session only, and the one picked.)
   const [pmiEnabled, setPmiEnabled] = useState(false);
-  const [pmiSelected, setPmiSelected] = useState<string | null>(null);
   const [isolatedInstances, setIsolatedInstances] = useState<readonly string[] | undefined>();
   const [theme, setTheme] = useState<'dark' | 'light'>(() => { try { return (localStorage.getItem('cad-studio-theme') as 'dark' | 'light') || 'dark'; } catch { return 'dark'; } });
   /** A surface analysis look on the bodies (modelling view only). */
@@ -2429,8 +2428,8 @@ export function App() {
   const { printOptions, printReason, printWarnings, printScopeHint, printState, printDisplay, camReason, camState, camDisplay, patchCam } = useManufacturingPreviews({
     model: { doc, bodies, fresh, refShown }, editing: { rendering, drawing, sketch, active, previewBodies, ghost, assembly, cageEd, skel, bodyDrag },
     display: { viewAnalysis, scalarMaps, mouldShown, directShown, section }, print: { printEnabled, printing }, cam: { camEnabled, camOptions, setCamOptions } });
-  const { pmiReason, pmiSheet, pmiItems, pickAnnotation } = usePmiPreview({ model: { doc, evaluated, bodies, engine, fileName },
-    editing: { rendering, drawing, sketch, active, cageEd, skel }, settings: { printEnabled, camEnabled, pmiEnabled, pmiSelected, setPmiSelected },
+  const { pmiReason, pmiSheet, pmiItems, pmiSelected, pickAnnotation } = usePmiPreview({ model: { doc, evaluated, bodies, engine, fileName, generation: docGeneration },
+    editing: { rendering, drawing, sketch, active, cageEd, skel }, settings: { printEnabled, camEnabled, pmiEnabled },
     selection: { setInstanceSel, setDirectSel, setSelection } });
   useEffect(() => { if (import.meta.env.DEV) (window as unknown as { __studioCam: () => unknown }).__studioCam = () => ({ reason: camReason, stage: camState.stage, error: camState.error, display: camDisplay }); }, [camReason, camState.stage, camState.error, camDisplay]);
 

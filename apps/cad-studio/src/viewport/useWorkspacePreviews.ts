@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, type Dispatch, type SetStateAction } from 'react';
+import { useCallback, useEffect, useMemo, useState, type Dispatch, type SetStateAction } from 'react';
 import { prefixDoc, type StudioDoc } from '@barocss/cad-model/engine/doc';
 import type { BodyResult } from '@barocss/cad-model/engine/evaluate';
 import type { Vec3 } from '@barocss/cad-model/engine/mesh';
@@ -136,15 +136,17 @@ export function useManufacturingPreviews({ model, editing, display, print, cam }
 
 /** Build the drawing annotations for the model and route a picked annotation to model selection. */
 export function usePmiPreview({ model, editing, settings, selection }: {
-  model: { doc: StudioDoc; evaluated: StudioDoc; bodies: BodyResult[]; engine: EngineClient; fileName: string };
+  model: { doc: StudioDoc; evaluated: StudioDoc; bodies: BodyResult[]; engine: EngineClient; fileName: string; generation: number };
   editing: Pick<PreviewEditing, 'rendering' | 'drawing' | 'sketch' | 'active' | 'cageEd' | 'skel'>;
-  settings: { printEnabled: boolean; camEnabled: boolean; pmiEnabled: boolean; pmiSelected: string | null; setPmiSelected: Dispatch<SetStateAction<string | null>> };
+  settings: { printEnabled: boolean; camEnabled: boolean; pmiEnabled: boolean };
   selection: { setInstanceSel: Dispatch<SetStateAction<string[]>>; setDirectSel: Dispatch<SetStateAction<string[]>>; setSelection: Dispatch<SetStateAction<Selection>> };
 }) {
-  const { doc, evaluated, bodies, engine, fileName } = model;
+  const { doc, evaluated, bodies, engine, fileName, generation } = model;
   const { rendering, drawing, sketch, active, cageEd, skel } = editing;
-  const { printEnabled, camEnabled, pmiEnabled, pmiSelected, setPmiSelected } = settings;
+  const { printEnabled, camEnabled, pmiEnabled } = settings;
   const { setInstanceSel, setDirectSel, setSelection } = selection;
+  const [annotationSelection, setAnnotationSelection] = useState<{ id: string; generation: number } | null>(null);
+  const pmiSelected = pmiEnabled && annotationSelection?.generation === generation ? annotationSelection.id : null;
   // (G24: the drawing's own sheet, built as the Drawing workspace builds it, its annotations lifted onto the model.)
   const pmiReason = rendering || drawing ? '3D annotations are shown in Model view (the Drawing workspace shows the sheet).'
     : sketch || active || cageEd.overlay || skel.tool ? 'Finish the current edit to show the 3D annotations.'
@@ -154,10 +156,17 @@ export function usePmiPreview({ model, editing, settings, selection }: {
   const pmiItems = pmiEnabled && !pmiReason ? pmiSheet.annotations?.items ?? null : null;
   const pickAnnotation = useCallback((id: string) => {
     const a = pmiItems?.find(x => x.id === id); if (!a) return;
-    setPmiSelected(id); const sel = pmiSelection(a, bodies);
+    setAnnotationSelection({ id, generation }); const sel = pmiSelection(a, bodies);
     setInstanceSel([]); setDirectSel([]); setSelection({ faces: sel.faces, edges: sel.edges, bodies: [] });
-  }, [pmiItems, bodies]);
-  useEffect(() => { if (!pmiEnabled) setPmiSelected(null); }, [pmiEnabled]);
+  }, [pmiItems, bodies, generation, setInstanceSel, setDirectSel, setSelection]);
+  useEffect(() => {
+    setAnnotationSelection(current => {
+      if (!pmiEnabled || current?.generation !== generation) return null;
+      // A current sheet may remove a selected annotation during an ordinary drawing edit.
+      if (!pmiSheet.busy && pmiItems && !pmiItems.some(item => item.id === current.id)) return null;
+      return current;
+    });
+  }, [generation, pmiEnabled, pmiItems, pmiSheet.busy]);
   useEffect(() => { if (import.meta.env.DEV) (window as unknown as { __studioPmi: () => unknown }).__studioPmi = () => ({ reason: pmiReason, busy: pmiSheet.busy, error: pmiSheet.error, items: pmiItems?.map(a => ({ id: a.id, kind: a.kind, text: a.text, anchor: a.anchor, targets: a.targets })) ?? null, left: pmiSheet.annotations?.left ?? null, selected: pmiSelected }); }, [pmiReason, pmiSheet.busy, pmiSheet.error, pmiItems, pmiSheet.annotations, pmiSelected]);
-  return { pmiReason, pmiSheet, pmiItems, pickAnnotation };
+  return { pmiReason, pmiSheet, pmiItems, pmiSelected, pickAnnotation };
 }

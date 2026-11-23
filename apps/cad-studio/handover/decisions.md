@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D1821: [Retire 3D annotation selection with its drawing source](notes/pmi-drawing-source-closeout-2026-11-24/README.md), #268. Repair removal and same-ID document replacement, and reconcile original desktop acceptance.
+
 - D1820: [Show the pending Agent review for the five-span S-bend](notes/pending-five-span-paired-s-bend-review-2026-11-24/README.md), #324. Pin both images, both mouths and all four junctions through actual Studio approval and reopen.
 
 - D1819: [Add a straight outlet to the paired Exact Sweep S-bend](notes/exact-five-span-paired-s-bend-2026-11-24/README.md), #10. Certify both straight ends, 48 native joins and editable Studio persistence.
