@@ -3,10 +3,11 @@ import { CadNumericPolicy, CadPartLimits, brepFromPrismatic, checkBrep, prismati
 import { boxCapOffsetFrame, draftedFaceOffsetFrame } from '@barocss/cad/internal/drafted-cap-offset';
 import { annularCapReplacementFrame, boredCapOffsetFrame, boredPlateWallOffsetFrame, boreWallOffsetFrame, circularWallOffsetFrame } from '@barocss/cad/internal/bored-cap-offset';
 import { exactSemicylinderBoredOuterWallOffsetFrame, exactSemicylinderCapOffsetFrame, exactSemicylinderMixedOffsetFrame, exactSemicylinderSecondWallOffsetFrame, exactSemicylinderWallOffsetAfterReplacementFrame, exactSemicylinderWallOffsetFrame } from '@barocss/cad/internal/exact-cylinder-cap-offset';
+import { exactPairedElbowOutletOffsetFrame } from '@barocss/cad/internal/exact-paired-elbow-offset';
 import { prismWallOffsetFrame } from '@barocss/cad/internal/prism-wall-offset';
 import { fillFeaturePatternSpec } from '@barocss/cad/api';
 import { finiteBinary64Integer } from '../engine/binary64';
-import { exactSemicylinderCapSource, exactSemicylinderRadialBoreSource, exactSemicylinderSecondOffset, exactSemicylinderWallAfterReplacement, isExactCylinderFaceEditChain, isAnnularCapOffsetSource, isAnnularReplacementSource, isBoredPlateHole, isBoredPlateOffsetSource, isBoxCapOffsetSource, isCylinderReplacementSource, isStraightHexagonalExtrusion, leafBodies, type SketchNode, type StudioDoc } from '../engine/doc';
+import { exactSemicylinderCapSource, exactSemicylinderRadialBoreSource, exactSemicylinderSecondOffset, exactSemicylinderWallAfterReplacement, isExactCylinderFaceEditChain, isAnnularCapOffsetSource, isAnnularReplacementSource, isBoredPlateHole, isBoredPlateOffsetSource, isBoxCapOffsetSource, isCylinderReplacementSource, isPairedElbowOutletOffsetSource, isStraightHexagonalExtrusion, leafBodies, type SketchNode, type StudioDoc } from '../engine/doc';
 import { evaluateDoc, massOfRef, partBreps, snapshotOf, type BodyResult } from '../engine/evaluate';
 import { bodyKeyFor, featureId, withIds } from '../engine/ids';
 import { refusal } from '../engine/refusal';
@@ -380,6 +381,15 @@ export function resolveDirectOffsetFace(ctx: Ctx): {
   const { body, display, ref } = offsetPick(ctx, true);
   if (ref.side !== 'solid') return undefined;
   const node = ctx.doc.nodes[ref.node];
+  if (node?.kind === 'sweep-curve' && display.exact?.kind === 'plane'
+    && isPairedElbowOutletOffsetSource(ctx.doc.nodes, ref.node, display.name)) {
+    currentOffsetBody(ctx.doc, body);
+    const { brep } = nativeOffsetBody(ctx, body, display);
+    const frame = exactPairedElbowOutletOffsetFrame(brep, display.name, {
+      id: featureId(ctx.doc.nodes, ref.node), mode: 'exact', path: { kind: 'curve', id: 'path', ...node.path },
+    });
+    if (frame) return { parent: ref, face: display.name, ...frame, allowsPlane: false };
+  }
   const bore = exactSemicylinderRadialBoreSource(ctx.doc.nodes, ref.node, ctx.doc.parameters);
   if (bore) {
     if (display.name !== bore.wallFace || display.exact?.kind !== 'cylinder')

@@ -72,6 +72,8 @@ const rules: { code?: string | readonly string[]; text?: RegExp; title: string; 
     title: 'End face is behind the sketch', hint: 'Pick a parallel face ahead of the sketch along its extrusion direction.' },
   { text: /Offset face: the reference plane must be parallel to the selected face/i,
     title: 'Reference plane is not parallel', hint: 'Pick a parallel face on another solid.' },
+  { text: /Exact paired elbow outlet offset: the offset would reach or cross the retained bend-to-outlet join/,
+    title: 'Offset would remove the straight outlet', hint: 'Leave at least 0.0001 mm of straight outlet between the cap and the bend.' },
   { text: /cylindrical wrap.*(?:height|radius)|height.*source radius/i,
     title: 'Wrap height must equal the cylinder radius',
     hint: 'Use the cylinder radius as the outward height.' },

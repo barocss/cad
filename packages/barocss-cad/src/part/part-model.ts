@@ -32,7 +32,7 @@ import { weldVertices } from '../mesh/facet-brep.js';
 import { splitFacetBrep, type FacetSplitResult } from '../mesh/facet-split.js';
 import { facetBoolean, isFacetBooleanError, splitMixedBrep } from '../mesh/facet-boolean.js';
 import { selfIntersections } from '../mesh/mesh-repair.js';
-import { exactSweep } from '../brep/exact-sweep.js';
+import { exactSweep, offsetExactPairedElbowOutletIfAdmitted } from '../brep/exact-sweep.js';
 import { sweepSolid } from '../brep/sweep-solid.js';
 import { validateCurve } from '../core/math.js';
 
@@ -652,6 +652,15 @@ function operation(f: CadPartFeature & Record<string, unknown>, t: Tools): () =>
         id: hole.id, surface: { ...structuredClone(hole.surface), kind: 'surface', id: 'surface' } as Surface,
         thickness: dim(hole.thickness, 'Thicken thickness', true), side: hole.side,
       } : undefined;
+      const sweepSketch = hole?.kind === 'sweep-curve' && hole.mode === 'exact' ? ref(hole.sketch, 'outlet sweep sketch').result : undefined;
+      const sweepFrame = sweepSketch?.kind === 'sketch' ? sweepSketch.frame?.m ?? [1, 0, 0, 0, 1, 0, 0, 0, 1] : undefined;
+      const pairedElbow = hole?.kind === 'sweep-curve' && hole.mode === 'exact' && sweepSketch?.kind === 'sketch'
+        && !sweepSketch.regions?.length && sweepFrame ? {
+          id: hole.id, mode: 'exact' as const, outer: sweepSketch.outer, holes: sweepSketch.holes, sideTags: sweepSketch.tags,
+          path: { ...structuredClone(hole.path), kind: 'curve', id: 'path' } as Curve,
+          xAxis: [sweepFrame[0], sweepFrame[3], sweepFrame[6]] as Point,
+          yAxis: [sweepFrame[1], sweepFrame[4], sweepFrame[7]] as Point,
+        } : undefined;
       const firstOffset = hole?.kind === 'offset-face' ? hole : undefined;
       const original = firstOffset ? ref(firstOffset.target, 'first Offset source').author : undefined;
       const secondCylinder = original?.kind === 'thicken' && original.mode === 'exact-cylinder' ? {
@@ -666,6 +675,10 @@ function operation(f: CadPartFeature & Record<string, unknown>, t: Tools): () =>
       } : undefined;
       return () => {
         const brep = namedFaceTargetBrep(t, f.target, target[0]);
+        if (pairedElbow) {
+          const offset = offsetExactPairedElbowOutletIfAdmitted(brep, face, pairedElbow, distance);
+          if (offset) return one({ kind: 'brep', brep: offset });
+        }
         if (exactBore) {
           const recut = (stock: Brep, tool: Brep, id: string) => {
             // The certified operands both use the analytic B-rep Difference path.

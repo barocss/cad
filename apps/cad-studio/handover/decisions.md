@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1788: [Move the original straight outlet cap of a paired Exact Sweep](notes/paired-elbow-outlet-offset-2026-11-23/README.md), #17. Verify signed offset, cap collapse refusal, retained bend and both passages, native fresh Open and explicit Agent approval.
 - D1787: [Review the two-ended paired duct before Agent approval](notes/pending-line-arc-line-paired-duct-review-2026-11-23/README.md), #324. Bind native cap apertures and both groups of tangent joins through two images, Studio approval and fresh Open.
 - D1786: [Sweep two passages through an elbow with two straight ends](notes/exact-line-arc-line-paired-duct-2026-11-23/README.md), #10. Verify both open caps, all 24 native tangent joins, aperture edits, fresh Open and local Agent approval.
 - D1785: [Keep in-place edit notices clear of Details](notes/in-place-edit-notice-clearance-2026-11-23/README.md), #44. Preserve Dismiss at two desktop widths and keep the draft, History and normal notice flows.

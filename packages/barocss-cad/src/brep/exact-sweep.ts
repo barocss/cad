@@ -1,12 +1,12 @@
 import { add, cross, dot, len, scale, sub, unit } from '../core/vec3.js';
-import { curveDomain, surfaceDomain } from '../core/math.js';
+import { curveDomain, surfaceDomain, validateCurve } from '../core/math.js';
 import type { SideTags } from '../document/side-names.js';
 import { buildProfileLoop, ExtrudedProfileLimits, type ProfileSegment, type ProfileSegmentInput, type XY } from '../features/extruded-profile-solid.js';
 import { brepFromPrismatic, prismaticFromProfile } from '../features/prismatic-solid.js';
 import { revolveMassProperties, revolveProfile, revolveSweepProfile, type RevolveInput } from '../features/revolve.js';
 import { CadNumericPolicy, geometryScaleMM, linearToleranceMM } from '../numeric-policy.js';
 import type { Curve, Point, Surface } from '../types.js';
-import { checkBrep, type Brep, type BrepCoedge } from './brep-core.js';
+import { BrepError, checkBrep, type Brep, type BrepCoedge } from './brep-core.js';
 import { faceGeometry } from './analytic-boolean.js';
 import { affinePlaneBinding } from './affine-plane-binding.js';
 import { glueAtSharedFace } from './brep-glue.js';
@@ -1209,4 +1209,91 @@ export function exactSweep(input: ExactSweepInput, refuse: Refuse): SweepSolid {
   }) : revolveProfile(revolve);
   const offset = profileRadius === undefined ? sub(start, add(scale(x, cx), scale(y, cy))) : start;
   return place({ brep, mass: density => revolveMassProperties(revolve, density) }, axes, offset);
+}
+
+
+type PairedElbowOutletSource = Pick<ExactSweepInput, 'id' | 'mode' | 'path'>;
+const pairedOutletFailure: Refuse = (code, message) => { throw new BrepError(code === 'GEOMETRY' ? 'GEOMETRY' : 'INPUT', `Exact paired elbow outlet offset: ${message}`); };
+
+/** The original terminal cap only. Native incidence supplies the handle; the authored path supplies its rail. */
+export function exactPairedElbowOutletOffsetFrame(brep: Brep, faceName: string,
+  source: PairedElbowOutletSource): { anchor: Point; normal: Point } | undefined {
+  try {
+    if (source.mode !== 'exact' || faceName !== `${source.id}.end` || brep.source?.family !== 'sweep-curve'
+      || brep.source.id !== source.id || brep.faces.length !== 38 || brep.loops.length !== 42
+      || brep.coedges.length !== 168 || brep.edges.length !== 84 || brep.vertices.length !== 48) return;
+    validateCurve(source.path);
+    const rail = tangentLineArcLine(source.path, pairedOutletFailure);
+    if (!rail || rail.tailLength === undefined) return;
+    const matches = brep.faces.filter(face => face.name === faceName), cap = matches[0];
+    if (matches.length !== 1 || cap.loops.length !== 3) return;
+    const loops = brep.loops.filter(loop => cap.loops.includes(loop.id));
+    if (loops.length !== 3 || loops.some(loop => loop.coedges.length !== 4)
+      || loops.filter(loop => loop.kind === 'inner').length !== 2) return;
+    const outer = loops.find(loop => loop.kind === 'outer');
+    if (!outer) return;
+    const support = faceGeometry(cap);
+    if (support.kind !== 'plane') return;
+    const inward = unit(sub(rail.toCentre, scale(rail.tangent, dot(rail.toCentre, rail.tangent))));
+    const terminal = add(scale(rail.tangent, Math.cos(rail.angle)), scale(inward, Math.sin(rail.angle)));
+    if (len(sub(support.n, terminal)) > 256 * Number.EPSILON) return;
+    const anchor: Point = [0, 0, 0];
+    for (const id of outer.coedges) {
+      const use = brep.coedges.find(use => use.id === id), edge = use && brep.edges.find(edge => edge.id === use.edge);
+      const vertex = edge && brep.vertices.find(vertex => vertex.id === edge.vertices[use!.sense === 'forward' ? 0 : 1]);
+      if (!vertex) return;
+      for (let axis = 0; axis < 3; axis++) anchor[axis] += vertex.point[axis] / 4;
+    }
+    const report = checkBrep(brep, { strict: true });
+    if (!report.valid || report.topology.length !== 1 || report.topology[0].genus !== 2 || report.topology[0].shells !== 1) return;
+    return { anchor, normal: support.n };
+  } catch { return; }
+}
+
+function retainedElbowBoundary(before: Brep, after: Brep, face: Brep['faces'][number]): boolean {
+  const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+  const loops = new Set(face.loops), uses = before.coedges.filter(use => loops.has(use.loop));
+  const edges = new Set(uses.map(use => use.edge));
+  const vertices = new Set(before.edges.filter(edge => edges.has(edge.id)).flatMap(edge => edge.vertices));
+  return same(face, after.faces.find(value => value.id === face.id))
+    && before.loops.every(loop => !loops.has(loop.id) || same(loop, after.loops.find(value => value.id === loop.id)))
+    && uses.every(use => same(use, after.coedges.find(value => value.id === use.id)))
+    && before.edges.every(edge => !edges.has(edge.id) || same(edge, after.edges.find(value => value.id === edge.id)))
+    && before.vertices.every(vertex => !vertices.has(vertex.id) || same(vertex, after.vertices.find(value => value.id === vertex.id)));
+}
+
+/** Continue only the original straight outlet. Replaying the authored producer binds every original native coefficient. */
+export function offsetExactPairedElbowOutletIfAdmitted(brep: Brep, faceName: string,
+  source: ExactSweepInput, distance: number): Brep | undefined {
+  const frame = exactPairedElbowOutletOffsetFrame(brep, faceName, source);
+  if (!frame || source.outer.length !== 4 || source.outer.some(segment => segment.kind !== 'line')
+    || source.holes?.length !== 2 || source.holes.some(loop => loop.length !== 4 || loop.some(segment => segment.kind !== 'line'))) return;
+  const original = exactSweep(source, pairedOutletFailure).brep;
+  if (JSON.stringify(original) !== JSON.stringify(brep)) return;
+  if (!Number.isFinite(distance) || distance === 0 || Math.abs(distance) > CadNumericPolicy.coordinateAbs)
+    return pairedOutletFailure('PARAMETER', 'distance must be nonzero and within the modeling range.');
+  const rail = tangentLineArcLine(source.path, pairedOutletFailure)!;
+  const length = rail.tailLength! + distance;
+  if (!(length >= ExtrudedProfileLimits.minimumLengthMM))
+    return pairedOutletFailure('GEOMETRY', 'the offset would reach or cross the retained bend-to-outlet join.');
+  const path = structuredClone(source.path), normal = unit(sub(source.path.controlPoints[6], source.path.controlPoints[4]));
+  path.controlPoints[5] = add(path.controlPoints[5], scale(normal, distance / 2));
+  path.controlPoints[6] = add(path.controlPoints[6], scale(normal, distance));
+  if (path.controlPoints[6].every((value, axis) => value === source.path.controlPoints[6][axis]))
+    return pairedOutletFailure('GEOMETRY', 'distance is too small to move the outlet.');
+  const candidate = exactSweep({ ...source, path }, pairedOutletFailure).brep;
+  const keys = ['bodies', 'shells', 'faces', 'loops', 'coedges', 'edges', 'vertices'] as const;
+  for (const key of keys) {
+    const identity = (value: { id: string; name?: string }) => [value.id, value.name];
+    if (JSON.stringify(brep[key].map(identity)) !== JSON.stringify(candidate[key].map(identity)))
+      return pairedOutletFailure('GEOMETRY', 'the offset cannot preserve the original native names and incidence.');
+  }
+  for (const face of brep.faces) if (face.name !== faceName && !face.name?.startsWith(`${source.id}.tail.`)
+    && !retainedElbowBoundary(brep, candidate, face))
+    return pairedOutletFailure('GEOMETRY', 'the offset cannot preserve the inlet, bend and tangent joins.');
+  const next = exactPairedElbowOutletOffsetFrame(candidate, faceName, { ...source, path });
+  const expected = add(frame.anchor, scale(frame.normal, distance));
+  if (!next || len(sub(next.anchor, expected)) > linearToleranceMM(geometryScaleMM(candidate.vertices.map(vertex => vertex.point))))
+    return pairedOutletFailure('GEOMETRY', 'the terminal cap cannot preserve the signed native displacement.');
+  return candidate;
 }

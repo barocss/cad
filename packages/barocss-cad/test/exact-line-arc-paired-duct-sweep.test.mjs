@@ -6,6 +6,8 @@ import {
   faceGeometry, joinCurves, loadCadPart, massPropertiesOf, measureBrepEdgeContinuity, reevaluate, reverseCurve, saveCadPart,
 } from '../dist/index.js';
 
+import { exactPairedElbowOutletOffsetFrame, offsetExactPairedElbowOutletIfAdmitted } from '../dist/brep/exact-sweep.js';
+
 const add = (a, b) => a.map((x, i) => x + b[i]);
 const sub = (a, b) => a.map((x, i) => x - b[i]);
 const scale = (a, s) => a.map(x => x * s);
@@ -281,4 +283,76 @@ test('existing solid, single-aperture and two-aperture line-arc native bytes rem
     const brep = evaluateCadPart(document(rail().path, sketch)).outputs[0].brep;
     assert.equal(createHash('sha256').update(JSON.stringify(brep)).digest('hex'), expected);
   }
+});
+
+test('original paired elbow outlet signed offsets preserve both apertures, native charts, joins, IDs and independent mass', () => {
+  const path = rail({ tail: 14 }), sketch = section();
+  sketch.sideTags = { outer: ['o0', 'o1', 'o2', 'o3'], holes: [['a0', 'a1', 'a2', 'a3'], ['b0', 'b1', 'b2', 'b3']] };
+  const source = document(path.path, sketch), initial = evaluateCadPart(source), saved = saveCadPart(initial);
+  const shifted = distance => ({ ...source, features: [...source.features,
+    { id: 'move', kind: 'offset-face', target: 'w', face: 'w.end', distance }] });
+  let previous = initial;
+  for (const distance of [4, -4, 4]) {
+    const changed = reevaluate(previous, { document: shifted(distance) });
+    const moved = { ...path, tail: path.tail + distance, length: path.length + distance,
+      end: add(path.end, scale(path.terminal, distance)) };
+    verify(changed.outputs[0], moved);
+    near(brepMassProperties(changed.outputs[0].brep, 1).volume - brepMassProperties(initial.outputs[0].brep, 1).volume, 32 * distance);
+    assert.deepEqual(identity(changed), identity(initial));
+    const fixed = brep => brep.faces.filter(face => face.name !== 'w.end' && !face.name.startsWith('w.tail.'));
+    assert.deepEqual(fixed(changed.outputs[0].brep), fixed(initial.outputs[0].brep));
+    const reopened = loadCadPart(saveCadPart(changed));
+    assert.deepEqual(reopened.outputs[0].brep, changed.outputs[0].brep);
+    assert.deepEqual(reevaluate(reopened, { document: source }).outputs[0].brep, initial.outputs[0].brep);
+    previous = reopened;
+  }
+  for (const distance of [-14, -15, -13.99999]) {
+    assert.throws(() => reevaluate(previous, { document: shifted(distance) }),
+      error => error instanceof CadPartError && error.feature === 'move' && error.code === 'GEOMETRY'
+        && /reach or cross the retained bend-to-outlet join/.test(error.message));
+    assert.equal(saveCadPart(initial), saved);
+  }
+  const inlet = shifted(4);
+  inlet.features.at(-1).face = 'w.start';
+  assert.throws(() => evaluateCadPart(inlet), CadPartError);
+  const wall = shifted(4);
+  wall.features.at(-1).face = 'w.tail.side[o0]';
+  assert.throws(() => evaluateCadPart(wall), CadPartError);
+});
+
+test('translated original paired elbow outlet frames and signed offsets retain authored lane order at both sweep limits', () => {
+  for (const degrees of [30, 120]) {
+    const path = rail({ degrees, tail: 14, entry: [32, -14, 18], tangent: [.6, .8, 0], inward: [-.8, .6, 0] });
+    const intervals = [[1, 3], [-3, -1]], widths = [1.5, 2];
+    const sketch = { ...section(intervals, widths, [false, true]), plane: { origin: [5, 4, 3], normal: path.tangent, xAxis: path.inward } };
+    const source = document(path.path, sketch);
+    for (const distance of [4, -4]) {
+      const result = evaluateCadPart({ ...source, features: [...source.features,
+        { id: 'move', kind: 'offset-face', target: 'w', face: 'w.end', distance }] });
+      verify(result.outputs[0], { ...path, tail: path.tail + distance, length: path.length + distance,
+        end: add(path.end, scale(path.terminal, distance)) }, intervals, widths);
+    }
+  }
+});
+
+
+test('paired elbow outlet native handle excludes other caps, old profile families and unbound body coefficients', () => {
+  const path = rail({ tail: 14 }), sketch = section(), original = evaluateCadPart(document(path.path, sketch)).outputs[0].brep;
+  const source = { id: 'w', mode: 'exact', path: path.path };
+  const handle = exactPairedElbowOutletOffsetFrame(original, 'w.end', source);
+  pointNear(handle.anchor, path.end);
+  pointNear(handle.normal, path.terminal);
+  assert.equal(exactPairedElbowOutletOffsetFrame(original, 'w.start', source), undefined);
+  assert.equal(exactPairedElbowOutletOffsetFrame(original, 'w.end', { ...source, id: 'stale' }), undefined);
+  assert.equal(exactPairedElbowOutletOffsetFrame(original, 'w.end', { ...source, mode: 'exact-straight' }), undefined);
+  for (const holes of [[], [rectangle(1, -1, 1)]]) {
+    const other = evaluateCadPart(document(path.path, { ...sketch, holes })).outputs[0].brep;
+    assert.equal(exactPairedElbowOutletOffsetFrame(other, 'w.end', source), undefined);
+  }
+  const input = { ...source, outer: sketch.segments, holes: sketch.holes, xAxis: [1, 0, 0], yAxis: [0, 1, 0] };
+  const unbound = structuredClone(original);
+  unbound.vertices[0].tolerance *= 2;
+  assert.ok(checkBrep(unbound, { strict: true }).valid);
+  assert.equal(offsetExactPairedElbowOutletIfAdmitted(unbound, 'w.end', input, 4), undefined);
+  assert.deepEqual(original, evaluateCadPart(document(path.path, sketch)).outputs[0].brep);
 });

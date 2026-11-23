@@ -171,6 +171,7 @@ export function editSavedOffsetFaceCommand(doc: StudioDoc, index: number): Comma
     && doc.nodes.some((node, slot) => slot > index && node.kind === 'offset-face' && node.parent.node === index
       && node.target === undefined && exactSemicylinderSecondOffset(doc.nodes, index, doc.parameters, node.faces[0])?.mixed);
   const allowPlane = !!direct && !radial && !pairedCap && !isExactCylinderOffsetChain(doc.nodes, direct.parent.node)
+    && doc.nodes[direct.parent.node]?.kind !== 'sweep-curve'
     && !isBoredPlateOffsetSource(doc.nodes, direct.parent.node) && !isBoxCapOffsetSource(doc.nodes, direct.parent.node)
     && !isAnnularCapOffsetSource(doc.nodes, direct.parent.node, doc.parameters);
   let directSource: Ctx | undefined;

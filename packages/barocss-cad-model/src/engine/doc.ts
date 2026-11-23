@@ -727,6 +727,17 @@ function deleteFaceRecipeProblem(node: Record<string, unknown>, nodes: readonly 
   return null;
 }
 
+/** Authored bounds for the original outlet recipe. The kernel verifies the native geometry. */
+export function isPairedElbowOutletOffsetSource(nodes: readonly unknown[], index: number, face: string): boolean {
+  const sweep = nodes[index];
+  if (!textRecord(sweep) || sweep.kind !== 'sweep-curve' || sweep.mode !== 'exact' || sweep.suppressed || sweep.held !== undefined
+    || typeof sweep.id !== 'string' || face !== `${sweep.id}.end` || !textRecord(sweep.path)
+    || sweep.path.degree !== 2 || !Array.isArray(sweep.path.controlPoints) || sweep.path.controlPoints.length !== 7
+    || !Number.isSafeInteger(sweep.sketch) || Number(sweep.sketch) < 0 || Number(sweep.sketch) >= index) return false;
+  const sketch = nodes[Number(sweep.sketch)];
+  return textRecord(sketch) && sketch.kind === 'sketch' && Array.isArray(sketch.holes) && sketch.holes.length === 2;
+}
+
 /** Check raw face-edit recipes in the root model and its placed or pending part definitions. */
 export function directFaceDocumentProblem(input: unknown): string | null {
   const stack: unknown[] = [input], seen = new Set<object>();
@@ -775,6 +786,11 @@ export function directFaceDocumentProblem(input: unknown): string | null {
       }
       const parent = value.nodes[parentIndex];
       if (!textRecord(parent)) return 'Offset face: a supported solid parent is required.';
+      if (parent.kind === 'sweep-curve') {
+        if (signature.k !== 'plane' || node.target !== undefined || !isPairedElbowOutletOffsetSource(value.nodes, parentIndex, face))
+          return 'Offset face: the paired Exact Sweep needs its original straight outlet and a signed distance.';
+        continue;
+      }
       if (isExactCylinderThicken(parent)) {
         const source = exactSemicylinderCapSource(value.nodes, parentIndex, parameters);
         const axial = signature.k === 'plane' && source?.faces.includes(face);
