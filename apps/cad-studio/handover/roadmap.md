@@ -1,13 +1,13 @@
 # CAD roadmap — current status and execution order
 
-Updated 2026-11-23 · Priority authority: D520 · Latest delivery: D1796 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
+Updated 2026-11-23 · Priority authority: D520 · Latest delivery: D1797 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
 
 This is the only current status index. Detailed tracks define acceptance; the 34 stable row pages retain scope and issue navigation. Immutable decision notes retain results. Do not append chronological status paragraphs here. [D520 decision](notes/cad-roadmap-replan-2026-11-04/README.md) supersedes D445 execution order and historical next-item text, while retaining its safeguards and bounded proofs.
 
 ## Now and next
 
-- **Current position:** [D1796](notes/pending-same-turn-paired-duct-review-2026-11-23/README.md), P5 rows 07 and 16. The same-turn paired duct has independent native proof and two pinned Agent images. Explicit Studio approval, Save and fresh Open retain the body and both images. The B06 PDF group remains held.
-- **Next MAIN:** D1797, P4 rows [15](roadmap-rows/15.md), [21](roadmap-rows/21.md) and [22](roadmap-rows/22.md), [#44](https://github.com/barocss/cad/issues/44). Extract the cohesive reference-review session from App. Preserve candidate preview ownership, explicit confirmation, Undo, Redo, Save, fresh Open and final keyboard focus in paired desktop runs.
+- **Current position:** [D1797](notes/studio-reference-review-session-2026-11-23/README.md), P4 rows 15, 21 and 22. The reference-review session is separate from App. Paired desktop runs retain all 14 states, saved files, stale guards and final keyboard focus. The B06 PDF group remains held.
+- **Next MAIN:** D1798, P5 rows [07](roadmap-rows/07.md) and [16](roadmap-rows/16.md), [#10](https://github.com/barocss/cad/issues/10). Extend paired rectangular passages to the existing directly joined opposite-turn two-arc path. Reproduce the original refusal, bind all three section rings at the single tangent join, and verify independent native geometry, editable Studio history, Save and fresh Open.
 - **Separate follow-ups:** Continue Studio App extraction in cohesive parts with affected desktop checks. [#608 Rendering](https://github.com/barocss/cad/issues/608) stays on HOLD. API inventory drift remains open. The issue tracker records [#126](https://github.com/barocss/cad/issues/126), [#613](https://github.com/barocss/cad/issues/613), [#152](https://github.com/barocss/cad/issues/152) and [#22](https://github.com/barocss/cad/issues/22) as closed.
 - **Active repository:** [barocss/cad](https://github.com/barocss/cad), based on `origin/main`. Fetch before work and preserve unexpected changes. The [migration record](../../../docs/migration/README.md) maps the former `local/cad-dev` history and issue numbers.
 - **Evidence correction:** D482 records2167 PASS/0 FAIL/2 existing SKIP in a later full-kernel run than D433. Neither result is a new full-suite PASS at this audit HEAD. [D482 record](notes/vertical-contact-refusal-2026-11-04/README.md).

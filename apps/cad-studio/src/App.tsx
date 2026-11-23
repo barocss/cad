@@ -36,8 +36,7 @@ import { useBrowserActions } from './app/useBrowserActions';
 import { commandApplyReadiness, createCommandApplyQueue } from './state/commandApply';
 import { ownsEllipseAxesRecovery } from './sketch/ellipseAxesRecovery';
 import { sketchOffsetTarget } from './app/sketchOffsetTarget';
-import { handoffReferenceFocus, type ReferenceFocusReceipt } from './ui/referenceFocus';
-import { createReferenceDecisions, createReferencePreview, type ReferenceChoices } from './state/referenceDecisions';
+import { useStudioReferenceReview } from './app/useStudioReferenceReview';
 import { bodyTopologyCounts } from './ui/bodyTopologyLabel';
 import { viewportRecoveryToast } from './viewport/viewportRecovery';
 import { useSpecificationActions } from './state/useSpecificationActions';
@@ -149,9 +148,8 @@ import { resolveSkeletons, SKELETON_CODES } from '@barocss/cad-model/frames/skel
 import { offsetFaceGroup, carryOver, emptyDoc, featureLabel, fmt, prefixDoc, starterDoc, type ModelNode, type SketchNode, type StudioDoc } from '@barocss/cad-model/engine/doc';
 import { featureId, nextSerial } from '@barocss/cad-model/engine/ids';
 import { modelHash } from '@barocss/cad-model/chat/spec';
-import { captureSignatures, markedReferences, type Problem as RefProblem } from '@barocss/cad-model/engine/references';
+import { captureSignatures, type Problem as RefProblem } from '@barocss/cad-model/engine/references';
 import { type BodyResult, type EvalResult } from '@barocss/cad-model/engine/evaluate';
-import type { DrawingReferenceLabel, DrawingReferencePreview } from './ui/DrawingWorkspace';
 import type { FriendlyError } from '@barocss/cad-model/engine/errors';
 import type { Vec3 } from '@barocss/cad-model/engine/mesh';
 import { carrySelection, commands, patchValues, refOf, selectedBodies, subdNodeOf, type Command, type Ctx, type Selection, type Values } from '@barocss/cad-model/app/commands';
@@ -290,7 +288,6 @@ import { planeLabel } from '@barocss/cad-model/sketch/plane';
 const ChatPanel = lazy(() => import('./ui/ChatPanel').then(m => ({ default: m.ChatPanel })));
 const DrawingWorkspace = lazy(() => import('./ui/DrawingWorkspace').then(m => ({ default: m.DrawingWorkspace })));
 const RenderPanel = lazy(() => import('./ui/RenderPanel').then(m => ({ default: m.RenderPanel })));
-type ReferenceLabelOwner = { doc: StudioDoc; model: StudioDoc };
 export function App() {
   countRender('App');
   const engine = useMemo(() => new EngineClient(), []);
@@ -311,14 +308,6 @@ export function App() {
   // Even a no-op dispatch invalidates an older receipt; functional updates retain React's queued semantics.
   const saveDocumentToken = useRef<object>({});
   const openIntent = useRef<OpenScope>({});
-  const referenceBrowser = useRef<HTMLElement>(null);
-  const referenceFocus = useRef<ReferenceFocusReceipt<StudioDoc, OpenScope> | null>(null);
-  const referenceFocusRequest = useRef(0);
-  useLayoutEffect(() => {
-    const receipt = referenceFocus.current;
-    referenceFocus.current = null;
-    if (receipt) handoffReferenceFocus(receipt, doc, openIntent.current, referenceBrowser.current, document);
-  }, [doc]);
   const midpointSketch = useMidpointSketch();
   const insetRelink = useInsetRelink();
   const cancelNativeReview = useCallback((restoreInsetFocus = false) => {
@@ -531,13 +520,6 @@ export function App() {
   // References an opened file stores that could not be told (engine/references.ts), and the candidates on show.
   const referenceProblems = useRef(new WeakMap<StudioDoc, RefProblem[]>());
   const refProblems = referenceProblems.current.get(doc) ?? [];
-  const [referenceChoices, setRefChoices] = useState<ReferenceChoices | null>(null);
-  const refChoices = referenceChoices?.doc === doc ? referenceChoices : null;
-  const [referencePreview, setReferencePreview] = useState<(DrawingReferencePreview & { owner: StudioDoc }) | null>(null);
-  const [referenceLabelCache, setReferenceLabelCache] = useState<{ owner: ReferenceLabelOwner; labels: readonly DrawingReferenceLabel[] } | null>(null);
-  const clearReferencePreview = useCallback(() => setReferencePreview(null), []);
-  useEffect(clearReferencePreview, [doc, clearReferencePreview]);
-  useEffect(() => { if (!drawing) clearReferencePreview(); }, [drawing, clearReferencePreview]);
   const [fileName, setFileNameRaw] = useState('Bracket-01');
   const fileNameNow = useRef(fileName); fileNameNow.current = fileName;
   const setFileName = useCallback((next: string) => { fileNameNow.current = next; setFileNameRaw(next); }, []);
@@ -571,7 +553,7 @@ export function App() {
       const next = prepared?.doc ?? d;
       if (!openAccepted(inPlaceNow.current) || !replaceDoc(next, 'project-open')) return false;
       if (prepared?.problems.length) referenceProblems.current.set(next, prepared.problems);
-      setRefChoices(null);
+      clearReferenceChoices();
       setCompareBase(null);
       const accepted = openIntent.current;
       setFileName(path.replace(/\.bcad$/i, '').split('/').pop()!); setDirty(notes.length > 0 || next !== d);
@@ -829,16 +811,6 @@ export function App() {
     if (noticeExpired) setToast(current => current === notice ? null : current);
   }, [noticeExpired, notice]);
   const commandDoc = useMemo(() => directCommandDocument(evaluated, shownDoc), [evaluated, shownDoc.direct]);
-  // Labels outlive the Drawing view, but only for the exact accepted document and displayed model.
-  // Do not bind to DrawingWorkspace's spread prop: that wrapper is new on every render.
-  const referenceLabelOwner = useMemo<ReferenceLabelOwner>(() => ({ doc, model: evaluated }), [doc, evaluated]);
-  const referenceLabelOwnerNow = useRef(referenceLabelOwner); referenceLabelOwnerNow.current = referenceLabelOwner;
-  const receiveReferenceLabels = useCallback((labels: readonly DrawingReferenceLabel[]) => {
-    if (referenceLabelOwnerNow.current !== referenceLabelOwner) return;
-    setReferenceLabelCache(previous => previous?.owner === referenceLabelOwner && JSON.stringify(previous.labels) === JSON.stringify(labels) ? previous : { owner: referenceLabelOwner, labels });
-  }, [referenceLabelOwner]);
-  const referenceLabels = referenceLabelCache?.owner === referenceLabelOwner ? referenceLabelCache.labels : [];
-
   const { gpuSection, sectionExactShown, sectionBodies } = useSectionEvaluation({ section, sectionDragFrom, sectionDebug, sectionExact,
     setSectionExact, doc, evaluated, bodies, viewport, engine, revision, lanes });
   const render = useMemo(() => doc.render ?? defaultRender(), [doc.render]);
@@ -1962,7 +1934,7 @@ export function App() {
         const local = value?.review.localRun;
         return local && retiresTaskRunReview(status, local.request, local.revision) ? null : value;
       }),
-      rememberRefProblems: (source, problems) => { referenceProblems.current.set(source, problems); setRefChoices(null); }, commit, commitDirect },
+      rememberRefProblems: (source, problems) => { referenceProblems.current.set(source, problems); clearReferenceChoices(); }, commit, commitDirect },
     validateSave: () => {
       // Save serializes the authored master, including steps beyond the visible History marker.
       if (fresh && !busy && markerNow.current === null && shownDocNow.current === doc) return;
@@ -2035,8 +2007,6 @@ export function App() {
   }, [workingComparison, doc]);
   const { setRequirement, answerQuestions, acceptAll, refTool, addDrawingFile, addReferenceFile, placeRef, removeRef, confirmBrief } =
     useSpecificationActions({ doc, bodies, commit, engine, revision, setToast, setChat, setChatOutbox });
-  // The references marked matched again (until confirmed), and the user's say on them and on the problems.
-  const refMarks = useMemo(() => markedReferences(doc), [doc]);
   const { showWorkspace, requestWorkspace, requestSketchWorkspace } = createWorkspaceNavigation({
     switchWhenReady: workspaceModeExit.switchWhenReady, readCommandDraft: commandDraft,
     hasEditorDraft: () => !!nodeEditorDraft.current, hasSketch: !!sketch, sketchButton: sketchModeButton,
@@ -2044,21 +2014,19 @@ export function App() {
     changes: { clearSketch: () => setSketch(null), discardFeatureDraft, clearMeasurement: () => setMeasure(null),
       closeFeatureEditor: () => setEditNode(null), stopPlayback: () => setPlaying(false), setRendering, setDrawing },
   });
-  const previewReference = createReferencePreview({
-    model: { doc, bodies, ready: fresh && !busy, edgeBlocked: () => !!(section || previewBodies || sketch || mateFaces) },
-    owner: { document: docNow, switchDrawing: ready => workspaceModeExit.switchWhenReady(ready, { readFeature: commandDraft }) },
-    changes: { setPreview: setReferencePreview, notice: setToast,
+  const { referenceBrowser, refMarks, refChoices, referenceLabels, previewReference, settleRef, showRefChoices,
+    referencePreview, clearReferencePreview, clearReferenceChoices, receiveReferenceLabels } = useStudioReferenceReview({
+    source: { doc, evaluated, bodies, problems: refProblems, ready: fresh && !busy, drawing,
+      edgeBlocked: () => !!(section || previewBodies || sketch || mateFaces) },
+    owner: { document: docNow, open: openIntent, dispatch: saveDocumentToken,
+      canSettle: () => ownsEvaluatedSource() && canChangeDocument() },
+    confirmation: { pushUndo, setDoc, remember: (next, problems) => referenceProblems.current.set(next, problems), setDirty },
+    navigation: {
+      switchDrawing: ready => workspaceModeExit.switchWhenReady(ready, { readFeature: commandDraft }),
       showDrawing: () => { showWorkspace('Drawing'); setBrowserOpen(true); },
       showModel: edges => { setDrawing(false); setRendering(false); setMeasure(null); setInstanceSel([]); setDirectSel([]); setSelection({ faces: [], edges, bodies: [] }); },
     },
-  });
-  const { settleRef, showRefChoices } = createReferenceDecisions({
-    model: { doc, bodies, problems: refProblems },
-    owner: { document: docNow, open: openIntent, dispatch: saveDocumentToken, canSettle: () => ownsEvaluatedSource() && canChangeDocument() },
-    focus: { request: referenceFocusRequest, receipt: referenceFocus },
-    readPart: source => engine.part(source, revision.current++, 'refs'),
-    changes: { pushUndo, setDoc, remember: (next, problems) => referenceProblems.current.set(next, problems),
-      setChoices: setRefChoices, setDirty, notice: setToast },
+    readPart: source => engine.part(source, revision.current++, 'refs'), onNotice: setToast,
   });
   /** A sketch's profile as DXF, 1:1 in its plane (R11b, O1). */
   const exportSketchDxf = (index: number) => {

@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D1797: [Extract the Studio reference-review session from App](notes/studio-reference-review-session-2026-11-23/README.md), #44. Match candidate preview, explicit confirmation, stale guards, saved files and final keyboard focus in paired desktop runs.
+
 - D1796: [Review the paired same-turn duct before Agent approval](notes/pending-same-turn-paired-duct-review-2026-11-23/README.md), #324. Bind both mouths, 36 walls and 24 charted tangent joins to independent evidence and both Agent images through explicit Studio approval and fresh Open.
 
 - D1795: [Sweep two passages through spaced same-turn bends](notes/exact-spaced-same-turn-paired-duct-2026-11-23/README.md), #10. Verify both mouths, all 24 native tangent joins, editable lane geometry, Undo, Redo and fresh Open.

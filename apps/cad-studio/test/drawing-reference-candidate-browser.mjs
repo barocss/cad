@@ -7,6 +7,7 @@ const baseline = mode === '--baseline';
 const guards = mode === '--guards';
 const pins = [
   'apps/cad-studio/test/drawing-reference-candidate-browser.mjs', 'apps/cad-studio/src/App.tsx',
+  'apps/cad-studio/src/app/useStudioReferenceReview.ts',
   'apps/cad-studio/src/ui/DrawingWorkspace.tsx', 'apps/cad-studio/src/ui/ReferenceDecisions.tsx',
   'apps/cad-studio/src/ui/drawing/referenceCandidate.ts',
   'packages/barocss-cad-model/src/engine/references.ts', 'packages/barocss-cad-model/src/drawing/dimensions.ts',

@@ -4,7 +4,7 @@ import {join} from 'node:path';
 import {createFlow} from './flow-helper.mjs';
 const producer=await readFile(new URL('./drawing-reference-candidate-browser.mjs',import.meta.url),'utf8');
 const inspectorSource=producer.match(/const inspectorSource = String.raw`([\s\S]*?)`;/)?.[1];assert.ok(inspectorSource);
-const pins=['apps/cad-studio/src/App.tsx','apps/cad-studio/src/ui/ReferenceDecisions.tsx','apps/cad-studio/test/drawing-reference-candidate-browser.mjs'];
+const pins=['apps/cad-studio/src/App.tsx','apps/cad-studio/src/app/useStudioReferenceReview.ts','apps/cad-studio/src/ui/ReferenceDecisions.tsx','apps/cad-studio/test/drawing-reference-candidate-browser.mjs'];
 const f=await createFlow({name:'reference-final-focus',output:process.argv[2],envFrozen:'D1344_SOURCE_FROZEN',initialFiles:pins,requiredFrozen:pins,inspectorSource,qualification:'Keyboard confirmation returns to next candidate or durable Browser control, including final drawing reference.',limits:['One two-finish Split and one lost drawing endpoint; not assistive-technology qualification.']});
 const button=(name,scope=f.page)=>scope.getByRole('button',{name,exact:true});
 const refs=()=>f.page.getByRole('region',{name:'References',exact:true});
