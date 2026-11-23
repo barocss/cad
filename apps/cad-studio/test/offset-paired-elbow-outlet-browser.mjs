@@ -3,11 +3,14 @@ import { copyFile, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createFlow } from './flow-helper.mjs';
 import { currentPartRevision, withMcpSession } from './mcp-browser-session.mjs';
+import { checkSavedOutletDrag } from './paired-elbow-outlet-handle-browser-steps.mjs';
 import { checkReopenedOutlet, reviewPendingOutlet } from './paired-elbow-outlet-review-browser-steps.mjs';
 
 const baseline = process.argv.includes('--expect-refused');
 const reviewUnavailable = process.argv.includes('--expect-review-unavailable');
 const reviewOutlet = process.argv.includes('--review-outlet');
+const expectMissingHandle = process.argv.includes('--expect-history-handle-absent');
+const historyHandle = process.argv.includes('--history-handle');
 const path = {
   degree: 2, knots: [0, 0, 0, 1, 1, 2, 2, 3, 3, 3],
   controlPoints: [[-10, 0, 0], [-5, 0, 0], [0, 0, 0], [20, 0, 0], [20, 20, 0], [20, 27, 0], [20, 34, 0]],
@@ -24,6 +27,13 @@ const source = {
   ],
   outputs: { b1: { node: 1, side: 'solid' } },
 };
+const retainedRail = process.env.D1790_RETAINED_RAIL;
+if (retainedRail) {
+  const railDoc = JSON.parse(await readFile(retainedRail, 'utf8'));
+  assert.deepEqual([railDoc.nodes, railDoc.outputs], [source.nodes, source.outputs]);
+  assert.equal(railDoc.direct.objects.length, 1);
+  source.direct = railDoc.direct;
+}
 const pins = [
   'apps/cad-studio/test/offset-paired-elbow-outlet-browser.mjs',
   'packages/barocss-cad/package.json',
@@ -39,6 +49,8 @@ const pins = [
   'packages/barocss-cad-model/src/chat/part/proposals.ts',
   'packages/barocss-cad-model/src/chat/part/views.ts',
   'apps/cad-studio/test/paired-elbow-outlet-review-browser-steps.mjs',
+  'apps/cad-studio/test/paired-elbow-outlet-handle-browser-steps.mjs',
+  ...(historyHandle ? ['packages/barocss-cad-model/src/app/pairedElbowOutletOffsetHandle.ts'] : []),
   ...(reviewOutlet ? [
     'apps/cad-studio/test/duct-proposal-review-browser-steps.mjs',
     'packages/barocss-cad-model/src/chat/pairedElbowOutletOffsetEvidence.ts',
@@ -220,7 +232,7 @@ await f.run(async () => {
     const labels = [...document.querySelectorAll('.view-cube .vc-label')];
     return labels.length === 1 && labels[0].textContent === 'BACK';
   });
-  const pixel = await f.page.evaluate(point => window.__studioScreenOf(point), [20, 34, 0]);
+  const pixel = await f.page.evaluate(point => window.__studioScreenOf(point), [20, 34, retainedRail ? 4 : 0]);
   assert.ok(pixel && await f.page.evaluate(point => document.elementFromPoint(...point)?.matches('canvas.vp-canvas'), pixel));
   await f.page.mouse.click(...pixel);
   const capIndex = original.mesh.find(([name]) => name === cap)?.[1];
@@ -286,6 +298,8 @@ await f.run(async () => {
   const saved = await f.save('paired-elbow-outlet-offset');
   const reopened = (await f.freshOpen(saved.file, inward, '05-fresh-open')).doc;
   assert.equal((await verify('reopened-native', reopened, -4, original)).digest, native.digest);
+  if (expectMissingHandle || historyHandle) return checkSavedOutletDrag(f, reopened,
+    (label, doc, distance) => verify(label, doc, distance, original), expectMissingHandle);
   await f.openFeatureEditor(2, 'reopened outlet offset');
   await button('Edit offset', f.editor()).click();
   const reopenedEdit = hud('Edit Offset face');

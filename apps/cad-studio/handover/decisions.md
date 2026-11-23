@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1790: [Drag the saved paired duct outlet Offset](notes/saved-paired-elbow-outlet-handle-2026-11-23/README.md), #17. Verify native cap ownership and physical History drag through Undo, Redo and fresh Open with or without the original Direct rail.
 - D1789: [Review a pending paired duct outlet Offset](notes/pending-paired-elbow-outlet-offset-review-2026-11-23/README.md), #324. Bind both cap planes, the two passages, retained joints and signed material change to the same images through Studio approval and fresh Open.
 - D1788: [Move the original straight outlet cap of a paired Exact Sweep](notes/paired-elbow-outlet-offset-2026-11-23/README.md), #17. Verify signed offset, cap collapse refusal, retained bend and both passages, native fresh Open and explicit Agent approval.
 - D1787: [Review the two-ended paired duct before Agent approval](notes/pending-line-arc-line-paired-duct-review-2026-11-23/README.md), #324. Bind native cap apertures and both groups of tangent joins through two images, Studio approval and fresh Open.

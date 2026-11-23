@@ -10,6 +10,7 @@ import { refusal } from '../engine/refusal';
 import { canonical } from '../util/revision';
 import type { Command, Ctx, HandleSpec, Values } from './commands';
 import { captureOffsetPlane, offsetFields, offsetPlaneStep, pickOffsetPlane, resetOffsetPlane, restoreOffsetPlaneValues } from './offsetPlanePick';
+import { savedPairedElbowOutletOffsetHandle } from './pairedElbowOutletOffsetHandle';
 import { buildNativeOffsetFace, checkDirectOffsetDistance, offsetFaceDescription, offsetFaceCommand } from './profileCommands';
 
 export const OFFSET_FACE_EDIT = 'offset-face-edit';
@@ -194,14 +195,18 @@ export function editSavedOffsetFaceCommand(doc: StudioDoc, index: number): Comma
     steps: (ctx, values) => [{ label: 'Face', text: radialLabel ?? describe(() => getDirectSource(direct), direct.faces[0]), done: true },
       ...(values.offsetMode === 'to-plane' ? [offsetPlaneStep(values, direct.target, ctx)] : offsetFaceCommand.steps?.(ctx, values).filter(step => step.label !== 'Face') ?? [])],
     onPick: allowPlane ? (ctx, values, hit) => pickOffsetPlane(ctx, values, hit.face, direct.parent, index) : undefined,
-    handles: (ctx, values) => savedDraftOffsetHandle(doc,index,ctx,values,face => {
-      if (!wallFrames.has(face)) {
-        let checked: SavedWallFrame | undefined;
-        try { checked = savedDraftWallFrame(getDirectSource(direct), face, direct); } catch { /* The typed editor remains available. */ }
-        wallFrames.set(face, checked ?? null);
-      }
-      return wallFrames.get(face) ?? undefined;
-    }),
+    handles: (ctx, values) => {
+      const outlet = savedPairedElbowOutletOffsetHandle(doc, index, ctx, values, () => getDirectSource(direct));
+      if (outlet.length) return outlet;
+      return savedDraftOffsetHandle(doc, index, ctx, values, face => {
+        if (!wallFrames.has(face)) {
+          let checked: SavedWallFrame | undefined;
+          try { checked = savedDraftWallFrame(getDirectSource(direct), face, direct); } catch { /* The typed editor remains available. */ }
+          wallFrames.set(face, checked ?? null);
+        }
+        return wallFrames.get(face) ?? undefined;
+      });
+    },
     build: (ctx, values) => {
       if (ctx.doc !== doc || ctx.doc.nodes[index] !== direct) return rejected('open the current Offset face in History again.');
       const { target: priorTarget, distance: priorDistance, ...recipe } = direct;
