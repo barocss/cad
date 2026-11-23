@@ -1,7 +1,7 @@
 // In the engine worker: the part's standard views by the kernel's hidden-line projection.
 import { projectBrepHiddenLines, type Brep } from '@barocss/cad';
 import { viewsFor, type Orientation } from './views';
-import { VIEW_IDS, type DrawingViews } from './types';
+import { VIEW_IDS, type DrawingViews, type NativeTopEdge } from './types';
 
 import type { SectionCut } from './section';
 
@@ -25,6 +25,21 @@ export function projectViews(breps: readonly Brep[], prefixes?: readonly string[
         return { name: (prefixes?.[bi] ?? '') + (f.name ?? f.id), points: [...ids].flatMap(id => { const v = vertices.get(id); return v ? [[v.point[0], v.point[1], v.point[2]] as [number, number, number]] : []; }) };
       });
     });
+    // Reflex corners require actual shared vertex IDs, never projected or spatial coincidence.
+    const [body] = breps;
+    if (breps.length === 1 && body.bodies.length === 1 && body.bodies[0].kind === 'solid'
+      && body.shells.every(shell => shell.closed)
+      && body.faces.every(face => face.surface.kind === 'surface' && !/\.facet\d+$/.test(face.name ?? ''))) {
+      const vertices = new Map(body.vertices.map(vertex => [vertex.id, vertex.point]));
+      const edges: NativeTopEdge[] = [];
+      for (const edge of body.edges) {
+        if (edge.curve.degree !== 1 || edge.curve.controlPoints.length !== 2) continue;
+        const a = vertices.get(edge.vertices[0]), b = vertices.get(edge.vertices[1]);
+        if (a && b) edges.push({ name: (prefixes?.[0] ?? '') + (edge.name ?? edge.id), id: edge.id,
+          vertices: [edge.vertices[0], edge.vertices[1]], ends: [[...a], [...b]] });
+      }
+      views.nativeTop = { edges };
+    }
     return { ok: true, views, ms: performance.now() - t0 };
   } catch (cause) { return { ok: false, error: cause instanceof Error ? cause.message : String(cause) }; }
 }

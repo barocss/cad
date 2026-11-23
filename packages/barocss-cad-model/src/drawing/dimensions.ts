@@ -3,12 +3,13 @@
 // from the model's 3D geometry in mm, so a dimension follows the part as it changes.
 import type { BrepProjection, ProjectedCurve, ProjectedEdge } from '@barocss/cad';
 import { isSectionRef } from './types';
-import type { CentreRef, DimPoint, DimView, DrawingDimension, EdgeRef, Vec3, XY } from './types';
+import type { CentreRef, DimPoint, DimView, DrawingDimension, DrawingViews, EdgeRef, Vec3, XY } from './types';
 import { dot } from '../engine/vec3';
 import type { DrawingFrame } from './controls';
 import { nextFreeId } from '../util/ids';
 import { formatNumber, type LengthFormat, type UnitPrecision } from './standard';
 import type { DrawingDetail } from './detail';
+import { reflexAngle } from './reflexAngle';
 
 const sub3 = (a: readonly number[], b: readonly number[]): Vec3 => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
 const dist3 = (a: readonly number[], b: readonly number[]) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
@@ -193,13 +194,20 @@ export function closestDetailRim(arcs: readonly CircularArc[], label: XY): XY | 
   }
   return best;
 }
-export function resolveDimension(views: Partial<Record<DimView, BrepProjection>>, dim: DrawingDimension, detail?: Pick<DrawingDetail, 'center' | 'radius'>, showHidden = false, detailParent?: BrepProjection): Resolved {
+export function resolveDimension(views: Partial<Record<DimView, BrepProjection>> & Pick<DrawingViews, 'nativeTop'>, dim: DrawingDimension, detail?: Pick<DrawingDetail, 'center' | 'radius'>, showHidden = false, detailParent?: BrepProjection): Resolved {
   const pr = views[dim.view];
   if (!pr) return { ok: false, dim, reason: `Its view (${dim.view}) is not on the sheet.` };
   // A missing projected reference does not establish that its source feature was deleted.
   const section = isSectionRef(dim.view);
   const missingEdge = section ? 'An edge it measured cannot be found in the current section. Check the section position and the source feature.' : 'An edge it measured is no longer in the part.';
   if (dim.kind === 'angle') {
+    if (dim.mode !== undefined) {
+      if (dim.mode !== 'reflex' || dim.view !== 'top') return { ok: false, dim, reason: 'Reflex angle: mode must be reflex on an ordinary Top angle dimension.' };
+      const g = reflexAngle(pr, views.nativeTop, dim.a, dim.b);
+      if (!g.ok) return { ok: false, dim, reason: g.reason };
+      return { ok: true, kind: 'angle', dim, vertex: g.vertex, from: g.from, to: g.to, ends: g.ends,
+        value: g.degrees, text: valueText({ kind: 'angle', value: g.degrees }, fmtMM) };
+    }
     const a = resolveLine(pr, dim.a), b = resolveLine(pr, dim.b);
     if (!a || !b) return { ok: false, dim, reason: missingEdge };
     const g = angleBetween(a, b, dim.place);

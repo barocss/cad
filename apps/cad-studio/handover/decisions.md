@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D1827: [Place the long angle of a shared native Top corner](notes/native-top-reflex-angle-2026-11-24/README.md), #742. Bind the two original straight edges and verify the 270° and 300° long arcs in Studio, native reopen and SVG.
+
 - D1826: [End round-section SVG hatch lines on the drawn circles](notes/round-section-svg-hatch-2026-11-24/README.md), #743. Compare the exported full circular section with independent exact hatch intervals and retain the fallback, visibility and text clearance.
 
 - D1825: [Review the five-span inlet offset before Agent approval](notes/pending-five-span-inlet-offset-review-2026-11-24/README.md), #324. Pin both orientations to the original rail, the signed inlet move and the retained outlet through Studio approval and reopen.

@@ -1,5 +1,6 @@
 import { checkSavedNoteTargets } from '@barocss/cad-model/drawing/savedNoteTargets';
 import { checkSavedExtension } from '@barocss/cad-model/drawing/savedExtension';
+import { checkSavedReflexAngle } from '@barocss/cad-model/drawing/savedReflexAngle';
 // What the drawing workspace hands up when settings change: the same canonical form Open reads, so an authored
 // drawing equals its reopened self as JSON (key order included).
 import { readDrawing, type DrawingSettings } from '@barocss/cad-model/drawing/types';
@@ -18,10 +19,10 @@ export function commitDrawingSettings(next: DrawingSettings, scope: DrawingScope
   const input = { ...next, scope: next.scope ?? scope };
   try { assertSectionHatchScope(input); assertDrawingBodySettings(input); }
   catch (cause) { onRefused(cause instanceof Error ? cause.message : String(cause)); return false; }
-  const issue = checkSavedSectionHatch(input)[0] ?? checkSavedExtension(input)[0] ?? checkSavedNoteTargets(input)[0];
+  const issue = checkSavedSectionHatch(input)[0] ?? checkSavedExtension(input)[0] ?? checkSavedReflexAngle(input)[0] ?? checkSavedNoteTargets(input)[0];
   if (issue) { onRefused(issue.message); return false; }
   const canonical = committedSettings(input, scope);
-  const finalIssue = checkSavedSectionHatch(canonical)[0] ?? checkSavedExtension(canonical)[0] ?? checkSavedNoteTargets(canonical)[0];
+  const finalIssue = checkSavedSectionHatch(canonical)[0] ?? checkSavedExtension(canonical)[0] ?? checkSavedReflexAngle(canonical)[0] ?? checkSavedNoteTargets(canonical)[0];
   if (finalIssue) { onRefused(finalIssue.message); return false; }
   return commit(canonical);
 }

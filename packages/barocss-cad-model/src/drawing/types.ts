@@ -73,7 +73,7 @@ export type DrawingDimension = ({ tol?: Tolerance; count?: number; auto?: true; 
   /** A pitch circle (R14.5, O6): the circle through the centres of three or more holes, its diameter as `Ø40 PCD`. */
   | { id: string; view: DimView; kind: 'pcd'; ring: CentreRef[]; place: XY }
   /** Between two straight edges (each the one of its name nearest `near`), in the sector holding `place`. */
-  | { id: string; view: DimView; kind: 'angle'; a: EdgeRef; b: EdgeRef; place: XY });
+  | { id: string; view: DimView; kind: 'angle'; a: EdgeRef; b: EdgeRef; place: XY; /** The long angle of one linked native Top corner; omitted keeps the placement-selected ordinary sector. */ mode?: 'reflex' });
 /**
  * A note: lines of text with their top left at `at` (sheet mm), and optionally a leader to a point
  * of a view (`leader.at` in the view's model coordinates, so it follows the view).
@@ -370,4 +370,11 @@ function readTolerance(t: unknown): Tolerance | null {
   return null;
 }
 
-export type DrawingViews = Record<ViewId, BrepProjection> & { faces?: DrawingFace[] };
+/** Transient native identity for one exact solid's Top edges. Never authored or saved with the drawing. */
+export interface NativeTopEdge {
+  readonly name: string;
+  readonly id: string;
+  readonly vertices: readonly [string, string];
+  readonly ends: readonly [Vec3, Vec3];
+}
+export type DrawingViews = Record<ViewId, BrepProjection> & { faces?: DrawingFace[]; nativeTop?: { readonly edges: readonly NativeTopEdge[] } };

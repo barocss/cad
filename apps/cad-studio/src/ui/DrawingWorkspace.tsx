@@ -83,13 +83,14 @@ import { NotesList } from './drawing/NotesList';
 import { ExportActions } from './drawing/ExportActions';
 import '../drawing/drawing.css';
 
-type Tool = 'select' | 'linear' | 'diameter' | 'radius' | 'angle' | 'note' | 'detail' | 'datum-target';
+type Tool = 'select' | 'linear' | 'diameter' | 'radius' | 'angle' | 'reflex-angle' | 'note' | 'detail' | 'datum-target';
 const TOOLS: { tool: Tool; label: string; icon: string; key: string; hint: string }[] = [
   { tool: 'select', label: 'Select', icon: 'arrow_selector_tool', key: 'V', hint: 'Click a dimension to select it, drag to move it · Delete removes it · drag the paper to pan, scroll to zoom' },
   { tool: 'linear', label: 'Linear dimension', icon: 'straighten', key: 'D', hint: 'Click two points (edge ends, circle centres) or one straight edge, then where the dimension goes' },
   { tool: 'diameter', label: 'Diameter', icon: 'radio_button_unchecked', key: 'O', hint: 'Click a circle, then where its diameter goes' },
   { tool: 'radius', label: 'Radius', icon: 'line_end_circle', key: 'R', hint: 'Click a circle or an arc, then where its radius goes' },
   { tool: 'angle', label: 'Angle', icon: 'architecture', key: 'A', hint: 'Click two straight edges, then the side of their corner the angle goes on' },
+  { tool: 'reflex-angle', label: 'Reflex angle', icon: 'restart_alt', key: 'G', hint: 'Pick two straight edges that share a corner in the Top view' },
   { tool: 'note', label: 'Note', icon: 'sticky_note_2', key: 'N', hint: 'Click on the paper for a note, or on a view for a leader and then where its text goes' },
   { tool: 'detail', label: 'Detail view', icon: 'zoom_in', key: 'E', hint: 'Click the centre of what to enlarge on a view or a section, then how far its circle reaches' },
   { tool: 'datum-target', label: 'Datum target', icon: 'my_location', key: 'T', hint: 'Place a datum target using the kind selected under Datum targets.' },
@@ -109,7 +110,7 @@ type Pending =
   | { kind: 'datum-line'; view: ViewId; from: XY }
   | { kind: 'linear'; view: DimView; a: DimPoint; b?: DimPoint }
   | { kind: 'diameter' | 'radius'; view: DimView; edge: string; near: Vec3; source?: { projection: DrawingViews; settings: DrawingSettings }; owner?: string }
-  | { kind: 'angle'; view: DimView; a: EdgeRef; b?: EdgeRef }
+  | { kind: 'angle'; view: DimView; a: EdgeRef; b?: EdgeRef; mode?: 'reflex'; owner?: object }
   | { kind: 'note'; leader: { view: ViewId; at: XY } }
   /** DR-1: a detail's circle, its centre picked on its parent. */
   | { kind: 'detail-center'; view: DetailParent; moving: DetailMove }
@@ -439,6 +440,8 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
       const rims = diameterRims(projection, at, 6 * mmPerPx() / v.scale, tol, visibleRimOnly, scope.kind === 'assembly');
       return { q, view, at, snap: null, edge: rims[0] ?? null, visibleRimOnly, rims };
     }
+    if (tool === 'reflex-angle') return { q, view, at, snap: null, edge: view === 'top' && !v.breaks?.length
+      ? edgeAt(pr, at, 6 * mmPerPx() / v.scale, true) : null };
     const breaks = tool === 'linear' || tool === 'angle' || tool === 'radius' ? v.breaks : undefined;
     return { q, view, at, ...drawingBrokenPick(pr, snaps[view] ?? [], at, tol, 6 * mmPerPx() / v.scale, breaks) };
   }, [sheetPoint, layout, views, snaps, viewAt, sheet, tool, settings, scope.kind, currentReattachment]);
@@ -675,19 +678,40 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
       }
       setMessage(pending ? 'Click an edge end or a circle centre.' : 'Click an edge end, a circle centre or a straight edge.'); return;
     }
-    if (tool === 'angle') {
+    if (tool === 'angle' || tool === 'reflex-angle') {
+      const reflex = tool === 'reflex-angle';
+      if (reflex && scope.kind !== 'part') { setMessage('Reflex angles use a part drawing.'); return; }
+      if (reflex && (busy || !projectionCurrent || (pending?.kind === 'angle' && pending.owner !== projectionActionOwner))) {
+        setPending(null); setMessage('The drawing changed. Pick both reflex angle edges again.'); return;
+      }
       if (pending?.kind === 'angle' && pending.b) {
-        commitDims([...settings.dimensions, { id: newDimensionId(wholeSettings.dimensions, wholeSettings.frames), view: pending.view, kind: 'angle', a: pending.a, b: pending.b, place }]);
+        const dim: DrawingDimension = { id: newDimensionId(wholeSettings.dimensions, wholeSettings.frames), view: pending.view, kind: 'angle',
+          a: pending.a, b: pending.b, place, ...(pending.mode ? { mode: pending.mode } : {}) };
+        if (reflex) {
+          const resolved = resolveDimension(views, dim);
+          if (!resolved.ok) { setMessage(resolved.reason); return; }
+        }
+        commitDims([...settings.dimensions, dim]);
         setPending(null); return;
       }
-      // (A straight edge under the pointer, even near its ends.)
-      const e = h.edge ?? drawingBrokenEdgeAt(pr, h.at, 6 * mmPerPx() / (placementAt(h.view)?.scale ?? 1), placementAt(h.view)?.breaks);
-      if (!e || !e.ends || e.circle || (e.kind !== 'line' && e.kind !== 'silhouette')) { setMessage('Click a straight edge.'); return; }
+      if (reflex && (h.view !== 'top' || placementAt(h.view)?.breaks?.length)) {
+        setMessage('Pick two straight edges in an unbroken Top view.'); return;
+      }
+      // A straight edge under the pointer, including near its ends.
+      const e = h.edge ?? (reflex ? null : drawingBrokenEdgeAt(pr, h.at, 6 * mmPerPx() / (placementAt(h.view)?.scale ?? 1), placementAt(h.view)?.breaks));
+      if (!e || !e.ends || e.circle || (e.kind !== 'line' && (reflex || e.kind !== 'silhouette'))) { setMessage('Click a straight edge.'); return; }
       const ref: EdgeRef = { edge: e.name, near: [0, 1, 2].map(k => (e.ends![0][k] + e.ends![1][k]) / 2) as Vec3 };
-      if (!pending || pending.kind !== 'angle') { setPending({ kind: 'angle', view: h.view, a: ref }); return; }
+      if (pending?.kind !== 'angle') {
+        setPending({ kind: 'angle', view: h.view, a: ref, ...(reflex ? { mode: 'reflex', owner: projectionActionOwner } : {}) }); return;
+      }
       if (pending.view !== h.view) { setMessage('Pick the second edge in the same view.'); return; }
-      const a = resolveLine(pr, pending.a), b = resolveLine(pr, ref);
-      if (!a || !b || !angleBetween(a, b, h.at)) { setMessage('These edges are parallel here — pick one that meets the first at an angle.'); return; }
+      if (reflex) {
+        const resolved = resolveDimension(views, { id: 'preview', view: pending.view, kind: 'angle', mode: 'reflex', a: pending.a, b: ref, place: h.at });
+        if (!resolved.ok) { setMessage(resolved.reason); return; }
+      } else {
+        const a = resolveLine(pr, pending.a), b = resolveLine(pr, ref);
+        if (!a || !b || !angleBetween(a, b, h.at)) { setMessage('These edges are parallel here — pick one that meets the first at an angle.'); return; }
+      }
       setPending({ ...pending, b: ref }); return;
     }
     if (tool === 'diameter' || tool === 'radius') {
@@ -1231,6 +1255,7 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
       return parts.join('');
     }
     const placing = pending && hover && pending.kind !== 'note' && ((pending.kind !== 'linear' && pending.kind !== 'angle') || pending.b);
+    if (pending?.kind === 'angle' && pending.mode && pending.owner !== projectionActionOwner) return '';
     if (pending?.kind === 'angle') for (const ref of [pending.a, ...(pending.b ? [pending.b] : [])]) {
       const l = resolveLine(R(pending.view), ref);
       if (l) parts.push(`<g class="dw-hover">${marksSvg([{ kind: 'line', a: toSheet(P(pending.view), l[0]), b: toSheet(P(pending.view), l[1]), pen: 'visible' }])}</g>`);
@@ -1242,7 +1267,7 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
       const at = fromSheet(P(pending.view), hover.q);
       const d: DrawingDimension = pending.kind === 'linear'
         ? { id: 'preview', view: pending.view, kind: 'linear', a: pending.a, b: pending.b!, orient: orientFor(pointIn(R(pending.view), pending.a), pointIn(R(pending.view), pending.b!), at), place: at }
-        : pending.kind === 'angle' ? { id: 'preview', view: pending.view, kind: 'angle', a: pending.a, b: pending.b!, place: at }
+        : pending.kind === 'angle' ? { id: 'preview', view: pending.view, kind: 'angle', a: pending.a, b: pending.b!, place: at, ...(pending.mode ? { mode: pending.mode } : {}) }
         : { id: 'preview', view: pending.view, kind: pending.kind, edge: pending.edge, near: pending.near, place: at };
       const r = resolveDimension({ ...views, [pending.view]: R(pending.view) }, d, detailFor(settings, pending.view), showDetailHidden(settings, pending.view));
       if (r.ok) { const preset = presetFor(settings); parts.push(`<g class="dw-preview">${marksSvg(dimensionMarks(P(pending.view), withShownText(r, undefined, preset) as typeof r, preset))}</g>`); }
@@ -1254,14 +1279,14 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
     } else if (hover && v && tool !== 'select') {
       if (hover.snap && tool === 'linear') { const q = toSheet(v, hover.snap.at); parts.push(`<circle class="dw-snap" cx="${q[0]}" cy="${q[1]}" r="1.4"/>`); }
       else if (hover.edge && (tool !== 'linear' || !pending)) {
-        const ok = tool === 'linear' || tool === 'angle' ? hover.edge.kind !== 'circle' && hover.edge.kind !== 'curve' : !!hover.edge.circle && roundIn(R(hover.view), hover.edge);
-        const pieces = hover.visibleRimOnly || (tool === 'diameter' && isDetailRef(hover.view) && !showDetailHidden(settings, hover.view))
+        const ok = tool === 'reflex-angle' ? hover.edge.kind === 'line' : tool === 'linear' || tool === 'angle' ? hover.edge.kind !== 'circle' && hover.edge.kind !== 'curve' : !!hover.edge.circle && roundIn(R(hover.view), hover.edge);
+        const pieces = tool === 'reflex-angle' || hover.visibleRimOnly || (tool === 'diameter' && isDetailRef(hover.view) && !showDetailHidden(settings, hover.view))
           ? hover.edge.pieces.filter(piece => piece.visible) : hover.edge.pieces;
         if (ok) parts.push(`<g class="dw-hover">${marksSvg(pieces.map(p => curveMark(v, p.curve, 'visible')))}</g>`);
       }
     }
     return parts.join('');
-  }, [layout, views, bodies, hover, pending, tool, settings, inspectedTarget, targetChoices]);
+  }, [layout, views, bodies, hover, pending, tool, settings, inspectedTarget, targetChoices, projectionActionOwner]);
 
   // The dimension being dragged is drawn where it goes.
   const shownMarkup = useMemo(() => {
@@ -1274,7 +1299,7 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
     return sheetGroupsSvg(buildSheet(views, layout, { ...settings, dimensions: dims }, { svgSectionTextClearance, title, date: today(), callout, threads, tableContent: tableContentOf, welds: weldJoints, bodyFaces, ...(bom ? { bom } : {}) }, cuts), selected, selectedTarget);
   }, [drag, views, layout, sheet, sheetMarkup, settings, title, selected, selectedTarget, weldJoints, bom, svgSectionTextClearance]);
 
-  const hint = message ?? (currentReattachment ? `Select a rim in the ${viewLabel(currentReattachment.original.view)} · Esc cancels` : null) ?? (pending ? (pending.kind === 'standalone-frame' ? `Click the sheet to place the frame. View: ${viewLabel(pending.view)}. Esc cancels.` : pending.kind === 'datum-target' ? 'Click where the target symbol goes · Esc cancels' : pending.kind === 'datum-line' ? 'Now the other end of the target line · Esc cancels' : pending.kind === 'note' ? 'Click where the note’s text goes · Esc cancels' : pending.kind === 'detail-center' ? `Select the centre of Detail ${pending.moving.detail.id} on the ${viewLabel(pending.view)} · Esc cancels` : pending.kind === 'detail' ? 'Now how far the detail’s circle reaches · Esc cancels' : pending.kind === 'angle' ? (pending.b ? 'Choose the side of the corner to measure, then click to place the angle · Esc cancels' : 'Now the second edge · Esc cancels') : pending.kind === 'linear' && !pending.b ? 'Now the second point · Esc cancels' : pending.kind === 'diameter' && pending.owner ? `${pending.owner} · Click where the dimension goes · Esc cancels` : 'Click where the dimension goes · Esc cancels') : tool === 'select' ? null : tool === 'datum-target' ? (targetDraft.kind === 'point' ? 'Click a straight edge endpoint · Esc cancels' : targetDraft.kind === 'line' ? 'Click the first end of the target line · Esc cancels' : 'Click the centre of the target area · Esc cancels') : TOOLS.find(t => t.tool === tool)!.hint);
+  const hint = message ?? (currentReattachment ? `Select a rim in the ${viewLabel(currentReattachment.original.view)} · Esc cancels` : null) ?? (pending ? (pending.kind === 'standalone-frame' ? `Click the sheet to place the frame. View: ${viewLabel(pending.view)}. Esc cancels.` : pending.kind === 'datum-target' ? 'Click where the target symbol goes · Esc cancels' : pending.kind === 'datum-line' ? 'Now the other end of the target line · Esc cancels' : pending.kind === 'note' ? 'Click where the note’s text goes · Esc cancels' : pending.kind === 'detail-center' ? `Select the centre of Detail ${pending.moving.detail.id} on the ${viewLabel(pending.view)} · Esc cancels` : pending.kind === 'detail' ? 'Now how far the detail’s circle reaches · Esc cancels' : pending.kind === 'angle' ? (pending.b ? (pending.mode ? 'Click to place the reflex angle · Esc cancels' : 'Choose the side of the corner to measure, then click to place the angle · Esc cancels') : 'Now the second edge · Esc cancels') : pending.kind === 'linear' && !pending.b ? 'Now the second point · Esc cancels' : pending.kind === 'diameter' && pending.owner ? `${pending.owner} · Click where the dimension goes · Esc cancels` : 'Click where the dimension goes · Esc cancels') : tool === 'select' ? null : tool === 'datum-target' ? (targetDraft.kind === 'point' ? 'Click a straight edge endpoint · Esc cancels' : targetDraft.kind === 'line' ? 'Click the first end of the target line · Esc cancels' : 'Click the centre of the target area · Esc cancels') : TOOLS.find(t => t.tool === tool)!.hint);
   const selDim = selected?.kind === 'dimension' ? settings.dimensions.find(d => d.id === selected.id) : undefined;
   const extensionReady = !busy && projectionCurrent && sourceCurrent !== false;
   const extensionOwner = useMemo(() => ({}), [projectionActionOwner, selected, sheet, extensionReady]);

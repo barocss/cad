@@ -1,6 +1,7 @@
 // Strict source-table and section inputs for drawing.set. Saved-file readers remain permissive.
 import { assertDrawingBodySettings, assertSectionHatchScope } from './scope';
-import { problem, refusal, type Problem } from '../engine/refusal';
+import { problem, refusal, refused, type Problem } from '../engine/refusal';
+import { checkSavedReflexAngle } from './savedReflexAngle';
 import { annotatedDetailLetters, halfOk, removedOk, reservedDetailLetters, reservedSectionLetters, sameSection, sectionHatchVisibilitySupported, sectionDirOk, sectionsOf, stepsOk, withSections, type DrawingSection, type DrawingSettings, type DrawingTable } from './types';
 import { detailOk, type DrawingDetail } from './detail';
 import { datumsProperty, checkDatumOptions, readDatums } from './datums';
@@ -139,5 +140,7 @@ export function withManufacturingDrawing(s: DrawingSettings, args: Record<string
   }
   assertSectionHatchScope(next);
   assertDrawingBodySettings(next);
+  const [reflexIssue] = checkSavedReflexAngle(next);
+  if (reflexIssue) throw refused(reflexIssue);
   return next;
 }
