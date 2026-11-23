@@ -3,7 +3,7 @@ import {
   type Brep, type BrepEdge, type Point,
 } from '@barocss/cad';
 import { sweepPath } from '../app/profileCommands';
-import { withNode, type StudioDoc } from '../engine/doc';
+import { withNode, type ModelNode, type StudioDoc } from '../engine/doc';
 import { loadDirect } from '../engine/directModule';
 import { partBreps } from '../engine/evaluate';
 import { bodyKeyFor, featureId } from '../engine/ids';
@@ -19,10 +19,9 @@ const sub = (a: Point, b: Point): Point => [a[0] - b[0], a[1] - b[1], a[2] - b[2
 const dot = (a: Point, b: Point) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 const cross = (a: Point, b: Point): Point => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
 
-function scope(doc: StudioDoc) {
-  const [sketch] = doc.nodes;
-  if (doc.nodes.length !== 1 || doc.instances?.length || Object.keys(doc.outputs).length ||
-    sketch?.kind !== 'sketch' || sketch.profile !== 'rectangle' || !sketch.id ||
+/** Read one authored, tagged rectangular wall section and its centered opening. */
+export function rectangularDuctSection(sketch: ModelNode | undefined) {
+  if (sketch?.kind !== 'sketch' || sketch.profile !== 'rectangle' || !sketch.id ||
     sketch.suppressed || sketch.held !== undefined || sketch.on || sketch.association || sketch.pocketFloor || sketch.regions?.length || sketch.plane ||
     ![...sketch.min, ...sketch.max].every(value => typeof value === 'number' && Number.isFinite(value)) ||
     sketch.holes?.length !== 1 || sketch.holes[0].length !== 4) return;
@@ -42,11 +41,17 @@ function scope(doc: StudioDoc) {
   const tags = sketch.sideTags, innerTags = tags?.holes?.[0];
   if (tags?.outer.length !== 4 || tags.regions?.length || tags.holes?.length !== 1 || innerTags?.length !== 4 ||
     [...tags.outer, ...innerTags].some(tag => typeof tag !== 'string' || !tag) || new Set([...tags.outer, ...innerTags]).size !== 8) return;
+  return { sketchId: sketch.id, outer, inner, outerTags: tags.outer, innerTags };
+}
+
+function scope(doc: StudioDoc) {
+  const section = rectangularDuctSection(doc.nodes[0]);
+  if (doc.nodes.length !== 1 || doc.instances?.length || Object.keys(doc.outputs).length || !section) return;
   const direct = doc.direct, visible = direct?.objects.filter(object => !object.hidden), object = visible?.[0];
   if (!direct || visible?.length !== 1 || !object || direct.objects.filter(item => item.id === object.id).length !== 1 ||
     Object.keys(object).some(key => !['id', 'name', 'source', 'geometry', 'hidden'].includes(key)) ||
     typeof direct.sources[object.source] !== 'string') return;
-  return { sketch, sketchId: sketch.id, object, outer, inner, outerTags: tags.outer, innerTags };
+  return { ...section, object };
 }
 
 /** Identify one pinned creation of an independent rectangular duct. */

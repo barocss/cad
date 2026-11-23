@@ -7,6 +7,7 @@ import { cornerBatchProposal, reviewedChamferResizeEvidence, reviewedCornerBatch
 import { boredWallProposal, reviewedBoreEvidence, type ModelCandidatePin } from '../modelProposalReview';
 import { proposalIsStale } from '../proposals';
 import { rectangularDuctProposal, reviewedRectangularDuctEvidence } from '../rectangularDuctProposalReview';
+import { rectangularDuctIntersectionProposal, reviewedRectangularDuctIntersectionEvidence } from '../rectangularDuctIntersectionProposalReview';
 import { fail, type ChatState, type Evaluate, type PartRun } from '../toolKit';
 import { renderViews } from '../views';
 import { previewProposalWith } from './proposals';
@@ -47,9 +48,10 @@ export async function reviewModelCandidate(state: ChatState, args: Record<string
   const cornerEdit = pending && !boreEdit ? cornerBatchProposal(state.doc, pending) : undefined;
   const resizeEdit = pending && !boreEdit && !cornerEdit ? savedChamferResizeProposal(state.doc, pending) : undefined;
   const duct = pending && !boreEdit && !cornerEdit && !resizeEdit ? rectangularDuctProposal(state.doc, pending) : undefined;
-  const proposalRevision = boreEdit?.revision ?? cornerEdit?.revision ?? resizeEdit?.revision ?? duct?.revision;
+  const ductCut = pending && !boreEdit && !cornerEdit && !resizeEdit && !duct ? rectangularDuctIntersectionProposal(state.doc, pending) : undefined;
+  const proposalRevision = boreEdit?.revision ?? cornerEdit?.revision ?? resizeEdit?.revision ?? duct?.revision ?? ductCut?.revision;
   if (!pending || !proposalRevision)
-    return refuse('MODEL_REVIEW_UNAVAILABLE', 'Choose a unique open proposal for a supported bored-wall Offset, sketch corner group, saved Chamfer resize or rectangular duct.');
+    return refuse('MODEL_REVIEW_UNAVAILABLE', 'Choose a unique open proposal for a supported bored-wall Offset, sketch corner group, saved Chamfer resize, rectangular duct or offset duct Intersect.');
   if (proposalRevision !== expectedProposalRevision || proposalIsStale(pending, requirementEvidenceRevision(state.doc)))
     return refuse('MODEL_REVIEW_PROPOSAL_STALE', 'The proposal or its source changed. Read proposals.list and request a fresh proposal.');
 
@@ -58,7 +60,8 @@ export async function reviewModelCandidate(state: ChatState, args: Record<string
   const evidence = boreEdit ? boredWallEvidence(preview.doc, boreEdit)
     : cornerEdit ? reviewedCornerBatchEvidence(state.doc, preview.doc, cornerEdit)
       : resizeEdit ? reviewedChamferResizeEvidence(state.doc, preview.doc, resizeEdit)
-        : duct && await reviewedRectangularDuctEvidence(state.doc, preview.doc, duct);
+        : duct ? await reviewedRectangularDuctEvidence(state.doc, preview.doc, duct)
+          : ductCut && reviewedRectangularDuctIntersectionEvidence(state.doc, preview.doc, ductCut);
   if (!evidence) return refuse('MODEL_REVIEW_REPLAY_FAILED', 'The native geometry of this proposal could not be verified.');
   if ('error' in evidence) return refuse('MODEL_REVIEW_REPLAY_FAILED', evidence.error);
   const { brep, ...geometry } = evidence;

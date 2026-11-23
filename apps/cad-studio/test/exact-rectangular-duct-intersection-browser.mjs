@@ -1,11 +1,13 @@
 import assert from 'node:assert/strict';
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { createFlow } from './flow-helper.mjs';
+import { createFlow, sha256 } from './flow-helper.mjs';
 import { currentPartRevision, withMcpSession } from './mcp-browser-session.mjs';
 
 const baseline = process.argv.includes('--observe-base');
-const cutOffset = process.argv.includes('--offset') ? 1 : 0;
+const reviewBaseline = process.argv.includes('--expect-cut-review-unavailable');
+const reviewCut = reviewBaseline || process.argv.includes('--review-cut');
+const cutOffset = reviewCut || process.argv.includes('--offset') ? 1 : 0;
 const path = {
   degree: 2, knots: [0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 4],
   controlPoints: [[20, 0, 0], [20, 20, 0], [0, 20, 0], [-20, 20, 0], [-20, 0, 0],
@@ -26,8 +28,17 @@ const pins = [
   'apps/cad-studio/src/App.tsx', 'apps/cad-studio/test/exact-rectangular-duct-intersection-browser.mjs',
 ];
 if (!baseline) pins.push('packages/barocss-cad/src/brep/exact-rectangular-duct-intersect.ts');
+if (reviewCut) pins.push(
+  'packages/barocss-cad-model/src/chat/part/modelCandidate.ts',
+  'packages/barocss-cad-model/src/chat/part/proposals.ts',
+  'packages/barocss-cad-model/src/chat/part/views.ts',
+);
+if (reviewCut && !reviewBaseline) pins.push(
+  'packages/barocss-cad-model/src/chat/offsetRectangularDuctIntersectionEvidence.ts',
+  'packages/barocss-cad-model/src/chat/rectangularDuctIntersectionProposalReview.ts',
+);
 const f = await createFlow({
-  name: 'exact-rectangular-duct-intersection', output: process.argv[2], envFrozen: cutOffset ? 'D1767_SOURCE_FROZEN' : 'D1765_SOURCE_FROZEN',
+  name: 'exact-rectangular-duct-intersection', output: process.argv[2], envFrozen: reviewCut ? 'D1769_SOURCE_FROZEN' : cutOffset ? 'D1767_SOURCE_FROZEN' : 'D1765_SOURCE_FROZEN',
   initialFiles: pins, requiredFrozen: pins,
   qualification: cutOffset ? 'Intersect one exact closed rectangular duct with an offset box in desktop Studio.'
     : 'Intersect one exact closed rectangular duct with a centered box in desktop Studio.',
@@ -259,10 +270,77 @@ async function editCavity(halfHeight, label) {
   return doc;
 }
 
+async function modelImage(request, args) {
+  const response = await request('tools/call', { name: 'query', arguments: { action: 'render', ...args } });
+  assert.equal(response.isError, false, response.content[0].text);
+  const meta = JSON.parse(response.content[0].text);
+  const png = Buffer.from(response.content.find(item => item.type === 'image').data, 'base64');
+  assert.equal(png.subarray(0, 8).toString('hex'), '89504e470d0a1a0a');
+  assert.equal(meta.imageSha256, sha256(png));
+  assert.equal(Object.keys(meta.views).length, 4);
+  return { meta, png };
+}
+
+async function reviewPendingCut(call, request, revision, native) {
+  const { proposals: [proposal] } = await call('proposals', { action: 'list' });
+  assert.equal(proposal.id, 'P1');
+  const modelPins = { proposal: proposal.id, expectedRevision: revision, expectedProposalRevision: proposal.modelReviewRevision };
+  const { meta, png } = await modelImage(request, modelPins);
+  const evidence = meta.rectangularDuctIntersection;
+  assert.deepEqual([evidence.body, evidence.duct, evidence.box, evidence.offset, evidence.pathRadius], ['b4', 'b1', 'b3', 1, 20]);
+  assert.equal(meta.candidate.bodySha256, native.digest);
+  assert.equal(evidence.caps.length, 2);
+  near(evidence.volume.analytic, 6 * (segmentArea(22, 1) - segmentArea(18, 1)) - 4 * (segmentArea(21, 1) - segmentArea(19, 1)));
+  near(evidence.volume.native, native.mass.volume);
+  assert.equal(evidence.volume.method, 'quadrature');
+  assert.ok(evidence.maximumGapMM < 1e-8);
+  assert.equal(evidence.measuredEdges, 24);
+  assert.ok(evidence.maximumAngleErrorDegrees < 1e-7);
+  for (const cap of evidence.caps) {
+    assert.deepEqual(cap.normal, [-1, 0, 0]);
+    assert.deepEqual([cap.outer.edges.length, cap.inner.edges.length], [4, 4]);
+    near(cap.outer.width, ordinate(22, 1) - ordinate(18, 1));
+    near(cap.inner.width, ordinate(21, 1) - ordinate(19, 1));
+    near(cap.outer.height, 6);
+    near(cap.inner.height, 4);
+    near(cap.outer.signedArea, cap.outer.width * 6);
+    near(cap.inner.signedArea, -cap.inner.width * 4);
+    near(cap.materialArea, cap.outer.signedArea + cap.inner.signedArea);
+  }
+  const faces = evidence.caps.map(cap => cap.name);
+  const lookup = { ...modelPins, action: 'inspect', faces, expectedReviewRevision: meta.candidate.reviewRevision };
+  const read = await call('query', lookup);
+  assert.deepEqual([read.candidate, read.revision, read.imageSha256, read.rectangularDuctIntersection],
+    [meta.candidate, meta.revision, meta.imageSha256, evidence]);
+  for (const face of read.faces) {
+    assert.equal(face.geometry.kind, 'plane');
+    near(face.geometry.point[0], 1);
+    assert.deepEqual(face.geometry.outwardNormal, [-1, 0, 0]);
+  }
+  const other = await modelImage(request, { ...modelPins, orientation: 'opposite' });
+  assert.equal(other.meta.candidate.bodySha256, meta.candidate.bodySha256);
+  assert.deepEqual(other.meta.rectangularDuctIntersection, evidence);
+  assert.notEqual(other.meta.candidate.reviewRevision, meta.candidate.reviewRevision);
+  const visible = [...Object.values(meta.views), ...Object.values(other.meta.views)].flatMap(view => view.visible_faces);
+  assert.ok(faces.every(name => visible.includes(name)));
+  assert.equal((await call('query', { ...lookup, orientation: 'opposite' }, true)).code, 'MODEL_REVIEW_IMAGE_STALE');
+  assert.equal((await call('query', { ...lookup, expectedProposalRevision: '0'.repeat(64) }, true)).code, 'MODEL_REVIEW_PROPOSAL_STALE');
+  assert.equal((await call('query', { ...lookup, expectedRevision: '0'.repeat(16) }, true)).code, 'MODEL_REVIEW_BASE_STALE');
+  const oppositeRead = await call('query', { ...lookup, orientation: 'opposite', expectedReviewRevision: other.meta.candidate.reviewRevision });
+  assert.deepEqual(oppositeRead.faces, read.faces);
+  await writeFile(join(f.output, 'offset-cut-agent-four-views.png'), png);
+  await writeFile(join(f.output, 'offset-cut-agent-opposite-views.png'), other.png);
+  f.report.observations.push({ label: 'offset-duct-review', ...meta.candidate, revision: meta.revision, imageSha256: meta.imageSha256,
+    oppositeImageSha256: other.meta.imageSha256, evidence });
+  return { meta, png, other, lookup, faces: read.faces };
+}
+
 async function localApproval(boxed, cut, native) {
-  const file = join(f.output, 'centered-duct-proposal.bcad'), bytes = JSON.stringify(boxed);
+  const file = join(f.output, cutOffset ? 'offset-duct-proposal.bcad' : 'centered-duct-proposal.bcad');
+  const bytes = JSON.stringify(boxed);
+  const session = { app: f.app, output: f.output, clientName: f.name };
   await writeFile(file, bytes);
-  await withMcpSession({ app: f.app, output: f.output, clientName: f.name }, file, 'centered-duct-intersection', async call => {
+  const reviewed = await withMcpSession(session, file, 'duct-intersection', async (call, request) => {
     const revision = await currentPartRevision(call);
     const op = expectedRevision => ({ tool: 'features', args: {
       action: 'command', command: 'intersect', bodies: Object.keys(boxed.outputs), expectedRevision,
@@ -274,6 +352,24 @@ async function localApproval(boxed, cut, native) {
     assert.equal(await readFile(file, 'utf8'), bytes);
     const staged = await call('proposals', { action: 'propose', title: 'Intersect the closed rectangular duct', ops });
     assert.deepEqual([staged.proposal, staged.applied], ['P1', false]);
+    if (reviewBaseline) {
+      const pendingBytes = await readFile(file);
+      const { proposals: [proposal] } = await call('proposals', { action: 'list' });
+      assert.equal(proposal.id, 'P1');
+      assert.equal(proposal.modelReviewRevision, undefined);
+      assert.match(proposal.proposalRevision, /^[0-9a-f]{64}$/);
+      const render = await call('query', { action: 'render', proposal: proposal.id, expectedRevision: revision,
+        expectedProposalRevision: proposal.proposalRevision }, true);
+      assert.equal(render.code, 'MODEL_REVIEW_UNAVAILABLE');
+      assert.deepEqual(await readFile(file), pendingBytes);
+      f.report.observations.push({ label: 'offset-duct-review-unavailable', ...render });
+    }
+    if (reviewCut && !reviewBaseline) {
+      const bytes = await readFile(file);
+      const review = await reviewPendingCut(call, request, revision, native);
+      assert.deepEqual(await readFile(file), bytes);
+      return review;
+    }
   });
   const pending = JSON.parse(await readFile(file, 'utf8'));
   assert.deepEqual([pending.nodes, pending.outputs], [boxed.nodes, boxed.outputs]);
@@ -291,6 +387,22 @@ async function localApproval(boxed, cut, native) {
   const approved = await f.inspect('local-approved-native', doc);
   verifyCut(approved, 2);
   assert.equal(approved.digest, native.digest);
+  if (reviewCut) {
+    const saved = await f.save('offset-cut-reviewed');
+    const reopened = (await f.freshOpen(saved.file, doc, '11-approved-fresh-open')).doc;
+    const reopenedNative = await f.inspect('approved-reopened-native', reopened);
+    verifyCut(reopenedNative, 2);
+    assert.equal(reopenedNative.digest, native.digest);
+    if (reviewed) await withMcpSession(session, saved.file, 'offset-cut-reviewed', async (call, request) => {
+      const expectedRevision = await currentPartRevision(call);
+      assert.equal(expectedRevision, reviewed.meta.revision);
+      assert.deepEqual((await modelImage(request, { expectedRevision })).png, reviewed.png);
+      assert.deepEqual((await modelImage(request, { expectedRevision, orientation: 'opposite' })).png, reviewed.other.png);
+      const current = await call('query', { action: 'inspect', faces: reviewed.lookup.faces, expectedRevision });
+      assert.deepEqual(current.faces, reviewed.faces);
+      assert.equal((await call('query', { ...reviewed.lookup, expectedRevision }, true)).code, 'MODEL_REVIEW_UNAVAILABLE');
+    });
+  }
 }
 
 await f.run(async () => {
@@ -328,6 +440,10 @@ await f.run(async () => {
   const caps = verifyCut(native, 2);
   await measureInStudio(native, caps, '03-native-rim-continuity');
   await capRays('04-initial');
+  if (reviewCut) {
+    await localApproval(boxed, cut, native);
+    return;
+  }
 
   let beforeCavityEdit = cut, keptOffset = cutOffset;
   if (cutOffset) {

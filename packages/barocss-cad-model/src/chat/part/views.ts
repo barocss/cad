@@ -63,8 +63,9 @@ const renderViewsTool: PartHandler = async (state, args, evaluate, _options, dis
     const { image, ...views } = review.result;
     const ductKind = 'rectangularDuct' in review.geometry ? review.geometry.rectangularDuct.pathKind ?? 'S-bend' : undefined;
     const label = ductKind ? `Rectangular ${ductKind} duct`
-      : 'chamferResize' in review.geometry ? 'Saved Chamfer resize'
-        : 'cornerBatch' in review.geometry ? 'Sketch corner proposal' : 'Bored wall proposal';
+      : 'rectangularDuctIntersection' in review.geometry ? 'Offset rectangular duct Intersect'
+        : 'chamferResize' in review.geometry ? 'Saved Chamfer resize'
+          : 'cornerBatch' in review.geometry ? 'Sketch corner proposal' : 'Bored wall proposal';
     return { state, content: json({ revision: review.revision, ...views, candidate: review.candidate, ...review.geometry }),
       isError: false, changed: false, summary: `${label} ${review.candidate.proposal}`, images: [{ data: image, mediaType: 'image/png' }] };
   }
