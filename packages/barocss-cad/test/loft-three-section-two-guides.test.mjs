@@ -91,7 +91,40 @@ test('three tilted sections retain the native topology, split guides and rigid m
   }
   for (const [index, origin] of [[1, world([1, 0, 10])], [2, world([1, 0, 20])], [1, world([0, 0, 9])]]) {
     const invalid = framed.map((section, i) => i === index ? { ...section, frame: { ...section.frame, origin } } : section);
-    assert.throws(() => build({ sections: invalid, guides: worldGuides }), /exact pure-normal middle and upper offsets/);
+    assert.throws(() => build({ sections: invalid, guides: worldGuides }), /reconstruct|middle rectangle|endpoints/);
   }
   assert.throws(() => build({ sections: [framed[0], sections[1], framed[2]], guides: worldGuides }), /finite frames/);
+});
+
+test('a shifted tilted three-section Loft retains each station and both full guide curves', () => {
+  const sample = [rectangle(10, 5, 0), rectangle(14, 10, 10), rectangle(10, 5, 20)];
+  const world = ([x, y, z]) => [20 + x, 0.6 * y + 0.8 * z - 10, -0.8 * y + 0.6 * z + 7];
+  for (const [xRate, yRate] of [[0.2, 0], [-0.2, 0.5]]) {
+    const shift = ([x, y, z]) => [x + xRate * z, y + yRate * z, z];
+    const place = point => world(shift(point));
+    const framed = sample.map(({ profile, z }) => ({
+      profile, frame: { origin: place([0, 0, z]), xAxis: [1, 0, 0], yAxis: [0, 0.6, -0.8] },
+    }));
+    const rails = guides.map(guide => ({ ...guide, controlPoints: guide.controlPoints.map(place) }));
+    const { brep, mass } = build({ sections: framed, guides: rails });
+    const report = checkBrep(brep, { strict: true, pcurveSamples: 13 });
+    assert.ok(report.valid, report.issues.join('\n'));
+    assert.deepEqual(report.counts, { bodies: 1, shells: 1, faces: 10, loops: 10, coedges: 40, edges: 20, vertices: 12 });
+    assert.equal(report.topology[0].genus, 0);
+    assert.ok(brep.coedges.every(use => use.pcurve));
+    for (const controls of [
+      [[0, 0, 0], [0, 0, 5], [0, 0, 10]], [[0, 0, 10], [0, 0, 15], [0, 0, 20]],
+      [[10, 0, 0], [14, 0, 5], [14, 0, 10]], [[14, 0, 10], [14, 0, 15], [10, 0, 20]],
+    ]) {
+      const poles = JSON.stringify(controls.map(place));
+      assert.ok(brep.edges.some(edge => edge.curve.degree === 2 && JSON.stringify(edge.curve.controlPoints) === poles), poles);
+    }
+    const center = place([95490 / 14707, 2100579 / 514745, 10]);
+    for (const properties of [mass(1), brepMassProperties(brep, 1)]) {
+      close(properties.volume, 42020 / 21);
+      properties.centroid.forEach((value, axis) => close(value, center[axis]));
+    }
+    const missed = structuredClone(rails); missed[1].controlPoints[1][0] += 1;
+    assert.throws(() => build({ sections: framed, guides: missed }), /match the middle rectangle front corners exactly at parameter 1\/2/);
+  }
 });

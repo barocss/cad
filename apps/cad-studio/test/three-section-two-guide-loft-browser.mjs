@@ -4,7 +4,8 @@ import { createFlow } from './flow-helper.mjs';
 const baseline = process.argv.includes('--baseline');
 const replaceBaseline = process.argv.includes('--replace-baseline');
 const replaceTilted = replaceBaseline || process.argv.includes('--replace-tilted');
-const tilted = replaceTilted || process.argv.includes('--tilted');
+const shifted = process.argv.includes('--shifted');
+const tilted = shifted || replaceTilted || process.argv.includes('--tilted');
 const flow = await createFlow({
   name: 'three-section-two-guide-loft', output: process.argv[2], envFrozen: 'THREE_SECTION_TWO_GUIDE_SOURCE_FROZEN',
   initialFiles: ['packages/barocss-cad/src/features/loft-two-guides.ts', 'packages/barocss-cad-model/src/app/profileCommands.ts'],
@@ -30,8 +31,10 @@ console.log(JSON.stringify({
 });
 const world = ([x, y, z]) => tilted ? [20 + x, -10 + 0.6 * y + 0.8 * z, 7 - 0.8 * y + 0.6 * z] : [x, y, z];
 const local = ([x, y, z]) => tilted ? [x - 20, 0.6 * (y + 10) - 0.8 * (z - 7), 0.8 * (y + 10) + 0.6 * (z - 7)] : [x, y, z];
-const frame = z => ({ origin: world([0, 0, z]), xAxis: [1, 0, 0], yAxis: [0, 0.6, -0.8] });
-const guide = x => [[x, 0, 0], [x === 0 ? 0 : 18, 0, 10], [x, 0, 20]].map(world);
+const shift = z => shifted ? z / 5 : 0;
+const place = ([x, y, z]) => world([x + shift(z), y, z]);
+const frame = z => ({ origin: place([0, 0, z]), xAxis: [1, 0, 0], yAxis: [0, 0.6, -0.8] });
+const guide = x => [[x, 0, 0], [x === 0 ? 0 : 18, 0, 10], [x, 0, 20]].map(place);
 const curve = (name, x) => `@model ${name} {
   version: 0; length-unit: mm;
   @curve #curve { type: nurbs; degree: 2; knots: [0,0,0,1,1,1];
@@ -39,11 +42,12 @@ const curve = (name, x) => `@model ${name} {
 }`;
 const rectangle = (id, width, depth, z) => ({
   id, kind: 'sketch', profile: 'rectangle', min: [0, 0], max: [width, depth],
-  ...(!tilted && z === 0 ? {} : { plane: { origin: world([0, 0, z]), normal: tilted ? [0, 0.8, 0.6] : [0, 0, 1], xAxis: [1, 0, 0] } }),
+  ...(!tilted && z === 0 ? {} : { plane: { origin: place([0, 0, z]), normal: tilted ? [0, 0.8, 0.6] : [0, 0, 1], xAxis: [1, 0, 0] } }),
 });
+const endDepth = shifted ? 5 : 6, initialMiddleDepth = shifted ? 10 : 12;
 const sources = [
-  rectangle('n0', 10, 6, 0), rectangle('n1', 14, 12, 10),
-  rectangle('n2', 10, 6, 20), rectangle('n3', 14, 14, 10),
+  rectangle('n0', 10, endDepth, 0), rectangle('n1', 14, initialMiddleDepth, 10),
+  rectangle('n2', 10, endDepth, 20), rectangle('n3', 14, 14, 10),
   ...(replaceTilted ? [rectangle('n4', 15, 14, 10), rectangle('n5', 14, 14, 11)] : []),
 ];
 const firstCopy = sources.length, loftIndex = firstCopy + 3;
@@ -81,13 +85,16 @@ async function verify(label, middleDepth, middleSource) {
   assert.equal(native.check.topology[0].genus, 0);
   assert.equal(native.pcurveCount, 40);
   assert.ok(native.check.maximumPcurveGap < 1e-8);
-  const volume = middleDepth === 12 ? 16808 / 7 : 2656;
+  const volume = shifted ? 42020 / 21 : middleDepth === 12 ? 16808 / 7 : 2656;
   near(native.mass.volume, volume);
   near(worker.volume, volume);
-  if (middleDepth === 12) world([95490 / 14707, 12603474 / 2573725, 10])
+  if (shifted) world([124904 / 14707, 2100579 / 514745, 10])
+    .forEach((value, axis) => near(native.mass.centroid[axis], value));
+  else if (middleDepth === 12) world([95490 / 14707, 12603474 / 2573725, 10])
     .forEach((value, axis) => near(native.mass.centroid[axis], value));
   else near(local(native.mass.centroid)[2], 10);
-  const ring = [[0, 0, 10], [14, 0, 10], [14, middleDepth, 10], [0, middleDepth, 10]];
+  const ring = [[0, 0, 10], [14, 0, 10], [14, middleDepth, 10], [0, middleDepth, 10]]
+    .map(([x, y, z]) => [x + shift(z), y, z]);
   const middle = native.vertices.map(local).filter(point => Math.abs(point[2] - 10) < 1e-8);
   assert.equal(middle.length, 4);
   assert.ok(ring.every(point => middle.some(vertex => samePoint(point, vertex))));
@@ -104,7 +111,7 @@ async function verify(label, middleDepth, middleSource) {
     const lower = [[x, 0, 0], [(x + c) / 2, 0, 5], middle];
     const top = [middle, [(x + c) / 2, 0, 15], [x, 0, 20]];
     for (const row of [lower, top]) {
-      const controls = row.map(world);
+      const controls = row.map(place);
       const rail = native.joints.find(joint => JSON.stringify(joint.controls) === JSON.stringify(controls));
       assert.ok(rail, JSON.stringify(controls));
       assert.equal(rail.uses, 2);
@@ -130,10 +137,12 @@ await flow.run(async () => {
     if (tilted) {
       await secondGuide.selectOption('b');
       await waitStatus('refused');
-      await hud().getByText(/three sections.*face \+Z/).first().waitFor();
+      if (shifted) await hud().locator('.hud-error details:not([open]) > summary').click();
+      await hud().getByText(shifted ? /exact pure-normal middle and upper offsets/ : /three sections.*face \+Z/).first().waitFor();
     } else assert.equal(await secondGuide.count(), 0);
     await flow.same(seed);
-    await flow.snapshot(tilted ? '00-prior-tilted-three-section-refusal' : '00-prior-second-guide-unavailable');
+    await flow.snapshot(shifted ? '00-prior-lateral-stations-refused'
+      : tilted ? '00-prior-tilted-three-section-refusal' : '00-prior-second-guide-unavailable');
     return;
   }
 
@@ -143,7 +152,7 @@ await flow.run(async () => {
   await flow.same(seed);
   await button('Apply', hud()).click();
   await flow.changed(seed);
-  const first = await verify('middle-depth-12', 12, 1);
+  const first = await verify('middle-depth-' + initialMiddleDepth, initialMiddleDepth, 1);
   await button('Iso').click();
   await flow.page.getByTitle('Frame all (F)', { exact: true }).click();
   await flow.snapshot('01-three-section-loft');
@@ -173,7 +182,7 @@ await flow.run(async () => {
     await flow.same(first);
     const { file } = await flow.save('tilted-three-section-loft');
     await flow.freshOpen(file, first, '03-fresh-open-tilted');
-    await verify('reopened-tilted-depth-12', 12, 1);
+    await verify('reopened-tilted-depth-' + initialMiddleDepth, initialMiddleDepth, 1);
     return;
   }
   await guideX.fill('18');

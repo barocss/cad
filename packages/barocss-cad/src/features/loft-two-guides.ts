@@ -55,34 +55,47 @@ export function twoGuideLoftSolid(input: LoftInput): { brep: Brep; mass: (densit
   const upper = frames[three ? 2 : 1], height = loftFrameLocal(common, upper.origin)[2];
   if (three ? !(height / 2 >= ExtrudedProfileLimits.minimumLengthMM) : !(height >= ExtrudedProfileLimits.minimumLengthMM))
     return fail(three ? 'require three separated heights in increasing order' : 'require two separated heights in increasing order');
-  // Three sections retain only the exact pure-normal midpoint and endpoint. Do not
-  // treat a floating transverse projection of a normal displacement as a real shift.
-  if (three && (!loftFramePoint(common, [0, 0, height / 2]).every((p, i) => p === frames[1].origin[i])
-    || !loftFramePoint(common, [0, 0, height]).every((p, i) => p === upper.origin[i])))
-    return fail('three framed sections need exact pure-normal middle and upper offsets');
+  // Keep the original pure-normal three-section leaf unchanged. For a shifted stack,
+  // project each origin within its fixed normal station, then reconstruct it exactly.
+  // A direct full-frame projection can turn normal roundoff into a false in-plane shift.
+  const pureNormalThree = three && loftFramePoint(common, [0, 0, height / 2]).every((p, i) => p === frames[1].origin[i])
+    && loftFramePoint(common, [0, 0, height]).every((p, i) => p === upper.origin[i]);
+  const threeOffsets: XY[] | undefined = three && !pureNormalThree ? frames.map((frame, i): XY => {
+    const z = i * (height / 2), origin = loftFramePoint(common, [0, 0, z]);
+    const projected = loftFrameLocal({ ...common, origin }, frame.origin);
+    const shift: XY = origin.every((p, axis) => p === frame.origin[axis]) ? [0, 0] : [projected[0], projected[1]];
+    if (!loftFramePoint(common, [...shift, z]).every((p, axis) => p === frame.origin[axis]))
+      return fail(`need to reconstruct the ${i === 1 ? 'middle' : i === 2 ? 'upper' : 'lower'} frame origin exactly at its normal station`);
+    return shift;
+  }) : undefined;
   // The existing pair still admits an exactly reconstructed in-plane upper shift.
   const normalOrigin = loftFramePoint(common, [0, 0, height]);
   const [dx, dy] = three ? [0, 0] : loftFrameLocal({ ...common, origin: normalOrigin }, upper.origin);
-  if (!loftFramePoint(common, [dx, dy, height]).every((p, i) => p === upper.origin[i]))
+  if (!threeOffsets && !loftFramePoint(common, [dx, dy, height]).every((p, i) => p === upper.origin[i]))
     return fail('need to reconstruct the upper frame origin exactly');
+  const inPlaneRectangle = (profile: readonly ProfileSegmentInput[], i: number, origin: Point,
+    shift: XY, z: number, label: string): LoftSectionInput => {
+    // Validate the authored rectangle before carrying its vertices into the lower frame.
+    twoGuideRectangle({ profile, z: 0 }, i, fail);
+    const placed = profile.map((segment: ProfileSegmentInput) => {
+      const [x, y] = segment.start;
+      const start: XY = [x + shift[0], y + shift[1]];
+      const world = loftFramePoint({ ...common, origin }, [x, y, 0]);
+      if (!loftFramePoint(common, [...start, z]).every((p, axis) => p === world[axis]))
+        return fail(`need to reconstruct each ${label} rectangle corner exactly`);
+      return { kind: 'line' as const, start };
+    });
+    return { profile: placed, z };
+  };
   const sections = input.sections.map((section, i): LoftSectionInput => {
     if (!Array.isArray(section.profile))
       return fail(three ? 'require a four-line rectangle on all three framed sections' : 'require a four-line rectangle on both framed sections');
-    if (three) return { profile: section.profile, z: i * (height / 2) };
+    if (three) return threeOffsets
+      ? inPlaneRectangle(section.profile, i, frames[i].origin, threeOffsets[i], i * (height / 2), i === 1 ? 'middle' : i === 2 ? 'upper' : 'lower')
+      : { profile: section.profile, z: i * (height / 2) };
     if (i === 0) return { profile: section.profile, z: 0 };
     if (dx === 0 && dy === 0) return { profile: section.profile, z: height };
-
-    // Validate the authored rectangle before carrying its vertices into the lower frame.
-    twoGuideRectangle({ profile: section.profile, z: 0 }, i, fail);
-    const profile = section.profile.map((segment: ProfileSegmentInput) => {
-      const [x, y] = segment.start;
-      const start: XY = [x + dx, y + dy];
-      const world = loftFramePoint({ ...common, origin: upper.origin }, [x, y, 0]);
-      if (!loftFramePoint(common, [...start, height]).every((p, axis) => p === world[axis]))
-        return fail('need to reconstruct each upper rectangle corner exactly');
-      return { kind: 'line' as const, start };
-    });
-    return { profile, z: height };
+    return inPlaneRectangle(section.profile, i, upper.origin, [dx, dy], height, 'upper');
   });
   const localGuide = (guide: LoftQuadraticGuide, index: number): LoftQuadraticGuide => {
     const local = (world: Point, z: number): Point => {

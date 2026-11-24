@@ -337,3 +337,20 @@ test('public loft: exact two guides can span three tilted frames through native 
     /use either heights or explicit frames/);
   assert.deepEqual(accepted.doc, doc);
 });
+
+test('public loft: three exact tilted sections keep lateral frame shifts after Open', async () => {
+  const world = ([x, y, z]: Point): Point => [20 + x + z / 5, 0.8 * z + 0.6 * y - 10, 0.6 * z - 0.8 * y + 7];
+  const rectangle = (w: number, d: number, z: number) => ({
+    sketch: sketch().rectangle({ w, d, x: 0, y: 0 }),
+    frame: { origin: world([0, 0, z]), xAxis: [1, 0, 0] as Point, yAxis: [0, 0.6, -0.8] as Point },
+  });
+  const sections = [rectangle(10, 5, 0), rectangle(14, 10, 10), rectangle(10, 5, 20)];
+  const guide = (x: number, middle: number) => ({
+    kind: 'quadratic-bezier' as const, controlPoints: [world([x, 0, 0]), world([middle, 0, 10]), world([x, 0, 20])] as QuadraticControls,
+  });
+  const accepted = part('shifted tilted loft').loft(sections, { guides: [guide(0, 0), guide(10, 18)] });
+  const feature = accepted.doc.nodes.at(-1);
+  assert.ok(feature?.kind === 'loft');
+  assert.deepEqual(feature.sections, sections.map(({ frame }, sketch) => ({ sketch, frame })));
+  await reopened(accepted, 42020 / 21, world([95490 / 14707, 2100579 / 514745, 10]));
+});

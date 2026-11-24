@@ -341,6 +341,7 @@ export class StudioPart extends Part<StudioDoc> {
    * explicit frames; a `nurbs` guide (any polynomial B-spline through a vertex of each section) takes sections by z.
    * A pair of quadratic Bézier `guides` takes two supported rectangular sections. Three rectangles also work with
    * an exact halfway section and matching rail contacts. Use horizontal z heights or one exact rigid frame orientation.
+   * A lateral frame shift must reconstruct its origin and the rectangle corners exactly in the common frame.
    * Only a successfully evaluated document is returned; a refusal leaves this part and the inputs unchanged.
    */
   loft(sections: readonly StudioLoftSection[], options: StudioLoftOptions = {}): this {
