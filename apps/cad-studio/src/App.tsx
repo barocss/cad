@@ -106,6 +106,7 @@ import { changesBeyondVariability } from './app/documentChanges';
 import { sameMeshes, withMasses, samePlacement } from './app/bodyResults';
 import { sketchRegion } from './app/sketchControls';
 import { createDocumentReplacement, type ReplacementIntent } from './app/documentReplacement';
+import { createStudioDocumentEntryActions } from './app/studioDocumentEntryActions';
 import { activeKey, type Active } from './app/commandState';
 import { emptySel, NO_INSTANCES, BROWSER_PLACEMENT, PALETTE_EXTRA } from './app/studioConstants';
 import { routeMessage } from './app/routeSession';
@@ -128,7 +129,7 @@ import { contentKey } from '@barocss/cad-model/engine/evalMemo';
 import { bearingFaceInput } from './app/bearingEdit';
 import { usePlacedBearingEditor } from './app/usePlacedBearingEditor';
 import { resolveSkeletons, SKELETON_CODES } from '@barocss/cad-model/frames/skeleton';
-import { carryOver, emptyDoc, featureLabel, fmt, prefixDoc, starterDoc, type StudioDoc } from '@barocss/cad-model/engine/doc';
+import { carryOver, featureLabel, fmt, prefixDoc, starterDoc, type StudioDoc } from '@barocss/cad-model/engine/doc';
 import { featureId, nextSerial } from '@barocss/cad-model/engine/ids';
 import { modelHash } from '@barocss/cad-model/chat/spec';
 import { captureSignatures, type Problem as RefProblem } from '@barocss/cad-model/engine/references';
@@ -2256,25 +2257,12 @@ export function App() {
     onRadiusMode={mode => { const a = activeStore.get(); if (a?.fillet) changeFillet(a.fillet.type, mode); }}
     onFramePreview={owner => { if (activeStore.get() === owner && owner.preview === 'ok') viewport.current?.fit(); }}
     onFile={uploadFont} onHoleOptions={applyHoleOptions} onApply={applyHud} onCancel={cancel} />;
-  const newPartFromToolbar = (event: React.MouseEvent<HTMLButtonElement>) => {
-    if (sessionBlocked('starting a new part')) return;
-    workspaceModeExit.switchWhenReady(() => replaceDoc(emptyDoc(), 'new-part'), { event,
-      readFeature: () => cageEdRef.current?.session ?? commandDraft() ?? nodeEditorDraft.current,
-      title: cageEdRef.current?.session ? 'Discard cage draft and start a new part?' : undefined });
-  };
-  const chooseTemplate = (next: StudioDoc, focus: HTMLElement | null) => {
-    if (sessionBlocked('starting from a template')) return;
-    workspaceModeExit.switchWhenReady(() => {
-      if (!replaceDoc(next)) return;
-      setFileName('Untitled');
-      setTimeout(() => viewport.current?.fit(), 300);
-    }, { originFocus: focus });
-  };
-  const toggleVersions = () => {
-    if (sessionBlocked('opening the project')) return;
-    if (versionsOpen) cancelLocalCandidateReview();
-    setVersionsOpen(v => !v);
-  };
+  const documentEntry = createStudioDocumentEntryActions({
+    sessionBlocked, switchWhenReady: workspaceModeExit.switchWhenReady, replace: replaceDoc,
+    drafts: { cage: () => cageEdRef.current?.session ?? null, feature: () => commandDraft() ?? nodeEditorDraft.current },
+    template: { setFileName, fit: () => viewport.current?.fit() },
+    versions: { open: versionsOpen, toggle: () => setVersionsOpen(open => !open), cancelCandidateReview: cancelLocalCandidateReview },
+  });
   const canExportIges = !!doc.direct?.objects.some(object => !object.hidden);
   const exportIges = async () => {
     try { downloadBytes(new TextEncoder().encode((await loadDirect()).directIGES(doc.direct!, fileName)), `${fileName}.igs`, 'model/iges'); }
@@ -2287,7 +2275,7 @@ export function App() {
     <div className={'studio' + (historyLayout.visible ? ' has-history' : '') + (historyLayout.row.stacked ? ' history-stacked' : '') + (historyLayout.row.cramped ? ' stage-cramped' : '')} style={{ '--history-left': historyLeft + 'px', '--strip-w': chatColumnShown ? '0px' : CHAT_STRIP + 'px', '--dock-strip-w': dockEdge + 'px', '--chat-col-w': (chatColumnShown ? layout.chatShown : CHAT_STRIP) + 'px', '--rail-w': sketch || rendering || drawing ? '44px' : '116px' } as CSSProperties}>
       <Profiler id="topbar" onRender={onBlockRender}>
         <StudioTopBar
-          file={{ name: fileName, dirty, rename: setFileName, open, save, insertPart, newPart: newPartFromToolbar,
+          file={{ name: fileName, dirty, rename: setFileName, open, save, insertPart, newPart: documentEntry.newPart,
             saveHint: cageEd.session ? 'Saves the applied part only. Cage draft is excluded until Done.' : project.view.store ? `Into ${project.view.store.name}` : undefined }}
           workspace={{ sketchPlane: sketch ? planeLabel(sketch.plane) : undefined, rendering, drawing,
             sketchButton: sketchModeButton, requestMode: requestWorkspace, requestSketch: requestSketchWorkspace,
@@ -2297,9 +2285,9 @@ export function App() {
           panels={{ chat: { open: chat, toggle: () => setChat(v => !v) },
             library: { open: libraryOpen, toggle: () => setLibraryOpen(v => !v) },
             parameters: { open: paramsOpen, toggle: () => setParamsOpen(v => !v) },
-            versions: { open: versionsOpen, toggle: toggleVersions },
+            versions: { open: versionsOpen, toggle: documentEntry.toggleVersions },
             route: routeAvailable ? { open: routePanelOpen, disabled: routeContext.current.blocked, show: openRoute } : undefined }}
-          template={{ doc, onTemplate: chooseTemplate, onNotice: setToast }}
+          template={{ doc, onTemplate: documentEntry.chooseTemplate, onNotice: setToast }}
           exchange={{ stl: askStlExport, threeMf: exportThreeMf, step: exportStepFile, editableCopy: modelExports.editableCopy, iges: canExportIges ? exportIges : undefined }}
         />
       </Profiler>
