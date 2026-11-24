@@ -74,8 +74,6 @@ import { useDocumentHistoryActions } from './state/useDocumentHistoryActions';
 import { useAlignHistoryPreview } from './app/useAlignHistoryPreview';
 import { useOppositeFlangeRadiusPreview } from './app/useOppositeFlangeRadiusPreview';
 import { carrySketchSelection } from './state/profileSelection';
-import { BodyBrowserRows } from './ui/BodyBrowserRows';
-import { DirectBrowserRows, SketchBrowserRows } from './ui/BrowserGeometryRows';
 import { ModelBrowser } from './ui/ModelBrowser';
 import { RequirementsBrowser } from './ui/RequirementsBrowser';
 import { DesignHistory } from './ui/DesignHistory';
@@ -108,10 +106,9 @@ import { sameMeshes, withMasses, samePlacement } from './app/bodyResults';
 import { sketchRegion } from './app/sketchControls';
 import { createDocumentReplacement, type ReplacementIntent } from './app/documentReplacement';
 import { activeKey, type Active } from './app/commandState';
-import { emptySel, NO_CUTS, NO_INSTANCES, BROWSER_PLACEMENT, PALETTE_EXTRA } from './app/studioConstants';
+import { emptySel, NO_INSTANCES, BROWSER_PLACEMENT, PALETTE_EXTRA } from './app/studioConstants';
 import { routeMessage } from './app/routeSession';
 import { CursorReadout } from './ui/CursorReadout';
-import { iconFor } from './ui/featureIcon';
 import { revokePersonRowFiles, isPersonRowFiles, type PersonRowFiles } from '@barocss/cad-model/engine/rowFiles';
 import { Profiler, Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties } from 'react';
 import { EngineClient, type ProposalOverlay } from './engine/client';
@@ -145,8 +142,6 @@ import { NestedPartPanel } from './ui/NestedPartPanel';
 import { offsetFaceLaunchView } from './viewport/offsetFaceLaunchView';
 import { DRAG_TYPE, snapshotInstanceIsolation, type Spot, type SketchState, type ViewportHandle } from './viewport/Viewport';
 import { countRender, onBlockRender } from './devRenders';
-import { OutlinerInstances } from './ui/OutlinerInstances';
-import { OutlinerCuts } from './ui/OutlinerCuts';
 import { AssemblyCutHud } from './ui/AssemblyCutHud';
 import { nextInstanceId } from '@barocss/cad-model/assembly/takenIds';
 import { AssemblyStepsPanel } from './ui/AssemblyStepsPanel';
@@ -2102,28 +2097,27 @@ export function App() {
     isCurrent: () => docNow.current === doc && evaluatedRef.current === evaluated && openIntent.current === bodyRevealOpenIntent &&
       workerSessionNow.current === workerSession && !project.opening() && !dragCmd.current,
   });
-  const { reveal: bodyReveal, isolationAction } = browserActions;
   const browserPanel = (
-      <ModelBrowser ref={referenceBrowser} model={{ doc, bodies, generation: docGeneration, fresh, busy }} actions={browserActions}
-        state={{ open: browserOpen, setOpen: setBrowserOpen, blocked: bodyRevealBlocked, onCollapse: clearReferencePreview }}>
-        <BodyBrowserRows registerBodyRow={bodyReveal.register} model={{ doc, evaluated, namesDoc, bodies, fresh, busy }} selection={selection}
-          rows={{ expanded, setExpanded, renaming, setRenaming, editNode, setRowHover }} changes={{ commit, commitVisibility: commitBodyVisibility, setSelection, setDirectSel, setInstanceSel,
-            rememberFocus: workspaceModeExit.rememberFocus, editRepair,
-            editFeature: (index, body, event) => workspaceModeExit.switchWhenReady(() => {
-              const picked: Selection = { faces: [], edges: [], bodies: [body] };
-              cutSourceIntent.current = doc.nodes[index]?.kind === 'difference' ? { doc, selection: picked, index } : null;
-              setEditNode(index);
-              setSelection(picked);
-            }, { event, readFeature: readFeatureTransitionDraft }),
-          }} />
-        <SketchBrowserRows indices={freeSketches} selected={selection.sketches} onPick={pickProfile} />
-        {!!doc.instances?.length && <div className="ol-head">Parts placed <span className="muted">{doc.instances.length}</span></div>}
-        <OutlinerInstances isolationAction={isolationAction} open={bodyReveal.openPaths} onToggle={bodyReveal.togglePath} registerRow={bodyReveal.registerInstance} instances={doc.instances ?? NO_INSTANCES} selection={instanceSel} edit={instanceEdit} locked={!!active || !!sketch || rendering || drawing}
-          onPick={pickInstanceRow} onEdit={editInstanceRow} iconFor={iconFor} />
-        {!!doc.assemblyCuts?.length && <div className="ol-head">Cuts <span className="muted">{doc.assemblyCuts.length}</span></div>}
-        <OutlinerCuts cuts={doc.assemblyCuts ?? NO_CUTS} instances={doc.instances ?? NO_INSTANCES} editing={cutDraft?.editing ?? null} locked={!!active || !!sketch || rendering || drawing} onEdit={openCut} onDelete={deleteCut} />
-        <DirectBrowserRows doc={doc} selected={directSel} actions={{ retarget: retargetActiveSweep,
-          commit: commitDirect, selectGeometry: setDirectSel, selectModel: setSelection }} />
+      <ModelBrowser ref={referenceBrowser} model={{ doc, evaluated, namesDoc, bodies, generation: docGeneration, fresh, busy }} actions={browserActions}
+        state={{ open: browserOpen, setOpen: setBrowserOpen, blocked: bodyRevealBlocked, onCollapse: clearReferencePreview }}
+        geometry={{
+          bodies: { selection, rows: { expanded, setExpanded, renaming, setRenaming, editNode, setRowHover },
+            changes: { commit, commitVisibility: commitBodyVisibility, setSelection, setDirectSel, setInstanceSel,
+              rememberFocus: workspaceModeExit.rememberFocus, editRepair,
+              editFeature: (index, body, event) => workspaceModeExit.switchWhenReady(() => {
+                const picked: Selection = { faces: [], edges: [], bodies: [body] };
+                cutSourceIntent.current = doc.nodes[index]?.kind === 'difference' ? { doc, selection: picked, index } : null;
+                setEditNode(index);
+                setSelection(picked);
+              }, { event, readFeature: readFeatureTransitionDraft }),
+            },
+          },
+          sketches: { indices: freeSketches, selected: selection.sketches, onPick: pickProfile },
+          instances: { selection: instanceSel, edit: instanceEdit, onPick: pickInstanceRow, onEdit: editInstanceRow },
+          cuts: { editing: cutDraft?.editing ?? null, onEdit: openCut, onDelete: deleteCut },
+          direct: { selected: directSel, actions: { retarget: retargetActiveSweep, commit: commitDirect, selectGeometry: setDirectSel, selectModel: setSelection } },
+          locked: !!active || !!sketch || rendering || drawing,
+        }}>
         <SpecifyPanel doc={doc} onAnswer={answerQuestions} onAcceptAll={acceptAll} />
         <DraftsPanel drafts={liveDrafts(doc)} underlays={doc.underlays ?? []} onUnderlay={(id, hidden) => commit({ ...doc, underlays: (doc.underlays ?? []).map(u => u.id === id ? { ...u, hidden } : u) }, false)} onAddDrawing={f => void addDrawingFile(f)} onConfirm={(key, value) => { try { commit(confirmDimension(doc, key, value, new Date().toISOString())); } catch (e) { setToast({ title: 'Dimension not changed', hint: e instanceof Error ? e.message.replace(/^\[[A-Z_]+\] /, '') : String(e), detail: '' }); } }} />
         <ReferencesPanel set={readReferences(doc.references)} resetKey={doc} local={refLocal} errors={refErrors} pending={refPending} verdicts={keepoutVerdicts} onAddFile={f => void addReferenceFile(f)} onPlace={placeRef}

@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D1933: [Move geometry row composition into Model Browser](notes/model-browser-geometry-rows-2026-11-25/README.md), #44. Compare desktop reveal, isolation and prior-cut source behavior.
+
 - D1932: [Extrude a downward circle to the original upper rectangular face](notes/downward-circle-extrude-to-face-2026-11-25/README.md), #222. Check the reflected native disk, strict contact refusal, source editing and saved target identity.
 
 - D1931: [Repeat an original circular through-cut on a quarter arc](notes/prior-circular-quarter-path-2026-11-25/README.md), #25. Verify native bore ownership, physical clearance, History editing and fresh Open.
