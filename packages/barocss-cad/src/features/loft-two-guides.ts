@@ -4,7 +4,7 @@ import { gauss } from '../core/quadrature.js';
 import { transferNativeMassBasis } from '../internal/native-si-mass-state.js';
 import { registerTwoGuideLoftDisplay } from '../internal/two-guide-loft-display.js';
 import type { Curve, Point } from '../types.js';
-import { buildProfileLoop, capSurface, ExtrudedProfileLimits, type XY } from './extruded-profile-solid.js';
+import { buildProfileLoop, capSurface, ExtrudedProfileLimits, type ProfileSegmentInput, type XY } from './extruded-profile-solid.js';
 import { admitLoftCommonFrame, loftFrameLocal, loftFramePoint, placeLoftInFrame } from './loft-common-frame.js';
 import type { LoftInput, LoftQuadraticGuide, LoftSectionInput } from './loft.js';
 
@@ -63,13 +63,29 @@ export function twoGuideLoftSolid(input: LoftInput): { brep: Brep; mass: (densit
     return { origin: frame.origin, u: frame.xAxis, v: frame.yAxis };
   });
   const common = admitLoftCommonFrame(frames, fail);
-  const height = loftFrameLocal(common, frames[1].origin)[2];
+  const upper = frames[1], height = loftFrameLocal(common, upper.origin)[2];
   if (!(height >= ExtrudedProfileLimits.minimumLengthMM)) return fail('require two separated heights in increasing order');
-  if (!loftFramePoint(common, [0, 0, height]).every((p, i) => p === frames[1].origin[i]))
-    return fail('require an exact offset along the common normal');
+  // Project the in-plane shift at the upper station to avoid a residual from the normal part.
+  const normalOrigin = loftFramePoint(common, [0, 0, height]);
+  const [dx, dy] = loftFrameLocal({ ...common, origin: normalOrigin }, upper.origin);
+  if (!loftFramePoint(common, [dx, dy, height]).every((p, i) => p === upper.origin[i]))
+    return fail('need to reconstruct the upper frame origin exactly');
   const sections = input.sections.map((section, i): LoftSectionInput => {
     if (!Array.isArray(section.profile)) return fail('require a four-line rectangle on both framed sections');
-    return { profile: section.profile, z: i === 0 ? 0 : height };
+    if (i === 0) return { profile: section.profile, z: 0 };
+    if (dx === 0 && dy === 0) return { profile: section.profile, z: height };
+
+    // Validate the authored rectangle before carrying its vertices into the lower frame.
+    rectangle({ profile: section.profile, z: 0 }, i);
+    const profile = section.profile.map((segment: ProfileSegmentInput) => {
+      const [x, y] = segment.start;
+      const start: XY = [x + dx, y + dy];
+      const world = loftFramePoint({ ...common, origin: upper.origin }, [x, y, 0]);
+      if (!loftFramePoint(common, [...start, height]).every((p, axis) => p === world[axis]))
+        return fail('need to reconstruct each upper rectangle corner exactly');
+      return { kind: 'line' as const, start };
+    });
+    return { profile, z: height };
   });
   const localGuide = (guide: LoftQuadraticGuide, index: number): LoftQuadraticGuide => {
     const local = (world: Point, z: number): Point => {

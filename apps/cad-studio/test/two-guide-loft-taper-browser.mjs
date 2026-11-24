@@ -8,8 +8,10 @@ import { twoGuideInspector } from './loft-two-guides-oracle.mjs';
 const stepExchange = process.argv.includes('--step');
 const framed = process.argv.includes('--framed');
 const baseline = process.argv.includes('--baseline');
+const shifted = process.argv.includes('--shifted');
 assert.ok(!framed || !stepExchange);
 assert.ok(!baseline || framed);
+assert.ok(!shifted || framed);
 const output = resolve(process.argv[2]);
 assert.ok(relative(resolve(import.meta.dirname, '../../..'), output).startsWith('../'));
 const pins = [
@@ -35,9 +37,12 @@ const f = await createFlow({
   inspectorSource: twoGuideInspector,
 });
 const height = framed ? 10 : 12;
-const world = ([x, y, z]) => framed ? [20 + x, -10 + 0.6 * y + 0.8 * z, 7 - 0.8 * y + 0.6 * z] : [x, y, z];
+// At this origin both authored and carried upper corners reconstruct identically in binary64.
+const frameY = shifted ? -6 : -10;
+const world = ([x, y, z]) => framed ? [20 + x, frameY + 0.6 * y + 0.8 * z, 7 - 0.8 * y + 0.6 * z] : [x, y, z];
 const normal = framed ? [0, 0.8, 0.6] : [0, 0, 1];
-const plane = z => ({ origin: world([0, 0, z]), normal, xAxis: [1, 0, 0] });
+const upperShift = shifted ? 5 : 0;
+const plane = (z, shift = 0) => ({ origin: world([shift, 0, z]), normal, xAxis: [1, 0, 0] });
 const guidePoints = (start, mid, end, midY = 0) => [[start, 0, 0], [mid, midY, height / 2], [end, 0, height]].map(world);
 const bezier = (name, start, mid, end) => `@model ${name} {
   version: 0; length-unit: mm;
@@ -48,7 +53,7 @@ const seed = {
   format: 'barocss-cad-model', schema: 3, units: 'mm', parameters: {}, nextId: 2, outputs: {},
   nodes: [
     { id: 'n0', kind: 'sketch', profile: 'rectangle', min: [0, 0], max: [10, 6], ...(framed ? { plane: plane(0) } : {}) },
-    { id: 'n1', kind: 'sketch', profile: 'rectangle', min: [0, 0], max: [14, 4], plane: plane(height) },
+    { id: 'n1', kind: 'sketch', profile: 'rectangle', min: [0 - upperShift, 0], max: [14 - upperShift, 4], plane: plane(height, upperShift) },
   ],
   direct: {
     sources: { a: bezier('left', 0, 2, 0), b: bezier('right', 10, 16, 14) },
@@ -72,7 +77,7 @@ async function verify(doc, middleX, label, middleY = 0) {
     if (framed) {
       assert.deepEqual(feature.from, [0, 1]);
       assert.deepEqual(feature.sections.map(section => section.frame), [0, height].map(z => ({
-        origin: world([0, 0, z]), xAxis: [1, 0, 0], yAxis: [0, 0.6, -0.8],
+        origin: world([z === 0 ? 0 : upperShift, 0, z]), xAxis: [1, 0, 0], yAxis: [0, 0.6, -0.8],
       })));
     }
   }
@@ -198,10 +203,13 @@ await f.run(async () => {
   await hud().getByLabel('Guide (copied)', { exact: true }).selectOption('a');
   await hud().getByLabel('Second guide (copied)', { exact: true }).selectOption('b');
   if (baseline) {
-    await hud().getByText(/must face \+Z for a two-guide loft/).first().waitFor();
     await hud().locator('.status').filter({ hasText: /^refused$/ }).waitFor();
+    if (shifted) {
+      const reason = hud().getByText(/exact offset along the common normal/).first();
+      assert.match(await reason.textContent(), /require an exact offset along the common normal/);
+    } else await hud().getByText(/must face \+Z for a two-guide loft/).first().waitFor();
     await f.same(seed);
-    await f.snapshot('00-previous-tilted-loft-refusal');
+    await f.snapshot(shifted ? '00-previous-shifted-loft-refusal' : '00-previous-tilted-loft-refusal');
     return;
   }
   await hud().locator('.status').filter({ hasText: /^preview$/ }).waitFor({ timeout: 15000 });
@@ -226,15 +234,17 @@ await f.run(async () => {
   f.phase = 'Edit the second guide and check that both authored sections stay exact';
   await f.openFeatureEditor(4, 'Loft with unequal sections');
   const guideX = f.editor().getByLabel(framed ? 'Guide 2 middle section X' : 'Guide 2 middle X', { exact: true });
+  const sectionX = x => String(x - upperShift / 2);
+  assert.equal(await guideX.inputValue(), sectionX(16));
   if (framed) {
     f.phase = 'Refuse crossed guides and keep the accepted solid';
-    await guideX.fill('1');
+    await guideX.fill(sectionX(1));
     await button('Apply', f.editor()).click();
     await f.editor().getByText('The Loft guides are too close', { exact: true }).waitFor();
     await f.same(made);
     await f.snapshot('crossed-guides-refused');
   }
-  await guideX.fill('18');
+  await guideX.fill(sectionX(18));
   const edited = (await f.applyEditor(made, 'edited')).doc;
   const actual = await verify(edited, 18, 'edited');
   await f.undo();
