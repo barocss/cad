@@ -204,7 +204,7 @@ function literalCircle(sketch: Extract<SketchNode, { profile: 'circle' }>): sket
 function circularProfileTarget(doc: StudioDoc, node: FaceEndExtrudeNode, sketch: LiteralRectangle | LiteralPolygon | LiteralCircle,
   brep: Brep, face: BrepFace, axes: EndFrame): RadialTarget | undefined {
   const target = doc.nodes[node.target.body.node];
-  if ((axes !== XY && axes !== DOWN_XY) || (sketch.profile !== 'rectangle' && sketch.profile !== 'circle')) return;
+  if ((axes !== XY && axes !== DOWN_XY) || (sketch.profile === 'polygon' && axes !== DOWN_XY)) return;
   const cap = axes === DOWN_XY ? 'top' : 'bottom';
   if (target?.kind !== 'extrude' || target.held || target.cutDepth !== undefined
     || target.draft || face.name !== `${node.target.feature}.${cap}`) return;
@@ -223,7 +223,7 @@ function circularProfileTarget(doc: StudioDoc, node: FaceEndExtrudeNode, sketch:
   if (!(radius > roundoff)) throw invalid('the circular target radius cannot be certified.');
   return {
     min: [cx - radius, cy - radius], max: [cx + radius, cy + radius], level, rectangle: false, centre: [cx, cy], radius, roundoff,
-    // A rectangle is convex and distance to a fixed centre attains its maximum at a corner.
+    // A convex footprint stays inside this disk if every vertex stays inside.
     // The extra roundoff margin also bounds subtraction and hypot, so tangency is not silently widened.
     contains: point => Math.hypot(point[0] - cx, point[1] - cy) + roundoff <= radius,
   };
@@ -376,8 +376,8 @@ function literalPolygon(sketch: Extract<SketchNode, { profile: 'polygon' }>): sk
   if (points.length > 3 && ['holes', 'regions', 'holeOutlines', 'regionLengths', 'on', 'association', 'pocketFloor'].some(key => (sketch as unknown as Record<string, unknown>)[key] !== undefined)) return false;
   const frame = faceEndAxes(sketch.plane);
   if (!frame) return false;
-  const { axes: [u, v] } = frame, origin = sketch.plane?.origin ?? [0, 0, 0];
-  if (!admittedPolygon(points.map(p => [origin[u] + p[0], origin[v] + p[1]]))) return false;
+  const origin = sketch.plane?.origin ?? [0, 0, 0];
+  if (!admittedPolygon(points.map(point => projectProfilePoint(frame, origin, point)))) return false;
   const outline: unknown = sketch.outline;
   if (outline !== undefined) {
     if (!record(outline) || !Array.isArray(outline.points) || outline.points.length !== points.length
@@ -399,6 +399,11 @@ function exactAxis(vector: unknown, axis: Axis): boolean {
     && vector[1] === Number(axis === 1) && vector[2] === Number(axis === 2);
 }
 
+function projectProfilePoint(frame: EndFrame, origin: readonly number[], point: readonly [number, number]): [number, number] {
+  const [u, v] = frame.axes;
+  return [origin[u] + point[0], origin[v] + (frame === DOWN_XY ? -point[1] : point[1])];
+}
+
 /** Only the admitted exact raw frames reach the native prism placement. */
 function faceEndAxes(plane: DocPlane | undefined): EndFrame | null {
   if (plane === undefined) return XY;
@@ -415,8 +420,7 @@ function faceEndAxes(plane: DocPlane | undefined): EndFrame | null {
 export function isFaceEndExtrudeSketch(sketch: ModelNode | undefined): sketch is LiteralRectangle | LiteralPolygon | LiteralCircle {
   if (sketch?.kind !== 'sketch' || sketch.suppressed || faceEndAxes(sketch.plane) === null || sketch.on
     || sketch.association || sketch.regions?.length || sketch.holes?.length) return false;
-  if (faceEndAxes(sketch.plane) === DOWN_XY &&
-    ((sketch.profile !== 'rectangle' && sketch.profile !== 'circle') || sketch.held !== undefined || sketch.pocketFloor !== undefined)) return false;
+  if (faceEndAxes(sketch.plane) === DOWN_XY && (sketch.held !== undefined || sketch.pocketFloor !== undefined)) return false;
   if (sketch.profile === 'circle') return literalCircle(sketch);
   if (sketch.profile === 'polygon') return literalPolygon(sketch);
   return sketch.profile === 'rectangle'
@@ -438,7 +442,8 @@ function downwardTargetProblem(nodes: readonly unknown[], target: FaceEndExtrude
       : 'the downward profile needs an intact original upper annulus of a forward upright circular extrusion and one coaxial through Hole.';
   }
   const stock = nodes[target.body.node];
-  const profile = admitsRadial ? 'rectangular or circular' : 'rectangular';
+  const polygon = sourceProfile === 'polygon';
+  const profile = polygon ? 'circular' : admitsRadial ? 'rectangular or circular' : 'rectangular';
   const unsupported = `the downward profile needs the original upper cap of a forward upright ${profile} extrusion with zero draft.`;
   if (!record(stock) || stock.kind !== 'extrude' || stock.suppressed || stock.held !== undefined
     || !previous(stock.sketch, target.body.node) || stock.cutDepth !== undefined || (stock.draft ?? 0) !== 0
@@ -449,14 +454,14 @@ function downwardTargetProblem(nodes: readonly unknown[], target: FaceEndExtrude
   if (!record(sketch) || sketch.kind !== 'sketch' || sketch.held !== undefined
     || sketch.pocketFloor !== undefined || faceEndAxes(sketch.plane as DocPlane | undefined) !== XY
     || !isFaceEndExtrudeSketch(sketch as unknown as ModelNode)) return unsupported;
-  return sketch.profile === 'rectangle' || (admitsRadial && sketch.profile === 'circle' && sketch.plane === undefined)
+  return (!polygon && sketch.profile === 'rectangle') || ((admitsRadial || polygon) && sketch.profile === 'circle' && sketch.plane === undefined)
     ? null : unsupported;
 }
 
 /** Resolve from the live preceding native results. A consumed target has no eligible output. */
 export function faceEndExtrudeHeight(doc: StudioDoc, node: FaceEndExtrudeNode, prefix: readonly CadPartFeature[]): number {
   const sketch = doc.nodes[node.sketch];
-  if (!isFaceEndExtrudeSketch(sketch)) throw invalid('the source needs a literal rectangle, straight convex polygon of 3 to 8 points or circle on a default or translated XY plane, on the supported +X-normal YZ plane, or on the exact -Y-normal Front XZ plane. An exact -Z-normal XY plane supports a literal rectangle or circle.');
+  if (!isFaceEndExtrudeSketch(sketch)) throw invalid('the source needs a literal rectangle, straight convex polygon of 3 to 8 points or circle on a default or translated XY plane, on the supported +X-normal YZ plane, or on the exact -Y-normal Front XZ plane. An exact -Z-normal XY plane supports a literal rectangle, circle or straight convex polygon.');
   const axes = faceEndAxes(sketch.plane)!;
   const { axes: [u, v, w], sign } = axes, origin = sketch.plane?.origin ?? [0, 0, 0];
   if (axes === DOWN_XY) {
@@ -488,7 +493,7 @@ export function faceEndExtrudeHeight(doc: StudioDoc, node: FaceEndExtrudeNode, p
     if (!box.rectangle) {
       if (sketch.profile === 'circle') throw invalid('a circle source currently needs an axis-aligned rectangle target or an original lower circular disk or annulus.');
       const projected = sketch.profile === 'rectangle' ? [[u0,v0],[u1,v0],[u1,v1],[u0,v1]]
-        : sketch.points.map(p => [origin[u]+p[0],origin[v]+p[1]]);
+        : sketch.points.map(point => projectProfilePoint(axes, origin, point));
       if (!projected.every(box.contains)) throw invalid('the target face must contain the entire projected profile.');
     }
   }

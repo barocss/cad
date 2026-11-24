@@ -102,7 +102,7 @@ test('downward XY admission stays on the supported literal profiles and original
   ]) assert.equal(isFaceEndExtrudeSketch({ ...sketch, plane } as ModelNode), false);
   for (const profile of [
     { id: 'n2', kind: 'sketch', profile: 'circle', center: [5, -4], radius: { parameter: 'r' }, plane: sketch.plane },
-    { id: 'n2', kind: 'sketch', profile: 'polygon', points: [[2, -6], [8, -6], [5, -2]], plane: sketch.plane },
+    { id: 'n2', kind: 'sketch', profile: 'polygon', points: [[2, -6], [8, -6], [5, -6]], plane: sketch.plane },
   ] as const) assert.equal(isFaceEndExtrudeSketch(profile as unknown as ModelNode), false);
   for (const changed of [
     { ...target, draft: 1 }, { ...target, held: 'stale target' },
@@ -238,6 +238,56 @@ test('a downward rectangle refuses radial corner contact, out-of-disk corners an
     assert.throws(() => toPartDocument(downwardRectangleToDisk(height)), /positive extrusion direction/);
 });
 
+function downwardPolygonToDisk(height = 5, points: [number, number][] = [[1, -8], [10, 0], [15, -14]]): StudioDoc {
+  const doc = downwardCircleToDisk(height), source = doc.nodes[2];
+  assert.ok(source.kind === 'sketch');
+  return replaceNode(doc, 2, { id: 'n2', kind: 'sketch', profile: 'polygon', points, plane: source.plane });
+}
+
+test('a reflected downward triangle reaches the original upper disk although its bounding corner does not', () => {
+  assert.ok(Math.hypot(8, 8) > 10);
+  for (const height of [5, 8]) {
+    const doc = downwardPolygonToDisk(height), source = doc.nodes[2], travel = 20 - height;
+    assert.ok(source.kind === 'sketch' && source.profile === 'polygon');
+    for (const working of [doc, replaceNode(doc, 2, { ...source, points: [...source.points].reverse() })]) {
+      const opened = readStudioDoc(JSON.stringify(working));
+      assert.ok('doc' in opened);
+      assert.deepEqual(opened.doc, working);
+      assert.equal(currentFaceEndDistance(opened.doc, 3), travel);
+      const { outputs } = evaluateCadPart(toPartDocument(opened.doc));
+      const [stock, added] = outputs;
+      assert.deepEqual(outputs.map(output => output.id), ['n1', 'n3']);
+      assert.ok(outputs.every(output => checkOutput(output).valid));
+      assert.deepEqual(stock.brep, evaluateCadPart(toPartDocument(prefixDoc(doc, 3))).outputs[0].brep);
+      const mass = massPropertiesOf(added);
+      assert.ok(Math.abs(mass.volume - 83 * travel) < 1e-8);
+      mass.centroid.forEach((value, axis) => assert.ok(Math.abs(value - [29 / 3, 28 / 3, (20 + height) / 2][axis]) < 1e-8));
+      assert.equal(added.brep.faces.length, 5);
+      const lower = faceGeometry(added.brep.faces.find(face => face.name === 'n3.top')!);
+      assert.ok(lower.kind === 'plane');
+      assert.equal(lower.o[2], height);
+      assert.equal(lower.n[2], -1);
+      for (const [x, y] of [[2, 10], [11, 2], [16, 16]]) for (const z of [height, 20]) {
+        assert.equal(added.brep.vertices.filter(vertex => vertex.point.join() === [x, y, z].join()).length, 1);
+      }
+    }
+  }
+});
+
+test('a downward polygon to the exact upper disk refuses contact and uses the reflected world coordinates', () => {
+  const points = (y: number): [number, number][] => [[1, -8], [10, 0], [15, y]];
+  assert.equal(currentFaceEndDistance(downwardPolygonToDisk(5, points(-16 + 1e-6)), 3), 15);
+  for (const y of [-16, -16 - 1e-6]) {
+    assert.throws(() => toPartDocument(downwardPolygonToDisk(5, points(y))), /entire projected profile/);
+  }
+  assert.throws(() => toPartDocument(downwardPolygonToDisk(5, [[1, 8], [10, 0], [15, 14]])), /entire projected profile/);
+  for (const height of [-5, 0]) assert.throws(() => toPartDocument(downwardPolygonToDisk(height)), /stay forward.*authored end cap/);
+  for (const height of [20, 21]) assert.throws(() => toPartDocument(downwardPolygonToDisk(height)), /positive extrusion direction/);
+  const doc = downwardPolygonToDisk();
+  assert.throws(() => toPartDocument(replaceNode(doc, 0, { id: 'n0', kind: 'sketch', profile: 'rectangle', min: [0, 0], max: [20, 20] })),
+    /original upper cap.*forward upright circular extrusion/);
+});
+
 function circleSourceTarget(center: [number, number] = [5, 5], radius = 9, from = 20): StudioDoc {
   return replaceNode(circularTarget(from), 2, { id: 'n2', kind: 'sketch', profile: 'circle', center, radius });
 }
@@ -301,7 +351,7 @@ test('a downward annular target refuses contact, loss of authored authority and 
   assert.throws(() => toPartDocument(replaceNode(doc, 0, { ...stockCircle, id: stock.id })), /stock or source sketch identity/);
   assert.throws(() => toPartDocument(replaceNode(doc, 3, {
     id: 'n3', kind: 'sketch', profile: 'polygon', points: [[14, -15], [16, -15], [16, -13]], plane: source.plane,
-  })), /forward upright rectangular extrusion/);
+  })), /forward upright circular extrusion/);
 });
 
 function downwardRectangleToAnnulus(height = 5, min: [number, number] = [15, -13], max: [number, number] = [18, -10]): StudioDoc {

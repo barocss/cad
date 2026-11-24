@@ -6,12 +6,15 @@ import { createFlow, sha256 } from './flow-helper.mjs';
 
 const baseline = process.argv.includes('--baseline');
 const rectangleDisk = process.argv.includes('--rectangle-disk');
+const polygonDisk = process.argv.includes('--polygon-disk');
+const polygonRim = polygonDisk && process.argv.includes('--rim-contact');
 const finishNotice = process.argv.includes('--finish-notice');
-const disk = rectangleDisk || process.argv.includes('--disk');
-const circle = !rectangleDisk && (disk || process.argv.includes('--circle'));
-const sourceCenter = disk ? [11, 10] : [5, 4];
+const disk = rectangleDisk || polygonDisk || process.argv.includes('--disk');
+const circle = !rectangleDisk && !polygonDisk && (disk || process.argv.includes('--circle'));
+const sourceCenter = polygonDisk ? [29 / 3, 28 / 3] : disk ? [11, 10] : [5, 4];
 const sourceRadius = disk ? 8 : 2;
 const sourceSize = rectangleDisk ? 5 : sourceRadius;
+const profile = polygonDisk ? 'polygon' : circle ? 'circle' : 'rectangle';
 const pins = [
   'apps/cad-studio/test/reversed-extrude-end-face-browser.mjs',
   'packages/barocss-cad-model/src/app/profileCommands.ts',
@@ -19,9 +22,9 @@ const pins = [
   'packages/barocss-cad-model/src/engine/part.ts',
 ];
 const f = await createFlow({
-  name: 'reversed-extrude-end-face', output: process.argv[2], envFrozen: finishNotice ? 'D1966_SOURCE_FROZEN' : rectangleDisk ? 'D1964_SOURCE_FROZEN' : disk ? 'D1958_SOURCE_FROZEN' : circle ? 'D1932_SOURCE_FROZEN' : 'D1896_SOURCE_FROZEN',
+  name: 'reversed-extrude-end-face', output: process.argv[2], envFrozen: polygonDisk ? 'D1976_SOURCE_FROZEN' : finishNotice ? 'D1966_SOURCE_FROZEN' : rectangleDisk ? 'D1964_SOURCE_FROZEN' : disk ? 'D1958_SOURCE_FROZEN' : circle ? 'D1932_SOURCE_FROZEN' : 'D1896_SOURCE_FROZEN',
   initialFiles: pins, requiredFrozen: pins,
-  qualification: `Extrude a ${circle ? 'circular' : 'rectangular'} profile from an exact -Z sketch plane to the original top face.`,
+  qualification: `Extrude a ${profile} profile from an exact -Z sketch plane to the original top face.`,
   limits: ['One top-level upright rectangular or circular target Extrude and one literal source in desktop Studio.'],
   inspectorSource: `
 import { readFileSync } from 'node:fs';
@@ -53,13 +56,14 @@ const seed = {
       : { id: 'n0', kind: 'sketch', profile: 'rectangle', min: circle ? [0, 0] : [-5, -5], max: circle ? [10, 10] : [15, 15] },
     { id: 'n1', kind: 'extrude', sketch: 0, height: 5 },
     { id: 'n2', kind: 'sketch', ...(circle ? { profile: 'circle', center: disk ? [10, -8] : [5, -4], radius: sourceRadius }
-      : rectangleDisk ? { profile: 'rectangle', min: [9, -16], max: [14, -12], sideTags: { outer: ['e1', 'e2', 'e3', 'e4'] } }
+      : polygonDisk ? { profile: 'polygon', points: [[1, -8], [10, 0], [15, polygonRim ? -16 : -14]] }
+        : rectangleDisk ? { profile: 'rectangle', min: [9, -16], max: [14, -12], sideTags: { outer: ['e1', 'e2', 'e3', 'e4'] } }
         : { profile: 'rectangle', min: [2, -6], max: [8, -2] }),
       plane: { origin: disk ? [1, 2, 20] : [0, 0, 20], normal: [0, 0, -1], xAxis: [1, 0, 0] } },
   ],
   outputs: { b1: { node: 1, side: 'solid' } }, nextId: 3,
 };
-const fileName = rectangleDisk ? 'downward-rectangle-to-original-disk.bcad' : disk ? 'downward-circle-to-original-disk.bcad' : circle ? 'reversed-circle-extrude-end-face.bcad' : 'reversed-extrude-end-face.bcad';
+const fileName = polygonDisk ? 'downward-polygon-to-original-disk.bcad' : rectangleDisk ? 'downward-rectangle-to-original-disk.bcad' : disk ? 'downward-circle-to-original-disk.bcad' : circle ? 'reversed-circle-extrude-end-face.bcad' : 'reversed-extrude-end-face.bcad';
 const feature = { id: 'n3', kind: 'face-end-extrude', sketch: 2,
   target: { body: { node: 1, side: 'solid' }, feature: 'n1', face: 'n1.top' } };
 function sourceAt(size) {
@@ -103,7 +107,7 @@ async function verify(label, height, size = sourceSize) {
     assert.equal(stock.corners.length, 8);
     assert.ok(equal(stock.mass.volume, (circle ? 100 : 400) * height));
   }
-  const area = rectangleDisk ? size * 4 : circle ? size ** 2 * Math.PI : 24;
+  const area = polygonDisk ? 83 : rectangleDisk ? size * 4 : circle ? size ** 2 * Math.PI : 24;
   const centre = rectangleDisk ? [10 + size / 2, 16] : sourceCenter;
   assert.ok(equal(added.mass.volume, area * travel));
   [...centre, (20 + height) / 2].forEach((value, i) => assert.ok(equal(added.mass.centroid[i], value)));
@@ -118,6 +122,12 @@ async function verify(label, height, size = sourceSize) {
       assert.ok(equal(Math.hypot(point[0] - sourceCenter[0], point[1] - sourceCenter[1]), size));
       assert.ok(equal(point[2], height) || equal(point[2], 20));
     }
+  } else if (polygonDisk) {
+    assert.equal(added.corners.length, 6);
+    assert.equal(added.strict.counts.faces, 5);
+    const footprint = [[2, 10], [11, 2], [16, 16]];
+    for (const [x, y] of footprint) for (const z of [height, 20])
+      assert.ok(added.corners.some(point => point.every((value, axis) => equal(value, [x, y, z][axis]))));
   } else {
     assert.equal(added.corners.length, 8);
     const xs = rectangleDisk ? [10, 10 + size] : [2, 8];
@@ -251,12 +261,12 @@ await f.run(async () => {
   });
   await f.same(seed);
   await f.page.getByTitle('Frame all (F)', { exact: true }).click();
-  await button(circle ? 'Sketch · circle' : 'Sketch · rectangle', f.page.getByRole('group', { name: 'History', exact: true })).click();
+  await button(`Sketch · ${profile}`, f.page.getByRole('group', { name: 'History', exact: true })).click();
   await f.editor().waitFor();
   await f.closeEditor();
   await f.openExtrudeHud();
   const hud = f.hud(), depth = field('Depth', hud);
-  if (baseline && !disk) {
+  if (baseline && (!disk || polygonDisk)) {
     assert.equal(await depth.count(), 0);
     assert.equal(await field('Distance', hud).inputValue(), '8');
     await f.snapshot('00-reversed-source-fixed-distance-only');
@@ -267,6 +277,7 @@ await f.run(async () => {
 
   f.phase = 'Pick the original top face from the reversed sketch';
   await depth.selectOption('to-face');
+  if (polygonDisk && await button('Ortho').getAttribute('aria-pressed') !== 'true') await button('Ortho').click();
   await button('Top', f.page.locator('.views')).click();
   await f.page.waitForFunction(() => {
     const labels = [...document.querySelectorAll('.view-cube .vc-label')];
@@ -287,6 +298,17 @@ await f.run(async () => {
     await f.snapshot(rectangleDisk ? '00-previous-downward-rectangle-to-disk-refused' : '00-previous-downward-circle-to-disk-refused');
     await button('Cancel', hud).click();
     await f.same(seed);
+    return;
+  }
+  if (polygonRim) {
+    await hud.locator('.status').getByText('refused', { exact: true }).waitFor();
+    const refusal = hud.locator('.hud-error');
+    const details = refusal.locator('details:not([open]) > summary');
+    if (await details.count()) await details.click();
+    assert.match(await refusal.innerText(), /contain the entire projected profile/i);
+    assert.equal(await button('Apply', hud).isDisabled(), true);
+    await f.same(seed);
+    await f.snapshot('01-polygon-corner-contact-refused');
     return;
   }
   await hud.getByText('n1.top', { exact: true }).waitFor();
