@@ -1,13 +1,13 @@
 # CAD roadmap — current status and execution order
 
-Updated 2026-11-24 · Priority authority: D520 · Latest delivery: D1920 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
+Updated 2026-11-24 · Priority authority: D520 · Latest delivery: D1921 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
 
 This is the only current status index. Detailed tracks define acceptance; the 34 stable row pages retain scope and issue navigation. Immutable decision notes retain results. Do not append chronological status paragraphs here. [D520 decision](notes/cad-roadmap-replan-2026-11-04/README.md) supersedes D445 execution order and historical next-item text, while retaining its safeguards and bounded proofs.
 
 ## Now and next
 
-- **Current position:** [D1920](notes/source-bound-note-lifecycle-2026-11-24/README.md), P2 row 11. Verify source-bound Drawing Notes through sheet and document changes, a delayed reply and edited text after native Open.
-- **Next MAIN:** D1921, P5 [row 08](roadmap-rows/08.md), [row 16](roadmap-rows/16.md) and [row 31](roadmap-rows/31.md), [#17](https://github.com/barocss/cad/issues/17). Add a signed Offset face on the original straight inlet cap of the perpendicular annular Sweep. Preserve the original native joins and refuse contact with the first bend.
+- **Current position:** [D1921](notes/perpendicular-annular-inlet-offset-2026-11-24/README.md), P5 rows 08, 16 and 31. Apply signed Offset to the original annular inlet and preserve its exact junctions through History and native Open.
+- **Next MAIN:** D1922, P2 [row 11](roadmap-rows/11.md), [#240](https://github.com/barocss/cad/issues/240). Verify the saved extension roles on ordinary vertical and aligned linear dimensions in Studio and in actual SVG and DXF.
 - **Separate follow-ups:** Continue Studio App extraction in cohesive parts with affected desktop checks. [#608 Rendering](https://github.com/barocss/cad/issues/608) stays on HOLD. API inventory drift remains open. The issue tracker records [#126](https://github.com/barocss/cad/issues/126), [#613](https://github.com/barocss/cad/issues/613), [#152](https://github.com/barocss/cad/issues/152) and [#22](https://github.com/barocss/cad/issues/22) as closed.
 - **Active repository:** [barocss/cad](https://github.com/barocss/cad), based on `origin/main`. Fetch before work and preserve unexpected changes. The [migration record](../../../docs/migration/README.md) maps the former `local/cad-dev` history and issue numbers.
 - **Evidence correction:** D482 records2167 PASS/0 FAIL/2 existing SKIP in a later full-kernel run than D433. Neither result is a new full-suite PASS at this audit HEAD. [D482 record](notes/vertical-contact-refusal-2026-11-04/README.md).
@@ -43,7 +43,7 @@ P0 findings that can lose work, export stale geometry or misattribute results ta
 
 ## GitHub requirement and issue inventory
 
-- The [current closeout queue](roadmap-tracks/18-issue-closeout.md) records 206 open issues after the section hatch text clearance closeout, with remaining acceptance gaps and held dependencies.
+- The [current closeout queue](roadmap-tracks/18-issue-closeout.md) records 205 open issues after the source-bound Drawing Note closeout, with remaining acceptance gaps and held dependencies.
 
 The [November 20 routing snapshot](notes/open-issue-routing-2026-11-20/README.md) covers all 229 open issues in the standalone CAD repository. It links each issue to a primary route and identifies model-version tracking for agent visual review as the next AI workflow to measure (#324).
 

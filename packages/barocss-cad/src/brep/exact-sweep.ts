@@ -14,6 +14,8 @@ import { glueAtSharedFace } from './brep-glue.js';
 import { transformBrep } from './brep-transform.js';
 import { curveTolerance, intersectSegments, locateInRegion, segDistance, type CurveSegment2 } from './curved-arrangement.js';
 import { combineMassProperties, prismaticMassProperties, type MassProperties } from './solid-mass.js';
+import { revolutionOf } from '../nurbs/surfaces/surface-revolution.js';
+import { circleOf as nativeCircleOf } from './brep-tessellate.js';
 
 interface ExactSweepInput {
   readonly id: string;
@@ -1710,6 +1712,150 @@ export function exactSweep(input: ExactSweepInput, refuse: Refuse): SweepSolid {
 type PairedElbowOutletSource = Pick<ExactSweepInput, 'id' | 'mode' | 'path'>;
 const pairedOutletFailure: Refuse = (code, message) => { throw new BrepError(code === 'GEOMETRY' ? 'GEOMETRY' : 'INPUT', `Exact paired elbow outlet offset: ${message}`); };
 const pairedInletFailure: Refuse = (code, message) => { throw new BrepError(code === 'GEOMETRY' ? 'GEOMETRY' : 'INPUT', `Exact paired elbow inlet offset: ${message}`); };
+const perpendicularAnnularInletFailure: Refuse = (code, message) => {
+  throw new BrepError(code === 'GEOMETRY' ? 'GEOMETRY' : 'INPUT', `Exact perpendicular annular inlet offset: ${message}`);
+};
+
+/** The original circular inlet only; the minimal source supplies the four exact spans, not a new surface law. */
+export function exactPerpendicularAnnularInletOffsetFrame(brep: Brep, faceName: string,
+  source: PairedElbowOutletSource): { anchor: Point; normal: Point } | undefined {
+  try {
+    if (source.mode !== 'exact' || faceName !== `${source.id}.start` || brep.source.family !== 'sweep-curve'
+      || brep.source.id !== source.id || brep.bodies.length !== 1 || brep.shells.length !== 1 || !brep.shells[0].closed
+      || brep.faces.length !== 18 || brep.loops.length !== 20 || brep.coedges.length !== 72 || brep.edges.length !== 36 || brep.vertices.length !== 20) return;
+    validateCurve(source.path);
+    const rail = perpendicularQuarterEnds(source.path, perpendicularAnnularInletFailure);
+    if (!rail) return;
+    const { first, second } = rail.inlet.pair, path = source.path.controlPoints;
+    const extent = geometryScaleMM(brep.vertices.map(vertex => vertex.point)), roundoff = 512 * Number.EPSILON * Math.max(1, extent);
+    const uses = new Map(brep.coedges.map(use => [use.id, use])), edges = new Map(brep.edges.map(edge => [edge.id, edge]));
+    const owners = new Map(brep.faces.flatMap(face => face.loops.map(loop => [loop, face] as const)));
+    const start = brep.faces.filter(face => face.name === faceName), end = brep.faces.filter(face => face.name === `${source.id}.end`);
+    if (start.length !== 1 || end.length !== 1) return;
+    const normal = scale(first.tangent, -1), terminal = rail.outlet.rail.line.tangent;
+    const radii: number[] = [], required = new Set<string>();
+    for (const [cap, center, axis] of [[start[0], path[0], normal], [end[0], path[8], terminal]] as const) {
+      const geometry = faceGeometry(cap, extent);
+      if (geometry.kind !== 'plane' || cap.surface.kind !== 'surface' || cap.loops.length !== 2
+        || len(sub(geometry.n, axis)) * Math.max(1, first.radius, second.radius) > roundoff
+        || cap.surface.controlPoints.flat().some(point => Math.abs(dot(sub(point, center), axis)) > roundoff)) return;
+      const loops = cap.loops.map(id => brep.loops.find(loop => loop.id === id));
+      if (loops.filter(loop => loop?.kind === 'outer').length !== 1 || loops.filter(loop => loop?.kind === 'inner').length !== 1) return;
+      for (const kind of ['outer', 'inner']) {
+        const loop = loops.find(loop => loop?.kind === kind);
+        if (!loop || loop.coedges.length !== 2) return;
+        const halves = loop.coedges.map(id => {
+          const use = uses.get(id), edge = use && edges.get(use.edge), circle = edge && nativeCircleOf(edge.curve);
+          if (!use || !edge || !circle || edge.curve.degree !== 2 || edge.curve.controlPoints.length !== 5
+            || len(sub(circle.c, center)) > roundoff || Math.abs(circle.spans.reduce((sum, span) => sum + span.phi, 0) - Math.PI) > 512 * Number.EPSILON) return;
+          required.add(edge.id);
+          return circle.r;
+        });
+        if (halves[0] === undefined || halves[1] === undefined || Math.abs(halves[0] - halves[1]) > roundoff) return;
+        if (cap === start[0]) radii.push(halves[0]);
+        else if (Math.abs(halves[0] - radii[kind === 'outer' ? 0 : 1]) > roundoff) return;
+      }
+    }
+    const [outside, bore] = radii;
+    if (!(outside > bore && bore >= ExtrudedProfileLimits.minimumRadiusMM)) return;
+    const carrier = (face: Brep['faces'][number], piece: 'lead' | 'first' | 'second' | 'tail') => {
+      if (face.surface.kind !== 'surface' || face.surface.weights.some(row => row.some(weight => !(weight > 0)))) return;
+      const geometry = faceGeometry(face, extent);
+      if (piece === 'lead' || piece === 'tail') {
+        const axis = piece === 'lead' ? first.tangent : terminal, center = piece === 'lead' ? path[2] : path[6];
+        if (geometry.kind !== 'cylinder' || len(cross(geometry.a, axis)) * outside > roundoff
+          || len(cross(sub(geometry.c, center), axis)) > roundoff) return;
+        const lane = Math.abs(geometry.r - outside) <= roundoff ? 0 : Math.abs(geometry.r - bore) <= roundoff ? 1 : undefined;
+        return lane !== undefined && geometry.out === (lane ? -1 : 1) ? lane : undefined;
+      }
+      const arc = piece === 'first' ? first : second, native = revolutionOf(face.surface, extent);
+      if (!native || native.profile.kind !== 'arc') return;
+      const center = add(native.c, scale(native.a, native.profile.c[1])), axis = unit(cross(arc.tangent, arc.toCentre));
+      if (len(sub(center, add(arc.start, arc.toCentre))) > roundoff || Math.abs(native.profile.c[0] - arc.radius) > roundoff
+        || len(cross(native.a, axis)) * arc.radius > roundoff) return;
+      return Math.abs(native.profile.r - outside) <= roundoff ? 0 : Math.abs(native.profile.r - bore) <= roundoff ? 1 : undefined;
+    };
+    const lanes = new Map<string, number>();
+    for (const piece of ['lead', 'first', 'second', 'tail'] as const) {
+      const faces = brep.faces.filter(face => face.name?.startsWith(`${source.id}.${piece}.`)), counts = [0, 0];
+      if (faces.length !== 4) return;
+      for (const face of faces) {
+        const lane = carrier(face, piece); if (lane === undefined) return;
+        counts[lane]++; lanes.set(face.id, lane);
+      }
+      if (counts.some(count => count !== 2)) return;
+    }
+    for (const [a, b, center] of [['lead', 'first', path[2]], ['first', 'second', path[4]], ['second', 'tail', path[6]]] as const) {
+      const joints = brep.edges.filter(edge => {
+        const faces = brep.coedges.filter(use => use.edge === edge.id).map(use => owners.get(use.loop));
+        return faces.some(face => face?.name?.startsWith(`${source.id}.${a}.`)) && faces.some(face => face?.name?.startsWith(`${source.id}.${b}.`));
+      });
+      const counts = [0, 0];
+      if (joints.length !== 4) return;
+      for (const edge of joints) {
+        const pair = brep.coedges.filter(use => use.edge === edge.id), lane = lanes.get(owners.get(pair[0]?.loop)?.id ?? '');
+        const circle = nativeCircleOf(edge.curve);
+        if (lane === undefined || !circle || len(sub(circle.c, center)) > roundoff
+          || Math.abs(circle.r - (lane ? bore : outside)) > roundoff
+          || pair.some(use => lanes.get(owners.get(use.loop)?.id ?? '') !== lane)) return;
+        counts[lane]++; required.add(edge.id);
+      }
+      if (counts.some(count => count !== 2)) return;
+    }
+    if (required.size !== 20) return;
+    // Each cap circle and all three joins retain their actual complete native chart correspondence.
+    for (const id of required) {
+      const edge = edges.get(id)!, pair = brep.coedges.filter(use => use.edge === id);
+      if (pair.length !== 2 || pair[0].twin !== pair[1].id || pair[1].twin !== pair[0].id || pair[0].sense === pair[1].sense) return;
+      for (const use of pair) {
+        const face = owners.get(use.loop), actual = use.pcurve;
+        if (!face || face.surface.kind !== 'surface' || !actual) return;
+        const expected = face === start[0] || face === end[0] ? closedRectanglePlaneBinding(edge.curve, face.surface, roundoff)
+          : ringChartEdge(edge.curve, face.surface, roundoff)?.pcurve;
+        if (!expected || actual.degree !== expected.degree || actual.knots.length !== expected.knots.length
+          || actual.controlPoints.length !== expected.controlPoints.length || actual.weights.length !== expected.weights.length
+          || actual.knots.some((knot, i) => knot !== expected.knots[i])
+          || actual.weights.some((weight, i) => !(weight > 0) || Math.abs(weight / actual.weights[0] - expected.weights[i] / expected.weights[0]) > 512 * Number.EPSILON)
+          || actual.controlPoints.some((point, i) => len(sub(point, expected.controlPoints[i])) > 512 * Number.EPSILON * Math.max(1, geometryScaleMM(expected.controlPoints)))) return;
+      }
+    }
+    const report = checkBrep(brep, { strict: true });
+    if (!report.valid || report.topology.length !== 1 || report.topology[0].shells !== 1 || report.topology[0].genus !== 1) return;
+    return { anchor: [...path[0]], normal };
+  } catch { return; }
+}
+
+/** Signed original annular inlet only. Replaying the original producer binds every coefficient and owner. */
+export function offsetExactPerpendicularAnnularInletIfAdmitted(brep: Brep, faceName: string,
+  source: ExactSweepInput, distance: number): Brep | undefined {
+  const frame = exactPerpendicularAnnularInletOffsetFrame(brep, faceName, source), disk = circleOf(source.outer);
+  if (!frame || !disk || source.holes?.length !== 1 || !circleOf(source.holes[0])) return;
+  const refuse = perpendicularAnnularInletFailure, original = exactSweep(source, refuse).brep;
+  if (JSON.stringify(original) !== JSON.stringify(brep)) return;
+  if (!Number.isFinite(distance) || distance === 0 || Math.abs(distance) > CadNumericPolicy.coordinateAbs)
+    return refuse('PARAMETER', 'distance must be nonzero and within the modeling range.');
+  const rail = perpendicularQuarterEnds(source.path, refuse)!;
+  if (!(rail.inlet.line.length + distance >= ExtrudedProfileLimits.minimumLengthMM))
+    return refuse('GEOMETRY', 'the offset would reach or cross the retained inlet-to-bend join.');
+  const path = structuredClone(source.path);
+  path.controlPoints[0] = add(path.controlPoints[0], scale(frame.normal, distance));
+  path.controlPoints[1] = add(path.controlPoints[1], scale(frame.normal, distance / 2));
+  if (path.controlPoints[0].every((value, axis) => value === source.path.controlPoints[0][axis]))
+    return refuse('GEOMETRY', 'distance is too small to move the inlet.');
+  const candidate = exactSweep({ ...source, path }, refuse).brep;
+  for (const key of ['bodies', 'shells', 'faces', 'loops', 'coedges', 'edges', 'vertices'] as const) {
+    const identity = (value: { id: string; name?: string }) => [value.id, value.name];
+    if (JSON.stringify(brep[key].map(identity)) !== JSON.stringify(candidate[key].map(identity)))
+      return refuse('GEOMETRY', 'the offset cannot preserve the original native names and incidence.');
+  }
+  for (const face of brep.faces) if (face.name !== faceName && !face.name?.startsWith(`${source.id}.lead.`)
+    && !retainedElbowBoundary(brep, candidate, face))
+    return refuse('GEOMETRY', 'the offset cannot preserve both bends, the outlet and all three joins.');
+  const next = exactPerpendicularAnnularInletOffsetFrame(candidate, faceName, { ...source, path });
+  if (!next || len(sub(next.anchor, add(frame.anchor, scale(frame.normal, distance)))) > linearToleranceMM(geometryScaleMM(candidate.vertices.map(vertex => vertex.point))))
+    return refuse('GEOMETRY', 'the inlet cap cannot preserve the signed native displacement.');
+  return candidate;
+}
 
 /** Certified straight-cap recipes keep their original producer and native entity counts. */
 function pairedStraightCapRail(path: Curve, inlet: boolean) {
