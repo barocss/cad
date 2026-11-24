@@ -743,7 +743,7 @@ for (const inlet of [false, true]) test(`an inward tilted replacement trims the 
   assert.deepEqual(base, untouched);
 });
 
-test('an inward tilted outlet retains the exactly replayed earlier inlet trim', () => {
+test('either tilted end can follow its exactly replayed original opposite trim', () => {
   const input = document(rail({ leadLength: 10, tailLength: 6 }).path);
   const original = evaluateCadPart(input).outputs[0].brep;
   const start = { id: 'i', kind: 'replace-face', target: 'w', face: 'w.start',
@@ -776,6 +776,14 @@ test('an inward tilted outlet retains the exactly replayed earlier inlet trim', 
   near(brepMassProperties(revised, 1).volume, 32 * (21 + 15 * Math.PI));
   assert.deepEqual(revised.faces.find(face => face.name === 'w.end'), after.faces.find(face => face.name === 'w.end'));
   assert.throws(() => evaluate(start, { ...end, face: 'w.start' }), /exactly one inward tilted replacement/);
-  assert.throws(() => evaluate({ ...end, target: 'w' }, { ...start, target: 'o' }), /exactly one inward tilted replacement/);
+  const outletFirst = { ...end, target: 'w' }, inletSecond = { ...start, target: 'o' };
+  assert.deepEqual(evaluate(outletFirst, inletSecond), after);
+  const movedOutlet = { ...outletFirst, plane: { ...outletFirst.plane, origin: [34, 38, 0] } };
+  const reverseRevised = evaluate(movedOutlet, inletSecond);
+  const reverseMass = brepMassProperties(reverseRevised, 1);
+  near(reverseMass.volume, 32 * (21 + 15 * Math.PI));
+  pointNear(reverseMass.centroid, [12.502662706455551, 18.37360362581566, 0]);
+  assert.deepEqual(reverseRevised.faces.find(face => face.name === 'w.start'), after.faces.find(face => face.name === 'w.start'));
+  assert.throws(() => evaluate(outletFirst, { ...inletSecond, face: 'w.end' }), /exactly one inward tilted replacement/);
   assert.throws(() => evaluate(start, end, { ...end, id: 'third', target: 'o' }), /Replace face/);
 });

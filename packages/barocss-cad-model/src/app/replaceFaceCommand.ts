@@ -1,13 +1,13 @@
 import {
   exactSemicylinderCapAfterWall, exactSemicylinderCapSource, isAnnularReplacementSource, isBoredPlateReplacementSource, isBoxReplacementSource, isCylinderReplacementSource, isDraftedFaceReplacementSource, isPairedFiveSpanCapPlaneSource,
-  isStraightPolygonReplacementSource, pairedFiveSpanOutletAfterInletSourceIndex, withNode, type StudioDoc,
+  isStraightPolygonReplacementSource, pairedFiveSpanOppositeReplacementSourceIndex, withNode, type StudioDoc,
 } from '../engine/doc';
 import { captureSignatures } from '../engine/references';
 import { refusal } from '../engine/refusal';
 import type { Command, Ctx } from './commands';
 import { captureOffsetPlane, offsetPlaneStep, pickReferencePlane, restoreOffsetPlaneValues } from './offsetPlanePick';
 
-const SOURCE = 'Select a supported extrusion face, through-bore cap, original Exact semicylinder upper cap, or original five-span paired sweep inlet or outlet. An outlet can follow one inlet replacement.';
+const SOURCE = 'Select a supported extrusion face, through-bore cap, original Exact semicylinder upper cap, or original five-span paired sweep inlet or outlet. One prior replacement of the opposite cap is supported.';
 const REFERENCE = 'Pick a tilted face on another solid.';
 
 function pickedFace(ctx: Ctx) {
@@ -25,7 +25,7 @@ function pickedFace(ctx: Ctx) {
   const semicylinderCap = exactSemicylinderCapSource(ctx.doc.nodes, parent.node, ctx.doc.parameters)?.upperFace === face.name
     || exactSemicylinderCapAfterWall(ctx.doc.nodes, parent.node, ctx.doc.parameters, face.name) !== undefined;
   const sweepCap = isPairedFiveSpanCapPlaneSource(ctx.doc.nodes, parent.node, face.name) ||
-    pairedFiveSpanOutletAfterInletSourceIndex(ctx.doc.nodes, parent.node, face.name) !== undefined;
+    pairedFiveSpanOppositeReplacementSourceIndex(ctx.doc.nodes, parent.node, face.name) !== undefined;
   if (!boxFace && !polygonFace && !circularCap && !semicylinderCap && !sweepCap && !isDraftedFaceReplacementSource(ctx.doc.nodes, parent.node)) return;
   return { parent, face: face.name };
 }

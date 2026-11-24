@@ -1542,18 +1542,19 @@ export function replaceExactPairedSweepEndIfAdmitted(brep: Brep, faceName: strin
   return trimExactSweepEnd(brep, faceName, rail, plane);
 }
 
-/** The first tilted inlet must reproduce the exact current parent before its original outlet can move. */
-export function replaceExactPairedSweepOutletAfterInletIfAdmitted(brep: Brep, faceName: string, source: ExactSweepInput,
-  inlet: { face: string; plane: SweepTrimPlane }, plane: SweepTrimPlane): Brep | undefined {
-  if (inlet.face !== `${source.id}.start` || faceName !== `${source.id}.end`) return;
-  const outletRail = pairedSweepTrimRail(brep, faceName, source);
-  if (!outletRail) return;
+/** Replay one original tilted end before trimming its untouched opposite cap. */
+export function replaceExactPairedSweepEndAfterOppositeIfAdmitted(brep: Brep, faceName: string, source: ExactSweepInput,
+  prior: { face: string; plane: SweepTrimPlane }, plane: SweepTrimPlane): Brep | undefined {
+  const inlet = `${source.id}.start`, outlet = `${source.id}.end`;
+  if (!((prior.face === inlet && faceName === outlet) || (prior.face === outlet && faceName === inlet))) return;
+  const rail = pairedSweepTrimRail(brep, faceName, source);
+  if (!rail) return;
   const original = exactSweep(source, pairedReplacementFailure).brep;
-  const inletRail = pairedSweepTrimRail(original, inlet.face, source);
-  if (!inletRail) return;
-  const replay = trimExactSweepEnd(original, inlet.face, inletRail, inlet.plane);
+  const priorRail = pairedSweepTrimRail(original, prior.face, source);
+  if (!priorRail) return;
+  const replay = trimExactSweepEnd(original, prior.face, priorRail, prior.plane);
   if (JSON.stringify(replay) !== JSON.stringify(brep)) return;
-  return trimExactSweepEnd(brep, faceName, outletRail, plane);
+  return trimExactSweepEnd(brep, faceName, rail, plane);
 }
 
 /** Continue only an admitted original straight cap. Replaying its producer binds every original native coefficient. */

@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1892: [Replace the original Sweep inlet after its inward tilted outlet](notes/paired-sweep-outlet-then-inlet-replacement-2026-11-24/README.md), #17. Qualify the reverse order and the current first donor across both native caps.
 - D1891: [Replace the original Sweep outlet after its inward tilted inlet](notes/paired-sweep-inlet-then-outlet-replacement-2026-11-24/README.md), #17. Verify two linked end caps, the first donor edit and exact native Studio reopen.
 - D1890: [Complete the original measured sketch gap closeout](notes/path-gap-original-contract-closeout-2026-11-24/README.md), #226. Verify the four remaining actual scope and draft ownership cases.
 - D1889: [Cut a measured gap in an ordinary straight sketch polyline](notes/ordinary-polyline-path-gap-2026-11-24/README.md), #226. Keep both original neighboring spans, material role, draft Undo and exact native curve reopen.

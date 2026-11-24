@@ -776,15 +776,18 @@ export function isPairedFiveSpanOutletPlaneSource(nodes: readonly unknown[], ind
   return isPairedFiveSpanEndPlaneSource(nodes, index, face, 'end');
 }
 
-/** Return the original sweep only for its untouched outlet after one inward tilted inlet recipe. */
-export function pairedFiveSpanOutletAfterInletSourceIndex(nodes: readonly unknown[], index: number, face: string): number | undefined {
+/** Return the original sweep for its untouched cap after one replacement of the opposite cap. */
+export function pairedFiveSpanOppositeReplacementSourceIndex(nodes: readonly unknown[], index: number, face: string): number | undefined {
   const prior = nodes[index];
   if (!textRecord(prior) || prior.kind !== 'replace-face' || prior.suppressed || prior.held !== undefined ||
       faceEditNodeProblem(prior, index, 'replace-face')) return;
   const replacement = prior as unknown as ReplaceFaceNode;
-  const sourceIndex = replacement.parent.node;
-  if (!isPairedFiveSpanEndPlaneSource(nodes, sourceIndex, replacement.faces[0], 'start') ||
-      !isPairedFiveSpanEndPlaneSource(nodes, sourceIndex, face, 'end')) return;
+  const sourceIndex = replacement.parent.node, source = nodes[sourceIndex];
+  if (!textRecord(source) || typeof source.id !== 'string') return;
+  const priorEnd = replacement.faces[0] === `${source.id}.start` ? 'start' : 'end';
+  const nextEnd = priorEnd === 'start' ? 'end' : 'start';
+  if (!isPairedFiveSpanEndPlaneSource(nodes, sourceIndex, replacement.faces[0], priorEnd) ||
+      !isPairedFiveSpanEndPlaneSource(nodes, sourceIndex, face, nextEnd)) return;
   return sourceIndex;
 }
 
@@ -837,7 +840,7 @@ export function directFaceDocumentProblem(input: unknown): string | null {
       const signature = (node.sigs as Record<string, Sig>)[face];
       if (node.kind === 'replace-face') {
         if (isPairedFiveSpanCapPlaneSource(value.nodes, parentIndex, face) ||
-            pairedFiveSpanOutletAfterInletSourceIndex(value.nodes, parentIndex, face) !== undefined) {
+            pairedFiveSpanOppositeReplacementSourceIndex(value.nodes, parentIndex, face) !== undefined) {
           const donor = value.nodes[(node.target as OffsetPlaneRef).body.node];
           if (signature.k !== 'plane' || !textRecord(donor) || donor.suppressed || donor.held !== undefined)
             return 'Replace face: the paired sweep needs its original planar cap and an available reference body.';
