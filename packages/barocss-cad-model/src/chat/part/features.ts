@@ -1,6 +1,7 @@
 // The v2 `features` group's handlers (R3, moved verbatim from chat/tools.ts's runPartTool): the feature tree's
 // commands, raw nodes, edits and deletes, materials, and the person's rows (stock, frame stock, sections, welds).
 import { commandById, commands, givenValues, shownFields, type Ctx, type Values } from '../../app/commands';
+import { boxShellSelection } from '../../app/boxShellSelection';
 import { updateBoxFootprint } from '../../app/editCommand';
 import { editFields, type BindableField } from '../../app/editFields';
 import { extrudeEndFaceValues } from '../../app/extrudeEndFacePick';
@@ -142,7 +143,12 @@ export const COMMAND_DOCS: Record<string, { selection: string; values: Record<st
   'full-round': { selection: 'faces: [flat tops of one body facing +Z, each an axis-aligned rectangle: a rib or wall top]', values: { along: 'auto (each face\'s longer side) | x | y' } },
   fillet: { selection: 'edges: [edges of one body]', values: { radius: 'fillet radius (with endRadius: at the chain\'s start)', endRadius: 'optional: the radius at the other end of one open chain (0: the same); the radius varies along it', stationMode: 'ends (default) | interior | two-interior. Interior controls need one original straight edge. Two interior controls need a convex edge outside a tangent chain.', stationAt: 'first interior position in percent from the authored start, strictly between 0 and 100', stationRadius: 'positive radius in mm at the first interior position', station2At: 'two-interior only: second position in percent, after stationAt and below 100', station2Radius: 'two-interior only: positive radius in mm at station2At', shape: 'optional section: circular (default) | conic | g2 (curving as the faces do at the contacts)', rho: 'conic: 0–1 exclusive (0.5 a parabola; smaller flatter, larger fuller)', tension: 'g2: 0–1 exclusive (default 0.5)' } },
   decimate: { selection: 'bodies: [one mesh body] (an imported STL, OBJ or scan: facet faces)', values: { keep: 'per cent of the triangles to keep (1–99)', maxError: 'mm: no collapse past it (0: none)', crease: 'degrees: also keep edges sharper than this (0: only the regions\u2019 boundaries and open edges)' } },
-  shell: { selection: 'faces to open (all of one body), or bodies: [one body] for a closed hollow', values: { t: 'wall thickness' } },
+  shell: { selection: 'faces to open on one body, or one body for a closed hollow', values: {
+    t: 'uniform wall thickness in mm',
+    wallMode: 'uniform | per-face. For per-face, give expectedRevision from query.rebuild, one exact original upper or side face of an upright rectangular extrusion, and all five kept wall values. Omit the wall at the opening.',
+    bottomWall: 'bottom thickness in mm', frontWall: 'front thickness in mm', rightWall: 'right thickness in mm',
+    backWall: 'back thickness in mm', leftWall: 'left thickness in mm', topWall: 'top thickness in mm',
+  } },
   move: { selection: 'bodies: [one body]', values: { x: 'ΔX', y: 'ΔY', z: 'ΔZ', ax: 'to X (the box corner; the HUD keeps it with ΔX — give one of the two)', ay: 'to Y', az: 'to Z' } },
   rotate: { selection: 'bodies: [one body]', values: { axis: 'x | y | z', angle: 'degrees', px: 'pivot x mm (default: the body\'s centre)', py: 'pivot y mm', pz: 'pivot z mm' } },
   scale: { selection: 'bodies: [one body]', values: { factor: 'uniform factor (1 = unchanged)', px: 'pivot x mm (default: the body\'s centre)', py: 'pivot y mm', pz: 'pivot z mm' } },
@@ -261,6 +267,7 @@ async function runCommandTool(state: ChatState, args: Record<string, unknown>, e
     return fail(state, 'Delete face needs distinct original faces; duplicate names or aliases of the same face are not supported.');
   const point = Array.isArray(args.point) && args.point.length === 3 ? args.point.map(Number) as [number, number, number] : undefined;
   let given = isObj(args.values) ? args.values : {};
+  const perFaceShell = cmd.id === 'shell' && given.wallMode === 'per-face';
   const toPlane = isReferencePlaneEdit(cmd.id, { offsetMode: typeof given.offsetMode === 'string' ? given.offsetMode : '' });
   const [sourceFace, referenceFace] = selection.faces;
   if (toPlane && (sel.names.faces.length !== 2 || selection.faces.length !== 2 ||
@@ -314,9 +321,27 @@ async function runCommandTool(state: ChatState, args: Record<string, unknown>, e
     given = other;
     cutSource = { source, target: featureId(state.doc.nodes, body.ref.node), body: body.key };
   }
+  if (perFaceShell) {
+    if (args.expectedRevision === undefined)
+      return fail(state, 'Per-face Shell needs expectedRevision from query.rebuild for the same part.', { code: 'COMMAND_INPUT' });
+    const name = sel.names.faces[0];
+    if (!Array.isArray(args.faces) || args.faces.length !== 1 || selection.faces.length !== 1
+      || selection.edges.length || selection.bodies.length || args.point !== undefined
+      || state.bodies[sourceFace.body]?.mesh.faces[sourceFace.face]?.nativePlaneName !== name
+      || state.bodies.flatMap(body => body.mesh.faces.filter(face => face.nativePlaneName === name)).length !== 1)
+      return fail(state, 'Per-face Shell needs one exact original native face as its opening.', { code: 'COMMAND_INPUT' });
+    const box = boxShellSelection(ctx);
+    if (!box)
+      return fail(state, 'Per-face Shell needs the original upper or side face of one upright rectangular extrusion.', { code: 'COMMAND_INPUT' });
+    const invalid = box.walls.filter(({ key }) => !Object.hasOwn(given, key) || !Number.isFinite(given[key]));
+    if (invalid.length)
+      return fail(state, `Give a finite thickness in mm for each kept wall: ${invalid.map(({ key }) => key).join(', ')}.`, { code: 'COMMAND_INPUT' });
+  }
   const avail = cmd.available(ctx);
   if (!avail.ok) return fail(state, `${cmd.label} can’t run: ${avail.reason}`);
-  const fields = cmd.fields?.(ctx, cmd.id === 'sweep-curve' ? { representation: String(given.representation) } : undefined) ?? [];
+  const fieldMode: Values | undefined = cmd.id === 'sweep-curve' ? { representation: String(given.representation) }
+    : perFaceShell ? { wallMode: 'per-face' } : undefined;
+  const fields = cmd.fields?.(ctx, fieldMode) ?? [];
   const bad = Object.keys(given).filter(k => !fields.some(f => f.key === k));
   if (bad.length) return fail(state, `${cmd.label} has no value ${bad.map(k => `"${k}"`).join(', ')}; its values are ${fields.map(f => `${f.key} (${f.label})`).join(', ') || 'none'}.`);
   let values: Values = givenValues(cmd, ctx, cmd.defaults?.(ctx) ?? {}, Object.fromEntries(Object.entries(given).map(([k, v]) => [k, typeof v === 'number' ? v : String(v)])));
