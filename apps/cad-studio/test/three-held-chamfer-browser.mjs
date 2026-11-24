@@ -2,6 +2,9 @@ import assert from 'node:assert/strict';
 import { createFlow } from './flow-helper.mjs';
 
 const baseline = process.argv.includes('--baseline');
+const fillet = process.argv.includes('--fillet');
+const finish = fillet ? 'Fillet' : 'Chamfer';
+const featureName = fillet ? 'fillets' : 'chamfers';
 const pins = [
   'apps/cad-studio/test/three-held-chamfer-browser.mjs',
   'apps/cad-studio/test/flow-helper.mjs',
@@ -21,17 +24,19 @@ const oldCap = [[0, -12], [18, -12], [20, -10], [20, 18], [18, 20], [17, 20], [1
 const newCap = [[0, 0], [18, 0], [20, 2], [20, 5], [7, 5], [5, 7], [5, 20], [2, 20], [0, 18]];
 const ref = node => ({ node, side: 'solid' });
 const model = (points, edges) => ({
-  format: 'barocss-cad-model', schema: 3, units: 'mm', parameters: { Bevel: 2 },
+  format: 'barocss-cad-model', schema: 3, units: 'mm', parameters: fillet ? { Radius: 2 } : { Bevel: 2 },
   nodes: [{ id: 'n0', kind: 'sketch', profile: 'polygon', points },
     { id: 'n1', kind: 'extrude', sketch: 0, height: 3 },
-    { id: 'n2', kind: 'chamfer', parent: ref(1), edges, distance: { parameter: 'Bevel' } }],
+    { id: 'n2', parent: ref(1), edges, ...(fillet ? { kind: 'fillet', radius: { parameter: 'Radius' } }
+      : { kind: 'chamfer', distance: { parameter: 'Bevel' } }) }],
   outputs: { b2: ref(2) }, nextId: 3,
 });
 const f = await createFlow({
-  name: 'three-held-chamfer', output: process.argv[2], envFrozen: 'D1834_SOURCE_FROZEN',
-  qualification: 'Recover three distinct terminal Chamfer straight-edge references together through History.',
+  name: fillet ? 'three-held-fillet' : 'three-held-chamfer', output: process.argv[2],
+  envFrozen: fillet ? 'D1870_SOURCE_FROZEN' : 'D1834_SOURCE_FROZEN',
+  qualification: `Recover three distinct terminal ${finish} straight-edge references together through History.`,
   limits: ['The signed fixture is opened through Studio. Viewport creation of the fixture is NOT_RUN.',
-    'Three held references, one constant positive distance and one exact native source.'],
+    'Three held references, one constant positive size and one exact native source.'],
   initialFiles: pins, requiredFrozen: pins,
   inspectorSource: `
 import {readFileSync} from 'node:fs';
@@ -72,6 +77,27 @@ function geometry(rows, volume, centre, cap) {
     assert.ok(native.vertices.some(v => Math.hypot(v[0] - x, v[1] - y, v[2] - z) < 1e-8), `Missing vertex ${[x,y,z]}`);
   }
 }
+const sector = 4 - Math.PI;
+const oldRound = { volume: 3 * (590 - 3 * sector), faces: 13, walls: [[18, -10, 1], [18, 18, 1], [17, 18, 1]] };
+const newRound = { volume: 3 * (175 - sector), faces: 11, walls: [[18, 2, 1], [7, 7, -1], [2, 18, 1]] };
+function roundGeometry(rows, expected) {
+  assert.equal(rows.length, 1);
+  const [native] = rows;
+  assert.ok(native.valid);
+  assert.deepEqual(native.kinds, ['solid']);
+  near(native.volume, expected.volume);
+  assert.equal(native.faces.length, expected.faces);
+  assert.equal(native.vertices.length, 2 * (expected.faces - 2));
+  assert.equal(native.edges, 3 * (expected.faces - 2));
+  const walls = native.faces.filter(face => face.kind === 'cylinder');
+  assert.equal(walls.length, expected.walls.length);
+  for (const [x, y, out] of expected.walls) {
+    assert.equal(walls.filter(wall => Math.hypot(wall.c[0] - x, wall.c[1] - y) < 1e-8 &&
+      Math.hypot(wall.a[0], wall.a[1]) < 1e-8 && Math.abs(Math.abs(wall.a[2]) - 1) < 1e-8 &&
+      Math.abs(wall.r - 2) < 1e-8 && wall.out === out).length, 1, `Missing native wall at [${x}, ${y}]`);
+  }
+  assert.deepEqual([...new Set(native.vertices.map(point => point[2]))].sort(), [0, 3]);
+}
 async function open(name, doc) {
   await f.newPage();
   await f.page.getByLabel('Model file', { exact: true }).setInputFiles({
@@ -105,19 +131,25 @@ await f.run(async () => {
   const prep = await f.inspect('00-native-preflight', { prepare: true, original: model(oldPoints, oldNames),
     target: model(newPoints, newNames), wrong: model(newPoints, [...newNames.slice(0, 2), 'n1.side3|n1.side4']) });
   const centre = [6953 / 1038, 6953 / 1038, 1.5];
-  geometry(prep.original.native, 1752, [8687 / 876, 4891 / 1752, 1.5], oldCap);
-  geometry(prep.target.native, 519, centre, newCap);
-  near(prep.wrong.native[0].volume, 519);
-  near(prep.wrong.native[0].centroid[0], 6909 / 1038);
-  assert.throws(() => geometry(prep.wrong.native, 519, centre, newCap), assert.AssertionError);
-  await open('three-chamfers-original', prep.original.doc); await f.same(prep.original.doc);
+  const qualifyTarget = rows => fillet ? roundGeometry(rows, newRound) : geometry(rows, 519, centre, newCap);
+  if (fillet) {
+    roundGeometry(prep.original.native, oldRound);
+    roundGeometry(prep.wrong.native, { ...newRound, walls: [...newRound.walls.slice(0, 2), [3, 18, 1]] });
+  } else {
+    geometry(prep.original.native, 1752, [8687 / 876, 4891 / 1752, 1.5], oldCap);
+    near(prep.wrong.native[0].volume, 519);
+    near(prep.wrong.native[0].centroid[0], 6909 / 1038);
+  }
+  qualifyTarget(prep.target.native);
+  assert.throws(() => qualifyTarget(prep.wrong.native), assert.AssertionError);
+  await open(`three-${featureName}-original`, prep.original.doc); await f.same(prep.original.doc);
   assert.equal(await references().count(), 0);
-  await f.snapshot('01-three-original-chamfers');
+  await f.snapshot(`01-three-original-${featureName}`);
 
   f.phase = 'Open upstream changes with all three authored references held';
   const changed = structuredClone(prep.original.doc);
   changed.nodes[0].points = newPoints;
-  await open('three-chamfers-upstream-changed', changed);
+  await open(`three-${featureName}-upstream-changed`, changed);
   const problems = references().getByText('Choose a reference · Feature held', { exact: true });
   await problems.nth(2).waitFor();
   assert.equal(await problems.count(), 3);
@@ -129,7 +161,7 @@ await f.run(async () => {
   assert.equal(before.doc.nodes[2].rematched, undefined);
   near(before.bodies.bodies[0].volume, 525);
   await direction('Back right');
-  await f.openFeatureEditor(2, 'three unresolved Chamfer edges');
+  await f.openFeatureEditor(2, `three unresolved ${finish} edges`);
   const editor = f.editor();
   const replace = button('Replace edges', editor);
   if (baseline) {
@@ -137,12 +169,12 @@ await f.run(async () => {
     assert.equal(await button('Replace edge', editor).count(), 0);
     await f.same(before.doc);
     await f.snapshot('03-three-edge-replacement-unavailable');
-    f.report.observations.push({ directReplacement: 'FAIL: unavailable for three held Chamfer references' });
+    f.report.observations.push({ directReplacement: `FAIL: unavailable for three held ${finish} references` });
     return;
   }
   const apply = button('Apply edge replacements', editor);
   const cancel = button('Cancel edge replacement', editor);
-  const stage = editor.getByRole('group', { name: 'Chamfer edge replacements', exact: true });
+  const stage = editor.getByRole('group', { name: `${finish} edge replacements`, exact: true });
   const nthRow = index => stage.locator('.row-actions').nth(index);
   const duplicate = f.page.getByText('Edge not selected', { exact: true });
   const inside = [5, 5, 1.5];
@@ -184,17 +216,17 @@ await f.run(async () => {
   assertUnchanged(await f.snapshot('05-three-picks-await-apply'));
   await apply.click(); await f.changed(before.doc);
   await references().waitFor({ state: 'hidden' });
-  const accepted = await f.snapshot('06-three-chamfers-applied');
+  const accepted = await f.snapshot(`06-three-${featureName}-applied`);
   assert.deepEqual(accepted.doc, prep.target.doc);
-  geometry(await f.inspect('07-applied-native', accepted.doc), 519, centre, newCap);
+  qualifyTarget(await f.inspect('07-applied-native', accepted.doc));
   assert.equal(accepted.history.length, before.history.length);
   await f.undo(); await f.same(before.doc); await problems.nth(2).waitFor();
   assertUnchanged(await f.snapshot('08-undo-restores-three-held'));
   await f.redo(); await f.same(accepted.doc); await references().waitFor({ state: 'hidden' });
-  const saved = await f.save('three-chamfers-confirmed');
+  const saved = await f.save(`three-${featureName}-confirmed`);
   await f.freshOpen(saved.file, accepted.doc, '09-fresh-open');
   assert.equal(await references().count(), 0);
-  geometry(await f.inspect('10-reopened-native', await f.doc()), 519, centre, newCap);
+  qualifyTarget(await f.inspect('10-reopened-native', await f.doc()));
   f.report.observations.push({ stagedDistinctPicks: 'PASS', duplicateRefusal: 'PASS', cancelUnchanged: 'PASS',
     exactNativeGeometry: 'PASS', undoRedoSaveOpen: 'PASS', sameVolumeWrongThirdRejectedByOracle: 'PASS' });
 });

@@ -113,7 +113,7 @@ for (const kind of ['fillet', 'chamfer'] as const) test(`both unresolved ${kind}
  assert.deepEqual(source.nodes[2], node);
 });
 
-test('three held Chamfer slots require complete distinct native picks on the terminal source', () => {
+for (const kind of ['chamfer', 'fillet'] as const) test(`three held ${kind} slots require complete distinct native picks on the terminal source`, () => {
  const stock = rectanglePart(30, 20, 10);
  const evaluated = evaluatePart(stock, 1);
  assert.ok(evaluated.ok);
@@ -123,17 +123,21 @@ test('three held Chamfer slots require complete distinct native picks on the ter
  const signatures = signaturesOf(body).edges;
  const live = (name: string) => toSig(signatures.get(name)!);
  const sigs = Object.fromEntries([a, b, c].map(name => [name, { ...live(name), s: live(name).s + 100 }]));
- const node: Extract<HeldFinish, { kind: 'chamfer' }> = {
-  id: finish.id, kind: 'chamfer', parent: finish.parent, edges: [a, b, c], sigs,
-  distance: { parameter: 'Bevel' }, held: finish.held, suppressed: true,
+ const size = { parameter: 'FinishSize' };
+ const node: HeldFinish = {
+  id: finish.id, parent: finish.parent, edges: [a, b, c], sigs, held: finish.held, suppressed: true,
+  ...(kind === 'fillet' ? { kind, radius: size } : { kind, distance: size }),
  };
- const source = withNode({ ...stock, parameters: { Bevel: 2 } }, node);
+ const source = withNode({ ...stock, parameters: { FinishSize: 2 } }, node);
  const before = structuredClone(source);
  const problems = [c, a, b].map((name, index) => ({ index, name, where: 'feature 2', node: 2, candidates: [] }));
  assert.deepEqual(heldFinishGroupProblems(source, 2, problems), [problems[1], problems[2], problems[0]]);
  assert.equal(heldFinishGroupProblems(source, 2, [problems[0], problems[1], { ...problems[2], index: 0 }]), undefined);
  assert.equal(heldFinishGroupProblems(source, 2, problems.slice(1)), undefined);
- assert.equal(heldFinishGroupProblems(withNode(stock, { ...finish, edges: node.edges, sigs, radii: undefined }), 2, problems), undefined);
+ assert.equal(heldFinishGroupProblems(withNode(stock, { ...finish, edges: node.edges, sigs }), 2, problems), undefined);
+ assert.equal(heldFinishGroupProblems({ ...source, parameters: {} }, 2, problems), undefined);
+ assert.equal(heldFinishProblem(source, 2, [problems[1]], body), undefined);
+ assert.equal(heldFinishReplacement(source, 2, fourth, body.mesh.edges, live(d), a), null);
  assert.equal(heldFinishGroupProblems(withNode(stock, { ...node, edges: [a, b, c, d] }), 2, problems), undefined);
  assert.equal(heldFinishGroupProblems({ ...source, nodes: [...source.nodes, stock.nodes[0]] }, 2, problems), undefined);
  for (const picks of [[third, second], [third, second, undefined], [third, second, third], [third, second, { ...fourth }]]) {
@@ -142,10 +146,11 @@ test('three held Chamfer slots require complete distinct native picks on the ter
  const accepted = replaceHeldFinishGroup(source, 2, problems, body, [third, second, fourth]);
  assert.ok(accepted);
  const changed = accepted.nodes[2];
- assert.ok(changed.kind === 'chamfer');
+ assert.ok(changed.kind === 'chamfer' || changed.kind === 'fillet');
+ assert.equal(changed.kind, kind);
  assert.deepEqual(changed.edges, [c, b, d]);
  assert.deepEqual(changed.sigs, { [c]: live(c), [b]: live(b), [d]: live(d) });
- assert.deepEqual(changed.distance, node.distance);
+ assert.deepEqual(changed.kind === 'fillet' ? changed.radius : changed.distance, size);
  assert.equal(changed.held, undefined);
  assert.equal(changed.suppressed, undefined);
  assert.deepEqual(source, before);

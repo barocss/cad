@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1870: [Replace three held Constant Fillet edges](notes/triple-held-fillet-history-replacement-2026-11-24/README.md), #20. Use one explicit History Apply, distinguish the correct native owners and retain signatures through fresh Open.
 - D1869: [Keep shared placed surfaces alive through selection changes](notes/placed-shared-surface-ownership-2026-11-24/README.md), #44. Fix released geometry on the unchanged peer and verify its actual native-face picks, project reopen and 24-copy control.
 - D1868: [Extract the placed bearing editor](notes/placed-bearing-editor-extraction-2026-11-24/README.md), #44. Verify delayed owner retirement and native edit/reopen. Reproduce the separate existing peer display defect on both App versions.
 - D1867: [Refuse unsupported STEP cone angle units](notes/step-cone-angle-unit-admission-2026-11-24/README.md), #277. Reproduce wrong native geometry, verify ownership-based admission and preserve the current Studio document on refusal.

@@ -37,7 +37,7 @@ export function heldFinishReplaceable(node: ModelNode | undefined, parameters: P
 function isHeldConstantFinishGroup(node: ModelNode | undefined): node is HeldFinish {
  return !!node && (node.kind === 'fillet' || node.kind === 'chamfer') && !!node.held &&
   node.suppressed === true && !node.rematched &&
-  (node.edges.length === 2 || (node.kind === 'chamfer' && node.edges.length === 3)) &&
+  (node.edges.length === 2 || node.edges.length === 3) &&
   new Set(node.edges).size === node.edges.length &&
   (node.kind === 'chamfer' || (!node.radii && node.section === undefined));
 }
@@ -94,7 +94,8 @@ export function heldFinishProblem(doc: StudioDoc, index: number, problems: reado
   if (node.kind === 'fillet' && node.radii && index !== doc.nodes.length - 1) return;
   return problems.find(problem => problem.node === index && problem.name === node.edges[0]);
  }
- if (!isHeldConstantFinishGroup(node) || node.kind !== 'fillet' || index !== doc.nodes.length - 1 || !positiveSize(node.radius, doc.parameters)) return;
+ if (!isHeldConstantFinishGroup(node) || node.kind !== 'fillet' || node.edges.length !== 2 ||
+     index !== doc.nodes.length - 1 || !positiveSize(node.radius, doc.parameters)) return;
  const failures = problems.filter(problem => problem.node === index);
  if (failures.length !== 1) return;
  const [problem] = failures;
@@ -130,7 +131,8 @@ export function heldFinishCandidate(finish: HeldFinish, edge: DisplayEdge | unde
 export function heldFinishReplacement(doc:StudioDoc,index:number,edge:DisplayEdge,edges:readonly DisplayEdge[],signature:Sig, heldName?: string): StudioDoc | null {
  const original=doc.nodes[index];
  if (heldName !== undefined) {
-  if (!isHeldConstantFinishGroup(original) || original.kind !== 'fillet' || index !== doc.nodes.length - 1 || !original.edges.includes(heldName) ||
+  if (!isHeldConstantFinishGroup(original) || original.kind !== 'fillet' || original.edges.length !== 2 ||
+      index !== doc.nodes.length - 1 || !original.edges.includes(heldName) ||
       !positiveSize(original.radius, doc.parameters) || signature.k !== 'line' || signature.n !== undefined) return null;
  } else if (!heldFinishReplaceable(original,doc.parameters)||(original.kind==='fillet'&&original.radii&&index!==doc.nodes.length-1)) return null;
  const candidate=heldFinishCandidate(original,edge,edges,doc.parameters,heldName);if('error'in candidate)return null;
