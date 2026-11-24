@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { StudioDoc } from '@barocss/cad-model/engine/doc';
+import { fmt, type StudioDoc } from '@barocss/cad-model/engine/doc';
 import type { BodyResult } from '@barocss/cad-model/engine/evaluate';
 import type { Vec3 } from '@barocss/cad-model/engine/mesh';
 import type { EngineClient } from '../engine/client';
@@ -45,7 +45,7 @@ export function useSectionThroughVertex({ source, box, engine, nextRevision, liv
     if (move && !active && moveNow.current === move) update(null);
   }, [move, active]);
 
-  const available = !!source && !!planeAxis(source.section.planes[0]);
+  const available = !!source;
   const start = () => {
     if (!source || !available || !owns(source)) return;
     update({ owner: source, message: 'Click an original corner.' });
@@ -60,14 +60,14 @@ export function useSectionThroughVertex({ source, box, engine, nextRevision, liv
       return true;
     }
     const { owner } = request;
-    const { normal, axis } = owner.section.planes[0];
+    const plane = owner.section.planes[0], { normal } = plane;
     const offset = normal.reduce((sum, value, i) => sum + value * at[i], 0);
     const span = projectedSectionSpan(box, normal);
     if (!span || !Number.isFinite(offset) || offset <= span[0] || offset >= span[1]) {
       update({ owner, message: 'The corner is outside the section range.' });
       return true;
     }
-    const next: Section = { mode: 'plane', planes: [{ normal, axis, offset }] };
+    const next: Section = { mode: 'plane', planes: [{ ...plane, offset }] };
     const checking = { owner, message: 'Checking the section…' };
     update(checking);
     void (async () => {
@@ -79,7 +79,7 @@ export function useSectionThroughVertex({ source, box, engine, nextRevision, liv
         return;
       }
       const coordinate = planeAxis(next.planes[0]);
-      update({ owner, next, message: coordinate ? `Move to ${'XYZ'[coordinate.k]} ${coordinate.at} mm` : 'Use this corner' });
+      update({ owner, next, message: coordinate ? `Move to ${'XYZ'[coordinate.k]} ${coordinate.at} mm` : `Move to offset ${fmt(offset)} mm` });
     })().catch(() => {
       if (moveNow.current === checking && owns(owner)) update({ owner, message: 'The exact section is unavailable at this corner.' });
     });

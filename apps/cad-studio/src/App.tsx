@@ -1847,6 +1847,7 @@ export function App() {
       && viewBackend && fresh && !busy && !modelUnavailable && !workerFailure && !active && !measure && sectionFacePick === null && !sketch && !rendering && !drawing
       && marker === null && shownDoc === doc && !variants.showing && !inPlace && !doc.instances?.length && !doc.direct
       && !ghost && !workingComparison && !bodyDrag && !exploded && !cageEd.session && !routePreviewBodies && !project.opening()
+      && viewportSelection.sectionCornerMeshes.some(corner => !!corner?.vertices.size)
       ? { doc, evaluated, section, bodies: sectionExact.sourceBodies, shown: shownBodies, backend: viewBackend, open: sectionOpen, worker: workerSession } : null,
     box: sectionBox, engine, nextRevision: () => revision.current++, select: viewportSelection.sectionVertexPick, setSection,
     live: owner => docNow.current === owner.doc && evaluatedRef.current === owner.evaluated && ownsEvaluatedSource()
@@ -2313,7 +2314,7 @@ export function App() {
         pickedPole={poleEditor.controls.selected} onPickPole={poleEditor.pick}
         offsets={animatedOffsets} transforms={dragTransforms} instances={viewportInstances} clearance={clearanceDisplay}
         isolatedInstances={displayScopeReason ? undefined : stepsDisp?.opaque ?? isolatedInstances}
-        clip={sectionClip} sectionVertexPicking={sectionVertex.controls.active} sectionHatch={sectionHatchLines} scalarMaps={scalarMaps} onHoverScalar={mapHoverOwner ? setMapHover : undefined}
+        clip={sectionClip} sectionVertexPicking={sectionVertex.controls.active ? viewportSelection.sectionCornerMeshes : undefined} sectionHatch={sectionHatchLines} scalarMaps={scalarMaps} onHoverScalar={mapHoverOwner ? setMapHover : undefined}
         mould={mouldShown} isoclines={isoclines} proposal={ghost ? proposalOverlay : compareOverlay}
         placing={!!active?.placing} placeSkip={placeSkip} onSpot={onSpot}
         bodyColors={bodyColors} faceColors={faceColors} hiddenBodies={hiddenBodies} snapStep={snapStep}

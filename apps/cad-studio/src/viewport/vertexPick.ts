@@ -1,11 +1,12 @@
 import { lookOf } from '@barocss/cad-model/app/bodies';
 import type { StudioDoc } from '@barocss/cad-model/engine/doc';
 import type { BodyResult } from '@barocss/cad-model/engine/evaluate';
+import type { SectionVertexIds } from './sectionEdgePick';
 import type { DisplayMesh, Vec3 } from '@barocss/cad-model/engine/mesh';
 
 type PickFilter = 'all' | 'face' | 'edge' | 'body';
 type EdgeEnds = { a: readonly number[]; b: readonly number[]; index?: number; faces?: readonly number[]; nativeVertices?: readonly [string, string]; meshVertices?: readonly [string, string] };
-type NativePickSource = { mesh: DisplayMesh } & ({ face: number } | { edge: number });
+type NativePickSource = { mesh: DisplayMesh; sectionVertices?: SectionVertexIds } & ({ face: number } | { edge: number });
 type VertexPick = { body: number; at: Vec3 };
 
 const meshOwners = new WeakMap<VertexPick, { id: string; mesh: DisplayMesh; at: Vec3 }>();
@@ -54,7 +55,7 @@ export function currentNativeVertexPoints(doc: StudioDoc, bodies: readonly BodyR
   const ids = new Set<string>();
   for (const pick of picks) {
     const owner = nativeOwners.get(pick);
-    if (!owner || owner.doc !== doc || owner.source.mesh !== mesh || ids.has(owner.id)) return null;
+    if (!owner || owner.doc !== doc || owner.source.mesh !== mesh || owner.source.sectionVertices || ids.has(owner.id)) return null;
     ids.add(owner.id);
   }
   return [picks[0].at, picks[1].at, picks[2].at];
@@ -83,7 +84,8 @@ export function pickVertex(filter: PickFilter, body: number | undefined, edges: 
           if (old && !old.every((v, axis) => v === point[axis])) meshAmbiguous = true;
           meshPoints.set(meshId, [...point] as Vec3);
         }
-        const id = edge.nativeVertices?.[k];
+        const id = source.sectionVertices && edge.index !== undefined
+          ? source.sectionVertices.get(edge.index)?.[k] : edge.nativeVertices?.[k];
         if (!id) ambiguous = true;
         else {
           native ??= new Map();

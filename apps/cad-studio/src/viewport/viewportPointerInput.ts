@@ -46,6 +46,7 @@ import type { PathGapDraft, PathGapInput } from '../sketch/usePathGap';
 import type { TwoPointSnapInput } from '../sketch/useTwoPointSnap';
 import { placedBoxSnapPoints, type PlacedBoxSnapPoint } from './placedBoxSnap';
 import type { PlacedSketchSnapInput, PlacedSketchSnapSource } from './placedSketchSnaps';
+import type { SectionCornerMesh } from './sectionEdgePick';
 import { pickVertex } from './vertexPick';
 import type { CageOverlay, Spot, ToolView, ViewportTool } from './Viewport';
 
@@ -57,7 +58,7 @@ export interface ViewportPointerProps {
   camActive?: boolean;
   /** G2: the section's clip plane keeps dot(normal, p) ≥ offset on native bodies or placed parts. */
   clip?: SectionClip | null;
-  sectionVertexPicking?: boolean;
+  sectionVertexPicking?: readonly (SectionCornerMesh | null)[];
   /** G24: the drawing's annotations on the model (model-annotations-v1 items), the one picked, and a pick's callback. */
   annotations?: readonly ModelAnnotation[] | null;
   onPickAnnotation?(id: string): void;
@@ -255,7 +256,11 @@ export function useViewportPointerInput({ canvas, camera, propsRef, rendering, f
     const native = !print && !propsRef.current.camActive
       && (!propsRef.current.clip || (propsRef.current.sectionVertexPicking && propsRef.current.clip.bodies === false))
       && !view.offsets.has(bi) && !view.transforms?.has(bi) && !view.ghostBodies.has(bi);
-    const source = native ? hit.edge ? { mesh, edge: hit.edge.edge } : hit.face ? { mesh, face: hit.face.face } : undefined : undefined;
+    const sectionCorner = propsRef.current.sectionVertexPicking?.[bi];
+    const sectionVertices = sectionCorner?.mesh === mesh ? sectionCorner.vertices : undefined;
+    const current = native && (!propsRef.current.sectionVertexPicking || !!sectionVertices);
+    const source = current ? hit.edge ? { mesh, sectionVertices, edge: hit.edge.edge }
+      : hit.face ? { mesh, sectionVertices, face: hit.face.face } : undefined : undefined;
     return pickVertex(f, bi, mesh.edges, x, y, p => camera.current.project(p as Vec3, w, h), print?.printed ? print.top : undefined, source, camera.current.ortho);
   };
   const drag = useRef<PointerDrag>({ mode: null, x: 0, y: 0, moved: false });

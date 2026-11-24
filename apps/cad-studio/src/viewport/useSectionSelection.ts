@@ -7,7 +7,7 @@ import type { Vec3 } from '@barocss/cad-model/engine/mesh';
 import type { BodyResult } from '@barocss/cad-model/engine/evaluate';
 import { cutAfter } from '@barocss/cad-model/engine/ids';
 import type { EdgeRef, FaceRef } from './renderer';
-import { retainedSectionEdges } from './sectionEdgePick';
+import { retainedSectionEdges, retainedSectionVertexIds, type SectionCornerMesh } from './sectionEdgePick';
 import { nativeVertexWitness } from './vertexPick';
 import type { Section } from './sectionView';
 
@@ -38,7 +38,10 @@ export function useSectionSelection({
     return shownBodies.map(shown => {
       const key = sourceKeys?.get(shown.key);
       const body = sourceBodies.findIndex(source => source.key === key);
-      return body < 0 ? null : { body, edges: retainedSectionEdges(sourceBodies[body].mesh, shown.mesh, section.planes[0], cutFrom) };
+      if (body < 0) return null;
+      const original = sourceBodies[body].mesh, plane = section.planes[0];
+      return { body, edges: retainedSectionEdges(original, shown.mesh, plane, cutFrom),
+        corner: { mesh: shown.mesh, vertices: retainedSectionVertexIds(original, shown.mesh, plane, cutFrom) } satisfies SectionCornerMesh };
     });
   }, [exactView, section, shownBodies, sourceKeys, sourceBodies, cutFrom]);
 
@@ -79,29 +82,17 @@ export function useSectionSelection({
     if (!shown || !source || !original || lookOf(doc, original).hidden
       || sourceBodies.filter(body => body.key === original.key).length !== 1) return null;
     const witness = nativeVertexWitness(hit, shown);
-    if (!witness) return null;
-    const incident = 'edge' in witness.source ? [shown.edges[witness.source.edge]]
-      : shown.edges.filter(edge => 'face' in witness.source && edge.faces.includes(witness.source.face));
+    if (!witness || witness.source.sectionVertices !== source.corner.vertices) return null;
     if ('face' in witness.source && cutAfter(shown.faces[witness.source.face]?.name ?? '', cutFrom)) return null;
     const matches = new Map<string, Vec3>();
-    for (const edge of incident) {
-      if (!edge) continue;
-      const index = source.edges.get(edge.index);
-      const from = index === undefined ? undefined : original.mesh.edges[index];
-      if (!from || !edge.nativeVertices?.includes(witness.id) || !from.nativeVertices) continue;
-      const pointIndex = [from.a, from.b].findIndex(point => point.every((value, k) => value === hit.at[k]));
-      if (pointIndex >= 0) matches.set(from.nativeVertices[pointIndex], pointIndex === 0 ? from.a : from.b);
-    }
-    if (matches.size !== 1) return null;
-    const ids = new Set<string>();
     for (const edge of original.mesh.edges) {
       edge.nativeVertices?.forEach((id, i) => {
-        if ((i === 0 ? edge.a : edge.b).every((value, k) => value === hit.at[k])) ids.add(id);
+        const point = i === 0 ? edge.a : edge.b;
+        if (point.every((value, k) => value === hit.at[k])) matches.set(id, point);
       });
     }
-    if (ids.size !== 1) return null;
-    const point = matches.values().next().value;
+    const point = matches.size === 1 ? matches.get(witness.id) : undefined;
     return point ? [...point] : null;
   };
-  return { selection, pick, pickVertex };
+  return { selection, pick, pickVertex, cornerMeshes: edgesBySectionBody.map(source => source?.corner ?? null) };
 }
