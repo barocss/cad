@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D1932: [Extrude a downward circle to the original upper rectangular face](notes/downward-circle-extrude-to-face-2026-11-25/README.md), #222. Check the reflected native disk, strict contact refusal, source editing and saved target identity.
+
 - D1931: [Repeat an original circular through-cut on a quarter arc](notes/prior-circular-quarter-path-2026-11-25/README.md), #25. Verify native bore ownership, physical clearance, History editing and fresh Open.
 
 - D1930: [Qualify both circular orientations in actual Studio outputs](notes/circular-instance-orientation-output-2026-11-25/README.md), #263. Verify the downloaded SVG and STEP independently and check retained source metadata.

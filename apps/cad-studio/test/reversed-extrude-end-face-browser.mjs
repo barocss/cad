@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { createFlow, sha256 } from './flow-helper.mjs';
 
 const baseline = process.argv.includes('--baseline');
+const circle = process.argv.includes('--circle');
 const pins = [
   'apps/cad-studio/test/reversed-extrude-end-face-browser.mjs',
   'packages/barocss-cad-model/src/app/profileCommands.ts',
@@ -12,10 +13,10 @@ const pins = [
   'packages/barocss-cad-model/src/engine/part.ts',
 ];
 const f = await createFlow({
-  name: 'reversed-extrude-end-face', output: process.argv[2], envFrozen: 'D1896_SOURCE_FROZEN',
+  name: 'reversed-extrude-end-face', output: process.argv[2], envFrozen: circle ? 'D1932_SOURCE_FROZEN' : 'D1896_SOURCE_FROZEN',
   initialFiles: pins, requiredFrozen: pins,
-  qualification: 'Extrude a rectangular profile from an exact -Z sketch plane to the original top face.',
-  limits: ['One top-level upright rectangular target Extrude and one literal rectangular source in desktop Studio.'],
+  qualification: `Extrude a ${circle ? 'circular' : 'rectangular'} profile from an exact -Z sketch plane to the original top face.`,
+  limits: ['One top-level upright rectangular target Extrude and one literal source in desktop Studio.'],
   inspectorSource: `
 import { readFileSync } from 'node:fs';
 import { toPartDocument } from '@barocss/cad-model/engine/part';
@@ -28,6 +29,7 @@ console.log(JSON.stringify({
     id, strict: checkBrep(brep, { strict: true }), bodyCount: output.bodyCount,
     mass: massPropertiesOf({ id, brep, ...output }),
     corners: brep.vertices.map(vertex => vertex.point),
+    cylinders: brep.faces.map(faceGeometry).filter(geometry => geometry.kind === 'cylinder'),
     caps: brep.faces.filter(face => face.name === id + '.top' || face.name === id + '.bottom')
       .map(face => ({ name: face.name, geometry: faceGeometry(face) })),
   })),
@@ -41,26 +43,27 @@ console.log(JSON.stringify({
 const seed = {
   format: 'barocss-cad-model', schema: 3, units: 'mm', parameters: {},
   nodes: [
-    { id: 'n0', kind: 'sketch', profile: 'rectangle', min: [-5, -5], max: [15, 15] },
+    { id: 'n0', kind: 'sketch', profile: 'rectangle', min: circle ? [0, 0] : [-5, -5], max: circle ? [10, 10] : [15, 15] },
     { id: 'n1', kind: 'extrude', sketch: 0, height: 5 },
-    { id: 'n2', kind: 'sketch', profile: 'rectangle', min: [2, -6], max: [8, -2],
+    { id: 'n2', kind: 'sketch', ...(circle ? { profile: 'circle', center: [5, -4], radius: 2 } : { profile: 'rectangle', min: [2, -6], max: [8, -2] }),
       plane: { origin: [0, 0, 20], normal: [0, 0, -1], xAxis: [1, 0, 0] } },
   ],
   outputs: { b1: { node: 1, side: 'solid' } }, nextId: 3,
 };
-const fileName = 'reversed-extrude-end-face.bcad';
+const fileName = circle ? 'reversed-circle-extrude-end-face.bcad' : 'reversed-extrude-end-face.bcad';
 const feature = { id: 'n3', kind: 'face-end-extrude', sketch: 2,
   target: { body: { node: 1, side: 'solid' }, feature: 'n1', face: 'n1.top' } };
-const bound = height => ({
-  ...seed, nodes: [seed.nodes[0], { ...seed.nodes[1], height }, seed.nodes[2], feature],
+const bound = (height, radius = 2) => ({
+  ...seed, nodes: [seed.nodes[0], { ...seed.nodes[1], height },
+    circle ? { ...seed.nodes[2], radius, ...(radius !== 2 ? { sideTags: { outer: ['e1'] } } : {}) } : seed.nodes[2], feature],
   outputs: { ...seed.outputs, b3: { node: 3, side: 'solid' } }, nextId: 4,
 });
 const button = (name, scope = f.page) => scope.getByRole('button', { name, exact: true });
 const field = (label, scope) => scope.getByLabel(label, { exact: true });
 const equal = (a, b) => Math.abs(a - b) <= 1e-8;
 
-async function verify(label, height) {
-  const doc = bound(height), travel = 20 - height;
+async function verify(label, height, radius = 2) {
+  const doc = bound(height, radius), travel = 20 - height;
   await f.page.waitForFunction(height => window.__studioDoc?.nodes?.length === 4 && window.__studioDoc.nodes[1].height === height, height);
   await f.ready();
   assert.deepEqual(await f.doc(), doc);
@@ -71,13 +74,27 @@ async function verify(label, height) {
   for (const solid of solids) {
     assert.equal(solid.strict.valid, true, solid.strict.issues.join('\n'));
     assert.equal(solid.bodyCount, 1);
-    assert.equal(solid.corners.length, 8);
   }
-  assert.ok(equal(stock.mass.volume, 400 * height));
-  assert.ok(equal(added.mass.volume, 24 * travel));
+  assert.equal(stock.corners.length, 8);
+  assert.ok(equal(stock.mass.volume, (circle ? 100 : 400) * height));
+  assert.ok(equal(added.mass.volume, (circle ? radius ** 2 * Math.PI : 24) * travel));
   [5, 4, (20 + height) / 2].forEach((value, i) => assert.ok(equal(added.mass.centroid[i], value)));
-  for (const x of [2, 8]) for (const y of [2, 6]) for (const z of [height, 20])
-    assert.ok(added.corners.some(point => point.every((value, axis) => equal(value, [x, y, z][axis]))));
+  if (circle) {
+    assert.equal(added.cylinders.length, 2);
+    for (const support of added.cylinders) {
+      [5, 4].forEach((value, i) => assert.ok(equal(support.c[i], value)));
+      assert.ok(equal(support.r, radius) && equal(Math.abs(support.a[2]), 1));
+      assert.equal(support.out, 1);
+    }
+    for (const point of added.corners) {
+      assert.ok(equal(Math.hypot(point[0] - 5, point[1] - 4), radius));
+      assert.ok(equal(point[2], height) || equal(point[2], 20));
+    }
+  } else {
+    assert.equal(added.corners.length, 8);
+    for (const x of [2, 8]) for (const y of [2, 6]) for (const z of [height, 20])
+      assert.ok(added.corners.some(point => point.every((value, axis) => equal(value, [x, y, z][axis]))));
+  }
   const lower = added.caps.find(({ geometry }) => geometry.kind === 'plane' && geometry.n[2] === -1);
   const upper = added.caps.find(({ geometry }) => geometry.kind === 'plane' && geometry.n[2] === 1);
   assert.ok(lower && equal(lower.geometry.o[2], height));
@@ -105,7 +122,7 @@ async function editDistance(height, accepted) {
 }
 
 async function saveAndReopen() {
-  const accepted = await f.doc(), project = 'D1896 end face ' + randomUUID();
+  const accepted = await f.doc(), project = 'Downward end face ' + randomUUID();
   const versions = f.page.getByRole('complementary', { name: 'Versions panel', exact: true });
   await button('Project and versions').click();
   await versions.getByRole('textbox', { name: 'Browser project name', exact: true }).fill(project);
@@ -127,14 +144,40 @@ async function saveAndReopen() {
   await f.freshOpen(file, accepted, '04-reopened-linked-extrude');
 }
 
+async function editCircleDiameter(height) {
+  f.phase = 'Refuse contact then edit the reopened circle diameter';
+  const original = await f.doc();
+  await f.openFeatureEditor(3, 'linked face termination');
+  await button('Edit sketch', f.editor()).click();
+  await f.sketchPanel().waitFor();
+  const diameter = f.sketchPanel().locator('input#sk-diameter');
+  await diameter.fill('8');
+  await diameter.press('Tab');
+  await f.page.locator('.topbar button.finish').click();
+  await f.waitToast(/strictly contain the entire projected circle/);
+  await f.same(original);
+  await f.snapshot('06-circle-contact-refused');
+  await diameter.fill('5');
+  await diameter.press('Tab');
+  await f.finishSketch('07-reopened-circle-diameter-five');
+  await verify('reopened-radius-edit', height, 2.5);
+}
+
 await f.run(async () => {
   await f.newPage();
+  if (circle && process.env.D1932_EDIT_FROM) {
+    await f.openFile(process.env.D1932_EDIT_FROM, 4);
+    const height = (await f.doc()).nodes[1].height;
+    await verify('before-reopened-diameter-change', height);
+    await editCircleDiameter(height);
+    return;
+  }
   await f.page.getByLabel('Model file', { exact: true }).setInputFiles({
     name: fileName, mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(seed)),
   });
   await f.same(seed);
   await f.page.getByTitle('Frame all (F)', { exact: true }).click();
-  await button('Sketch · rectangle', f.page.getByRole('group', { name: 'History', exact: true })).click();
+  await button(circle ? 'Sketch · circle' : 'Sketch · rectangle', f.page.getByRole('group', { name: 'History', exact: true })).click();
   await f.editor().waitFor();
   await f.closeEditor();
   await f.openExtrudeHud();
@@ -148,7 +191,7 @@ await f.run(async () => {
     return;
   }
 
-  f.phase = 'Pick the original top face from the reversed rectangular sketch';
+  f.phase = 'Pick the original top face from the reversed sketch';
   await depth.selectOption('to-face');
   await button('Top', f.page.locator('.views')).click();
   await f.page.waitForFunction(() => {
@@ -158,7 +201,7 @@ await f.run(async () => {
   const pick = await f.page.evaluate(point => {
     const xy = window.__studioScreenOf(point);
     return xy && document.elementFromPoint(...xy)?.closest('.vp-canvas') ? xy : null;
-  }, [12, 12, 5]);
+  }, circle ? [8, 8, 5] : [12, 12, 5]);
   assert.ok(pick);
   await f.page.mouse.click(...pick);
   await hud.getByText('n1.top', { exact: true }).waitFor();
@@ -189,4 +232,7 @@ await f.run(async () => {
   await editDistance(6, true);
   await verify('reopened-edit', 6);
   await f.snapshot('05-reopened-target-edit');
+  if (!circle) return;
+
+  await editCircleDiameter(6);
 });

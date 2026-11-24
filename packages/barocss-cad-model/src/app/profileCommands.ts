@@ -284,7 +284,7 @@ export const extrudeCommand: Command = {
     }
     if (v.depth === 'to-face') {
       const profile = extrudeProfile(ctx);
-      if (!profile || !canExtrudeToFace(ctx, profile) || (v.op !== undefined && v.op !== 'new')) throw refusal('VALUE', 'Extrude to face requires a finished XY rectangle and a new body.');
+      if (!profile || !canExtrudeToFace(ctx, profile) || (v.op !== undefined && v.op !== 'new')) throw refusal('VALUE', 'Extrude to face needs a supported finished profile and a new body.');
       const target = extrudeEndFaceTarget(ctx, v);
       if (!target) throw refusal('BAD_REFERENCE', 'Pick one original planar face of a current solid.');
       return withNode(ctx.doc, { kind: 'face-end-extrude', sketch: profile.index, target });

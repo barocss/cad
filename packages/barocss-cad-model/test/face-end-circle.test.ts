@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import {checkOutput,evaluateCadPart,faceGeometry,massPropertiesOf} from '@barocss/cad';
+import {checkBrep,checkOutput,evaluateCadPart,faceGeometry,massPropertiesOf} from '@barocss/cad';
 import type {DocPlane,SketchNode,StudioDoc} from '../src/engine/doc';
 import {currentFaceEndDistance,toPartDocument} from '../src/engine/part';
 import {readStudioDoc} from '../src/engine/migrate';
@@ -38,4 +38,72 @@ test('circle capability rejects malformed and alternate metadata without throwin
   ...['outline','holes','regions','on','association','pocketFloor','holeOutlines','regionLengths'].flatMap(key=>[{[key]:null},{[key]:{}},{[key]:[]}])];
  for(const patch of patches){const candidate={...source,...patch as object} as Circle;assert.doesNotThrow(()=>isFaceEndExtrudeSketch(candidate));assert.equal(isFaceEndExtrudeSketch(candidate),false);}
  assert.equal(isFaceEndExtrudeSketch({...source,radius:.01}),true);
+});
+
+
+function downwardCircle(radius = 2, height = 5, origin: [number, number, number] = [0, 0, 20]): StudioDoc {
+  const plane: DocPlane = { origin, normal: [0, 0, -1], xAxis: [1, 0, 0] };
+  return {
+    ...fixture(),
+    nodes: [
+      { id: 'n0', kind: 'sketch', profile: 'rectangle', min: [0, 0], max: [10, 10] },
+      { id: 'n1', kind: 'extrude', sketch: 0, height },
+      { id: 'n2', kind: 'sketch', profile: 'circle', center: [5, -4], radius, plane, sideTags: { outer: ['rim'] } },
+      { id: 'n3', kind: 'face-end-extrude', sketch: 2, target: { body: { node: 1, side: 'solid' }, feature: 'n1', face: 'n1.top' } },
+    ],
+  };
+}
+
+test('a downward circle reaches the original rectangular upper cap with the reflected centre and complete outward cylinders', () => {
+  const near = (a: number, b: number) => assert.ok(Math.abs(a - b) < 1e-8, `${a} vs ${b}`);
+  for (const [radius, height, origin] of [
+    [2, 5, [0, 0, 20]], [2, 8, [0, 0, 20]], [2.5, 8, [2, 1, 20]],
+  ] as const) {
+    const doc = downwardCircle(radius, height, [...origin]), travel = origin[2] - height;
+    const centre = [origin[0] + 5, origin[1] + 4, (height + origin[2]) / 2];
+    const opened = readStudioDoc(JSON.stringify(doc));
+    assert.ok('doc' in opened);
+    assert.deepEqual(opened.doc, doc);
+    const part = toPartDocument(doc);
+    assert.deepEqual(part.features[3], { id: 'n3', kind: 'extrude', sketch: 'n2', height: travel });
+    const [target, output] = evaluateCadPart(part).outputs;
+    assert.equal(target.id, 'n1');
+    near(massPropertiesOf(target).volume, 100 * height);
+    const check = checkBrep(output.brep, { strict: true });
+    assert.equal(check.valid, true, check.issues.join('\n'));
+    assert.deepEqual(check.counts, { bodies: 1, shells: 1, faces: 4, loops: 4, coedges: 12, edges: 6, vertices: 4 });
+    assert.equal(check.topology[0].genus, 0);
+    const mass = massPropertiesOf(output);
+    near(mass.volume, Math.PI * radius ** 2 * travel);
+    mass.centroid.forEach((value, axis) => near(value, centre[axis]));
+    const sides = output.brep.faces.filter(face => faceGeometry(face).kind === 'cylinder');
+    assert.equal(sides.length, 2);
+    for (const side of sides) {
+      assert.match(side.name ?? '', /^n3\.side\[rim\]/);
+      const support = faceGeometry(side);
+      assert.ok(support.kind === 'cylinder');
+      assert.ok(support.a[0] === 0 && support.a[1] === 0 && support.a[2] === 1);
+      assert.equal(support.out, 1);
+      near(support.c[0], centre[0]); near(support.c[1], centre[1]); near(support.r, radius);
+    }
+    for (const [name, z, normal] of [['n3.bottom', origin[2], 1], ['n3.top', height, -1]] as const) {
+      const face = output.brep.faces.find(candidate => candidate.name === name);
+      assert.ok(face);
+      const cap = faceGeometry(face);
+      assert.ok(cap.kind === 'plane');
+      near(cap.n[2], normal); near(cap.o[2], z);
+    }
+  }
+});
+
+test('downward circular termination refuses native contact and uses the reflected footprint', () => {
+  const touching = downwardCircle(4);
+  assert.throws(() => toPartDocument(touching), /strictly contain the entire projected circle/);
+  assert.doesNotThrow(() => toPartDocument(downwardCircle(3.999)));
+  assert.throws(() => toPartDocument(downwardCircle(4.001)), /contain the entire projected profile/);
+  const wrongSide = downwardCircle();
+  wrongSide.nodes[0] = { id: 'n0', kind: 'sketch', profile: 'rectangle', min: [0, -10], max: [10, 0] };
+  assert.throws(() => toPartDocument(wrongSide), /contain the entire projected profile/);
+  for (const height of [0, -5]) assert.throws(() => toPartDocument(downwardCircle(2, height)), /stay forward/);
+  for (const height of [20, 25]) assert.throws(() => toPartDocument(downwardCircle(2, height)), /positive extrusion direction/);
 });

@@ -93,7 +93,7 @@ test('downward XY containment uses reflected world Y and preserves the target au
   for (const height of [20, 21]) assert.throws(() => toPartDocument(downwardDocument(height)), /positive extrusion direction/);
 });
 
-test('downward XY admission stays on literal rectangles and the original upright rectangular upper cap', () => {
+test('downward XY admission stays on the supported literal profiles and the original upright rectangular upper cap', () => {
   const doc = downwardDocument(), sketch = doc.nodes[2], target = doc.nodes[1], end = doc.nodes[3];
   assert.ok(sketch.kind === 'sketch' && sketch.profile === 'rectangle' && sketch.plane && target.kind === 'extrude' && end.kind === 'face-end-extrude');
   for (const plane of [
@@ -101,7 +101,7 @@ test('downward XY admission stays on literal rectangles and the original upright
     { ...sketch.plane, xAxis: [2, 0, 0] }, { ...sketch.plane, xAxis: [-1, 0, 0] },
   ]) assert.equal(isFaceEndExtrudeSketch({ ...sketch, plane } as ModelNode), false);
   for (const profile of [
-    { id: 'n2', kind: 'sketch', profile: 'circle', center: [5, -4], radius: 1, plane: sketch.plane },
+    { id: 'n2', kind: 'sketch', profile: 'circle', center: [5, -4], radius: { parameter: 'r' }, plane: sketch.plane },
     { id: 'n2', kind: 'sketch', profile: 'polygon', points: [[2, -6], [8, -6], [5, -2]], plane: sketch.plane },
   ] as const) assert.equal(isFaceEndExtrudeSketch(profile as unknown as ModelNode), false);
   for (const changed of [
@@ -752,7 +752,7 @@ test('the Extrude command binds a picked native cap and resets the pick when dep
   const attachedDepth = cmd.fields!(attached).find(field => field.key === 'depth');
   assert.ok(attachedDepth?.kind === 'choice');
   assert.deepEqual(attachedDepth.options.map(option => option.value), ['distance', 'through']);
-  assert.throws(() => cmd.build!(attached, picked), /finished XY rectangle/i);
+  assert.throws(() => cmd.build!(attached, picked), /supported finished profile/i);
 });
 
 test('detaching keeps the exact current distance and the feature identity used by later nodes', () => {
