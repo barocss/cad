@@ -2,7 +2,7 @@ import { planarScaleSliver } from '../brep/brep-check-geometry.js';
 import { checkBrep, BrepError } from '../brep/brep-core.js';
 // Transform and pattern operation cases. Shared geometry/state stays with part-model.ts.
 import { fillCutSnapshot, fillCutPlacements } from '../features/fill-cut-pattern.js';
-import { curveCutOffsets } from '../features/curve-cut-pattern.js';
+import { curveCutOffsets, priorCurveCutPlan } from '../features/curve-cut-pattern.js';
 import { certifyPriorCutPlacements, certifyPriorRectangularCut } from './part-prior-rectangular-cut.js';
 import { certifyPriorCircularCut, certifyPriorCircularGrid, certifyPriorCircularPlacements } from './part-prior-circular-cut.js';
 import { faceGeometry } from '../brep/analytic-boolean.js';
@@ -201,9 +201,14 @@ export function transformOperation(f: CadPartFeature & Record<string, unknown>, 
     case 'curve-feature-pattern': {
       const spacing = dim(f.spacing as CadPartDim, 'spacing', true), count = integer(f.count, 'count', 1, CadPartLimits.copies);
       const source = f.source;
-      const offsets = curveCutOffsets(f.path, spacing, count, CadPartLimits.length, fail, source === undefined ? undefined : 'prior-xy-linear');
-      const { seed, tool, prior } = t.cutSource(f.target, source, 'path');
+      const priorPlan = source === undefined ? undefined : priorCurveCutPlan(f.path, spacing, count, CadPartLimits.length, fail);
+      const offsets = priorPlan ? priorPlan.offsets : curveCutOffsets(f.path, spacing, count, CadPartLimits.length, fail);
+      const { seed, tool, prior, priorCircular } = t.cutSource(f.target, source, 'path');
       if (prior) certifyPriorCutPlacements(prior, offsets.slice(1), fail, 'path');
+      if (priorCircular) {
+        if (!priorPlan?.straight) fail('CAPABILITY', 'path feature pattern source with an original circular cut needs an open level path of exact straight spans');
+        certifyPriorCircularPlacements(priorCircular, offsets.slice(1), fail, 'path');
+      }
       const matrix: BrepAffine['matrix'] = [1, 0, 0, 0, 1, 0, 0, 0, 1];
       return () => {
         if (count === 1 || !tool.length) return { kind: 'solid', parts: [seed] };

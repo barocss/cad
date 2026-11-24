@@ -11,8 +11,8 @@ export type PriorCircularCut = {
   later: { result: Part; cutter: Part };
 };
 type Circle = { center: readonly [number, number]; radius: number; tag: string };
-type Pattern = 'linear' | 'rectangular' | 'fill';
-const requirement = (pattern: Pattern) => `${pattern} feature pattern source needs one original circular through cut followed by one original rectangular through cut on upright rectangular stock and ${pattern === 'linear' ? 'one XY line' : pattern === 'fill' ? 'selected XY placements' : 'an XY grid'}`;
+type Pattern = 'linear' | 'rectangular' | 'fill' | 'path';
+const requirement = (pattern: Pattern) => `${pattern} feature pattern source needs one original circular through cut followed by one original rectangular through cut on upright rectangular stock and ${pattern === 'linear' ? 'one XY line' : pattern === 'fill' ? 'selected XY placements' : pattern === 'path' ? 'an open XY straight path' : 'an XY grid'}`;
 
 function profile(part: Part) {
   if (part.solid.kind !== 'upright' || part.solid.solid.slabs.length !== 1) return;

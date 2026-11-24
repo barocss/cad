@@ -163,7 +163,10 @@ test('bad source ownership, unsupported cutters and unsafe native offsets refuse
   refused(doc => { doc.features.splice(-1, 0, { id: 'moved', kind: 'translate', target: 'second', offset: [0, 0, 1] }); }, 'REFERENCE', /must still be active/);
   refused(doc => { doc.features.splice(-1, 0, { id: 'foreign', kind: 'difference', target: 'stock', tool: 'olderTool' }); doc.features.at(-1).source = 'foreign'; }, 'REFERENCE', /direct Difference chain/);
   for (const id of ['olderTool', 'newerTool']) refused(doc => { doc.features.find(feature => feature.id === id).height = 5; }, 'CAPABILITY', /path feature pattern source/);
-  refused(doc => { Object.assign(doc.features.find(feature => feature.id === 'olderSketch'), { profile: 'circle', center: [10, 9], radius: 1, sideTags: { outer: ['a'] } }); }, 'CAPABILITY');
+  refused(doc => {
+    Object.assign(doc.features.find(feature => feature.id === 'olderSketch'), { profile: 'circle', center: [10, 9], radius: 1, sideTags: { outer: ['a'] } });
+    doc.features.at(-1).path = { degree: 2, knots: [0, 0, 0, 1, 1, 1], controlPoints: [[0, 0, 2], [20, 10, 2], [40, 0, 2]], weights: [1, 1, 1] };
+  }, 'CAPABILITY');
   for (const [end, spacing, message] of [[[0, 18, 2], 18, /disjoint/], [[4, 0, 2], 4, /disjoint/], [[-8, 0, 2], 8, /strictly inside/], [[60, 0, 2], 60, /strictly inside/]])
     refused(doc => { Object.assign(doc.features.at(-1), { path: { degree: 1, knots: [0, 0, 1, 1], controlPoints: [[0, 0, 2], end], weights: [1, 1] }, spacing, count: 2 }); }, 'GEOMETRY', message);
   refused(doc => { doc.features.at(-1).count = 4; }, 'PARAMETER', /exceeds the open path length/);

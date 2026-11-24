@@ -125,19 +125,21 @@ function quadratic(path: RawNurbsPath, spacing: number, count: number, limit: nu
   const plan = planQuadraticCut(path.controlPoints, spacing, count, limit, fail, work);
   return { offsets: plan.offsets, length: plan.length };
 }
+/** One owned earlier-source plan preserves the existing curved and exact straight leaves. */
+export function priorCurveCutPlan(path: unknown, spacing: number, count: number, lengthLimit: number, fail: Refuse): { offsets: Point[]; straight: boolean } {
+  const owned = snapshot(path, fail), level = owned.controlPoints[0][2];
+  if (owned.controlPoints.some(point => point[2] !== level))
+    return fail('CAPABILITY', 'earlier-source path cut patterns require one exact constant authored Z');
+  if (owned.degree === 2 && owned.controlPoints.length === 3) {
+    const work = new QuadraticCutWork(fail); work.take(16384);
+    if (curved(owned, work)) return { offsets: quadratic(owned, spacing, count, lengthLimit, fail, work).offsets, straight: false };
+  }
+  return { offsets: legacyCurveCutOffsets(owned, spacing, count, lengthLimit, fail), straight: true };
+}
+
 /** Preserve the legacy offset leaf; only a single nonstraight three-pole span uses certification. */
 export function curveCutOffsets(path: unknown, spacing: number, count: number, lengthLimit: number, fail: Refuse, scope?: 'prior-xy-linear'): Point[] {
-  if (scope === 'prior-xy-linear') {
-    // Read authored data once. Both the certified quadratic and legacy straight leaf use this owned copy.
-    const owned = snapshot(path, fail), level = owned.controlPoints[0][2];
-    if (owned.controlPoints.some(point => point[2] !== level))
-      return fail('CAPABILITY', 'earlier-source path cut patterns require one exact constant authored Z');
-    if (owned.degree === 2 && owned.controlPoints.length === 3) {
-      const work = new QuadraticCutWork(fail); work.take(16384);
-      if (curved(owned, work)) return quadratic(owned, spacing, count, lengthLimit, fail, work).offsets;
-    }
-    return legacyCurveCutOffsets(owned, spacing, count, lengthLimit, fail);
-  }
+  if (scope === 'prior-xy-linear') return priorCurveCutPlan(path, spacing, count, lengthLimit, fail).offsets;
   const degree = record(path) ? Object.getOwnPropertyDescriptor(path, 'degree') : undefined;
   const poles = record(path) ? Object.getOwnPropertyDescriptor(path, 'controlPoints') : undefined;
   if (degree && !('value' in degree) || poles && !('value' in poles)) return fail('INPUT', 'path must contain only owned data properties');
@@ -148,6 +150,7 @@ export function curveCutOffsets(path: unknown, spacing: number, count: number, l
   }
   return legacyCurveCutOffsets(path, spacing, count, lengthLimit, fail);
 }
+
 /** Query-only exact qualification avoids the legacy decoder's uncharged trailing-zero loop.
  * The Number leaf receives the very same authored span endpoints in the very same order.
  */

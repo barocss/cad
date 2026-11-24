@@ -529,3 +529,44 @@ test('Fill repeats the original circular through-cut at the captured references 
     assert.equal(refused.state.doc, doc);
   }
 });
+
+test('the local Path command repeats an original circular through-cut using linked level straight spans', async () => {
+  const first = part('original circular Path source').box({ w: 60, d: 40, h: 10 })
+    .subtract(tool => tool.cylinder({ r: 2, h: 10, x: 10, y: 10 }));
+  const later = first.subtract(tool => tool.box({ w: 4, d: 2, h: 10, x: 24, y: 8 }));
+  const points: [number, number, number][] = [[6, 5, 0], [6, 13, 0], [6, 21, 0], [18, 21, 0], [30, 21, 0]];
+  const curve = { degree: 2, knots: [0, 0, 0, 1, 1, 2, 2, 2], points, weights: [1, 1, 1, 1, 1] };
+  const direct = importSource({ sources: {}, objects: [] }, curvesSource('circle_path', [curve]), 'Path');
+  const doc = { ...later.doc, direct }, path = direct.objects[0].id;
+  const source: BodyRef = { node: first.doc.nodes.length - 1, side: 'solid' };
+  const parent: BodyRef = { node: later.doc.nodes.length - 1, side: 'solid' };
+  const ctx = context(doc);
+  const values = { source: featureId(doc.nodes, source.node), path, spacing: 16, count: 3 };
+  const run = (spacing: number) => dispatchTool({ doc, bodies: ctx.bodies }, 'features', {
+    action: 'command', command: 'curve-feature-pattern', expectedRevision: revisionOf(doc),
+    bodies: [ctx.bodies[0].key], values: { ...values, spacing },
+  }, async candidate => evaluateDoc(candidate, 2));
+
+  const made = await run(values.spacing);
+  assert.equal(made.isError, false, made.content);
+  const pattern = made.state.doc.nodes.at(-1);
+  assert.ok(pattern?.kind === 'curve-feature-pattern');
+  assert.deepEqual({ source: pattern.source, parent: pattern.parent, path: pattern.path },
+    { source, parent, path: { objectId: path } });
+  assert.deepEqual(made.state.doc.direct, direct);
+  assert.deepEqual(made.state.doc.nodes.slice(0, -1), doc.nodes);
+  const opened = await readStudioFile(encodeStudioFile(made.state.doc));
+  assert.ok('doc' in opened);
+  assert.deepEqual(opened.doc, made.state.doc);
+  const [{ brep }] = partBreps(opened.doc);
+  const shape = checkBrep(brep, { strict: true });
+  assert.ok(shape.valid, shape.issues.join('\n'));
+  assert.equal(shape.topology[0].genus, 4);
+  assert.ok(Math.abs(brepMassProperties(brep, 1).volume - (23920 - 120 * Math.PI)) < 1e-8);
+
+  for (const spacing of [4, 21]) {
+    const refused = await run(spacing);
+    assert.equal(refused.isError, true, refused.content);
+    assert.equal(refused.state.doc, doc);
+  }
+});

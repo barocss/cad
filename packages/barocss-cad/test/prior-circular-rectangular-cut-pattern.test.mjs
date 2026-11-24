@@ -125,7 +125,7 @@ test('contacts, overlap, stock contact and the genuinely diagonal-only collision
   assert.equal(saveCadPart(initial), saved);
 });
 
-test('omitted source repeats the current rectangle while unsupported original families and Path stay refused', () => {
+test('omitted source repeats the current rectangle while unsupported original families and nonlevel Paths stay refused', () => {
   const ordinary = document(); delete ordinary.features.at(-1).source;
   const output = evaluateCadPart(ordinary).outputs[0], report = checkBrep(output.brep, { strict: true });
   assert.ok(report.valid, report.issues.join('\n')); assert.equal(report.topology[0].genus, 5);
@@ -151,5 +151,5 @@ test('omitted source repeats the current rectangle while unsupported original fa
     Object.assign(doc.features.at(-1), { kind: 'fill-feature-pattern', region: { points: [[0, 0], [60, 0], [60, 40], [0, 40]] }, anchor: [10, 10] });
     Object.assign(doc.features[5], { profile: 'circle', center: [26, 9], radius: 1, sideTags: { outer: ['laterRound'] } });
   });
-  refused(doc => { Object.assign(doc.features.at(-1), { kind: 'curve-feature-pattern', path: { degree: 1, knots: [0, 0, 1, 1], controlPoints: [[0, 0, 0], [8, 0, 0]], weights: [1, 1] } }); });
+  refused(doc => { Object.assign(doc.features.at(-1), { kind: 'curve-feature-pattern', path: { degree: 1, knots: [0, 0, 1, 1], controlPoints: [[0, 0, 0], [8, 0, 1]], weights: [1, 1] } }); });
 });
