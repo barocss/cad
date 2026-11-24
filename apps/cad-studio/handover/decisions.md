@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1953: [Keep a blank Sketch Plane Angle out of placement](notes/sketch-plane-angle-blank-input-2026-11-25/README.md), #21. Verify explicit input, draft ownership and the native placed extrusion after fresh Open.
 - D1952: [Extract Studio document entry actions](notes/studio-document-entry-actions-2026-11-25/README.md), #44. Compare New Part, Template, Versions and cage confirmation in desktop Studio.
 - D1951: [Keep a blank Slot angle out of sketch geometry](notes/slot-angle-blank-input-2026-11-25/README.md), #21. Verify explicit zero, negative input, draft ownership and native reopen.
 - D1950: [Repeat the earlier circular through-cut on one polynomial quadratic Path](notes/prior-circular-quadratic-path-2026-11-25/README.md), #25. Verify independent length stations, original apertures, atomic refusal and desktop fresh Open.

@@ -52,9 +52,9 @@ export function SketchPanel({ sketch, constraintInspection, constraintDocument, 
   onBand?: { make(offset: number, width?: number): void; edit(patch: { offset?: number; width?: number | null }): void; remove(): void } }) {
   const [splineError, setSplineError] = useState<string | null>(null);
   const s = sketch.shape;
-  const [blankField, setBlankField] = useState<{ id: string; owner: SketchShape } | null>(null);
-  // Undo and outline switches can restore a previously rendered shape object.
-  if (blankField && blankField.owner !== s) setBlankField(null);
+  const [blankField, setBlankField] = useState<{ id: string; owner: SketchShape | SketchState } | null>(null);
+  // Undo can restore a previously rendered outline or placement draft.
+  if (blankField && blankField.owner !== s && blankField.owner !== sketch) setBlankField(null);
   const openLineEditable = canEditOpenLineLength(s) && !sketch.association && !sketch.band && !sketch.anchor?.face?.linkSource;
   const terminalLineEditable = canEditOpenPolylineTerminalDraft(sketch);
   const outlines = onActivateOutline ? sketchCutInputs(sketch).shapes.flatMap((shape, index) =>
@@ -62,12 +62,12 @@ export function SketchPanel({ sketch, constraintInspection, constraintDocument, 
   const activeOutline = outlines.find(outline => outline.shape === s)?.index ?? '';
   // A refusal belongs to the shape it was made on.
   useEffect(() => setSplineError(null), [s]);
-  const liveNumber = (id: string, value: number, set: (v: number) => void) => ({
-    value: blankField?.owner === s && blankField?.id === id ? '' : round(value),
+  const liveNumber = (id: string, value: number, set: (v: number) => void, owner: SketchShape | SketchState | null = s) => ({
+    value: blankField?.owner === owner && blankField?.id === id ? '' : round(value),
     onChange(event: ChangeEvent<HTMLInputElement>) {
       const value = event.currentTarget.value;
       if (value === '') {
-        if (s) setBlankField({ id, owner: s });
+        if (owner) setBlankField({ id, owner });
         return;
       }
       const next = Number(value);
@@ -76,7 +76,7 @@ export function SketchPanel({ sketch, constraintInspection, constraintDocument, 
       set(next);
     },
     onBlur() {
-      setBlankField(current => current?.id === id && current.owner === s ? null : current);
+      setBlankField(current => current?.id === id && current.owner === owner ? null : current);
     },
   });
   const num = (id: string, label: string, value: number, set: (v: number) => void, min?: number) => (
@@ -139,8 +139,10 @@ export function SketchPanel({ sketch, constraintInspection, constraintDocument, 
             <span className={NUM}><Input aria-label="Plane offset" type="number" step="any" value={anchor.offset}
               onChange={e => { const text = e.target.value, v = Number(text); if (text && Number.isFinite(v) && Math.abs(v) <= 10000) onPlace(anchor.kind, v, anchor.angle); }} /><em>mm</em></span></label>
           <label className={FIELD}><span>Angle</span>
-            <span className={NUM}><Input aria-label="Plane angle" type="number" step={5} min={-89} max={89} value={round(anchor.angle ?? 0)}
-              onChange={e => { const v = Number(e.target.value); if (Number.isFinite(v) && Math.abs(v) < 90) onPlace(anchor.kind, anchor.offset, v); }} /><em>°</em></span></label>
+            <span className={NUM}><Input aria-label="Plane angle" type="number" step={5} min={-89} max={89}
+              {...liveNumber('plane-angle', anchor.angle ?? 0, value => {
+                if (Math.abs(value) < 90) onPlace(anchor.kind, anchor.offset, value);
+              }, sketch)} /><em>°</em></span></label>
         </div>;
       })()}
       <VertexPlaneSummary anchor={sketch.anchor} plane={sketch.plane} />
