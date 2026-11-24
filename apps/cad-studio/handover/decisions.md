@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D1922: [Qualify vertical and reversed aligned extension roles](notes/drawing-extension-orientations-2026-11-24/README.md), #240. Verify a naturally short witness, independent dimensions and actual R12 and R2000 output.
+
 - D1921: [Offset the original perpendicular annular inlet](notes/perpendicular-annular-inlet-offset-2026-11-24/README.md), #17. Move only the native lead with a signed distance, retain three exact junctions and refuse contact with the first bend.
 
 - D1920: [Qualify the source-bound Drawing Note lifecycle](notes/source-bound-note-lifecycle-2026-11-24/README.md), #245. Verify owning sheet, units, view changes, an original delayed reply, explicit repair and revised Note text after native Open.
