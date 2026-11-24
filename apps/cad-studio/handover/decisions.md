@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D1934: [Draft three selected sides of a cardinal box](notes/three-side-box-draft-2026-11-25/README.md), #14. Verify signed angle editing, original shared edges, strict native geometry and fresh Open.
+
 - D1933: [Move geometry row composition into Model Browser](notes/model-browser-geometry-rows-2026-11-25/README.md), #44. Compare desktop reveal, isolation and prior-cut source behavior.
 
 - D1932: [Extrude a downward circle to the original upper rectangular face](notes/downward-circle-extrude-to-face-2026-11-25/README.md), #222. Check the reflected native disk, strict contact refusal, source editing and saved target identity.

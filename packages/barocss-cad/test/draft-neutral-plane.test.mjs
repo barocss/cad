@@ -202,8 +202,75 @@ test('adjacent Draft refuses a collapsed box, unsupported neutral planes and non
   assert.throws(() => evaluateCadPart(collapsed), e => e.code === 'GEOMETRY' && /closes a box wall/.test(e.message));
   assert.deepEqual(collapsed, before);
   assert.throws(() => evaluateCadPart(cornerDocument({ neutral: -2 })), e => e.code === 'CAPABILITY' && /neutral plane at the start/.test(e.message));
-  assert.throws(() => evaluateCadPart(cornerDocument({ faces: ['n1.side[e1]', right, back] })), e => e.code === 'CAPABILITY' && /meet along an edge/.test(e.message));
+  assert.throws(() => evaluateCadPart(cornerDocument({ faces: ['n1.side[e1]', right, back, 'n1.side[e4]'] })), e => e.code === 'CAPABILITY' && /meet along an edge/.test(e.message));
+  assert.throws(() => evaluateCadPart(cornerDocument({ faces: [right, right, back] })), e => e.code === 'CAPABILITY' && /meet along an edge/.test(e.message));
+  assert.throws(() => evaluateCadPart(cornerDocument({ faces: [right, back, 'n1.top'] })), e => e.code === 'CAPABILITY' && /square to the pull/.test(e.message));
   const holed = cornerDocument({ target: 'h' });
   holed.features.splice(2, 0, { id: 'h', kind: 'hole', target: 'n1', center: [20, 15], radius: 2 });
   assert.throws(() => evaluateCadPart(holed), e => e.code === 'CAPABILITY' && /meet along an edge/.test(e.message));
+});
+
+const front = 'n1.side[e1]';
+const threeSides = [right, front, back];
+function threeSideBox(angle, pull = 'z') {
+  const doc = cornerDocument({ angle, pull, faces: threeSides });
+  doc.features[1].height = 40;
+  return doc;
+}
+test('three box sides retain both shared native corners and agree with independent signed-pull mass', () => {
+  const H = 40, W = 40, D = 30;
+  for (const [angle, pull] of [[10, 'z'], [-12, 'z'], [10, '-z']]) {
+    const input = threeSideBox(angle, pull), before = structuredClone(input);
+    const removeDraft = { ...input, features: input.features.slice(0, -1) };
+    const source = evaluateCadPart(removeDraft), old = source.outputs[0].brep;
+    const [out] = evaluateCadPart(input).outputs, brep = out.brep;
+    assert.deepEqual(input, before);
+    const strict = checkBrep(brep, { strict: true });
+    assert.equal(strict.valid, true, strict.issues.join(String.fromCharCode(10)));
+    assert.deepEqual(strict.counts, { bodies: 1, shells: 1, faces: 6, loops: 6, coedges: 24, edges: 12, vertices: 8 });
+    assert.equal(strict.topology[0].genus, 0);
+    assert.deepEqual(brep.faces.map(f => f.name).sort(), old.faces.map(f => f.name).sort());
+    assert.deepEqual(brep.edges.map(e => e.name).sort(), old.edges.map(e => e.name).sort());
+    const reversed = structuredClone(input); reversed.features.at(-1).faces.reverse();
+    assert.deepEqual(evaluateCadPart(reversed).outputs[0].brep, brep);
+    assert.deepEqual(reevaluate(source, { document: input }).outputs[0].brep, brep);
+
+    const slope = Math.tan(angle * Math.PI / 180), sign = pull === 'z' ? 1 : -1, start = sign > 0 ? 0 : H;
+    const volume = W * D * H - (2 * W + D) * slope * H ** 2 / 2 + 2 * slope ** 2 * H ** 3 / 3;
+    const t = (W * D * H ** 2 / 2 - (2 * W + D) * slope * H ** 3 / 3 + slope ** 2 * H ** 4 / 2) / volume;
+    const mass = massPropertiesOf(out);
+    close(mass.volume, volume, 1e-7, 'three-side draft volume');
+    [(W - slope * t) / 2, D / 2, start + sign * t].forEach((value, i) => close(mass.centroid[i], value, coordinateLimit, 'three-side centroid'));
+    for (const [name, normal] of [[right, [1, 0, sign * slope]], [front, [0, -1, sign * slope]], [back, [0, 1, sign * slope]]]) {
+      const plane = faceGeometry(brep.faces.find(f => f.name === name));
+      assert.equal(plane.kind, 'plane');
+      plane.n.forEach((value, i) => close(value, normal[i] / Math.hypot(...normal), coordinateLimit, 'turned normal'));
+    }
+    for (const [face, y0, y1] of [[front, 0, slope * H], [back, D, D - slope * H]]) {
+      const key = [right, face].sort().join('|');
+      const edge = brep.edges.find(e => e.name === key);
+      assert.ok(edge && edge.curve.degree === 1 && edge.curve.controlPoints.length === 2);
+      for (const point of [[W, y0, start], [W - slope * H, y1, start + sign * H]]) {
+        assert.ok(edge.curve.controlPoints.some(value => samePoint(value, point)));
+        for (const name of [right, face]) {
+          const plane = faceGeometry(brep.faces.find(f => f.name === name));
+          assert.equal(plane.kind, 'plane');
+          close(point.reduce((d, x, i) => d + (x - plane.o[i]) * plane.n[i], 0), 0, coordinateLimit, 'shared endpoint on native support');
+        }
+      }
+    }
+  }
+});
+test('three box sides refuse a collapsed depth and an off-start neutral plane', () => {
+  const exactLimit = Math.atan(15 / 40) * 180 / Math.PI;
+  assert.doesNotThrow(() => evaluateCadPart(threeSideBox(exactLimit - 0.01)));
+  for (const angle of [exactLimit, exactLimit + 0.01]) {
+    const input = threeSideBox(angle), retained = structuredClone(input);
+    assert.throws(() => evaluateCadPart(input), e => e.code === 'GEOMETRY' && /closes a box wall/.test(e.message));
+    assert.deepEqual(input, retained);
+  }
+  for (const neutral of [-1, 1]) {
+    const input = threeSideBox(10); input.features.at(-1).neutral = neutral;
+    assert.throws(() => evaluateCadPart(input), e => ['CAPABILITY', 'SELECTION'].includes(e.code));
+  }
 });

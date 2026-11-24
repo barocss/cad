@@ -75,3 +75,24 @@ test('Studio Draft creates a fixed neutral coordinate and preserves its binding 
   assert.equal(restored.neutral, undefined);
   assert.throws(() => command.build!({ ...editContext, doc: { ...bound } }, values), /Open the current Draft in History again/);
 });
+
+test('Studio Draft retains three selected box sides through its editable History command', () => {
+  const source = rectanglePart(40, 30, 40), ctx = ctxOn(source, [[1, 0, 0], [0, -1, 0], [0, 1, 0]]);
+  const created = draft.build!(ctx, { ...draft.defaults!(ctx), deg: 10, pull: 'z' });
+  const index = created.nodes.length - 1, node = created.nodes[index];
+  assert.ok(node.kind === 'draft');
+  assert.equal(new Set(node.faces).size, 3);
+  assert.deepEqual(created.nodes.slice(0, -1), source.nodes);
+  const checkVolume = (doc: StudioDoc, angle: number) => {
+    const s = Math.tan(angle * Math.PI / 180), h = 40;
+    const expected = 40 * 30 * h - 110 * s * h ** 2 / 2 + 2 * s ** 2 * h ** 3 / 3;
+    assert.ok(Math.abs(volume(doc) - expected) < 1e-7);
+  };
+  checkVolume(created, 10);
+  const command = editSavedDraftCommand(created, index);
+  assert.ok(command?.build && command.defaults);
+  const editContext = { doc: created, bodies: [], selection: { faces: [], edges: [], bodies: [] } };
+  const edited = command.build(editContext, { ...command.defaults(editContext), deg: -12 });
+  assert.deepEqual(edited.nodes[index], { ...node, angle: -12 });
+  checkVolume(edited, -12);
+});

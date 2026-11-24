@@ -25,24 +25,25 @@ function boxDraftPlane(id: string, axis: 0 | 1 | 2, side: 0 | 1, base: Ranges, t
     controlPoints, weights: [[1, 1], [1, 1]] };
 }
 
-/** Draft two incident box sides in the pull frame. Each top corner is the intersection of three supports. */
-export function draftBoxCorner(brep: Brep, names: readonly [string, string], neutral: number, angle: number, id: string, fail: Tools['fail']): Brep | undefined {
+/** Draft two incident or three transverse sides of a box. Top corners meet at the moved supports. */
+export function draftBoxCorner(brep: Brep, names: readonly string[], neutral: number, angle: number, id: string, fail: Tools['fail']): Brep | undefined {
+  if ((names.length !== 2 && names.length !== 3) || new Set(names).size !== names.length) return undefined;
   const chosen = names.map(name => brep.faces.filter(face => face.name === name));
   if (chosen.some(faces => faces.length !== 1)) return undefined;
   const box = cardinalBoxOf(brep);
   if (!box) return undefined;
-  const [first, second] = chosen.map(([face]) => box.sides.get(face.id)!);
-  // Distinct transverse axes on a box have exactly one shared edge.
-  if (first.axis === 2 || second.axis === 2 || first.axis === second.axis) return undefined;
+  const sides = chosen.map(([face]) => box.sides.get(face.id)!);
+  // Both transverse axes must participate. Two opposite faces use the existing wedge path.
+  if (sides.some(side => side.axis === 2) || new Set(sides.map(side => side.axis)).size !== 2) return undefined;
   const base = box.ranges[2][0];
   if (neutral < base) fail('CAPABILITY', 'Draft on adjacent box sides needs the neutral plane at the start of the pull');
   if (neutral !== base) return undefined;
 
   const slope = Math.tan(angle), inset = (box.ranges[2][1] - neutral) * slope;
   const top = box.ranges.map(range => [...range]);
-  for (const { axis, side } of [first, second]) {
+  for (const { axis, side } of sides) {
     top[axis][side] += side === 0 ? inset : -inset;
-    if (top[axis][side] === box.ranges[axis][side]) fail('GEOMETRY', 'the angle is too small to move both box sides');
+    if (top[axis][side] === box.ranges[axis][side]) fail('GEOMETRY', 'the angle is too small to move the selected box sides');
   }
   const extent = Math.max(...box.ranges.flat().map(Math.abs), ...top.flat().map(Math.abs));
   if (extent > CadNumericPolicy.coordinateAbs) fail('PARAMETER', 'the drafted box exceeds the modeling coordinate range');

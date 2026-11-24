@@ -191,9 +191,9 @@ export function faceFinishOperation(f: CadPartFeature & Record<string, unknown>,
         const fromZ: BrepAffine['matrix'] | null = pull === 'x' ? [0, 0, 1, 1, 0, 0, 0, 1, 0] : pull === 'y' ? [0, 1, 0, 0, 0, 1, 1, 0, 0] : pull === '-x' ? [0, 0, -1, 1, 0, 0, 0, -1, 0] : pull === '-y' ? [0, -1, 0, 0, 0, -1, 1, 0, 0] : pull === '-z' ? [1, 0, 0, 0, -1, 0, 0, 0, -1] : null;
         const localSolid = toZ ? affine(target[0].solid, toZ, [0, 0, 0]) : target[0].solid;
         const box = bounds(localSolid), zN = negativePull && neutral !== undefined ? -neutral : neutral ?? box.min[2], a = (angle as number) * Math.PI / 180;
-        if (names.length === 2 && names[0] !== names[1]) {
+        if (names.length === 2 || names.length === 3) {
           // Materialize upright input under this feature's id regardless of the source Part's cached B-rep.
-          const corner = draftBoxCorner(brepOf({ solid: localSolid }, at), [names[0], names[1]], zN, a, at, fail);
+          const corner = draftBoxCorner(brepOf({ solid: localSolid }, at), names, zN, a, at, fail);
           if (corner) {
             const result: Solid = { kind: 'brep', brep: corner };
             return one(fromZ ? affine(result, fromZ, [0, 0, 0]) : result);
