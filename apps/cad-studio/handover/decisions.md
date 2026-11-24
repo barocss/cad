@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D1928: [Keep the seed orientation in a circular instance pattern](notes/circular-instance-orientation-2026-11-25/README.md), #263. Verify both modes, bounds, native Save/Open and the previous reader refusal.
+
 - D1927: [Link the original perpendicular annular outlet to a native plane](notes/perpendicular-annular-outlet-reference-plane-2026-11-24/README.md), #17. Verify a parallel donor, its live translation, reference reselection and atomic collapse refusal in Studio.
 
 - D1926: [Move section and overlay test observations out of App](notes/studio-section-overlay-dev-hooks-2026-11-24/README.md), #44. Compare actual section, selection, Save/Open and affected overlay behavior.

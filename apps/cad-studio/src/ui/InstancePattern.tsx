@@ -1,6 +1,6 @@
 import { useEffect, useId, useState } from 'react';
 import type { InstancePattern, PartInstance } from '@barocss/cad-model/engine/doc';
-import { PATTERN_MIN, PATTERN_MAX, type AddPatternOptions, type EditPatternOptions } from '@barocss/cad-model/assembly/patterns';
+import { PATTERN_MIN, PATTERN_MAX, type AddPatternOptions, type EditPatternOptions, type PatternOrientation } from '@barocss/cad-model/assembly/patterns';
 import { Button } from '@/components/ui/button';
 import { FIELD } from './panelStyles';
 
@@ -12,11 +12,12 @@ type Axis = keyof typeof AXES | 'Custom';
 /** The axis a direction is exactly (+X, +Y, +Z), else 'Custom': a direction a chat or a file made is shown as it is and kept unless the choice changes. */
 export const axisOf = (v: readonly number[]): Axis => (Object.keys(AXES) as (keyof typeof AXES)[]).find(a => AXES[a].every((x, k) => x === v[k])) ?? 'Custom';
 
-export interface Draft { kind: 'linear' | 'circular'; count: string; spacing: string; angle: string; axis: Axis; originX: string; originY: string; originZ: string; vectorX: string; vectorY: string; vectorZ: string }
+export interface Draft { kind: 'linear' | 'circular'; orientation: PatternOrientation; count: string; spacing: string; angle: string; axis: Axis; originX: string; originY: string; originZ: string; vectorX: string; vectorY: string; vectorZ: string }
 export function draftOf(p: InstancePattern | undefined): Draft {
-  const origin = p?.kind === 'circular' ? p.origin : [0, 0, 0];
+  const origin = p && p.kind !== 'linear' ? p.origin : [0, 0, 0];
+  const orientation: PatternOrientation = p?.kind === 'circular-fixed' ? 'keep' : 'rotate';
   const vector = !p ? AXES.X : p.kind === 'linear' ? p.dir : p.axis;
-  const coordinates = { vectorX: String(vector[0]), vectorY: String(vector[1]), vectorZ: String(vector[2]), originX: String(origin[0]), originY: String(origin[1]), originZ: String(origin[2]) };
+  const coordinates = { orientation, vectorX: String(vector[0]), vectorY: String(vector[1]), vectorZ: String(vector[2]), originX: String(origin[0]), originY: String(origin[1]), originZ: String(origin[2]) };
   if (!p) return { kind: 'linear', count: '3', spacing: '20', angle: '120', axis: 'X', ...coordinates };
   return p.kind === 'linear' ? { kind: 'linear', count: String(p.count), spacing: String(p.spacing), angle: '120', axis: axisOf(p.dir), ...coordinates }
     : { kind: 'circular', count: String(p.count), spacing: '20', angle: String(p.angle), axis: axisOf(p.axis), ...coordinates };
@@ -37,10 +38,12 @@ export function patternVector(draft: Draft): [number, number, number] {
 /** What Apply sends for an existing pattern: its numbers, and the direction/axis/origin only when changed (a custom one stays as it is). */
 export function patternEdit(pattern: InstancePattern, draft: Draft): EditPatternOptions {
   const origin = patternOrigin(draft);
-  const moved = pattern.kind === 'circular' && origin.some((v, i) => v !== pattern.origin[i]);
   const vector = patternVector(draft), previous = pattern.kind === 'linear' ? pattern.dir : pattern.axis;
   const count = Number(draft.count), turned = vector.some((v, i) => v !== previous[i]) ? vector : undefined;
-  return pattern.kind === 'linear' ? { id: pattern.id, count, spacing: Number(draft.spacing), ...(turned ? { dir: turned } : {}) } : { id: pattern.id, count, angle: Number(draft.angle), ...(turned ? { axis: turned } : {}), ...(moved ? { origin } : {}) };
+  if (pattern.kind === 'linear') return { id: pattern.id, count, spacing: Number(draft.spacing), ...(turned ? { dir: turned } : {}) };
+  const moved = origin.some((v, i) => v !== pattern.origin[i]);
+  const orientation = draft.orientation !== (pattern.kind === 'circular-fixed' ? 'keep' : 'rotate') ? draft.orientation : undefined;
+  return { id: pattern.id, count, angle: Number(draft.angle), ...(turned ? { axis: turned } : {}), ...(moved ? { origin } : {}), ...(orientation ? { orientation } : {}) };
 }
 
 /** Explicit full-circle drafting: count includes the seed; preserve a clockwise step's sign. */
@@ -71,31 +74,35 @@ export function InstancePatternControls({ inst, pattern, occurrenceOf, onAdd, on
       <span>Pattern <b>{occurrenceOf.id}</b> · {inst.pattern.k + 1} of {occurrenceOf.count}</span>
       <Button variant="ghost" title="Leave this occurrence out of the pattern (editing the pattern's skip list brings it back)" onClick={onSkip}>Skip</Button>
     </div>);
-  const set = (k: keyof Draft, v: string) => { setDraft(d => ({ ...d, [k]: v })); setError(undefined); };
+  const set = <K extends keyof Draft>(k: K, v: Draft[K]) => { setDraft(d => ({ ...d, [k]: v })); setError(undefined); };
   const apply = () => {
     let why: string | undefined;
     if (pattern) why = onEdit(patternEdit(pattern, draft));
     else {
       const count = Number(draft.count), dir = patternVector(draft);
-      why = onAdd(draft.kind === 'linear' ? { seed: inst.id, kind: 'linear', count, spacing: Number(draft.spacing), dir } : { seed: inst.id, kind: 'circular', count, angle: Number(draft.angle), axis: dir, origin: patternOrigin(draft) });
+      why = onAdd(draft.kind === 'linear' ? { seed: inst.id, kind: 'linear', count, spacing: Number(draft.spacing), dir } : { seed: inst.id, kind: 'circular', count, angle: Number(draft.angle), axis: dir, origin: patternOrigin(draft), orientation: draft.orientation });
     }
     setError(why);
     if (!why) setOpen(false);
   };
   if (!open && !pattern) return <Button variant="ghost" onClick={() => setOpen(true)} title="Repeat this part along a line or about an axis">Pattern…</Button>;
-  const kind = pattern?.kind ?? draft.kind;
+  const kind = pattern ? (pattern.kind === 'linear' ? 'linear' : 'circular') : draft.kind;
   return (
     <div className="flex flex-col gap-1 rounded-md border border-border p-2" role="group" aria-label="Instance pattern" aria-describedby={error ? errorId : undefined}>
       <div className="card-title">PATTERN{pattern ? ` · ${pattern.id}` : ''}</div>
       {!pattern && <label className={FIELD}><span>Kind</span>
-        <select aria-label="Pattern kind" value={draft.kind} onChange={e => set('kind', e.target.value)}><option value="linear">Linear</option><option value="circular">Circular</option></select></label>}
+        <select aria-label="Pattern kind" value={draft.kind} onChange={e => set('kind', e.target.value as Draft['kind'])}><option value="linear">Linear</option><option value="circular">Circular</option></select></label>}
       <label className={FIELD}><span>Count</span><input aria-label="Pattern count" type="number" step="1" value={draft.count} onChange={e => set('count', e.target.value)} /></label>
       {kind === 'linear'
         ? <label className={FIELD}><span>Spacing mm</span><input aria-label="Pattern spacing" type="number" step="any" value={draft.spacing} onChange={e => set('spacing', e.target.value)} /></label>
         : <label className={FIELD}><span>Angle °</span><input aria-label="Pattern angle" type="number" step="any" value={draft.angle} onChange={e => set('angle', e.target.value)} /></label>}
       {kind === 'circular' && <Button variant="ghost" disabled={fullCircleAngle(draft) === undefined} title="Set the angle to 360° divided by count, including the seed; keep the turn direction. Apply to commit." onClick={() => { const angle = fullCircleAngle(draft); if (angle !== undefined) set('angle', angle); }}>Space full circle</Button>}
+      {kind === 'circular' && <label className={FIELD}><span>Orientation</span>
+        <select aria-label="Pattern orientation" value={draft.orientation} onChange={e => set('orientation', e.target.value as PatternOrientation)}>
+          <option value="rotate">Rotate with pattern</option><option value="keep">Keep seed orientation</option>
+        </select></label>}
       <label className={FIELD}><span>{kind === 'linear' ? 'Along' : 'About'}</span>
-        <select aria-label="Pattern axis" value={draft.axis} onChange={e => set('axis', e.target.value)}>{([...Object.keys(AXES), 'Custom'] as Axis[]).map(a => <option key={a} value={a}>{a}</option>)}</select></label>
+        <select aria-label="Pattern axis" value={draft.axis} onChange={e => set('axis', e.target.value as Axis)}>{([...Object.keys(AXES), 'Custom'] as Axis[]).map(a => <option key={a} value={a}>{a}</option>)}</select></label>
       {draft.axis === 'Custom' && <fieldset className="flex flex-col gap-1"><legend>{kind === 'linear' ? 'Direction vector' : 'Axis direction'}</legend>
         {(['X', 'Y', 'Z'] as const).map(a => {
           const key = `vector${a}` as 'vectorX' | 'vectorY' | 'vectorZ';

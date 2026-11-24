@@ -142,7 +142,7 @@ async function describe(doc: StudioDoc, base: BodyResult[], evaluate: Evaluate, 
   return {
     base: { id: BASE, feature_count: doc.nodes.length, bodies: base.length, volume: r3(base.reduce((s, b) => s + (b.volume ?? 0), 0)), note: 'the document\'s own part, fixed at the origin', ...memberInterfaceList(base), ...(detail === BASE ? mateFaces(withDatums(tableOf(doc), doc)) : {}) },
     instances,
-    ...(doc.instancePatterns?.length ? { patterns: doc.instancePatterns.map(p => ({ ...p, ...(p.skip?.length ? {} : { skip: undefined }) })) } : {}),
+    ...(doc.instancePatterns?.length ? { patterns: doc.instancePatterns.map(p => ({ ...p, ...(p.kind === 'circular-fixed' ? { kind: 'circular', orientation: 'keep' } : {}), ...(p.skip?.length ? {} : { skip: undefined }) })) } : {}),
     mates: mates.map((m, i) => ({ id: m.id, label: mateLabel(m, i), kind: m.kind, a: m.a, b: m.b, ...(m.distance !== undefined ? { distance: m.distance } : {}), ...(m.angle !== undefined ? { angle: m.angle } : {}), ...(m.flip || (m.kind === 'concentric' && m.flip === false) ? { flip: m.flip } : {}) })),
     ...(solved.length ? { problems: solved } : {}),
     ...(detail ? {} : { note: 'mateable faces of one part: get_assembly {"faces_of": part id or "base"}' }),
@@ -299,7 +299,7 @@ export async function runAssemblyTool(state: State, name: string, args: Record<s
       const shape = (): { ok: true; v: Record<string, unknown> } | { ok: false; error: string } => {
         const v: Record<string, unknown> = {};
         for (const [from, to] of [['direction', 'dir'], ['axis', 'axis'], ['origin', 'origin']] as const) if (args[from] !== undefined) { if (!vec3(args[from])) return { ok: false, error: `"${from}" is [x, y, z] (mm for origin; a direction and an axis are not all zero).` }; v[to] = args[from]; }
-        for (const k of ['count', 'spacing', 'angle', 'skip'] as const) if (args[k] !== undefined) v[k] = args[k];
+        for (const k of ['count', 'spacing', 'angle', 'skip', 'orientation'] as const) if (args[k] !== undefined) v[k] = args[k];
         return { ok: true, v };
       };
       const got = shape(); if (!got.ok) return fail(doc, got.error);
@@ -450,13 +450,13 @@ export const ASSEMBLY_TOOLS: ToolDefinition[] = [
   },
   {
     name: 'pattern_part',
-    description: 'Repeats a placed part: "count" in all (2 to 64, the part itself the first). Linear: every "spacing" mm along "direction". Circular: every "angle" degrees about "axis" through "origin" (default the origin), angle × (count − 1) at most 360. The copies (ids <pattern>-<k>) are driven by the part: place_part moves the part and its copies follow; mates never move a copy, but may hold it as the fixed side ("a"). "skip" leaves out copies by k (1 to count − 1).',
-    input_schema: { type: 'object', properties: { seed: { type: 'string', description: 'The part id to repeat.' }, kind: { type: 'string', enum: ['linear', 'circular'] }, count: { type: 'number' }, spacing: { type: 'number' }, direction: xyz, angle: { type: 'number' }, axis: xyz, origin: xyz, skip: { type: 'array', items: { type: 'number' } } }, required: ['seed', 'kind', 'count'], additionalProperties: false },
+    description: 'Repeats a placed part: "count" in all (2 to 64, the part itself the first). Linear: every "spacing" mm along "direction". Circular: every "angle" degrees about "axis" through "origin" (default the origin), angle × count at most 360 in magnitude. Circular orientation is "rotate" (default) or "keep" (current seed rotation). The copies (ids <pattern>-<k>) are driven by the part: place_part moves the part and its copies follow; mates never move a copy, but may hold it as the fixed side ("a"). "skip" leaves out copies by k (1 to count − 1).',
+    input_schema: { type: 'object', properties: { seed: { type: 'string', description: 'The part id to repeat.' }, kind: { type: 'string', enum: ['linear', 'circular'] }, count: { type: 'number' }, spacing: { type: 'number' }, direction: xyz, angle: { type: 'number' }, axis: xyz, origin: xyz, orientation: { type: 'string', enum: ['rotate', 'keep'] }, skip: { type: 'array', items: { type: 'number' } } }, required: ['seed', 'kind', 'count'], additionalProperties: false },
   },
   {
     name: 'edit_pattern',
-    description: 'Changes a pattern (get_assembly lists them): count, skip (the k left out; [] brings all back), and its own kind\'s spacing/direction or angle/axis/origin; left out: kept. Refused while a mate holds a copy it would remove.',
-    input_schema: { type: 'object', properties: { id: { type: 'string' }, count: { type: 'number' }, spacing: { type: 'number' }, direction: xyz, angle: { type: 'number' }, axis: xyz, origin: xyz, skip: { type: 'array', items: { type: 'number' } } }, required: ['id'], additionalProperties: false },
+    description: 'Changes a pattern (get_assembly lists them): count, skip (the k left out; [] brings all back), and its own kind\'s spacing/direction or angle/axis/origin/orientation; left out: kept. Refused while a mate holds a copy it would remove.',
+    input_schema: { type: 'object', properties: { id: { type: 'string' }, count: { type: 'number' }, spacing: { type: 'number' }, direction: xyz, angle: { type: 'number' }, axis: xyz, origin: xyz, orientation: { type: 'string', enum: ['rotate', 'keep'] }, skip: { type: 'array', items: { type: 'number' } } }, required: ['id'], additionalProperties: false },
   },
   {
     name: 'cut_parts',

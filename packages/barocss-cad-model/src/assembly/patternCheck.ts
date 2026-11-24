@@ -11,16 +11,17 @@ const finite3 = (v: unknown): v is [number, number, number] => Array.isArray(v) 
 export function patternProblem(who: string, p: InstancePattern): string | undefined {
   const bad = (what: string) => `Pattern of ${who}: ${what}`;
   if (!Number.isInteger(p.count) || p.count < PATTERN_MIN || p.count > PATTERN_MAX) return bad(`count is a whole number from ${PATTERN_MIN} to ${PATTERN_MAX} (the seed counts as one), not ${String(p.count)}.`);
+  if ('orientation' in p) return bad('use the saved pattern kind for orientation.');
   if (p.kind === 'linear') {
     if (!finite3(p.dir) || !p.dir.some(v => v !== 0)) return bad('dir is [x, y, z], not all zero.');
     if (typeof p.spacing !== 'number' || !Number.isFinite(p.spacing) || p.spacing === 0 || Math.abs(p.spacing) > PATTERN_SPACING_MAX) return bad(`spacing is the gap between neighbours in mm: not 0, and at most ${PATTERN_SPACING_MAX} either way, not ${String(p.spacing)}.`);
-  } else if (p.kind === 'circular') {
+  } else if (p.kind === 'circular' || p.kind === 'circular-fixed') {
     if (!finite3(p.origin)) return bad('origin is [x, y, z] in mm, a point on the axis.');
     if (!finite3(p.axis) || !p.axis.some(v => v !== 0)) return bad('axis is [x, y, z], not all zero.');
     if (typeof p.angle !== 'number' || !Number.isFinite(p.angle) || p.angle === 0) return bad(`angle is the turn between neighbours in degrees and not 0, not ${String(p.angle)}.`);
     // (A full circle is count × angle = 360: the copy after the last stands on the seed, so more would put two on one spot.)
     if (Math.abs(p.angle * p.count) > 360 + 1e-9) return bad(`angle × count is at most 360 degrees in size, so no two stand on one spot; ${p.angle} × ${p.count} is ${p.angle * p.count}.`);
-  } else return bad('kind is linear or circular.');
+  } else return bad('unsupported kind; expected linear, circular or circular-fixed.');
   if (p.skip !== undefined && !Array.isArray(p.skip)) return bad('skip is a list of occurrence numbers.');
   for (const k of p.skip ?? []) if (!Number.isInteger(k) || k < 1 || k >= p.count) return bad(`skip lists occurrence numbers from 1 to ${p.count - 1} (the seed, 0, stays), not ${String(k)}.`);
   return undefined;

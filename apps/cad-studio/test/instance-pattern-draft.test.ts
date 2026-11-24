@@ -75,3 +75,13 @@ test('full circle is explicit draft spacing including the seed, preserves sign, 
   assert.equal(fullCircleAngle({ ...d, angle: '' }), '60');
   assert.equal(fullCircleAngle({ ...d, angle: '0' }), '60');
 });
+
+test('circular orientation is restored from the saved kind and sent only when changed', () => {
+  const p: InstancePattern = { id: 'pat2', seed: 'p1', kind: 'circular-fixed', count: 3, angle: 90, axis: [0, 3, 4], origin: [10, 20, 30] };
+  const draft = draftOf(p);
+  assert.equal(draft.kind, 'circular');
+  assert.equal(draft.orientation, 'keep');
+  assert.deepEqual(patternOrigin(draft), p.origin);
+  assert.deepEqual(patternEdit(p, { ...draft, count: '4' }), { id: 'pat2', count: 4, angle: 90 });
+  assert.deepEqual(patternEdit(p, { ...draft, orientation: 'rotate' }), { id: 'pat2', count: 3, angle: 90, orientation: 'rotate' });
+});

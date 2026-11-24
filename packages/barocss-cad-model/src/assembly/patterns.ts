@@ -46,7 +46,7 @@ function occurrencesOf(seed: PartInstance, p: InstancePattern): PartInstance[] {
       const axial = u.findIndex((v, i) => Math.abs(v) === 1 && u.every((x, j) => i === j || x === 0));
       const d = t.map((v, i) => i === axial ? 0 : v - p.origin[i]);
       position = [0, 1, 2].map(i => i === axial ? t[i] : clean(R[i * 3] * d[0] + R[i * 3 + 1] * d[1] + R[i * 3 + 2] * d[2] + p.origin[i])) as Tuple3;
-      rotation = [...eulerOf(matMul(R, m as Mat3))] as Tuple3;
+      rotation = p.kind === 'circular-fixed' ? [...seed.rotation] : [...eulerOf(matMul(R, m as Mat3))] as Tuple3;
     }
     out.push({ id: `${p.id}-${k}`, name: `${seed.name} ${k + 1}`, doc: seed.doc, position, rotation, grounded: true, ...(seed.joints ? { joints: seed.joints } : {}), ...(seed.looks ? { looks: seed.looks } : {}), ...(seed.hidden ? { hidden: true } : {}), ...(seed.part ? { part: seed.part } : {}), pattern: { id: p.id, k } });
   }
@@ -140,9 +140,19 @@ const find = (doc: StudioDoc, id: string) => {
   return p;
 };
 
-type Without<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
-/** A pattern to add: the seed (an instance id), the count with the seed, and a line or an axis. */
-export type AddPatternOptions = Without<InstancePattern, 'id'>;
+export type PatternOrientation = 'rotate' | 'keep';
+
+type LinearPattern = Extract<InstancePattern, { kind: 'linear' }>;
+type CircularPattern = Exclude<InstancePattern, LinearPattern>;
+/** A pattern to add: the seed, the count with the seed, and a line or an axis. */
+export type AddPatternOptions = (Omit<LinearPattern, 'id'> | (Omit<CircularPattern, 'id' | 'kind'> & { kind: 'circular' }))
+  & { orientation?: PatternOrientation };
+
+function checkOrientation(who: string, circular: boolean, orientation: unknown): void {
+  if (orientation !== undefined && (!circular || (orientation !== 'rotate' && orientation !== 'keep'))) {
+    throw refusal('PATTERN_VALUE', `Pattern of ${who}: orientation must be rotate or keep for a circular pattern.`);
+  }
+}
 
 /** add_pattern: `seed` repeated (its first occurrences k = 1 … count − 1 beside it); the seed becomes a shared definition when it was not. */
 export function addInstancePattern(doc: StudioDoc, o: AddPatternOptions): Edited & { id: string } {
@@ -152,9 +162,14 @@ export function addInstancePattern(doc: StudioDoc, o: AddPatternOptions): Edited
   const was = (doc.instancePatterns ?? []).find(p => p.seed === seed.id);
   if (was) throw refusal('PATTERN_VALUE', `${nameOf(doc, seed.id)} is the seed of pattern ${was.id} already: edit that pattern.`);
   const id = freshPatternId(doc);
-  const p = { ...o, id, ...(o.skip?.length ? { skip: [...new Set(o.skip)].sort((a, b) => a - b) } : {}) } as InstancePattern;
-  if (!o.skip?.length) delete p.skip;
-  if (p.kind === 'linear') p.dir = copy3(p.dir); else if (p.kind === 'circular') { p.axis = copy3(p.axis); p.origin = copy3(p.origin); }
+  const { orientation, ...shape } = o;
+  if (shape.kind !== 'linear' && shape.kind !== 'circular') throw refusal('PATTERN_VALUE', `Pattern of ${seed.name}: kind is linear or circular.`);
+  checkOrientation(seed.name, shape.kind === 'circular', orientation);
+  const p: InstancePattern = shape.kind === 'linear'
+    ? { ...shape, id, dir: copy3(shape.dir) }
+    : { ...shape, id, kind: orientation === 'keep' ? 'circular-fixed' : 'circular', axis: copy3(shape.axis), origin: copy3(shape.origin) };
+  if (o.skip?.length) p.skip = [...new Set(o.skip)].sort((a, b) => a - b);
+  else delete p.skip;
   check(seed.name, p);
   checkAll({ instances, instancePatterns: [...(doc.instancePatterns ?? []), p] });
   // (The occurrences are the seed's part: one definition, so the BOM and the revisions see one part placed count times.)
@@ -162,16 +177,17 @@ export function addInstancePattern(doc: StudioDoc, o: AddPatternOptions): Edited
   return { ...solveDoc({ ...doc, instances: shared, instancePatterns: [...(doc.instancePatterns ?? []), p] }, instances), id };
 }
 
-export interface EditPatternOptions { id: string; count?: number; skip?: number[]; spacing?: number; dir?: Vec3; angle?: number; axis?: Vec3; origin?: Vec3 }
+export interface EditPatternOptions { id: string; count?: number; skip?: number[]; spacing?: number; dir?: Vec3; angle?: number; axis?: Vec3; origin?: Vec3; orientation?: PatternOrientation }
 /** edit_pattern: a pattern's count, skipped occurrences and line or axis changed (each left out: kept); occurrences a mate holds stay. */
 export function editInstancePattern(doc: StudioDoc, o: EditPatternOptions): Edited {
   const old = find(doc, o.id), who = doc.instances?.find(i => i.id === old.seed)?.name ?? old.seed;
+  checkOrientation(who, old.kind !== 'linear', o.orientation);
   const alien = old.kind === 'linear' ? (['angle', 'axis', 'origin'] as const).filter(k => o[k] !== undefined) : (['spacing', 'dir'] as const).filter(k => o[k] !== undefined);
   if (alien.length) throw refusal('PATTERN_VALUE', `Pattern of ${who}: a ${old.kind} pattern has no ${alien.join(' or ')}${old.kind === 'linear' ? ' (angle, axis and origin are a circular pattern\'s)' : ' (spacing and dir are a linear pattern\'s)'}.`);
   // (A lower count leaves the skipped numbers it no longer has out of the list, unless the same call gives the list.)
   const kept = o.skip !== undefined ? o.skip : o.count !== undefined && Number.isInteger(o.count) ? (old.skip ?? []).filter(k => k < o.count!) : undefined;
   const next = { ...old, ...(o.count !== undefined ? { count: o.count } : {}), ...(kept !== undefined ? { skip: [...new Set(kept)].sort((a, b) => a - b) } : {}),
-    ...(old.kind === 'linear' ? { ...(o.spacing !== undefined ? { spacing: o.spacing } : {}), ...(o.dir !== undefined ? { dir: copy3(o.dir) } : {}) } : { ...(o.angle !== undefined ? { angle: o.angle } : {}), ...(o.axis !== undefined ? { axis: copy3(o.axis) } : {}), ...(o.origin !== undefined ? { origin: copy3(o.origin) } : {}) }) } as InstancePattern;
+    ...(old.kind === 'linear' ? { ...(o.spacing !== undefined ? { spacing: o.spacing } : {}), ...(o.dir !== undefined ? { dir: copy3(o.dir) } : {}) } : { ...(o.orientation !== undefined ? { kind: o.orientation === 'keep' ? 'circular-fixed' : 'circular' } : {}), ...(o.angle !== undefined ? { angle: o.angle } : {}), ...(o.axis !== undefined ? { axis: copy3(o.axis) } : {}), ...(o.origin !== undefined ? { origin: copy3(o.origin) } : {}) }) } as InstancePattern;
   if (!next.skip?.length) delete next.skip;
   check(who, next);
   const list = doc.instancePatterns!.map(p => p === old ? next : p);

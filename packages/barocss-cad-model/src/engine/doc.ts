@@ -1721,10 +1721,12 @@ export interface PartInstance {
 /**
  * A pattern of instances: the seed repeated `count` times in all (k = 0 is the seed itself, 2 to 64), the occurrences
  * k ≥ 1 not in `skip` generated beside it. Linear: `spacing` mm between neighbours along `dir`. Circular: `angle` degrees
- * between neighbours about the axis `axis` through `origin`. `dir` and `axis` are stored as given and normalised when used.
+ * between neighbours about the axis `axis` through `origin`. A `circular-fixed` pattern uses the same orbit but
+ * copies the seed rotation. The separate saved kind lets older readers refuse the new placement rule.
+ * `dir` and `axis` are stored as given and normalised when used.
  */
 export type InstancePattern = { id: string; seed: string; count: number; skip?: number[] }
-  & ({ kind: 'linear'; dir: [number, number, number]; spacing: number } | { kind: 'circular'; origin: [number, number, number]; axis: [number, number, number]; angle: number });
+  & ({ kind: 'linear'; dir: [number, number, number]; spacing: number } | { kind: 'circular' | 'circular-fixed'; origin: [number, number, number]; axis: [number, number, number]; angle: number });
 
 /**
  * A cut across placed parts (roadmap 10 ⑤): a circle or rectangle profile centred on `at` (mm, the assembly's frame), cut along

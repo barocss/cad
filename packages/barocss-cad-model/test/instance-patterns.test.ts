@@ -1,5 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { brepMassProperties, checkBrep, importStep, type Brep } from '@barocss/cad';
+import { encodeStudioFile, readStudioFile } from '../src/engine/container';
 import { evaluateDoc, exportStudioStep, brepsFor } from '../src/engine/evaluate';
 import { placedDoc, rectanglePart, type StudioDoc } from '../src/engine/doc';
 import { readStudioDoc } from '../src/engine/migrate';
@@ -63,6 +65,80 @@ test('circular: the seed\'s placement turned about the axis through the origin, 
   const c = addInstancePattern(withPin([10, 0, 0]), { seed: 'p1', kind: 'circular', count: 6, origin: [0, 0, 0], axis: [0, 0, 1], angle: 60 });
   const k5 = c.doc.instances![5].position;
   assert.ok(Math.abs(k5[0] - 10 * Math.cos(300 * Math.PI / 180)) < 1e-9 && Math.abs(k5[1] - 10 * Math.sin(300 * Math.PI / 180)) < 1e-9);
+});
+
+const bracket = rectanglePart(10, 4, 2);
+const bracketAssembly = () => addPart(rectanglePart(60, 40, -4), {
+  name: 'Bracket', doc: bracket, position: [20, 5, 0], rotation: [0, 0, 90],
+}).doc;
+const circleOptions = { seed: 'p1', kind: 'circular', count: 4, origin: [10, 5, 0], axis: [0, 0, 1], angle: 90 } satisfies Parameters<typeof addInstancePattern>[1];
+
+test('keep keeps the orbit and follows a tilted seed about an offset nonunit axis with negative angle', () => {
+  const rotation: [number, number, number] = [20, -30, 47];
+  const doc = placePart(bracketAssembly(), { part: 'p1', position: [20, 5, 2], rotation }).doc;
+  const options = { ...circleOptions, origin: [10, 5, 2], axis: [0, 3, 4], angle: -90 } satisfies Parameters<typeof addInstancePattern>[1];
+  const rotating = addInstancePattern(doc, options).doc;
+  const fixed = editInstancePattern(rotating, { id: 'pat1', orientation: 'keep' }).doc;
+  assert.deepEqual(fixed, addInstancePattern(doc, { ...options, orientation: 'keep' }).doc);
+  assert.deepEqual(fixed.instances!.map(i => i.position), [[20, 5, 2], [10, -3, 8], [0, 5, 2], [10, 13, -4]]);
+  assert.ok(fixed.instances!.every(i => JSON.stringify(i.rotation) === JSON.stringify(rotation)));
+  assert.notDeepEqual(rotating.instances![1].rotation, rotation);
+  assert.deepEqual(editInstancePattern(fixed, { id: 'pat1', orientation: 'rotate' }).doc, rotating);
+});
+
+test('changing orientation retains the fixed-side lock and moves the same dependent occurrence', () => {
+  const rotating = addInstancePattern(bracketAssembly(), circleOptions).doc;
+  const placed = addPart(rotating, { name: 'Follower', doc: bracket, position: [12, 15, 3], rotation: [0, 0, 180] }).doc;
+  const locked = lockPart(placed, { part: 'p2', to: 'pat1-1' }).doc;
+  const fixed = editInstancePattern(locked, { id: 'pat1', orientation: 'keep' });
+  assert.deepEqual(fixed.problems, []);
+  assert.deepEqual(fixed.doc.mates, locked.mates);
+  assert.deepEqual(fixed.doc.instances!.find(i => i.id === 'p2')!.position, [10, 13, 3]);
+  assert.deepEqual(fixed.doc.instances!.find(i => i.id === 'p2')!.rotation, [0, 0, 90]);
+  refused(() => skipOccurrence(fixed.doc, 'pat1-1'), 'PATTERN_REFERENCED', /mate/);
+  refused(() => deleteInstancePattern(fixed.doc, 'pat1'), 'PATTERN_REFERENCED', /mate/);
+  refused(() => editInstancePattern(fixed.doc, { id: 'pat1', orientation: 'uniform' as never }), 'PATTERN_VALUE', /orientation/);
+  refused(() => addInstancePattern(bracketAssembly(), { ...circleOptions, orientation: 'uniform' as never }), 'PATTERN_VALUE', /orientation/);
+  refused(() => addInstancePattern(bracketAssembly(), { seed: 'p1', kind: 'linear', count: 4, dir: [1, 0, 0], spacing: 10, orientation: 'keep' }), 'PATTERN_VALUE', /orientation/);
+  refused(() => editInstancePattern(linear(bracketAssembly()).doc, { id: 'pat1', orientation: 'keep' }), 'PATTERN_VALUE', /orientation/);
+});
+
+test('fixed orientation reaches native drawing bodies and STEP, while BOM keeps one shared definition', async () => {
+  const doc = addInstancePattern(bracketAssembly(), { ...circleOptions, orientation: 'keep' }).doc;
+  const bytes = encodeStudioFile(doc);
+  const reopened = await readStudioFile(bytes);
+  assert.ok('doc' in reopened, JSON.stringify(reopened));
+  assert.equal(reopened.doc.instancePatterns![0].kind, 'circular-fixed');
+  assert.ok(!('orientation' in reopened.doc.instancePatterns![0]));
+  assert.deepEqual(expandPatterns(reopened.doc).instances, doc.instances);
+  const invalid = readStudioDoc(JSON.stringify({ ...doc, instancePatterns: [{ ...doc.instancePatterns![0], kind: 'circular', orientation: 'keep' }] }));
+  assert.ok('error' in invalid && /saved pattern kind/.test(invalid.error));
+
+  const drawing = brepsFor(reopened.doc);
+  assert.ok(!('error' in drawing), JSON.stringify(drawing));
+  const positions = [[20, 5], [10, 15], [0, 5], [10, -5]];
+  const xyz = (point: unknown) => {
+    const p = point as { x: number; y: number; z: number } | [number, number, number];
+    return (Array.isArray(p) ? p : [p.x, p.y, p.z]).map(n => +n.toFixed(8)).join(',');
+  };
+  const allVertices = new Set(drawing.breps[0].vertices.map(v => xyz(v.point)));
+  assert.deepEqual(drawing.prefixes.filter(Boolean), ['p1/', 'pat1-1/', 'pat1-2/', 'pat1-3/']);
+  for (const [k, [x, y]] of positions.entries()) {
+    const body: Brep = drawing.breps[k + 1];
+    const expected = [x - 4, x].flatMap(a => [y, y + 10].flatMap(b => [0, 2].map(c => xyz([a, b, c]))));
+    assert.deepEqual(body.vertices.map(v => xyz(v.point)).sort(), expected.sort());
+    assert.ok(Math.abs(brepMassProperties(body, 1).volume - 80) < 1e-9);
+    expected.forEach(point => allVertices.add(point));
+  }
+  const step = exportStudioStep(reopened.doc, { name: 'fixed-pattern', timestamp: '2026-11-24T17:00:00Z' });
+  const imported = importStep(step.text);
+  assert.equal(checkBrep(imported, { strict: true }).valid, true);
+  assert.equal(imported.bodies.length, 5);
+  assert.deepEqual(new Set(imported.vertices.map(v => xyz(v.point))), allVertices);
+  const bom = deriveBom(await bomView(reopened.doc, evaluate));
+  const rows = bom.lines.filter(row => row.item === 'Bracket');
+  assert.equal(rows.length, 1);
+  assert.deepEqual([rows[0].qty, rows[0].parts], [4, ['p1', 'pat1-1', 'pat1-2', 'pat1-3']]);
 });
 
 test('the seed gets a shared definition: occurrences are the same part to the BOM and the revisions', () => {
@@ -241,6 +317,11 @@ test('facade: pattern, editPattern, skipOccurrence, deletePattern keep the core\
   assert.equal(a.deletePattern('pat1').placements().length, 1);
   const c = base.pattern('Pin', { kind: 'circular', count: 4, axis: [0, 0, 1], angle: 90 });
   assert.deepEqual(c.placements()[1].position, [0, 10, 0]);
+  assert.equal(c.patterns()[0].orientation, undefined);
+  const fixed = c.editPattern('pat1', { orientation: 'keep' });
+  assert.deepEqual([fixed.patterns()[0].kind, fixed.patterns()[0].orientation, fixed.placements()[1].rotation], ['circular', 'keep', [0, 0, 0]]);
+  assert.deepEqual(base.pattern('Pin', { kind: 'circular', count: 4, axis: [0, 0, 1], angle: 90, orientation: 'keep' }).doc, fixed.doc);
+  assert.throws(() => base.pattern('Pin', { kind: 'linear', count: 2, direction: [1, 0, 0], spacing: 5, orientation: 'keep' as never }), (e: unknown) => e instanceof BarocssError && e.code === 'PATTERN_VALUE' && /orientation/.test(e.message));
   assert.throws(() => a.place('Pin 2', { at: Location.at([0, 0, 0]) }), (e: unknown) => e instanceof BarocssError && e.code === 'PATTERN_DRIVEN');
   assert.throws(() => base.pattern('Pin', { kind: 'linear', count: 99, direction: [1, 0, 0], spacing: 5 }), (e: unknown) => e instanceof BarocssError && e.code === 'PATTERN_VALUE' && /count/.test(e.message));
   assert.throws(() => a.editPattern('pat9', {}), (e: unknown) => e instanceof BarocssError && e.code === 'NO_PATTERN');
@@ -272,6 +353,16 @@ test('chat tools: pattern_part, edit_pattern, delete_pattern; get_assembly lists
   assert.deepEqual([s.doc.instances!.map(i => i.id), s.doc.instancePatterns], [['p1'], undefined]);
   await call('pattern_part', { seed: 'p1', kind: 'circular', count: 3, angle: 90, axis: [0, 0, 1] });
   assert.deepEqual(s.doc.instancePatterns![0], { id: 'pat1', seed: 'p1', count: 3, kind: 'circular', origin: [0, 0, 0], axis: [0, 0, 1], angle: 90 });
+  await call('edit_pattern', { id: 'pat1', orientation: 'keep' });
+  const kept = (await call('get_assembly', {})).patterns as { kind: string; orientation: string }[];
+  assert.deepEqual([kept[0].kind, kept[0].orientation, s.doc.instances![1].rotation], ['circular', 'keep', [0, 0, 0]]);
+  const accepted = s.doc;
+  assert.match(await err('edit_pattern', { id: 'pat1', orientation: 'uniform' }), /orientation/);
+  assert.equal(s.doc, accepted);
+  await call('delete_pattern', { id: 'pat1' });
+  assert.match(await err('pattern_part', { seed: 'p1', kind: 'linear', count: 2, spacing: 5, direction: [1, 0, 0], orientation: 'keep' }), /orientation/);
+  await call('pattern_part', { seed: 'p1', kind: 'circular', count: 3, angle: 90, axis: [0, 0, 1], orientation: 'keep' });
+  assert.deepEqual(s.doc, accepted);
   await call('delete_pattern', { id: 'nope' }, true);
 });
 
@@ -344,7 +435,7 @@ test('audit 1: a full circle is count × angle = 360; one that would put the las
 test('audit 1: Open refuses a bad pattern (typed, naming it); expandPatterns on an unchecked document never makes NaN or more than the maximum', () => {
   const doc = linear(withPin()).doc, p0 = doc.instancePatterns![0];
   const open = (p: object, instances = doc.instances) => readStudioDoc(JSON.stringify({ ...doc, instances, instancePatterns: [{ ...p0, ...p }] }));
-  for (const [bad, words] of [[{ count: 5000 }, /Pattern of Pin: count.*2 to 64.*5000/], [{ dir: [0, 0, 0] }, /dir is \[x, y, z\], not all zero/], [{ spacing: 'wide' }, /spacing/], [{ skip: [9] }, /skip lists/], [{ kind: 'spiral' }, /linear or circular/]] as [object, RegExp][]) {
+  for (const [bad, words] of [[{ count: 5000 }, /Pattern of Pin: count.*2 to 64.*5000/], [{ dir: [0, 0, 0] }, /dir is \[x, y, z\], not all zero/], [{ spacing: 'wide' }, /spacing/], [{ skip: [9] }, /skip lists/], [{ kind: 'spiral' }, /unsupported kind; expected linear, circular or circular-fixed/]] as [object, RegExp][]) {
     const r = open(bad); assert.ok('error' in r, JSON.stringify(bad)); assert.match(r.error, /^\[PATTERN_VALUE\]/); assert.match(r.error, words);
   }
   assert.ok('doc' in open({}), 'a good pattern opens');
