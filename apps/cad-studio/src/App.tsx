@@ -85,7 +85,8 @@ import { useDirectCurveCurvature } from './app/useDirectCurveCurvature';
 import { useNativeEdgeInspection } from './app/useNativeEdgeInspection';
 import { MeshFileDialogs } from './files/MeshFileDialogs';
 import { useRouteBundleEditor } from './state/useRouteBundleEditor';
-import { commandLaunchContext, prepareCutPatternLaunch } from './app/commandLaunchContext';
+import { prepareCutPatternLaunch } from './app/commandLaunchContext';
+import { prepareStudioFeatureCommand, useStudioCommandEntry } from './app/useStudioCommandEntry';
 import { moveRenderAppearance } from './app/moveRenderAppearance';
 import { curvePatternInputKey, curvePatternDocumentProblem, directCommandDocument, insertedCurvePartProblem, prepareDirectCurveCandidate, type DirectCurveEdit } from './app/directCurveCandidate';
 import { createRoundedInsetHistoryEdit, LINKED_INSET_EXTRUDE } from './app/roundedInsetCommand';
@@ -93,7 +94,7 @@ import { ReferenceDecisions } from './ui/ReferenceDecisions';
 import { useRobotExports } from './robot/useRobotExports';
 import { RobotInspector } from './robot/RobotInspector';
 import { useHistoryReferenceActions } from './app/useHistoryReferenceActions';
-import { filletLaunchAvailability, filletType, newFilletActive } from './app/filletFamily';
+import { filletLaunchAvailability, filletType } from './app/filletFamily';
 import { currentNativePlanePick, SKETCH_AT_MIDPOINT } from './app/midpointSketch';
 import { createInsetSourceReview } from './sketch/insetSourceReview';
 import { PROJECT_TO_SKETCH } from './app/materialFootprint';
@@ -127,7 +128,7 @@ import { contentKey } from '@barocss/cad-model/engine/evalMemo';
 import { bearingFaceInput } from './app/bearingEdit';
 import { usePlacedBearingEditor } from './app/usePlacedBearingEditor';
 import { resolveSkeletons, SKELETON_CODES } from '@barocss/cad-model/frames/skeleton';
-import { carryOver, emptyDoc, featureLabel, fmt, prefixDoc, starterDoc, type SketchNode, type StudioDoc } from '@barocss/cad-model/engine/doc';
+import { carryOver, emptyDoc, featureLabel, fmt, prefixDoc, starterDoc, type StudioDoc } from '@barocss/cad-model/engine/doc';
 import { featureId, nextSerial } from '@barocss/cad-model/engine/ids';
 import { modelHash } from '@barocss/cad-model/chat/spec';
 import { captureSignatures, type Problem as RefProblem } from '@barocss/cad-model/engine/references';
@@ -139,7 +140,6 @@ import type { MeasurePick } from '@barocss/cad-model/app/measure';
 import { captureMeasureTarget, type PlacedMeasureSource } from './app/measureTargets';
 import { hostsOf, nestedCard, renderKeysOf, singleNested, singleTop, viewportInstanceSelection } from './assembly/nestedSelection';
 import { NestedPartPanel } from './ui/NestedPartPanel';
-import { offsetFaceLaunchView } from './viewport/offsetFaceLaunchView';
 import { DRAG_TYPE, snapshotInstanceIsolation, type Spot, type SketchState, type ViewportHandle } from './viewport/Viewport';
 import { countRender, onBlockRender } from './devRenders';
 import { AssemblyCutHud } from './ui/AssemblyCutHud';
@@ -221,12 +221,11 @@ import { sweepLinks } from '@barocss/cad-model/robot/sweep';
 import { sweepTimed } from '@barocss/cad-model/robot/ccd';
 import { Lanes } from './engine/lanes';
 import { useAssembly } from './assembly/useAssembly';
-import { pickedSketches, planeOf } from '@barocss/cad-model/app/profiles';
 import type { Analysis } from './viewport/analysis';
 import { type MapKind } from './viewport/scalarMaps';
 import { useStudioSectionOverlayDevHooks, useStudioViewportDevHooks } from './viewport/useStudioViewportDevHooks';
 import { sectionSketchAction } from './app/sectionSketch';
-import { bodyName, describeChange, lookOf } from '@barocss/cad-model/app/bodies';
+import { describeChange, lookOf } from '@barocss/cad-model/app/bodies';
 import { readBrief } from '@barocss/cad-model/chat/brief';
 import { BriefPanel } from './ui/BriefPanel';
 import { SpecifyPanel } from './ui/SpecifyPanel';
@@ -234,7 +233,6 @@ import { ReferencesPanel } from './ui/ReferencesPanel';
 import { placeReference, readReferences } from '@barocss/cad-model/chat/references';
 import { confirmDimension, liveDrafts } from '@barocss/cad-model/chat/drafts';
 import { DraftsPanel } from './ui/DraftsPanel';
-import { extrudeProfile, isIndependentExtrudeJoinProfile } from '@barocss/cad-model/app/profileCommands';
 import { isBodyEyeVisibilityOnly } from './state/bodyVisibilityReferenceProblems';
 import { heldDraftFacePreviewClear, heldDraftFaceWorkCurrent } from './state/heldDraftFaceSession';
 import { useHeldDraftFace } from './state/useHeldDraftFace';
@@ -1058,32 +1056,16 @@ export function App() {
   };
   const { play, animatedAt, videoBusy, recordVideo, exportImage } = useRenderPlayback({ render, rendering, state: { time, setTime, playing, setPlaying, turnFrom }, viewport, fileName, onNotice: setToast });
 
-  const extrudeOpener = useRef<HTMLElement | null>(null);
-  const holeOpener = useRef<HTMLElement | null>(null);
-  const holeCloseFocus = useCallback((active: Active | null) => {
-    const focused = document.activeElement;
-    if (active?.cmd.id !== 'hole' || !focused?.closest('.hud')) return;
-    const opener = holeOpener.current;
-    const scope = openIntent.current;
-    requestAnimationFrame(() => {
-      if (openIntent.current !== scope || activeStore.get() || document.activeElement !== document.body) return;
-      const fallback = document.querySelector<HTMLElement>('[data-workspace-mode] button:first-child');
-      const target = opener?.isConnected && !opener.closest('[hidden]') ? opener : fallback;
-      target?.focus();
-    });
-  }, [activeStore]);
+  const { rememberOpener, restoreOpener, holeCloseFocus } = useStudioCommandEntry(openIntent, activeStore.get, restoreEditorFocusAfterClose);
 
   const cancel = useCallback(() => {
     const running = activeStore.get();
     const command = running?.cmd;
     if (running?.independentExtrude) commandApply.clear();
-    holeCloseFocus(running);
-    if (running?.cmd.id === 'extrude' && document.activeElement?.closest('.hud')) {
-      restoreEditorFocusAfterClose(extrudeOpener.current);
-    }
+    restoreOpener(running);
     if (command) setToast(current => current?.inputPick === command ? null : current);
     discardDirectCandidateRef.current(); discardRouteRef.current(); setActive(null); setPreviewBodies(null); setSketch(null);
-  }, [activeStore, commandApply, holeCloseFocus, restoreEditorFocusAfterClose, setSketch]);
+  }, [activeStore, commandApply, restoreOpener, setSketch]);
 
   const openRoute = () => {
     cancel(); poleEditor.clear(); routeEditor.open(directSel);
@@ -1206,41 +1188,21 @@ export function App() {
       });
       return;
     }
-    // A profile seen straight on (just after sketching on it) is turned to an angle, so its pull shows.
-    if (cmd === LINKED_INSET_EXTRUDE || ['extrude', 'revolve', 'pipe', 'loft'].includes(cmd.id)) {
-      const [i] = pickedSketches(evaluated.nodes, selection.sketches), face = cmd.id === 'extrude' ? extrudeProfile(ctx) : null;
-      const n = face ? planeOf(face.node).normal : i !== undefined ? planeOf(evaluated.nodes[i] as SketchNode).normal : null, cam = viewport.current?.camera;
-      if (n && cam) { const f = cam.basis().forward; if (Math.abs(f[0] * n[0] + f[1] * n[1] + f[2] * n[2]) > 0.95) viewport.current?.setView('iso'); }
-    }
-    const startCtx = commandLaunchContext({ command: cmd, ctx, doc, shownDoc, selection, cutSource: cut.source,
-      hasDirectSelection: directSel.length > 0, nativePlaneReady: footprintState.current.midpointReady || footprintState.current.insetReady, snapStep });
-    if (cmd.id === 'extrude') {
-      const focused = document.activeElement;
-      extrudeOpener.current = focused instanceof HTMLElement && focused.matches('button')
-        && !!focused.closest('nav[aria-label="Tools"], [aria-label="Browser"], .history') ? focused : null;
-    }
-    if (cmd.id === 'hole') {
-      const focused = document.activeElement;
-      holeOpener.current = focused instanceof HTMLElement && focused.closest('nav[aria-label="Tools"]') ? focused : null;
-    }
-    if (family) { commandPreview.retire(); commandApply.clearApply(); const next = newFilletActive(family, startCtx, initial); setSelection(next.ctx.selection); setActive(next); }
-    else {
-      const independent = cmd.id === 'extrude' && marker === null && shownDoc === doc && isIndependentExtrudeJoinProfile(startCtx);
-      const open = openIntent.current;
-      const ownsModel = () => openIntent.current === open && !project.opening() && ownsEvaluatedSource()
-        && shownDocNow.current === doc && bodiesRef.current === bodies;
-      const targetLooks = { bodies: doc.bodies, nameOf: (body: BodyResult) => bodyName(doc, body) };
-      const values = { ...(cmd.defaults?.(startCtx) ?? {}), ...initial };
-      if (cmd.id === 'offset-face' && viewport.current) {
-        const view = offsetFaceLaunchView(cmd, startCtx, values, viewport.current.camera.basis().forward);
-        if (view) viewport.current.setView(view);
-      }
-      setActive({ cmd, values, preview: 'busy',
-        ctx: independent ? { ...startCtx, extrudeJoinLooks: targetLooks } : { ...startCtx },
-        ...(independent ? { independentExtrude: { ownsModel, joinScope: () => ownsModel() ? joinViewNow.current : null } } : {}),
-        ...(cmd.place ? { placing: true } : {}) });
-    }
-  }, [ctx, doc, selection, instanceSel, bodies, engine, commit, evaluated, shownDoc, variants.showing, setSketch, acceptanceScope, openCut, commandApply, commandPreview.retire, discardFeatureDraft, fresh, busy, modelUnavailable, nativeVertexReady, checkInterference, midpointSketch.start, cancelNativeReview, snapStep, directSel, marker, ownsEvaluatedSource, project.opening, openSteps]);
+    const next = prepareStudioFeatureCommand({
+      launch: { command: cmd, ctx, doc, shownDoc, selection, cutSource: cut.source, hasDirectSelection: directSel.length > 0,
+        nativePlaneReady: footprintState.current.midpointReady || footprintState.current.insetReady, snapStep },
+      evaluated, viewport, initial, rememberOpener, family,
+      prepareFillet: () => { commandPreview.retire(); commandApply.clearApply(); },
+      join: { available: marker === null && shownDoc === doc, readScope: () => joinViewNow.current,
+        captureOwner: () => {
+          const open = openIntent.current;
+          return () => openIntent.current === open && !project.opening() && ownsEvaluatedSource()
+            && shownDocNow.current === doc && bodiesRef.current === bodies;
+        } },
+    });
+    if (family) setSelection(next.ctx.selection);
+    setActive(next);
+  }, [ctx, doc, selection, instanceSel, bodies, engine, commit, evaluated, shownDoc, variants.showing, setSketch, acceptanceScope, openCut, commandApply, commandPreview.retire, discardFeatureDraft, fresh, busy, modelUnavailable, nativeVertexReady, checkInterference, midpointSketch.start, cancelNativeReview, snapStep, directSel, marker, ownsEvaluatedSource, project.opening, openSteps, rememberOpener]);
 
   const sheetRuleSource = { doc, evaluated, bodies, open: openIntent.current, worker: workerSession,
     generation: workOwnership.current.generation,
