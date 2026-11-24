@@ -182,8 +182,8 @@ export function SketchPanel({ sketch, constraintInspection, constraintDocument, 
         const put = (len: number, deg: number) => onShape(slotEndpoint(s, len, deg));
         return <>{num('slot-x', 'Centre X', s.a[0], v => onShape(slotCentre(s, 0, v)))}{num('slot-y', 'Centre Y', s.a[1], v => onShape(slotCentre(s, 1, v)))}
           {num('slot-length', 'Length', l, v => put(Math.max(0.5, v), angle), 0.5)}
-          <label className={FIELD}><span>Angle</span><span className={NUM}><Input id="sk-slot-angle" type="number" step="any" value={round(angle)}
-            onChange={e => { const v = Number(e.target.value); if (Number.isFinite(v)) put(l, v); }} /><em>°</em></span></label>
+          <label className={FIELD}><span>Angle</span><span className={NUM}><Input id="sk-slot-angle" type="number" step="any"
+            {...liveNumber('slot-angle', angle, deg => put(l, deg))} /><em>°</em></span></label>
           {num('slot-width', 'Width', s.r * 2, v => onShape(slotWidth(s, v)), 0.5)}</>;
       })()}
       {s?.kind === 'polygon' && !ell && <div className="pts pts-4" role="group" aria-label="Outline points" style={{ gridTemplateColumns: '18px minmax(0, 1fr) minmax(0, 1fr) minmax(112px, 1.1fr)' }}>
