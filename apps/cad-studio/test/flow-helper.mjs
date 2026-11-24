@@ -151,12 +151,12 @@ export async function createFlow(options) {
   };
 
   /** Open a fresh 1440 x 1000 desktop context and wait for the WebGPU viewport. */
-  f.newPage = async ({ deviceScaleFactor = 1 } = {}) => {
+  f.newPage = async ({ deviceScaleFactor = 1, backend = 'webgpu' } = {}) => {
     if (f.context) { await f.context.close(); report.cleanup.push('CONTEXT_CLOSED'); }
     f.context = await f.browser.newContext({ viewport: { width: 1440, height: 1000 }, deviceScaleFactor }); const page = f.page = await f.context.newPage();
     page.on('pageerror', e => report.errors.push(e.stack ?? String(e))); page.on('console', m => { if (m.type() === 'error') report.consoleErrors.push(m.text()); });
     page.on('download', d => report.downloads.push({ phase: f.phase, suggestedFilename: d.suggestedFilename() })); page.on('dialog', d => d.accept());
-    await page.goto(f.server.resolvedUrls.local[0]); await page.waitForSelector('.viewport[data-renderer="webgpu"]', { timeout: 30000 }); await f.ready();
+    await page.goto(f.server.resolvedUrls.local[0]); await page.waitForSelector(`.viewport[data-renderer="${backend}"]`, { timeout: 30000 }); await f.ready();
   };
   /** Open a model file through the file input and wait for `nodeCount` nodes. */
   f.openFile = async (file, nodeCount) => { await f.page.setInputFiles('input[aria-label="Model file"]', file); await f.page.waitForFunction(n => window.__studioDoc?.nodes?.length === n, nodeCount, { timeout: 60000 }); await f.ready(); };

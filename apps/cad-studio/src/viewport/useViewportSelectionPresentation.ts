@@ -50,5 +50,5 @@ export function useViewportSelectionPresentation({ scene, command, section, high
       : hideSource ? emptySel
       : mateFaces ? { faces: mateFaces, edges: [], bodies: [] }
       : source);
-  return { commandScope, selection, sectionPick: cut.pick };
+  return { commandScope, selection, sectionPick: cut.pick, sectionVertexPick: cut.pickVertex };
 }

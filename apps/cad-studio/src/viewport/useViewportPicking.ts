@@ -29,7 +29,7 @@ export interface ViewportMenu {
   measureSource?: { doc: StudioDoc; target: MeasureTarget };
 }
 
-export function useViewportPicking({ meshCirclePick, doc, modelUnavailable, nativeVertexReady, nativePlanePickState, sectionPickRef, activeStore, setActive, measure, assembly, sectionRef, sectionFacePickRef, viewBodiesRef,
+export function useViewportPicking({ meshCirclePick, doc, modelUnavailable, nativeVertexReady, nativePlanePickState, sectionPickRef, sectionVertexPick, activeStore, setActive, measure, assembly, sectionRef, sectionFacePickRef, viewBodiesRef,
   sectionBoxRef, setSection, setSectionFacePick, setToast, activeRef, halvesShownRef, setPick, setInstanceSel, setSelection,
   directSel, setDirectSel, setMeasure, measureNativeReady, measureInstances, placedMeasureContextReady, pickFilterRef, onFilletPick, onReferenceFacePick, onRevolveAxisPick, onTransformFacePick, retargetSweep, scene }: {
   meshCirclePick?: RefObject<((hit: MeshCircleHit) => boolean) | null>;
@@ -39,6 +39,7 @@ export function useViewportPicking({ meshCirclePick, doc, modelUnavailable, nati
   onTransformFacePick(hit: ExtrudeEndHit, blocked: boolean): boolean;
   onFilletPick?(hit: { face: { body: number; face: number } | null; edge: { body: number; edge: number } | null; instance?: string }, additive: boolean): boolean;
   sectionPickRef: RefObject<SectionPick>;
+  sectionVertexPick: RefObject<{ pick(hit: { vertex?: { body: number; at: Vec3 } }): boolean }>;
   nativePlanePickState: RefObject<{ midpointReady: boolean; insetReady: boolean }>;
   doc: StudioDoc; modelUnavailable: boolean; nativeVertexReady: boolean; activeStore: ReturnType<typeof createValueStore<Active | null>>;
   setActive: Dispatch<SetStateAction<Active | null>>; measure: MeasureTarget[] | null; assembly: ReturnType<typeof useAssembly>;
@@ -64,7 +65,7 @@ export function useViewportPicking({ meshCirclePick, doc, modelUnavailable, nati
 }) {
   const onPick = useCallback((hit: RevolveAxisHit & { face: { body: number; face: number } | null; edge: { body: number; edge: number } | null; point: Vec3 | null; direct?: string; instance?: string; instanceFace?: { body: number; face: number }; instanceCap?: { body: number }; vertex?: { body: number; at: Vec3 } }, additive: boolean) => {
     if (meshCirclePick?.current?.(hit)) return;
-    if (modelUnavailable) return;
+    if (modelUnavailable || sectionVertexPick.current.pick(hit)) return;
     const blocked = !!sectionRef.current || halvesShownRef.current;
     if (!blocked && hit.direct && retargetSweep({ path: hit.direct })) return;
     if (onReferenceFacePick(hit, blocked) || onRevolveAxisPick(hit, blocked) || onTransformFacePick(hit, blocked)) return;
@@ -168,7 +169,7 @@ export function useViewportPicking({ meshCirclePick, doc, modelUnavailable, nati
       }
       return hit.edge ? { faces: [], edges: [hit.edge], bodies: [] } : { faces: [hit.face!], edges: [], bodies: [] };
     });
-  }, [meshCirclePick, activeStore, measure, measureNativeReady, measureInstances, assembly, doc, modelUnavailable, nativeVertexReady, nativePlanePickState, viewBodiesRef, sectionPickRef, scene.bodies, onFilletPick, onReferenceFacePick, onRevolveAxisPick, onTransformFacePick, retargetSweep]);
+  }, [meshCirclePick, activeStore, measure, measureNativeReady, measureInstances, assembly, doc, modelUnavailable, nativeVertexReady, nativePlanePickState, viewBodiesRef, sectionPickRef, sectionVertexPick, scene.bodies, onFilletPick, onReferenceFacePick, onRevolveAxisPick, onTransformFacePick, retargetSweep]);
 
   // The viewport, Browser and History use the same action for a finished sketch.
   const onPickProfile = useCallback((id: number | null, additive: boolean, region?: number) => {

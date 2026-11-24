@@ -33,7 +33,14 @@ export function currentMeshVertexTarget(target: MeshVertexTarget, doc: StudioDoc
     && finitePoint(target.at) && target.at.every((v, k) => v === saved.at[k]);
 }
 
-const nativeOwners = new WeakMap<VertexPick, { id: string; mesh: DisplayMesh; doc?: StudioDoc }>();
+const nativeOwners = new WeakMap<VertexPick, { id: string; source: NativePickSource; at: Vec3; body: number; doc?: StudioDoc }>();
+
+/** Read the visible incident geometry that supplied a real native pointer corner. */
+export function nativeVertexWitness(pick: VertexPick, mesh: DisplayMesh) {
+  const owner = nativeOwners.get(pick);
+  return owner && owner.source.mesh === mesh && owner.body === pick.body && owner.at.every((value, k) => pick.at[k] === value)
+    ? { id: owner.id, source: owner.source } : null;
+}
 
 export function bindNativeVertexPick(pick: VertexPick, doc: StudioDoc): void {
   const owner = nativeOwners.get(pick);
@@ -47,7 +54,7 @@ export function currentNativeVertexPoints(doc: StudioDoc, bodies: readonly BodyR
   const ids = new Set<string>();
   for (const pick of picks) {
     const owner = nativeOwners.get(pick);
-    if (!owner || owner.doc !== doc || owner.mesh !== mesh || ids.has(owner.id)) return null;
+    if (!owner || owner.doc !== doc || owner.source.mesh !== mesh || ids.has(owner.id)) return null;
     ids.add(owner.id);
   }
   return [picks[0].at, picks[1].at, picks[2].at];
@@ -95,7 +102,7 @@ export function pickVertex(filter: PickFilter, body: number | undefined, edges: 
       other === id || pixel[2] > chosen.pixel[2] && Math.hypot(pixel[0] - chosen.pixel[0], pixel[1] - chosen.pixel[1]) <= 0.1);
     if (front) {
       const pick = { body, at: chosen.at };
-      nativeOwners.set(pick, { id, mesh: source.mesh });
+      nativeOwners.set(pick, { id, source, at: [...chosen.at], body });
       return pick;
     }
   }

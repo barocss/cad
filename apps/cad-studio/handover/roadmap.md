@@ -1,13 +1,13 @@
 # CAD roadmap — current status and execution order
 
-Updated 2026-11-25 · Priority authority: D520 · Latest delivery: D1972 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
+Updated 2026-11-25 · Priority authority: D520 · Latest delivery: D1973 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
 
 This is the only current status index. Detailed tracks define acceptance; the 34 stable row pages retain scope and issue navigation. Immutable decision notes retain results. Do not append chronological status paragraphs here. [D520 decision](notes/cad-roadmap-replan-2026-11-04/README.md) supersedes D445 execution order and historical next-item text, while retaining its safeguards and bounded proofs.
 
 ## Now and next
 
-- **Current position:** [D1972](notes/downward-rectangle-to-upper-annulus-2026-11-25/README.md), P1 rows 8 and 16. A downward rectangle can end at the original upper annulus of a supported through Hole. Studio verifies complete bore and rim clearance, a live stock edit and fresh Open.
-- **Next MAIN:** D1973, P4 rows 5 and 20. Check the current Viewer pick path for one original vertex on a retained base body, then use it to move a single section plane without changing its direction for [#272](https://github.com/barocss/cad/issues/272). Verify current-source ownership, generated section point refusal and both desktop backends.
+- **Current position:** [D1973](notes/axis-section-through-original-vertex-2026-11-25/README.md), P4 rows 5 and 20. Move one exact axis Section through an original retained vertex after explicit Apply. Desktop WebGPU and WebGL2 agree. Native Save and Open preserve the original part.
+- **Next MAIN:** D1974, P4 rows 5 and 20. Verify source vertex ownership on an oblique exact one-plane section for [#272](https://github.com/barocss/cad/issues/272). Extend the vertex move only if the existing exact split preserves a unique retained original endpoint and independent section geometry checks pass.
 - **Separate follow-ups:** Continue Studio App extraction in cohesive parts with affected desktop checks. [#608 Rendering](https://github.com/barocss/cad/issues/608) stays on HOLD. API inventory drift remains open. The issue tracker records [#126](https://github.com/barocss/cad/issues/126), [#613](https://github.com/barocss/cad/issues/613), [#152](https://github.com/barocss/cad/issues/152) and [#22](https://github.com/barocss/cad/issues/22) as closed.
 - **Active repository:** [barocss/cad](https://github.com/barocss/cad), based on `origin/main`. Fetch before work and preserve unexpected changes. The [migration record](../../../docs/migration/README.md) maps the former `local/cad-dev` history and issue numbers.
 - **Evidence correction:** D482 records2167 PASS/0 FAIL/2 existing SKIP in a later full-kernel run than D433. Neither result is a new full-suite PASS at this audit HEAD. [D482 record](notes/vertical-contact-refusal-2026-11-04/README.md).

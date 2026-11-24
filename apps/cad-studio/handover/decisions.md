@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1973: [Move an axis Section through an original vertex](notes/axis-section-through-original-vertex-2026-11-25/README.md), #272. Verify source ownership, native section preflight, explicit Apply and unchanged native documents on desktop.
 - D1972: [End a downward rectangular Extrude at the original upper annulus](notes/downward-rectangle-to-upper-annulus-2026-11-25/README.md), #222. Verify full rectangle clearance, the retained current Hole and cap, and actual desktop rebuild and fresh Open.
 - D1971: [Draft four original box sides around an interior neutral plane](notes/four-side-box-draft-interior-neutral-2026-11-25/README.md), #14. Verify both opposing wall pairs, the four original corners and desktop History and fresh Open.
 - D1970: [Extract Studio project version actions](notes/studio-project-version-actions-2026-11-25/README.md), #44. Compare named Restore and saved face repair through the approval attachment chip in desktop Studio.

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { resolveSketchLaunchVertices } from '../src/sketch/sketchLaunch';
-import { bindNativeVertexPick, currentNativeVertexPoints, pickVertex } from '../src/viewport/vertexPick';
+import { bindNativeVertexPick, currentNativeVertexPoints, nativeVertexWitness, pickVertex } from '../src/viewport/vertexPick';
 import { rectanglePart } from '@barocss/cad-model/engine/doc';
 import { evaluatePart } from '@barocss/cad-model/engine/evaluate';
 
@@ -91,4 +91,25 @@ test('orthographic vertex overlap uses camera depth and leaves separated endpoin
   assert.deepEqual(pickVertex('all', 0, [edge], 0.02, 0, project, undefined, source)?.at, rear);
   const separated = (point: readonly number[]) => [point[2] / 2, 0, point[2] / 10];
   assert.deepEqual(pickVertex('all', 0, [edge], 5, 0, separated, undefined, source, true)?.at, rear);
+});
+
+test('a Section corner reads only an unchanged native pointer witness from its visible mesh', () => {
+  const evaluated = evaluatePart(rectanglePart(60, 30, 10), 1);
+  assert.ok(evaluated.ok);
+  const mesh = evaluated.bodies[0].mesh;
+  const edge = mesh.edges.find(edge => edge.nativeVertices && edge.nativeLine)!;
+  const source = { mesh, edge: edge.index };
+  const project = (point: readonly number[]) => point === edge.a ? [0, 0] : [16, 0];
+  const pick = pickVertex('all', 0, mesh.edges, 0, 0, project, undefined, source);
+  assert.ok(pick);
+  assert.deepEqual(nativeVertexWitness(pick, mesh), { id: edge.nativeVertices![0], source });
+  assert.equal(nativeVertexWitness({ ...pick }, mesh), null);
+  assert.equal(nativeVertexWitness(pick, { ...mesh }), null);
+  pick.body = 1;
+  assert.equal(nativeVertexWitness(pick, mesh), null);
+  pick.body = 0;
+  const before = [...edge.a];
+  pick.at[0] += 1;
+  assert.equal(nativeVertexWitness(pick, mesh), null);
+  assert.deepEqual(edge.a, before);
 });

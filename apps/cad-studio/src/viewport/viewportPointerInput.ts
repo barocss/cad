@@ -57,6 +57,7 @@ export interface ViewportPointerProps {
   camActive?: boolean;
   /** G2: the section's clip plane keeps dot(normal, p) ≥ offset on native bodies or placed parts. */
   clip?: SectionClip | null;
+  sectionVertexPicking?: boolean;
   /** G24: the drawing's annotations on the model (model-annotations-v1 items), the one picked, and a pick's callback. */
   annotations?: readonly ModelAnnotation[] | null;
   onPickAnnotation?(id: string): void;
@@ -243,7 +244,7 @@ export function useViewportPointerInput({ canvas, camera, propsRef, rendering, f
 
   /** A corner of the body under the pointer within 7 px (an end of one of its edges), when the filter takes corners. */
   const vertexAt = (x: number, y: number, w: number, h: number, hit: { face: FaceRef | null; edge: EdgeRef | null }): { body: number; at: Vec3 } | null => {
-    const f = propsRef.current.pickFilter ?? 'all';
+    const f = propsRef.current.sectionVertexPicking ? 'all' : propsRef.current.pickFilter ?? 'all';
     if (f !== 'all') return null;
     const bi = hit.edge?.body ?? hit.face?.body;
     if (bi === undefined) return null;
@@ -251,7 +252,9 @@ export function useViewportPointerInput({ canvas, camera, propsRef, rendering, f
     const print = propsRef.current.printDisplay;
     if (print && hit.face && mesh.faces.some(face => face.index === hit.face!.face && face.id === 'section-cap')) return null;
     const view = viewState();
-    const native = !print && !propsRef.current.camActive && !propsRef.current.clip && !view.offsets.has(bi) && !view.transforms?.has(bi) && !view.ghostBodies.has(bi);
+    const native = !print && !propsRef.current.camActive
+      && (!propsRef.current.clip || (propsRef.current.sectionVertexPicking && propsRef.current.clip.bodies === false))
+      && !view.offsets.has(bi) && !view.transforms?.has(bi) && !view.ghostBodies.has(bi);
     const source = native ? hit.edge ? { mesh, edge: hit.edge.edge } : hit.face ? { mesh, face: hit.face.face } : undefined : undefined;
     return pickVertex(f, bi, mesh.edges, x, y, p => camera.current.project(p as Vec3, w, h), print?.printed ? print.top : undefined, source, camera.current.ortho);
   };
@@ -544,7 +547,8 @@ export function useViewportPointerInput({ canvas, camera, propsRef, rendering, f
   const pickAt = (r: ViewRenderer, x: number, y: number, face?: FaceRef | null): { face: FaceRef | null; edge: EdgeRef | null; front?: { face: FaceRef | null; edge: EdgeRef | null } } => {
     syncDisplayedBodies(r);
     const view = viewState(), cameraNow = camera.current;
-    const under = face === undefined ? r.pickFace(x, y, cameraNow, view) : face, filter = propsRef.current.pickFilter ?? 'all';
+    const under = face === undefined ? r.pickFace(x, y, cameraNow, view) : face;
+    const filter = propsRef.current.sectionVertexPicking ? 'all' : propsRef.current.pickFilter ?? 'all';
     if (filter === 'face' || filter === 'body') return { face: under, edge: null };
     const radius = under ? 4 : 6;
     const edge = r.pickEdge(x, y, cameraNow, view, radius);
@@ -1320,8 +1324,8 @@ export function useViewportPointerInput({ canvas, camera, propsRef, rendering, f
       return;
     }
     // Finished sketch outlines and filled areas come before the bodies behind them.
-    const filter = propsRef.current.pickFilter ?? 'all';
-    const prof = filter === 'all' ? profileAt(x, y, w, h) : null;
+    const filter = propsRef.current.sectionVertexPicking ? 'all' : propsRef.current.pickFilter ?? 'all';
+    const prof = filter === 'all' && !propsRef.current.sectionVertexPicking ? profileAt(x, y, w, h) : null;
     if (prof && !prof.retained) { propsRef.current.onPickProfile?.(prof.id, e.shiftKey, prof.region); return; }
     const poles = propsRef.current.poles;
     if (poles?.length) {

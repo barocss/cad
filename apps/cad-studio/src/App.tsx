@@ -121,6 +121,7 @@ import type { OpenScope } from './state/openOwnership';
 import { scheduleProjectOpenFit } from './app/projectOpenFit';
 import { prepareSignedFinishOpen, verifyStoredNativeOpen } from './files/documentFile';
 import type { SectionPick } from './viewport/useSectionSelection';
+import { useSectionThroughVertex } from './viewport/useSectionThroughVertex';
 import { useViewportSelectionPresentation } from './viewport/useViewportSelectionPresentation';
 import type { PartInstance } from '@barocss/cad-model/engine/doc';
 import { usePlacedCandidatePreview } from './viewport/usePlacedCandidatePreview';
@@ -1304,6 +1305,7 @@ export function App() {
 
   const viewBodiesRef = useRef<BodyResult[]>(null!);
   const sectionPickRef = useRef<SectionPick>(() => ({ face: null, edge: null, cap: false }));
+  const sectionVertexActions = useRef<Pick<ReturnType<typeof useSectionThroughVertex>, 'pick' | 'escape'>>({ pick: () => false, escape: () => false });
   const commandPickScope = useRef<CommandPickScope | null>(null);
   const { pickCommandReferenceFace, pickTransformFace, pickRevolveAxis, retargetActiveSweep } = createCommandReferencePicking({
     model: { doc, commandDoc, isCurrent: () => docNow.current === doc && evaluatedRef.current === evaluated, ownsEvaluatedSource },
@@ -1357,7 +1359,7 @@ export function App() {
   const placedMeasureContextReady = () => placedMeasureContext && docNow.current === doc
     && workerSessionNow.current === workerSession && explodeStore.get() === 0 && !sectionRef.current
     && !activeStore.get() && !halvesShownRef.current;
-  const { onPick, picking } = useViewportPicking({ meshCirclePick, doc, modelUnavailable, nativeVertexReady, nativePlanePickState: footprintState, sectionPickRef, activeStore, setActive, onFilletPick: pickFillet, onReferenceFacePick: pickCommandReferenceFace, onRevolveAxisPick: pickRevolveAxis, onTransformFacePick: pickTransformFace, retargetSweep: retargetActiveSweep, measure, assembly, sectionRef, sectionFacePickRef, viewBodiesRef,
+  const { onPick, picking } = useViewportPicking({ meshCirclePick, doc, modelUnavailable, nativeVertexReady, nativePlanePickState: footprintState, sectionPickRef, sectionVertexPick: sectionVertexActions, activeStore, setActive, onFilletPick: pickFillet, onReferenceFacePick: pickCommandReferenceFace, onRevolveAxisPick: pickRevolveAxis, onTransformFacePick: pickTransformFace, retargetSweep: retargetActiveSweep, measure, assembly, sectionRef, sectionFacePickRef, viewBodiesRef,
     sectionBoxRef, setSection, setSectionFacePick, setToast, activeRef, halvesShownRef, setPick, setInstanceSel, setSelection, directSel, setDirectSel, setMeasure, measureNativeReady, measureInstances, placedMeasureContextReady, pickFilterRef,
     scene: { active, section, sketch: !!sketch, bodies, selection, setMenu } });
   const finishEdgePick = finishEdgeEditor.current ? finishEdgeEditor.pick : undefined;
@@ -1713,7 +1715,7 @@ export function App() {
         ? () => discardRouteRef.current() : undefined,
       invalidateProjection: () => { projectionRequest.current++; },
       cancelAssembly: assembly.draft ? assembly.cancel : undefined,
-      cancelSectionFacePick,
+      cancelSectionFacePick: repeat => sectionVertexActions.current.escape(repeat) || cancelSectionFacePick(repeat),
     },
   });
 
@@ -1839,6 +1841,20 @@ export function App() {
   const viewportDirect = useMemo(() => sewPreviewDirect(directShown, active?.cmd.id, active?.ctx, sewCandidateShown), [directShown, active?.cmd.id, active?.ctx, sewCandidateShown]);
   viewBodiesRef.current = viewBodies;
   sectionPickRef.current = viewportSelection.sectionPick;
+  const sectionOpen = openIntent.current;
+  const sectionVertex = useSectionThroughVertex({
+    source: section?.mode === 'plane' && section.planes.length === 1 && sectionExactShown && sectionExact && shownBodies === sectionBodies
+      && viewBackend && fresh && !busy && !modelUnavailable && !workerFailure && !active && !measure && sectionFacePick === null && !sketch && !rendering && !drawing
+      && marker === null && shownDoc === doc && !variants.showing && !inPlace && !doc.instances?.length && !doc.direct
+      && !ghost && !workingComparison && !bodyDrag && !exploded && !cageEd.session && !routePreviewBodies && !project.opening()
+      ? { doc, evaluated, section, bodies: sectionExact.sourceBodies, shown: shownBodies, backend: viewBackend, open: sectionOpen, worker: workerSession } : null,
+    box: sectionBox, engine, nextRevision: () => revision.current++, select: viewportSelection.sectionVertexPick, setSection,
+    live: owner => docNow.current === owner.doc && evaluatedRef.current === owner.evaluated && ownsEvaluatedSource()
+      && sectionRef.current === owner.section && !sectionLive.get() && !activeStore.get() && !project.opening()
+      && openIntent.current === owner.open && workerSessionNow.current === owner.worker,
+  });
+  sectionVertexActions.current = sectionVertex;
+
   const pinView = !rendering && !drawing && !sketch;
   const massPinView = pinView && previewMode === 'none';
   const pinReady = pinView && nativeVertexReady && shownDoc === doc && !workerFailure
@@ -2297,7 +2313,7 @@ export function App() {
         pickedPole={poleEditor.controls.selected} onPickPole={poleEditor.pick}
         offsets={animatedOffsets} transforms={dragTransforms} instances={viewportInstances} clearance={clearanceDisplay}
         isolatedInstances={displayScopeReason ? undefined : stepsDisp?.opaque ?? isolatedInstances}
-        clip={sectionClip} sectionHatch={sectionHatchLines} scalarMaps={scalarMaps} onHoverScalar={mapHoverOwner ? setMapHover : undefined}
+        clip={sectionClip} sectionVertexPicking={sectionVertex.controls.active} sectionHatch={sectionHatchLines} scalarMaps={scalarMaps} onHoverScalar={mapHoverOwner ? setMapHover : undefined}
         mould={mouldShown} isoclines={isoclines} proposal={ghost ? proposalOverlay : compareOverlay}
         placing={!!active?.placing} placeSkip={placeSkip} onSpot={onSpot}
         bodyColors={bodyColors} faceColors={faceColors} hiddenBodies={hiddenBodies} snapStep={snapStep}
@@ -2347,7 +2363,7 @@ export function App() {
       <ViewDisplayControls inspection={inspection} doc={doc} viewport={viewport} cornerRight={historyLayout.cornerRight}
         display={{ ...viewDisplay.controls, isolatedInstances, setIsolatedInstances, isolationReason, isolationSelection }}
         view={{ ortho, sketching: !!sketch, wheelZoom: modelWheelZoom, sketchReopenCamera, fitActiveSketch: sketchActions.fitActiveSketch, ao, setAo, theme, setTheme, rendering, printing: !!printing, viewBackend }}
-        section={{ section, documentSession: docGeneration, setSection, sectionHatchOn, setSectionHatchOn, sectionBox, sectionFacePick, setSectionFacePick, sketchSection, cameraEye, sectionExclusion: sectionExclusionControls }}
+        section={{ section, documentSession: docGeneration, setSection, sectionHatchOn, setSectionHatchOn, sectionBox, sectionFacePick, setSectionFacePick, sketchSection, cameraEye, sectionExclusion: sectionExclusionControls, vertexMove: sectionVertex.controls }}
         analysis={{ analysis, setAnalysis, mapKind, setMapKind, mapLegend, mapScope, mapHover, setMapHover, mouldResult, mouldSpread, setMouldSpread }}
         picking={{ pickFilter, setPickFilter, snapStep, setSnapStep, setSelection }} explodeStore={explodeStore} />
 

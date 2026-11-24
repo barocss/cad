@@ -7,6 +7,7 @@ import type { SectionOutlineMode } from '@barocss/cad-model/app/sectionSketchPro
 import type { Vec3 } from '@barocss/cad-model/engine/mesh';
 import { fmt } from '@barocss/cad-model/engine/doc';
 import type { FeatureHandle } from '../viewport/gizmo';
+import type { SectionVertexMoveControls } from '../viewport/useSectionThroughVertex';
 import type { SectionExclusionControls } from '../viewport/useSectionExclusion';
 import { boxSection, cutoutCorner, flipPlane, middlePlane, planeAxis, type Section, type SectionPlane } from '../viewport/sectionView';
 import { SECTION_SPAN_UNAVAILABLE, projectedSectionSpan, sectionDragRange, sectionDragValue } from '../viewport/sectionSpan';
@@ -86,8 +87,9 @@ function SectionSketchControls({ excluded, onSketch }: { excluded: boolean; onSk
  * The bar. `box`: the part's and its placed parts' box; `facePick`: the plane a face click sets (its index) or null;
  * `onSketch`: Sketch the section (one plane only); `eye`: where the camera is (a cut-out's default corner faces it).
  */
-export function SectionBar({ section, documentSession, setSection, hatch, setHatch, box, facePick, setFacePick, onSketch, eye, onProblem, sectionExclusion }: {
+export function SectionBar({ section, documentSession, setSection, hatch, setHatch, box, facePick, setFacePick, onSketch, eye, onProblem, sectionExclusion, vertexMove }: {
   sectionExclusion?: SectionExclusionControls;
+  vertexMove?: SectionVertexMoveControls;
   documentSession: number;
   section: Section; setSection(f: (s: Section | null) => Section | null): void; hatch: boolean; setHatch(on: boolean): void; box: Box; facePick: number | null; setFacePick(i: number | null): void; onSketch(mode: SectionOutlineMode): void; eye(): Vec3 | null; onProblem(reason: string | null): void;
 }) {
@@ -133,6 +135,16 @@ export function SectionBar({ section, documentSession, setSection, hatch, setHat
     {section.mode === 'plane' && <>{axisButtons(0)}{faceButton(0)}{flip(0)}
       {section.planes[0].face && <span className="mono muted" aria-label="Face-derived section position">{label(section.planes[0])}</span>}
       <SectionSketchControls key={JSON.stringify([documentSession, section])} excluded={excluded} onSketch={onSketch} /></>}
+    {section.mode === 'plane' && vertexMove && <>
+      <Button size="sm" variant={vertexMove.active ? 'default' : 'ghost'} aria-pressed={vertexMove.active}
+        aria-label="Section through a vertex" title="Section through a vertex" disabled={!vertexMove.available && !vertexMove.active}
+        onClick={vertexMove.active ? vertexMove.cancel : vertexMove.start}><Icon name="my_location" small /></Button>
+      {vertexMove.active && <span className="cad-display-control">
+        <span className="muted small" role="status">{vertexMove.message}</span>
+        <Button size="sm" onClick={vertexMove.apply} disabled={!vertexMove.canApply}>Apply section move</Button>
+        <Button size="sm" variant="ghost" onClick={vertexMove.cancel}>Cancel section move</Button>
+      </span>}
+    </>}
     {section.mode === 'plane' && sectionExclusion && <div role="group" aria-label="Section instance exclusions">
       <Button size="sm" variant="ghost" disabled={sectionExclusion.selectionReason !== null} onClick={() => { if (sectionExclusion.selectionReason === null) sectionExclusion.excludeSelected(); }}>Exclude selected instances</Button>
       {sectionExclusion.selectionReason && <p className="small muted" role="status">{sectionExclusion.selectionReason}</p>}
