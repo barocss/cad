@@ -15,7 +15,7 @@ import { cornerBatchProposal, savedChamferResizeProposal } from '../cornerPropos
 import { boredWallProposal } from '../modelProposalReview';
 import { pairedElbowInletProposal, pairedElbowOutletProposal } from '../pairedElbowOutletProposalReview';
 import { pairedElbowInletPlaneProposal, pairedElbowOutletPlaneProposal } from '../pairedElbowOutletPlaneProposalReview';
-import { pairedTiltedInletProposal, pairedTiltedOutletProposal } from '../pairedTiltedOutletProposalReview';
+import { pairedTiltedInletProposal, pairedTiltedOppositeCapProposal, pairedTiltedOutletProposal } from '../pairedTiltedOutletProposalReview';
 import { rectangularDuctProposal } from '../rectangularDuctProposalReview';
 import { rectangularDuctIntersectionProposal } from '../rectangularDuctIntersectionProposalReview';
 import { DIRECT_SNAPSHOT_APPROVAL, isDirectThickenOperation, isRuledThickenOperation } from '../directThickenProposal';
@@ -416,7 +416,7 @@ async function listProposalsTool(state: ChatState, args: Record<string, unknown>
         ?? rectangularDuctIntersectionProposal(state.doc, p)?.revision ?? pairedElbowOutletProposal(state.doc, p)?.revision
         ?? pairedElbowInletProposal(state.doc, p)?.revision ?? pairedElbowOutletPlaneProposal(state.doc, p)?.revision
         ?? pairedElbowInletPlaneProposal(state.doc, p)?.revision ?? pairedTiltedOutletProposal(state.doc, p)?.revision
-        ?? pairedTiltedInletProposal(state.doc, p)?.revision;
+        ?? pairedTiltedInletProposal(state.doc, p)?.revision ?? pairedTiltedOppositeCapProposal(state.doc, p)?.revision;
     return { ...details, ops: ops.length, stale: proposalIsStale(p, revision),
       ...(p.status === 'open' ? { proposalRevision: proposalRevisionOf(p) } : {}),
       ...(direct ? { directReviewRevision: direct } : {}),

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { createFlow } from './flow-helper.mjs';
-import { pairedOutletFixture, tiltedDonor, tiltedInletDonor } from './paired-outlet-fixture.mjs';
+import { pairedTwoCapFixture, tiltedDonor, tiltedInletDonor } from './paired-outlet-fixture.mjs';
 
 const baseline = process.argv.includes('--baseline');
 const reverse = process.argv.includes('--reverse');
@@ -10,13 +10,7 @@ const outletEnd = { name: 'outlet', cap: 1, face: 'n1.end', sourceView: 'Right',
   donorView: 'Left', donor: tiltedDonor, reference: 'n6.bottom', feature: 'n7', donorIndex: 7, shift: -1 };
 const [firstEnd, secondEnd] = reverse ? [outletEnd, inletEnd] : [inletEnd, outletEnd];
 const solid = node => ({ node, side: 'solid' });
-const inlet = pairedOutletFixture({ replace: true, inlet: true });
-const outlet = pairedOutletFixture({ replace: true });
-const seed = { ...inlet, nextId: 8, nodes: [
-  ...inlet.nodes, { ...outlet.nodes[2], id: 'n5' },
-  { ...outlet.nodes[3], id: 'n6', sketch: 5 },
-  { ...outlet.nodes[4], id: 'n7', parent: solid(6) },
-], outputs: { ...inlet.outputs, b7: solid(7) } };
+const seed = pairedTwoCapFixture();
 const pins = [
   'apps/cad-studio/test/paired-outlet-fixture.mjs',
   'packages/barocss-cad/src/brep/exact-sweep.ts',

@@ -7,7 +7,7 @@ import { cornerBatchProposal, reviewedChamferResizeEvidence, reviewedCornerBatch
 import { boredWallProposal, reviewedBoreEvidence, type ModelCandidatePin } from '../modelProposalReview';
 import { pairedElbowInletProposal, pairedElbowOutletProposal, reviewedPairedElbowInletEvidence, reviewedPairedElbowOutletEvidence } from '../pairedElbowOutletProposalReview';
 import { pairedElbowInletPlaneProposal, pairedElbowOutletPlaneProposal, reviewedPairedElbowInletPlaneEvidence, reviewedPairedElbowOutletPlaneEvidence } from '../pairedElbowOutletPlaneProposalReview';
-import { pairedTiltedInletProposal, pairedTiltedOutletProposal, reviewedPairedTiltedInletEvidence, reviewedPairedTiltedOutletEvidence } from '../pairedTiltedOutletProposalReview';
+import { pairedTiltedInletProposal, pairedTiltedOppositeCapProposal, pairedTiltedOutletProposal, reviewedPairedTiltedInletEvidence, reviewedPairedTiltedOppositeCapEvidence, reviewedPairedTiltedOutletEvidence } from '../pairedTiltedOutletProposalReview';
 import { proposalIsStale } from '../proposals';
 import { rectangularDuctProposal, reviewedRectangularDuctEvidence } from '../rectangularDuctProposalReview';
 import { rectangularDuctIntersectionProposal, reviewedRectangularDuctIntersectionEvidence } from '../rectangularDuctIntersectionProposalReview';
@@ -59,10 +59,11 @@ export async function reviewModelCandidate(state: ChatState, args: Record<string
   const inletPlane = pairedOffset && !outlet && !inlet && !outletPlane ? pairedElbowInletPlaneProposal(state.doc, pairedOffset) : undefined;
   const tiltedOutlet = pending && pairedTiltedOutletProposal(state.doc, pending);
   const tiltedInlet = pending && !tiltedOutlet ? pairedTiltedInletProposal(state.doc, pending) : undefined;
+  const tiltedOpposite = pending && !tiltedOutlet && !tiltedInlet ? pairedTiltedOppositeCapProposal(state.doc, pending) : undefined;
   const proposalRevision = boreEdit?.revision ?? cornerEdit?.revision ?? resizeEdit?.revision ?? duct?.revision ?? ductCut?.revision ??
-    outlet?.revision ?? inlet?.revision ?? outletPlane?.revision ?? inletPlane?.revision ?? tiltedOutlet?.revision ?? tiltedInlet?.revision;
+    outlet?.revision ?? inlet?.revision ?? outletPlane?.revision ?? inletPlane?.revision ?? tiltedOutlet?.revision ?? tiltedInlet?.revision ?? tiltedOpposite?.revision;
   if (!pending || !proposalRevision)
-    return refuse('MODEL_REVIEW_UNAVAILABLE', 'Choose a unique open proposal for a supported bored-wall Offset, sketch corner group, saved Chamfer resize, rectangular duct Sweep, duct Intersect, paired duct inlet or outlet Offset, or a paired tilted inlet or outlet replacement.');
+    return refuse('MODEL_REVIEW_UNAVAILABLE', 'Choose a unique open proposal for a supported bored-wall Offset, sketch corner group, saved Chamfer resize, rectangular duct Sweep, duct Intersect, paired duct inlet or outlet Offset, or a paired tilted cap replacement.');
   if (proposalRevision !== expectedProposalRevision || proposalIsStale(pending, requirementEvidenceRevision(state.doc)))
     return refuse('MODEL_REVIEW_PROPOSAL_STALE', 'The proposal or its source changed. Read proposals.list and request a fresh proposal.');
 
@@ -78,7 +79,8 @@ export async function reviewModelCandidate(state: ChatState, args: Record<string
                 : outletPlane ? await reviewedPairedElbowOutletPlaneEvidence(state.doc, state.bodies, preview.doc, outletPlane)
                   : inletPlane ? await reviewedPairedElbowInletPlaneEvidence(state.doc, state.bodies, preview.doc, inletPlane)
                     : tiltedOutlet ? reviewedPairedTiltedOutletEvidence(state.doc, preview.doc, tiltedOutlet)
-                      : tiltedInlet && reviewedPairedTiltedInletEvidence(state.doc, preview.doc, tiltedInlet);
+                      : tiltedInlet ? reviewedPairedTiltedInletEvidence(state.doc, preview.doc, tiltedInlet)
+                        : tiltedOpposite && reviewedPairedTiltedOppositeCapEvidence(state.doc, preview.doc, tiltedOpposite);
   if (!evidence) return refuse('MODEL_REVIEW_REPLAY_FAILED', 'The native geometry of this proposal could not be verified.');
   if ('error' in evidence) return refuse('MODEL_REVIEW_REPLAY_FAILED', evidence.error);
   const { brep, ...geometry } = evidence;

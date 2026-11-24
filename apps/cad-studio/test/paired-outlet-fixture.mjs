@@ -22,3 +22,14 @@ export function pairedOutletFixture({ replace = false, inlet = false, donorMin, 
     outputs: { b1: solid(1), b4: solid(4) },
   };
 }
+
+export function pairedTwoCapFixture(donorThickness = .5) {
+  const inlet = pairedOutletFixture({ replace: true, inlet: true });
+  const outlet = pairedOutletFixture({ replace: true });
+  return { ...inlet, nextId: 8, nodes: [
+    ...inlet.nodes.map((node, index) => index === 3 ? { ...node, height: donorThickness } : node),
+    { ...outlet.nodes[2], id: 'n5' },
+    { ...outlet.nodes[3], id: 'n6', sketch: 5, height: donorThickness },
+    { ...outlet.nodes[4], id: 'n7', parent: solid(6) },
+  ], outputs: { ...inlet.outputs, b7: solid(7) } };
+}

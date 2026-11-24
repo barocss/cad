@@ -4,16 +4,21 @@ import { join } from 'node:path';
 import { render } from './duct-proposal-review-browser-steps.mjs';
 import { createFlow } from './flow-helper.mjs';
 import { currentPartRevision, withMcpSession } from './mcp-browser-session.mjs';
-import { pairedOutletFixture } from './paired-outlet-fixture.mjs';
+import { pairedOutletFixture, pairedTwoCapFixture } from './paired-outlet-fixture.mjs';
 
 const baseline = process.argv.includes('--baseline');
 const inlet = process.argv.includes('--inlet');
+const chained = process.argv.includes('--chain');
 const endpoint = inlet ? 'inlet' : 'outlet';
 const sourceFace = inlet ? 'n1.start' : 'n1.end';
-const evidenceKey = inlet ? 'pairedTiltedInletReplacement' : 'pairedTiltedOutletReplacement';
-const otherEvidenceKey = inlet ? 'pairedTiltedOutletReplacement' : 'pairedTiltedInletReplacement';
-const seed = pairedOutletFixture({ replace: true, inlet });
-const faces = [sourceFace, 'n3.bottom'];
+const ordinaryKey = inlet ? 'pairedTiltedInletReplacement' : 'pairedTiltedOutletReplacement';
+const evidenceKey = chained ? 'pairedTiltedOppositeCapReplacement' : ordinaryKey;
+const otherEvidenceKey = chained ? ordinaryKey : inlet ? 'pairedTiltedOutletReplacement' : 'pairedTiltedInletReplacement';
+const referenceFace = chained && !inlet ? 'n6.bottom' : 'n3.bottom';
+const priorFace = inlet ? 'n1.end' : 'n1.start';
+const priorReference = inlet ? 'n6.bottom' : 'n3.bottom';
+const raw = chained ? pairedTwoCapFixture(.25) : pairedOutletFixture({ replace: true, inlet });
+const faces = [sourceFace, referenceFace];
 const pins = [
   'apps/cad-studio/test/paired-outlet-fixture.mjs', 'apps/cad-studio/test/mcp-browser-session.mjs',
   'apps/cad-studio/src/ui/ProposalBrowser.tsx', 'packages/barocss-cad-model/src/chat/part/proposals.ts',
@@ -21,26 +26,41 @@ const pins = [
   ...(!baseline ? ['packages/barocss-cad-model/src/chat/pairedTiltedOutletProposalReview.ts'] : []),
 ];
 const f = await createFlow({
-  name: `paired-tilted-${endpoint}-agent`, output: process.argv[2], envFrozen: inlet ? 'D1886_SOURCE_FROZEN' : 'D1882_SOURCE_FROZEN',
+  name: `paired-tilted-${endpoint}-agent`, output: process.argv[2], envFrozen: chained ? 'D1893_SOURCE_FROZEN' : inlet ? 'D1886_SOURCE_FROZEN' : 'D1882_SOURCE_FROZEN',
   initialFiles: pins, requiredFrozen: pins,
-  qualification: `Review and explicitly approve the same revision-bound inward tilted ${endpoint} through local MCP and Studio.`,
-  limits: [`One native five-span paired duct, its original ${endpoint}, and one isolated tilted donor. The Agent is local.`],
+  qualification: `Review and explicitly approve the revision-bound tilted ${endpoint}${chained ? ' after its accepted opposite cap' : ''} through local MCP and Studio.`,
+  limits: [`One native five-span paired duct, its original ${endpoint}, and ${chained ? 'two isolated tilted donors' : 'one isolated tilted donor'}. The Agent is local.`],
   inspectorSource: `
 import { readFileSync } from 'node:fs';
+import assert from 'node:assert/strict';
 import { brepMassProperties, checkBrep } from '@barocss/cad';
-import { partBreps } from '@barocss/cad-model/engine/evaluate';
+import { evaluateDoc, partBreps } from '@barocss/cad-model/engine/evaluate';
+import { dispatchTool } from '@barocss/cad-model/chat/tools';
+import { revisionOf } from '@barocss/cad-model/util/revision';
 import { digestOf } from '@barocss/cad-model/util/digest';
 const doc = JSON.parse(readFileSync(process.argv[2], 'utf8'));
-const part = partBreps(doc).find(entry => entry.key === 'b5');
-const { brep } = part, report = checkBrep(brep, { strict: true });
-console.log(JSON.stringify({ digest: digestOf(brep), strict: report.valid, genus: report.topology[0].genus,
-  volume: brepMassProperties(brep, 1).volume }));
+const [mode, firstFace, firstReference] = process.argv.slice(3).map(value => JSON.parse(value));
+if (mode === 'seed') {
+  const result = evaluateDoc(doc, 1);
+  assert.ok(result.ok);
+  const accepted = await dispatchTool({ doc, bodies: result.bodies }, 'features', {
+    action: 'command', command: 'replace-face', faces: [firstFace, firstReference], expectedRevision: revisionOf(doc),
+  }, async next => evaluateDoc(next, 1));
+  assert.ok(!accepted.isError && accepted.changed, accepted.content);
+  console.log(JSON.stringify(accepted.state.doc));
+} else {
+  const part = partBreps(doc).find(entry => entry.key === (mode || 'b5'));
+  const { brep } = part, report = checkBrep(brep, { strict: true });
+  console.log(JSON.stringify({ digest: digestOf(brep), strict: report.valid, genus: report.topology[0].genus,
+    volume: brepMassProperties(brep, 1).volume }));
+}
 `,
 });
 const button = (name, scope = f.page) => scope.getByRole('button', { name, exact: true });
 const near = (actual, expected) => assert.ok(Math.abs(actual - expected) < 1e-8, `${actual} vs ${expected}`);
 
 await f.run(async () => {
+  const seed = chained ? await f.inspect('accepted-first-tilted-cap', raw, 'seed', priorFace, priorReference) : raw;
   const file = join(f.output, `tilted-${endpoint}-pending.bcad`), seedBytes = Buffer.from(JSON.stringify(seed));
   await writeFile(file, seedBytes);
   const session = { app: f.app, output: f.output, clientName: f.name };
@@ -76,7 +96,15 @@ await f.run(async () => {
     assert.notEqual(image.meta.candidate.reviewRevision, opposite.meta.candidate.reviewRevision);
     const identities = [geometry.source, geometry.reference, geometry.candidate];
     assert.deepEqual(identities.map(owner => [owner.body, owner.feature, owner.face]),
-      [['b1', 'n1', sourceFace], ['b4', 'n4', 'n3.bottom'], ['b5', 'n5', sourceFace]]);
+      chained ? [['b8', 'n8', sourceFace], inlet ? ['b4', 'n4', referenceFace] : ['b7', 'n7', referenceFace], ['b9', 'n9', sourceFace]]
+        : [['b1', 'n1', sourceFace], ['b4', 'n4', 'n3.bottom'], ['b5', 'n5', sourceFace]]);
+    if (chained) {
+      assert.equal(geometry.originalSweepFeature, 'n1');
+      assert.equal(geometry.prior.cap.face, priorFace);
+      assert.equal(geometry.prior.reference.face, priorReference);
+      assert.equal(geometry.prior.beforeBoundarySha256, geometry.prior.afterBoundarySha256);
+      assert.match(geometry.prior.beforeBoundarySha256, /^[a-f0-9]{64}$/);
+    }
     if (inlet) {
       const outward = [-4, 1, 0].map(value => value / Math.sqrt(17));
       geometry.candidate.plane.n.forEach((value, axis) => near(value, outward[axis]));
@@ -109,7 +137,7 @@ await f.run(async () => {
   if (reviewed) {
     // Proposal content can change while the base geometry and its revision stay the same.
     const changedProposal = structuredClone(pending), alteredFile = join(f.output, 'tilted-different-proposal.bcad');
-    changedProposal.proposals[0].ops[0].args.faces[1] = 'n3.top';
+    changedProposal.proposals[0].ops[0].args.faces[1] = referenceFace.replace('.bottom', '.top');
     await writeFile(alteredFile, JSON.stringify(changedProposal));
     await withMcpSession(session, alteredFile, 'tilted-changed-proposal', async call => {
       assert.equal(await currentPartRevision(call), reviewed.inspect.expectedRevision);
@@ -135,10 +163,11 @@ await f.run(async () => {
   await preview(card, baseline ? 'tilted-baseline-preview-without-native-pin' : 'tilted-pinned-studio-preview');
   if (baseline) return;
   await button('Hide', card).click();
-  await f.openFeatureEditor(4, 'change the donor after native review');
-  await f.editor().getByLabel('ΔX').fill(inlet ? '1' : '-1');
+  const changedDonor = chained && inlet ? 7 : 4;
+  await f.openFeatureEditor(changedDonor, 'change the donor after native review');
+  await f.editor().getByLabel('ΔX').fill(chained ? inlet ? '-1' : '1' : inlet ? '1' : '-1');
   const moved = (await f.applyEditor(pending, 'tilted-donor-changed')).doc;
-  assert.equal(moved.nodes.length, 5);
+  assert.equal(moved.nodes.length, seed.nodes.length);
   await card.getByText('stale ·', { exact: true }).waitFor();
   assert.equal(await button('Accept', card).count(), 0);
   await f.snapshot('tilted-stale-approval-withheld');
@@ -155,11 +184,12 @@ await f.run(async () => {
   await f.changed(pending);
   const approved = (await f.snapshot('tilted-explicitly-approved')).doc;
   assert.equal(approved.proposals[0].status, 'accepted');
-  const accepted = await f.inspect('tilted-accepted-native', approved);
+  const body = chained ? 'b9' : 'b5';
+  const accepted = await f.inspect('tilted-accepted-native', approved, body);
   assert.ok(accepted.strict && accepted.genus === 2);
   assert.equal(accepted.digest, reviewed.geometry.candidate.bodySha256);
-  near(accepted.volume, 32 * (23 + 15 * Math.PI));
+  near(accepted.volume, 32 * ((chained ? 22 : 23) + 15 * Math.PI));
   const saved = await f.save('tilted-approved-review');
   await f.freshOpen(saved.file, approved, 'tilted-approved-fresh-open');
-  assert.deepEqual(await f.inspect('tilted-reopened-native', await f.doc()), accepted);
+  assert.deepEqual(await f.inspect('tilted-reopened-native', await f.doc(), body), accepted);
 });
