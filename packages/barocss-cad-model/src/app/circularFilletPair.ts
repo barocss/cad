@@ -1,4 +1,5 @@
 import type { DisplayEdge } from '../engine/mesh';
+import { closedFilletRimNames } from '../engine/nativeFilletTorus';
 
 function nativeRim(edge: DisplayEdge | undefined) {
   const circle = edge?.nativeCircle, frame = edge?.nativeFilletRim, joint = edge?.nativeJoint;
@@ -19,5 +20,29 @@ export function circularFilletPair(edges: readonly (DisplayEdge | undefined)[]) 
     || Math.abs(a.circle.radius - b.circle.radius) > 1e-8
     || Math.hypot(a.circle.centre[0] - b.circle.centre[0], a.circle.centre[1] - b.circle.centre[1]) > 1e-8
     || Math.hypot(a.frame.midpoint[0] - b.frame.midpoint[0], a.frame.midpoint[1] - b.frame.midpoint[1]) > 1e-8) return;
+  return { top, bottom };
+}
+
+/** Use the two native, complete rims of one round prism. Either pick order uses the upper seam. */
+export function closedCircularFilletPair(edges: readonly DisplayEdge[]) {
+  if (edges.length !== 2) return;
+  const rims = edges.map(edge => {
+    const { nativeCircle: circle, nativeFilletRim: frame } = edge;
+    if (edge.straight || edge.nativeJoint || edge.names.length !== 2 || !circle || !frame || frame.quarter ||
+      ![...circle.centre, ...circle.normal, circle.radius, ...frame.midpoint, ...frame.direction].every(Number.isFinite) ||
+      !(circle.radius > 0) || Math.hypot(circle.normal[0], circle.normal[1]) > 1e-9 ||
+      Math.abs(Math.abs(circle.normal[2]) - 1) > 1e-9) return;
+    return { edge, circle, frame };
+  });
+  const [a, b] = rims;
+  if (!a || !b) return;
+  const [top, bottom] = a.circle.centre[2] > b.circle.centre[2] ? [a, b] : [b, a];
+  const owner = /^(n\d+)\./.exec(top.edge.names[0])?.[1];
+  if (!owner || !closedFilletRimNames(owner, 1).every(name => top.edge.names.includes(name)) ||
+    !closedFilletRimNames(owner, -1).every(name => bottom.edge.names.includes(name)) ||
+    !(top.circle.centre[2] > bottom.circle.centre[2]) || !(top.frame.direction[2] > 0 && bottom.frame.direction[2] < 0) ||
+    Math.abs(top.circle.radius - bottom.circle.radius) > 1e-8 ||
+    Math.hypot(top.circle.centre[0] - bottom.circle.centre[0], top.circle.centre[1] - bottom.circle.centre[1]) > 1e-8 ||
+    Math.hypot(top.frame.midpoint[0] - bottom.frame.midpoint[0], top.frame.midpoint[1] - bottom.frame.midpoint[1]) > 1e-8) return;
   return { top, bottom };
 }

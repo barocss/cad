@@ -1,4 +1,5 @@
-import { checkBrep, faceGeometry, revolutionOf, type BrepFace, type CadPartOutput, type Curve } from '@barocss/cad';
+import { CadNumericPolicy, checkBrep, faceGeometry, revolutionOf, type BrepFace, type CadPartOutput, type Curve } from '@barocss/cad';
+import type { DisplayFace } from './mesh';
 import { add, cross, dot, len, scale, sub, unit, type Vec3 } from './vec3';
 
 /** Native surface and exact resolved edge of a single terminal toroidal fillet. */
@@ -151,86 +152,141 @@ function closedHalfChart(face: BrepFace, capSign: number, tolerance: number) {
   return { geometry, first, middle, surface, wallColumn, capColumn };
 }
 
-/** Certify the native trims of a complete cap-rim round. */
+export function closedFilletRimNames(owner: string, capSign: 1 | -1): readonly [string, string] {
+  return capSign === 1 ? [`${owner}.side0#1|${owner}.top`, `${owner}.side0#2|${owner}.top`]
+    : [`${owner}.bottom|${owner}.side0#1`, `${owner}.bottom|${owner}.side0#2`];
+}
+
+/** A shared drag keeps positive native wall height and cap radius. Typed radii retain their own admission. */
+export function closedFilletDragLimit(stockRadius: number, height: number): number {
+  return Math.min(stockRadius, height / 2) - 2 * CadNumericPolicy.linearTolerance;
+}
+
+/** Certify a complete cap-rim round, including the exact two chart boundaries and wall and cap ownership. */
 export function nativeClosedFilletTorusOf(output: CadPartOutput): NativeClosedFilletTorus | undefined {
+  return closedFilletTori(output, 1)?.[0];
+}
+
+/** Both rounded rims of one cylinder with its two original central wall charts still present. */
+export function nativeClosedFilletTorusPairOf(output: CadPartOutput): readonly [NativeClosedFilletTorus, NativeClosedFilletTorus] | undefined {
+  const tori = closedFilletTori(output, 2);
+  if (!tori) return;
+  const [upper, lower] = tori, tolerance = Math.max(1e-8, (upper.majorRadius + upper.radius) * 1e-9);
+  if (upper.radius > closedFilletDragLimit(upper.majorRadius + upper.radius, upper.height) ||
+    upper.centre[2] - lower.centre[2] <= tolerance ||
+    Math.abs(upper.radius - lower.radius) > tolerance || Math.abs(upper.majorRadius - lower.majorRadius) > tolerance ||
+    Math.hypot(upper.centre[0] - lower.centre[0], upper.centre[1] - lower.centre[1]) > tolerance ||
+    new Set([...upper.faces, ...lower.faces].map(face => face.faceId)).size !== 4) return;
+  return [upper, lower];
+}
+
+export function closedFilletDisplayFace(faces: readonly DisplayFace[], torus: NativeClosedFilletTorus): DisplayFace | undefined {
+  const matches = faces.filter(face => torus.faces.some(member => member.faceId === face.id));
+  if (matches.length === 1 && torus.faces.every(member => member.face.slice(0, member.face.lastIndexOf('#')) === matches[0].name)) return matches[0];
+}
+
+function closedFilletTori(output: CadPartOutput, count: 1 | 2): NativeClosedFilletTorus[] | undefined {
   const { brep, filletTargets: targets } = output;
-  if (targets?.length !== 2 || new Set(targets).size !== 2 || output.bodyCount !== 1 ||
+  if (targets?.length !== 2 * count || new Set(targets).size !== targets.length || output.bodyCount !== 1 ||
     brep.source.family !== 'analytic-boolean' || brep.source.id !== output.feature ||
     brep.bodies.length !== 1 || brep.bodies[0].kind !== 'solid' || brep.bodies[0].shells.length !== 1 ||
     brep.shells.length !== 1 || !brep.shells[0].closed || brep.bodies[0].shells[0] !== brep.shells[0].id ||
-    brep.faces.length !== 6 || brep.loops.length !== 6 || brep.coedges.length !== 20 || brep.edges.length !== 10 || brep.vertices.length !== 6) return;
-  const upper = /^(n\d+)\.side0#[12]\|\1\.top$/.exec(targets[0]);
-  const owner = upper?.[1] ?? /^(n\d+)\.bottom\|\1\.side0#[12]$/.exec(targets[0])?.[1];
+    brep.faces.length !== 4 + 2 * count || brep.loops.length !== 4 + 2 * count || brep.coedges.length !== 12 + 8 * count ||
+    brep.edges.length !== 6 + 4 * count || brep.vertices.length !== 4 + 2 * count) return;
+  const owner = /^(n\d+)\./.exec(targets[0])?.[1];
   if (!owner) return;
-  const capSign = upper ? 1 : -1;
-  const expectedTargets = [1, 2].map(index => upper ? `${owner}.side0#${index}|${owner}.top` : `${owner}.bottom|${owner}.side0#${index}`);
-  if (!expectedTargets.every(target => targets.includes(target))) return;
-  const faces = [`${output.feature}.face#1`, `${output.feature}.face#2`].map(name => brep.faces.find(face => face.name === name));
-  const top = brep.faces.find(face => face.name === `${owner}.top`), bottom = brep.faces.find(face => face.name === `${owner}.bottom`);
-  const walls = [1, 2].map(index => brep.faces.find(face => face.name === `${owner}.side0#${index}`));
-  if (!top || !bottom || faces.some(face => !face) || walls.some(face => !face) ||
-    new Set([top, bottom, ...faces, ...walls].map(face => face!.id)).size !== 6) return;
+  const signs = ([1, -1] as const).filter(sign => closedFilletRimNames(owner, sign).every(target => targets.includes(target)));
+  if (signs.length !== count) return;
+  const namedFace = (name: string) => brep.faces.find(face => face.name === name);
+  const top = namedFace(`${owner}.top`), bottom = namedFace(`${owner}.bottom`);
+  const wallA = namedFace(`${owner}.side0#1`), wallB = namedFace(`${owner}.side0#2`);
+  const faces = Array.from({ length: 2 * count }, (_, i) => namedFace(`${output.feature}.face#${i + 1}`));
+  if (!top || !bottom || !wallA || !wallB || !faces.every(face => !!face) ||
+    new Set([top, bottom, wallA, wallB, ...faces].map(face => face.id)).size !== brep.faces.length) return;
   try {
     const report = checkBrep(brep, { strict: true });
     if (!report.valid || report.topology.length !== 1 || report.topology[0].genus !== 0) return;
-    const initial = torusGeometry(faces[0]!);
+    const topPlane = faceGeometry(top);
+    if (topPlane.kind !== 'plane' || !(topPlane.o[2] > 0) || !Number.isFinite(topPlane.o[2])) return;
+    const height = topPlane.o[2], result: NativeClosedFilletTorus[] = [];
+    const initial = torusGeometry(faces[0]);
     if (!initial) return;
     const tolerance = Math.max(1e-8, (initial.majorRadius + initial.radius) * 1e-9);
-    const charts = faces.map(face => closedHalfChart(face!, capSign, tolerance)), a = charts[0], b = charts[1];
-    if (!a || !b || !closedNear(a.geometry.centre, b.geometry.centre, tolerance) ||
-      Math.abs(a.geometry.majorRadius - b.geometry.majorRadius) > tolerance || Math.abs(a.geometry.radius - b.geometry.radius) > tolerance ||
-      len(add(a.first, b.first)) > 1e-9 || len(add(a.middle, b.middle)) > 1e-9) return;
-    const { centre, majorRadius, radius } = a.geometry, outerRadius = majorRadius + radius;
-    const topPlane = faceGeometry(top);
-    if (topPlane.kind !== 'plane') return;
-    const height = topPlane.o[2];
-    if (!Number.isFinite(height) || !(centre[2] > 0 && height > centre[2]) ||
-      Math.abs(centre[2] + capSign * radius - (upper ? height : 0)) > tolerance) return;
     for (const [face, z, sign] of [[top, height, 1], [bottom, 0, -1]] as const) {
       const plane = faceGeometry(face);
       if (plane.kind !== 'plane' || !closedNear(plane.n, [0, 0, sign], 1e-9) || Math.abs(plane.o[2] - z) > tolerance ||
         face.loops.length !== 1 || face.surface.kind !== 'surface' || face.surface.degreeU !== 1 || face.surface.degreeV !== 1 ||
         face.surface.controlPoints.some(row => row.some(point => Math.abs(point[2] - z) > tolerance))) return;
     }
-    const loops = new Map(brep.loops.map(loop => [loop.id, loop])), uses = new Map(brep.coedges.map(use => [use.id, use]));
-    const edges = new Map(brep.edges.map(edge => [edge.id, edge])), blendIds = new Set(faces.map(face => face!.id));
-    const seamIds = new Set<string>(), wallIds = new Set<string>();
-    for (let f = 0; f < 2; f++) {
-      const face = faces[f]!, chart = charts[f]!, { surface } = chart, loop = loops.get(face.loops[0]);
-      if (face.shell !== brep.shells[0].id || face.loops.length !== 1 || !loop || loop.face !== face.id || loop.kind !== 'outer' || loop.coedges.length !== 4) return;
-      const boundaries = [
-        { role: 'seam', points: surface.controlPoints[0], weights: surface.weights[0], knots: closedQuarterKnots },
-        { role: 'seam', points: surface.controlPoints[4], weights: surface.weights[4], knots: closedQuarterKnots },
-        { role: 'wall', points: surface.controlPoints.map(row => row[chart.wallColumn]), weights: surface.weights.map(row => row[chart.wallColumn]), knots: closedHalfKnots },
-        { role: 'cap', points: surface.controlPoints.map(row => row[chart.capColumn]), weights: surface.weights.map(row => row[chart.capColumn]), knots: closedHalfKnots },
-      ];
-      const matched = new Set<number>();
-      for (const id of loop.coedges) {
-        const use = uses.get(id), twin = use?.twin ? uses.get(use.twin) : undefined, edge = use && edges.get(use.edge);
-        const neighbor = twin && loops.get(twin.loop)?.face;
-        if (!use || use.pcurve !== null || use.loop !== loop.id || !edge || !twin || twin.twin !== use.id || twin.edge !== use.edge) return;
-        const match = boundaries.flatMap((boundary, index) => closedIsoMatches(edge.curve, boundary.points, boundary.weights, boundary.knots, tolerance) ? [index] : []);
-        if (match.length !== 1 || matched.has(match[0])) return;
-        matched.add(match[0]);
-        const role = boundaries[match[0]].role;
-        if (role === 'seam') {
-          if (neighbor !== faces[1 - f]!.id || !blendIds.has(neighbor)) return;
-          seamIds.add(edge.id);
-        } else if (role === 'cap') {
-          if (neighbor !== (upper ? top : bottom).id) return;
-        } else {
-          const wall = walls.find(wall => wall!.id === neighbor);
-          if (!wall || wallIds.has(wall.id)) return;
-          const cylinder = faceGeometry(wall);
-          if (cylinder.kind !== 'cylinder' || cylinder.out !== 1 || !closedNear(cylinder.a, [0, 0, 1], 1e-9) ||
-            Math.abs(cylinder.r - outerRadius) > tolerance || Math.hypot(cylinder.c[0] - centre[0], cylinder.c[1] - centre[1]) > tolerance) return;
-          wallIds.add(wall.id);
-        }
-      }
-      if (matched.size !== 4) return;
+    for (const sign of signs) {
+      // Use the native torus carrier to find the two half charts at this cap. The proof below
+      // checks their exact reciprocal trims, so neither suffix order nor proximity grants ownership.
+      const cap = sign === 1 ? top : bottom, z = sign === 1 ? height : 0;
+      const charts = count === 1 ? faces : faces.filter(face => {
+        const g = torusGeometry(face);
+        return g && Math.abs(g.centre[2] + sign * g.radius - z) <= tolerance;
+      });
+      if (charts.length !== 2) return;
+      const names = closedFilletRimNames(owner, sign);
+      const selected = targets.filter(target => names.some(name => target === name));
+      const proof = certifyClosedRim(brep, [charts[0], charts[1]], cap, [wallA, wallB], [selected[0], selected[1]], sign, height);
+      if (!proof) return;
+      result.push(proof);
     }
-    if (seamIds.size !== 2 || wallIds.size !== 2) return;
-    return { targets: [targets[0], targets[1]], faces: [{ faceId: faces[0]!.id, face: faces[0]!.name! }, { faceId: faces[1]!.id, face: faces[1]!.name! }],
-      centre, axis: [0, 0, 1], majorRadius, radius, height };
+    return result;
   } catch { return; }
+}
+
+function certifyClosedRim(brep: CadPartOutput['brep'], faces: readonly [BrepFace, BrepFace], cap: BrepFace,
+  walls: readonly [BrepFace, BrepFace], targets: readonly [string, string], capSign: 1 | -1, height: number): NativeClosedFilletTorus | undefined {
+  const initial = torusGeometry(faces[0]);
+  if (!initial) return;
+  const tolerance = Math.max(1e-8, (initial.majorRadius + initial.radius) * 1e-9);
+  const charts = faces.map(face => closedHalfChart(face, capSign, tolerance)), a = charts[0], b = charts[1];
+  if (!a || !b || !closedNear(a.geometry.centre, b.geometry.centre, tolerance) ||
+    Math.abs(a.geometry.majorRadius - b.geometry.majorRadius) > tolerance || Math.abs(a.geometry.radius - b.geometry.radius) > tolerance ||
+    len(add(a.first, b.first)) > 1e-9 || len(add(a.middle, b.middle)) > 1e-9) return;
+  const { centre, majorRadius, radius } = a.geometry, outerRadius = majorRadius + radius;
+  if (!(centre[2] > 0 && height > centre[2]) ||
+    Math.abs(centre[2] + capSign * radius - (capSign === 1 ? height : 0)) > tolerance) return;
+  const loops = new Map(brep.loops.map(loop => [loop.id, loop])), uses = new Map(brep.coedges.map(use => [use.id, use]));
+  const edges = new Map(brep.edges.map(edge => [edge.id, edge]));
+  const seamIds = new Set<string>(), wallIds = new Set<string>();
+  for (let f = 0; f < 2; f++) {
+    const face = faces[f], chart = charts[f]!, { surface } = chart, loop = loops.get(face.loops[0]);
+    if (face.shell !== brep.shells[0].id || face.loops.length !== 1 || !loop || loop.face !== face.id || loop.kind !== 'outer' || loop.coedges.length !== 4) return;
+    const boundaries = [
+      { role: 'seam', points: surface.controlPoints[0], weights: surface.weights[0], knots: closedQuarterKnots },
+      { role: 'seam', points: surface.controlPoints[4], weights: surface.weights[4], knots: closedQuarterKnots },
+      { role: 'wall', points: surface.controlPoints.map(row => row[chart.wallColumn]), weights: surface.weights.map(row => row[chart.wallColumn]), knots: closedHalfKnots },
+      { role: 'cap', points: surface.controlPoints.map(row => row[chart.capColumn]), weights: surface.weights.map(row => row[chart.capColumn]), knots: closedHalfKnots },
+    ];
+    const matched = new Set<number>();
+    for (const id of loop.coedges) {
+      const use = uses.get(id), twin = use?.twin ? uses.get(use.twin) : undefined, edge = use && edges.get(use.edge);
+      const neighbor = twin && loops.get(twin.loop)?.face;
+      if (!use || use.pcurve !== null || use.loop !== loop.id || !edge || !twin || twin.twin !== use.id || twin.edge !== use.edge) return;
+      const match = boundaries.flatMap((boundary, index) => closedIsoMatches(edge.curve, boundary.points, boundary.weights, boundary.knots, tolerance) ? [index] : []);
+      if (match.length !== 1 || matched.has(match[0])) return;
+      matched.add(match[0]);
+      const role = boundaries[match[0]].role;
+      if (role === 'seam') {
+        if (neighbor !== faces[1 - f].id) return;
+        seamIds.add(edge.id);
+      } else if (role === 'cap') {
+        if (neighbor !== cap.id) return;
+      } else {
+        const wall = walls.find(wall => wall.id === neighbor);
+        if (!wall || wallIds.has(wall.id)) return;
+        const cylinder = faceGeometry(wall);
+        if (cylinder.kind !== 'cylinder' || cylinder.out !== 1 || !closedNear(cylinder.a, [0, 0, 1], 1e-9) ||
+          Math.abs(cylinder.r - outerRadius) > tolerance || Math.hypot(cylinder.c[0] - centre[0], cylinder.c[1] - centre[1]) > tolerance) return;
+        wallIds.add(wall.id);
+      }
+    }
+    if (matched.size !== 4) return;
+  }
+  if (seamIds.size !== 2 || wallIds.size !== 2) return;
+  return { targets, faces: [{ faceId: faces[0].id, face: faces[0].name! }, { faceId: faces[1].id, face: faces[1].name! }],
+    centre, axis: [0, 0, 1], majorRadius, radius, height };
 }

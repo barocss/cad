@@ -13,6 +13,7 @@ import { planeOf, profileMiddle } from './profiles';
 import { replaceRange } from '../chat/features';
 import { commands, type Command, type Ctx, type Field, type HandleSpec, type Selection, type Values } from './commands';
 import type { BodyResult } from '../engine/evaluate';
+import { closedFilletDisplayFace, closedFilletDragLimit } from '../engine/nativeFilletTorus';
 import { bodyKeyFor, featureId, nodeIndexOf } from '../engine/ids';
 import { refOf } from './bodyRef';
 import { canonical } from '../util/revision';
@@ -331,9 +332,13 @@ export function editCommand(index: number, nodes: readonly ModelNode[], rows: Pi
       }
       // A fillet or chamfer: on its round (or cut) face, out of the body; out is larger.
       if (n.kind === 'fillet' || n.kind === 'chamfer') {
-        const body = ctx.bodies.find(b => b.key === bodyKeyFor(now, index)), fid = `${featureId(now, index)}.`, face = body?.mesh.faces.find(f => f.name.split('+').some(s => s.startsWith(fid)));
+        const body = ctx.bodies.find(b => b.key === bodyKeyFor(now, index)), fid = `${featureId(now, index)}.`;
+        const upper = n.kind === 'fillet' ? body?.nativeClosedFilletTorusPair?.[0] : undefined;
+        const face = upper && body ? closedFilletDisplayFace(body.mesh.faces, upper)
+          : body?.mesh.faces.find(f => f.name.split('+').some(s => s.startsWith(fid)));
         if (!face) return [];
-        return [{ key: n.kind === 'fillet' ? 'r' : 'd', at: [...face.centroid] as V3, dir: [...face.normal] as V3, min: 0.1, step: 0.5 }];
+        return [{ key: n.kind === 'fillet' ? 'r' : 'd', at: [...face.centroid] as V3, dir: [...face.normal] as V3, min: 0.1, step: 0.5,
+          ...(upper ? { max: closedFilletDragLimit(upper.majorRadius + upper.radius, upper.height) } : {}) }];
       }
       return [];
     },

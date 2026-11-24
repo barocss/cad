@@ -37,7 +37,8 @@ import { linearSpanPatternInput } from '../engine/linearSpanPattern';
 import { circularPatternCountRange, circularPatternStep } from '../engine/circularPatternSpan';
 import { linearSpanHandles } from './linearSpanHandles';
 import type { BodyResult } from '../engine/evaluate';
-import { circularFilletPair } from './circularFilletPair';
+import { circularFilletPair, closedCircularFilletPair } from './circularFilletPair';
+import { closedFilletDragLimit } from '../engine/nativeFilletTorus';
 import type { BearingAssemblyInput } from '../engine/bearingContext';
 import type { DisplayEdge } from '../engine/mesh';
 import { refOf } from './bodyRef';
@@ -254,9 +255,12 @@ function edgeHandle(ctx: Ctx, key: string, size: number, kind: 'fillet' | 'chamf
     return kind === 'fillet' ? room * Math.tan(half) : room;
   };
   const e = sel.edges[0], n = normals(e); if (n.length !== 2) return [];
-  const max = Math.min(...sel.edges.map(limit));
-  const rim = useNativeRim && ctx.selection.edges.length === sel.edges.length && !ctx.selection.faces.length
-    ? sel.edges.length === 1 ? e.nativeFilletRim : circularFilletPair(sel.edges)?.top.frame
+  const usePickedRim = useNativeRim && ctx.selection.edges.length === sel.edges.length && !ctx.selection.faces.length;
+  const closedPair = usePickedRim ? closedCircularFilletPair(sel.edges) : undefined;
+  const pairLimit = closedPair ? closedFilletDragLimit(closedPair.top.circle.radius, closedPair.top.circle.centre[2] - closedPair.bottom.circle.centre[2]) : Infinity;
+  const max = Math.min(pairLimit, ...sel.edges.map(limit));
+  const rim = usePickedRim
+    ? sel.edges.length === 1 ? e.nativeFilletRim : (closedPair ?? circularFilletPair(sel.edges))?.top.frame
     : undefined;
   const out = rim?.direction ?? unit3([n[0][0] + n[1][0], n[0][1] + n[1][1], n[0][2] + n[1][2]]);
   const mid = rim?.midpoint ?? [0, 1, 2].map(k => (e.a[k] + e.b[k]) / 2);

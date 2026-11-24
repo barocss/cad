@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { brepMassProperties, checkBrep, evaluateCadPart, type CadPartDocument, type CadPartOutput } from '@barocss/cad';
-import { nativeClosedFilletTorusOf, nativeFilletTorusOf, nativeFilletTorusPairOf } from '../src/engine/nativeFilletTorus';
+import { closedFilletRimNames, nativeClosedFilletTorusOf, nativeClosedFilletTorusPairOf, nativeFilletTorusOf, nativeFilletTorusPairOf } from '../src/engine/nativeFilletTorus';
 import { emptyDoc, withNode, type SketchNode } from '../src/engine/doc';
 import { evaluateDoc, placeBody } from '../src/engine/evaluate';
 import { captureSignatures } from '../src/engine/references';
@@ -168,4 +168,38 @@ for (const cap of ['top', 'bottom'] as const) test(`two native half patches cert
     assert.deepEqual(output, before);
   }
   assert.equal(nativeClosedFilletTorusOf(fixture()), undefined);
+});
+
+test('two complete rim rounds certify both original caps and the retained common wall', () => {
+  const top = closedFilletRimNames('n1', 1), bottom = closedFilletRimNames('n1', -1);
+  const output = (radius: number, edges: readonly string[]) => evaluateCadPart({
+    format: 'barocss-cad-part', version: 1, units: 'mm', parameters: {}, features: [
+      { id: 'n0', kind: 'sketch', profile: 'circle', center: [0, 0], radius: 8 },
+      { id: 'n1', kind: 'extrude', sketch: 'n0', height: 10 },
+      { id: 'n2', kind: 'fillet', target: 'n1', edges, radius },
+    ],
+  }).outputs[0];
+  for (const [r, order] of [[.6, [...bottom, ...top]], [1.5, [...top, ...bottom]]] as const) {
+    const result = output(r, order);
+    const pair = nativeClosedFilletTorusPairOf(result);
+    assert.ok(pair);
+    assert.deepEqual(pair.map(rim => [...rim.targets].sort()), [top, bottom]);
+    assert.equal(new Set(pair.flatMap(rim => rim.faces.map(face => face.faceId))).size, 4);
+    for (const [i, rim] of pair.entries()) {
+      close(rim.radius, r);
+      close(rim.majorRadius, 8 - r);
+      close(rim.centre[2], i === 0 ? 10 - r : r);
+    }
+    assert.equal(nativeClosedFilletTorusOf(result), undefined);
+    const damaged = structuredClone(result) as Mutable<CadPartOutput>;
+    const patch = damaged.brep.faces.find(face => face.id === pair[1].faces[0].faceId)?.surface;
+    assert.ok(patch?.kind === 'surface');
+    patch.weights[2][1] += 0.01;
+    assert.equal(nativeClosedFilletTorusPairOf(damaged), undefined);
+    assert.equal(nativeClosedFilletTorusPairOf({ ...result, filletTargets: [...top, bottom[0], bottom[0]] }), undefined);
+  }
+  const noWall = output(5, [...top, ...bottom]);
+  assert.ok(checkBrep(noWall.brep, { strict: true }).valid);
+  assert.equal(noWall.brep.faces.length, 6);
+  assert.equal(nativeClosedFilletTorusPairOf(noWall), undefined);
 });

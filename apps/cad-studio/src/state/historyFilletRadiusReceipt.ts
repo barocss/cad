@@ -5,7 +5,7 @@ import type { BodyResult, EvalResult } from '@barocss/cad-model/engine/evaluate'
 import { signaturesOf } from '@barocss/cad-model/engine/rematch';
 import { toSig } from '@barocss/cad-model/engine/references';
 import type { DisplayEdge } from '@barocss/cad-model/engine/mesh';
-import type { NativeFilletTorusFace } from '@barocss/cad-model/engine/nativeFilletTorus';
+import { closedFilletDisplayFace, closedFilletRimNames, type NativeClosedFilletTorus, type NativeFilletTorusFace } from '@barocss/cad-model/engine/nativeFilletTorus';
 import { circularFilletPair } from '@barocss/cad-model/app/circularFilletPair';
 import { add, cross, dot, len, scale, sub, unit, type Vec3 } from '@barocss/cad-model/engine/vec3';
 import type { Active } from '../app/commandState';
@@ -52,19 +52,19 @@ function historyCircularRims(doc: StudioDoc, fillet: Fillet) {
   if (rims.every(edge => fillet.edges.includes(edge) && fillet.sigs?.[edge]?.k === 'curve')) return rims;
 }
 
-function historyClosedCircularRim(doc: StudioDoc, fillet: Fillet) {
+function historyClosedCircularRims(doc: StudioDoc, fillet: Fillet) {
   const [sketch, stock] = doc.nodes;
-  if (fillet.edges.length !== 2 || sketch.kind !== 'sketch' || sketch.profile !== 'circle' ||
+  if ((fillet.edges.length !== 2 && fillet.edges.length !== 4) || sketch.kind !== 'sketch' || sketch.profile !== 'circle' ||
     !Object.keys(sketch).every(key => ['id', 'kind', 'profile', 'center', 'radius'].includes(key)) ||
     !numericPoint(sketch.center) || typeof sketch.radius !== 'number' || !Number.isFinite(sketch.radius) || sketch.radius <= 0 ||
     stock.kind !== 'extrude' || typeof stock.height !== 'number') return;
-  const id = featureId(doc.nodes, 1);
-  for (const capSign of [1, -1] as const) {
-    const targets = capSign === 1 ? [`${id}.side0#1|${id}.top`, `${id}.side0#2|${id}.top`] as const
-      : [`${id}.bottom|${id}.side0#1`, `${id}.bottom|${id}.side0#2`] as const;
-    if (targets.every(edge => fillet.edges.includes(edge) && fillet.sigs?.[edge]?.k === 'curve' && fillet.sigs[edge].n === 2))
-      return { targets, capSign, height: stock.height };
-  }
+  const id = featureId(doc.nodes, 1), height = stock.height;
+  const rims = ([1, -1] as const).flatMap(capSign => {
+    const targets = closedFilletRimNames(id, capSign);
+    return targets.every(edge => fillet.edges.includes(edge) && fillet.sigs?.[edge]?.k === 'curve' && fillet.sigs[edge].n === 2)
+      ? [{ targets, capSign, height }] : [];
+  });
+  if (rims.length * 2 === fillet.edges.length) return rims;
 }
 
 export function ordinaryHistoryFillet(doc: StudioDoc,index: number|null,bodies?:readonly BodyResult[]): Fillet | null {
@@ -81,14 +81,15 @@ export function ordinaryHistoryFillet(doc: StudioDoc,index: number|null,bodies?:
   const plain = sketch.profile === 'rectangle' && Object.keys(sketch).every(k => ['id','kind','profile','min','max'].includes(k))
     && numericPoint(sketch.min) && numericPoint(sketch.max);
   const circular = sketch.profile === 'loop' && stored?.k === 'curve' && plainQuarterSector(sketch);
-  const closedRim = historyClosedCircularRim(doc, fillet);
-  if (!plain && !circular && !closedRim) return null;
+  const closedRims = historyClosedCircularRims(doc, fillet);
+  if (!plain && !circular && !closedRims) return null;
   const pair = historyTopEdges(doc, fillet);
   const circularPair = circular && historyCircularRims(doc, fillet);
-  if (fillet.edges.length !== 1 && !(plain && pair) && !circularPair && !closedRim) return null;
+  if (fillet.edges.length !== 1 && !(plain && pair) && !circularPair && !closedRims) return null;
   if (pair?.adjacent && bodies && (bodies.length !== 1 || bodies[0].nativeFilletPair?.adjacentTop !== true)) return null;
   if (circularPair && bodies && (bodies.length !== 1 || !bodies[0].nativeFilletTorusPair)) return null;
-  if (closedRim && bodies && (bodies.length !== 1 || !bodies[0].nativeClosedFilletTorus)) return null;
+  if (closedRims && bodies && (bodies.length !== 1 ||
+    !(closedRims.length === 1 ? bodies[0].nativeClosedFilletTorus : bodies[0].nativeClosedFilletTorusPair))) return null;
   const out=doc.outputs[bodyKeyFor(doc.nodes,index,'solid')];
   return out?.node===index&&out.side==='solid'?fillet:null;
 }
@@ -204,14 +205,9 @@ function pairedCircularHistoryFrame(rims: readonly [string, string], fillet: Fil
     return topMatches[0].frame;
 }
 
-function closedCircularHistoryFrame({ targets, capSign, height }: NonNullable<ReturnType<typeof historyClosedCircularRim>>,
-  fillet: Fillet, stock: BodyResult, finished: BodyResult,
-  face: HistoryFilletReceipt['face'], radius: number): HistoryFilletReceipt['frame'] {
-  const accepted = finished.nativeClosedFilletTorus;
-  // The two owner-certified native halves directly adjoin one another under the same display name.
-  if (!accepted || !closedSolid(stock) || !closedSolid(finished) || !targets.every(edge => accepted.targets.includes(edge))
-    || !accepted.faces.some(member => member.faceId === face.id)
-    || ![1, 2].every(suffix => accepted.faces.some(member => member.face === `${face.name}#${suffix}`))) return;
+function closedCircularHistoryFrame({ targets, capSign, height }: NonNullable<ReturnType<typeof historyClosedCircularRims>>[number],
+  fillet: Fillet, stock: BodyResult, accepted: NativeClosedFilletTorus, radius: number): HistoryFilletReceipt['frame'] {
+  if (!targets.every(edge => accepted.targets.includes(edge))) return;
   const sources = stock.mesh.edges.filter(edge => targets.some(name => edge.names.includes(name)));
   const [source] = sources, circle = source?.nativeCircle, rim = source?.nativeFilletRim;
   if (sources.length !== 1 || source.straight || source.nativeJoint || source.names.length !== 2 ||
@@ -246,15 +242,24 @@ export function historyFilletReceipt(doc:StudioDoc,commandDoc:StudioDoc,index:nu
     (stock.pieces??1)!==1||(finished.pieces??1)!==1) return null;
   const name=featureId(doc.nodes,index)+'.face', face=finished.mesh.faces.filter(f=>f.name.startsWith(featureId(doc.nodes,index)+'.'));
   const topPair = historyTopEdges(doc, fillet);
-  const circularPair = historyCircularRims(doc, fillet), closedRim = historyClosedCircularRim(doc, fillet);
-  // The joined fillet patches share one display face under the feature name.
-  const expectedFaces = topPair?.adjacent || closedRim ? 1 : fillet.edges.length;
-  if(face.length!==expectedFaces||face.some(item=>item.name!==name)||!face[0].normal.every(Number.isFinite)||
-    Math.abs(Math.hypot(...face[0].normal)-1)>1e-8) return null;
+  const circularPair = historyCircularRims(doc, fillet), closedRims = historyClosedCircularRims(doc, fillet);
+  // Each complete rim has one display face. Both rims can have the same name.
+  const expectedFaces = closedRims?.length ?? (topPair?.adjacent ? 1 : fillet.edges.length);
+  if(face.length!==expectedFaces||face.some(item=>item.name!==name||!item.normal.every(Number.isFinite)||
+    Math.abs(Math.hypot(...item.normal)-1)>1e-8)) return null;
   const radius = Number(fillet.radius), sketch = doc.nodes[0];
-  if (closedRim) {
-    const frame = closedCircularHistoryFrame(closedRim, fillet, stock, finished, face[0], radius);
-    return frame ? { document:doc,commandDoc,index,bodies,edge,face:face[0],isCurrent,frame } : null;
+  if (closedRims) {
+    if (!closedSolid(stock) || !closedSolid(finished)) return null;
+    const accepted = closedRims.length === 1 ? [finished.nativeClosedFilletTorus] : finished.nativeClosedFilletTorusPair;
+    if (!accepted || closedRims.length !== accepted.length) return null;
+    const witnesses = closedRims.map((rim, i) => {
+      const torus = accepted[i], display = torus && closedFilletDisplayFace(face, torus);
+      const frame = torus && closedCircularHistoryFrame(rim, fillet, stock, torus, radius);
+      return display && frame ? { display, frame } : undefined;
+    });
+    if (!witnesses.every(witness => !!witness) || new Set(witnesses.map(witness => witness.display.id)).size !== witnesses.length) return null;
+    const first = witnesses[0];
+    return { document:doc,commandDoc,index,bodies,edge:closedRims[0].targets[0],face:first.display,isCurrent,frame:first.frame };
   }
   if (fillet.edges.length === 2) {
     const frame = circularPair ? pairedCircularHistoryFrame(circularPair, fillet, stock, finished, face, radius)

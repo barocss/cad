@@ -345,3 +345,29 @@ for (const capSign of [1, -1] as const) test(`closed circular History binds both
   assert.equal(historyFilletReceipt(x.doc, x.doc, 2, x.accepted.bodies, x.reply, 3, x.current), null);
   assert.equal(ownedHistoryFilletHandle(x.evidence, x.cmd, x.ctx, x.handle, null), undefined);
 });
+
+test('History binds both complete rings to one upper-rim grip and keeps its drag below wall collapse', () => {
+  const disc: SketchNode = { kind: 'sketch', profile: 'circle', center: [0, 0], radius: 8 };
+  const picked = ['n1.bottom|n1.side0#1', 'n1.side0#1|n1.top'];
+  for (const order of [picked, [...picked].reverse()]) {
+    const x = fixture(disc, order, .6);
+    const [body] = x.accepted.bodies, pair = body.nativeClosedFilletTorusPair;
+    assert.ok(pair && x.evidence.frame);
+    const [upper, lower] = pair;
+    assert.ok(upper.faces.some(face => face.faceId === x.evidence.face.id));
+    assert.ok(!lower.faces.some(face => face.faceId === x.evidence.face.id));
+    assert.deepEqual(x.handle.at, x.evidence.face.centroid);
+    assert.ok(x.handle.max! > 4.9 && x.handle.max! < 5);
+    const at = [8 + .6 * Math.SQRT1_2, 0, 10 + .6 * Math.SQRT1_2];
+    assert.ok(Math.hypot(...x.evidence.frame.at.map((point, i) => point - at[i])) < 1e-12);
+    assert.equal(ownedHistoryFilletHandle(x.evidence, x.cmd, x.ctx, x.handle, null), x.evidence);
+    assert.equal(placeBody(body, [1,0,0,0,1,0,0,0,1], [1,0,0]).nativeClosedFilletTorusPair, undefined);
+    assert.equal(historyFilletReceipt(x.doc, x.doc, 2, [{ ...body, nativeClosedFilletTorusPair: [lower, upper] }], x.reply, 3, x.current), null);
+    const stock = x.reply.bodies[0];
+    const missingLower = { ...stock, mesh: { ...stock.mesh, edges: stock.mesh.edges.map(edge =>
+      edge.names.includes(picked[0]) ? { ...edge, nativeFilletRim: undefined } : edge) } };
+    assert.equal(historyFilletReceipt(x.doc, x.doc, 2, [body], { ...x.reply, bodies: [missingLower] }, 3, x.current), null);
+    x.revoke();
+    assert.equal(ownedHistoryFilletHandle(x.evidence, x.cmd, x.ctx, x.handle, null), undefined);
+  }
+});

@@ -6,6 +6,8 @@ const baseline = process.argv.includes('--baseline');
 const historyBaseline = process.argv.includes('--history-baseline');
 const history = historyBaseline || process.argv.includes('--history');
 const lower = process.argv.includes('--lower');
+const twoRims = process.argv.includes('--two-rims');
+assert.ok(!twoRims || !lower);
 const capView = lower ? 'Bottom' : 'Top';
 const capZ = lower ? 0 : 10, capSign = lower ? -1 : 1;
 const pins = [
@@ -21,11 +23,11 @@ if (history) pins.push('apps/cad-studio/test/hold-original-fillet-refs.mjs',
   'apps/cad-studio/src/state/historyFilletRadiusReceipt.ts', 'apps/cad-studio/src/app/useHistoryFilletRadius.ts',
   'packages/barocss-cad-model/src/engine/nativeFilletTorus.ts', 'packages/barocss-cad-model/src/engine/evaluate.ts');
 const f = await createFlow({
-  name: 'closed-circular-fillet-handle', output: process.argv[2], envFrozen: lower ? 'D1878_SOURCE_FROZEN' : history ? 'D1865_SOURCE_FROZEN' : 'D1864_SOURCE_FROZEN',
+  name: 'closed-circular-fillet-handle', output: process.argv[2], envFrozen: twoRims ? 'D1937_SOURCE_FROZEN' : lower ? 'D1878_SOURCE_FROZEN' : history ? 'D1865_SOURCE_FROZEN' : 'D1864_SOURCE_FROZEN',
   initialFiles: pins, requiredFrozen: pins,
   qualification: history ? 'Edit the existing complete circular rim Fillet from its authenticated original seam in History.'
     : 'Create a Constant Fillet by dragging from the stable native seam of one complete circular rim.',
-  limits: [`One upright radius-8 cylinder, one ${capView.toLowerCase()} rim selection, Constant Fillet and actual desktop Studio.`],
+  limits: [`One upright radius-8 cylinder, ${twoRims ? 'both complete rims' : `one ${capView.toLowerCase()} rim`}, Constant Fillet and actual desktop Studio.`],
   inspectorSource: `
 import { readFileSync } from 'node:fs';
 import { brepMassProperties, checkBrep, surfaceDomain, surfaceEvaluator } from '@barocss/cad';
@@ -39,8 +41,9 @@ const faces = brep.faces.filter(face => face.name?.startsWith('n2.face#')).map(f
     samples.push(at(domain.u[0] + u * (domain.u[1] - domain.u[0]), domain.v[0] + v * (domain.v[1] - domain.v[0])));
   return { name: face.name, samples };
 });
-console.log(JSON.stringify({ key, digest: digestOf(brep), valid: checkBrep(brep, { strict: true }), volume: brepMassProperties(brep, 1).volume,
-  edges: brep.edges.filter(edge => edge.name?.includes(${JSON.stringify(lower ? '.bottom' : '.top')})).map(edge => ({ name: edge.name, id: edge.id, vertices: edge.vertices })),
+const mass = brepMassProperties(brep, 1);
+console.log(JSON.stringify({ key, digest: digestOf(brep), valid: checkBrep(brep, { strict: true }), volume: mass.volume, centroid: mass.centroid,
+  edges: brep.edges.filter(edge => ${twoRims ? "edge.name?.includes('.bottom') || edge.name?.includes('.top')" : `edge.name?.includes(${JSON.stringify(lower ? '.bottom' : '.top')})`}).map(edge => ({ name: edge.name, id: edge.id, vertices: edge.vertices })),
   faces }));
 `,
 });
@@ -50,7 +53,8 @@ const source = {
     { id: 'n1', kind: 'extrude', sketch: 0, height: 10 }],
   outputs: { b1: { node: 1, side: 'solid' } }, nextId: 2,
 };
-const targets = lower ? ['n1.bottom|n1.side0#1', 'n1.bottom|n1.side0#2'] : ['n1.side0#1|n1.top', 'n1.side0#2|n1.top'];
+const topTargets = ['n1.side0#1|n1.top', 'n1.side0#2|n1.top'], bottomTargets = ['n1.bottom|n1.side0#1', 'n1.bottom|n1.side0#2'];
+const targets = twoRims ? [...bottomTargets, ...topTargets] : lower ? bottomTargets : topTargets;
 const button = (name, scope = f.page) => scope.getByRole('button', { name, exact: true });
 const hud = () => f.page.getByRole('dialog', { name: 'Fillet', exact: true });
 const input = () => hud().getByLabel('Radius', { exact: true });
@@ -71,14 +75,21 @@ async function frame(view) {
 }
 
 async function start() {
-  await frame(capView);
+  await frame(twoRims ? 'Bottom' : capView);
   const canvas = await f.page.locator('.vp-canvas').boundingBox();
   await f.page.mouse.click(canvas.x + 8, canvas.y + 8);
   const filter = button('Selection filter');
   for (let i = 0; i < 6 && !(await filter.innerText()).includes('Edges'); i++) await filter.click();
   assert.match(await filter.innerText(), /Edges/);
-  await f.worldClick([8 * Math.SQRT1_2, 8 * Math.SQRT1_2, capZ]);
+  await f.worldClick([8 * Math.SQRT1_2, 8 * Math.SQRT1_2, twoRims ? 0 : capZ]);
   await f.page.waitForFunction(() => window.__studioSelection?.selection?.edges?.length === 1);
+  if (twoRims) {
+    await frame('Top');
+    await f.page.keyboard.down('Shift');
+    try { await f.worldClick([8 * Math.SQRT1_2, 8 * Math.SQRT1_2, 10]); }
+    finally { await f.page.keyboard.up('Shift'); }
+    await f.page.waitForFunction(() => window.__studioSelection?.selection?.edges?.length === 2);
+  }
   await f.command('Fillet');
   await input().fill('0.6');
   await preview();
@@ -121,20 +132,32 @@ async function verify(label, doc, radius) {
   assert.equal(doc.nodes[2].radius, radius);
   const native = await f.inspect(label, doc);
   assert.ok(native.valid.valid);
-  assert.deepEqual(native.valid.counts, { bodies: 1, shells: 1, faces: 6, loops: 6, coedges: 20, edges: 10, vertices: 6 });
-  assert.deepEqual(native.faces.map(face => face.name).sort(), ['n2.face#1', 'n2.face#2']);
-  const expected = 640 * Math.PI - 2 * Math.PI * (8 * (1 - Math.PI / 4) * radius ** 2 - (5 / 6 - Math.PI / 4) * radius ** 3);
+  const rimCount = twoRims ? 2 : 1;
+  assert.deepEqual(native.valid.counts, { bodies: 1, shells: 1, faces: 4 + 2 * rimCount, loops: 4 + 2 * rimCount,
+    coedges: 12 + 8 * rimCount, edges: 6 + 4 * rimCount, vertices: 4 + 2 * rimCount });
+  assert.equal(native.valid.topology[0].genus, 0);
+  assert.deepEqual(native.faces.map(face => face.name).sort(), Array.from({ length: 2 * rimCount }, (_, i) => `n2.face#${i + 1}`));
+  const expected = 640 * Math.PI - rimCount * 2 * Math.PI * (8 * (1 - Math.PI / 4) * radius ** 2 - (5 / 6 - Math.PI / 4) * radius ** 3);
   near(native.volume, expected, 2e-6);
   near((await f.bodies()).bodies[0].volume, expected, 2e-6);
+  const seenCaps = new Map();
   for (const { samples } of native.faces) {
-    const capDistances = samples.map(([, , z]) => capSign * (capZ - z));
+    const side = twoRims ? (samples[0][2] < 5 ? -1 : 1) : capSign, end = side === 1 ? 10 : 0;
+    seenCaps.set(side, (seenCaps.get(side) ?? 0) + 1);
+    const capDistances = samples.map(([, , z]) => side * (end - z));
     const radial = samples.map(([x, y]) => Math.hypot(x, y));
     near(Math.min(...capDistances), 0, 2e-6);
     near(Math.max(...capDistances), radius, 2e-6);
     near(Math.min(...radial), 8 - radius, 2e-6);
     near(Math.max(...radial), 8, 2e-6);
     for (const [x, y, z] of samples)
-      near(Math.hypot(Math.hypot(x, y) - (8 - radius), z - (capZ - capSign * radius)), radius, 2e-6);
+      near(Math.hypot(Math.hypot(x, y) - (8 - radius), z - (end - side * radius)), radius, 2e-6);
+  }
+  if (twoRims) {
+    assert.equal(seenCaps.get(1), 2);
+    assert.equal(seenCaps.get(-1), 2);
+    native.centroid.forEach((value, i) => near(value, [0, 0, 5][i], 2e-6));
+    assert.ok(targets.every(target => doc.nodes[2].sigs[target]?.n === 2));
   }
   f.report.observations.push({ label, radius, volume: native.volume, referenceVolume: expected, digest: native.digest });
   return native.digest;
@@ -230,7 +253,7 @@ await f.run(async () => {
   await f.same(source);
   const original = await f.inspect('original-round-prism', source);
   assert.deepEqual(original.edges.map(edge => edge.name).sort(), targets);
-  assert.equal(new Set(original.edges.flatMap(edge => edge.vertices)).size, 2);
+  assert.equal(new Set(original.edges.flatMap(edge => edge.vertices)).size, twoRims ? 4 : 2);
   await start();
   if (history) {
     await button('Apply', hud()).click();
@@ -261,7 +284,7 @@ await f.run(async () => {
   const iso = await measure('isometric-handle', .6);
   await f.snapshot(baseline ? '02-isometric-baseline' : '02-isometric-original-anchor');
   if (baseline) {
-    assert.ok(top.errorPx > 20 && iso.errorPx > 10, JSON.stringify({ top, iso }));
+    assert.ok(twoRims ? top.errorPx > 5 || iso.errorPx > 5 : top.errorPx > 20 && iso.errorPx > 10, JSON.stringify({ top, iso }));
     await button('Apply', hud()).click();
     await f.changed(source);
     await verify('03-baseline-native-still-admits', await f.doc(), .6);
