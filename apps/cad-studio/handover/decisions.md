@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D1926: [Move section and overlay test observations out of App](notes/studio-section-overlay-dev-hooks-2026-11-24/README.md), #44. Compare actual section, selection, Save/Open and affected overlay behavior.
+
 - D1925: [Pin Agent review of the original annular outlet Offset](notes/perpendicular-annular-outlet-agent-review-2026-11-24/README.md), #324. Verify both image orientations, exact native inspection, stale pin refusal, explicit Studio approval and matching reopen.
 
 - D1924: [Offset the original perpendicular annular outlet](notes/perpendicular-annular-outlet-offset-2026-11-24/README.md), #17. Move the outlet with a signed distance while preserving the inlet and all three exact native joins.

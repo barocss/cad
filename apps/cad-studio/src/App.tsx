@@ -104,7 +104,7 @@ import { useModelExports } from './files/useModelExports';
 import { ModelExportDialogs } from './files/ModelExportDialogs';
 import { StepExportPanel } from './files/StepExportPanel';
 import { changesBeyondVariability } from './app/documentChanges';
-import { sameMeshes, withMasses, samePlacement, meshVolume } from './app/bodyResults';
+import { sameMeshes, withMasses, samePlacement } from './app/bodyResults';
 import { sketchRegion } from './app/sketchControls';
 import { createDocumentReplacement, type ReplacementIntent } from './app/documentReplacement';
 import { activeKey, type Active } from './app/commandState';
@@ -228,9 +228,8 @@ import { Lanes } from './engine/lanes';
 import { useAssembly } from './assembly/useAssembly';
 import { pickedSketches, planeOf } from '@barocss/cad-model/app/profiles';
 import type { Analysis } from './viewport/analysis';
-import { asSection, type AxisSection, type Section } from './viewport/sectionView';
 import { type MapKind } from './viewport/scalarMaps';
-import { useStudioViewportDevHooks } from './viewport/useStudioViewportDevHooks';
+import { useStudioSectionOverlayDevHooks, useStudioViewportDevHooks } from './viewport/useStudioViewportDevHooks';
 import { sectionSketchAction } from './app/sectionSketch';
 import { bodyName, describeChange, lookOf } from '@barocss/cad-model/app/bodies';
 import { readBrief } from '@barocss/cad-model/chat/brief';
@@ -660,8 +659,9 @@ export function App() {
   useEffect(() => { setLibraryStore(browserStore()); loadUserLibraries(); }, []);
   /** The view's field of view (degrees; the Render panel sets it, a saved view keeps it). */
   const [fov, setFov] = useState(32);
-  const { sectionDragFrom, sectionDebug, setSectionDebug, sectionLive, section, setSection, dragSection, sectionFacePick, setSectionFacePick,
-    sectionFacePickRef, cancelSectionFacePick, sectionExact, setSectionExact, sectionRef } = useSectionState(viewBackend);
+  const sectionState = useSectionState(viewBackend);
+  const { sectionDragFrom, sectionDebug, sectionLive, section, setSection, dragSection, sectionFacePick, setSectionFacePick,
+    sectionFacePickRef, cancelSectionFacePick, sectionExact, setSectionExact, sectionRef } = sectionState;
 
   const resetDocumentSection = useCallback(() => {
     lanes.cancel('section');
@@ -1824,35 +1824,16 @@ export function App() {
     ? instancesPlaced.filter(i => !isolatedInstances || isolatedInstances.includes(i.id))
       .flatMap(i => i.bodies.filter(b => !instanceLooks.get(i.id)?.get(b.key)?.hidden).map(b => b.mesh.bounds))
     : [];
-  const { sectionBox, sectionHatchOn, setSectionHatchOn, hatchStep, sectionClip, sectionLiveView, sectionHatchLines, sectionDrag } = useSectionDisplay({
+  const sectionDisplay = useSectionDisplay({
     bodies, instancesPlaced, placedHandleBounds, section, sketch, gpuSection, shownBodies, sectionBodies, sectionExactShown, sectionLive, active, dragSection, placedDragSection: (update, done) => {
       if (ownsPlacedSectionHandle()) dragSection(update, done);
     }, excludedInstances: excludedSectionInstances });
-  useEffect(() => {
-    if (!import.meta.env.DEV) return;
-    const w = window as unknown as { __studioSection: () => unknown; __studioSectionDebug: (d: { hold: boolean; cpu: boolean }) => void };
-    // (G19: the mode and planes, and the exact section's kept volume once it is shown.)
-    w.__studioSection = () => ({ gpu: gpuSection, excludedInstances: excludedSectionInstances, exact: sectionExactShown, clip: sectionClip, hatch: sectionHatchOn ? { spacing: hatchStep, lines: sectionHatchLines?.map(h => ({ body: h.body, segments: h.segments.length / 6 })) ?? null } : null, bodies: shownBodies.length, mode: section?.mode ?? null, planes: section?.planes ?? null, volume: sectionExactShown ? sectionExact!.bodies.reduce((v, b) => v + meshVolume(b.mesh), 0) : null, shownVolume: shownBodies.reduce((v, b) => v + meshVolume(b.mesh), 0),
-      // (G19.5: each shown body's own body, and the Render workspace's offsets on them, by shown body's key.)
-      shownKeys: shownBodies.map(b => b.key), sources: shownBodies.map(b => (shownBodies === sectionBodies && sectionExactShown ? sectionExact!.from.get(b.key) : null) ?? b.key), offsets: animatedOffsets ? [...animatedOffsets].map(([i, o]) => [shownBodies[i]?.key, o]) : null,
-      historyAlignBounds: alignPreviewBodies === shownBodies && editNode !== null
-        ? shownBodies.find(body => body.ref?.node === editNode)?.mesh.bounds : null });
-    w.__studioSectionDebug = setSectionDebug;
-    // (The axis form as before, or a section of planes, G19.)
-    (window as unknown as { __studioSetSection: (s: Section | AxisSection | null) => void }).__studioSetSection = s => setSection(s ? asSection(s) : null);
-    // (R1c (3c), for the bench: a section dragged, its steps shown and its last one, `done`, committed — as a handle drags it.)
-    (window as unknown as { __studioDragSection: (s: Section | AxisSection | null, done: boolean) => void }).__studioDragSection = (s, done) => dragSection(() => s ? asSection(s) : null, done);
-    (window as unknown as { __studioOverlayLines: () => Record<string, number> }).__studioOverlayLines = () => viewport.current?.overlayLines() ?? {};
-    (window as unknown as { __studioOverlayTexts: () => Record<string, string[]> }).__studioOverlayTexts = () => viewport.current?.overlayTexts() ?? {};
-    // (G12: the shown proposal's diff, as the overlay has it.)
-    (window as unknown as { __studioProposalOverlay: () => unknown }).__studioProposalOverlay = () => proposalOverlay && { added: proposalOverlay.added?.volume ?? null, removed: proposalOverlay.removed?.volume ?? null, method: proposalOverlay.method, faces: proposalOverlay.changedFaces.length, tinted: !!proposalTint, directSheets: proposalOverlay.directSheets?.length ?? 0 };
-    // (CG6: the compared version's diff, the same way.)
-    (window as unknown as { __studioCompareOverlay: () => unknown }).__studioCompareOverlay = () => compareOverlay && { added: compareOverlay.added?.volume ?? null, removed: compareOverlay.removed?.volume ?? null, method: compareOverlay.method, faces: compareOverlay.changedFaces.length, tinted: !!proposalTint };
-    // (n points spread through a box, coloured by height; 0: none.)
-    (window as unknown as { __studioSetCloud: (n: number, min: Vec3, max: Vec3) => void }).__studioSetCloud = (n, min, max) => setBenchCloud(n > 0 ? Array.from({ length: n }, (_, i) => {
-      const u = (i * 0.61803398875) % 1, v = (i * 0.7548776662) % 1, w = (i * 0.5698402910) % 1;
-      return { at: [min[0] + u * (max[0] - min[0]), min[1] + v * (max[1] - min[1]), min[2] + w * (max[2] - min[2])] as Vec3, t: w };
-    }) : null);
+  const { sectionBox, sectionHatchOn, setSectionHatchOn, hatchStep, sectionClip, sectionLiveView, sectionHatchLines, sectionDrag } = sectionDisplay;
+  useStudioSectionOverlayDevHooks({
+    section: { state: sectionState, display: sectionDisplay, gpu: gpuSection, exactShown: sectionExactShown,
+      bodies: sectionBodies, excludedInstances: excludedSectionInstances },
+    view: { viewport, shownBodies, alignPreviewBodies, editNode, offsets: animatedOffsets },
+    overlays: { proposal: proposalOverlay, comparison: compareOverlay, tint: !!proposalTint }, setBenchCloud,
   });
   const filletPickedEdgeHighlight = readFilletPickedEdgeHighlight(filletPickedEdgeRequest, {
     active, doc, evaluated, commandDoc, bodies,

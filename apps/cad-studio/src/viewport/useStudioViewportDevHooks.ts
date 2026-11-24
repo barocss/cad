@@ -4,7 +4,12 @@ import { edgeChain } from '@barocss/cad-model/app/edgeChain';
 import type { StudioDoc } from '@barocss/cad-model/engine/doc';
 import type { BodyResult } from '@barocss/cad-model/engine/evaluate';
 import type { Vec3 } from '@barocss/cad-model/engine/mesh';
+import { meshVolume } from '../app/bodyResults';
+import type { ProposalOverlay } from '../engine/client';
 import type { useCageEditor } from '../subd/useCageEditor';
+import { asSection, type AxisSection, type Section } from './sectionView';
+import type { useSectionDisplay } from './useSectionDisplay';
+import type { useSectionState } from './useSectionState';
 import type { useViewportPicking } from './useViewportPicking';
 import type { ViewportHandle } from './Viewport';
 
@@ -131,4 +136,78 @@ export function useStudioViewportDevHooks({ model, view, input, cage }: Options)
       return chain.length;
     };
   }, [bodies, cage, setDirectSel, setInstanceSel, setSelection, viewport]);
+}
+
+
+interface SectionOverlayOptions {
+  section: {
+    state: Pick<ReturnType<typeof useSectionState>, 'section' | 'sectionExact' | 'setSectionDebug' | 'setSection' | 'dragSection'>;
+    display: Pick<ReturnType<typeof useSectionDisplay>, 'sectionClip' | 'sectionHatchOn' | 'sectionHatchLines' | 'hatchStep'>;
+    gpu: boolean;
+    exactShown: boolean;
+    bodies: readonly BodyResult[] | null;
+    excludedInstances: readonly string[];
+  };
+  view: {
+    viewport: RefObject<ViewportHandle | null>;
+    shownBodies: readonly BodyResult[];
+    alignPreviewBodies: readonly BodyResult[] | null | undefined;
+    editNode: number | null;
+    offsets: ReadonlyMap<number, Vec3> | null | undefined;
+  };
+  overlays: { proposal: ProposalOverlay | null | undefined; comparison: ProposalOverlay | null; tint: boolean };
+  setBenchCloud(points: { at: Vec3; t: number }[] | null): void;
+}
+
+type SectionOverlayDevWindow = Window & Partial<{
+  __studioSection(): unknown;
+  __studioSectionDebug(value: { hold: boolean; cpu: boolean }): void;
+  __studioSetSection(section: Section | AxisSection | null): void;
+  __studioDragSection(section: Section | AxisSection | null, done: boolean): void;
+  __studioOverlayLines(): Record<string, number>;
+  __studioOverlayTexts(): Record<string, string[]>;
+  __studioProposalOverlay(): unknown;
+  __studioCompareOverlay(): unknown;
+  __studioSetCloud(count: number, min: Vec3, max: Vec3): void;
+}>;
+
+/** Publish the current committed viewport state for the desktop harness. */
+export function useStudioSectionOverlayDevHooks({ section, view, overlays, setBenchCloud }: SectionOverlayOptions): void {
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    const hooks = window as SectionOverlayDevWindow;
+    const { section: definition, sectionExact, setSectionDebug, setSection, dragSection } = section.state;
+    const { sectionClip, sectionHatchOn, sectionHatchLines, hatchStep } = section.display;
+    const { viewport, shownBodies, alignPreviewBodies, editNode, offsets } = view;
+    const { proposal, comparison, tint } = overlays;
+    hooks.__studioSection = () => ({
+      gpu: section.gpu, excludedInstances: section.excludedInstances, exact: section.exactShown, clip: sectionClip,
+      hatch: sectionHatchOn ? { spacing: hatchStep, lines: sectionHatchLines?.map(h => ({ body: h.body, segments: h.segments.length / 6 })) ?? null } : null,
+      bodies: shownBodies.length, mode: definition?.mode ?? null, planes: definition?.planes ?? null,
+      volume: section.exactShown ? sectionExact!.bodies.reduce((volume, body) => volume + meshVolume(body.mesh), 0) : null,
+      shownVolume: shownBodies.reduce((volume, body) => volume + meshVolume(body.mesh), 0),
+      shownKeys: shownBodies.map(body => body.key),
+      sources: shownBodies.map(body => (shownBodies === section.bodies && section.exactShown ? sectionExact!.from.get(body.key) : null) ?? body.key),
+      offsets: offsets ? [...offsets].map(([index, offset]) => [shownBodies[index]?.key, offset]) : null,
+      historyAlignBounds: alignPreviewBodies === shownBodies && editNode !== null
+        ? shownBodies.find(body => body.ref?.node === editNode)?.mesh.bounds : null,
+    });
+    hooks.__studioSectionDebug = setSectionDebug;
+    hooks.__studioSetSection = value => setSection(value ? asSection(value) : null);
+    hooks.__studioDragSection = (value, done) => dragSection(() => value ? asSection(value) : null, done);
+    hooks.__studioOverlayLines = () => viewport.current?.overlayLines() ?? {};
+    hooks.__studioOverlayTexts = () => viewport.current?.overlayTexts() ?? {};
+    hooks.__studioProposalOverlay = () => proposal && {
+      added: proposal.added?.volume ?? null, removed: proposal.removed?.volume ?? null, method: proposal.method,
+      faces: proposal.changedFaces.length, tinted: tint, directSheets: proposal.directSheets?.length ?? 0,
+    };
+    hooks.__studioCompareOverlay = () => comparison && {
+      added: comparison.added?.volume ?? null, removed: comparison.removed?.volume ?? null, method: comparison.method,
+      faces: comparison.changedFaces.length, tinted: tint,
+    };
+    hooks.__studioSetCloud = (count, min, max) => setBenchCloud(count > 0 ? Array.from({ length: count }, (_, i) => {
+      const u = (i * 0.61803398875) % 1, v = (i * 0.7548776662) % 1, w = (i * 0.5698402910) % 1;
+      return { at: [min[0] + u * (max[0] - min[0]), min[1] + v * (max[1] - min[1]), min[2] + w * (max[2] - min[2])] as Vec3, t: w };
+    }) : null);
+  });
 }
