@@ -41,10 +41,10 @@ test('per-face box Shell preserves native names and the exact asymmetric cavity'
   near(massPropertiesOf(evaluate([sketch, extrude, thickOneSide]).outputs[0], 1).volume, 24000 - 10 * 24 * 16);
 });
 
-test('per-face Shell gives each original lateral opening one exact ring and five named inner walls', () => {
+test('per-face Shell gives each other original opening one exact ring and five named inner walls', () => {
   const pairs = [['box.side3', 'box.side1'], ['box.side0', 'box.side2'], ['box.bottom', 'box.top']];
   const extents = [40, 30, 20];
-  for (const opening of pairs.slice(0, 2).flat()) {
+  for (const opening of [...pairs.slice(0, 2).flat(), 'box.bottom']) {
     const kept = { ...walls, 'box.top': 6 };
     delete kept[opening];
     const feature = { ...shell, opening, walls: kept };
@@ -87,14 +87,14 @@ test('per-face Shell gives each original lateral opening one exact ring and five
         near(value, (12000 * extents[axis] - removed * (high[axis] + low[axis]) / 2) / (24000 - removed)));
     }
     assert.deepEqual(loadCadPart(saveCadPart(snapshot)).outputs[0].brep, brep);
-    const collapsed = { ...feature, walls: { ...kept, 'box.top': 16 } };
+    const collapsed = { ...feature, walls: { ...kept, 'box.top': opening === 'box.bottom' ? 20 : 16 } };
     assert.throws(() => evaluate([sketch, extrude, collapsed]), /no cavity/);
   }
 });
 
 test('per-face box Shell refuses ambiguous walls, stale orientation and a closed cavity', () => {
   const reject = (feature, reason, from = sketch) => assert.throws(() => evaluate([from, extrude, feature]), reason);
-  reject({ ...shell, opening: 'box.bottom' }, /upper face/);
+  reject({ ...shell, opening: 'box.bottom' }, /five kept faces/);
   reject({ ...shell, walls: { ...walls, 'box.top': 2 } }, /five kept faces/);
   const { 'box.side0': replaced, ...rest } = walls;
   reject({ ...shell, walls: { ...rest, 'unknown.wall': replaced } }, /five kept faces/);

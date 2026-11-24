@@ -145,7 +145,7 @@ export const COMMAND_DOCS: Record<string, { selection: string; values: Record<st
   decimate: { selection: 'bodies: [one mesh body] (an imported STL, OBJ or scan: facet faces)', values: { keep: 'per cent of the triangles to keep (1–99)', maxError: 'mm: no collapse past it (0: none)', crease: 'degrees: also keep edges sharper than this (0: only the regions\u2019 boundaries and open edges)' } },
   shell: { selection: 'faces to open on one body, or one body for a closed hollow', values: {
     t: 'uniform wall thickness in mm',
-    wallMode: 'uniform | per-face. For per-face, give expectedRevision from query.rebuild, one exact original upper or side face of an upright rectangular extrusion, and all five kept wall values. Omit the wall at the opening.',
+    wallMode: 'uniform | per-face. For per-face, give expectedRevision from query.rebuild, one exact original face of an upright rectangular extrusion, and all five kept wall values. Omit the wall at the opening.',
     bottomWall: 'bottom thickness in mm', frontWall: 'front thickness in mm', rightWall: 'right thickness in mm',
     backWall: 'back thickness in mm', leftWall: 'left thickness in mm', topWall: 'top thickness in mm',
   } },
@@ -332,7 +332,7 @@ async function runCommandTool(state: ChatState, args: Record<string, unknown>, e
       return fail(state, 'Per-face Shell needs one exact original native face as its opening.', { code: 'COMMAND_INPUT' });
     const box = boxShellSelection(ctx);
     if (!box)
-      return fail(state, 'Per-face Shell needs the original upper or side face of one upright rectangular extrusion.', { code: 'COMMAND_INPUT' });
+      return fail(state, 'Per-face Shell needs an original face of one upright rectangular extrusion.', { code: 'COMMAND_INPUT' });
     const invalid = box.walls.filter(({ key }) => !Object.hasOwn(given, key) || !Number.isFinite(given[key]));
     if (invalid.length)
       return fail(state, `Give a finite thickness in mm for each kept wall: ${invalid.map(({ key }) => key).join(', ')}.`, { code: 'COMMAND_INPUT' });

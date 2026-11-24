@@ -5,11 +5,12 @@ import { createFlow } from './flow-helper.mjs';
 import { currentPartRevision, withMcpSession } from './mcp-browser-session.mjs';
 
 const baseline = process.argv.includes('--baseline');
+const bottom = process.argv.includes('--bottom');
 const pins = ['apps/cad-studio/test/per-face-shell-agent-proposal-browser.mjs', 'apps/cad-studio/test/mcp-browser-session.mjs',
   'packages/barocss-cad-model/src/chat/part/features.ts', 'packages/barocss-cad-model/src/app/boxShellSelection.ts',
   'packages/barocss-cad/src/part/part-box-shell.ts'];
 const f = await createFlow({
-  name: 'per-face-shell-agent-proposal', output: process.argv[2], envFrozen: 'D1955_SOURCE_FROZEN',
+  name: 'per-face-shell-agent-proposal', output: process.argv[2], envFrozen: bottom ? 'D1957_SOURCE_FROZEN' : 'D1955_SOURCE_FROZEN',
   initialFiles: pins, requiredFrozen: pins,
   qualification: 'Propose a reviewed original-face box Shell through local L1 MCP and explicitly approve it in desktop Studio.',
   inspectorSource: `
@@ -32,9 +33,14 @@ const source = {
     { id: 'n1', kind: 'extrude', sketch: 0, height: 20 }],
   outputs: { b1: { node: 1, side: 'solid' } },
 };
-const opening = 'n1.side1', title = 'Open the right side with five reviewed wall depths';
-const values = { wallMode: 'per-face', leftWall: 3, frontWall: 2, backWall: 4, bottomWall: 4, topWall: 6 };
-const walls = { 'n1.side3': 3, 'n1.side0': 2, 'n1.side2': 4, 'n1.bottom': 4, 'n1.top': 6 };
+const opening = bottom ? 'n1.bottom' : 'n1.side1';
+const title = bottom ? 'Open the bottom with five reviewed wall depths' : 'Open the right side with five reviewed wall depths';
+const values = { wallMode: 'per-face', leftWall: 3, frontWall: 2, backWall: 4, topWall: 6,
+  ...(bottom ? { rightWall: 5 } : { bottomWall: 4 }) };
+const walls = { 'n1.side3': 3, 'n1.side0': 2, 'n1.side2': 4, 'n1.top': 6,
+  ...(bottom ? { 'n1.side1': 5 } : { 'n1.bottom': 4 }) };
+const approvedVolume = bottom ? 13248 : 15120;
+const editedVolume = bottom ? 14016 : 16008;
 const near = (a, b) => assert.ok(Math.abs(a - b) < 1e-7, `${a} != ${b}`);
 
 async function verify(label, doc, topWall) {
@@ -46,8 +52,9 @@ async function verify(label, doc, topWall) {
   assert.deepEqual(feature.walls, { ...walls, 'n1.top': topWall });
   assert.deepEqual(Object.keys(feature.sigs).sort(), [opening, ...Object.keys(walls)].sort());
   const native = await f.inspect(label, doc);
-  const removed = 37 * 24 * (16 - topWall), volume = 24000 - removed;
-  const innerCenter = [21.5, 14, (24 - topWall) / 2];
+  const removed = bottom ? 32 * 24 * (20 - topWall) : 37 * 24 * (16 - topWall);
+  const volume = 24000 - removed;
+  const innerCenter = bottom ? [19, 14, (20 - topWall) / 2] : [21.5, 14, (24 - topWall) / 2];
   near(native.mass.volume, volume);
   native.mass.centroid.forEach((value, axis) => near(value, (24000 * [20, 15, 10][axis] - removed * innerCenter[axis]) / volume));
   assert.equal(native.check.valid, true);
@@ -87,17 +94,17 @@ await f.run(async () => {
     for (const [args, reason] of [
       [{ ...command, expectedRevision: '0000000000000000' }, /part changed/i],
       [{ ...command, expectedRevision: undefined }, /expectedRevision/],
-      [{ ...command, faces: ['n1.bottom'] }, /upper or side face/i],
+      [{ ...command, faces: [bottom ? 'n1.side1' : 'n1.bottom'] }, bottom ? /bottomWall/ : /rightWall/],
       [{ ...command, faces: [opening, opening] }, /one exact.*face/i],
       [{ ...command, values: missingTop }, /topWall/],
-      [{ ...command, values: { ...values, rightWall: 5 } }, /rightWall/],
-      [{ ...command, values: { ...values, topWall: 16 } }, /leave no cavity/i],
+      [{ ...command, values: { ...values, ...(bottom ? { bottomWall: 4 } : { rightWall: 5 }) } }, bottom ? /bottomWall/ : /rightWall/],
+      [{ ...command, values: { ...values, topWall: bottom ? 20 : 16 } }, /leave no cavity/i],
     ]) assert.match((await call('proposals', proposal(args), true)).error, reason);
     assert.match((await call('features', command, true)).error, /autonomy L1/i);
     assert.deepEqual(await readFile(file), original);
     const candidate = await call('proposals', proposal());
     assert.deepEqual([candidate.proposal, candidate.applied], ['P1', false]);
-    near(candidate.change.volume, -8880);
+    near(candidate.change.volume, approvedVolume - 24000);
     const pending = await readFile(file);
     assert.match((await call('proposals', { action: 'accept', id: 'P1' }, true)).error, /user accepts.*studio/i);
     assert.deepEqual(await readFile(file), pending);
@@ -119,7 +126,8 @@ await f.run(async () => {
   await f.snapshot('01-pending-original-stock');
   await button('Preview', card()).click();
   await button('Hide', card()).waitFor();
-  await card().getByLabel('Volume change').getByText(/^[−-]8,?880(?:\.0+)? mm³/).waitFor();
+  const volumeChange = bottom ? /^[−-]10,?752(?:\.0+)? mm³/ : /^[−-]8,?880(?:\.0+)? mm³/;
+  await card().getByLabel('Volume change').getByText(volumeChange).waitFor();
   await f.same(pending);
   near((await f.bodies()).bodies[0].volume, 24000);
   await f.snapshot('02-preview-lateral-shell');
@@ -138,13 +146,13 @@ await f.run(async () => {
   await f.editor().getByLabel('Top wall', { exact: true }).fill('7');
   const edited = (await f.applyEditor(approved, '04-top-wall-edited')).doc;
   const native = await verify('edited', edited, 7);
-  const saved = await f.save('approved-lateral-shell');
+  const saved = await f.save(bottom ? 'approved-bottom-shell' : 'approved-lateral-shell');
   await f.freshOpen(saved.file, edited, '05-fresh-open');
   assert.deepEqual(await verify('reopened', await f.doc(), 7), native);
   const bytes = await readFile(saved.file);
   await mcp(saved.file, 'reopened', async call => {
     const summary = await call('query', { action: 'summary' });
-    near(summary.facts.volume, 16008);
+    near(summary.facts.volume, editedVolume);
     assert.deepEqual(summary.features[2].node, edited.nodes[2]);
     const list = await call('proposals', { action: 'list', all: true });
     assert.deepEqual(list.proposals.map(p => [p.id, p.status]), [['P1', 'accepted']]);

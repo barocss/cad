@@ -2,11 +2,13 @@ import assert from 'node:assert/strict';
 import { createFlow } from './flow-helper.mjs';
 
 const baseline = process.argv.includes('--baseline');
-const lateral = process.argv.includes('--right') ? 'Right' : process.argv.includes('--front') ? 'Front' : null;
+const bottom = process.argv.includes('--bottom');
+const openingView = bottom ? 'Bottom' : process.argv.includes('--right') ? 'Right' : process.argv.includes('--front') ? 'Front' : null;
+const caseLabel = bottom ? 'bottom' : 'lateral';
 const supports = [
   ['n1.side3', 'n1.side1'], ['n1.side0', 'n1.side2'], ['n1.bottom', 'n1.top'],
 ];
-const open = lateral === 'Right' ? [0, 1] : lateral === 'Front' ? [1, 0] : [2, 1];
+const open = openingView === 'Right' ? [0, 1] : openingView === 'Front' ? [1, 0] : [2, bottom ? 0 : 1];
 const opening = supports[open[0]][open[1]];
 const pins = [
   'apps/cad-studio/test/box-wall-shell-browser.mjs',
@@ -19,7 +21,8 @@ const pins = [
   'packages/barocss-cad/src/part/part-shell.ts',
 ];
 const f = await createFlow({
-  name: 'box-wall-shell', output: process.argv[2], envFrozen: lateral ? 'D1954_SOURCE_FROZEN' : 'D1938_SOURCE_FROZEN',
+  name: 'box-wall-shell', output: process.argv[2],
+  envFrozen: bottom ? 'D1957_SOURCE_FROZEN' : openingView ? 'D1954_SOURCE_FROZEN' : 'D1938_SOURCE_FROZEN',
   initialFiles: pins, requiredFrozen: pins,
   qualification: 'Make and edit five named walls on one exact cardinal box.',
   limits: ['One ordinary 40 × 30 × 20 mm upright rectangular extrusion. Native desktop Studio and exact .bcad.'],
@@ -52,6 +55,12 @@ const near = (a, b) => Math.abs(a - b) < 1e-7;
 const uniform = { 'n1.bottom': 2, 'n1.side0': 2, 'n1.side1': 2, 'n1.side2': 2, 'n1.side3': 2 };
 const equalSides = { ...uniform, 'n1.bottom': 4 };
 const unequal = { ...equalSides, 'n1.side1': 5, 'n1.side2': 4, 'n1.side3': 3 };
+
+async function lookBottom() {
+  await button('View cube directions').click();
+  await f.page.getByRole('menuitem', { name: 'Bottom', exact: true }).click();
+  await f.page.waitForFunction(() => window.__studioCamera?.().pitch < -1.3);
+}
 
 async function verify(label, doc, walls) {
   assert.deepEqual(doc.nodes.slice(0, 2), source.nodes);
@@ -106,9 +115,10 @@ await f.run(async () => {
     name: 'shell-wall-stock.bcad', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(source)),
   });
   await f.same(source);
-  await button(lateral ?? 'Top', f.page.locator('.views')).click();
+  if (bottom) await lookBottom();
+  else await button(openingView ?? 'Top', f.page.locator('.views')).click();
   await f.page.getByTitle('Frame all (F)', { exact: true }).click();
-  await f.worldClick(lateral === 'Right' ? [40, 15, 10] : lateral === 'Front' ? [20, 0, 10] : [20, 15, 20]);
+  await f.worldClick(openingView === 'Right' ? [40, 15, 10] : openingView === 'Front' ? [20, 0, 10] : [20, 15, bottom ? 0 : 20]);
   await f.page.waitForFunction(() => window.__studioSelection?.selection?.faces?.length === 1);
   await f.command('Shell');
   if (baseline) {
@@ -117,8 +127,8 @@ await f.run(async () => {
     await hud().locator('.status').filter({ hasText: /^preview$/ }).waitFor();
     await f.same(source);
     await f.snapshot('00-previous-uniform-wall-only');
-    if (lateral) return;
-  } else if (lateral) {
+    if (openingView) return;
+  } else if (openingView) {
     await field(hud(), 'Wall thickness').selectOption({ label: 'Per face' });
     const allWalls = {
       'Left wall': ['n1.side3', 3], 'Right wall': ['n1.side1', 5], 'Front wall': ['n1.side0', 2],
@@ -126,7 +136,7 @@ await f.run(async () => {
     };
     const kept = Object.entries(allWalls).filter(([, [name]]) => name !== opening);
     const walls = Object.fromEntries(kept.map(([, entry]) => entry));
-    assert.equal(await field(hud(), lateral + ' wall').count(), 0);
+    assert.equal(await field(hud(), openingView + ' wall').count(), 0);
     for (const [label, [, value]] of kept) await field(hud(), label).fill(String(value));
     await hud().locator('.status').filter({ hasText: /^preview$/ }).waitFor();
     await f.same(source);
@@ -134,25 +144,30 @@ await f.run(async () => {
     await f.changed(source);
     await hud().waitFor({ state: 'hidden' });
     const made = await f.doc();
-    await verify('lateral-applied', made, walls);
-    await f.snapshot('01-lateral-applied');
+    await verify(caseLabel + '-applied', made, walls);
+    await f.snapshot('01-' + caseLabel + '-applied');
     await f.openFeatureEditor(2, 'Edit the original top wall');
     const editor = f.editor();
-    assert.equal(await field(editor, lateral + ' wall').count(), 0);
-    await field(editor, 'Top wall').fill('16');
+    assert.equal(await field(editor, openingView + ' wall').count(), 0);
+    await field(editor, 'Top wall').fill(bottom ? '20' : '16');
     await button('Apply', editor).click();
     await editor.getByText('Wall thicknesses leave no cavity', { exact: true }).waitFor();
     await f.same(made);
-    await f.snapshot('02-lateral-cavity-collapse-refused');
+    await f.snapshot('02-' + caseLabel + '-cavity-collapse-refused');
     await field(editor, 'Top wall').fill('7');
-    const edited = (await f.applyEditor(made, '03-lateral-wall-edited')).doc;
+    const edited = (await f.applyEditor(made, '03-' + caseLabel + '-wall-edited')).doc;
     const nextWalls = { ...walls, 'n1.top': 7 };
-    const accepted = await verify('lateral-edited-native', edited, nextWalls);
+    const accepted = await verify(caseLabel + '-edited-native', edited, nextWalls);
     await f.undo(); await f.same(made);
     await f.redo(); await f.same(edited);
-    const saved = await f.save('per-face-' + lateral.toLowerCase());
-    await f.freshOpen(saved.file, edited, '04-lateral-fresh-open');
-    assert.deepEqual(await verify('lateral-reopened', edited, nextWalls), accepted);
+    const saved = await f.save('per-face-' + openingView.toLowerCase());
+    await f.freshOpen(saved.file, edited, '04-' + caseLabel + '-fresh-open');
+    assert.deepEqual(await verify(caseLabel + '-reopened', edited, nextWalls), accepted);
+    if (bottom) {
+      await lookBottom();
+      await f.page.getByTitle('Frame all (F)', { exact: true }).click();
+      await f.snapshot('05-bottom-opening-after-open');
+    }
     return;
   } else {
     await field(hud(), 'Wall thickness').selectOption({ label: 'Per face' });

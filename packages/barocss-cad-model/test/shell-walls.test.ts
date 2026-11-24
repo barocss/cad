@@ -82,6 +82,17 @@ test('a lateral per-face Shell exposes its five retained walls and keeps the top
   invalid.sigs['n1.top'].d = [1, 0, 0];
   assert.match((readStudioDoc(JSON.stringify(wrong)) as { error?: string }).error ?? '', /five cardinal walls/);
   const bottom = pick('z', -1);
-  assert.deepEqual(shell.fields!(bottom, values).map(field => field.key), ['t']);
-  assert.throws(() => shell.build!(bottom, values), /original upper or a side face/);
+  const bottomValues = {
+    ...shell.defaults!(bottom), wallMode: 'per-face', leftWall: 3, frontWall: 2, rightWall: 5, backWall: 4, topWall: 6,
+  };
+  assert.deepEqual(shell.fields!(bottom, bottomValues).map(field => field.key), ['wallMode', 'frontWall', 'rightWall', 'backWall', 'leftWall', 'topWall']);
+  const bottomDoc = shell.build!(bottom, bottomValues);
+  const opened = readStudioDoc(JSON.stringify(bottomDoc));
+  assert.ok('doc' in opened);
+  const bottomFeature = opened.doc.nodes[2];
+  assert.ok(bottomFeature.kind === 'shell-walls');
+  assert.equal(bottomFeature.opening, 'n1.bottom');
+  assert.ok(!Object.hasOwn(bottomFeature.walls, 'n1.bottom'));
+  const bottomResult = evaluateDoc(opened.doc, 4);
+  assert.ok(bottomResult.ok && Math.abs(bottomResult.bodies[0].volume! - 13248) < 1e-7);
 });

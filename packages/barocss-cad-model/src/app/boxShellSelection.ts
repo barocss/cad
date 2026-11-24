@@ -37,7 +37,7 @@ export function boxShellSelection(ctx: Ctx) {
 
 export function buildBoxWallShell(ctx: Ctx, values: Values) {
   const target = boxShellSelection(ctx);
-  if (!target) throw refusal('BAD_REFERENCE', 'Select the original upper or a side face of one upright box extrusion.');
+  if (!target) throw refusal('BAD_REFERENCE', 'Select one original face of an upright box extrusion.');
   const { parent, opening, sigs } = target;
   const walls = Object.fromEntries(target.walls.map(face => [face.name, Number(values[face.key])]));
   return withNode(ctx.doc, { kind: 'shell-walls', parent, opening, walls, sigs });

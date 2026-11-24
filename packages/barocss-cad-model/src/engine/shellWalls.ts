@@ -14,10 +14,10 @@ export function sameWallNormal(value: unknown, direction: readonly number[]): bo
   return isVec3(value) && direction.every((coordinate, i) => coordinate === value[i]);
 }
 
-/** A per-face box Shell opens the upper face or one lateral face. */
+/** Return the five opposite and adjacent walls for the chosen original opening. */
 export function boxShellOpeningWalls(normal: unknown) {
   const opening = boxShellWalls.find(side => sameWallNormal(normal, side.normal));
-  if (opening && opening.key !== 'bottomWall') return boxShellWalls.filter(side => side !== opening);
+  if (opening) return boxShellWalls.filter(side => side !== opening);
 }
 
 /** Preserve the stored ownership of all five kept faces and the opening. */
@@ -42,6 +42,6 @@ export function shellWallFieldsProblem(node: Record<string, unknown>): string | 
   const signatureDirection = (name: string) => (sigs[name] as { d: readonly number[] }).d;
   const kept = boxShellOpeningWalls(signatureDirection(opening));
   if (!kept || !kept.every(side => Object.keys(walls).some(name => sameWallNormal(signatureDirection(name), side.normal))))
-    return 'Per-face Shell needs an original upper or side opening and its five cardinal walls.';
+    return 'Per-face Shell needs an original cardinal opening and its five cardinal walls.';
   return null;
 }
