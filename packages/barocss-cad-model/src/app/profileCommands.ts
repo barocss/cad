@@ -698,6 +698,8 @@ export function sweepRepresentationLabel(mode: unknown, path?: SweepRail): strin
       && weights[2] === first && weights[4] === first && weights[6] === first) {
       if (weights[1] === first && weights[3] < first && weights[5] === first)
         return 'Exact line–arc–line';
+      if (weights[1] > 0 && weights[1] < first && weights[3] > 0 && weights[3] < first && weights[5] === first)
+        return 'Exact arc–arc–line';
       if (weights[1] > 0 && weights[1] < first && weights[3] === first && weights[5] > 0 && weights[5] < first)
         return 'Exact arc–line–arc';
     }
