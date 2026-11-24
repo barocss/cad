@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D1920: [Qualify the source-bound Drawing Note lifecycle](notes/source-bound-note-lifecycle-2026-11-24/README.md), #245. Verify owning sheet, units, view changes, an original delayed reply, explicit repair and revised Note text after native Open.
+
 - D1919: [Preserve circular Sweep joints through an inlet Subtract](notes/perpendicular-sweep-inlet-subtract-2026-11-24/README.md), #10. Verify strict annular cap geometry, preserved native join bindings, cutter width edit and fresh Open.
 
 - D1918: [Qualify vertical ISO text clearance in a full section](notes/vertical-iso-section-hatch-clearance-2026-11-24/README.md), #247. Match actual rotated text and hatch through drag, Undo/Redo, native Open and independent SVG inspection.
