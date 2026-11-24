@@ -11,6 +11,8 @@ import { smoothScrewAngleField, smoothScrewAngleKey, smoothScrewWindingRule, smo
 import { hasLineArcScrewSections, hasLineArcTurnSections } from '../../app/lineArcScrew';
 import { dropStaleMade, exactSemicylinderRadialBoreSource, exactSemicylinderWallAfterReplacement, featureLabel, isAnnularReplacementSource, prefixDoc, withNode, type ModelNode, type StudioDoc } from '../../engine/doc';
 import { snapshotOf } from '../../engine/evaluate';
+import { detachFaceEndExtrude } from '../../engine/faceEndExtrude';
+import { currentFaceEndDistance } from '../../engine/part';
 import { isExactThickenEdit } from '../../engine/exactThickenEdit';
 import { DIRECT_RULED_COMMAND, proposeDirectRuledCommand } from '../directRuledProposal';
 import { DIRECT_THICKEN_COMMAND, proposeDirectThickenCommand } from '../directThickenProposal';
@@ -504,6 +506,12 @@ async function editFeatureTool(state: ChatState, args: Record<string, unknown>, 
   const refusal = checkFeatureRevision(state, args.expectedRevision, 'EDIT');
   if (refusal) return refusal;
   const given = isObj(args.values) ? args.values : {};
+  const detach = Object.hasOwn(given, 'detachToDistance');
+  if (detach && (given.detachToDistance !== true || args.expectedRevision === undefined || typeof args.index !== 'number'
+    || args.feature !== undefined || Object.keys(given).length !== 1 || args.sketchChamfer !== undefined
+    || args.sketchRound !== undefined || args.retainBoxCommand !== undefined)) {
+    return fail(state, 'To detach Extrude to face, pass its index, the current expectedRevision and only values.detachToDistance set to true.', { code: 'EDIT_INPUT' });
+  }
   const turnField = [smoothTurnAngleKey, smoothTurnWidthKey].find(key => Object.hasOwn(given, key));
   if (turnField && (args.expectedRevision === undefined || args.feature !== undefined || Object.keys(given).length !== 1))
     return fail(state, `Edit a Smooth Turn with only values.${turnField} and the current expectedRevision from query.render or query.rebuild.`,
@@ -528,7 +536,18 @@ async function editFeatureTool(state: ChatState, args: Record<string, unknown>, 
     return fail(state, 'Retaining the Box command requires a replacement sketch for one standard Box.');
   if (editWallDistance) return editReviewedWallDistance(state, index, given[savedWallDistanceKey], evaluate, options);
   let next: ModelNode[];
-  if (chamfer || round) {
+  if (detach) {
+    const node = nodes[index];
+    if (state.partOf || node.kind !== 'face-end-extrude' || node.suppressed)
+      return fail(state, 'Select an active Extrude to face in the base part.', { code: 'BAD_REFERENCE' });
+    let replacement: ModelNode;
+    try { replacement = detachFaceEndExtrude(node, currentFaceEndDistance(state.doc, index)); }
+    catch (error) {
+      if (isRefusal(error, 'BAD_REFERENCE', 'VALUE')) return fail(state, error.message, { code: error.code, kept: 'the part is unchanged' });
+      throw error;
+    }
+    next = dropStaleMade(nodes, nodes.map((n, i) => i === index ? replacement : n));
+  } else if (chamfer || round) {
     const result = round
       ? editSketchCorner(state.doc, index, 'ROUND', args.sketchRound)
       : editSketchCorner(state.doc, index, 'CHAMFER', args.sketchChamfer);
@@ -608,7 +627,8 @@ async function editFeatureTool(state: ChatState, args: Record<string, unknown>, 
     return { ok: false, revision: result.revision, wallTime: result.wallTime,
       error: { code: 'GEOMETRY', title: 'Screw winding was not verified', hint: 'Review the edit in a Studio session with native winding validation.', detail: '' } };
   } : evaluate;
-  return accept(state, rm.doc, evaluateEdit, options, `edited ${index}: ${featureLabel(rm.doc.nodes[index], index, rm.doc.nodes)}`,
+  const summary = detach ? `detached Extrude to face at ${index} to its current Distance` : `edited ${index}: ${featureLabel(rm.doc.nodes[index], index, rm.doc.nodes)}`;
+  return accept(state, rm.doc, evaluateEdit, options, summary,
     rm.changes.length ? { rematched: rm.changes.map(c => ({ feature: c.node, was: c.from, now: c.to })), note_rematched: 'these stored names were renumbered by the edit and matched again by their geometry; check them' } : {}, true);
 }
 async function deleteFeatureTool(state: ChatState, args: Record<string, unknown>, evaluate: Evaluate, options: CallOptions): Promise<ToolOutcome> {

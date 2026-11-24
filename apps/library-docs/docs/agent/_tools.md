@@ -16,7 +16,7 @@ Edit features. Use face and edge names ("n1.top", "n1.side0|n1.side1") or select
 |---|---|---|
 | `features.command` | `run_command` | command, values?, faces?, edges?, bodies?, point?, expectedRevision? |
 | `features.add` | `add_features` | features: [node] — raw feature nodes (sketches, extrudes, revolves, sweeps, lofts, …) |
-| `features.edit` | `edit_feature` | index, values? \| feature?, expectedRevision? |
+| `features.edit` | `edit_feature` | index, values? \| feature?, expectedRevision? — values.detachToDistance: true uses the current native length of a base-part Extrude to face; pass expectedRevision and omit other edits |
 | `features.parameters` | `set_parameters` | add?, set?, rename?, bind?, remove? — named parameters; bind a feature's value to one |
 | `features.load_rows` | `load_rows` | kind, file, part?, feature? — rows from the person’s conversation file |
 | `features.delete` | `delete_feature` | index, expectedRevision? |

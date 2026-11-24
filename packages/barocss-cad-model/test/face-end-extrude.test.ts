@@ -755,6 +755,37 @@ test('the Extrude command binds a picked native cap and resets the pick when dep
   assert.throws(() => cmd.build!(attached, picked), /supported finished profile/i);
 });
 
+test('a pinned Agent detach uses the native distance and retains downstream feature identity', async () => {
+  const source = downwardDocument(8);
+  const follower: ModelNode = { id: 'n4', kind: 'translate', parent: { node: 3, side: 'solid' }, offset: [12, 0, 0] };
+  const doc: StudioDoc = { ...source, nodes: [...source.nodes, follower],
+    outputs: { b1: source.outputs.b1, b4: { node: 4, side: 'solid' } }, nextId: 5 };
+  const original = evaluateDoc(doc, 0);
+  assert.ok(original.ok);
+  const state = { doc, bodies: original.bodies };
+  const request = { action: 'edit', index: 3, expectedRevision: revisionOf(doc), values: { detachToDistance: true } };
+  const noEvaluation = async () => assert.fail('Invalid detach requests must refuse before evaluating a candidate');
+  for (const [args, reason] of [
+    [{ ...request, expectedRevision: undefined }, /expectedRevision/],
+    [{ ...request, expectedRevision: revisionOf(downwardDocument()) }, /part changed/],
+    [{ ...request, index: 4 }, /active Extrude to face/],
+    [{ ...request, values: { detachToDistance: true, height: 15 } }, /only values.detachToDistance/],
+    [{ ...request, values: { detachToDistance: 12 } }, /set to true/],
+    [{ ...request, sketchRound: {} }, /only values.detachToDistance/],
+  ] as const) {
+    const denied = await dispatchTool(state, 'features', args, noEvaluation);
+    assert.equal(denied.isError, true, denied.content);
+    assert.match(denied.content, reason);
+    assert.equal(denied.state.doc, doc);
+  }
+  const evaluate = async (candidate: StudioDoc) => evaluateDoc(candidate, 1);
+  const result = await dispatchTool(state, 'features', request, evaluate);
+  assert.ok(!result.isError && result.changed, result.content);
+  assert.deepEqual(result.state.doc.nodes[3], { kind: 'extrude', id: 'n3', sketch: 2, height: 12 });
+  assert.deepEqual(result.state.doc.nodes[4], follower);
+  assert.deepEqual(toPartDocument(result.state.doc), toPartDocument(doc));
+});
+
 test('detaching keeps the exact current distance and the feature identity used by later nodes', () => {
   const base = documentAt(30), downstream = {
     id: 'n4', kind: 'translate', parent: { node: 3, side: 'solid' }, offset: [0, 0, 12],
