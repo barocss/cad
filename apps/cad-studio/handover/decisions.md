@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1875: [Qualify delayed paired Drawing replies](notes/drawing-fit-list-reply-ownership-2026-11-24/README.md), #269. Deliver each original response after Open or New and keep the current document, sheet, selection and exports.
 - D1874: [Read paired fit rows and estimate provenance](notes/drawing-fit-pair-estimate-2026-11-24/README.md), #269. Qualify source replacement, dimension deletion, shaft-class clearance and exact native reopen in Studio and both exports.
 - D1873: [Extract viewport development probes](notes/studio-viewport-dev-hooks-2026-11-24/README.md), #44. Verify actual face/edge picks, new and reopened native documents, and the SubD cage consumer.
 - D1872: [Repeat an earlier cut along one quarter arc](notes/three-cut-quarter-arc-path-2026-11-24/README.md), #25. Certify arc-length placements, keep all three original native apertures, and verify desktop edit and fresh Open.

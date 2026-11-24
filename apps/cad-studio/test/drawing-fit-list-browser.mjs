@@ -3,14 +3,18 @@ import { join } from 'node:path';
 import { writeFile } from 'node:fs/promises';
 import { createFlow, sha256 } from './flow-helper.mjs';
 import { clickModelCommand } from './model-rail-helper.mjs';
+import { holdFitDrawingReply } from './hold-fit-drawing-reply.mjs';
 
-const paired = process.argv.includes('--pair');
+const late = process.argv.includes('--late');
+const paired = late || process.argv.includes('--pair');
 const shaftEstimate = { class: 'g6', over: 10, upTo: 18, upper: -.006, lower: -.017, estimate: true };
-const f=await createFlow({name:'drawing-fit-list',output:process.argv[2],envFrozen: paired ? 'D1874_SOURCE_FROZEN' : 'DRAWING_FITS_FROZEN',initialFiles:['apps/cad-studio/test/drawing-fit-list-browser.mjs','apps/cad-studio/test/model-rail-helper.mjs'],
- qualification: paired
+const f=await createFlow({name:'drawing-fit-list',output:process.argv[2],envFrozen: late ? 'D1875_SOURCE_FROZEN' : paired ? 'D1874_SOURCE_FROZEN' : 'DRAWING_FITS_FROZEN',initialFiles:['apps/cad-studio/test/drawing-fit-list-browser.mjs','apps/cad-studio/test/model-rail-helper.mjs', ...(late ? ['apps/cad-studio/test/hold-fit-drawing-reply.mjs','apps/cad-studio/src/ui/useDrawingSheet.ts'] : [])],
+ qualification: late
+  ? '#269 late fit-list Drawing replies after File Open and New part.'
+  : paired
   ? '#269 an actual fitted bore and shaft, mixed sourced/estimate rows, two separate diameter identities, and reversible row deletion.'
   : '#269 single base-part sheet, two authored diameter dimensions of one Ø12 bore, explicit fit list and source-table replacement.',
- limits:['Synthetic H7 rows with explicitly named test-source IDs, not certified standard values or manufacturing approval.','This run covers the selected mm drawing only. Other Open/New routes, late responses and unsupported scope matrices are separate.','Original SVG/DXF Blob capture; independent text/entity reader, not a general DXF visual reader.'],
+ limits:['Synthetic H7 rows with explicitly named test-source IDs, not certified standard values or manufacturing approval.',late ? 'One current base-part sheet. Actual replies are delivered without rewriting payloads.' : 'The selected mm drawing only. Late responses and unsupported scope matrices are separate.','Original SVG/DXF Blob capture; independent text/entity reader, not a general DXF visual reader.'],
  snapshotExtra:()=>({drawing:window.__studioDrawing?.()??null}),
  inspectorSource:`
 import assert from 'node:assert/strict';
@@ -108,8 +112,103 @@ async function verifyFits(label, seed, changed, ids = ['fit-a', 'fit-b'], hasPai
   await f.runOracle({ ...await exported(label), edge: seed.drawing.dimensions[0].edge,
     upper, upperLimit, source, ids, paired: hasPair, shaftUpper, shaftLower, clearance }, label);
 }
+async function replaceFitTable(table) {
+  await button('Model').click();
+  await button('Library').click();
+  await f.page.getByLabel('Fit table file', { exact: true }).setInputFiles({
+    name: 'fits.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(table)),
+  });
+  await f.page.waitForFunction(source => window.__studioDoc.fits?.tables[0].rows[0].source === source, table.rows[0].source);
+  await button('Close library').click();
+  await f.ready();
+}
+const fitTableB = {
+  id: 'shop-test', sources: [{ id: 'synthetic-B', label: 'Synthetic row B, not a standard' }],
+  rows: [
+    { class: 'H7', over: 10, upTo: 18, upper: .02, lower: 0, source: 'synthetic-B' },
+    ...(paired ? [{ ...shaftEstimate, upper: -.008, lower: -.019 }] : []),
+  ],
+};
+
+async function openFitDocument(doc, name) {
+  await f.page.getByLabel('Model file', { exact: true }).setInputFiles({
+    name: `${name}.bcad`, mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(doc)),
+  });
+  await f.page.waitForFunction(label => document.querySelector('.doc-tab input')?.value === label, name);
+  await f.ready();
+  assert.deepEqual(await f.doc(), doc);
+}
+
+async function delayDrawingFor(doc, source) {
+  await f.page.evaluate(() => window.__fitDrawingReply.arm());
+  await button('Drawing').click();
+  await f.page.waitForFunction(() => !!window.__fitDrawingReply.read());
+  const held = await f.page.evaluate(() => window.__fitDrawingReply.read());
+  assert.ok(held.id !== undefined);
+  assert.equal(held.ok, true);
+  assert.equal(held.doc.fits.tables[0].rows[0].source, source);
+  assert.deepEqual(held.doc.drawing.dimensions, doc.drawing.dimensions);
+  return held.id;
+}
+
+async function verifyLateFitList(original) {
+  const sample = () => f.page.evaluate(() => window.__fitDrawingReply.sample());
+  const release = () => f.page.evaluate(() => window.__fitDrawingReply.release());
+  const requireSource = source => f.page.waitForFunction(id => window.__fitDrawingReply.sample().text.includes(id), source);
+  const tableA = original.fits.tables[0];
+
+  f.phase = 'Hold an actual paired drawing while File Open takes ownership';
+  await f.save('original-paired-fit-list');
+  await button('Model').click();
+  const first = await delayDrawingFor(original, 'synthetic-A');
+  await f.snapshot('02-drawing-a-held');
+  const replacement = { ...original, fits: { ...original.fits, tables: [fitTableB] } };
+  await openFitDocument(replacement, 'fit-list-replacement');
+  await drawing();
+  await listReady();
+  await requireSource('synthetic-B');
+  await f.snapshot('03-replacement-ready-before-old-drawing');
+  const before = await sample();
+  const after = await release();
+  assert.ok(after.length >= 5);
+  for (const state of after) assert.deepEqual(state, before);
+  assert.doesNotMatch(before.text, /synthetic-A/);
+  await verifyFits('04-replacement-after-old-drawing', original, true);
+  await f.snapshot('04-replacement-after-old-drawing');
+
+  f.phase = 'Hold a different fit revision and create a new part';
+  await replaceFitTable(tableA);
+  const second = await delayDrawingFor(replacement, 'synthetic-A');
+  await button('New part').click();
+  await f.page.waitForFunction(() => !window.__studioDoc.nodes.length && !window.__studioBodies().bodies.length);
+  await f.ready();
+  const blank = await sample();
+  assert.deepEqual(blank.tables, []);
+  assert.doesNotMatch(blank.text, /FIT DIMENSIONS|synthetic-[AB]/);
+  const blankSamples = await release();
+  for (const state of blankSamples) assert.deepEqual(state, blank);
+  await f.snapshot('05-new-part-after-old-drawing');
+
+  f.phase = 'Reopen the current paired drawing after both late responses';
+  await openFitDocument(replacement, 'fit-list-restored');
+  await drawing();
+  await listReady();
+  await requireSource('synthetic-B');
+  await verifyFits('06-current-source-restored', original, true);
+  await f.snapshot('06-current-source-restored');
+  f.report.observations.push({ realDelayedReplies: [first, second], fileOpenSamples: after.length, newPartSamples: blankSamples.length });
+}
+
 await f.run(async()=>{
  const { doc: prepared } = await f.inspect('prepare', {}, { prepare: true, paired, shaftEstimate });
+ if (late) {
+   const newContext = f.browser.newContext.bind(f.browser);
+   f.browser.newContext = async options => {
+     const context = await newContext(options);
+     await context.addInitScript(holdFitDrawingReply);
+     return context;
+   };
+ }
  await f.newPage();
  await f.page.setViewportSize({ width: 1440, height: 1000 });
  await f.page.evaluate(capture);
@@ -123,9 +222,17 @@ await f.run(async()=>{
  await drawing();
  await controls().locator(':scope > summary').click();await button('Add fit dimension list').click();await listReady();const added=await f.doc();assert.deepEqual(added.drawing.tables,[{id:'fits',from:'fits'}]);assert.deepEqual(added.nodes,seed.nodes);assert.deepEqual(added.drawing.dimensions,seed.drawing.dimensions);
  await verifyFits('01-added', seed, false);await f.snapshot('01-added');
+ if (late) {
+   await verifyLateFitList(added);
+   return;
+ }
  await f.page.getByLabel('Fit list fits X (mm)',{exact:true}).fill('15');await f.page.getByLabel('Fit list fits Y (mm)',{exact:true}).fill('175');await button('Move fit list fits').click();await f.page.waitForFunction(()=>window.__studioDoc.drawing.tables[0].at?.[1]===175);const moved=await f.doc();assert.deepEqual(moved.drawing.tables,[{id:'fits',from:'fits',at:[15,175]}]);
  await button('Remove fit list fits').click();await f.page.waitForFunction(()=>!window.__studioDoc.drawing.tables?.length);await f.undo();await f.same(moved);await listReady();
- await button('Model').click();await button('Library').click();const changedTable={id:'shop-test',sources:[{id:'synthetic-B',label:'Synthetic row B, not a standard'}],rows:[{class:'H7',over:10,upTo:18,upper:.02,lower:0,source:'synthetic-B'}, ...(paired ? [{ ...shaftEstimate, upper: -.008, lower: -.019 }] : [])]};await f.page.getByLabel('Fit table file',{exact:true}).setInputFiles({name:'fits.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(changedTable))});await f.page.waitForFunction(()=>window.__studioDoc.fits?.tables[0].rows[0].upper===.02);await button('Close library').click();await f.ready();await drawing();await listReady();const changed=await f.doc();assert.deepEqual(changed,{...moved,fits:{...moved.fits,tables:[changedTable]}});
+ await replaceFitTable(fitTableB);
+ await drawing();
+ await listReady();
+ const changed = await f.doc();
+ assert.deepEqual(changed, { ...moved, fits: { ...moved.fits, tables: [fitTableB] } });
  await verifyFits('02-source-replaced', seed, true);await f.snapshot('02-source-replaced');
  await f.undo();await f.same(moved);await listReady();await f.redo();await f.same(changed);await listReady();
  if (paired) {
