@@ -33,7 +33,7 @@ import { weldVertices } from '../mesh/facet-brep.js';
 import { splitFacetBrep, type FacetSplitResult } from '../mesh/facet-split.js';
 import { facetBoolean, isFacetBooleanError, splitMixedBrep } from '../mesh/facet-boolean.js';
 import { selfIntersections } from '../mesh/mesh-repair.js';
-import { exactSweep, offsetExactPairedElbowOutletIfAdmitted, replaceExactPairedSweepEndIfAdmitted } from '../brep/exact-sweep.js';
+import { exactSweep, offsetExactPairedElbowOutletIfAdmitted, replaceExactPairedSweepEndIfAdmitted, replaceExactPairedSweepOutletAfterInletIfAdmitted } from '../brep/exact-sweep.js';
 import { sweepSolid } from '../brep/sweep-solid.js';
 import { validateCurve } from '../core/math.js';
 
@@ -767,6 +767,8 @@ function operation(f: CadPartFeature & Record<string, unknown>, t: Tools): () =>
       if (typeof face !== 'string' || !face.trim() || /[+\0]/.test(face)) return fail('INPUT', 'Replace face needs one exact native face name.');
       const author = ref(f.target, 'target').author;
       const sweep = exactSweepFaceEditSource(author, ref);
+      const firstReplacement = author?.kind === 'replace-face' ? author : undefined;
+      const replacedSweep = firstReplacement ? exactSweepFaceEditSource(ref(firstReplacement.target, 'original inlet source').author, ref) : undefined;
       const exactCylinder = author?.kind === 'thicken' && author.mode === 'exact-cylinder' ? {
         id: author.id, surface: { ...structuredClone(author.surface), kind: 'surface', id: 'surface' } as Surface,
         thickness: dim(author.thickness, 'Thicken thickness', true), side: author.side,
@@ -796,6 +798,12 @@ function operation(f: CadPartFeature & Record<string, unknown>, t: Tools): () =>
           if (sweep?.path.controlPoints.length === 11) {
             const replaced = replaceExactPairedSweepEndIfAdmitted(brep, face, sweep, plane);
             if (!replaced) return fail('CAPABILITY', 'Replace face needs the original straight inlet or outlet of one exact five-span sweep with two rectangular passages.');
+            return one({ kind: 'brep', brep: replaced });
+          }
+          if (firstReplacement && replacedSweep?.path.controlPoints.length === 11) {
+            const replaced = replaceExactPairedSweepOutletAfterInletIfAdmitted(brep, face, replacedSweep,
+              { face: firstReplacement.face, plane: firstReplacement.plane }, plane);
+            if (!replaced) return fail('CAPABILITY', 'Replace face needs the original outlet after exactly one inward tilted replacement of its paired sweep inlet.');
             return one({ kind: 'brep', brep: replaced });
           }
           const replaced = replaceBoredCapIfAdmitted(brep, face, plane) ?? replaceCircularCapIfAdmitted(brep, face, plane)

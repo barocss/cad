@@ -1,13 +1,13 @@
 # CAD roadmap — current status and execution order
 
-Updated 2026-11-24 · Priority authority: D520 · Latest delivery: D1890 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
+Updated 2026-11-24 · Priority authority: D520 · Latest delivery: D1891 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
 
 This is the only current status index. Detailed tracks define acceptance; the 34 stable row pages retain scope and issue navigation. Immutable decision notes retain results. Do not append chronological status paragraphs here. [D520 decision](notes/cad-roadmap-replan-2026-11-04/README.md) supersedes D445 execution order and historical next-item text, while retaining its safeguards and bounded proofs.
 
 ## Now and next
 
-- **Current position:** [D1890](notes/path-gap-original-contract-closeout-2026-11-24/README.md), P1 rows 09 and 16. Actual Studio verifies constrained and overlapping input refusal, current gap preview ownership and constant requested length next to another crossing.
-- **Next MAIN:** D1891, P5 rows [07](roadmap-rows/07.md) and [31](roadmap-rows/31.md), [#17](https://github.com/barocss/cad/issues/17). Add an independent inward tilted outlet Replace face after exactly one original inlet replacement on the same five-span paired Sweep. Keep the first live reference, both passages and all joins through donor editing and reopen.
+- **Current position:** [D1891](notes/paired-sweep-inlet-then-outlet-replacement-2026-11-24/README.md), P5 rows 07 and 31. Studio can add an independent inward tilted outlet after the original inlet replacement on one five-span paired Sweep. A live first donor edit and fresh Open keep the outlet, both passages and every join.
+- **Next MAIN:** D1892, P5 rows [07](roadmap-rows/07.md) and [31](roadmap-rows/31.md), [#17](https://github.com/barocss/cad/issues/17). Admit the reverse ordered pair: inward tilted outlet followed by the original inlet. Verify native equivalence, retained inlet under an upstream donor edit, one Undo/Redo and native reopen.
 - **Separate follow-ups:** Continue Studio App extraction in cohesive parts with affected desktop checks. [#608 Rendering](https://github.com/barocss/cad/issues/608) stays on HOLD. API inventory drift remains open. The issue tracker records [#126](https://github.com/barocss/cad/issues/126), [#613](https://github.com/barocss/cad/issues/613), [#152](https://github.com/barocss/cad/issues/152) and [#22](https://github.com/barocss/cad/issues/22) as closed.
 - **Active repository:** [barocss/cad](https://github.com/barocss/cad), based on `origin/main`. Fetch before work and preserve unexpected changes. The [migration record](../../../docs/migration/README.md) maps the former `local/cad-dev` history and issue numbers.
 - **Evidence correction:** D482 records2167 PASS/0 FAIL/2 existing SKIP in a later full-kernel run than D433. Neither result is a new full-suite PASS at this audit HEAD. [D482 record](notes/vertical-contact-refusal-2026-11-04/README.md).
@@ -43,7 +43,7 @@ P0 findings that can lose work, export stale geometry or misattribute results ta
 
 ## GitHub requirement and issue inventory
 
-- The [current closeout queue](roadmap-tracks/18-issue-closeout.md) records 212 open issues after the completed Fit dimensions list and straight Drag Trim closeouts, with remaining acceptance gaps and held dependencies.
+- The [current closeout queue](roadmap-tracks/18-issue-closeout.md) records 211 open issues after the completed Fit dimensions list, straight Drag Trim and measured sketch Gap closeouts, with remaining acceptance gaps and held dependencies.
 
 The [November 20 routing snapshot](notes/open-issue-routing-2026-11-20/README.md) covers all 229 open issues in the standalone CAD repository. It links each issue to a primary route and identifies model-version tracking for agent visual review as the next AI workflow to measure (#324).
 

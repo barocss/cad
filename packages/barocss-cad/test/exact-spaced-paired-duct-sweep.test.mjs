@@ -742,3 +742,40 @@ for (const inlet of [false, true]) test(`an inward tilted replacement trims the 
   assert.throws(() => evaluateCadPart(recipe({ origin, normal }, wallName)), /original straight inlet or outlet/);
   assert.deepEqual(base, untouched);
 });
+
+test('an inward tilted outlet retains the exactly replayed earlier inlet trim', () => {
+  const input = document(rail({ leadLength: 10, tailLength: 6 }).path);
+  const original = evaluateCadPart(input).outputs[0].brep;
+  const start = { id: 'i', kind: 'replace-face', target: 'w', face: 'w.start',
+    plane: { origin: [-9, 0, 0], normal: [-4, 1, 0] } };
+  const end = { id: 'o', kind: 'replace-face', target: 'i', face: 'w.end',
+    plane: { origin: [35, 38, 0], normal: [4, -1, 0] } };
+  const evaluate = (...features) => evaluateCadPart({ ...input, features: [...input.features, ...features] }).outputs[0].brep;
+  const first = evaluate(start), after = evaluate(start, end);
+  const report = checkBrep(after, { strict: true });
+  assert.ok(report.valid, report.issues.join('\n'));
+  assert.deepEqual(report.counts, { bodies: 1, shells: 1, faces: 62, loops: 66, coedges: 264, edges: 132, vertices: 72 });
+  assert.equal(report.topology[0].genus, 2);
+  assert.deepEqual(after.faces.filter(face => face.name !== 'w.end'), first.faces.filter(face => face.name !== 'w.end'));
+  const changed = after.edges.filter((edge, index) => JSON.stringify(edge) !== JSON.stringify(first.edges[index]));
+  assert.equal(changed.length, 24);
+  for (const edge of changed) {
+    assert.ok(verifyCharts(after, edge).every(face => face.name === 'w.end' || face.name.startsWith('w.tail.')));
+  }
+  assert.equal(after.vertices.filter((vertex, index) => JSON.stringify(vertex) !== JSON.stringify(original.vertices[index])).length, 24);
+  for (const name of ['w.start', 'w.end']) {
+    const cap = after.faces.find(face => face.name === name);
+    assert.equal(after.loops.filter(loop => cap.loops.includes(loop.id) && loop.kind === 'inner').length, 2);
+  }
+  const removed = brepMassProperties(original, 1), settled = brepMassProperties(after, 1);
+  near(settled.volume, 32 * (22 + 15 * Math.PI));
+  near(removed.volume - settled.volume, 64);
+  pointNear(settled.centroid, [12.82089331176388, 18.6575343541048, 0]);
+  const move = { ...start, plane: { ...start.plane, origin: [-8, 0, 0] } };
+  const revised = evaluate(move, end);
+  near(brepMassProperties(revised, 1).volume, 32 * (21 + 15 * Math.PI));
+  assert.deepEqual(revised.faces.find(face => face.name === 'w.end'), after.faces.find(face => face.name === 'w.end'));
+  assert.throws(() => evaluate(start, { ...end, face: 'w.start' }), /exactly one inward tilted replacement/);
+  assert.throws(() => evaluate({ ...end, target: 'w' }, { ...start, target: 'o' }), /exactly one inward tilted replacement/);
+  assert.throws(() => evaluate(start, end, { ...end, id: 'third', target: 'o' }), /Replace face/);
+});

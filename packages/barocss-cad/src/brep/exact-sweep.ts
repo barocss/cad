@@ -1516,23 +1516,44 @@ function retainedElbowBoundary(before: Brep, after: Brep, face: Brep['faces'][nu
     && before.vertices.every(vertex => !vertices.has(vertex.id) || same(vertex, after.vertices.find(value => value.id === vertex.id)));
 }
 
-/** Trim an original five-span paired cap against a tilted plane inside its straight end span. */
-export function replaceExactPairedSweepEndIfAdmitted(brep: Brep, faceName: string, source: ExactSweepInput,
-  plane: { readonly origin: Point; readonly normal: Point }): Brep | undefined {
+type SweepTrimPlane = { readonly origin: Point; readonly normal: Point };
+const pairedReplacementFailure: Refuse = (code, detail) => {
+  throw new BrepError(code === 'GEOMETRY' ? 'GEOMETRY' : 'INPUT', detail);
+};
+
+function pairedSweepTrimRail(brep: Brep, faceName: string, source: ExactSweepInput) {
   const inlet = faceName === `${source.id}.start`;
   if (source.path.controlPoints.length !== 11 ||
     !exactPairedElbowOutletOffsetFrame(brep, faceName, source) || source.outer.length !== 4 ||
     source.outer.some(segment => segment.kind !== 'line') || source.holes?.length !== 2 ||
     source.holes.some(loop => loop.length !== 4 || loop.some(segment => segment.kind !== 'line'))) return;
-  const original = exactSweep(source, (code, detail) => { throw new BrepError(code === 'GEOMETRY' ? 'GEOMETRY' : 'INPUT', detail); }).brep;
-  if (JSON.stringify(original) !== JSON.stringify(brep)) return;
   const rail = pairedStraightCapRail(source.path, inlet);
   if (!rail || !('endpoint' in rail)) return;
   const path = source.path.controlPoints;
   const axis = inlet ? unit(sub(path[0], path[2])) : unit(sub(path[10], path[8]));
-  return trimExactSweepEnd(brep, faceName, {
-    end: inlet ? 'inlet' : 'outlet', axis, length: rail.length, wallPrefix: `${source.id}.${rail.wallPiece}.`,
-  }, plane);
+  return { end: inlet ? 'inlet' as const : 'outlet' as const, axis, length: rail.length, wallPrefix: `${source.id}.${rail.wallPiece}.` };
+}
+
+/** Trim an original five-span paired cap against a tilted plane inside its straight end span. */
+export function replaceExactPairedSweepEndIfAdmitted(brep: Brep, faceName: string, source: ExactSweepInput,
+  plane: SweepTrimPlane): Brep | undefined {
+  const rail = pairedSweepTrimRail(brep, faceName, source);
+  if (!rail || JSON.stringify(exactSweep(source, pairedReplacementFailure).brep) !== JSON.stringify(brep)) return;
+  return trimExactSweepEnd(brep, faceName, rail, plane);
+}
+
+/** The first tilted inlet must reproduce the exact current parent before its original outlet can move. */
+export function replaceExactPairedSweepOutletAfterInletIfAdmitted(brep: Brep, faceName: string, source: ExactSweepInput,
+  inlet: { face: string; plane: SweepTrimPlane }, plane: SweepTrimPlane): Brep | undefined {
+  if (inlet.face !== `${source.id}.start` || faceName !== `${source.id}.end`) return;
+  const outletRail = pairedSweepTrimRail(brep, faceName, source);
+  if (!outletRail) return;
+  const original = exactSweep(source, pairedReplacementFailure).brep;
+  const inletRail = pairedSweepTrimRail(original, inlet.face, source);
+  if (!inletRail) return;
+  const replay = trimExactSweepEnd(original, inlet.face, inletRail, inlet.plane);
+  if (JSON.stringify(replay) !== JSON.stringify(brep)) return;
+  return trimExactSweepEnd(brep, faceName, outletRail, plane);
 }
 
 /** Continue only an admitted original straight cap. Replaying its producer binds every original native coefficient. */
