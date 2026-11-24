@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D1924: [Offset the original perpendicular annular outlet](notes/perpendicular-annular-outlet-offset-2026-11-24/README.md), #17. Move the outlet with a signed distance while preserving the inlet and all three exact native joins.
+
 - D1923: [Qualify manual extension role ownership](notes/drawing-extension-lifecycle-2026-11-24/README.md), #240. Verify native source loss and restoration, Auto, view and sheet changes, PDF writer and Studio Model annotation.
 
 - D1922: [Qualify vertical and reversed aligned extension roles](notes/drawing-extension-orientations-2026-11-24/README.md), #240. Verify a naturally short witness, independent dimensions and actual R12 and R2000 output.

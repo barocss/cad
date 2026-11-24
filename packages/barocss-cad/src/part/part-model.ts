@@ -36,7 +36,7 @@ import { weldVertices } from '../mesh/facet-brep.js';
 import { splitFacetBrep, type FacetSplitResult } from '../mesh/facet-split.js';
 import { facetBoolean, isFacetBooleanError, splitMixedBrep } from '../mesh/facet-boolean.js';
 import { selfIntersections } from '../mesh/mesh-repair.js';
-import { exactSweep, offsetExactPairedElbowOutletIfAdmitted, offsetExactPerpendicularAnnularInletIfAdmitted, replaceExactPairedSweepEndIfAdmitted, replaceExactPairedSweepEndAfterOppositeIfAdmitted } from '../brep/exact-sweep.js';
+import { exactSweep, offsetExactPairedElbowOutletIfAdmitted, offsetExactPerpendicularAnnularInletIfAdmitted, offsetExactPerpendicularAnnularOutletIfAdmitted, replaceExactPairedSweepEndIfAdmitted, replaceExactPairedSweepEndAfterOppositeIfAdmitted } from '../brep/exact-sweep.js';
 import { sweepSolid } from '../brep/sweep-solid.js';
 import { validateCurve } from '../core/math.js';
 
@@ -783,6 +783,8 @@ function operation(f: CadPartFeature & Record<string, unknown>, t: Tools): () =>
         if (pairedElbow) {
           const circular = offsetExactPerpendicularAnnularInletIfAdmitted(brep, face, pairedElbow, distance);
           if (circular) return one({ kind: 'brep', brep: circular });
+          const circularOutlet = offsetExactPerpendicularAnnularOutletIfAdmitted(brep, face, pairedElbow, distance);
+          if (circularOutlet) return one({ kind: 'brep', brep: circularOutlet });
           const offset = offsetExactPairedElbowOutletIfAdmitted(brep, face, pairedElbow, distance);
           if (offset) return one({ kind: 'brep', brep: offset });
         }

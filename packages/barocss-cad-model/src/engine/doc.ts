@@ -759,26 +759,29 @@ export function isPairedElbowOutletOffsetSource(nodes: readonly unknown[], index
   return controlPoints.length === 7 || arcLine || isFiveSpanPairedElbowOffsetPath(path);
 }
 
-/** The saved original annular inlet recipe. The kernel verifies the rail, cap and native charts. */
-export function isPerpendicularAnnularInletOffsetSource(nodes: readonly unknown[], index: number, face: string): boolean {
+/** The saved original annular end recipe. The kernel verifies the rail, cap and native charts. */
+export function perpendicularAnnularOffsetEnd(nodes: readonly unknown[], index: number, face: string): 'start' | 'end' | undefined {
   const sweep = nodes[index];
   if (!textRecord(sweep) || sweep.kind !== 'sweep-curve' || sweep.mode !== 'exact' || sweep.suppressed || sweep.held !== undefined
-    || typeof sweep.id !== 'string' || face !== `${sweep.id}.start` || !textRecord(sweep.path)
-    || !Number.isSafeInteger(sweep.sketch) || Number(sweep.sketch) < 0 || Number(sweep.sketch) >= index) return false;
+    || typeof sweep.id !== 'string' || !textRecord(sweep.path)
+    || !Number.isSafeInteger(sweep.sketch) || Number(sweep.sketch) < 0 || Number(sweep.sketch) >= index) return;
+  const end = face === `${sweep.id}.start` ? 'start' : face === `${sweep.id}.end` ? 'end' : undefined;
+  if (!end) return;
   const sketch = nodes[Number(sweep.sketch)];
   if (!textRecord(sketch) || sketch.kind !== 'sketch' || sketch.profile !== 'circle' || sketch.suppressed || sketch.held !== undefined
     || !Array.isArray(sketch.holes) || sketch.holes.length !== 1
     || !Array.isArray(sketch.holes[0]) || sketch.holes[0].length !== 1 || !textRecord(sketch.holes[0][0])
-    || sketch.holes[0][0].kind !== 'arc') return false;
+    || sketch.holes[0][0].kind !== 'arc') return;
   const { degree, controlPoints, weights, knots } = sweep.path;
   if (degree !== 2 || !Array.isArray(controlPoints) || controlPoints.length !== 9 || !controlPoints.every(point => textVector(point, true))
-    || !Array.isArray(weights) || weights.length !== 9 || !Array.isArray(knots) || knots.length !== 12 || !knots.every(Number.isFinite)) return false;
+    || !Array.isArray(weights) || weights.length !== 9 || !Array.isArray(knots) || knots.length !== 12 || !knots.every(Number.isFinite)) return;
   const first = weights[0];
-  return Number.isFinite(first) && first > 0 && weights.every((weight, i) => i === 3 || i === 5
+  const valid = Number.isFinite(first) && first > 0 && weights.every((weight, i) => i === 3 || i === 5
     ? Number.isFinite(weight) && weight > 0 && weight < first : weight === first)
     && knots[0] === knots[1] && knots[1] === knots[2] && knots[3] === knots[4] && knots[5] === knots[6]
     && knots[7] === knots[8] && knots[9] === knots[10] && knots[10] === knots[11]
     && knots[2] < knots[3] && knots[4] < knots[5] && knots[6] < knots[7] && knots[8] < knots[9];
+  return valid ? end : undefined;
 }
 
 function isPairedFiveSpanEndPlaneSource(nodes: readonly unknown[], index: number, face: string, end: 'start' | 'end'): boolean {
@@ -885,7 +888,7 @@ export function directFaceDocumentProblem(input: unknown): string | null {
       if (parent.kind === 'sweep-curve') {
         if (signature.k !== 'plane' || !(isPairedElbowOutletOffsetSource(value.nodes, parentIndex, face)
           || isPairedElbowInletOffsetSource(value.nodes, parentIndex, face)
-          || isPerpendicularAnnularInletOffsetSource(value.nodes, parentIndex, face)))
+          || perpendicularAnnularOffsetEnd(value.nodes, parentIndex, face)))
           return 'Offset face: the Exact Sweep needs a supported original straight end and a signed distance.';
         if (node.target !== undefined) {
           if (!isPairedFiveSpanCapPlaneSource(value.nodes, parentIndex, face))

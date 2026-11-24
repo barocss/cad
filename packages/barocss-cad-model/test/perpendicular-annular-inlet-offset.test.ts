@@ -5,7 +5,7 @@ import type { Ctx } from '../src/app/commands';
 import { editSavedOffsetFaceCommand } from '../src/app/offsetFaceEdit';
 import { offsetFaceCommand } from '../src/app/profileCommands';
 import { encodeStudioFile, readStudioFile } from '../src/engine/container';
-import { emptyDoc, isPerpendicularAnnularInletOffsetSource, offsetFaceDocumentProblem, withNode, type StudioDoc } from '../src/engine/doc';
+import { emptyDoc, perpendicularAnnularOffsetEnd, offsetFaceDocumentProblem, withNode, type StudioDoc } from '../src/engine/doc';
 import { evaluateDoc, partBreps } from '../src/engine/evaluate';
 
 const face = 'n1.start';
@@ -27,8 +27,9 @@ function context(doc: StudioDoc, name = face): Ctx {
 
 test('an original annular inlet has a signed Offset that survives native Open and History', async () => {
   const source = fixture(), before = structuredClone(source), original = context(source);
-  assert.ok(isPerpendicularAnnularInletOffsetSource(source.nodes, 1, face));
-  assert.equal(isPerpendicularAnnularInletOffsetSource(source.nodes, 1, 'n1.end'), false);
+  assert.equal(perpendicularAnnularOffsetEnd(source.nodes, 1, face), 'start');
+  assert.equal(perpendicularAnnularOffsetEnd(source.nodes, 1, 'n1.end'), 'end');
+  assert.equal(perpendicularAnnularOffsetEnd(source.nodes, 1, 'n1.lead.side[e0]#1'), undefined);
   assert.equal(offsetFaceCommand.available(original).ok, true);
   const applied = offsetFaceCommand.build!(original, { d: 4 }), node = applied.nodes[2];
   assert.ok(node.kind === 'offset-face');
@@ -57,8 +58,36 @@ test('saved inlet authority cannot be redirected to the other cap', () => {
   const source = fixture(), original = context(source);
   const saved = offsetFaceCommand.build!(original, { d: 4 }), node = saved.nodes[2];
   assert.ok(node.kind === 'offset-face' && node.sigs?.[face]);
-  const wrong = { ...saved, nodes: [...source.nodes, { ...node, faces: ['n1.end'], sigs: { 'n1.end': node.sigs[face] } }] };
-  assert.match(offsetFaceDocumentProblem(wrong) ?? '', /supported original straight end/);
-  const otherView = context(source, 'n1.end');
-  assert.throws(() => offsetFaceCommand.build!(otherView, { d: 4 }), /Offset face/);
+  const wrong: StudioDoc = { ...saved, nodes: [...source.nodes, { ...node, faces: ['n1.end'], sigs: { 'n1.end': node.sigs[face] } }] };
+  assert.equal(offsetFaceDocumentProblem(wrong), null);
+  const evaluated = evaluateDoc(wrong, 2);
+  assert.ok(!evaluated.ok);
+  assert.match(evaluated.error.detail, /signature|reference/i);
+});
+
+test('an original annular outlet supports signed Offset through History and native Open', async () => {
+  const source = fixture(), before = structuredClone(source), end = 'n1.end', selected = context(source, end);
+  assert.equal(offsetFaceCommand.available(selected).ok, true);
+  const applied = offsetFaceCommand.build!(selected, { d: 4 }), node = applied.nodes[2];
+  assert.ok(node.kind === 'offset-face');
+  assert.deepEqual(node.faces, [end]);
+  assert.equal(node.sigs?.[end]?.k, 'plane');
+  assert.equal(offsetFaceDocumentProblem(applied), null);
+  const opened = await readStudioFile(encodeStudioFile(applied));
+  assert.ok('doc' in opened);
+  assert.deepEqual(opened.doc, JSON.parse(JSON.stringify(applied)));
+  const edit = editSavedOffsetFaceCommand(opened.doc, 2);
+  assert.ok(edit?.build);
+  const current = context(opened.doc, end);
+  const signed = edit.build(current, { d: -4 });
+  const [{ brep }] = partBreps(signed), cap = faceGeometry(brep.faces.find(candidate => candidate.name === end)!);
+  assert.ok(cap.kind === 'plane' && Math.abs(cap.o[2] - 24) < 1e-7);
+  const fixed = faceGeometry(brep.faces.find(candidate => candidate.name === face)!);
+  assert.ok(fixed.kind === 'plane' && Math.abs(fixed.o[0] + 10) < 1e-7);
+  assert.ok(checkBrep(brep, { strict: true }).valid);
+  assert.ok(Math.abs(brepMassProperties(brep, 1).volume - 3 * Math.PI * (15 * Math.PI + 16)) < 1e-7);
+  const collapse = evaluateDoc(edit.build(current, { d: -10 }), 2);
+  assert.ok(!collapse.ok);
+  assert.match(collapse.error.detail, /outlet.*join/);
+  assert.deepEqual(source, before);
 });

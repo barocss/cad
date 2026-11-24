@@ -2,7 +2,12 @@ import assert from 'node:assert/strict';
 import { createFlow } from './flow-helper.mjs';
 
 const baseline = process.argv.includes('--baseline');
-const inlet = 'n1.start';
+const outlet = process.argv.includes('--outlet');
+const end = outlet ? 'outlet' : 'inlet';
+const capName = outlet ? 'n1.end' : 'n1.start';
+const fixedName = outlet ? 'n1.start' : 'n1.end';
+const axis = outlet ? 2 : 0, initialCap = outlet ? 28 : -10, sign = outlet ? 1 : -1;
+const movingPiece = outlet ? 'tail' : 'lead';
 const source = { format: 'barocss-cad-model', schema: 3, units: 'mm', parameters: {}, nextId: 2,
   nodes: [
     { id: 'n0', kind: 'sketch', profile: 'circle', center: [0, 0], radius: 2,
@@ -15,10 +20,10 @@ const source = { format: 'barocss-cad-model', schema: 3, units: 'mm', parameters
   ], outputs: { b1: { node: 1, side: 'solid' } } };
 const pins = ['packages/barocss-cad/src/part/part-model.ts', 'packages/barocss-cad/src/brep/exact-sweep.ts',
   'packages/barocss-cad-model/src/engine/doc.ts', 'packages/barocss-cad-model/src/app/nativeOffsetFace.ts'];
-const f = await createFlow({ name: 'perpendicular-sweep-inlet-offset', output: process.argv[2], envFrozen: 'D1921_SOURCE_FROZEN',
+const f = await createFlow({ name: `perpendicular-sweep-${end}-offset`, output: process.argv[2], envFrozen: outlet ? 'D1924_SOURCE_FROZEN' : 'D1921_SOURCE_FROZEN',
   initialFiles: pins, requiredFrozen: pins,
-  qualification: 'Use signed Offset face on the original annular inlet of the four-span perpendicular Exact Sweep.',
-  limits: ['Original inlet of one exact annulus with both straight ends. No replacement, outlet or linked reference plane. Desktop only.'],
+  qualification: `Use signed Offset face on the original annular ${end} of the four-span perpendicular Exact Sweep.`,
+  limits: ['Original straight cap of one exact annulus with both ends. No replacement, second edit or linked reference plane. Desktop only.'],
   inspectorSource: `
 import { readFileSync } from 'node:fs';
 import { brepMassProperties, checkBrep, curveDomain, evaluateCurve, faceGeometry, massPropertiesOf, measureBrepEdgeContinuity } from '@barocss/cad';
@@ -52,7 +57,7 @@ const joints = [[0,0],[1,12],[2,18]].flatMap(([axis,level]) => brep.edges
     id: edge.id, points: sample(edge), continuity: measureBrepEdgeContinuity(brep,edge.id),
     sides: brep.coedges.filter(use => use.edge === edge.id).map(use => [use.id,digestOf(use.pcurve)]),
   })));
-const kept = brep.faces.filter(face => face.name !== 'n1.start' && !face.name?.startsWith('n1.lead.'))
+const kept = brep.faces.filter(face => face.name !== '${capName}' && !face.name?.startsWith('n1.${movingPiece}.'))
   .map(face => [face.name,digestOf(face.surface)]);
 console.log(JSON.stringify({ digest: digestOf(brep), topology: checkBrep(brep,{strict:true}), caps, joints, kept,
   mesh: drawn.mesh.faces.map(face => [face.name,face.index]), mass: massPropertiesOf(out), quadrature: brepMassProperties(brep,1) }));
@@ -71,22 +76,24 @@ async function verify(label, doc, offset, original) {
   assert.ok(topology.valid, topology.issues.join('\n'));
   assert.deepEqual(topology.counts, { bodies: 1, shells: 1, faces: 18, loops: 20, coedges: 72, edges: 36, vertices: 20 });
   assert.equal(topology.topology[0].genus,1);
-  const cap = caps.find(face => face.name === inlet);
+  const cap = caps.find(face => face.name === capName);
   assert.ok(cap && cap.plane.kind === 'plane');
-  near(cap.plane.o[0],-10-offset);
-  assert.deepEqual(cap.plane.n,[-1,0,0]);
+  const moved = initialCap + sign * offset;
+  near(cap.plane.o[axis], moved);
+  assert.deepEqual(cap.plane.n, outlet ? [0,0,1] : [-1,0,0]);
   assert.deepEqual(cap.loops.map(loop => loop.kind),['outer','inner']);
   for (const { kind, rims } of cap.loops) {
     assert.equal(rims.length,2);
     for (const rim of rims) {
       assert.ok(rim.reciprocal);
-      for (const [x,y,z] of rim.points) {
-        near(x,-10-offset);
-        near(Math.hypot(y,z),kind === 'outer' ? 2 : 1);
+      for (const point of rim.points) {
+        near(point[axis], moved);
+        const radius = outlet ? Math.hypot(point[0]-12,point[1]-30) : Math.hypot(point[1],point[2]);
+        near(radius,kind === 'outer' ? 2 : 1);
       }
     }
   }
-  assert.deepEqual(caps.find(face => face.name === 'n1.end'),original.caps.find(face => face.name === 'n1.end'));
+  assert.deepEqual(caps.find(face => face.name === fixedName),original.caps.find(face => face.name === fixedName));
   assert.deepEqual(kept,original.kept);
   const withoutContinuity = edges => edges.map(({id,points,sides}) => ({id,points,sides}));
   assert.deepEqual(withoutContinuity(joints),withoutContinuity(original.joints));
@@ -95,36 +102,38 @@ async function verify(label, doc, offset, original) {
     assert.equal(edge.continuity.status,'measured');
     near(edge.continuity.maximumAngleDegrees,0,1e-6);
   }
-  const length = baseLength + offset, centroid = baseMoments.map((value,i) => (value + (i ? 0 : offset * (-10-offset/2))) / length);
+  const middle = outlet ? [12,30,28+offset/2] : [-10-offset/2,0,0];
+  const length = baseLength + offset, centroid = baseMoments.map((value,i) => (value + offset * middle[i]) / length);
   const [shown] = (await f.bodies()).bodies;
   for (const measured of [mass,quadrature,shown]) {
     near(measured.volume,3*Math.PI*length);
     measured.centroid.forEach((value,i) => near(value,centroid[i]));
   }
-  f.report.observations.push({label,offset,capX:cap.plane.o[0],volume:mass.volume,centroid:mass.centroid,
+  f.report.observations.push({label,offset,capAxis:axis,capCoordinate:moved,volume:mass.volume,centroid:mass.centroid,
     gap:topology.maximumPcurveGap,digest:result.digest});
   return result;
 }
 
 await f.run(async () => {
   await f.newPage();
-  await f.openFile({ name: 'annular-sweep-inlet-offset.bcad', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(source)) },2);
+  await f.openFile({ name: `annular-sweep-${end}-offset.bcad`, mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(source)) },2);
   await f.same(source);
   const original = await f.inspect('original',source);
   assert.ok(original.topology.valid);
-  f.phase = 'pick the original annular inlet land';
+  f.phase = `pick the original annular ${end} land`;
   await button('View cube directions',f.page.getByRole('group',{name:'View cube',exact:true})).click();
-  await f.page.getByRole('menuitem',{name:'Left',exact:true}).click();
+  const direction = outlet ? 'Top' : 'Left';
+  await f.page.getByRole('menuitem',{name:direction,exact:true}).click();
   if (await button('Ortho').getAttribute('aria-pressed') !== 'true') await button('Ortho').click();
   await f.page.getByTitle('Frame all (F)',{exact:true}).click();
-  await f.page.waitForFunction(() => document.querySelector('.view-cube .vc-label')?.textContent === 'LEFT');
-  const pixel = await f.page.evaluate(() => window.__studioScreenOf([-10,0,1.55]));
+  await f.page.waitForFunction(label => document.querySelector('.view-cube .vc-label')?.textContent === label,direction.toUpperCase());
+  const pixel = await f.page.evaluate(point => window.__studioScreenOf(point),outlet ? [13.55,30,28] : [-10,0,1.55]);
   assert.ok(pixel && await f.page.evaluate(point => document.elementFromPoint(...point)?.matches('canvas.vp-canvas'),pixel));
   await f.page.mouse.click(...pixel);
-  const capIndex = original.mesh.find(([name]) => name === inlet)?.[1];
+  const capIndex = original.mesh.find(([name]) => name === capName)?.[1];
   assert.ok(Number.isInteger(capIndex));
   await f.page.waitForFunction(index => window.__studioSelection?.selection.faces[0]?.face === index,capIndex);
-  f.phase = 'open the signed Offset face on the selected inlet';
+  f.phase = `open the signed Offset face on the selected ${end}`;
   await f.page.evaluate(() => document.activeElement?.blur());
   await f.command('Offset face');
   const panel = hud('Offset face');
@@ -132,7 +141,7 @@ await f.run(async () => {
     await status(panel,'refused').waitFor();
     assert.ok(await button('Apply',panel).isDisabled());
     await f.same(source);
-    await f.snapshot('01-original-inlet-offset-refused');
+    await f.snapshot(`01-original-${end}-offset-refused`);
     return;
   }
   await distance(panel).fill('4');
@@ -144,12 +153,12 @@ await f.run(async () => {
   const outward = (await f.snapshot('02-outward-applied')).doc, operation = outward.nodes[2];
   assert.deepEqual(outward.nodes.slice(0,2),source.nodes);
   assert.deepEqual([operation.kind,operation.parent,operation.faces,operation.distance],
-    ['offset-face',{node:1,side:'solid'},[inlet],4]);
-  assert.equal(operation.sigs[inlet].k,'plane');
+    ['offset-face',{node:1,side:'solid'},[capName],4]);
+  assert.equal(operation.sigs[capName].k,'plane');
   await verify('outward',outward,4,original);
 
   f.phase = 'check joint contact and edit the original Offset in History';
-  await f.openFeatureEditor(2,'the signed inlet Offset');
+  await f.openFeatureEditor(2,`the signed ${end} Offset`);
   await button('Edit offset',f.editor()).click();
   const editor = hud('Edit Offset face');
   await distance(editor).fill('-10');
@@ -166,10 +175,10 @@ await f.run(async () => {
   const native = await verify('inward',inward,-4,original);
   await f.undo(); await f.same(outward);
   await f.redo(); await f.same(inward);
-  const saved = await f.save('perpendicular-annular-inlet-offset');
+  const saved = await f.save(`perpendicular-annular-${end}-offset`);
   await f.freshOpen(saved.file,inward,'05-native-reopened');
   assert.equal((await verify('reopened',await f.doc(),-4,original)).digest,native.digest);
   await button('Iso',f.page.locator('.views')).click();
   await f.page.getByTitle('Frame all (F)',{exact:true}).click();
-  await f.snapshot('06-reopened-offset-inlet');
+  await f.snapshot(`06-reopened-offset-${end}`);
 });

@@ -1715,22 +1715,25 @@ const pairedInletFailure: Refuse = (code, message) => { throw new BrepError(code
 const perpendicularAnnularInletFailure: Refuse = (code, message) => {
   throw new BrepError(code === 'GEOMETRY' ? 'GEOMETRY' : 'INPUT', `Exact perpendicular annular inlet offset: ${message}`);
 };
+const perpendicularAnnularOutletFailure: Refuse = (code, message) => {
+  throw new BrepError(code === 'GEOMETRY' ? 'GEOMETRY' : 'INPUT', `Exact perpendicular annular outlet offset: ${message}`);
+};
 
-/** The original circular inlet only; the minimal source supplies the four exact spans, not a new surface law. */
-export function exactPerpendicularAnnularInletOffsetFrame(brep: Brep, faceName: string,
-  source: PairedElbowOutletSource): { anchor: Point; normal: Point } | undefined {
+/** Inspect both original annular cap packets; the public wrappers retain separate end ownership. */
+function perpendicularAnnularCapOffsetFrame(brep: Brep, faceName: string,
+  source: PairedElbowOutletSource, inlet: boolean): { anchor: Point; normal: Point } | undefined {
   try {
-    if (source.mode !== 'exact' || faceName !== `${source.id}.start` || brep.source.family !== 'sweep-curve'
+    if (source.mode !== 'exact' || faceName !== `${source.id}.${inlet ? 'start' : 'end'}` || brep.source.family !== 'sweep-curve'
       || brep.source.id !== source.id || brep.bodies.length !== 1 || brep.shells.length !== 1 || !brep.shells[0].closed
       || brep.faces.length !== 18 || brep.loops.length !== 20 || brep.coedges.length !== 72 || brep.edges.length !== 36 || brep.vertices.length !== 20) return;
     validateCurve(source.path);
-    const rail = perpendicularQuarterEnds(source.path, perpendicularAnnularInletFailure);
+    const rail = perpendicularQuarterEnds(source.path, inlet ? perpendicularAnnularInletFailure : perpendicularAnnularOutletFailure);
     if (!rail) return;
     const { first, second } = rail.inlet.pair, path = source.path.controlPoints;
     const extent = geometryScaleMM(brep.vertices.map(vertex => vertex.point)), roundoff = 512 * Number.EPSILON * Math.max(1, extent);
     const uses = new Map(brep.coedges.map(use => [use.id, use])), edges = new Map(brep.edges.map(edge => [edge.id, edge]));
     const owners = new Map(brep.faces.flatMap(face => face.loops.map(loop => [loop, face] as const)));
-    const start = brep.faces.filter(face => face.name === faceName), end = brep.faces.filter(face => face.name === `${source.id}.end`);
+    const start = brep.faces.filter(face => face.name === `${source.id}.start`), end = brep.faces.filter(face => face.name === `${source.id}.end`);
     if (start.length !== 1 || end.length !== 1) return;
     const normal = scale(first.tangent, -1), terminal = rail.outlet.rail.line.tangent;
     const radii: number[] = [], required = new Set<string>();
@@ -1821,39 +1824,64 @@ export function exactPerpendicularAnnularInletOffsetFrame(brep: Brep, faceName: 
     }
     const report = checkBrep(brep, { strict: true });
     if (!report.valid || report.topology.length !== 1 || report.topology[0].shells !== 1 || report.topology[0].genus !== 1) return;
-    return { anchor: [...path[0]], normal };
+    return { anchor: [...path[inlet ? 0 : 8]], normal: inlet ? normal : terminal };
   } catch { return; }
 }
 
-/** Signed original annular inlet only. Replaying the original producer binds every coefficient and owner. */
+/** The original circular inlet only; the minimal source supplies the four exact spans. */
+export function exactPerpendicularAnnularInletOffsetFrame(brep: Brep, faceName: string,
+  source: PairedElbowOutletSource): { anchor: Point; normal: Point } | undefined {
+  return perpendicularAnnularCapOffsetFrame(brep, faceName, source, true);
+}
+
+/** The original circular outlet only, with its native terminal forward direction. */
+export function exactPerpendicularAnnularOutletOffsetFrame(brep: Brep, faceName: string,
+  source: PairedElbowOutletSource): { anchor: Point; normal: Point } | undefined {
+  return perpendicularAnnularCapOffsetFrame(brep, faceName, source, false);
+}
+
+/** Signed original annular inlet only. */
 export function offsetExactPerpendicularAnnularInletIfAdmitted(brep: Brep, faceName: string,
   source: ExactSweepInput, distance: number): Brep | undefined {
-  const frame = exactPerpendicularAnnularInletOffsetFrame(brep, faceName, source), disk = circleOf(source.outer);
+  return offsetExactPerpendicularAnnularCapIfAdmitted(brep, faceName, source, distance, true);
+}
+
+/** Signed original annular outlet only. */
+export function offsetExactPerpendicularAnnularOutletIfAdmitted(brep: Brep, faceName: string,
+  source: ExactSweepInput, distance: number): Brep | undefined {
+  return offsetExactPerpendicularAnnularCapIfAdmitted(brep, faceName, source, distance, false);
+}
+
+/** Replaying the original producer binds every coefficient and owner before either end moves. */
+function offsetExactPerpendicularAnnularCapIfAdmitted(brep: Brep, faceName: string,
+  source: ExactSweepInput, distance: number, inlet: boolean): Brep | undefined {
+  const frame = perpendicularAnnularCapOffsetFrame(brep, faceName, source, inlet), disk = circleOf(source.outer);
   if (!frame || !disk || source.holes?.length !== 1 || !circleOf(source.holes[0])) return;
-  const refuse = perpendicularAnnularInletFailure, original = exactSweep(source, refuse).brep;
+  const refuse = inlet ? perpendicularAnnularInletFailure : perpendicularAnnularOutletFailure, original = exactSweep(source, refuse).brep;
   if (JSON.stringify(original) !== JSON.stringify(brep)) return;
   if (!Number.isFinite(distance) || distance === 0 || Math.abs(distance) > CadNumericPolicy.coordinateAbs)
     return refuse('PARAMETER', 'distance must be nonzero and within the modeling range.');
   const rail = perpendicularQuarterEnds(source.path, refuse)!;
-  if (!(rail.inlet.line.length + distance >= ExtrudedProfileLimits.minimumLengthMM))
-    return refuse('GEOMETRY', 'the offset would reach or cross the retained inlet-to-bend join.');
-  const path = structuredClone(source.path);
-  path.controlPoints[0] = add(path.controlPoints[0], scale(frame.normal, distance));
-  path.controlPoints[1] = add(path.controlPoints[1], scale(frame.normal, distance / 2));
-  if (path.controlPoints[0].every((value, axis) => value === source.path.controlPoints[0][axis]))
-    return refuse('GEOMETRY', 'distance is too small to move the inlet.');
+  const length = inlet ? rail.inlet.line.length : rail.outlet.rail.line.length;
+  if (!(length + distance >= ExtrudedProfileLimits.minimumLengthMM))
+    return refuse('GEOMETRY', inlet ? 'the offset would reach or cross the retained inlet-to-bend join.' : 'the offset would reach or cross the retained bend-to-outlet join.');
+  const path = structuredClone(source.path), end = inlet ? 0 : 8, middle = inlet ? 1 : 7;
+  path.controlPoints[end] = add(path.controlPoints[end], scale(frame.normal, distance));
+  path.controlPoints[middle] = add(path.controlPoints[middle], scale(frame.normal, distance / 2));
+  if (path.controlPoints[end].every((value, axis) => value === source.path.controlPoints[end][axis]))
+    return refuse('GEOMETRY', `distance is too small to move the ${inlet ? 'inlet' : 'outlet'}.`);
   const candidate = exactSweep({ ...source, path }, refuse).brep;
   for (const key of ['bodies', 'shells', 'faces', 'loops', 'coedges', 'edges', 'vertices'] as const) {
     const identity = (value: { id: string; name?: string }) => [value.id, value.name];
     if (JSON.stringify(brep[key].map(identity)) !== JSON.stringify(candidate[key].map(identity)))
       return refuse('GEOMETRY', 'the offset cannot preserve the original native names and incidence.');
   }
-  for (const face of brep.faces) if (face.name !== faceName && !face.name?.startsWith(`${source.id}.lead.`)
+  for (const face of brep.faces) if (face.name !== faceName && !face.name?.startsWith(`${source.id}.${inlet ? 'lead' : 'tail'}.`)
     && !retainedElbowBoundary(brep, candidate, face))
-    return refuse('GEOMETRY', 'the offset cannot preserve both bends, the outlet and all three joins.');
-  const next = exactPerpendicularAnnularInletOffsetFrame(candidate, faceName, { ...source, path });
+    return refuse('GEOMETRY', `the offset cannot preserve both bends, the ${inlet ? 'outlet' : 'inlet'} and all three joins.`);
+  const next = perpendicularAnnularCapOffsetFrame(candidate, faceName, { ...source, path }, inlet);
   if (!next || len(sub(next.anchor, add(frame.anchor, scale(frame.normal, distance)))) > linearToleranceMM(geometryScaleMM(candidate.vertices.map(vertex => vertex.point))))
-    return refuse('GEOMETRY', 'the inlet cap cannot preserve the signed native displacement.');
+    return refuse('GEOMETRY', `the ${inlet ? 'inlet' : 'outlet'} cap cannot preserve the signed native displacement.`);
   return candidate;
 }
 
