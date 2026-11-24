@@ -37,7 +37,7 @@ import { sewPreviewDirect } from './viewport/sewPreviewDirect';
 import { useSectionState } from './viewport/useSectionState';
 import { useSectionExclusion } from './viewport/useSectionExclusion';
 import { useSectionEvaluation } from './viewport/useSectionEvaluation';
-import { useSectionDisplay } from './viewport/useSectionDisplay';
+import { useStudioSectionDisplay, useStudioSectionVertex } from './viewport/useStudioSectionViewport';
 import { useOwnedScalarHover } from './viewport/useOwnedScalarHover';
 import { mapSourceScope } from './viewport/mapSourceScope';
 import { useAnalysisMaps } from './viewport/useAnalysisMaps';
@@ -121,7 +121,6 @@ import type { OpenScope } from './state/openOwnership';
 import { scheduleProjectOpenFit } from './app/projectOpenFit';
 import { prepareSignedFinishOpen, verifyStoredNativeOpen } from './files/documentFile';
 import type { SectionPick } from './viewport/useSectionSelection';
-import { useSectionThroughVertex } from './viewport/useSectionThroughVertex';
 import { useViewportSelectionPresentation } from './viewport/useViewportSelectionPresentation';
 import type { PartInstance } from '@barocss/cad-model/engine/doc';
 import { usePlacedCandidatePreview } from './viewport/usePlacedCandidatePreview';
@@ -1305,7 +1304,7 @@ export function App() {
 
   const viewBodiesRef = useRef<BodyResult[]>(null!);
   const sectionPickRef = useRef<SectionPick>(() => ({ face: null, edge: null, cap: false }));
-  const sectionVertexActions = useRef<Pick<ReturnType<typeof useSectionThroughVertex>, 'pick' | 'escape'>>({ pick: () => false, escape: () => false });
+  const sectionVertexActions = useRef<Pick<ReturnType<typeof useStudioSectionVertex>, 'pick' | 'escape'>>({ pick: () => false, escape: () => false });
   const commandPickScope = useRef<CommandPickScope | null>(null);
   const { pickCommandReferenceFace, pickTransformFace, pickRevolveAxis, retargetActiveSweep } = createCommandReferencePicking({
     model: { doc, commandDoc, isCurrent: () => docNow.current === doc && evaluatedRef.current === evaluated, ownsEvaluatedSource },
@@ -1782,19 +1781,14 @@ export function App() {
     previewBodies, viewport, engine, revision, lanes, mouldResult, setMouldResult, mouldSpread, halvesShownRef, viewBackend });
   const mapScope = mapSourceScope({ shownBodies, sectionBodies, sectionExactShown, gpuSection });
   const instanceLooks = useInstanceLooks(doc, instanceBodies);
-  const placedHandleOpen = openIntent.current;
-  const ownsPlacedSectionHandle = () => placedHandleOpen === openIntent.current && ownsEvaluatedSource()
-    && shownDocNow.current === doc && markerNow.current === null && !shownVariant.current && !inPlaceNow.current
-    && !project.opening() && !explodeStore.get();
-  const placedHandleBounds = !bodies.length && section?.mode === 'plane' && fresh && !busy && !workerFailure && ownsPlacedSectionHandle()
-    && renderGeometryReady && !rendering && !drawing && !cutDraft && !instDrag && !stepsDisp && !assembly.draft
-    ? instancesPlaced.filter(i => !isolatedInstances || isolatedInstances.includes(i.id))
-      .flatMap(i => i.bodies.filter(b => !instanceLooks.get(i.id)?.get(b.key)?.hidden).map(b => b.mesh.bounds))
-    : [];
-  const sectionDisplay = useSectionDisplay({
-    bodies, instancesPlaced, placedHandleBounds, section, sketch, gpuSection, shownBodies, sectionBodies, sectionExactShown, sectionLive, active, dragSection, placedDragSection: (update, done) => {
-      if (ownsPlacedSectionHandle()) dragSection(update, done);
-    }, excludedInstances: excludedSectionInstances });
+  const sectionDisplay = useStudioSectionDisplay({
+    bodies, instancesPlaced, section, sketch, gpuSection, shownBodies, sectionBodies, sectionExactShown, sectionLive, active, dragSection,
+    excludedInstances: excludedSectionInstances,
+    placed: { isolated: isolatedInstances, looks: instanceLooks, open: openIntent, currentModel: fresh && !busy && !workerFailure,
+      ready: () => renderGeometryReady && !rendering && !drawing && !cutDraft && !instDrag && !stepsDisp && !assembly.draft,
+      ownsModel: () => ownsEvaluatedSource() && shownDocNow.current === doc && markerNow.current === null
+        && !shownVariant.current && !inPlaceNow.current && !project.opening() && !explodeStore.get() },
+  });
   const { sectionBox, sectionHatchOn, setSectionHatchOn, hatchStep, sectionClip, sectionLiveView, sectionHatchLines, sectionDrag } = sectionDisplay;
   useStudioSectionOverlayDevHooks({
     section: { state: sectionState, display: sectionDisplay, gpu: gpuSection, exactShown: sectionExactShown,
@@ -1841,15 +1835,13 @@ export function App() {
   const viewportDirect = useMemo(() => sewPreviewDirect(directShown, active?.cmd.id, active?.ctx, sewCandidateShown), [directShown, active?.cmd.id, active?.ctx, sewCandidateShown]);
   viewBodiesRef.current = viewBodies;
   sectionPickRef.current = viewportSelection.sectionPick;
-  const sectionOpen = openIntent.current;
-  const sectionVertex = useSectionThroughVertex({
-    source: section?.mode === 'plane' && section.planes.length === 1 && sectionExactShown && sectionExact && shownBodies === sectionBodies
-      && viewBackend && fresh && !busy && !modelUnavailable && !workerFailure && !active && !measure && sectionFacePick === null && !sketch && !rendering && !drawing
+  const sectionVertex = useStudioSectionVertex({
+    model: { doc, evaluated, worker: workerSession }, state: sectionState, selection: viewportSelection, open: openIntent,
+    view: { exactShown: sectionExactShown, shownBodies, sectionBodies, backend: viewBackend },
+    available: () => fresh && !busy && !modelUnavailable && !workerFailure && !active && !measure && sectionFacePick === null && !sketch && !rendering && !drawing
       && marker === null && shownDoc === doc && !variants.showing && !inPlace && !doc.instances?.length && !doc.direct
-      && !ghost && !workingComparison && !bodyDrag && !exploded && !cageEd.session && !routePreviewBodies && !project.opening()
-      && viewportSelection.sectionCornerMeshes.some(corner => !!corner?.vertices.size)
-      ? { doc, evaluated, section, bodies: sectionExact.sourceBodies, shown: shownBodies, backend: viewBackend, open: sectionOpen, worker: workerSession } : null,
-    box: sectionBox, engine, nextRevision: () => revision.current++, select: viewportSelection.sectionVertexPick, setSection,
+      && !ghost && !workingComparison && !bodyDrag && !exploded && !cageEd.session && !routePreviewBodies,
+    box: sectionBox, engine, nextRevision: () => revision.current++, projectOpening: () => project.opening(),
     live: owner => docNow.current === owner.doc && evaluatedRef.current === owner.evaluated && ownsEvaluatedSource()
       && sectionRef.current === owner.section && !sectionLive.get() && !activeStore.get() && !project.opening()
       && openIntent.current === owner.open && workerSessionNow.current === owner.worker,

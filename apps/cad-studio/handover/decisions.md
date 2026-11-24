@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1978: [Extract Studio Section viewport ownership](notes/studio-section-viewport-extraction-2026-11-25/README.md), #44. Compare actual desktop exact vertex, occurrence clipping, Frame and document reopen before and after.
 - D1977: [End a downward polygonal Extrude at the original upper annulus](notes/downward-polygon-to-upper-annulus-2026-11-25/README.md), #222. Verify reflected whole-footprint bore and rim clearance, native rebuild and actual desktop reopen.
 - D1976: [End a downward polygonal Extrude at the original upper disk](notes/downward-polygon-to-original-disk-2026-11-25/README.md), #222. Verify reflected convex vertices, exact rim refusal, native volume and actual Studio History and Open.
 - D1975: [Verify Section vertex ownership and project roundtrip](notes/section-vertex-ownership-closeout-2026-11-25/README.md), #272. Refuse coincident native corners and verify delayed Worker replies, source remapping and the original saved file on both desktop backends.
