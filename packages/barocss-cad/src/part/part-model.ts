@@ -21,9 +21,10 @@ import { unitNamedField } from '../document/unit-named.js';
 import { sampleRing, isCurvedArrangementError, type CurveSegment2, type XY } from '../brep/curved-arrangement.js';
 import { booleanPolyhedra } from '../brep/polyhedral-boolean.js';
 import { booleanAnalytic, faceGeometry, splitFaceAlongCurve, splitFaceAlongIsocline } from '../brep/analytic-boolean.js';
+import { retainSweepCircularJoinBindings } from '../brep/sweep-circular-join-bindings.js';
 import { cylindricalWrapFeature } from '../features/cylindrical-wrap-feature.js';
 import { transformOperation } from './part-transform.js';
-import type { PriorRectangularCut } from './part-prior-rectangular-cut.js';
+import { priorCutRectangle, type PriorRectangularCut } from './part-prior-rectangular-cut.js';
 import type { PriorCircularCut } from './part-prior-circular-cut.js';
 import { blindDrillHoleOperation } from './part-blind-drill-hole.js';
 import { prismaticDetailOperation } from './part-prismatic-detail.js';
@@ -70,7 +71,7 @@ import { frameOperation, planEndpointBeads, endpointContext, isEndpointBead } fr
 import type { EndpointBead } from './part-frame.js';
 import { checkExpected, expectOf } from './part-expect.js';
 import { KernelError } from '../core/barocss-error.js';
-import { offsetBoxCapIfAdmitted, offsetDraftedFace, replaceRectangularSolidFace } from '../features/drafted-cap-offset.js';
+import { boxFaceReplacementFrame, offsetBoxCapIfAdmitted, offsetDraftedFace, replaceRectangularSolidFace } from '../features/drafted-cap-offset.js';
 import { offsetExactSemicylinderCapIfAdmitted, offsetExactSemicylinderWallIfAdmitted, offsetExactSemicylinderSecondWallIfAdmitted, offsetExactSemicylinderMixedOffsetIfAdmitted, offsetExactSemicylinderWallAfterReplacementIfAdmitted, replaceExactSemicylinderCapIfAdmitted, replaceExactSemicylinderCapAfterWallIfAdmitted } from '../features/exact-cylinder-cap-offset.js';
 import { offsetPrismWallIfAdmitted, replacePrismCapIfAdmitted, replacePrismWallIfAdmitted } from '../features/prism-wall-offset.js';
 import { annularCapReplacementFrame, offsetBoredCapIfAdmitted, offsetBoredPlateWallIfAdmitted, offsetBoreWallIfAdmitted, offsetCircularWallIfAdmitted,
@@ -664,6 +665,36 @@ function exactSweepFaceEditSource(author: CadPartFeature | undefined, ref: Tools
   };
 }
 
+/** One original zero-draft rectangular prism, with only single-part translation wrappers. */
+function originalRectangularCutter(reference: unknown, part: Part, t: Tools): boolean {
+  let current = t.ref(reference, 'circular join cutter'), owner = part;
+  const seen = new Set<string>();
+  for (;;) {
+    if (seen.has(current.id) || current.result.kind !== 'solid' || current.result.parts.length !== 1
+      || current.result.parts[0] !== owner) return false;
+    seen.add(current.id);
+    if (current.author?.kind !== 'translate') break;
+    const parent = t.ref(current.author.target, 'circular join original cutter');
+    if (parent.result.kind !== 'solid' || parent.result.parts.length !== 1 || owner.moved?.from !== parent.result.parts[0]) return false;
+    current = parent; owner = parent.result.parts[0];
+  }
+  if (current.author?.kind !== 'extrude' || (current.author.draft !== undefined && current.author.draft !== 0)) return false;
+  const sketch = t.ref(current.author.sketch, 'circular join cutter sketch');
+  if (sketch.author?.kind !== 'sketch' || sketch.result.kind !== 'sketch' || sketch.result.regions?.length
+    || sketch.result.holes?.length) return false;
+  // The evaluated native section, rather than a feature label, proves the primitive's four sides.
+  const { segments } = buildProfileLoop(sketch.result.outer);
+  if (segments.some(segment => segment.kind !== 'line')
+    || !priorCutRectangle(segments.map(segment => ({ kind: 'line' as const, a: segment.start, b: segment.end })))) return false;
+  if (part.solid.kind === 'upright') {
+    const slabs = part.solid.solid.slabs;
+    return slabs.length === 1 && Number.isFinite(slabs[0].z0) && Number.isFinite(slabs[0].z1) && slabs[0].z0 < slabs[0].z1
+      && slabs[0].regions.length === 1 && slabs[0].regions[0].holes.length === 0 && !!priorCutRectangle(slabs[0].regions[0].outer);
+  }
+  const brep = part.solid.brep, name = brep.faces[0]?.name;
+  return name !== undefined && !!boxFaceReplacementFrame(brep, name);
+}
+
 // ---- operations ---------------------------------------------------------------------------------------
 function operation(f: CadPartFeature & Record<string, unknown>, t: Tools): () => Result {
   const { dim, xy, xyz, axisOf, solids, ref, fail, at } = t;
@@ -675,6 +706,11 @@ function operation(f: CadPartFeature & Record<string, unknown>, t: Tools): () =>
       // (An operand may be empty — an intersection that met nothing, as agents' trees do: the Booleans' algebra holds,
       // A ∪ ∅ = A, A − ∅ = A, ∅ − B = A ∩ ∅ = ∅, where it was refused. L4 fuzz, D190.)
       const target = solids(f.target, 'target', true), tool = solids(f.tool, 'tool', true), op = f.kind === 'intersect' ? 'intersection' : f.kind;
+      const source = op === 'difference' && target.length === 1 && tool.length === 1 ? ref(f.target, 'circular join source') : undefined;
+      const retainCircular = source?.author?.kind === 'sweep-curve' && source.author.mode === 'exact'
+        && source.result.kind === 'solid' && source.result.parts.length === 1 && source.result.parts[0] === target[0]
+        && target[0].solid.kind === 'brep' && target[0].solid.brep.source.family === 'sweep-curve'
+        && target[0].solid.brep.source.id === source.author.id && originalRectangularCutter(f.tool, tool[0], t);
       return () => {
         if (!tool.length || !target.length) {
           const left = target.length ? target : tool;
@@ -688,7 +724,11 @@ function operation(f: CadPartFeature & Record<string, unknown>, t: Tools): () =>
         // Unions merge every target part into one; difference and intersection act on each part.
         if (op === 'union') return one(target.reduce<Solid>((acc, p) => boolean(acc, p.solid, 'union', at), joined));
         // (A sheet's holes and cuts: still the sheet, its rules carried on; R12.2, D117.)
-        const out = many(target.map(p => boolean(p.solid, joined, op, at)));
+        const out = many(target.map((p): Solid => {
+          const solid = boolean(p.solid, joined, op, at);
+          return retainCircular && p.solid.kind === 'brep' && solid.kind === 'brep'
+            ? { kind: 'brep', brep: retainSweepCircularJoinBindings(p.solid.brep, solid.brep) } : solid;
+        }));
         return op === 'difference' ? carrySheet(out, target) : out;
       };
     }

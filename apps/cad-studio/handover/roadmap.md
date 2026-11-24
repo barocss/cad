@@ -1,13 +1,13 @@
 # CAD roadmap — current status and execution order
 
-Updated 2026-11-24 · Priority authority: D520 · Latest delivery: D1918 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
+Updated 2026-11-24 · Priority authority: D520 · Latest delivery: D1919 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
 
 This is the only current status index. Detailed tracks define acceptance; the 34 stable row pages retain scope and issue navigation. Immutable decision notes retain results. Do not append chronological status paragraphs here. [D520 decision](notes/cad-roadmap-replan-2026-11-04/README.md) supersedes D445 execution order and historical next-item text, while retaining its safeguards and bounded proofs.
 
 ## Now and next
 
-- **Current position:** [D1918](notes/vertical-iso-section-hatch-clearance-2026-11-24/README.md), P2 row 11. Verify rotated ISO full-section text and stacked deviations through Studio drag, native Open and original SVG.
-- **Next MAIN:** D1919, P5 [row 07](roadmap-rows/07.md), [row 08](roadmap-rows/08.md) and [row 30](roadmap-rows/30.md), [#10](https://github.com/barocss/cad/issues/10). Check exact box Subtract on the original straight inlet of the perpendicular annular Sweep. Preserve native cap material, all three original joints and the edit through fresh Open.
+- **Current position:** [D1919](notes/perpendicular-sweep-inlet-subtract-2026-11-24/README.md), P5 rows 07, 08 and 30. Preserve all three original circular joints after a box Subtract on the straight inlet, and verify cap material, cutter editing and fresh Open.
+- **Next MAIN:** D1920, P2 [row 11](roadmap-rows/11.md), [#245](https://github.com/barocss/cad/issues/245). Verify the bound Drawing Note through sheet, scale, orientation and document changes. Recheck the old Worker reply, post-Open source edit and explicit endpoint reselection in Studio and the original SVG.
 - **Separate follow-ups:** Continue Studio App extraction in cohesive parts with affected desktop checks. [#608 Rendering](https://github.com/barocss/cad/issues/608) stays on HOLD. API inventory drift remains open. The issue tracker records [#126](https://github.com/barocss/cad/issues/126), [#613](https://github.com/barocss/cad/issues/613), [#152](https://github.com/barocss/cad/issues/152) and [#22](https://github.com/barocss/cad/issues/22) as closed.
 - **Active repository:** [barocss/cad](https://github.com/barocss/cad), based on `origin/main`. Fetch before work and preserve unexpected changes. The [migration record](../../../docs/migration/README.md) maps the former `local/cad-dev` history and issue numbers.
 - **Evidence correction:** D482 records2167 PASS/0 FAIL/2 existing SKIP in a later full-kernel run than D433. Neither result is a new full-suite PASS at this audit HEAD. [D482 record](notes/vertical-contact-refusal-2026-11-04/README.md).

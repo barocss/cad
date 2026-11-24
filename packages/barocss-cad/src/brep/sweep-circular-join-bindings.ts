@@ -73,7 +73,8 @@ function joinOwners(body: Brep, edge: string, scaleMM: number) {
       center: add(revolution.c, scale(revolution.a, revolution.profile.c[1])), axis: revolution.a,
       major: revolution.profile.c[0], minor: revolution.profile.r,
     } : undefined;
-    return kind ? { use, face, surface, kind, torus } : undefined;
+    const cylinder = geometry.kind === 'cylinder' ? geometry : undefined;
+    return kind ? { use, face, surface, kind, torus, cylinder } : undefined;
   });
   const [first, second] = owners;
   if (!first || !second || first.face.id === second.face.id) return;
@@ -86,7 +87,7 @@ function joinOwners(body: Brep, edge: string, scaleMM: number) {
     && Math.abs(dot(a.axis, b.axis)) * Math.max(a.major, b.major) <= roundoff) return [first, second];
 }
 
-/** Retain only inherited whole circular cylinder/bend or perpendicular bend/bend joints after a finish rebuild. */
+/** Retain only inherited whole circular cylinder/bend or perpendicular bend/bend joints after a native rebuild. */
 export function retainSweepCircularJoinBindings(source: Brep, result: Brep): Brep {
   if (source.source.family !== 'sweep-curve') return result;
   const scaleMM = Math.max(1, geometryScaleMM(source.vertices.map(vertex => vertex.point)),
@@ -115,10 +116,14 @@ export function retainSweepCircularJoinBindings(source: Brep, result: Brep): Bre
         && (candidate.use.sense === owner.use.sense) === (direction === 1));
       if (candidates.length !== 1) return;
       const old = candidates[0];
-      if (original.owners.every(candidate => candidate.kind === 'torus')) {
+      if (owner.kind === 'torus') {
         const a = old.torus, b = owner.torus;
         if (!a || !b || len(sub(a.center, b.center)) > roundoff || Math.abs(a.major - b.major) > roundoff
           || Math.abs(a.minor - b.minor) > roundoff || len(cross(a.axis, b.axis)) * Math.max(a.major, b.major) > roundoff) return;
+      } else {
+        const a = old.cylinder, b = owner.cylinder;
+        if (!a || !b || a.out !== b.out || Math.abs(a.r - b.r) > roundoff
+          || len(cross(a.a, b.a)) * Math.max(a.r, b.r) > roundoff || len(cross(sub(a.c, b.c), a.a)) > roundoff) return;
       }
       const binding = circularBinding(edge.curve, owner.surface, roundoff);
       return binding && (!owner.use.pcurve || boundAs(owner.use.pcurve, binding)) ? binding : undefined;
