@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D1918: [Qualify vertical ISO text clearance in a full section](notes/vertical-iso-section-hatch-clearance-2026-11-24/README.md), #247. Match actual rotated text and hatch through drag, Undo/Redo, native Open and independent SVG inspection.
+
 - D1917: [Preserve a perpendicular Exact Sweep through inlet Fillet](notes/perpendicular-sweep-inlet-fillet-2026-11-24/README.md), #10. Retain all twelve original join bindings and refuse a radius that consumes the original inlet cap.
 
 - D1916: [Add both straight ends to a perpendicular Exact Sweep](notes/perpendicular-quarter-arc-both-ends-sweep-2026-11-24/README.md), #10. Verify all three circular joins, bore editing, native Open and matching Agent approval.
