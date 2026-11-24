@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1945: [Loft three horizontal rectangles along two exact guides](notes/three-section-two-guide-loft-2026-11-25/README.md), #174. Verify shared ring, middle source replacement, immutable guide values and Studio fresh Open.
 - D1944: [Open the upper hemisphere of an exact revolved capsule Shell](notes/revolved-capsule-shell-2026-11-25/README.md), #13. Preserve original native owners and verify the exact rim, wall edits and fresh Studio Open.
 - D1943: [Restore the local Agent tool description budget](notes/agent-tool-description-budget-2026-11-25/README.md), #324. Compare actual MCP discovery bytes and Studio edit recovery under the retained v2 tool contract.
 - D1942: [Move Model command entry and return focus out of App](notes/studio-command-entry-focus-2026-11-25/README.md), #44. Compare desktop keyboard focus and the Extrude, Hole and Fillet paths.

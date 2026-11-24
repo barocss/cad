@@ -4,9 +4,11 @@ import { gauss } from '../core/quadrature.js';
 import { transferNativeMassBasis } from '../internal/native-si-mass-state.js';
 import { registerTwoGuideLoftDisplay } from '../internal/two-guide-loft-display.js';
 import type { Curve, Point } from '../types.js';
-import { buildProfileLoop, capSurface, ExtrudedProfileLimits, type ProfileSegmentInput, type XY } from './extruded-profile-solid.js';
+import { capSurface, ExtrudedProfileLimits, type ProfileSegmentInput, type XY } from './extruded-profile-solid.js';
 import { admitLoftCommonFrame, loftFrameLocal, loftFramePoint, placeLoftInFrame } from './loft-common-frame.js';
 import type { LoftInput, LoftQuadraticGuide, LoftSectionInput } from './loft.js';
+import { twoGuideRectangle } from './loft-two-guide-rectangle.js';
+import { threeSectionTwoGuideLoft } from './loft-three-section-two-guides.js';
 
 const linearKnots = [0, 0, 1, 1], quadraticKnots = [0, 0, 0, 1, 1, 1], cubicKnots = [0, 0, 0, 0, 1, 1, 1, 1];
 const corners = [0, 1, 2, 3], G5 = gauss(5), G7 = gauss(7);
@@ -14,22 +16,6 @@ const limit = ExtrudedProfileLimits.coordinateMM;
 const fail = (reason: string): never => { throw new BrepError('INPUT', `loft: two guides ${reason}`); };
 const pointInRange = (value: unknown): value is Point => Array.isArray(value) && value.length === 3
   && [0, 1, 2].every(i => typeof value[i] === 'number' && Number.isFinite(value[i]) && Math.abs(value[i]) <= limit);
-
-function rectangle(section: LoftSectionInput, index: number) {
-  if (!section || Object.hasOwn(section, 'frame') || typeof section.z !== 'number' || !Number.isFinite(section.z) || Math.abs(section.z) > limit)
-    return fail(`need finite z heights within ±${limit} mm on both sections`);
-  if (!Array.isArray(section.profile) || section.profile.length !== 4 || !Array.from(section.profile).every(seg => seg?.kind === 'line'))
-    return fail(`need a four-line rectangle on section ${index + 1}`);
-  const loop = buildProfileLoop(section.profile), { min, max } = loop.bounds;
-  const positions: XY[] = [min, [max[0], min[1]], max, [min[0], max[1]]];
-  const same = (a: XY, b: XY) => a[0] === b[0] && a[1] === b[1];
-  const start = loop.segments.findIndex(segment => same(segment.start, min));
-  if (start < 0 || !positions.every((p, i) => same(p, loop.segments[(start + i) % 4].start)))
-    return fail(`need an axis-aligned rectangle on section ${index + 1}`);
-  const z = section.z;
-  const tags = corners.map(i => (start + i) % 4).map(i => loop.reversed ? 3 - i : i);
-  return { z, tags, points: positions.map(([x, y]): Point => [x, y, z]), bounds: loop.bounds, width: max[0] - min[0], depth: max[1] - min[1] };
-}
 
 function guideControls(value: unknown, index: number): [Point, Point, Point] {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return fail(`require a quadratic Bézier for guide ${index}`);
@@ -53,7 +39,9 @@ export function twoGuideLoftSolid(input: LoftInput): { brep: Brep; mass: (densit
   if (!Array.isArray(input.guides) || input.guides.length !== 2) return fail('require exactly two quadratic Béziers');
   if (Object.hasOwn(input, 'guide')) return fail('cannot be combined with the single guide');
   if (input.smooth !== undefined && input.smooth !== false) return fail('require ruled sections');
-  if (!Array.isArray(input.sections) || input.sections.length !== 2) return fail('require exactly two sections');
+  if (Array.isArray(input.sections) && input.sections.length === 3)
+    return threeSectionTwoGuideLoft(input, buildTwoGuideLoft, guideControls, fail);
+  if (!Array.isArray(input.sections) || input.sections.length !== 2) return fail('require two sections or three horizontal height sections');
   if (!input.sections.some(section => section && Object.hasOwn(section, 'frame'))) return buildTwoGuideLoft(input, input.guides);
 
   const frames = Array.from(input.sections, section => {
@@ -76,7 +64,7 @@ export function twoGuideLoftSolid(input: LoftInput): { brep: Brep; mass: (densit
     if (dx === 0 && dy === 0) return { profile: section.profile, z: height };
 
     // Validate the authored rectangle before carrying its vertices into the lower frame.
-    rectangle({ profile: section.profile, z: 0 }, i);
+    twoGuideRectangle({ profile: section.profile, z: 0 }, i, fail);
     const profile = section.profile.map((segment: ProfileSegmentInput) => {
       const [x, y] = segment.start;
       const start: XY = [x + dx, y + dy];
@@ -107,7 +95,7 @@ export function twoGuideLoftSolid(input: LoftInput): { brep: Brep; mass: (densit
 }
 
 function buildTwoGuideLoft(input: LoftInput, guides: NonNullable<LoftInput['guides']>) {
-  const [lo, hi] = input.sections.map(rectangle);
+  const [lo, hi] = input.sections.map((section, i) => twoGuideRectangle(section, i, fail));
   if (!(hi.z - lo.z >= ExtrudedProfileLimits.minimumLengthMM)) return fail('require two separated heights in increasing order');
   const sideTags = input.sideTags;
   if (sideTags && (sideTags.length !== 4 || !Array.from(sideTags).every(tag => typeof tag === 'string' && tag.length > 0) || new Set(sideTags).size !== 4))

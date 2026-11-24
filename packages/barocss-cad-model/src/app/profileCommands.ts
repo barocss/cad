@@ -567,7 +567,7 @@ export const loftCommand: Command = {
   hint: 'A solid through two or more sketches on parallel planes (Shift-click to pick them)',
   available: ctx => { const picked = ctx.selection.sketches ?? []; if (picked.length < 2) return no('Pick two or more finished sketches on parallel planes (Shift-click).'); const s = attempt(() => loftSections(loftSourceNodes(ctx), picked, ctx.doc.parameters)); return 'error' in s ? no(s.error) : ok; },
   fields: (ctx, values) => [loftGuideField(ctx),
-    ...((ctx.selection.sketches?.length ?? 0) === 2 ? [loftGuideField(ctx, true)] : []),
+    ...([2, 3].includes(ctx.selection.sketches?.length ?? 0) ? [loftGuideField(ctx, true)] : []),
     ...(!values?.guide && !values?.guideB && (ctx.selection.sketches?.length ?? 0) >= 3
       ? [{ key: 'smooth', label: 'Smooth (through the middle sections)', kind: 'choice' as const, options: [{ value: 'no', label: 'Ruled' }, { value: 'yes', label: 'Smooth' }] }] : [])],
   defaults: () => ({ smooth: 'no', guide: '', guideB: '' }),
@@ -606,7 +606,8 @@ export const loftCommand: Command = {
   build: (ctx, v) => {
     if (v.guideB !== undefined && v.guideB !== '') {
       const picked = ctx.selection.sketches ?? [];
-      if (picked.length !== 2 || v.smooth === 'yes') throw refusal('LOFT_SECTIONS', 'A two-guide loft needs exactly two ruled sections.');
+      if ((picked.length !== 2 && picked.length !== 3) || v.smooth === 'yes')
+        throw refusal('LOFT_SECTIONS', 'A two-guide loft needs two or three ruled sections.');
       if (typeof v.guide !== 'string' || !v.guide || typeof v.guideB !== 'string' || v.guide === v.guideB)
         throw refusal('DIRECT_PICK', 'Choose two different quadratic Bézier guides.');
       const first = copyLoftGuide(ctx.doc, v.guide), second = copyLoftGuide(ctx.doc, v.guideB);

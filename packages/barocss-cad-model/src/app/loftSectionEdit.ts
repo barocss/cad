@@ -3,6 +3,7 @@ import { featureId } from '../engine/ids';
 import { refusal } from '../engine/refusal';
 import type { EditField } from './editFields';
 import { copyLoftSection, planeOf } from './profiles';
+import { xyPlane } from '../sketch/plane';
 
 type Loft = Extract<ModelNode, { kind: 'loft' }>;
 type Nodes = readonly ModelNode[];
@@ -12,7 +13,12 @@ function sectionOption(nodes: Nodes, loft: Loft, slot: number, source: number, p
   if (typeof section.z !== 'number' || !Number.isFinite(section.z) || previous?.kind !== 'sketch'
     || sketch?.kind !== 'sketch' || sketch.suppressed || sketch.profile === 'band' || sketch.association || sketch.pocketFloor) return;
   try {
-    const result = copyLoftSection(sketch, source, planeOf(previous), parameters);
+    const exact = !!loft.guides;
+    if (exact) {
+      const normal = xyPlane().normal;
+      if (!planeOf(sketch).normal.every((value, axis) => value === normal[axis])) return;
+    }
+    const result = copyLoftSection(sketch, source, planeOf(previous), parameters, exact);
     if ('segments' in result && result.z === section.z) return result.segments;
   } catch { return; }
 }
@@ -20,11 +26,13 @@ function sectionOption(nodes: Nodes, loft: Loft, slot: number, source: number, p
 /** Change only a uniquely owned plain section copy at its existing plane and History station. */
 export function loftSectionSourceFields(nodes: Nodes, index: number, loft: Loft, parameters: Record<string, number>): EditField[] {
   const sources = loft.from;
-  if (!sources || sources.length !== loft.sections.length || loft.suppressed || loft.guides
+  const guidedMiddle = !!loft.guides && loft.sections.length === 3;
+  if (!sources || sources.length !== loft.sections.length || loft.suppressed || (loft.guides && !guidedMiddle)
     || loft.sections.some(section => section.frame !== undefined)) return [];
   const copies = new Set(loft.sections.map(section => section.sketch));
   if (copies.size !== sources.length || sources.some(source => copies.has(source))) return [];
   return loft.sections.flatMap((section, slot): EditField[] => {
+    if (guidedMiddle && slot !== 1) return [];
     const source = sources[slot], copy = nodes[section.sketch];
     const uniqueId = (candidate: number) => nodes.filter((_, i) => featureId(nodes, i) === featureId(nodes, candidate)).length === 1;
     if (copy?.kind !== 'sketch' || copy.profile !== 'loop' || copy.sideTags || copy.outline || copy.association || copy.pocketFloor

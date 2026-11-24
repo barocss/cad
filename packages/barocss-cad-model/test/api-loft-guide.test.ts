@@ -297,3 +297,20 @@ test('public loft: 17 and 64 control guides reach actual display meshes and both
     assert.deepEqual(made.doc, saved, 'caller mutations must not change the accepted guide');
   }
 });
+
+test('public loft: exact two guides through three sections preserve geometry and the native document', async () => {
+  const base = part('three-section loft');
+  const rectangle = (w: number, d: number, z: number) => ({ sketch: sketch().rectangle({ w, d, x: 0, y: 0 }), z });
+  const sections = [rectangle(10, 6, 0), rectangle(14, 12, 10), rectangle(10, 6, 20)];
+  const options: StudioLoftOptions = { guides: [
+    { kind: 'quadratic-bezier', controlPoints: [[0, 0, 0], [0, 0, 10], [0, 0, 20]] },
+    { kind: 'quadratic-bezier', controlPoints: [[10, 0, 0], [18, 0, 10], [10, 0, 20]] },
+  ] };
+  const accepted = base.loft(sections, options);
+  const before = accepted.doc;
+  // Integrate the lower half with width 10+8t−4t² and aspect 3/5+9t/35, then reflect the upper half.
+  await reopened(accepted, 16808 / 7, [95490 / 14707, 12603474 / 2573725, 10]);
+  assert.throws(() => accepted.loft([sections[0], rectangle(15, 12, 10), sections[2]], options), /middle|endpoints/);
+  assert.throws(() => accepted.loft([sections[0], rectangle(14, 12, 9), sections[2]], options), /half|middle|midpoint/);
+  assert.deepEqual(accepted.doc, before);
+});

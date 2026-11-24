@@ -83,8 +83,8 @@ export function profileMiddle(stored: SketchNode | DrivenSketchNode, params: Par
 }
 
 /** Copy the current outline onto the saved Loft frame without moving its world geometry. */
-export function copyLoftSection(node: SketchNode | DrivenSketchNode, source: number, base: SketchPlane, params: Params): { segments: LoopSegment[]; z: number } | { error: string } {
-  return projectLoftSection(valued(node, params, source), source, base);
+export function copyLoftSection(node: SketchNode | DrivenSketchNode, source: number, base: SketchPlane, params: Params, exact = false): { segments: LoopSegment[]; z: number } | { error: string } {
+  return projectLoftSection(valued(node, params, source), source, base, exact);
 }
 
 function projectLoftSection(sketch: SketchNode, source: number, base: SketchPlane, exact = false): ReturnType<typeof copyLoftSection> {
@@ -107,12 +107,15 @@ function projectLoftSection(sketch: SketchNode, source: number, base: SketchPlan
 /** Two-guide seams share the actual sketch vertices in world mm. Keep their exact coordinates. */
 export function twoGuideLoftSections(nodes: readonly ModelNode[], picked: readonly number[], params: Params):
   { sections: ({ node: SketchNode; source: number } & ({ z: number } | { frame: LoftSectionFrame }))[] } | { error: string } {
-  if (picked.length !== 2 || picked[0] === picked[1]) return { error: 'Pick two different rectangular sketches for a two-guide loft.' };
+  if ((picked.length !== 2 && picked.length !== 3) || new Set(picked).size !== picked.length)
+    return { error: 'Pick two or three different rectangular sketches for a two-guide loft.' };
   const sketches = picked.map(source => nodes[source]);
-  if (!sketches.every(sketch => sketch?.kind === 'sketch' || sketch?.kind === 'driven-sketch')) return { error: 'Pick two finished sketches.' };
-  const [first, second] = sketches.map(planeOf);
+  if (!sketches.every(sketch => sketch?.kind === 'sketch' || sketch?.kind === 'driven-sketch')) return { error: 'Pick finished sketches.' };
+  const planes = sketches.map(planeOf);
   const plane = xyPlane(), sections: { node: SketchNode; z: number; source: number }[] = [];
-  if (![first, second].every(p => p.normal.every((normal, axis) => normal === plane.normal[axis]))) {
+  if (!planes.every(p => p.normal.every((normal, axis) => normal === plane.normal[axis]))) {
+    if (picked.length === 3) return { error: 'For a two-guide loft through three sections, use sketch planes that face +Z.' };
+    const [first, second] = planes;
     if (!first.normal.every((normal, axis) => normal === second.normal[axis] && first.xAxis[axis] === second.xAxis[axis]))
       return { error: 'For a two-guide loft, use two sketch planes with the same normal and X axis.' };
     const height = dot(sub(second.origin, first.origin), first.normal);

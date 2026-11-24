@@ -88,7 +88,9 @@ export function profileSolidOperation(f: CadPartFeature & Record<string, unknown
       if (twoGuides) {
         if (Object.hasOwn(f, 'guide')) fail('INPUT', 'loft: two guides cannot be combined with the single guide');
         if (f.smooth !== undefined && f.smooth !== false) fail('INPUT', 'loft: two guides require ruled sections');
-        if ((list as unknown[]).length !== 2) fail('INPUT', 'loft: two guides require exactly two sections');
+        const count = (list as unknown[]).length;
+        if (count !== 2 && (count !== 3 || framedSections))
+          fail('INPUT', 'loft: two guides require two sections or three horizontal height sections');
       }
       if (twoGuides && !framedSections) {
         const sections = (list as unknown[]).map((sec, i) => {
