@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1963: [Expose the original annular inlet plane to local Agent proposals](notes/agent-perpendicular-annular-inlet-plane-2026-11-25/README.md), #324. Verify the named source and donor, stale refusal, explicit Studio acceptance and native Open.
 - D1962: [Expire a Parameters refusal after a valid edit](notes/parameter-refusal-notice-lifetime-2026-11-25/README.md), #44. Verify refusal visibility, successful retry, Undo/Redo and native project reopen.
 - D1961: [Extract Studio Parameters panel actions](notes/studio-parameter-panel-actions-2026-11-25/README.md), #44. Compare exact before and after desktop states, configuration ownership and saved bytes.
 - D1960: [Link the original perpendicular annular inlet to a native plane](notes/perpendicular-annular-inlet-reference-plane-2026-11-25/README.md), #17. Verify live donor movement, History reselection, retained joins and desktop fresh Open.

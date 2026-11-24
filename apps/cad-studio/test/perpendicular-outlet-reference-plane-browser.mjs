@@ -1,8 +1,13 @@
 import assert from 'node:assert/strict';
+import { readFile, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { createFlow } from './flow-helper.mjs';
+import { currentPartRevision, withMcpSession } from './mcp-browser-session.mjs';
 
 const baseline = process.argv.includes('--baseline');
 const inlet = process.argv.includes('--inlet');
+const agent = process.argv.includes('--agent');
+assert.ok(!agent || (inlet && !baseline), 'The Agent driver uses the current inlet fixture');
 const cap = inlet ? 'inlet' : 'outlet';
 const primary = inlet ? 'n1.start' : 'n1.end';
 const opposite = inlet ? 'n1.end' : 'n1.start';
@@ -32,10 +37,13 @@ const source = { format: 'barocss-cad-model', schema: 3, units: 'mm', parameters
   ], outputs: { b1: solid(1), b4: solid(4) } };
 const modelPins = ['engine/doc', 'engine/offsetPlane', 'app/nativeOffsetFace', 'app/offsetFaceEdit', 'app/profileCommands', 'app/offsetPlanePick']
   .map(path => `packages/barocss-cad-model/src/${path}.ts`);
-const pins = ['apps/cad-studio/test/perpendicular-outlet-reference-plane-browser.mjs', ...modelPins];
-const f = await createFlow({ name: 'perpendicular-cap-reference-plane', output: process.argv[2], envFrozen: inlet ? 'D1960_SOURCE_FROZEN' : 'D1927_SOURCE_FROZEN',
+const pins = ['apps/cad-studio/test/perpendicular-outlet-reference-plane-browser.mjs', ...modelPins,
+  ...(agent ? ['apps/cad-studio/scripts/cad-mcp.mjs', 'apps/cad-studio/test/mcp-browser-session.mjs',
+    'packages/barocss-cad-model/src/chat/part/features.ts'] : [])];
+const f = await createFlow({ name: 'perpendicular-cap-reference-plane', output: process.argv[2], envFrozen: agent ? 'D1963_SOURCE_FROZEN' : inlet ? 'D1960_SOURCE_FROZEN' : 'D1927_SOURCE_FROZEN',
   initialFiles: pins, requiredFrozen: pins,
-  qualification: `The original annular ${cap} follows one parallel native plane on a separate solid.`,
+  qualification: agent ? 'Stage the exact linked inlet in local MCP, then approve it explicitly in desktop Studio.'
+    : `The original annular ${cap} follows one parallel native plane on a separate solid.`,
   limits: [`Original ${cap} of the four-span perpendicular annular Sweep and a separate moved rectangular solid. Desktop only.`],
   inspectorSource: `
 import { readFileSync } from 'node:fs';
@@ -103,7 +111,85 @@ async function verify(label, doc, original, station, donorFace) {
 }
 const open = doc => ({ name: `perpendicular-${cap}-reference.bcad`, mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(doc)) });
 
+async function exerciseAgent() {
+  const file = join(f.output, 'annular-inlet-proposal.bcad');
+  const originalBytes = Buffer.from(JSON.stringify(source));
+  const session = { app: f.app, output: f.output, clientName: f.name };
+  await writeFile(file, originalBytes);
+  f.phase = 'Propose the original annular inlet through local MCP';
+  await withMcpSession(session, file, 'original-inlet', async call => {
+    const description = await call('describe', { command: 'offset-face' });
+    assert.match(description.selection, /original perpendicular annular inlet and outlet also accept To plane/);
+    const expectedRevision = await currentPartRevision(call);
+    const command = { action: 'command', command: 'offset-face', expectedRevision,
+      faces: [primary, firstDonor.face], values: { offsetMode: 'to-plane' } };
+    const operation = (overrides = {}) => ({ tool: 'features', args: { ...command, ...overrides } });
+    const dry = (op, error = false) => call('features', { action: 'batch', dryRun: true, ops: [op] }, error);
+    const preview = await dry(operation());
+    assert.equal(preview.dryRun, true);
+    assert.equal(preview.change.volume, Number((12 * Math.PI).toFixed(3)));
+    const detail = JSON.parse(preview.would_apply[0].did.slice('Offset face '.length));
+    assert.deepEqual(detail, { offsetMode: 'to-plane', sourceFace: primary, referenceFeature: 'n4', referenceFace: firstDonor.face });
+    assert.match((await dry(operation({ faces: [primary, 'n3.top'] }), true)).error, /parallel/i);
+    assert.match((await dry(operation({ expectedRevision: '0000000000000000' }), true)).error, /part changed/i);
+    assert.deepEqual(await readFile(file), originalBytes);
+    const pending = await call('proposals', {
+      action: 'propose', title: 'Move the original inlet to the reviewed native plane', ops: [operation()],
+    });
+    assert.deepEqual([pending.proposal, pending.applied], ['P1', false]);
+    const staged = await readFile(file);
+    assert.match((await call('proposals', { action: 'accept', id: 'P1' }, true)).error, /user accepts.*studio/i);
+    assert.deepEqual(await readFile(file), staged);
+  });
+  const pending = JSON.parse(await readFile(file, 'utf8'));
+  assert.deepEqual([pending.nodes, pending.outputs], [source.nodes, source.outputs]);
+  const records = await f.inspect('agent-original', pending), original = records.find(record => record.key === 'b1');
+  const openCard = async label => {
+    await f.freshOpen(file, pending, label);
+    await button('Chat').first().click();
+    const card = f.page.getByRole('listitem', { name: 'Proposal P1', exact: true });
+    await card.getByText(`${primary} to ${firstDonor.face} on n4`, { exact: false }).waitFor();
+    return card;
+  };
+  const previewCard = async (card, label) => {
+    await button('Preview', card).click();
+    await button('Hide', card).waitFor();
+    await card.getByLabel('Volume change').getByText(/^\+37\.7(?:0+)? mm³(?: \(.*\))?$/).waitFor();
+    await f.same(pending);
+    await f.snapshot(label);
+  };
+
+  const stale = await openCard('10-agent-pending');
+  await previewCard(stale, '11-agent-preview');
+  await button('Hide', stale).click();
+  await button('Preview', stale).waitFor();
+  await f.same(pending);
+  await f.openFeatureEditor(4, 'move the donor after the pending preview');
+  await field(f.editor(), 'ΔX').fill('8');
+  const moved = (await f.applyEditor(pending, '12-agent-donor-moved')).doc;
+  await stale.getByText('stale ·', { exact: true }).waitFor();
+  assert.ok(await button('Preview', stale).isDisabled());
+  assert.equal(await button('Accept', stale).count(), 0);
+  assert.equal(moved.nodes.length, source.nodes.length);
+  assert.equal(moved.proposals[0].status, 'open');
+  await f.snapshot('13-agent-stale-refused');
+
+  const card = await openCard('14-agent-original-donor-reopened');
+  await previewCard(card, '15-agent-preview-before-approval');
+  await button('Accept', card).click();
+  await f.changed(pending);
+  const approved = (await f.snapshot('16-agent-approved')).doc, feature = approved.nodes[5];
+  assert.deepEqual([feature.kind, feature.parent, feature.faces, feature.target.feature, feature.target.body, feature.target.face],
+    ['offset-face', solid(1), [primary], 'n4', solid(4), firstDonor.face]);
+  assert.deepEqual([approved.history.at(-1).by.agent, approved.proposals[0].status], ['user', 'accepted']);
+  const expected = await verify('approved-native', approved, original, firstDonor.station, firstDonor.face);
+  const saved = await f.save('approved-annular-inlet');
+  await f.freshOpen(saved.file, approved, '17-agent-fresh-open');
+  assert.equal(await verify('approved-reopened-native', await f.doc(), original, firstDonor.station, firstDonor.face), expected);
+}
+
 await f.run(async () => {
+  if (agent) return exerciseAgent();
   await f.newPage();
   await f.openFile(open(source), 5);
   await f.same(source);
