@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1910: [Adopt the independent orthogonal material footprint](notes/orthogonal-material-footprint-adoption-2026-11-24/README.md), #221. Recheck the adopted XY command and edit the copy after fresh Open.
 - D1909: [Repeat an original circular through-Subtract under a Fill mask](notes/prior-circular-fill-cut-pattern-2026-11-24/README.md), #25. Check only captured grid placements and preserve the original through cut outside the mask.
 - D1908: [Repeat an original circular through-Subtract on an XY Rectangular grid](notes/prior-circular-rectangular-cut-pattern-2026-11-24/README.md), #25. Check each grid cell against both original cavities and the stock.
 - D1907: [Move two parallel drawing dimensions together](notes/parallel-drawing-dimension-move-2026-11-24/README.md), #745. Apply one common paper offset, preserve the actual label coordinates relative to each other, and verify the native file and SVG.

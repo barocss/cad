@@ -8,6 +8,7 @@ const pins = [
   'apps/cad-studio/test/model-rail-helper.mjs',
   'apps/cad-studio/src/App.tsx',
   'apps/cad-studio/src/app/materialFootprint.ts',
+  'apps/cad-studio/src/app/launchDerivedSketch.ts',
   'apps/cad-studio/src/engine/client.ts',
   'apps/cad-studio/src/engine/engine.worker.ts',
   'apps/cad-studio/src/sketch/useSketchActions.ts',
@@ -119,18 +120,19 @@ function checkProfile(profile) {
   assert.equal(profile.on, undefined);
 }
 
-async function checkNative(label, doc, sourceWidth, dependent) {
+async function checkNative(label, doc, sourceWidth, dependent, copyWidth = 32) {
   const outputs = await f.inspect(label, doc);
   assert.deepEqual(outputs.map(output => output.id), dependent ? ['n7', 'n9', 'n11'] : ['n7', 'n9']);
   assert.ok(outputs.every(output => output.valid && output.count === 1));
   near(outputs[0].mass.volume, sourceWidth * 20 * 4 - 4 * 6 * 4 - 4 * 4 * 2);
   near(outputs[1].mass.volume, 64 * Math.PI);
   if (dependent) {
-    const footprint = [[0, 0], [32, 0], [32, 20], [0, 20], [4, 6], [8, 6], [8, 12], [4, 12]];
+    const footprint = [[0, 0], [copyWidth, 0], [copyWidth, 20], [0, 20], [4, 6], [8, 6], [8, 12], [4, 12]];
     assert.deepEqual(corners(outputs[2].points), corners([10, 12].flatMap(z => footprint.map(([x, y]) => [x, y, z]))));
-    near(outputs[2].mass.volume, 2 * (32 * 20 - 4 * 6));
-    near(outputs[2].mass.centroid[0], 10096 / 616);
-    near(outputs[2].mass.centroid[1], 6184 / 616);
+    const rectangle = copyWidth * 20, hole = 4 * 6, area = rectangle - hole;
+    near(outputs[2].mass.volume, 2 * area);
+    near(outputs[2].mass.centroid[0], (rectangle * copyWidth / 2 - hole * 6) / area);
+    near(outputs[2].mass.centroid[1], (rectangle * 10 - hole * 9) / area);
     near(outputs[2].mass.centroid[2], 11);
   }
   f.report.observations.push({ label, sourceWidth, sourceVolume: outputs[0].mass.volume, copiedVolume: outputs[2]?.mass.volume });
@@ -226,6 +228,34 @@ await f.run(async () => {
   await openBytes(bytes);
   await f.same(extruded);
   await checkNative('native-fresh-open', extruded, 32, true);
+
+  await f.snapshot('06a-fresh-open-footprint');
+  f.phase = 'reopen the copied footprint and move its vertical edge using the corner X field';
+  await f.openFeatureEditor(11, 'copied footprint extrusion');
+  await button(f.editor(), 'Edit sketch').click();
+  const sketch = f.sketchPanel();
+  await sketch.waitFor();
+  const points = await sketch.getByRole('spinbutton', { name: /^Point \d+ [XY]$/ }).evaluateAll(inputs =>
+    inputs.map(input => ({ name: input.getAttribute('aria-label'), value: Number(input.value) })));
+  const corner = points.find(({ name, value }) => name.endsWith(' X') && value === 32
+    && points.some(y => y.name === name.replace(/ X$/, ' Y') && y.value === 20));
+  assert.ok(corner, 'The copied outer profile contains the (32, 20) corner');
+  await sketch.getByRole('spinbutton', { name: corner.name, exact: true }).fill('34');
+  await f.snapshot('06b-copied-width-edit');
+  await finish();
+  await sketch.waitFor({ state: 'hidden' });
+  await f.changed(extruded);
+  const reedited = await f.doc();
+  assert.deepEqual(reedited.nodes.slice(0, 10), extruded.nodes.slice(0, 10));
+  assert.deepEqual(reedited.nodes[11], extruded.nodes[11]);
+  const copied = reedited.nodes[10], originalProfile = extruded.nodes[10];
+  assert.deepEqual([copied.id, copied.holes, copied.plane, copied.sideTags, copied.association, copied.on],
+    [originalProfile.id, originalProfile.holes, originalProfile.plane, originalProfile.sideTags, undefined, undefined]);
+  await checkNative('native-local-width-edit', reedited, 32, true, 34);
+  await f.snapshot('06c-edited-footprint-extrusion');
+  await f.undo(); await f.same(extruded);
+  await f.redo(); await f.same(reedited);
+  await f.undo(); await f.same(extruded);
 
   f.phase = 'edit the source and preserve the copied sketch';
   await f.openFeatureEditor(1, 'source stock');
