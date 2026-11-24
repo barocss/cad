@@ -55,8 +55,8 @@ export function useSectionThroughVertex({ source, box, engine, nextRevision, liv
     const request = moveNow.current;
     if (!request || !owns(request.owner)) return false;
     const at = hit.vertex && select(hit.vertex);
-    if (!at) {
-      update({ owner: request.owner, message: 'Pick a retained original corner.' });
+    if (!at || at === 'ambiguous') {
+      update({ owner: request.owner, message: at === 'ambiguous' ? 'More than one original corner has this position.' : 'Pick a retained original corner.' });
       return true;
     }
     const { owner } = request;

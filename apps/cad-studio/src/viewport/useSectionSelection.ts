@@ -3,7 +3,7 @@ import { lookOf } from '@barocss/cad-model/app/bodies';
 import type { Selection } from '@barocss/cad-model/app/commands';
 import type { MeasurePick } from '@barocss/cad-model/app/measure';
 import type { StudioDoc } from '@barocss/cad-model/engine/doc';
-import type { Vec3 } from '@barocss/cad-model/engine/mesh';
+import type { DisplayMesh, Vec3 } from '@barocss/cad-model/engine/mesh';
 import type { BodyResult } from '@barocss/cad-model/engine/evaluate';
 import { cutAfter } from '@barocss/cad-model/engine/ids';
 import type { EdgeRef, FaceRef } from './renderer';
@@ -11,7 +11,18 @@ import { retainedSectionEdges, retainedSectionVertexIds, type SectionCornerMesh 
 import { nativeVertexWitness } from './vertexPick';
 import type { Section } from './sectionView';
 
-export type SectionVertexPick = (hit: { body: number; at: Vec3 }) => Vec3 | null;
+export type SectionVertexPick = (hit: { body: number; at: Vec3 }) => Vec3 | 'ambiguous' | null;
+
+function nativeCornersAt(mesh: DisplayMesh, at: Vec3) {
+  const matches = new Map<string, Vec3>();
+  for (const edge of mesh.edges) {
+    edge.nativeVertices?.forEach((id, i) => {
+      const point = i === 0 ? edge.a : edge.b;
+      if (point.every((value, k) => value === at[k])) matches.set(id, point);
+    });
+  }
+  return matches;
+}
 
 export type SectionPick = (hit: { face: FaceRef | null; edge: EdgeRef | null }) =>
   { face: FaceRef | null; edge: EdgeRef | null; cap: boolean };
@@ -84,15 +95,13 @@ export function useSectionSelection({
     const witness = nativeVertexWitness(hit, shown);
     if (!witness || witness.source.sectionVertices !== source.corner.vertices) return null;
     if ('face' in witness.source && cutAfter(shown.faces[witness.source.face]?.name ?? '', cutFrom)) return null;
-    const matches = new Map<string, Vec3>();
-    for (const edge of original.mesh.edges) {
-      edge.nativeVertices?.forEach((id, i) => {
-        const point = i === 0 ? edge.a : edge.b;
-        if (point.every((value, k) => value === hit.at[k])) matches.set(id, point);
-      });
-    }
-    const point = matches.size === 1 ? matches.get(witness.id) : undefined;
-    return point ? [...point] : null;
+    const matches = nativeCornersAt(original.mesh, hit.at);
+    if (matches.size > 1) return 'ambiguous';
+    const point = matches.get(witness.id);
+    if (!point) return null;
+    if (edgesBySectionBody.some(entry => entry && entry.body !== source.body
+      && !lookOf(doc, sourceBodies[entry.body]).hidden && nativeCornersAt(sourceBodies[entry.body].mesh, point).size)) return 'ambiguous';
+    return [...point];
   };
   return { selection, pick, pickVertex, cornerMeshes: edgesBySectionBody.map(source => source?.corner ?? null) };
 }

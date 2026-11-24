@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1975: [Verify Section vertex ownership and project roundtrip](notes/section-vertex-ownership-closeout-2026-11-25/README.md), #272. Refuse coincident native corners and verify delayed Worker replies, source remapping and the original saved file on both desktop backends.
 - D1974: [Move an oblique Section through an original vertex](notes/oblique-section-through-original-vertex-2026-11-25/README.md), #272. Verify a real bevel-derived direction, Section-only source endpoint proof, exact retained geometry and both desktop backends.
 - D1973: [Move an axis Section through an original vertex](notes/axis-section-through-original-vertex-2026-11-25/README.md), #272. Verify source ownership, native section preflight, explicit Apply and unchanged native documents on desktop.
 - D1972: [End a downward rectangular Extrude at the original upper annulus](notes/downward-rectangle-to-upper-annulus-2026-11-25/README.md), #222. Verify full rectangle clearance, the retained current Hole and cap, and actual desktop rebuild and fresh Open.

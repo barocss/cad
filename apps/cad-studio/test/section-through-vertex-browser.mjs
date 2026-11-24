@@ -2,21 +2,27 @@ import assert from 'node:assert/strict';
 import { join } from 'node:path';
 import { writeFile } from 'node:fs/promises';
 import { createFlow } from './flow-helper.mjs';
+import { coincidentSectionCorners, holdRealSectionReply, projectSectionOwnership } from './section-vertex-ownership-steps.mjs';
 
 const baseline = process.argv.includes('--baseline');
 const webgl = process.argv.includes('--webgl');
 const oblique = process.argv.includes('--oblique');
+const ownership = process.argv.includes('--ownership');
+const coincident = process.argv.includes('--coincident');
+assert.ok(!ownership || (oblique && !baseline));
+assert.ok(!coincident || (oblique && !ownership));
 const f = await createFlow({
-  name: 'section-through-vertex', output: process.argv[2], envFrozen: oblique ? 'D1974_SOURCE_FROZEN' : 'D1973_SOURCE_FROZEN',
+  name: 'section-through-vertex', output: process.argv[2], envFrozen: ownership || coincident ? 'D1975_SOURCE_FROZEN' : oblique ? 'D1974_SOURCE_FROZEN' : 'D1973_SOURCE_FROZEN',
   initialFiles: [
     'apps/cad-studio/test/section-through-vertex-browser.mjs',
     'apps/cad-studio/src/App.tsx', 'apps/cad-studio/src/ui/SectionBar.tsx',
     'apps/cad-studio/src/viewport/useSectionSelection.ts', 'apps/cad-studio/src/viewport/sectionEdgePick.ts',
     'apps/cad-studio/src/viewport/viewportPointerInput.ts',
+    'apps/cad-studio/test/section-vertex-ownership-steps.mjs',
   ],
   qualification: 'Move a settled Section through one original retained vertex.',
   limits: ['One native L-profile extrusion, one settled Section and one retained straight-edge corner.'],
-  snapshotExtra: () => ({ section: window.__studioSection() }),
+  snapshotExtra: () => ({ section: window.__studioSection(), dirty: !!document.querySelector('[aria-label="Unsaved changes"]') }),
 });
 const points = oblique ? [[12, 0], [60, 0], [60, 30], [35, 30], [35, 10], [0, 10], [0, 9]]
   : [[0, 0], [60, 0], [60, 30], [37.375, 30], [37.375, 10], [0, 10]];
@@ -32,14 +38,21 @@ const button = name => f.page.getByRole('button', { name, exact: true });
 const section = () => f.page.evaluate(() => window.__studioSection());
 const near = (actual, expected) => assert.ok(Math.abs(actual - expected) < 1e-7, `${actual} != ${expected}`);
 async function click(point, toward) {
-  const pixel = await f.page.evaluate(([point, toward]) => {
+  const project = () => f.page.evaluate(([point, toward]) => {
     const at = window.__studioScreenOf(point);
     if (!toward) return at;
     const next = window.__studioScreenOf(toward), distance = Math.hypot(next[0] - at[0], next[1] - at[1]);
     return at.map((value, i) => value + 2 * (next[i] - value) / distance);
   }, [point, toward ?? null]);
-  assert.ok(await f.page.evaluate(([x, y]) => !!document.elementFromPoint(x, y)?.closest('canvas.vp-canvas'), pixel), pixel);
-  await f.page.mouse.click(...pixel);
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const pixel = await project();
+    const onCanvas = await f.page.evaluate(([x, y]) => !!document.elementFromPoint(x, y)?.closest('canvas.vp-canvas'), pixel);
+    if (onCanvas) { await f.page.mouse.click(...pixel); return; }
+    await f.page.mouse.move(610, 410);
+    await f.page.mouse.wheel(0, 350);
+    await f.page.waitForTimeout(200);
+  }
+  assert.fail(`The requested click is outside the canvas: ${point.join(', ')}`);
 }
 async function look(name) {
   await button('View cube directions').click();
@@ -48,11 +61,12 @@ async function look(name) {
   await f.page.evaluate(() => new Promise(done => requestAnimationFrame(() => requestAnimationFrame(done))));
 }
 await f.run(async () => {
-  if (webgl) {
+  if (webgl || ownership || coincident) {
     const newContext = f.browser.newContext.bind(f.browser);
     f.browser.newContext = async options => {
       const context = await newContext(options);
-      await context.addInitScript(() => { Object.defineProperty(navigator, 'gpu', { value: undefined }); });
+      if (webgl) await context.addInitScript(() => { Object.defineProperty(navigator, 'gpu', { value: undefined }); });
+      if (ownership || coincident) await context.addInitScript(holdRealSectionReply);
       return context;
     };
   }
@@ -61,8 +75,7 @@ await f.run(async () => {
   await f.newPage({ backend: webgl ? 'webgl2' : 'webgpu' });
   await f.openFile(input, 2);
   await f.same(doc);
-  await button('Section view').click();
-  const setup = async () => {
+  const setup = async (face = 'n1.side6') => {
     if (!oblique) {
       await button('Section across X').click();
       await f.page.waitForFunction(() => window.__studioSection()?.exact && window.__studioSection().planes[0].offset === 30);
@@ -74,12 +87,22 @@ await f.run(async () => {
     await look('Top front left');
     await button('Section from a face').click();
     await click([6, 4.5, 8]);
-    await f.page.waitForFunction(() => {
+    await f.page.waitForFunction(face => {
       const state = window.__studioSection();
-      return state?.exact && state.planes[0].face === 'n1.side6';
-    });
+      return state?.exact && state.planes[0].face === face;
+    }, face);
     await look('Top back');
   };
+  const clickCorner = () => click(oblique ? [35, 30, 10] : [37.375, 30, 10], oblique ? [60, 30, 10] : undefined);
+  if (coincident) {
+    await coincidentSectionCorners({ f, doc, button, look, clickCorner, setup, section, baseline });
+    return;
+  }
+  if (ownership) {
+    await projectSectionOwnership({ f, doc, button, look, clickCorner, setup, section, near });
+    return;
+  }
+  await button('Section view').click();
   await setup();
   const initial = await section(), firstPlane = initial.planes[0];
   assert.equal(initial.gpu, !webgl);
@@ -91,8 +114,6 @@ await f.run(async () => {
     assert.deepEqual(initial.planes, [{ normal: [1, 0, 0], offset: 30, axis: 'x' }]);
     near(initial.volume, 7525);
   }
-  const corner = oblique ? [35, 30, 10] : [37.375, 30, 10];
-  const clickCorner = () => click(corner, oblique ? [60, 30, 10] : undefined);
   const expectedStatus = oblique ? 'Move to offset 45 mm' : 'Move to X 37.375 mm';
   const offset = oblique ? 45 : 37.375;
   f.phase = 'Verify the existing Section and original target corner';
