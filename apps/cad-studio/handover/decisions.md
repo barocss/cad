@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1882: [Pin Agent review for the tilted paired outlet](notes/pinned-tilted-paired-outlet-agent-review-2026-11-24/README.md), #324. Match both actual image orientations and exact inspection to the same explicitly approved native result.
 - D1881: [Trim the five-span Sweep outlet to a tilted plane](notes/tilted-paired-sweep-outlet-replacement-2026-11-24/README.md), #17. Preserve both passages and 48 joins through exact reference edits and actual Studio reopen.
 - D1880: [Extract the Studio Sketch inspector](notes/studio-sketch-inspector-extraction-2026-11-24/README.md), #44. Keep draft guards and verify numeric edits, outline rotation and saved Bézier selection in desktop Studio.
 - D1879: [Preserve non-cone STEP with an active degree declaration](notes/step-angle-non-cone-retention-2026-11-24/README.md), #277. Verify pure planar and tessellated originals in mm and cm and document the cone admission boundary.
