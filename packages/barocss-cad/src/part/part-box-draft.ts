@@ -25,7 +25,7 @@ function boxDraftPlane(id: string, axis: 0 | 1 | 2, side: 0 | 1, base: Ranges, t
     controlPoints, weights: [[1, 1], [1, 1]] };
 }
 
-/** Draft two incident or three transverse sides of a box. Top corners meet at the moved supports. */
+/** Draft adjacent box sides and retain one intersection at each cap. */
 export function draftBoxCorner(brep: Brep, names: readonly string[], neutral: number, angle: number, id: string, fail: Tools['fail']): Brep | undefined {
   if ((names.length !== 2 && names.length !== 3) || new Set(names).size !== names.length) return undefined;
   const chosen = names.map(name => brep.faces.filter(face => face.name === name));
@@ -35,25 +35,34 @@ export function draftBoxCorner(brep: Brep, names: readonly string[], neutral: nu
   const sides = chosen.map(([face]) => box.sides.get(face.id)!);
   // Both transverse axes must participate. Two opposite faces use the existing wedge path.
   if (sides.some(side => side.axis === 2) || new Set(sides.map(side => side.axis)).size !== 2) return undefined;
-  const base = box.ranges[2][0];
-  if (neutral < base) fail('CAPABILITY', 'Draft on adjacent box sides needs the neutral plane at the start of the pull');
-  if (neutral !== base) return undefined;
+  const [start, end] = box.ranges[2];
+  if (neutral < start) fail('CAPABILITY', 'Draft on adjacent box sides needs the neutral plane at the start of the pull');
+  if (neutral >= end || (neutral !== start && names.length === 3)) return undefined;
 
-  const slope = Math.tan(angle), inset = (box.ranges[2][1] - neutral) * slope;
-  const top = box.ranges.map(range => [...range]);
+  const slope = Math.tan(angle);
+  const capRanges = (station: number) => {
+    const ranges = box.ranges.map(range => [...range]), inset = (station - neutral) * slope;
+    for (const { axis, side } of sides) ranges[axis][side] += side === 0 ? inset : -inset;
+    return ranges;
+  };
+  const base = neutral === start ? box.ranges : capRanges(start), top = capRanges(end);
   for (const { axis, side } of sides) {
-    top[axis][side] += side === 0 ? inset : -inset;
-    if (top[axis][side] === box.ranges[axis][side]) fail('GEOMETRY', 'the angle is too small to move the selected box sides');
+    const original = box.ranges[axis][side];
+    if (base[axis][side] === original && top[axis][side] === original)
+      fail('GEOMETRY', 'the angle is too small to move the selected box sides');
   }
-  const extent = Math.max(...box.ranges.flat().map(Math.abs), ...top.flat().map(Math.abs));
+  const extent = Math.max(...box.ranges.flat().map(Math.abs), ...base.flat().map(Math.abs), ...top.flat().map(Math.abs));
   if (extent > CadNumericPolicy.coordinateAbs) fail('PARAMETER', 'the drafted box exceeds the modeling coordinate range');
-  if (top.some(([low, high]) => high - low <= linearToleranceMM(extent)))
+  // Width and depth are affine in the pull direction. Positive end gaps certify the whole interval.
+  const collapsed = ([low, high]: readonly number[]) => high - low <= linearToleranceMM(extent);
+  if (top.some(collapsed) || (neutral !== start && base.some(collapsed)))
     fail('GEOMETRY', 'the draft closes a box wall at or before the end of the pull');
 
   const vertices = brep.vertices.map(vertex => {
-    if (vertex.point[2] === neutral) return vertex;
     const [x, y, z] = vertex.point;
-    const point: Point = [top[0][Number(x === box.ranges[0][1])], top[1][Number(y === box.ranges[1][1])], z];
+    const cap = z === start ? base : top;
+    if (cap === box.ranges) return vertex;
+    const point: Point = [cap[0][Number(x === box.ranges[0][1])], cap[1][Number(y === box.ranges[1][1])], z];
     return { ...vertex, point };
   });
   const points = new Map(vertices.map(vertex => [vertex.id, vertex.point]));
@@ -63,7 +72,7 @@ export function draftBoxCorner(brep: Brep, names: readonly string[], neutral: nu
     const { axis, side } = box.sides.get(face.id)!;
     // The side chart for Y points towards -Y; the other charts point towards their positive axis.
     const sense = (axis === 1 ? side === 0 : side === 1) ? 'forward' as const : 'reversed' as const;
-    return { ...face, sense, surface: boxDraftPlane(face.surface.id, axis, side, box.ranges, top) };
+    return { ...face, sense, surface: boxDraftPlane(face.surface.id, axis, side, base, top) };
   });
   // The trims retain their topology; UV curves from the old plane charts do not apply to the new ones.
   const coedges = brep.coedges.map(coedge => ({ ...coedge, pcurve: null }));

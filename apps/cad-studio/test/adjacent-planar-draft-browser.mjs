@@ -3,6 +3,9 @@ import { createFlow } from './flow-helper.mjs';
 
 const width = 40, depth = 30, height = 40;
 const three = process.argv.includes('--three');
+const interior = process.argv.includes('--interior');
+assert.ok(!interior || !three, 'The fixed interior neutral is for two sides');
+const neutral = interior ? 4 : 0;
 const baseline = process.argv.includes('--baseline');
 const pins = [
   'apps/cad-studio/src/App.tsx',
@@ -15,10 +18,10 @@ const pins = [
   'packages/barocss-cad/src/part/part-box-shell.ts',
 ];
 const f = await createFlow({
-  name: 'adjacent-planar-draft', output: process.argv[2], envFrozen: three ? 'D1934_SOURCE_FROZEN' : 'D1252_SOURCE_FROZEN',
+  name: 'adjacent-planar-draft', output: process.argv[2], envFrozen: interior ? 'D1968_SOURCE_FROZEN' : three ? 'D1934_SOURCE_FROZEN' : 'D1252_SOURCE_FROZEN',
   initialFiles: pins, requiredFrozen: pins,
   qualification: `Author Draft on ${three ? 'three' : 'two'} rectangular stock sides, edit the angle, reject collapse, and reopen.`,
-  limits: ['One rectangular solid, +Z pull, selected planar sides and the body-end neutral plane.'],
+  limits: [`One rectangular solid, +Z pull, selected planar sides and the ${interior ? 'fixed interior' : 'body-end'} neutral plane.`],
   inspectorSource: `
 import { readFileSync } from 'node:fs';
 import { checkBrep, faceGeometry, massPropertiesOf } from '@barocss/cad';
@@ -71,15 +74,17 @@ async function inspect(label, doc, angle, source) {
   const movingY = three ? 2 : 1;
   const areaSlope = (movingY * width + depth) * slope;
   const areaCurve = movingY * slope ** 2;
-  const volume = width * depth * height - areaSlope * height ** 2 / 2 + areaCurve * height ** 3 / 3;
-  const centroidZ = (width * depth * height ** 2 / 2 - areaSlope * height ** 3 / 3 + areaCurve * height ** 4 / 4) / volume;
-  const centroid = [(width - slope * centroidZ) / 2, (depth + (three ? 0 : slope * centroidZ)) / 2, centroidZ];
+  const offset = z => z - neutral;
+  const integral = degree => (offset(height) ** (degree + 1) - offset(0) ** (degree + 1)) / (degree + 1);
+  const volume = width * depth * integral(0) - areaSlope * integral(1) + areaCurve * integral(2);
+  const centreOffset = (width * depth * integral(1) - areaSlope * integral(2) + areaCurve * integral(3)) / volume;
+  const centroid = [(width - slope * centreOffset) / 2, (depth + (three ? 0 : slope * centreOffset)) / 2, neutral + centreOffset];
   assert.ok(samePoint(read.centroid, centroid), JSON.stringify({ label, actual: read.centroid, centroid }));
   assert.ok(near(read.volume, volume), JSON.stringify({ label, actual: read.volume, volume }));
   const current = (await f.bodies()).bodies;
   assert.equal(current.length, 1);
   assert.ok(near(current[0].volume, volume), JSON.stringify({ label, studioVolume: current[0].volume, volume }));
-  for (const z of [0, height]) for (const x of [0, width - z * slope]) for (const y of [z * slope, depth - (three ? z * slope : 0)]) {
+  for (const z of [0, height]) for (const x of [0, width - offset(z) * slope]) for (const y of [offset(z) * slope, depth - (three ? offset(z) * slope : 0)]) {
     assert.ok(read.points.some(point => samePoint(point, [x, y, z])), JSON.stringify({ label, missing: [x, y, z], points: read.points }));
   }
   if (source) {
@@ -100,15 +105,22 @@ async function inspect(label, doc, angle, source) {
     ];
     for (const [name, normal] of supports) assert.ok(samePoint(read.normals[name], normal));
     const shared = [];
-    for (const [yFace, yBase, yEnd] of [[yLow, 0, height * slope], ...(three ? [[yHigh, depth, depth - height * slope]] : [])]) {
+    for (const [yFace, yAt] of [[yLow, z => offset(z) * slope], ...(three ? [[yHigh, z => depth - offset(z) * slope]] : [])]) {
       const along = read.faces[xHigh].filter(id => read.faces[yFace].includes(id));
       assert.equal(along.length, 1);
       const edge = read.edges.find(edge => edge.id === along[0]);
       assert.equal(edge.degree, 1);
       assert.equal(edge.poles.length, 2);
-      for (const point of [[width, yBase, 0], [width - height * slope, yEnd, height]]) {
+      for (const z of [0, height]) {
+        const point = [width - offset(z) * slope, yAt(z), z];
         assert.ok(edge.endpoints.some(end => samePoint(end, point)), JSON.stringify({ label, edge, point }));
         assert.ok(edge.poles.some(pole => samePoint(pole, point)));
+      }
+      if (interior) {
+        const start = edge.endpoints.find(point => near(point[2], 0));
+        const end = edge.endpoints.find(point => near(point[2], height));
+        const cross = start.map((value, axis) => value + (end[axis] - value) * neutral / height);
+        assert.ok(samePoint(cross, [width, 0, neutral]));
       }
       shared.push(edge.endpoints);
     }
@@ -157,14 +169,18 @@ await f.run(async () => {
   const creation = hud('Draft'), angle = creation.getByLabel('Angle', { exact: true });
   assert.equal(await creation.getByLabel('Pull', { exact: true }).inputValue(), 'z');
   assert.equal(await creation.getByLabel('Neutral plane', { exact: true }).inputValue(), 'auto');
+  if (interior) {
+    await creation.getByLabel('Neutral plane', { exact: true }).selectOption('fixed');
+    await creation.getByLabel('Neutral coordinate', { exact: true }).fill(String(neutral));
+  }
   if (baseline) {
-    assert.equal(three, true);
+    assert.ok(three || interior);
     await angle.fill('10');
     await status(creation, 'refused');
     await creation.getByText('Kernel detail', { exact: true }).click();
-    assert.match(await creation.innerText(), /meet along an edge/);
+    assert.match(await creation.innerText(), interior ? /neutral plane.*at or below the face/i : /meet along an edge/);
     await f.same(source);
-    await f.snapshot('three-sides-refused-on-baseline');
+    await f.snapshot(interior ? 'interior-neutral-refused-on-baseline' : 'three-sides-refused-on-baseline');
     return;
   }
   for (const raw of ['0', '45', '-45']) {
@@ -186,6 +202,7 @@ await f.run(async () => {
   assert.deepEqual(inward.nodes.slice(0, index), source.nodes);
   assert.equal(node.kind, 'draft');
   assert.equal(node.angle, 10);
+  if (interior) assert.equal(node.neutral, neutral);
   assert.equal(new Set(node.faces).size, three ? 3 : 2);
   await inspect('inward-native', inward, 10, original);
 
@@ -236,6 +253,7 @@ await f.run(async () => {
   await inspect('reopened-native', reopened.doc, -12, original);
   const replay = await edit(index);
   assert.equal(await replay.getByLabel('Angle', { exact: true }).inputValue(), '-12');
+  if (interior) assert.equal(await replay.getByLabel('Neutral coordinate', { exact: true }).inputValue(), String(neutral));
   await button('Cancel', replay).click();
   await f.same(outward);
 });

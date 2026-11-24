@@ -132,7 +132,7 @@ function cornerDocument(options = {}) {
   return input;
 }
 
-function verifyCorner(input, [width, depth, length], ends, selected, expectedNormals) {
+function verifyCorner(input, [width, depth, length], ends, selected, expectedNormals, neutral = 0) {
   const before = structuredClone(input), base = evaluateCadPart({ ...input, features: input.features.slice(0, -1) }).outputs[0];
   const [output] = evaluateCadPart(input).outputs;
   assert.equal(output.id, 'n2');
@@ -149,8 +149,9 @@ function verifyCorner(input, [width, depth, length], ends, selected, expectedNor
   assert.deepEqual(reevaluate(seeded, { document: input }).outputs[0].brep, output.brep);
 
   const radians = input.features.at(-1).angle * Math.PI / 180, t = Math.tan(radians);
-  // Integral of (width - t*s)(depth - t*s), from the neutral end to the far end.
-  const volume = width * depth * length - (width + depth) * t * length ** 2 / 2 + t ** 2 * length ** 3 / 3;
+  // Integrate (width - t*s)(depth - t*s), with s measured from the neutral station.
+  const moment = degree => ((length - neutral) ** (degree + 1) - (-neutral) ** (degree + 1)) / (degree + 1);
+  const volume = width * depth * length - (width + depth) * t * moment(1) + t ** 2 * moment(2);
   close(massPropertiesOf(output).volume, volume, 1e-7, 'two-side draft volume');
   const name = [...selected].sort().join('|'), edge = output.brep.edges.find(e => e.name === name);
   assert.ok(edge && edge.curve.degree === 1 && edge.curve.controlPoints.length === 2, 'one exact shared line');
@@ -208,6 +209,37 @@ test('adjacent Draft refuses a collapsed box, unsupported neutral planes and non
   const holed = cornerDocument({ target: 'h' });
   holed.features.splice(2, 0, { id: 'h', kind: 'hole', target: 'n1', center: [20, 15], radius: 2 });
   assert.throws(() => evaluateCadPart(holed), e => e.code === 'CAPABILITY' && /meet along an edge/.test(e.message));
+});
+
+test('adjacent box Draft turns both caps around an interior neutral with unchanged shared incidence', () => {
+  for (const angle of [10, -10]) {
+    const slope = Math.tan(angle * Math.PI / 180);
+    const input = cornerDocument({ angle, neutral: 4 });
+    const ends = [[40 + 4 * slope, 30 + 4 * slope, 0], [40 - 6 * slope, 30 - 6 * slope, 10]];
+    const normals = [[1, 0, slope], [0, 1, slope]];
+    const brep = verifyCorner(input, [40, 30, 10], ends, [right, back], normals, 4);
+    const corners = brep.vertices.map(vertex => vertex.point);
+    for (const z of [0, 10]) for (const x of [0, 40 - slope * (z - 4)]) for (const y of [0, 30 - slope * (z - 4)])
+      assert.ok(corners.some(point => samePoint(point, [x, y, z])));
+    const [low, high] = ends;
+    assert.ok(samePoint(low.map((value, axis) => value + (high[axis] - value) * 0.4), [40, 30, 4]));
+    const mirrored = cornerDocument({ angle, neutral: 6, pull: '-z' });
+    const mirrorEnds = ends.map(([x, y, z]) => [x, y, 10 - z]);
+    verifyCorner(mirrored, [40, 30, 10], mirrorEnds, [right, back], [[1, 0, -slope], [0, 1, -slope]], 4);
+  }
+});
+
+test('adjacent box Draft rejects a collapsed section or out-of-range corner at either end', () => {
+  for (const [angle, neutral] of [[40, 4], [-40, 6]]) {
+    const input = cornerDocument({ angle, neutral });
+    input.features[0].max = [4, 30];
+    assert.throws(() => evaluateCadPart(input), error => error.code === 'GEOMETRY' && /closes a box wall/.test(error.message));
+  }
+  for (const angle of [10, -10]) {
+    const input = cornerDocument({ target: 'm', angle, neutral: 4 });
+    input.features.splice(2, 0, { id: 'm', kind: 'translate', target: 'n1', offset: [9960, 9970, 0] });
+    assert.throws(() => evaluateCadPart(input), error => error.code === 'PARAMETER' && /modeling coordinate range/.test(error.message));
+  }
 });
 
 const front = 'n1.side[e1]';
