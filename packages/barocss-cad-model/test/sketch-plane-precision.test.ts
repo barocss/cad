@@ -84,6 +84,8 @@ test('ordered vertices refuse missing precision, degeneracy and points outside m
   assert.equal(orderedVertexPlane([a, b, [0, 10000, 1e-6]]), null);
   assert.equal(orderedVertexPlane([a, b, [0, 10001, 0]]), null);
   assert.equal(orderedVertexPlane([a, b, [0, 1, NaN]]), null);
+  assert.equal(orderedVertexPlane([a, b, [0, 1, Infinity]]), null);
+  assert.equal(orderedVertexPlane([a, [1e-8, 0, 0], [0, 1, 0]]), null);
   const nearXY = orderedVertexPlane([a, [1, 0, 0], [0, 1, 1e-10]]);
   assert.ok(nearXY);
   assert.equal(isDefaultPlane(nearXY), false);
@@ -93,13 +95,15 @@ test('only single straight display edges retain their ordered native prism verte
   const box = rectanglePart(12, 9, 10), [source] = partBreps(box);
   const byName = new Map(source.brep.edges.map(edge => [edge.name ?? edge.id, edge]));
   const byId = new Map(source.brep.vertices.map(vertex => [vertex.id, vertex.point]));
-  const mesh = bodyMesh(source.brep, 1);
-  assert.equal(mesh.edges.length, 12);
-  for (const edge of mesh.edges) {
-    const native = byName.get(edge.names[0]);
-    assert.ok(native && edge.nativeVertices);
-    assert.deepEqual(edge.nativeVertices, native.vertices);
-    assert.deepEqual([edge.a, edge.b], native.vertices.map(id => byId.get(id)));
+  for (const quality of [1, 4, 12]) {
+    const mesh = bodyMesh(source.brep, quality);
+    assert.equal(mesh.edges.length, 12);
+    for (const edge of mesh.edges) {
+      const native = byName.get(edge.names[0]);
+      assert.ok(native && edge.nativeVertices);
+      assert.deepEqual(edge.nativeVertices, native.vertices);
+      assert.deepEqual([edge.a, edge.b], native.vertices.map(id => byId.get(id)));
+    }
   }
 
   const adjacent = withNode(box, { kind: 'sketch', profile: 'rectangle', min: [12, 0], max: [24, 9] });

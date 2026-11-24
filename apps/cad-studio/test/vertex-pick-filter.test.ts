@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { resolveSketchLaunchVertices } from '../src/sketch/sketchLaunch';
 import { bindNativeVertexPick, currentNativeVertexPoints, pickVertex } from '../src/viewport/vertexPick';
 import { rectanglePart } from '@barocss/cad-model/engine/doc';
 import { evaluatePart } from '@barocss/cad-model/engine/evaluate';
@@ -57,6 +58,13 @@ test('three native picks retain document and mesh identity and refuse overlappin
   assert.equal(currentNativeVertexPoints({ ...doc }, evaluated.bodies, picks), null);
   assert.equal(currentNativeVertexPoints(doc, [{ ...evaluated.bodies[0], mesh: { ...mesh } }], picks), null);
   assert.equal(currentNativeVertexPoints(doc, evaluated.bodies, [picks[0], picks[0], picks[2]]), null);
+  assert.equal(currentNativeVertexPoints(doc, [], picks), null);
+  assert.equal(currentNativeVertexPoints(doc, evaluated.bodies, picks.slice(0, 2)), null);
+  assert.equal(currentNativeVertexPoints(doc, evaluated.bodies, [...picks, picks[0]]), null);
+  const ctx = { doc, bodies: evaluated.bodies, selection: { faces: [], edges: [], bodies: [], vertices: picks } };
+  assert.equal(resolveSketchLaunchVertices(doc, ctx, true).ok, true);
+  assert.equal(resolveSketchLaunchVertices(doc, ctx, false).ok, false);
+  assert.equal(resolveSketchLaunchVertices(doc, { ...ctx, selection: { ...ctx.selection, bodies: [0] } }, true).ok, false);
 
   const overlapping = [...mesh.edges, { a: [0, 0, 10], b: [0, 30, 10], faces: [face], nativeVertices: ['separate', 'other'] as const }];
   const hit = pickVertex('all', 0, overlapping, 0, 0, xy, undefined, source);

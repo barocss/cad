@@ -1,13 +1,13 @@
 # CAD roadmap — current status and execution order
 
-Updated 2026-11-24 · Priority authority: D520 · Latest delivery: D1899 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
+Updated 2026-11-24 · Priority authority: D520 · Latest delivery: D1900 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
 
 This is the only current status index. Detailed tracks define acceptance; the 34 stable row pages retain scope and issue navigation. Immutable decision notes retain results. Do not append chronological status paragraphs here. [D520 decision](notes/cad-roadmap-replan-2026-11-04/README.md) supersedes D445 execution order and historical next-item text, while retaining its safeguards and bounded proofs.
 
 ## Now and next
 
-- **Current position:** [D1899](notes/agent-original-cut-chain-2026-11-24/README.md), P5 rows 16 and 31. The local Agent describes the earlier CUT chain and qualifies the first-of-four Rectangular proposal through explicit Studio approval and native reopen.
-- **Next MAIN:** D1900, P1 rows [09](roadmap-rows/09.md) and [15](roadmap-rows/15.md), [#216](https://github.com/barocss/cad/issues/216). Verify the ordered three-vertex Sketch capture through stale selection and document transitions. Confirm that the saved plane can still be edited after the source disappears.
+- **Current position:** [D1900](notes/three-vertex-snapshot-lifecycle-2026-11-24/README.md), P1 rows 09 and 15. Verify ordered native vertex capture through rebuild, deletion and File Open, then re-edit the saved source-free plane in Studio.
+- **Next MAIN:** D1901, P1 rows [15](roadmap-rows/15.md) and [16](roadmap-rows/16.md), [#25](https://github.com/barocss/cad/issues/25). Repeat an original circular through-cut across one later rectangular cut using signed XY Linear placement and native clearance checks.
 - **Separate follow-ups:** Continue Studio App extraction in cohesive parts with affected desktop checks. [#608 Rendering](https://github.com/barocss/cad/issues/608) stays on HOLD. API inventory drift remains open. The issue tracker records [#126](https://github.com/barocss/cad/issues/126), [#613](https://github.com/barocss/cad/issues/613), [#152](https://github.com/barocss/cad/issues/152) and [#22](https://github.com/barocss/cad/issues/22) as closed.
 - **Active repository:** [barocss/cad](https://github.com/barocss/cad), based on `origin/main`. Fetch before work and preserve unexpected changes. The [migration record](../../../docs/migration/README.md) maps the former `local/cad-dev` history and issue numbers.
 - **Evidence correction:** D482 records2167 PASS/0 FAIL/2 existing SKIP in a later full-kernel run than D433. Neither result is a new full-suite PASS at this audit HEAD. [D482 record](notes/vertical-contact-refusal-2026-11-04/README.md).

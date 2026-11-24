@@ -7,6 +7,7 @@ import { createFlow, sha256 } from './flow-helper.mjs';
 const output = process.argv[2], repo = resolve(import.meta.dirname, '../../..');
 const refusalReasons = process.argv[3] === '--refusal-reasons';
 const topOverlap = process.argv[3] === '--top-overlap';
+const lifecycle = process.argv[3] === '--lifecycle';
 assert.ok(output && isAbsolute(output) && relative(repo, output).startsWith('../'));
 await mkdir(output);
 const fixture = 'apps/cad-studio/test/fixtures/linear-cut-pattern.bcad';
@@ -20,12 +21,16 @@ const pins = [fixture, 'apps/cad-studio/test/three-vertex-sketch-browser.mjs', '
   'apps/cad-studio/src/viewport/vertexPick.ts', 'apps/cad-studio/src/viewport/viewportPointerInput.ts',
   'apps/cad-studio/src/viewport/useViewportPicking.ts', 'packages/barocss-cad-model/src/engine/mesh.ts',
   'packages/barocss-cad-model/src/sketch/plane.ts', 'packages/barocss-cad-model/src/sketch/types.ts',
-  'apps/cad-studio/src/sketch/useSketchActions.ts', 'apps/cad-studio/src/ui/SketchPanel.tsx'];
+  'apps/cad-studio/src/sketch/sketchLaunch.ts', 'apps/cad-studio/src/sketch/useSketchActions.ts', 'apps/cad-studio/src/ui/SketchPanel.tsx'];
 const f = await createFlow({
-  name: 'three-vertex-sketch', envFrozen: topOverlap ? 'D1127_SOURCE_FROZEN' : refusalReasons ? 'D1126_SOURCE_FROZEN' : 'D792_SOURCE_FROZEN', output, initialFiles: pins, requiredFrozen: pins,
+  name: 'three-vertex-sketch', envFrozen: lifecycle ? 'D1900_SOURCE_FROZEN' : topOverlap ? 'D1127_SOURCE_FROZEN' : refusalReasons ? 'D1126_SOURCE_FROZEN' : 'D792_SOURCE_FROZEN', output, initialFiles: pins, requiredFrozen: pins,
   qualification: 'Start a Sketch on the exact plane of three ordered native box vertices selected in the desktop viewport.',
   limits: ['One owned native box; ordered real pointer picks on two cameras.'],
-  snapshotExtra: () => ({ plane: document.querySelector('select[aria-label="Sketch plane"]')?.value ?? null }),
+  snapshotExtra: () => ({
+    plane: document.querySelector('select[aria-label="Sketch plane"]')?.value ?? null,
+    undo: document.querySelector('button[aria-label="Undo"]')?.getAttribute('data-tip'),
+    redo: document.querySelector('button[aria-label="Redo"]')?.getAttribute('data-tip'),
+  }),
   inspectorSource: `
 import { readFileSync } from 'node:fs';
 import { toPartDocument } from '@barocss/cad-model/engine/part';
@@ -55,9 +60,9 @@ async function openProject() {
   await versions().getByLabel('Project', { exact: true }).waitFor();
 }
 const localMin = [30, -16], localMax = [38, -10], height = 2;
-const corners = [0, height].flatMap(depth => [localMin[0], localMax[0]].flatMap(u =>
-  [localMin[1], localMax[1]].map(v => world([u, v], depth))));
-async function checkExtrude(label, doc) {
+async function checkExtrude(label, doc, width = 8) {
+  const corners = [0, height].flatMap(depth => [localMin[0], localMin[0] + width].flatMap(u =>
+    [localMin[1], localMax[1]].map(v => world([u, v], depth))));
   f.phase = label;
   await f.same(doc);
   const native = await f.inspect(label + '-native', doc);
@@ -65,8 +70,8 @@ async function checkExtrude(label, doc) {
   assert.equal(extruded.check.valid, true);
   assert.equal(extruded.corners.length, 8);
   for (const corner of corners) assert.ok(extruded.corners.some(actual => Math.hypot(...corner.map((v, k) => actual[k] - v)) < 1e-8), corner);
-  near(extruded.volume, 8 * 6 * height);
-  near((await f.bodies()).bodies.find(body => body.key === 'b3').volume, 8 * 6 * height);
+  near(extruded.volume, width * 6 * height);
+  near((await f.bodies()).bodies.find(body => body.key === 'b3').volume, width * 6 * height);
   f.report.observations.push({ label, corners, volume: extruded.volume });
   return native;
 }
@@ -121,6 +126,157 @@ async function checkRefusalReasons() {
   }
 }
 
+async function checkCaptureLifetime() {
+  const mode = f.page.locator('.mode'), views = f.page.locator('.views');
+  const unselected = () => f.page.waitForFunction(() => !window.__studioSelection.selection.vertices?.length);
+  const sketch = () => button(mode, 'Sketch').click();
+  const model = () => button(mode, 'Model').click();
+  const choose = async (count = 3) => {
+    await f.page.keyboard.press('Escape');
+    await unselected();
+    await button(views, 'Top').click();
+    await f.page.getByTitle('Frame all (F)', { exact: true }).click();
+    const extended = [...points, [0, 0, 0]];
+    await pickVertex(points[0], [30, 15, 10], 1, extended);
+    await pickVertex(points[1], [30, 15, 10], 2, extended);
+    if (count === 2) return;
+    await button(views, 'Front').click();
+    await pickVertex(points[2], [30, 0, 5], 3, extended);
+    if (count === 4) await pickVertex(extended[3], [30, 0, 5], 4, extended);
+  };
+  const currentOnly = async (doc, label) => {
+    f.phase = label;
+    await unselected();
+    await sketch();
+    await f.sketchPanel().waitFor();
+    const state = await f.snapshot(label);
+    assert.equal(state.plane, 'xy');
+    assert.deepEqual(state.doc, doc);
+    await model();
+    await f.sketchPanel().waitFor({ state: 'hidden' });
+    await f.same(doc);
+  };
+  const refused = async count => {
+    f.phase = `refuse ${count} selected native vertices`;
+    await choose(count);
+    const before = await f.doc();
+    const undo = await button(f.page, 'Undo').getAttribute('data-tip');
+    await sketch();
+    await f.waitToast(/select three distinct, non-collinear native vertices/i);
+    assert.equal(await f.sketchPanel().isVisible(), false);
+    await f.same(before);
+    assert.equal(await button(f.page, 'Undo').getAttribute('data-tip'), undo);
+    await f.snapshot(`capture-${count}-refused`);
+    await f.dismissToasts();
+  };
+  await refused(2);
+  await refused(4);
+
+  await choose();
+  await f.openFeatureEditor(1, 'Original Box Width');
+  await f.editor().getByRole('spinbutton', { name: 'Width', exact: true }).fill('65');
+  const rebuilt = (await f.applyEditor(stock, 'capture-source-width-changed')).doc;
+  assert.deepEqual(rebuilt.nodes[0].max, [65, 30]);
+  await currentOnly(rebuilt, 'capture-rebuild-clears-vertices');
+  await f.undo();
+  await f.same(stock);
+
+  await choose();
+  await f.openFeatureEditor(1, 'delete unadopted source');
+  await button(f.editor(), 'Delete feature').click();
+  await f.changed(stock);
+  const empty = await f.doc();
+  assert.deepEqual(empty.nodes, []);
+  await currentOnly(empty, 'capture-deleted-source-clears-vertices');
+  await f.undo();
+  await f.same(stock);
+
+  await choose();
+  await f.page.getByLabel('Model file', { exact: true }).setInputFiles({
+    name: 'same-id-replacement.bcad', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(rebuilt)),
+  });
+  await f.same(rebuilt);
+  await currentOnly(rebuilt, 'capture-same-id-open-clears-vertices');
+  await f.openFile(input, 2);
+  await f.same(stock);
+
+  f.phase = 'leave an uncommitted three-vertex sketch after a duplicate workspace request';
+  await choose();
+  const undo = await button(f.page, 'Undo').getAttribute('data-tip');
+  await sketch();
+  await f.sketchPanel().waitFor();
+  await mode.getByRole('button', { name: /^Sketch ·/ }).click();
+  assert.equal(await f.sketchPanel().count(), 1);
+  assert.equal(await f.sketchPanel().getByLabel('Sketch plane', { exact: true }).inputValue(), 'vertices');
+  await f.snapshot('capture-duplicate-request-keeps-plane');
+  await model();
+  await f.sketchPanel().waitFor({ state: 'hidden' });
+  await f.same(stock);
+  assert.equal(await button(f.page, 'Undo').getAttribute('data-tip'), undo);
+  await f.snapshot('capture-cancel-keeps-stock');
+  await f.page.keyboard.press('Escape');
+  await unselected();
+}
+
+async function saveProjectSnapshot(doc, artifact) {
+  await openProject();
+  await button(f.page, 'Save').click();
+  const name = 'three-vertex-stock.bcad';
+  await versions().getByRole('list', { name: 'Project documents', exact: true }).getByText(name, { exact: true }).waitFor();
+  await f.page.getByLabel('Unsaved changes', { exact: true }).waitFor({ state: 'hidden' });
+  const bytes = Buffer.from(await f.page.evaluate(async ([project, name]) => {
+    const projects = await (await navigator.storage.getDirectory()).getDirectoryHandle('projects');
+    const directory = await projects.getDirectoryHandle(project);
+    const file = await (await directory.getFileHandle(name)).getFile();
+    return Array.from(new Uint8Array(await file.arrayBuffer()));
+  }, [project, name]));
+  assert.deepEqual(JSON.parse(bytes), doc);
+  const file = join(output, artifact);
+  await writeFile(file, bytes);
+  f.report.observations.push({ savedBytes: bytes.length, savedSHA256: sha256(bytes) });
+  return { name, file };
+}
+
+async function checkIndependentSnapshot(extruded) {
+  f.phase = 'delete the original box after the new sketch and solid have adopted the plane';
+  await f.openFeatureEditor(1, 'remove original stock');
+  await button(f.editor(), 'Delete feature').click();
+  await f.changed(extruded);
+  const remaining = (await f.snapshot('snapshot-source-removed')).doc;
+  assert.deepEqual(remaining.nodes, [extruded.nodes[2], { ...extruded.nodes[3], sketch: 0 }]);
+  assert.deepEqual(remaining.outputs, { b3: { node: 1, side: 'solid' } });
+  assert.deepEqual((await checkExtrude('snapshot-orphan-native', remaining)).map(body => body.id), ['n3']);
+  await f.undo();
+  await f.same(extruded);
+  await f.redo();
+  await f.same(remaining);
+
+  const { file } = await saveProjectSnapshot(remaining, 'independent-three-vertex-sketch.bcad');
+  await f.freshOpen(file, remaining, 'snapshot-source-free-fresh-open');
+  await checkExtrude('snapshot-source-free-reopened', remaining);
+  await f.openFeatureEditor(1, 'saved independent Extrude');
+  await button(f.editor(), 'Edit sketch').click();
+  await f.sketchPanel().waitFor();
+  const width = f.sketchPanel().getByLabel('Edge 1 length', { exact: true });
+  assert.equal(Number(await width.inputValue()), 8);
+  assert.equal(Number(await f.sketchPanel().getByLabel('Point 1 X', { exact: true }).inputValue()), 30);
+  await width.fill('10');
+  await width.press('Tab');
+  const edited = (await f.finishSketch('snapshot-local-width-edited')).doc;
+  const old = remaining.nodes[0], next = edited.nodes[0];
+  assert.deepEqual(next.plane, old.plane);
+  assert.deepEqual(next.sideTags, old.sideTags);
+  nearPoint(next.min, localMin);
+  nearPoint(next.max, [40, -10]);
+  assert.deepEqual(edited.nodes[1], remaining.nodes[1]);
+  await checkExtrude('snapshot-edited-native', edited, 10);
+  await f.undo();
+  await checkExtrude('snapshot-edit-undo', remaining);
+  await f.redo();
+  await checkExtrude('snapshot-edit-redo', edited, 10);
+  await f.snapshot('snapshot-width-edit-replayed');
+}
+
 await f.run(async () => {
   await f.newPage();
   if (refusalReasons) {
@@ -129,6 +285,7 @@ await f.run(async () => {
   }
   await f.openFile(input, 2);
   await f.same(stock);
+  if (lifecycle) await checkCaptureLifetime();
   const views = f.page.locator('.views');
   if (orthographic) {
     await button(views, 'Ortho').click();
@@ -207,21 +364,13 @@ await f.run(async () => {
   await f.redo();
   await f.same(extruded.doc);
 
+  if (lifecycle) {
+    await checkIndependentSnapshot(extruded.doc);
+    assert.deepEqual(f.report.downloads, []);
+    return;
+  }
   f.phase = 'save the authored plane and open its exact project bytes';
-  await openProject();
-  await button(f.page, 'Save').click();
-  const name = 'three-vertex-stock.bcad';
-  await versions().getByRole('list', { name: 'Project documents', exact: true }).getByText(name, { exact: true }).waitFor();
-  await f.page.getByLabel('Unsaved changes', { exact: true }).waitFor({ state: 'hidden' });
-  const bytes = Buffer.from(await f.page.evaluate(async ([project, name]) => {
-    const projects = await (await navigator.storage.getDirectory()).getDirectoryHandle('projects');
-    const directory = await projects.getDirectoryHandle(project);
-    const file = await (await directory.getFileHandle(name)).getFile();
-    return Array.from(new Uint8Array(await file.arrayBuffer()));
-  }, [project, name]));
-  assert.deepEqual(JSON.parse(bytes), extruded.doc);
-  await writeFile(join(output, 'saved-three-vertex-sketch.bcad'), bytes);
-  f.report.observations.push({ savedBytes: bytes.length, savedSHA256: sha256(bytes) });
+  const { name } = await saveProjectSnapshot(extruded.doc, 'saved-three-vertex-sketch.bcad');
   await f.page.reload();
   await f.page.waitForSelector('.viewport[data-renderer="webgpu"]');
   await f.ready();
