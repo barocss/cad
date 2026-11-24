@@ -94,7 +94,10 @@ export class DragTrimStroke {
       if (s.points.length >= DRAG_TRIM_MAX_PATH_POINTS) s.plan = { error: 'The Trim stroke has too many points.' };
       else {
         s.points.push(point);
-        if (s.dragging) s.plan = planDragTrim(s.input.shapes, s.points, s.input.protectedShapes);
+        if (s.dragging) {
+          const { shapes, protectedShapes } = s.input;
+          s.plan = planDragTrim(shapes, s.points, protectedShapes, protectedShapes);
+        }
       }
     }
     return s.dragging;

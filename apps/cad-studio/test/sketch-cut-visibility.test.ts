@@ -56,3 +56,19 @@ test('visible cuts keep hidden boundaries, order, IDs and object identity', () =
   assert.equal(switched.done?.[0], hiddenA);
   assert.equal(switched.done?.[1], hiddenB);
 });
+
+test('Trim ignores only the hidden crossings and retains the authored construction entries', () => {
+  const target = line([0, 0], [10, 0], ['e1', 'e2']);
+  const hidden = line([2, -1], [2, 1], ['e8', 'e9'], true);
+  const visible = line([8, -1], [8, 1], ['e10', 'e11']);
+  const { shapes, protectedShapes } = sketchCutInputs(state([hidden, target, visible]));
+  assert.deepEqual(trimPreview(shapes, [4, 0], 0.1, protectedShapes), [[2, 0], [8, 0]]);
+  assert.deepEqual(trimPreview(shapes, [4, 0], 0.1, protectedShapes, protectedShapes), [[0, 0], [8, 0]]);
+  const previewed = trimAt(shapes, [4, 0], 0.1, protectedShapes, undefined, protectedShapes);
+  const exact = trimAt(shapes, [4, 0], 0.1, protectedShapes, { shape: 1, side: 0 }, protectedShapes);
+  assert.deepEqual(exact, previewed);
+  assert.ok('shapes' in previewed && previewed.shapes[1].kind === 'polygon');
+  assert.equal(previewed.shapes[0], hidden);
+  assert.deepEqual(previewed.shapes[1].points, [[8, 0], [10, 0]]);
+  assert.equal(previewed.shapes[1].ids?.at(-1), 'e2');
+});

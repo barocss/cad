@@ -55,9 +55,10 @@ function pathOf(samples: readonly P2[]): Path {
   return { points, travel };
 }
 
-function linesOf(shapes: readonly SketchShape[]): Line[] | { error: string } {
+function linesOf(shapes: readonly SketchShape[], excludedBoundaries?: ReadonlySet<SketchShape>): Line[] | { error: string } {
   const lines: Line[] = [];
   for (const shape of shapes) {
+    if (excludedBoundaries?.has(shape)) continue;
     if (shape.kind !== 'rectangle' && shape.kind !== 'polygon') return failure(unsupported);
     const count = shape.kind === 'rectangle' ? 4 : shape.points.length;
     if (count < 2 || count > maxPieces + 1 || (shape.ids?.length ?? 0) > count) return failure(budget);
@@ -173,13 +174,14 @@ function isRetained(shape: SketchShape, a: P2, b: P2, construction: boolean) {
 }
 
 /** Plan all cuts against one owned scene, then replay them through the ordinary Model Trim. */
-export function planDragTrim(shapes: SketchShape[], path: readonly P2[], protectedShapes?: ReadonlySet<SketchShape>):
+export function planDragTrim(shapes: SketchShape[], path: readonly P2[], protectedShapes?: ReadonlySet<SketchShape>,
+  excludedBoundaries?: ReadonlySet<SketchShape>):
   { shapes: SketchShape[]; intervals: readonly Interval[] } | { error: string } {
   if (path.length > DRAG_TRIM_MAX_PATH_POINTS || shapes.length > maxPieces) return failure(budget);
   if (!path.every(inRange)) return failure('Drag Trim needs finite sketch coordinates within the supported range.');
   const stroke = pathOf(path);
   if (stroke.points.length < 2) return { shapes, intervals: [] };
-  const lines = linesOf(shapes);
+  const lines = linesOf(shapes, excludedBoundaries);
   if ('error' in lines) return lines;
   const hits: Hit[] = [];
   for (const line of lines) {
@@ -216,7 +218,7 @@ export function planDragTrim(shapes: SketchShape[], path: readonly P2[], protect
   for (const { hit, target, interval } of cuts) {
     const index = draft.indexOf(target);
     if (index < 0) return failure(ambiguous);
-    const current = linesOf(draft);
+    const current = linesOf(draft, excludedBoundaries);
     if ('error' in current) return current;
     const witness = intervalOf(hit, current);
     if ('error' in witness || !sameInterval(interval, witness)) return failure(twoBoundaries);
@@ -231,11 +233,11 @@ export function planDragTrim(shapes: SketchShape[], path: readonly P2[], protect
       draft = draft.map((shape, i) => i === index ? editable : shape);
     }
 
-    // Other shapes still supply crossing boundaries. They cannot be picked, joined, or assigned IDs.
+    // Other visible shapes supply boundaries. Only the crossed target can receive edits or IDs.
     const locked = new Set(draft.filter(shape => shape !== editable));
-    const query = at(hit.line, hit.station), preview = trimPreview(draft, query, linearTolerance, locked);
+    const query = at(hit.line, hit.station), preview = trimPreview(draft, query, linearTolerance, locked, excludedBoundaries);
     if (!preview || !sameInterval(interval, preview)) return failure(ambiguous);
-    const result = trimAt(draft, query, linearTolerance, locked);
+    const result = trimAt(draft, query, linearTolerance, locked, undefined, excludedBoundaries);
     if ('error' in result) return result;
     const [head, tail] = result.shapes.slice(index, index + 2);
     if (result.shapes.length !== draft.length + 1

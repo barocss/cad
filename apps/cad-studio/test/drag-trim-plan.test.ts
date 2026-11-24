@@ -68,7 +68,11 @@ test('untouched and protected construction retain exact custody; protected shape
   const unaffected = { ...open([27, 12], [27, 14]), lengths: { 0: 2 } };
   const shapes = [lower, target, unaffected, upper];
   const protectedShapes = new Set([lower, upper]);
-  const result = planDragTrim(shapes, [[-2, 5], [2, 5]], protectedShapes);
+  const stroke: [number, number][] = [[-2, 5], [2, 5]];
+  const hidden = planDragTrim(shapes, stroke, protectedShapes, protectedShapes);
+  assert.ok('error' in hidden && /two.*boundar/i.test(hidden.error), JSON.stringify(hidden));
+  assert.deepEqual(shapes, [lower, target, unaffected, upper]);
+  const result = planDragTrim(shapes, stroke, protectedShapes);
   assert.ok('shapes' in result, JSON.stringify(result));
   assert.deepEqual(result.shapes.slice(1, 3).map(points), lowerAndUpper(0));
   assert.ok(result.shapes.slice(1, 3).every(shape => shape.construction));

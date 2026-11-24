@@ -2,19 +2,23 @@ import assert from 'node:assert/strict';
 import { createFlow } from './flow-helper.mjs';
 
 const baseline = process.argv[3] === '--baseline';
+const previous = process.argv[3] === '--previous';
 const pins = [
   'apps/cad-studio/test/hidden-trim-boundary-browser.mjs',
   'apps/cad-studio/src/app/sketchControls.ts',
   'apps/cad-studio/src/sketch/dragTrimPlan.ts',
   'apps/cad-studio/src/sketch/useSketchActions.ts',
   'apps/cad-studio/src/viewport/viewportPointerInput.ts',
+  'apps/cad-studio/src/viewport/dragTrimStroke.ts',
+  'apps/cad-studio/src/ui/SketchPanel.tsx',
   'packages/barocss-cad-model/src/sketch/entityIds.ts',
   'packages/barocss-cad-model/src/sketch/trim.ts',
 ];
 const f = await createFlow({
   name: 'hidden-trim-boundary', output: process.argv[2], envFrozen: 'HIDDEN_TRIM_FROZEN',
   initialFiles: pins, requiredFrozen: pins,
-  qualification: 'Hidden construction remains a boundary for actual click/drag Trim; a conditional explanation and Show construction recovery preserve accepted state.',
+  qualification: previous || baseline ? 'Reproduce hidden construction supplying boundaries to click and drag Trim.'
+    : 'Hide construction from click and drag Trim and show it again without changing its saved identity.',
   limits: ['One XY rectangle with two straight construction bounds, an ordinary Line target and an existing 2 mm Extrude.'],
   snapshotExtra: () => ({
     dirty: !!document.querySelector('[aria-label="Unsaved changes"]'),
@@ -102,6 +106,72 @@ await f.run(async () => {
   await button(f.page, 'Hide construction').click();
   await button(f.page, 'Show construction').waitFor();
   const notice = f.page.getByLabel('Hidden construction trimming boundaries', { exact: true });
+  if (!previous && !baseline) {
+    async function endpoints(locator, points) {
+      await locator.waitFor();
+      const actual = await locator.evaluate(line => {
+        const box = line.closest('svg').getBoundingClientRect();
+        return Array.from(line.points, point => [point.x + box.left, point.y + box.top]);
+      });
+      const expected = await Promise.all(points.map(point => f.screenOf(point)));
+      assert.equal(actual.length, 2);
+      assert.ok(expected.every(point => actual.some(candidate => Math.hypot(...point.map((value, axis) => value - candidate[axis])) < .02)),
+        JSON.stringify({ actual, expected }));
+    }
+    f.phase = 'Preview the whole line when its construction boundaries are hidden';
+    assert.equal(await notice.count(), 0);
+    await hover(midpoint);
+    await endpoints(hoverCut(), [inner[0], inner[5]]);
+    const hidden = await f.snapshot('01-hidden-whole-line-preview');
+
+    f.phase = 'Reject Drag Trim without two shown cutting boundaries';
+    await hold();
+    assert.equal(await cuts().count(), 0);
+    await f.page.mouse.up();
+    await brush().waitFor({ state: 'detached' });
+    await f.waitToast(/two.*boundar/i);
+    const refused = await f.snapshot('02-hidden-drag-refused');
+    unchanged(refused, hidden);
+    assert.deepEqual(refused.historyDisabled, hidden.historyDisabled);
+
+    f.phase = 'Click removes the whole previewed line; Undo restores it';
+    await f.dismissToasts();
+    await f.page.mouse.click(...await pixel(midpoint));
+    await hover(midpoint);
+    await hoverCut().waitFor({ state: 'detached' });
+    await hover([10, 9]);
+    await hoverCut().waitFor({ state: 'detached' });
+    unchanged(await f.snapshot('03-hidden-click-removed-whole-line'), hidden);
+    await button(f.page, 'Undo').click();
+    await hover(midpoint);
+    await endpoints(hoverCut(), [inner[0], inner[5]]);
+
+    f.phase = 'Show construction and recover the interior crossing';
+    await button(f.page, 'Show construction').click();
+    await hover(midpoint);
+    await endpoints(hoverCut(), [inner[1], inner[4]]);
+    const shown = await f.snapshot('04-shown-interior-preview');
+    await hold();
+    await endpoints(cuts(), [inner[1], inner[4]]);
+    await f.page.mouse.up();
+    await brush().waitFor({ state: 'detached' });
+    await hover(midpoint);
+    await hoverCut().waitFor({ state: 'detached' });
+    await hover([10, 9]);
+    await endpoints(hoverCut(), [inner[0], inner[1]]);
+    const trimmed = await f.snapshot('05-shown-drag-removed-interval');
+    unchanged(trimmed, shown);
+    await button(f.page, 'Undo').click();
+    await hover(midpoint);
+    await endpoints(hoverCut(), [inner[1], inner[4]]);
+    await button(f.page, 'Redo').click();
+    await hover(midpoint);
+    await hoverCut().waitFor({ state: 'detached' });
+    await f.same(source);
+    f.report.observations.push({ hiddenClick: [inner[0], inner[5]], hiddenDrag: 'refused',
+      shownCut: [inner[1], inner[4]], undoRedo: true, acceptedDocUnchanged: true });
+    return;
+  }
   if (baseline) assert.equal(await notice.count(), 0);
   else await notice.waitFor();
   await hover(midpoint);
@@ -133,5 +203,5 @@ await f.run(async () => {
   await f.tool('Select','v');
   await notice.waitFor({state:'hidden'});
   await f.same(source);
-  f.report.observations.push({baseline, expectedCut:[[10,15],[10,25]], clickAndDrag:true, acceptedDocUnchanged:true});
+  f.report.observations.push({baseline, previous, expectedCut:[[10,15],[10,25]], clickAndDrag:true, acceptedDocUnchanged:true});
 });

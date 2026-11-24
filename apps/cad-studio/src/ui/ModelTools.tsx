@@ -95,7 +95,7 @@ export function ModelTools({ sketch, setSketch, clearSketchProfile, command, pan
     <div className="sep" />
     <ToolIconButton state={sketch.construct ? 'on' : 'idle'} data-tip="Construction" data-tip-focus aria-pressed={!!sketch.construct} data-tip-key="X" data-tip-desc="Draw references: dashed shapes to snap to, not part of the profile" aria-label="Construction"
       onClick={() => setSketch(s => s && { ...s, construct: !s.construct })}><Icon name="cad-sk-construction" /></ToolIconButton>
-    {(sketch.done ?? []).some(d => d.construction) && <ToolIconButton state={sketch.hideConstruction ? 'on' : 'idle'} data-tip={sketch.hideConstruction ? 'Show construction' : 'Hide construction'} data-tip-desc="The dashed reference shapes: hidden ones are not drawn or snapped to, and stay with the sketch" aria-label={sketch.hideConstruction ? 'Show construction' : 'Hide construction'}
+    {(sketch.done ?? []).some(d => d.construction) && <ToolIconButton state={sketch.hideConstruction ? 'on' : 'idle'} data-tip={sketch.hideConstruction ? 'Show construction' : 'Hide construction'} data-tip-desc="Hidden reference shapes stay with the sketch. They are excluded from snapping and Trim." aria-label={sketch.hideConstruction ? 'Show construction' : 'Hide construction'}
       onClick={() => setSketch(s => s && { ...s, hideConstruction: !s.hideConstruction })}><Icon name={sketch.hideConstruction ? 'visibility_off' : 'visibility'} /></ToolIconButton>}
     <ToolIconButton data-tip="Clear profile" data-tip-desc="Remove every shape drawn in this sketch" aria-label="Clear profile" onClick={clearSketchProfile}><Icon name="ink_eraser" /></ToolIconButton>
   </>;

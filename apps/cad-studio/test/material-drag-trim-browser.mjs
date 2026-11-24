@@ -191,7 +191,9 @@ await f.run(async () => {
 
   f.phase = 'refuse Finish of the open material chain and retain both draft and accepted solid';
   await f.page.locator('.topbar button.finish').click();
-  await f.sketchPanel().getByRole('alert').getByText(/Close or trim the open chain from \(10, 5\) to \(10, 15\) mm/).waitFor();
+  const openChains = f.sketchPanel().getByRole('alert');
+  await openChains.getByText(/open chain(?: \d+)? from \(10, 5\) to \(10, 15\) mm/i).waitFor();
+  assert.match(await openChains.innerText(), /open chain(?: \d+)? from \(10, 25\) to \(10, 35\) mm/i);
   const refused = await f.snapshot('04-open-chain-refused');
   unchanged(refused, before);
   assert.deepEqual(refused.historyDisabled, cut.historyDisabled);

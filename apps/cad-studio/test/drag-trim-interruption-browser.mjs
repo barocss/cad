@@ -146,12 +146,31 @@ await f.run(async () => {
   await enterTrim();
   await beforeCuts();
   const other = process.argv.includes('--capture-only') ? null : await f.page.context().newPage();
-  if (other) await other.goto('about:blank');
+  if (other) {
+    await other.goto('about:blank');
+    // Playwright defaults to emulated focus even for a background page. Use native Chrome tab state.
+    const tabs = await Promise.all([f.page, other].map(async page => {
+      const session = await page.context().newCDPSession(page);
+      await session.send('Emulation.setFocusEmulationEnabled', { enabled: false });
+      const { targetInfo } = await session.send('Target.getTargetInfo');
+      const { windowId } = await session.send('Browser.getWindowForTarget', { targetId: targetInfo.targetId });
+      assert.equal(targetInfo.type, 'page');
+      return { target: targetInfo.targetId, windowId };
+    }));
+    assert.equal(tabs[0].windowId, tabs[1].windowId, 'both targets must be tabs of the same Chrome window');
+    assert.notEqual(tabs[0].target, tabs[1].target);
+    f.report.observations.push({ label: 'native-chrome-tab-identities', tabs });
+  }
   await f.page.bringToFront();
   await f.page.waitForFunction(() => !document.hidden, null, { polling: 100, timeout: 10000 });
   for (const reason of (process.argv.includes('--capture-only') ? ['native-lostcapture'] : ['tab-switch', 'native-lostcapture'])) {
     f.phase = reason + ': held three-cut stroke';
     const before = await f.snapshot(reason + '-before');
+    if (reason === 'tab-switch') {
+      await f.page.bringToFront();
+      await f.page.waitForFunction(() => document.hasFocus(), null, { polling: 100, timeout: 10000 });
+      await settle();
+    }
     await hold(); await verifyPreview();
     // Full-page screenshots may disturb native capture in headed Chrome. Read only while held.
     const heldState = await f.page.evaluate(() => ({
@@ -169,10 +188,13 @@ await f.run(async () => {
     await f.persist();
     const offset = await f.page.evaluate(() => window.__trimEvents.length);
     if (reason === 'tab-switch') {
+      await f.page.waitForFunction(() => document.hasFocus(), null, { polling: 100, timeout: 10000 });
       await other.bringToFront();
-      await f.page.waitForFunction(() => document.hidden, null, { polling: 100, timeout: 10000 });
+      await other.waitForFunction(() => document.hasFocus(), null, { polling: 100, timeout: 10000 });
+      await f.page.waitForFunction(() => !document.hasFocus(), null, { polling: 100, timeout: 10000 });
       await f.page.bringToFront();
-      await f.page.waitForFunction(() => !document.hidden, null, { polling: 100, timeout: 10000 });
+      await f.page.waitForFunction(() => document.hasFocus(), null, { polling: 100, timeout: 10000 });
+      await other.waitForFunction(() => !document.hasFocus(), null, { polling: 100, timeout: 10000 });
     } else {
       const capture = await f.page.evaluate(() => {
         const canvas = document.querySelector('canvas.vp-canvas'), id = window.__dragTrimPointer;
@@ -188,8 +210,8 @@ await f.run(async () => {
     await brush().waitFor({ state: 'detached' });
     const events = await f.page.evaluate(start => window.__trimEvents.slice(start), offset);
     if (reason === 'tab-switch') {
-      assert.ok(events.some(e => e.type === 'visibilitychange' && e.trusted && e.hidden), JSON.stringify(events));
-      assert.ok(events.some(e => e.type === 'visibilitychange' && e.trusted && !e.hidden), JSON.stringify(events));
+      assert.ok(events.some(e => e.type === 'blur' && e.trusted) ||
+        events.some(e => e.type === 'visibilitychange' && e.trusted && e.hidden), JSON.stringify(events));
     } else assert.ok(events.some(e => e.type === 'lostpointercapture' && e.trusted), JSON.stringify(events));
     await f.page.mouse.up();
     await f.sketchPanel().waitFor();

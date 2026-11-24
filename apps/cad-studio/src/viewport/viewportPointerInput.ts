@@ -1065,7 +1065,7 @@ export function useViewportPointerInput({ canvas, camera, propsRef, rendering, f
         }
         const { shapes, protectedShapes } = sketchCutInputs(sk);
         const q: [number, number] | null = p ? [p[0], p[1]] : null, tol = trimReach(x, y, w, h, sk), kind = sk.tool as 'trim' | 'extend' | 'split';
-        const points = !q ? null : kind === 'trim' ? trimPreview(shapes, q, tol, protectedShapes)
+        const points = !q ? null : kind === 'trim' ? trimPreview(shapes, q, tol, protectedShapes, protectedShapes)
           : kind === 'extend' ? extendPreview(shapes, q, tol, protectedShapes) : (pt => pt ? [pt] : null)(splitPreview(shapes, q, tol, protectedShapes));
         sketchDraft.current.trim = points ? { kind, points, owner: sk } : null;
       }

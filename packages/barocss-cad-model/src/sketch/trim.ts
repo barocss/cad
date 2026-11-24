@@ -148,7 +148,7 @@ const pt = (s: Piece, t: number): P2 => { const q = at(s, t); return [r6(q[0]), 
 
 /** The piece nearest `p` (within `tol` mm) and the part of it a trim there removes: t from lo to hi. */
 interface Target { shape: number; piece: number; s: Piece; full: boolean; lo: number; hi: number; gone: boolean }
-function target(shapes: SketchShape[], p: P2, tol: number, protectedShapes?: ReadonlySet<SketchShape>, exact?: { shape: number; side: number }): Target | null {
+function target(shapes: SketchShape[], p: P2, tol: number, protectedShapes?: ReadonlySet<SketchShape>, exact?: { shape: number; side: number }, excludedBoundaries?: ReadonlySet<SketchShape>): Target | null {
   let best: { shape: number; piece: number; d: number } | null = null;
   const pieces = shapes.map(piecesOf);
   pieces.forEach((ps, si) => {
@@ -162,7 +162,8 @@ function target(shapes: SketchShape[], p: P2, tol: number, protectedShapes?: Rea
   if (!best) return null;
   const { shape: si, piece: pi } = best as { shape: number; piece: number }, s = pieces[si][pi];
   const full = s.kind === 'arc' && Math.abs(s.sw) >= TAU - 1e-12, tp = paramOf(s, p);
-  const cuts = pieces.flatMap((ps, sj) => ps.flatMap((o, pj) => sj === si && pj === pi ? [] : crossings(s, o))).filter(t => full ? true : t > 1e-7 && t < 1 - 1e-7);
+  const cuts = pieces.flatMap((ps, sj) => excludedBoundaries?.has(shapes[sj]) ? []
+    : ps.flatMap((o, pj) => sj === si && pj === pi ? [] : crossings(s, o))).filter(t => full ? true : t > 1e-7 && t < 1 - 1e-7);
   if (exact && cuts.some(t => Math.abs(t - tp) <= 1e-7)) return null;
   if (full) {
     // A circle: crossing nothing (or once) it goes; else the arc between the crossings either side of the click.
@@ -175,8 +176,9 @@ function target(shapes: SketchShape[], p: P2, tol: number, protectedShapes?: Rea
 }
 
 /** The part a trim at `p` would remove, sampled (for the hover highlight), or null off the sketch. */
-export function trimPreview(shapes: SketchShape[], p: P2, tol: number, protectedShapes?: ReadonlySet<SketchShape>): P2[] | null {
-  const t = target(shapes, p, tol, protectedShapes); if (!t) return null;
+export function trimPreview(shapes: SketchShape[], p: P2, tol: number, protectedShapes?: ReadonlySet<SketchShape>,
+  excludedBoundaries?: ReadonlySet<SketchShape>): P2[] | null {
+  const t = target(shapes, p, tol, protectedShapes, undefined, excludedBoundaries); if (!t) return null;
   const n = t.s.kind === 'line' ? 1 : Math.max(2, Math.ceil(Math.abs(t.s.sw) * (t.hi - t.lo) / (Math.PI / 24)));
   return Array.from({ length: n + 1 }, (_, k) => pt(t.s, t.lo + (t.hi - t.lo) * k / n));
 }
@@ -185,8 +187,9 @@ export function trimPreview(shapes: SketchShape[], p: P2, tol: number, protected
  * The sketch's shapes with the piece nearest `p` (within `tol` mm) trimmed back to its nearest crossings
  * on either side, and open outlines meeting end to end joined; or why not.
  */
-export function trimAt(shapes: SketchShape[], p: P2, tol: number, protectedShapes?: ReadonlySet<SketchShape>, exact?: { shape: number; side: number }): { shapes: SketchShape[] } | { error: string } {
-  const T = target(shapes, p, tol, protectedShapes, exact);
+export function trimAt(shapes: SketchShape[], p: P2, tol: number, protectedShapes?: ReadonlySet<SketchShape>,
+  exact?: { shape: number; side: number }, excludedBoundaries?: ReadonlySet<SketchShape>): { shapes: SketchShape[] } | { error: string } {
+  const T = target(shapes, p, tol, protectedShapes, exact, excludedBoundaries);
   if (!T) return { error: 'Click on a line, arc or circle of the sketch to trim it.' };
   const { shape: si, piece: pi, s, full, lo, hi } = T, shape = shapes[si];
   const rest = shapes.filter((_, k) => k !== si);

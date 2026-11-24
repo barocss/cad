@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1887: [Exclude hidden construction from click and drag Trim](notes/hidden-construction-trim-2026-11-24/README.md), #233. Qualify geometry, material repair and actual tab and pointer capture interruption.
 - D1886: [Pin the local Agent review of the inward tilted Sweep inlet](notes/pinned-tilted-paired-inlet-agent-review-2026-11-24/README.md), #324. Bind both orientations and native inspection to the same explicit Studio approval.
 - D1885: [Replace the original five-span Sweep inlet with an inward tilted plane](notes/tilted-paired-sweep-inlet-replacement-2026-11-24/README.md), #17. Keep both passages, all native joins, the editable donor and fresh Studio reopen.
 - D1884: [Rebuild both Fit limits across adjacent nominal ranges](notes/paired-fit-adjacent-range-boundary-2026-11-24/README.md), #269. Qualify native paired geometry, narrow inch limits, dual callout and four independent export pairs.

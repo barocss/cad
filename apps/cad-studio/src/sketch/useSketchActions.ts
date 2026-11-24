@@ -202,7 +202,8 @@ export function useSketchActions({ model, editor, owner, worker, viewport, chang
     if (!sketch || !ownsSketch()) return;
     const { shapes, protectedShapes } = sketchCutInputs(sketch);
     const ready = shapes.map(x => x.kind === 'polygon' && !protectedShapes?.has(x) ? { ...x, pending: false } : x);
-    const r = (op === 'trim' ? trimAt : op === 'extend' ? extendAt : splitAt)(ready, at, tol, protectedShapes);
+    const r = op === 'trim' ? trimAt(ready, at, tol, protectedShapes, undefined, protectedShapes)
+      : (op === 'extend' ? extendAt : splitAt)(ready, at, tol, protectedShapes);
     if ('error' in r) { setToast({ title: op === 'trim' ? 'Nothing to trim there' : op === 'extend' ? 'Nothing to extend there' : 'Nothing to split there', hint: r.error, detail: '' }); return; }
     replaceDraftShapes(sketch, r.shapes);
   };
@@ -220,7 +221,7 @@ export function useSketchActions({ model, editor, owner, worker, viewport, chang
     const first = active.shape.points[side], last = active.shape.points[(side + 1) % active.shape.points.length];
     if (shape < 0 || !first || !last) return false;
     const at: [number, number] = [(first[0] + last[0]) / 2, (first[1] + last[1]) / 2];
-    const result = trimAt(shapes, at, 1e-6, protectedShapes, { shape, side });
+    const result = trimAt(shapes, at, 1e-6, protectedShapes, { shape, side }, protectedShapes);
     if ('error' in result) {
       setToast({ title: 'Cannot trim the highlighted line', hint: 'A crossing splits the line at its midpoint. Use Trim and click the part to remove.', detail: '' });
       return false;

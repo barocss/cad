@@ -41,7 +41,7 @@ export function activateDraftBezier(sketch: SketchState, source: SketchShape): S
   return { ...sketch, shape: source, done: ordered, activeOutlineIndex: index, picked: [], editDim: null };
 }
 
-/** Use the same ordered inputs for sketch hover and click. Hidden construction remains a boundary. */
+/** Keep hidden construction in its draft position while Trim excludes it from picking and crossings. */
 export function sketchCutInputs(sketch: SketchState) {
   const shapes = sketch.editNode === undefined ? draftShapeOrder(sketch)
     : sketch.activeOutlineIndex === undefined ? reopenedOrder(sketch.shape, sketch.done ?? [], sketch.mainIds)
