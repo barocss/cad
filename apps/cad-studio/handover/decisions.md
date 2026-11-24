@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1912: [Extract Studio document replacement from App](notes/studio-document-replacement-2026-11-24/README.md), #44. Preserve project and History ownership across desktop replacement and in-place editing.
 - D1911: [Repeat an original circular through-Subtract on a linked straight Path](notes/prior-circular-path-cut-pattern-2026-11-24/README.md), #25. Own the path once and check both exact translated cavities.
 - D1910: [Adopt the independent orthogonal material footprint](notes/orthogonal-material-footprint-adoption-2026-11-24/README.md), #221. Recheck the adopted XY command and edit the copy after fresh Open.
 - D1909: [Repeat an original circular through-Subtract under a Fill mask](notes/prior-circular-fill-cut-pattern-2026-11-24/README.md), #25. Check only captured grid placements and preserve the original through cut outside the mask.

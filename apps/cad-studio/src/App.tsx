@@ -106,7 +106,7 @@ import { StepExportPanel } from './files/StepExportPanel';
 import { changesBeyondVariability } from './app/documentChanges';
 import { sameMeshes, withMasses, samePlacement, meshVolume } from './app/bodyResults';
 import { sketchRegion } from './app/sketchControls';
-import { validateRoundedInsetDocument } from '@barocss/cad-model/sketch/internal/roundedInsetRecipe';
+import { createDocumentReplacement, type ReplacementIntent } from './app/documentReplacement';
 import { activeKey, type Active } from './app/commandState';
 import { emptySel, NO_CUTS, NO_INSTANCES, BROWSER_PLACEMENT, PALETTE_EXTRA } from './app/studioConstants';
 import { routeMessage } from './app/routeSession';
@@ -319,7 +319,7 @@ export function App() {
   const workOwnership = useRef(createWorkOwnership<StudioDoc, StudioDoc>());
   const [, setWorkCompletionVersion] = useState(0);
   const acceptanceScope = workOwnership.current.scope;
-  const replacement = useRef<{ scope: object; identity?: WorkHistory<StudioDoc>['documentIdentity'] } | null>(null);
+  const replacement = useRef<ReplacementIntent | null>(null);
   const workCompletion = useRef<object | null>(null);
   const shownVariant = useRef<string | null>(null);
   const undoFor = useRef<{ entry: WorkHistory<StudioDoc>; scope: object; base: StudioDoc; beforeInput: StudioDoc } | null>(null);
@@ -1499,42 +1499,23 @@ export function App() {
     opening: { intent: openIntent, pending: () => project.opening() },
     view: { viewport, setNotice: setToast, setSection, clearSelection: () => setSelection(emptySel), setSketch },
   });
-  // A new or opened part replaces the document: an open sketch or tool would carry the old part's shapes
-  // and face references into it, so they close first (U4).
-  // (What was picked in the old part goes too: instances, direct-edit faces, measurements.)
-  // A detached replacement clears the project document. Editing a part in place retains the root's checkpoint review.
-  const replaceDoc = (next: StudioDoc, mode: 'detached' | 'project-open' | 'project' | 'in-place' | 'new-part' = 'detached') => {
-    try {
-      if (next.nodes.some(node => node.kind === 'rounded-rectangle-inset')) {
-        if (!next.outputs || !next.parameters || (next.schema !== 3 && next.schema !== 4) || next.units !== 'mm') {
-          throw new Error('The rounded inset must have a complete model document.');
-        }
-        validateRoundedInsetDocument(next, true);
-      }
-    }
-    catch (error) {
-      setToast({ title: 'Could not open rounded inset', hint: 'The document is unchanged.', detail: error instanceof Error ? error.message : String(error) });
-      return false;
-    }
-    cancelStepExportRef.current(); invalidateDocumentWork();
-    const fileBoundary = mode === 'detached' || mode === 'project-open';
-    const identity = mode === 'new-part' || fileBoundary ? {
-      ...currentDocumentIdentity(), ...(fileBoundary ? { binding: project.documentBinding() } : {}),
-    } : undefined;
-    replacement.current = { scope: workOwnership.current.scope, identity };
-    try {
-      if (!commit(next, false, true)) return false;
+  const replaceDoc = createDocumentReplacement({
+    intent: replacement, currentScope: () => workOwnership.current.scope, documentIdentity: currentDocumentIdentity, project,
+    invalidateDocumentWork, commit: next => commit(next, false, true),
+    cancelStepExport: () => cancelStepExportRef.current(),
+    clearAcceptedDrafts: () => {
       cancelStlExportRef.current();
       resetDocumentSection();
       clearBodyClipboard();
       resetDocumentDraft();
-      if (mode !== 'in-place') setCheckpointReview(null);
-      if (mode === 'detached' || mode === 'new-part') { project.detach(); setCompareBase(null); }
-      if (mode === 'new-part') setFileName('Untitled');
-      cancel(); setCutDraft(null); setDocGeneration(g => g + 1); setSelection(emptySel); setPick(null); setInstanceSel([]); setIsolatedInstances(undefined); setDirectSel([]); setMeasure(null); clearPinnedFaces(); setEditNode(null);
-      return true;
-    } finally { replacement.current = null; }
-  };
+    },
+    clearCheckpointReview: () => setCheckpointReview(null), clearCompareBase: () => setCompareBase(null), setFileName,
+    resetAcceptedView: () => {
+      cancel(); setCutDraft(null); setDocGeneration(g => g + 1); setSelection(emptySel); setPick(null); setInstanceSel([]);
+      setIsolatedInstances(undefined); setDirectSel([]); setMeasure(null); clearPinnedFaces(); setEditNode(null);
+    },
+    onNotice: setToast,
+  });
   const { sessionBlocked, startInPlace, finishInPlaceSession, cancelInPlaceSession } = editInPlaceActions({
     model: { doc, bodies, instanceBodies, fresh },
     document: { read: () => docNow.current, beginOpen: beginOpenIntent, replace: next => replaceDoc(next, 'in-place') },
