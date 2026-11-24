@@ -4,9 +4,13 @@ import { brepMassProperties, checkBrep, faceGeometry } from '@barocss/cad';
 import type { Ctx } from '../src/app/commands';
 import { editSavedOffsetFaceCommand } from '../src/app/offsetFaceEdit';
 import { offsetFaceCommand } from '../src/app/profileCommands';
+import { perpendicularAnnularOutletProposal, reviewedPerpendicularAnnularOutletEvidence } from '../src/chat/perpendicularAnnularOutletProposalReview';
 import { encodeStudioFile, readStudioFile } from '../src/engine/container';
 import { emptyDoc, perpendicularAnnularOffsetEnd, offsetFaceDocumentProblem, withNode, type StudioDoc } from '../src/engine/doc';
 import { evaluateDoc, partBreps } from '../src/engine/evaluate';
+import type { Proposal } from '../src/engine/schema/proposals';
+import { digestOf } from '../src/util/digest';
+import { revisionOf } from '../src/util/revision';
 
 const face = 'n1.start';
 const fixture = () => withNode(withNode(emptyDoc(), { kind: 'sketch', profile: 'circle', center: [0, 0], radius: 2,
@@ -90,4 +94,32 @@ test('an original annular outlet supports signed Offset through History and nati
   assert.ok(!collapse.ok);
   assert.match(collapse.error.detail, /outlet.*join/);
   assert.deepEqual(source, before);
+});
+
+test('the outlet review binds the exact signed command, base and native output', () => {
+  const source = fixture(), end = 'n1.end', selected = context(source, end);
+  const args = { command: 'offset-face', expectedRevision: revisionOf(source), faces: [end], values: { d: -4 } };
+  const operation = { tool: 'run_command', args };
+  const proposal: Proposal = { id: 'P1', title: 'Move the outlet inward', status: 'open', by: { agent: 'chat' },
+    at: '2026-11-24T00:00:00.000Z', base: 'test', summary: '1 added', ops: [operation],
+    risk: { level: 'low', features_touched: 1, references_broken: 0, hard_requirements_changed: [], approval: [] } };
+  const edit = perpendicularAnnularOutletProposal(source, proposal);
+  assert.ok(edit);
+  assert.equal(edit.revision, digestOf(proposal));
+  for (const patch of [{ faces: ['n1.start'] }, { values: { d: -4, offsetMode: 'distance' } },
+    { values: { d: 0 } }, { expectedRevision: '0'.repeat(16) }])
+    assert.equal(perpendicularAnnularOutletProposal(source, { ...proposal, ops: [{ ...operation, args: { ...args, ...patch } }] }), undefined);
+  assert.equal(perpendicularAnnularOutletProposal(source, { ...proposal, ops: [operation, operation] }), undefined);
+  const candidate = offsetFaceCommand.build!(selected, { d: -4 });
+  const reviewed = reviewedPerpendicularAnnularOutletEvidence(source, selected.bodies, candidate, edit);
+  assert.ok(reviewed);
+  assert.deepEqual(partBreps(candidate)[0].brep, reviewed.brep);
+  const { sourceBody, body } = reviewed.perpendicularAnnularOutletOffset;
+  assert.deepEqual([sourceBody, body], ['b1', 'b2']);
+  assert.equal(reviewedPerpendicularAnnularOutletEvidence(source, selected.bodies, offsetFaceCommand.build!(selected, { d: 4 }), edit), undefined);
+  const wrongEnd = offsetFaceCommand.build!(context(source), { d: -4 });
+  assert.equal(reviewedPerpendicularAnnularOutletEvidence(source, selected.bodies, wrongEnd, edit), undefined);
+  const changed = { ...source, parameters: { revisionProbe: 1 } };
+  assert.equal(perpendicularAnnularOutletProposal(changed, proposal), undefined);
+  assert.equal(reviewedPerpendicularAnnularOutletEvidence(changed, selected.bodies, candidate, edit), undefined);
 });

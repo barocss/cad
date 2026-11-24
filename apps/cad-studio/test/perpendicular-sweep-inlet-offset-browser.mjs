@@ -1,8 +1,13 @@
 import assert from 'node:assert/strict';
+import { readFile, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import { checkApprovedDuctReview, render as renderReview } from './duct-proposal-review-browser-steps.mjs';
+import { currentPartRevision, withMcpSession } from './mcp-browser-session.mjs';
 import { createFlow } from './flow-helper.mjs';
 
 const baseline = process.argv.includes('--baseline');
-const outlet = process.argv.includes('--outlet');
+const review = process.argv.includes('--review');
+const outlet = review || process.argv.includes('--outlet');
 const end = outlet ? 'outlet' : 'inlet';
 const capName = outlet ? 'n1.end' : 'n1.start';
 const fixedName = outlet ? 'n1.start' : 'n1.end';
@@ -19,10 +24,15 @@ const source = { format: 'barocss-cad-model', schema: 3, units: 'mm', parameters
     } },
   ], outputs: { b1: { node: 1, side: 'solid' } } };
 const pins = ['packages/barocss-cad/src/part/part-model.ts', 'packages/barocss-cad/src/brep/exact-sweep.ts',
-  'packages/barocss-cad-model/src/engine/doc.ts', 'packages/barocss-cad-model/src/app/nativeOffsetFace.ts'];
-const f = await createFlow({ name: `perpendicular-sweep-${end}-offset`, output: process.argv[2], envFrozen: outlet ? 'D1924_SOURCE_FROZEN' : 'D1921_SOURCE_FROZEN',
+  'packages/barocss-cad-model/src/engine/doc.ts', 'packages/barocss-cad-model/src/app/nativeOffsetFace.ts',
+  ...(review ? ['apps/cad-studio/scripts/cad-mcp.mjs', 'apps/cad-studio/test/mcp-browser-session.mjs',
+    'apps/cad-studio/test/duct-proposal-review-browser-steps.mjs', 'packages/barocss-cad-model/src/chat/part/modelCandidate.ts',
+    'packages/barocss-cad-model/src/chat/part/proposals.ts', 'packages/barocss-cad-model/src/chat/part/views.ts'] : []),
+  ...(review && !baseline ? ['packages/barocss-cad-model/src/chat/perpendicularAnnularOutletOffsetEvidence.ts',
+    'packages/barocss-cad-model/src/chat/perpendicularAnnularOutletProposalReview.ts'] : [])];
+const f = await createFlow({ name: `perpendicular-sweep-${end}-offset`, output: process.argv[2], envFrozen: review ? 'D1925_SOURCE_FROZEN' : outlet ? 'D1924_SOURCE_FROZEN' : 'D1921_SOURCE_FROZEN',
   initialFiles: pins, requiredFrozen: pins,
-  qualification: `Use signed Offset face on the original annular ${end} of the four-span perpendicular Exact Sweep.`,
+  qualification: review ? 'Bind the local Agent image and inspection to the actual Studio approval.' : `Use signed Offset face on the original annular ${end} of the four-span perpendicular Exact Sweep.`,
   limits: ['Original straight cap of one exact annulus with both ends. No replacement, second edit or linked reference plane. Desktop only.'],
   inspectorSource: `
 import { readFileSync } from 'node:fs';
@@ -114,12 +124,96 @@ async function verify(label, doc, offset, original) {
   return result;
 }
 
+async function reviewOutlet(original) {
+  const file = join(f.output, 'annular-outlet-proposal.bcad');
+  await writeFile(file, JSON.stringify(source));
+  const session = { app: f.app, output: f.output, clientName: f.name };
+  f.phase = 'stage a signed outlet Offset in the local Agent';
+  const result = await withMcpSession(session, file, 'annular-outlet-review', async (call, request) => {
+    const expectedRevision = await currentPartRevision(call);
+    const op = { tool: 'features', args: { action: 'command', command: 'offset-face',
+      expectedRevision, faces: [capName], values: { d: -4 } } };
+    const originalFile = await readFile(file);
+    const dry = await call('features', { action: 'batch', dryRun: true, ops: [op] });
+    assert.equal(dry.dryRun, true);
+    near(dry.change.volume,-12*Math.PI,.0005);
+    assert.deepEqual(await readFile(file),originalFile);
+    const staged = await call('proposals', { action: 'propose', title: 'Move the original annular outlet inward by 4 mm', ops: [op] });
+    assert.deepEqual([staged.proposal,staged.applied],['P1',false]);
+    const { proposals: [pending] } = await call('proposals', { action: 'list' });
+    const beforeReview = await readFile(file);
+    if (baseline) {
+      assert.equal(pending.modelReviewRevision,undefined);
+      const refusal = await call('query', { action: 'render', proposal: 'P1', expectedRevision,
+        expectedProposalRevision: pending.proposalRevision }, true);
+      assert.equal(refusal.code,'MODEL_REVIEW_UNAVAILABLE');
+      assert.deepEqual(await readFile(file),beforeReview);
+      f.report.observations.push({ label: 'previous pinned review refusal', code: refusal.code });
+      return;
+    }
+    assert.match(pending.modelReviewRevision,/^[0-9a-f]{64}$/);
+    assert.match((await call('proposals',{action:'accept',id:'P1'},true)).error,/user accepts.*studio/i);
+    const pins = { proposal: 'P1', expectedRevision, expectedProposalRevision: pending.modelReviewRevision };
+    const normal = await renderReview(request,pins), opposite = await renderReview(request,{...pins,orientation:'opposite'});
+    assert.notDeepEqual(normal.png,opposite.png);
+    assert.notEqual(normal.meta.candidate.reviewRevision,opposite.meta.candidate.reviewRevision);
+    assert.equal(normal.meta.candidate.bodySha256,opposite.meta.candidate.bodySha256);
+    const evidence = normal.meta.perpendicularAnnularOutletOffset;
+    assert.ok(evidence);
+    assert.deepEqual(opposite.meta.perpendicularAnnularOutletOffset,evidence);
+    const faces = ['n1.start','n1.end'];
+    const inspect = { ...pins, action: 'inspect', faces,
+      expectedReviewRevision: normal.meta.candidate.reviewRevision };
+    const native = await call('query',inspect);
+    assert.equal(native.faces.find(x => x.name === 'n1.end').geometry.point[2],24);
+    assert.equal(native.faces.find(x => x.name === 'n1.start').geometry.point[0],-10);
+    assert.deepEqual(native.candidate,normal.meta.candidate);
+    assert.deepEqual(native.perpendicularAnnularOutletOffset,evidence);
+    assert.equal(native.imageSha256,normal.meta.imageSha256);
+    const alternate = await call('query',{...inspect,orientation:'opposite',expectedReviewRevision:opposite.meta.candidate.reviewRevision});
+    assert.deepEqual(alternate.faces,native.faces);
+    assert.equal(alternate.imageSha256,opposite.meta.imageSha256);
+    for (const [override,code] of [[{orientation:'opposite'},'MODEL_REVIEW_IMAGE_STALE'],
+      [{expectedRevision:'0'.repeat(16)},'MODEL_REVIEW_BASE_STALE'],
+      [{expectedProposalRevision:'0'.repeat(64)},'MODEL_REVIEW_PROPOSAL_STALE']])
+      assert.equal((await call('query',{...inspect,...override},true)).code,code);
+    assert.deepEqual(await readFile(file),beforeReview);
+    await writeFile(join(f.output,'01-Agent-four-views.png'),normal.png);
+    await writeFile(join(f.output,'02-Agent-opposite-views.png'),opposite.png);
+    f.report.observations.push({ label:'pinned outlet review', evidence, candidate:normal.meta.candidate,
+      normalImage:normal.meta.imageSha256, oppositeImage:opposite.meta.imageSha256 });
+    return { ...normal, faces, native, reviewPin:inspect, alternate:{png:opposite.png,orientation:'opposite'} };
+  });
+  const pending = JSON.parse(await readFile(file,'utf8'));
+  assert.deepEqual([pending.nodes,pending.outputs],[source.nodes,source.outputs]);
+  await f.freshOpen(file,pending,'03-open-pending-proposal');
+  await button('Chat').first().click();
+  const item = f.page.getByRole('listitem',{name:'Proposal P1',exact:true});
+  await button('Preview',item).click();
+  await button('Hide',item).waitFor();
+  await f.same(pending);
+  await f.snapshot('04-explicit-Studio-preview');
+  if (baseline) return;
+  await button('Accept',item).click();
+  await f.changed(pending);
+  const approved = (await f.snapshot('05-explicit-Studio-approval')).doc;
+  const native = await verify('approved-native',approved,-4,original);
+  assert.equal(native.digest,result.meta.candidate.bodySha256);
+  const saved = await f.save('reviewed-annular-outlet');
+  const reopened = (await f.freshOpen(saved.file,approved,'06-reviewed-native-open')).doc;
+  assert.equal((await verify('reopened-reviewed-native',reopened,-4,original)).digest,result.meta.candidate.bodySha256);
+  await withMcpSession(session,saved.file,'annular-outlet-reopened',async (call,request) => {
+    await checkApprovedDuctReview(call,request,result);
+  });
+}
+
 await f.run(async () => {
   await f.newPage();
   await f.openFile({ name: `annular-sweep-${end}-offset.bcad`, mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(source)) },2);
   await f.same(source);
   const original = await f.inspect('original',source);
   assert.ok(original.topology.valid);
+  if (review) return reviewOutlet(original);
   f.phase = `pick the original annular ${end} land`;
   await button('View cube directions',f.page.getByRole('group',{name:'View cube',exact:true})).click();
   const direction = outlet ? 'Top' : 'Left';

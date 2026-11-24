@@ -1719,15 +1719,34 @@ const perpendicularAnnularOutletFailure: Refuse = (code, message) => {
   throw new BrepError(code === 'GEOMETRY' ? 'GEOMETRY' : 'INPUT', `Exact perpendicular annular outlet offset: ${message}`);
 };
 
-/** Inspect both original annular cap packets; the public wrappers retain separate end ownership. */
-function perpendicularAnnularCapOffsetFrame(brep: Brep, faceName: string,
-  source: PairedElbowOutletSource, inlet: boolean): { anchor: Point; normal: Point } | undefined {
+export interface ExactPerpendicularAnnularCapReceipt {
+  readonly face: string;
+  readonly faceId: string;
+  readonly center: Point;
+  readonly normal: Point;
+  readonly outerEdges: readonly string[];
+  readonly innerEdges: readonly string[];
+}
+export interface ExactPerpendicularAnnularSweepReceipt {
+  readonly pathKind: 'line-arc-arc-line';
+  readonly feature: string;
+  readonly section: { readonly outerRadius: number; readonly boreRadius: number };
+  readonly dimensions: { readonly leadLength: number; readonly tailLength: number };
+  readonly caps: readonly [ExactPerpendicularAnnularCapReceipt, ExactPerpendicularAnnularCapReceipt];
+  readonly junctions: readonly { readonly pieces: readonly [string, string]; readonly outerEdges: readonly string[]; readonly innerEdges: readonly string[] }[];
+  readonly maximumGapMM: number;
+  readonly roundoffMM: number;
+}
+
+/** Read both original annular cap packets and native carriers without replaying a geometry producer. */
+export function exactPerpendicularAnnularSweepReceipt(brep: Brep,
+  source: PairedElbowOutletSource): ExactPerpendicularAnnularSweepReceipt | undefined {
   try {
-    if (source.mode !== 'exact' || faceName !== `${source.id}.${inlet ? 'start' : 'end'}` || brep.source.family !== 'sweep-curve'
+    if (source.mode !== 'exact' || brep.source.family !== 'sweep-curve'
       || brep.source.id !== source.id || brep.bodies.length !== 1 || brep.shells.length !== 1 || !brep.shells[0].closed
       || brep.faces.length !== 18 || brep.loops.length !== 20 || brep.coedges.length !== 72 || brep.edges.length !== 36 || brep.vertices.length !== 20) return;
     validateCurve(source.path);
-    const rail = perpendicularQuarterEnds(source.path, inlet ? perpendicularAnnularInletFailure : perpendicularAnnularOutletFailure);
+    const rail = perpendicularQuarterEnds(source.path, perpendicularAnnularOutletFailure);
     if (!rail) return;
     const { first, second } = rail.inlet.pair, path = source.path.controlPoints;
     const extent = geometryScaleMM(brep.vertices.map(vertex => vertex.point)), roundoff = 512 * Number.EPSILON * Math.max(1, extent);
@@ -1788,12 +1807,13 @@ function perpendicularAnnularCapOffsetFrame(brep: Brep, faceName: string,
       }
       if (counts.some(count => count !== 2)) return;
     }
+    const junctions: { pieces: [string, string]; outerEdges: string[]; innerEdges: string[] }[] = [];
     for (const [a, b, center] of [['lead', 'first', path[2]], ['first', 'second', path[4]], ['second', 'tail', path[6]]] as const) {
       const joints = brep.edges.filter(edge => {
         const faces = brep.coedges.filter(use => use.edge === edge.id).map(use => owners.get(use.loop));
         return faces.some(face => face?.name?.startsWith(`${source.id}.${a}.`)) && faces.some(face => face?.name?.startsWith(`${source.id}.${b}.`));
       });
-      const counts = [0, 0];
+      const counts = [0, 0], rings: [string[], string[]] = [[], []];
       if (joints.length !== 4) return;
       for (const edge of joints) {
         const pair = brep.coedges.filter(use => use.edge === edge.id), lane = lanes.get(owners.get(pair[0]?.loop)?.id ?? '');
@@ -1801,9 +1821,10 @@ function perpendicularAnnularCapOffsetFrame(brep: Brep, faceName: string,
         if (lane === undefined || !circle || len(sub(circle.c, center)) > roundoff
           || Math.abs(circle.r - (lane ? bore : outside)) > roundoff
           || pair.some(use => lanes.get(owners.get(use.loop)?.id ?? '') !== lane)) return;
-        counts[lane]++; required.add(edge.id);
+        counts[lane]++; rings[lane].push(edge.id); required.add(edge.id);
       }
       if (counts.some(count => count !== 2)) return;
+      junctions.push({ pieces: [a, b], outerEdges: rings[0], innerEdges: rings[1] });
     }
     if (required.size !== 20) return;
     // Each cap circle and all three joins retain their actual complete native chart correspondence.
@@ -1824,8 +1845,26 @@ function perpendicularAnnularCapOffsetFrame(brep: Brep, faceName: string,
     }
     const report = checkBrep(brep, { strict: true });
     if (!report.valid || report.topology.length !== 1 || report.topology[0].shells !== 1 || report.topology[0].genus !== 1) return;
-    return { anchor: [...path[inlet ? 0 : 8]], normal: inlet ? normal : terminal };
+    const capReceipt = (face: Brep['faces'][number], center: Point, normal: Point): ExactPerpendicularAnnularCapReceipt => {
+      const ring = (kind: 'outer' | 'inner') => {
+        const loop = brep.loops.find(loop => face.loops.includes(loop.id) && loop.kind === kind)!;
+        return loop.coedges.map(id => uses.get(id)!.edge);
+      };
+      return { face: face.name!, faceId: face.id, center: [...center], normal: [...normal], outerEdges: ring('outer'), innerEdges: ring('inner') };
+    };
+    return { pathKind: 'line-arc-arc-line', feature: source.id, section: { outerRadius: outside, boreRadius: bore },
+      dimensions: { leadLength: rail.inlet.line.length, tailLength: rail.outlet.rail.line.length },
+      caps: [capReceipt(start[0], path[0], normal), capReceipt(end[0], path[8], terminal)], junctions,
+      maximumGapMM: report.maximumPcurveGap, roundoffMM: roundoff };
   } catch { return; }
+}
+
+/** The public wrappers select one end after the same complete two-cap native proof. */
+function perpendicularAnnularCapOffsetFrame(brep: Brep, faceName: string,
+  source: PairedElbowOutletSource, inlet: boolean): { anchor: Point; normal: Point } | undefined {
+  if (faceName !== `${source.id}.${inlet ? 'start' : 'end'}`) return;
+  const receipt = exactPerpendicularAnnularSweepReceipt(brep, source), cap = receipt?.caps[inlet ? 0 : 1];
+  return cap && { anchor: cap.center, normal: cap.normal };
 }
 
 /** The original circular inlet only; the minimal source supplies the four exact spans. */

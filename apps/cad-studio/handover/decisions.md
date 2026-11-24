@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D1925: [Pin Agent review of the original annular outlet Offset](notes/perpendicular-annular-outlet-agent-review-2026-11-24/README.md), #324. Verify both image orientations, exact native inspection, stale pin refusal, explicit Studio approval and matching reopen.
+
 - D1924: [Offset the original perpendicular annular outlet](notes/perpendicular-annular-outlet-offset-2026-11-24/README.md), #17. Move the outlet with a signed distance while preserving the inlet and all three exact native joins.
 
 - D1923: [Qualify manual extension role ownership](notes/drawing-extension-lifecycle-2026-11-24/README.md), #240. Verify native source loss and restoration, Auto, view and sheet changes, PDF writer and Studio Model annotation.

@@ -17,6 +17,7 @@ import { pairedElbowInletProposal, pairedElbowOutletProposal } from '../pairedEl
 import { pairedElbowInletPlaneProposal, pairedElbowOutletPlaneProposal } from '../pairedElbowOutletPlaneProposalReview';
 import { pairedTiltedInletProposal, pairedTiltedOppositeCapProposal, pairedTiltedOutletProposal } from '../pairedTiltedOutletProposalReview';
 import { rectangularDuctProposal } from '../rectangularDuctProposalReview';
+import { perpendicularAnnularOutletProposal } from '../perpendicularAnnularOutletProposalReview';
 import { rectangularDuctIntersectionProposal } from '../rectangularDuctIntersectionProposalReview';
 import { DIRECT_SNAPSHOT_APPROVAL, isDirectThickenOperation, isRuledThickenOperation } from '../directThickenProposal';
 import type { ChecksDelta, FollowUpRepairSource, Proposal, Risk } from '../../engine/schema/proposals';
@@ -416,7 +417,8 @@ async function listProposalsTool(state: ChatState, args: Record<string, unknown>
         ?? rectangularDuctIntersectionProposal(state.doc, p)?.revision ?? pairedElbowOutletProposal(state.doc, p)?.revision
         ?? pairedElbowInletProposal(state.doc, p)?.revision ?? pairedElbowOutletPlaneProposal(state.doc, p)?.revision
         ?? pairedElbowInletPlaneProposal(state.doc, p)?.revision ?? pairedTiltedOutletProposal(state.doc, p)?.revision
-        ?? pairedTiltedInletProposal(state.doc, p)?.revision ?? pairedTiltedOppositeCapProposal(state.doc, p)?.revision;
+        ?? pairedTiltedInletProposal(state.doc, p)?.revision ?? pairedTiltedOppositeCapProposal(state.doc, p)?.revision
+        ?? perpendicularAnnularOutletProposal(state.doc, p)?.revision;
     return { ...details, ops: ops.length, stale: proposalIsStale(p, revision),
       ...(p.status === 'open' ? { proposalRevision: proposalRevisionOf(p) } : {}),
       ...(direct ? { directReviewRevision: direct } : {}),
