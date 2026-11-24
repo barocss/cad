@@ -1,13 +1,13 @@
 # CAD roadmap — current status and execution order
 
-Updated 2026-11-24 · Priority authority: D520 · Latest delivery: D1875 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
+Updated 2026-11-24 · Priority authority: D520 · Latest delivery: D1876 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
 
 This is the only current status index. Detailed tracks define acceptance; the 34 stable row pages retain scope and issue navigation. Immutable decision notes retain results. Do not append chronological status paragraphs here. [D520 decision](notes/cad-roadmap-replan-2026-11-04/README.md) supersedes D445 execution order and historical next-item text, while retaining its safeguards and bounded proofs.
 
 ## Now and next
 
-- **Current position:** [D1875](notes/drawing-fit-list-reply-ownership-2026-11-24/README.md), P2 rows 11 and 12. Two real late Drawing responses leave the replacement fit list and the blank New part bound to their accepted sources. The actual restored SVG and DXF match the new table.
-- **Next MAIN:** D1876, P0 rows [18](roadmap-rows/18.md) and [20](roadmap-rows/20.md), [#197](https://github.com/barocss/cad/issues/197). Reproduce retention of disposed Viewer image textures across replacements. Check the public ownership lifetime, real rendering and recovery before closing the issue.
+- **Current position:** [D1876](notes/viewer-image-texture-lifetime-2026-11-24/README.md), P0 rows 06, 20 and 32. The public Viewer releases disposed image maps. Real device recovery restores the two active maps and Studio saves and reopens the accepted images.
+- **Next MAIN:** D1877, P0 rows [06](roadmap-rows/06.md) and [32](roadmap-rows/32.md). Restore the GPU test harness resolution of the CAD package exports and run the full existing GPU suite. Reassess #197 closeout after exact CI and the recorded actual scenes.
 - **Separate follow-ups:** Continue Studio App extraction in cohesive parts with affected desktop checks. [#608 Rendering](https://github.com/barocss/cad/issues/608) stays on HOLD. API inventory drift remains open. The issue tracker records [#126](https://github.com/barocss/cad/issues/126), [#613](https://github.com/barocss/cad/issues/613), [#152](https://github.com/barocss/cad/issues/152) and [#22](https://github.com/barocss/cad/issues/22) as closed.
 - **Active repository:** [barocss/cad](https://github.com/barocss/cad), based on `origin/main`. Fetch before work and preserve unexpected changes. The [migration record](../../../docs/migration/README.md) maps the former `local/cad-dev` history and issue numbers.
 - **Evidence correction:** D482 records2167 PASS/0 FAIL/2 existing SKIP in a later full-kernel run than D433. Neither result is a new full-suite PASS at this audit HEAD. [D482 record](notes/vertical-contact-refusal-2026-11-04/README.md).

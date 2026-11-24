@@ -787,8 +787,11 @@ export class Viewer {
     this.requestRender();
   }
 
-  /** @internal A disposed geometry: no longer kept (nor restored after a lost device). */
-  forget(g: Geometry): void { this.geometries.delete(g); }
+  /** @internal Release a disposed resource from this Viewer's registry. */
+  forget(resource: Geometry | ImageTexture): void {
+    if (resource instanceof ImageTexture) this.textures.delete(resource);
+    else this.geometries.delete(resource);
+  }
 
   /** Remove every mesh and release every geometry. */
   clear(): void {
@@ -879,16 +882,21 @@ export class Viewer {
     const o = map.options, src = map.source, w = src.width, h = src.height, format = o.srgb ? 'rgba8unorm-srgb' : 'rgba8unorm';
     const levels = o.mipmaps ? Math.floor(Math.log2(Math.max(w, h))) + 1 : 1;
     const texture = this.device.createTexture({ size: [w, h], format, mipLevelCount: levels, usage: TextureUsage.TEXTURE_BINDING | TextureUsage.COPY_DST | TextureUsage.RENDER_ATTACHMENT, label: 'viewer map' });
-    if ('data' in src) this.device.queue.writeTexture({ texture }, src.data, { bytesPerRow: w * 4 }, [w, h]);
-    else this.device.queue.copyExternalImageToTexture({ source: src }, { texture }, [w, h]);
-    if (levels > 1) this.generateMips(texture, format, levels);
-    const sampler = this.device.createSampler({
-      addressModeU: o.wrap === 'repeat' ? 'repeat' : 'clamp-to-edge', addressModeV: o.wrap === 'repeat' ? 'repeat' : 'clamp-to-edge',
-      magFilter: o.filter, minFilter: o.filter, mipmapFilter: o.filter, ...(o.filter === 'linear' && o.mipmaps ? { maxAnisotropy: 8 } : {}),
-    });
-    const group = this.device.createBindGroup({ layout: this.materialLayout, entries: this.materialEntries(texture, sampler, this.zeroParams) });
-    map.gpu = { texture, group, device: this.device, sampler };
-    return group;
+    try {
+      if ('data' in src) this.device.queue.writeTexture({ texture }, src.data, { bytesPerRow: w * 4 }, [w, h]);
+      else this.device.queue.copyExternalImageToTexture({ source: src }, { texture }, [w, h]);
+      if (levels > 1) this.generateMips(texture, format, levels);
+      const sampler = this.device.createSampler({
+        addressModeU: o.wrap === 'repeat' ? 'repeat' : 'clamp-to-edge', addressModeV: o.wrap === 'repeat' ? 'repeat' : 'clamp-to-edge',
+        magFilter: o.filter, minFilter: o.filter, mipmapFilter: o.filter, ...(o.filter === 'linear' && o.mipmaps ? { maxAnisotropy: 8 } : {}),
+      });
+      const group = this.device.createBindGroup({ layout: this.materialLayout, entries: this.materialEntries(texture, sampler, this.zeroParams) });
+      map.gpu = { texture, group, device: this.device, sampler };
+      return group;
+    } catch (error) {
+      texture.destroy();
+      throw error;
+    }
   }
 
   /** A mesh's material group, with independently sampled linear data maps and custom shader parameters. */

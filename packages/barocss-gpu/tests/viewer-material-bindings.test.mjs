@@ -44,7 +44,7 @@ function installDevice(viewer, fake) {
 
 function fixture() {
   const viewer = Object.create(Viewer.prototype), fake = gpu();
-  Object.assign(viewer, { meshes: [], freeSlots: [], costRecords: new Map(), scene: null, requestRender() {}, sceneMoved() {} });
+  Object.assign(viewer, { meshes: [], freeSlots: [], costRecords: new Map(), textures: new Set(), scene: null, requestRender() {}, sceneMoved() {} });
   installDevice(viewer, fake);
   return { viewer, fake };
 }
@@ -169,4 +169,66 @@ test('device replacement rebuilds data-map bindings and releases the previous ma
   assert.equal(flags(entry(group, 9).buffer), 2);
   assert.notEqual(m.materialState.params, state.params); assert.notEqual(m.materialState.pbrParams, state.pbrParams);
   assert.equal(m.materialState.params.destroyed, 0); assert.equal(m.materialState.pbrParams.destroyed, 0);
+});
+
+test('factory image textures leave the owner when disposed across 120 distinct source replacements', () => {
+  const { viewer, fake } = fixture();
+  const make = (red, green, blue) => viewer.createTexture(
+    { width: 1, height: 1, data: Uint8Array.of(red, green, blue, 255) },
+    { mipmaps: false, filter: 'nearest' },
+  );
+  const shared = make(40, 150, 60), unrelated = make(160, 20, 110);
+  const left = mesh(viewer, { map: shared }), right = mesh(viewer, { map: shared });
+  const other = mesh(viewer, { map: unrelated });
+  const accepted = viewer.materialGroup(right), otherGroup = viewer.materialGroup(other);
+  for (let i = 0; i < 120; i++) {
+    const source = make(i, 255 - i, 127);
+    const bytes = source.source.data.slice();
+    left.material = { map: source };
+    const candidate = viewer.materialGroup(left);
+    const candidateGpu = entry(candidate, 0).texture;
+    left.material = { map: shared };
+    source.dispose();
+    source.dispose();
+    assert.equal(candidateGpu.destroyed, 1);
+    assert.deepEqual(source.source.data, bytes);
+    assert.equal(viewer.materialGroup(left), accepted);
+    assert.equal(viewer.materialGroup(right), accepted);
+    assert.equal(viewer.materialGroup(other), otherGroup);
+  }
+  assert.equal(viewer.textures.size, 2);
+  assert.ok(viewer.textures.has(shared) && viewer.textures.has(unrelated));
+  let closes = 0;
+  const callerImage = { width: 1, height: 1, close() { closes++; } };
+  const beforeUpload = viewer.createTexture(callerImage);
+  const objects = fake.textures.length;
+  beforeUpload.dispose();
+  assert.equal(viewer.mapGroup(beforeUpload), viewer.white.group);
+  assert.equal(fake.textures.length, objects);
+  assert.equal(beforeUpload.source, callerImage);
+  assert.equal(closes, 0);
+  assert.equal(viewer.textures.size, 2);
+  left.material = right.material = { map: null };
+  other.material = { map: null };
+  shared.dispose();
+  unrelated.dispose();
+  assert.equal(viewer.textures.size, 0);
+});
+
+test('a failed image upload destroys the partial texture before disposal or retry', () => {
+  const { viewer, fake } = fixture();
+  const candidate = viewer.createTexture({ width: 1, height: 1, data: Uint8Array.of(20, 40, 80, 255) }, { mipmaps: false });
+  const failure = Error('injected synchronous write failure');
+  fake.device.queue.writeTexture = () => { throw failure; };
+  assert.throws(() => viewer.mapGroup(candidate), error => error === failure);
+  assert.equal(candidate.gpu, null);
+  assert.equal(fake.textures.at(-1).destroyed, 1);
+  const ownerResources = viewer.textures.size;
+  fake.device.queue.writeTexture = () => {};
+  const uploaded = entry(viewer.mapGroup(candidate), 0).texture;
+  assert.equal(uploaded.destroyed, 0);
+  assert.equal(viewer.textures.size, ownerResources);
+  candidate.dispose();
+  assert.equal(uploaded.destroyed, 1);
+  assert.equal(viewer.textures.size, 0);
 });

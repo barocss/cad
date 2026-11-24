@@ -115,7 +115,7 @@ export interface TextureOptions {
   filter?: 'linear' | 'nearest';
 }
 
-/** A texture the viewer keeps (with its source, to upload again after a device loss). */
+/** A live image texture uses its caller-owned source for upload and device recovery. */
 export class ImageTexture {
   /** @internal (`lighting`: as an environment, its prefiltered reflections and diffuse light — G15b.) */
   gpu: { texture: Texture; group: BindGroup; device: Device; sampler: object; lighting?: { specular: Texture; irradiance: Texture } } | null = null;
@@ -123,7 +123,17 @@ export class ImageTexture {
   constructor(readonly source: TextureSource, readonly options: Required<TextureOptions>, private readonly owner: Viewer) {}
   get width(): number { return this.source.width; }
   get height(): number { return this.source.height; }
-  dispose(): void { this.disposed = true; this.gpu?.texture.destroy(); this.gpu?.lighting?.specular.destroy(); this.gpu?.lighting?.irradiance.destroy(); this.gpu = null; this.owner.requestRender(); }
+  dispose(): void {
+    if (this.disposed) return;
+    this.disposed = true;
+    const allocation = this.gpu;
+    this.gpu = null;
+    this.owner.forget?.(this);
+    allocation?.texture.destroy();
+    allocation?.lighting?.specular.destroy();
+    allocation?.lighting?.irradiance.destroy();
+    this.owner.requestRender();
+  }
 }
 export interface AddMeshOptions {
   material?: Material; transform?: ArrayLike<number>; visible?: boolean; pickable?: boolean; name?: string;

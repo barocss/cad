@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1876: [Release disposed Viewer image textures](notes/viewer-image-texture-lifetime-2026-11-24/README.md), #197. Bound the live resources, clean up upload failure and verify real device recovery and the Studio consumer.
 - D1875: [Qualify delayed paired Drawing replies](notes/drawing-fit-list-reply-ownership-2026-11-24/README.md), #269. Deliver each original response after Open or New and keep the current document, sheet, selection and exports.
 - D1874: [Read paired fit rows and estimate provenance](notes/drawing-fit-pair-estimate-2026-11-24/README.md), #269. Qualify source replacement, dimension deletion, shaft-class clearance and exact native reopen in Studio and both exports.
 - D1873: [Extract viewport development probes](notes/studio-viewport-dev-hooks-2026-11-24/README.md), #44. Verify actual face/edge picks, new and reopened native documents, and the SubD cage consumer.
