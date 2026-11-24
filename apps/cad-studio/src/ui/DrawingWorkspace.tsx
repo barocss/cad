@@ -42,7 +42,7 @@ import { sectionDxfDocument, sheetDxf } from '@barocss/cad-model/io/dxf';
 import { MIN_HOLE_ON_PAPER_MM, autoLayout, frontByInformation } from '@barocss/cad-model/drawing/layout';
 import { isRefusal } from '@barocss/cad-model/engine/refusal';
 import { reorient, turnSections } from '@barocss/cad-model/drawing/reorient';
-import { applyFix, drawingIssues, fixRound, fixRoundsOutcome, fixRoundsStart, type DrawingFix, type DrawingIssue, type FixRoundStep, type FixRounds, type SheetInputs } from '@barocss/cad-model/drawing/issues';
+import { applyFix, drawingIssues, fixRound, fixRoundsOutcome, fixRoundsStart, type DrawingIssue, type FixRoundStep, type FixRounds, type SheetInputs } from '@barocss/cad-model/drawing/issues';
 import { acceptAll, toleranceSuggestions, type ToleranceSuggestion } from '@barocss/cad-model/drawing/tolerance';
 import { writeDxf, type DxfVersion } from '@barocss/cad';
 
@@ -81,11 +81,14 @@ import { ToleranceEditor } from './drawing/ToleranceEditor';
 import { ToleranceStack } from './drawing/ToleranceStack';
 import { NotesList } from './drawing/NotesList';
 import { ExportActions } from './drawing/ExportActions';
+import { dimensionPairLabelsMoved, dimensionPairPaperDelta, drawingDimensionPair, moveDrawingDimensionPair, type DrawingDimensionPair } from '../app/drawingDimensionGroup';
 import '../drawing/drawing.css';
 
 type Tool = 'select' | 'linear' | 'diameter' | 'radius' | 'angle' | 'reflex-angle' | 'note' | 'detail' | 'datum-target';
+type DimensionGroup = { owner: object; pair: DrawingDimensionPair };
+type DimensionGroupDrag = { dimensionGroup: DimensionGroup; pointer: number; start: XY; scale: number; paperDelta: number };
 const TOOLS: { tool: Tool; label: string; icon: string; key: string; hint: string }[] = [
-  { tool: 'select', label: 'Select', icon: 'arrow_selector_tool', key: 'V', hint: 'Click a dimension to select it, drag to move it · Delete removes it · drag the paper to pan, scroll to zoom' },
+  { tool: 'select', label: 'Select', icon: 'arrow_selector_tool', key: 'V', hint: 'Drag a dimension to move it · Shift-click a second parallel dimension in the same view to move both · Delete removes one selected annotation · drag the paper to pan, scroll to zoom' },
   { tool: 'linear', label: 'Linear dimension', icon: 'straighten', key: 'D', hint: 'Click two points (edge ends, circle centres) or one straight edge, then where the dimension goes' },
   { tool: 'diameter', label: 'Diameter', icon: 'radio_button_unchecked', key: 'O', hint: 'Click a circle, then where its diameter goes' },
   { tool: 'radius', label: 'Radius', icon: 'line_end_circle', key: 'R', hint: 'Click a circle or an arc, then where its radius goes' },
@@ -188,6 +191,10 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
   const [pending, setPending] = useState<Pending | null>(null);
   const [hover, setHover] = useState<Hover | null>(null);
   const [selected, setSelected] = useState<SheetAnnotationSelection | null>(null);
+  const [dimensionGroup, setDimensionGroup] = useState<DimensionGroup | null>(null);
+  const groupReady = tool === 'select' && sourceCurrent && projectionCurrent && !busy && currentModel.current === model;
+  const activeDimensionGroup = groupReady && dimensionGroup?.owner === projectionActionOwner ? dimensionGroup : null;
+  const selectedDimensionIds = useMemo(() => activeDimensionGroup?.pair.map(dimension => dimension.id), [activeDimensionGroup]);
   const [selectedTarget, setSelectedTarget] = useState<string | null>(null);
   const [selectedFrame, setSelectedFrame] = useState<string | null>(null);
   const [rimChoice, setRimChoice] = useState<{ view: DimView; projection: DrawingViews; settings: DrawingSettings; rims: readonly ProjectedEdge[] } | null>(null);
@@ -247,7 +254,9 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
     if (!loss.length) { run(); return; }
     setControlDeletion({ settings: wholeSettings, model, sheet: current, loss, run });
   };
-  const [drag, setDrag] = useState<{ id: string; place: XY } | { target: string; original: DrawingDatumTarget; place: XY } | { note: string; at: XY; grab: XY } | { detail: string; original: DrawingDetail; owner: object; initialAt: XY; initialPointer: XY; at: XY; grab: XY } | { removed: string; at: XY; grab: XY } | { pan: XY; box: [number, number, number, number] } | null>(null);
+  const [drag, setDrag] = useState<DimensionGroupDrag | { id: string; place: XY } | { target: string; original: DrawingDatumTarget; place: XY } | { note: string; at: XY; grab: XY } | { detail: string; original: DrawingDetail; owner: object; initialAt: XY; initialPointer: XY; at: XY; grab: XY } | { removed: string; at: XY; grab: XY } | { pan: XY; box: [number, number, number, number] } | null>(null);
+  const cancelDimensionGroupDrag = () => setDrag(current => current && 'dimensionGroup' in current ? null : current);
+  const clearDimensionGroup = () => { setDimensionGroup(null); cancelDimensionGroupDrag(); };
   /** The selected note's text while it is typed, and the selected dimension's tolerance fields. */
   const [noteDraft, setNoteDraft] = useState<string | null>(null);
   const [noteAttach, setNoteAttach] = useState<{ note: DrawingNote; owner: object; choices?: { view: ViewId; points: DatumTargetPoint[] } } | null>(null);
@@ -267,7 +276,7 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
   }, [typeNote, shownNote]);
   const svg = useRef<SVGSVGElement>(null);
   useEffect(() => {
-    setNoteAttach(null); setPending(pending => pending?.kind === 'detail-center' && pending.moving.parentSheet === current ? pending : null); setSelected(null); setSelectedTarget(null); setSelectedFrame(null); setTargetChoices([]); setRimChoice(null); if (reattach) setTool('select'); setReattach(null); setReselectTarget(null); setHover(null); setDrag(null); setNoteDraft(null); setTolDraft({});
+    setNoteAttach(null); setPending(pending => pending?.kind === 'detail-center' && pending.moving.parentSheet === current ? pending : null); setSelected(null); setDimensionGroup(null); setSelectedTarget(null); setSelectedFrame(null); setTargetChoices([]); setRimChoice(null); if (reattach) setTool('select'); setReattach(null); setReselectTarget(null); setHover(null); setDrag(null); setNoteDraft(null); setTolDraft({});
   }, [scopeKey, current]);
 
   const lostOccurrences = useMemo(() => scope.kind === 'assembly' && sheet ? occurrenceLosses(sheet.dimensions, model.instances) : [], [scope.kind, sheet, model.instances]);
@@ -397,7 +406,8 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
     if (!referencePreview) return;
     setSelected(referenceDimensionId === null ? null : { kind: 'dimension', id: referenceDimensionId }); setSelectedTarget(null); setSelectedFrame(null); setTargetChoices([]); setReselectTarget(null); setTool('select'); setPending(null);
   }, [referencePreview, referenceDimensionId]);
-  const sheetMarkup = useMemo(() => sheet ? sheetGroupsSvg(sheet, selected, selectedTarget, selectedFrame) : '', [sheet, selected, selectedTarget, selectedFrame]);
+  const sheetMarkup = useMemo(() => sheet ? sheetGroupsSvg(sheet, selected, selectedTarget, selectedFrame, selectedDimensionIds) : '',
+    [sheet, selected, selectedTarget, selectedFrame, selectedDimensionIds]);
   const [W, H] = layout?.size ?? [297, 210];
   const [box, setBox] = useState<[number, number, number, number] | null>(null);
   useEffect(() => { setBox(null); }, [settings.sheet, current]);
@@ -455,6 +465,21 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
   };
 
   const commitDims = (dimensions: DrawingDimension[]) => onChange({ ...settings, dimensions });
+  const resolveDimensionGroup = (ids: readonly [string, string]) => {
+    if (!groupReady || !sheet || !layout || currentModel.current !== model ||
+        liveProjectionAction.current !== projectionActionOwner) return;
+    const pair = drawingDimensionPair(settings.dimensions, wholeSettings.dimensions, ids,
+      dimension => sheet.dimensions.some(result => result.ok && result.dim === dimension));
+    const placement = pair && placementOf(layout, sheet, pair[0].view);
+    if (pair && placement && !placement.hidden && !placement.breaks && placement.scale > 0) return { pair, scale: placement.scale };
+  };
+  const previewDimensionGroup = (pair: DrawingDimensionPair, scale: number, paperDelta: number) => {
+    if (!views || !layout || !sheet) return;
+    const dimensions = moveDrawingDimensionPair(settings.dimensions, pair, scale, paperDelta);
+    if (dimensions === settings.dimensions) return;
+    const preview = buildSheet(views, layout, { ...settings, dimensions }, { svgSectionTextClearance, title, date: today(), callout, threads, tableContent: tableContentOf, welds: weldJoints, bodyFaces, ...(bom ? { bom } : {}) }, cuts);
+    if (dimensionPairLabelsMoved(sheet, preview, pair, paperDelta)) return { dimensions, preview };
+  };
   const commitFrames = (frames: DrawingFrame[]) => {
     if (!scopeRead.scope) { setMessage(scopeRead.error ?? 'Invalid drawing scope.'); return false; }
     const mergedFrames = mergeSheet(wholeSettings, current, { ...settings, frames }).frames ?? [];
@@ -483,7 +508,7 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
     if (why) { setMessage(why.message); return false; }
     onChange({ ...settings, datumTargets }); setPending(null); setTargetChoices([]); return true;
   };
-  const cancel = () => { setNoteAttach(null); setReattach(null); setRimChoice(null); setPending(null); setTargetChoices([]); setReselectTarget(null); setMessage(null); };
+  const cancel = () => { clearDimensionGroup(); setNoteAttach(null); setReattach(null); setRimChoice(null); setPending(null); setTargetChoices([]); setReselectTarget(null); setMessage(null); };
   const startNoteAttach = (note: DrawingNote) => {
     cancel();
     if (noteDraft !== null && noteDraft.trimEnd() !== note.text) { setMessage('Finish the note text edit, then select Attach to endpoint again.'); return; }
@@ -810,7 +835,9 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
 
   const removeNoteLeader = (note: DrawingNote) => {
     if (!note.leader) return;
-    const { leader: _leader, sheet: _sheet, ...detached } = note;
+    const detached = { ...note };
+    delete detached.leader;
+    delete detached.sheet;
     const owner = current > 0 ? wholeSettings.sheets?.[current - 1]?.id : undefined;
     const next = owner ? { ...detached, sheet: owner } : detached;
     onChange({ ...settings, notes: settings.notes?.map(row => row === note ? next : row) });
@@ -869,6 +896,7 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
           .map(element => element.closest(selectable)).find(Boolean)
         : hit.closest(selectable);
       const target = picked?.hasAttribute('data-dim') ? picked : undefined;
+      if (!target?.matches('g.dimension')) clearDimensionGroup();
       const frameId = picked?.getAttribute('data-standalone-frame');
       const frames = frameId ? (settings.frames ?? []).filter(frame => frame.dim === undefined && frame.id === frameId) : [];
       if (frames.length === 1) { setSelected(null); setSelectedTarget(null); setSelectedFrame(frames[0].id); setDrag(null); return; }
@@ -897,6 +925,34 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
       const id = target?.getAttribute('data-dim') ?? null;
       const d = target?.matches('g.dimension') ? settings.dimensions.find(x => x.id === id) : undefined;
       const n = target?.matches('g.note') ? settings.notes?.find(x => x.id === id) : undefined;
+      if (d && e.shiftKey) {
+        if (activeDimensionGroup) {
+          const pair = activeDimensionGroup.pair;
+          if (pair.some(dimension => dimension === d)) {
+            const retained = pair[0] === d ? pair[1] : pair[0];
+            clearDimensionGroup();
+            setSelected({ kind: 'dimension', id: retained.id });
+          }
+          return;
+        }
+        if (selected?.kind === 'dimension' && selected.id !== d.id) {
+          const group = resolveDimensionGroup([selected.id, d.id]);
+          if (group) {
+            setDimensionGroup({ owner: projectionActionOwner, pair: group.pair });
+            setSelected(null); setNoteDraft(null); setTolDraft({});
+          }
+          return;
+        }
+      }
+      if (d && qd && activeDimensionGroup?.pair.some(dimension => dimension === d)) {
+        const [a, b] = activeDimensionGroup.pair;
+        const group = resolveDimensionGroup([a.id, b.id]);
+        if (!group) return;
+        setDrag({ dimensionGroup: activeDimensionGroup, pointer: e.pointerId, start: qd, scale: group.scale, paperDelta: 0 });
+        (e.currentTarget as Element).setPointerCapture(e.pointerId);
+        return;
+      }
+      clearDimensionGroup();
       setSelected(d ? { kind: 'dimension', id: d.id } : n ? { kind: 'note', id: n.id } : null);
       setNoteDraft(null); setTolDraft({});
       if (n) setNoteDraft(n.text);
@@ -909,6 +965,12 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
     const h = hoverAt(e.clientX, e.clientY) ?? placingAt(e.clientX, e.clientY); if (h) click(h);
   };
   const onPointerMove = (e: React.PointerEvent) => {
+    if (drag && 'dimensionGroup' in drag) {
+      if (e.pointerId !== drag.pointer || drag.dimensionGroup !== activeDimensionGroup) return;
+      const q = sheetPoint(e.clientX, e.clientY);
+      if (q) setDrag({ ...drag, paperDelta: dimensionPairPaperDelta(drag.dimensionGroup.pair, drag.start, q) });
+      return;
+    }
     if (drag && 'pan' in drag) {
       const k = mmPerPx(); setBox([drag.box[0] - (e.clientX - drag.pan[0]) * k, drag.box[1] - (e.clientY - drag.pan[1]) * k, drag.box[2], drag.box[3]]); return;
     }
@@ -931,7 +993,22 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
     }
     setHover(hoverAt(e.clientX, e.clientY) ?? placingAt(e.clientX, e.clientY));
   };
-  const onPointerUp = () => {
+  const onPointerUp = (e: React.PointerEvent) => {
+    if (drag && 'dimensionGroup' in drag) {
+      if (e.pointerId !== drag.pointer) return;
+      setDrag(null);
+      if (drag.dimensionGroup !== activeDimensionGroup) return;
+      const [a, b] = drag.dimensionGroup.pair;
+      const group = resolveDimensionGroup([a.id, b.id]);
+      const q = sheetPoint(e.clientX, e.clientY);
+      if (!group || !q || group.pair[0] !== a || group.pair[1] !== b || group.scale !== drag.scale) return;
+      const delta = dimensionPairPaperDelta(group.pair, drag.start, q);
+      if (!delta) return;
+      const moved = previewDimensionGroup(group.pair, group.scale, delta);
+      if (moved) { if (commitDims(moved.dimensions)) setMessage(null); }
+      else setMessage('The labels cannot keep their spacing at that position.');
+      return;
+    }
     if (drag && 'target' in drag) {
       const targets = (settings.datumTargets ?? []).filter(t => t.id === drag.target), target = targets[0];
       if (targets.length === 1 && target === drag.original && views && !busy) {
@@ -1007,6 +1084,7 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
         if (currentRimChoice) { e.preventDefault(); svg.current?.focus(); }
         setControlDeletion(null);
         setDrag(null);
+        setDimensionGroup(null);
         onClearReferencePreview();
         if (reattach) cancelReattachment();
         else if (noteAttach || pending || currentRimChoice || targetChoices.length || reselectTarget) cancel();
@@ -1291,13 +1369,19 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
   // The dimension being dragged is drawn where it goes.
   const shownMarkup = useMemo(() => {
     if (!drag || 'pan' in drag || !views || !layout || !sheet) return sheetMarkup;
+    if ('dimensionGroup' in drag) {
+      if (drag.dimensionGroup !== activeDimensionGroup) return sheetMarkup;
+      const moved = previewDimensionGroup(drag.dimensionGroup.pair, drag.scale, drag.paperDelta);
+      return moved ? sheetGroupsSvg(moved.preview, null, null, null, selectedDimensionIds) : sheetMarkup;
+    }
     if ('target' in drag) return sheetGroupsSvg(buildSheet(views, layout, { ...settings, datumTargets: (settings.datumTargets ?? []).map(t => t.id === drag.target ? { ...t, place: drag.place } : t) }, { svgSectionTextClearance, title, date: today(), callout, threads, tableContent: tableContentOf, welds: weldJoints, bodyFaces, ...(bom ? { bom } : {}) }, cuts), selected, selectedTarget);
     if ('detail' in drag) return sheetGroupsSvg(buildSheet(views, layout, { ...settings, details: (settings.details ?? []).map(d => d.id === drag.detail ? { ...d, at: drag.at } : d) }, { svgSectionTextClearance, title, date: today(), callout, threads, tableContent: tableContentOf, welds: weldJoints, bodyFaces, ...(bom ? { bom } : {}) }, cuts), selected, selectedTarget);
     if ('removed' in drag) return sheetGroupsSvg(buildSheet(views, layout, withSections(settings, sectionsOf(settings).map(x => x.id === drag.removed && x.removed ? { ...x, removed: { ...x.removed, at: drag.at } } : x)), { svgSectionTextClearance, title, date: today(), callout, threads, tableContent: tableContentOf, welds: weldJoints, bodyFaces, ...(bom ? { bom } : {}) }, cuts), selected, selectedTarget);
     if ('note' in drag) return sheetGroupsSvg(buildSheet(views, layout, { ...settings, notes: (settings.notes ?? []).map(n => n.id === drag.note ? { ...n, at: drag.at } : n) }, { svgSectionTextClearance, title, date: today(), callout, threads, tableContent: tableContentOf, welds: weldJoints, bodyFaces, ...(bom ? { bom } : {}) }, cuts), selected, selectedTarget);
     const dims = settings.dimensions.map(d => d.id === drag.id ? (d.kind === 'linear' ? { ...d, place: drag.place, orient: orientFor(pointIn(projectionOf(views, sheet ?? undefined, d.view)!, d.a), pointIn(projectionOf(views, sheet ?? undefined, d.view)!, d.b), drag.place) } : { ...d, place: drag.place }) : d);
     return sheetGroupsSvg(buildSheet(views, layout, { ...settings, dimensions: dims }, { svgSectionTextClearance, title, date: today(), callout, threads, tableContent: tableContentOf, welds: weldJoints, bodyFaces, ...(bom ? { bom } : {}) }, cuts), selected, selectedTarget);
-  }, [drag, views, layout, sheet, sheetMarkup, settings, title, selected, selectedTarget, weldJoints, bom, svgSectionTextClearance]);
+  }, [drag, views, layout, sheet, sheetMarkup, settings, title, selected, selectedTarget, weldJoints, bom, svgSectionTextClearance,
+    activeDimensionGroup, selectedDimensionIds]);
 
   const hint = message ?? (currentReattachment ? `Select a rim in the ${viewLabel(currentReattachment.original.view)} · Esc cancels` : null) ?? (pending ? (pending.kind === 'standalone-frame' ? `Click the sheet to place the frame. View: ${viewLabel(pending.view)}. Esc cancels.` : pending.kind === 'datum-target' ? 'Click where the target symbol goes · Esc cancels' : pending.kind === 'datum-line' ? 'Now the other end of the target line · Esc cancels' : pending.kind === 'note' ? 'Click where the note’s text goes · Esc cancels' : pending.kind === 'detail-center' ? `Select the centre of Detail ${pending.moving.detail.id} on the ${viewLabel(pending.view)} · Esc cancels` : pending.kind === 'detail' ? 'Now how far the detail’s circle reaches · Esc cancels' : pending.kind === 'angle' ? (pending.b ? (pending.mode ? 'Click to place the reflex angle · Esc cancels' : 'Choose the side of the corner to measure, then click to place the angle · Esc cancels') : 'Now the second edge · Esc cancels') : pending.kind === 'linear' && !pending.b ? 'Now the second point · Esc cancels' : pending.kind === 'diameter' && pending.owner ? `${pending.owner} · Click where the dimension goes · Esc cancels` : 'Click where the dimension goes · Esc cancels') : tool === 'select' ? null : tool === 'datum-target' ? (targetDraft.kind === 'point' ? 'Click a straight edge endpoint · Esc cancels' : targetDraft.kind === 'line' ? 'Click the first end of the target line · Esc cancels' : 'Click the centre of the target area · Esc cancels') : TOOLS.find(t => t.tool === tool)!.hint);
   const selDim = selected?.kind === 'dimension' ? settings.dimensions.find(d => d.id === selected.id) : undefined;
@@ -1351,7 +1435,9 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
       <div className="dw-canvas">
         <div className="dw-paper">
           {layout && <svg ref={svg} tabIndex={-1} viewBox={viewBox.join(' ')} className={drag && 'pan' in drag ? 'dw-pan' : ''} aria-label="Drawing sheet" data-scale={layout.scale}
-            onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerLeave={() => setHover(null)} onWheel={onWheel}>
+            onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp}
+            onPointerCancel={cancelDimensionGroupDrag} onLostPointerCapture={cancelDimensionGroupDrag}
+            onBlur={cancelDimensionGroupDrag} onPointerLeave={() => setHover(null)} onWheel={onWheel}>
             <rect className="dw-sheet" x={0} y={0} width={W} height={H} fill="#fff" />
             <g fill="none" stroke="#000" strokeLinecap="round" strokeLinejoin="round" fontFamily="Helvetica, Arial, sans-serif" dangerouslySetInnerHTML={{ __html: shownMarkup }} />
             <g dangerouslySetInnerHTML={{ __html: overlay }} />
