@@ -28,11 +28,14 @@ await f.run(async () => {
       // Exactly one submission: no extra UI action or retry may refresh a stale callback.
       await f.page.waitForFunction(value => window.__studioDoc.parameters.Width === value, target, { timeout: 10000 });
       await f.ready(); const after = await f.doc();
+      assert.ok(!(await f.toasts()).some(toast => toast.includes('Parameters not changed')));
       assert.deepEqual(after.nodes, before.nodes); assert.deepEqual(after.configurations, before.configurations);
       assert.ok(Math.abs((await f.bodies()).bodies[0].volume - target * 100) < 1e-7);
       await f.undo(); await f.same(before);
+      assert.ok(!(await f.toasts()).some(toast => toast.includes('Parameters not changed')));
       assert.ok(Math.abs((await f.bodies()).bodies[0].volume - before.parameters.Width * 100) < 1e-7);
       await f.redo(); await f.same(after);
+      assert.ok(!(await f.toasts()).some(toast => toast.includes('Parameters not changed')));
       assert.ok(Math.abs((await f.bodies()).bodies[0].volume - target * 100) < 1e-7);
       await f.snapshot(`${width}-recovered-${target}`);
       f.report.observations.push({ width, target, firstValidSubmissionAccepted: true, undoRedoVolumeVerified: true, configurationsPreserved: true, postRefusalDelayMs: target === 50 ? 1200 : 0 });

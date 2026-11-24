@@ -190,6 +190,7 @@ await f.run(async () => {
   await changed('FinalWidth', 40);
   await f.ready();
   const retry = await f.snapshot('reopened-normal-retry');
+  assert.ok(!retry.notices.some(notice => /Production.*already contains parameter A/.test(notice)));
   assert.deepEqual(retry.doc.configurations, { Production: { FinalWidth: 40, A: 10 } });
   await physical(retry, 'FinalWidth', 40);
   assert.deepEqual(f.report.downloads, []);

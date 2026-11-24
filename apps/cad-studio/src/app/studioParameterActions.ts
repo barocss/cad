@@ -39,7 +39,7 @@ export function createStudioParameterActions({ model, owner, edit, evidence, can
       } catch (error) {
         cancelCandidate();
         if (!isRefusal(error, ...SKELETON_CODES)) throw error;
-        notice({ title: 'That value does not hold', hint: error.message.replace(/^\[\w+\] /, ''), detail: 'The parameters are as they were.' });
+        notice({ title: 'That value does not hold', hint: error.message.replace(/^\[\w+\] /, ''), detail: 'The parameters are as they were.', documentSource: { doc } });
         return;
       }
       if (!fresh || !massReady || owner.showingVariant() || hasReferenceProblems) {
@@ -47,7 +47,7 @@ export function createStudioParameterActions({ model, owner, edit, evidence, can
         const hint = hasReferenceProblems ? 'Choose the unresolved references first.'
           : !massReady ? 'Wait for the accepted part’s mass results before changing parameters.'
             : 'Wait for the accepted part to finish evaluating.';
-        notice({ title: 'Parameters not changed', hint, detail: '' });
+        notice({ title: 'Parameters not changed', hint, detail: '', documentSource: { doc } });
         return;
       }
       // The accepted result still owns deferred mass updates if the candidate is refused.
@@ -56,7 +56,7 @@ export function createStudioParameterActions({ model, owner, edit, evidence, can
       edit.stage({ request, base: doc, baseInput: evaluated, input: prefixDoc(resolved, resolved.nodes.length), next: resolved, accept: commit });
     },
     invalidInput(hint: string) {
-      notice({ title: 'Parameters', hint, detail: '' });
+      notice({ title: 'Parameters', hint, detail: '', documentSource: { doc } });
     },
   };
 }

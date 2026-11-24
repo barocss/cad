@@ -93,7 +93,8 @@ export function useStudioModelEvaluation({ model, owner, work, params, worker, e
       evaluationEvidence.discardUninstalled(edit.request);
       if (edit.kind === 'direct') parameterEditNow.current = null;
       setParameterEdit(null); setBusy(false);
-      setToast({ title: edit.failureTitle ?? (edit.kind === 'direct' ? 'Direct geometry not changed' : 'Parameters not changed'), hint, detail });
+      setToast({ title: edit.failureTitle ?? (edit.kind === 'direct' ? 'Direct geometry not changed' : 'Parameters not changed'), hint, detail,
+        ...(!edit.kind && !edit.roundedInset ? { documentSource: { doc: edit.base } } : {}) });
     };
     setBusy(true);
     const run = async () => {

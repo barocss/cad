@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1962: [Expire a Parameters refusal after a valid edit](notes/parameter-refusal-notice-lifetime-2026-11-25/README.md), #44. Verify refusal visibility, successful retry, Undo/Redo and native project reopen.
 - D1961: [Extract Studio Parameters panel actions](notes/studio-parameter-panel-actions-2026-11-25/README.md), #44. Compare exact before and after desktop states, configuration ownership and saved bytes.
 - D1960: [Link the original perpendicular annular inlet to a native plane](notes/perpendicular-annular-inlet-reference-plane-2026-11-25/README.md), #17. Verify live donor movement, History reselection, retained joins and desktop fresh Open.
 - D1959: [Restore the Sweep selection-order regression](notes/sweep-input-order-label-regression-2026-11-25/README.md), #10. Verify the distinct path and solid labels, both actual input orders, and native replay.
