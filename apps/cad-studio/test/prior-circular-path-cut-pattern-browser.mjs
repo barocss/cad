@@ -4,6 +4,14 @@ import { clickModelCommand, modelRail } from './model-rail-helper.mjs';
 import { choosePriorCutSource, equivalent } from './prior-cut-pattern-browser-fixture.mjs';
 
 const baseline = process.argv.includes('--baseline');
+const quarter = process.argv.includes('--quarter');
+const count = quarter ? 4 : 3;
+const spacing = quarter ? 8 : 16;
+const revisedSpacing = quarter ? 9 : 14;
+const centersOnQuarter = pitch => Array.from({ length: count }, (_, i) => {
+  const a = i * pitch / 20;
+  return [10 + 20 * Math.sin(a), 10 + 20 * (1 - Math.cos(a))];
+});
 const pins = ['apps/cad-studio/test/prior-circular-path-cut-pattern-browser.mjs', 'apps/cad-studio/test/prior-cut-pattern-browser-fixture.mjs',
   'apps/cad-studio/src/app/cutPatternSource.ts', 'packages/barocss-cad-model/src/engine/doc.ts',
   'packages/barocss-cad-model/src/engine/curveFeaturePattern.ts',
@@ -11,9 +19,9 @@ const pins = ['apps/cad-studio/test/prior-circular-path-cut-pattern-browser.mjs'
   'packages/barocss-cad/src/part/part-transform.ts', 'packages/barocss-cad/src/part/part-prior-circular-cut.ts',
   'packages/barocss-cad/src/part/part-prior-rectangular-cut.ts'];
 const f = await createFlow({
-  name: 'prior-circular-path-cut-pattern', output: process.argv[2], envFrozen: 'D1911_SOURCE_FROZEN',
+  name: 'prior-circular-path-cut-pattern', output: process.argv[2], envFrozen: quarter ? 'D1931_SOURCE_FROZEN' : 'D1911_SOURCE_FROZEN',
   qualification: 'Repeat only the first original circular through-Subtract across one later rectangular through-Subtract.',
-  limits: ['One original rectangular upright stock, two original full-height cuts and fixed-orientation copies on a linked, two-span XY path.'],
+  limits: ['One upright rectangular stock, two original full-height cuts and fixed-orientation copies on a linked, level XY path.'],
   initialFiles: pins, requiredFrozen: pins,
   inspectorSource: `
 import { readFileSync } from 'node:fs';
@@ -135,14 +143,25 @@ async function createPath() {
   await button('Sketch', modelRail(f.page)).click();
   await f.sketchPanel().waitFor();
   await field(f.sketchPanel(), 'Sketch plane').selectOption('xy');
-  await button('Line').click();
-  await f.page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
-  for (const point of [[6, 5, 0], [6, 21, 0], [30, 21, 0]]) {
-    const pixel = await f.page.evaluate(world => window.__studioScreenOf(world), point);
-    assert.ok(pixel, 'Path point is in the sketch viewport');
-    await f.page.mouse.click(pixel[0], pixel[1]);
+  if (quarter) {
+    const center = [6, 24], start = [6, 4], end = [26, 24];
+    await f.frame([center, start, end]);
+    await f.tool('Centre arc', 'q');
+    await f.worldClick(center);
+    await f.worldClick(start);
+    for (const point of [[18, 8], [22, 12], end]) await f.page.mouse.move(...await f.screenOf(point), { steps: 3 });
+    await f.worldClick(end);
+    assert.equal(Number(await field(f.sketchPanel(), 'Arc 1 radius').inputValue()), 20);
+  } else {
+    await button('Line').click();
+    await f.page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    for (const point of [[6, 5, 0], [6, 21, 0], [30, 21, 0]]) {
+      const pixel = await f.page.evaluate(world => window.__studioScreenOf(world), point);
+      assert.ok(pixel, 'Path point is in the sketch viewport');
+      await f.page.mouse.click(pixel[0], pixel[1]);
+    }
+    await button('Select').click();
   }
-  await button('Select').click();
   await button('Make curves', f.sketchPanel()).click();
   await f.page.waitForFunction(() => window.__studioDoc.direct?.objects.length === 1);
   await f.ready();
@@ -163,30 +182,35 @@ async function refused(doc, history, label, reason) {
 await f.run(async () => {
   await f.newPage();
   await openModel(stock, 'circle-path-source.bcad');
-  f.phase = 'Author a linked two-span XY path and choose the earlier circular Subtract';
+  f.phase = 'Author a linked XY path and choose the earlier circular Subtract';
   const doc = await createPath();
   assert.deepEqual(doc.nodes, stock.nodes);
   const objectId = doc.direct.objects[0].id;
-  const path = await f.inspect('authored-level-straight-path', { direct: doc.direct, checkPath: objectId });
-  assert.deepEqual([path.degree, path.knots, path.weights], [2, [0, 0, 0, 1, 1, 2, 2, 2], [1, 1, 1, 1, 1]]);
-  assert.deepEqual(path.controlPoints, [[6, 5, 0], [6, 13, 0], [6, 21, 0], [18, 21, 0], [30, 21, 0]]);
+  const path = await f.inspect('authored-level-path', { direct: doc.direct, checkPath: objectId });
+  if (quarter) {
+    assert.deepEqual([path.degree, path.knots, path.weights], [2, [0, 0, 0, 1, 1, 1], [1, Math.SQRT1_2, 1]]);
+    assert.deepEqual(path.controlPoints, [[6, 4, 0], [26, 4, 0], [26, 24, 0]]);
+  } else {
+    assert.deepEqual([path.degree, path.knots, path.weights], [2, [0, 0, 0, 1, 1, 2, 2, 2], [1, 1, 1, 1, 1]]);
+    assert.deepEqual(path.controlPoints, [[6, 5, 0], [6, 13, 0], [6, 21, 0], [18, 21, 0], [30, 21, 0]]);
+  }
   const original = await inspect('original-circle-and-later-rectangle', doc, [[10, 10]]);
   await choosePriorCutSource(f, 'Browser');
   await clickModelCommand(f.page, 'Pattern', 'Path cut pattern');
   await panel().getByText('Subtract 1 (n4)', { exact: true }).waitFor();
   await field(panel(), 'Path').selectOption(objectId);
-  await field(panel(), 'Count').fill('3');
-  await field(panel(), 'Spacing').fill('16');
+  await field(panel(), 'Count').fill(String(count));
+  await field(panel(), 'Spacing').fill(String(spacing));
   const history = await stackState();
   if (baseline) {
-    await refused(doc, history, '01-circular-path-refused');
+    await refused(doc, history, '01-circular-path-refused', quarter ? /exact straight spans/ : undefined);
     return;
   }
   await status('preview');
-  for (const [pitch, name, reason] of [[4, '02-source-touch-refused', /disjoint/], [21, '03-path-too-short', /exceeds.*path length/i]]) {
+  for (const [pitch, name, reason] of [[4, '02-source-touch-refused', /disjoint/], [quarter ? 11 : 21, '03-path-too-short', /exceeds.*path length/i]]) {
     await field(panel(), 'Spacing').fill(String(pitch));
     await refused(doc, history, name, reason);
-    await field(panel(), 'Spacing').fill('16');
+    await field(panel(), 'Spacing').fill(String(spacing));
     await status('preview');
   }
   await button('Apply', panel()).click();
@@ -195,15 +219,15 @@ await f.run(async () => {
   assert.deepEqual(applied.nodes.slice(0, -1), doc.nodes);
   assert.deepEqual(applied.direct, doc.direct);
   assert.deepEqual([pattern.kind, pattern.parent, pattern.source, pattern.path, pattern.spacing, pattern.count],
-    ['curve-feature-pattern', ref(7), ref(4), { objectId }, 16, 3]);
-  const accepted = await inspect('path-native', applied, [[10, 10], [10, 26], [26, 26]], true);
+    ['curve-feature-pattern', ref(7), ref(4), { objectId }, spacing, count]);
+  const accepted = await inspect('path-native', applied, quarter ? centersOnQuarter(spacing) : [[10, 10], [10, 26], [26, 26]], true);
   assert.deepEqual(accepted.filter(wall => original.some(old => old.name === wall.name)), original);
   await f.openFeatureEditor(8, 'Path source spacing');
   await f.editor().getByText('Subtract 1 (n4)', { exact: true }).waitFor();
-  await field(f.editor(), 'Spacing').fill('14');
+  await field(f.editor(), 'Spacing').fill(String(revisedSpacing));
   const edited = (await f.applyEditor(applied, '05-path-spacing-edited')).doc;
-  assert.deepEqual(edited.nodes.at(-1), { ...pattern, spacing: 14 });
-  const centers = [[10, 10], [10, 24], [22, 26]];
+  assert.deepEqual(edited.nodes.at(-1), { ...pattern, spacing: revisedSpacing });
+  const centers = quarter ? centersOnQuarter(revisedSpacing) : [[10, 10], [10, 24], [22, 26]];
   await inspect('path-14-native', edited, centers, true);
   await f.undo(); await f.same(applied);
   await f.redo(); await f.same(edited);

@@ -206,7 +206,7 @@ export function transformOperation(f: CadPartFeature & Record<string, unknown>, 
       const { seed, tool, prior, priorCircular } = t.cutSource(f.target, source, 'path');
       if (prior) certifyPriorCutPlacements(prior, offsets.slice(1), fail, 'path');
       if (priorCircular) {
-        if (!priorPlan?.straight) fail('CAPABILITY', 'path feature pattern source with an original circular cut needs an open level path of exact straight spans');
+        if (!priorPlan || priorPlan.kind === 'quadratic') fail('CAPABILITY', 'path feature pattern source with an original circular cut needs exact straight spans or one canonical XY quarter arc');
         certifyPriorCircularPlacements(priorCircular, offsets.slice(1), fail, 'path');
       }
       const matrix: BrepAffine['matrix'] = [1, 0, 0, 0, 1, 0, 0, 0, 1];

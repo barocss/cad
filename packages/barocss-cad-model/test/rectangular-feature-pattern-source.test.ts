@@ -7,7 +7,7 @@ import { checkNode, deleteFeature, featureDependents, renumber } from '../src/ch
 import { moveNode } from '../src/chat/remap';
 import { dispatchTool } from '../src/chat/tools';
 import { encodeStudioFile, readStudioFile } from '../src/engine/container';
-import { curvesSource } from '../src/engine/curveSource';
+import { curvesSource, outlineCurve } from '../src/engine/curveSource';
 import { importSource } from '../src/engine/direct';
 import { leafBodies, parentsOf, priorLinearFeaturePatternProblem, rectangularFeaturePatternProblem, rectangularPatternDocumentProblem, usesOf, withNode, type BodyRef, type ModelNode, type StudioDoc } from '../src/engine/doc';
 import { evaluateDoc, partBreps } from '../src/engine/evaluate';
@@ -17,6 +17,7 @@ import { readStudioDoc } from '../src/engine/migrate';
 import { toPartDocument } from '../src/engine/part';
 import { isRefusal } from '../src/engine/refusal';
 import { revisionOf } from '../src/util/revision';
+import { xyPlane } from '../src/sketch/plane';
 
 const values = { axis: 'x', spacing: 16, count: 3, axis2: 'y', spacing2: 16, count2: 2 };
 function seed() {
@@ -530,18 +531,21 @@ test('Fill repeats the original circular through-cut at the captured references 
   }
 });
 
-test('the local Path command repeats an original circular through-cut using linked level straight spans', async () => {
+for (const quarter of [false, true]) test(`the local Path command repeats an original circular through-cut using ${quarter ? 'a linked canonical quarter arc' : 'linked level straight spans'}`, async () => {
   const first = part('original circular Path source').box({ w: 60, d: 40, h: 10 })
     .subtract(tool => tool.cylinder({ r: 2, h: 10, x: 10, y: 10 }));
   const later = first.subtract(tool => tool.box({ w: 4, d: 2, h: 10, x: 24, y: 8 }));
   const points: [number, number, number][] = [[6, 5, 0], [6, 13, 0], [6, 21, 0], [18, 21, 0], [30, 21, 0]];
-  const curve = { degree: 2, knots: [0, 0, 0, 1, 1, 2, 2, 2], points, weights: [1, 1, 1, 1, 1] };
+  const curve = quarter
+    ? outlineCurve(xyPlane(), [[6, 4], [26, 24]], [Math.tan(Math.PI / 8)], false)
+    : { degree: 2, knots: [0, 0, 0, 1, 1, 2, 2, 2], points, weights: [1, 1, 1, 1, 1] };
   const direct = importSource({ sources: {}, objects: [] }, curvesSource('circle_path', [curve]), 'Path');
   const doc = { ...later.doc, direct }, path = direct.objects[0].id;
   const source: BodyRef = { node: first.doc.nodes.length - 1, side: 'solid' };
   const parent: BodyRef = { node: later.doc.nodes.length - 1, side: 'solid' };
   const ctx = context(doc);
-  const values = { source: featureId(doc.nodes, source.node), path, spacing: 16, count: 3 };
+  const count = quarter ? 4 : 3;
+  const values = { source: featureId(doc.nodes, source.node), path, spacing: quarter ? 8 : 16, count };
   const run = (spacing: number) => dispatchTool({ doc, bodies: ctx.bodies }, 'features', {
     action: 'command', command: 'curve-feature-pattern', expectedRevision: revisionOf(doc),
     bodies: [ctx.bodies[0].key], values: { ...values, spacing },
@@ -561,10 +565,10 @@ test('the local Path command repeats an original circular through-cut using link
   const [{ brep }] = partBreps(opened.doc);
   const shape = checkBrep(brep, { strict: true });
   assert.ok(shape.valid, shape.issues.join('\n'));
-  assert.equal(shape.topology[0].genus, 4);
-  assert.ok(Math.abs(brepMassProperties(brep, 1).volume - (23920 - 120 * Math.PI)) < 1e-8);
+  assert.equal(shape.topology[0].genus, count + 1);
+  assert.ok(Math.abs(brepMassProperties(brep, 1).volume - (23920 - 40 * count * Math.PI)) < 1e-8);
 
-  for (const spacing of [4, 21]) {
+  for (const spacing of [4, quarter ? 11 : 21]) {
     const refused = await run(spacing);
     assert.equal(refused.isError, true, refused.content);
     assert.equal(refused.state.doc, doc);

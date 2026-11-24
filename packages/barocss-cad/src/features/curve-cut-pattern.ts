@@ -126,15 +126,18 @@ function quadratic(path: RawNurbsPath, spacing: number, count: number, limit: nu
   return { offsets: plan.offsets, length: plan.length };
 }
 /** One owned earlier-source plan preserves the existing curved and exact straight leaves. */
-export function priorCurveCutPlan(path: unknown, spacing: number, count: number, lengthLimit: number, fail: Refuse): { offsets: Point[]; straight: boolean } {
+export function priorCurveCutPlan(path: unknown, spacing: number, count: number, lengthLimit: number, fail: Refuse): { offsets: Point[]; kind: 'straight' | 'quadratic' | 'quarter-arc' } {
   const owned = snapshot(path, fail), level = owned.controlPoints[0][2];
   if (owned.controlPoints.some(point => point[2] !== level))
     return fail('CAPABILITY', 'earlier-source path cut patterns require one exact constant authored Z');
   if (owned.degree === 2 && owned.controlPoints.length === 3) {
     const work = new QuadraticCutWork(fail); work.take(16384);
-    if (curved(owned, work)) return { offsets: quadratic(owned, spacing, count, lengthLimit, fail, work).offsets, straight: false };
+    if (curved(owned, work)) {
+      const { offsets } = quadratic(owned, spacing, count, lengthLimit, fail, work);
+      return { offsets, kind: owned.weights[1] === Math.SQRT1_2 ? 'quarter-arc' : 'quadratic' };
+    }
   }
-  return { offsets: legacyCurveCutOffsets(owned, spacing, count, lengthLimit, fail), straight: true };
+  return { offsets: legacyCurveCutOffsets(owned, spacing, count, lengthLimit, fail), kind: 'straight' };
 }
 
 /** Preserve the legacy offset leaf; only a single nonstraight three-pole span uses certification. */

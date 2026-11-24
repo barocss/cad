@@ -11,7 +11,7 @@ const path = (degree = 2, z = 0) => degree === 1
   ? { degree: 1, knots: [0, 0, 1, 2, 2], controlPoints: [[6, 5, z], [6, 21, z], [30, 21, z]], weights: [1, 1, 1] }
   : { degree: 2, knots: [0, 0, 0, 1, 1, 2, 2, 2], controlPoints: [[6, 5, z], [6, 13, z], [6, 21, z], [18, 21, z], [30, 21, z]], weights: [1, 1, 1, 1, 1] };
 const curved = () => ({ degree: 2, knots: [0, 0, 0, 1, 1, 1], controlPoints: [[6, 5, 0], [26, 15, 0], [46, 5, 0]], weights: [1, 1, 1] });
-const quarter = () => ({ degree: 2, knots: [0, 0, 0, 1, 1, 1], controlPoints: [[6, 5, 0], [46, 5, 0], [46, 45, 0]], weights: [1, Math.SQRT1_2, 1] });
+const quarter = () => ({ degree: 2, knots: [0, 0, 0, 1, 1, 1], controlPoints: [[6, 4, 0], [26, 4, 0], [26, 24, 0]], weights: [1, Math.SQRT1_2, 1] });
 const document = (rail = path()) => ({ format: 'barocss-cad-part', version: 1, units: 'mm', parameters: { cx: 10, cy: 10, r: 2, pitch: 16, right: 28 }, features: [
   { id: 'stockSketch', kind: 'sketch', profile: 'rectangle', min: [0, 0], max: [60, 40] },
   { id: 'stock', kind: 'extrude', sketch: 'stockSketch', height: 10 },
@@ -107,7 +107,28 @@ test('polyline and translated level encodings retain the same independent physic
   for (const rail of [path(1), path(2, 7)]) verify(evaluateCadPart(document(rail)));
   const fail = (code, message) => { throw Object.assign(new Error(message), { code }); };
   const plan = priorCurveCutPlan(path(), 16, 3, 10000, fail);
-  assert.equal(plan.straight, true); assert.deepEqual(plan.offsets, [[0, 0, 0], [0, 16, 0], [16, 16, 0]]);
+  assert.equal(plan.kind, 'straight'); assert.deepEqual(plan.offsets, [[0, 0, 0], [0, 16, 0], [16, 16, 0]]);
+});
+
+test('a canonical quarter arc places the earlier circular cut by arc length through native edit and reopen', () => {
+  const input = document(quarter()), repeat = input.features.at(-1);
+  input.parameters.pitch = 8; repeat.count = 4;
+  const offsets = pitch => Array.from({ length: repeat.count }, (_, k) => {
+    const a = k * pitch / 20;
+    return [20 * Math.sin(a), 20 * (1 - Math.cos(a))];
+  });
+  const initial = evaluateCadPart(input), accepted = saveCadPart(initial);
+  const next = verify(initial, offsets(8));
+  const unpatterned = structuredClone(input); unpatterned.features.pop();
+  assert.deepEqual(laterWalls(next.brep), laterWalls(evaluateCadPart(unpatterned).outputs[0].brep));
+  const edited = reevaluate(initial, { parameters: { pitch: 9 } });
+  assert.deepEqual(verify(loadCadPart(saveCadPart(edited)), offsets(9)).brep, verify(edited, offsets(9)).brep);
+  assert.equal(saveCadPart(initial), accepted);
+  assert.throws(() => reevaluate(initial, { parameters: { pitch: 4 } }),
+    e => e instanceof CadPartError && e.feature === 'repeat' && e.code === 'GEOMETRY' && /disjoint/.test(e.message));
+  assert.throws(() => reevaluate(initial, { parameters: { pitch: 11 } }),
+    e => e instanceof CadPartError && e.feature === 'repeat' && e.code === 'PARAMETER' && /path length/.test(e.message));
+  assert.equal(saveCadPart(initial), accepted);
 });
 
 test('contact and overlap with any actual cavity refuse without changing the accepted source or path', () => {
@@ -125,10 +146,10 @@ test('contact and overlap with any actual cavity refuse without changing the acc
 test('count one keeps both original cavities and still rejects unsupported curves, nonlevel paths and partial source history', () => {
   const single = document(); single.features.at(-1).count = 1;
   const output = verify(evaluateCadPart(single), [[0, 0]]); assert.ok(!output.brep.faces.some(face => face.name?.includes('@')));
-  for (const rail of [curved(), quarter()]) {
-    const bad = document(rail); bad.features.at(-1).count = 1;
-    assert.throws(() => evaluateCadPart(bad), e => e instanceof CadPartError && e.feature === 'repeat' && e.code === 'CAPABILITY');
-  }
+  const quarterOne = document(quarter()); quarterOne.features.at(-1).count = 1;
+  assert.deepEqual(verify(evaluateCadPart(quarterOne), [[0, 0]]).brep, output.brep);
+  const bad = document(curved()); bad.features.at(-1).count = 1;
+  assert.throws(() => evaluateCadPart(bad), e => e instanceof CadPartError && e.feature === 'repeat' && e.code === 'CAPABILITY');
   const nonlevel = structuredClone(single); nonlevel.features.at(-1).path.controlPoints[1][2] = 1e-12;
   assert.throws(() => evaluateCadPart(nonlevel), e => e instanceof CadPartError && e.feature === 'repeat' && e.code === 'CAPABILITY');
   for (const id of ['circleTool', 'laterTool']) {
@@ -139,13 +160,17 @@ test('count one keeps both original cavities and still rejects unsupported curve
   assert.throws(() => evaluateCadPart(overlap), e => e instanceof CadPartError && e.feature === 'repeat' && e.code === 'GEOMETRY');
 });
 
-test('curved circular-source Paths and old reference/value guards stay refused', () => {
+test('other curved circular-source Paths and old reference/value guards stay refused', () => {
   const refused = (change, codes = ['CAPABILITY', 'REFERENCE']) => {
     const doc = document(); change(doc); const before = structuredClone(doc);
     assert.throws(() => evaluateCadPart(doc), e => e instanceof CadPartError && e.feature === 'repeat' && codes.includes(e.code));
     assert.deepEqual(doc, before);
   };
-  for (const rail of [curved(), quarter()]) refused(doc => { doc.features.at(-1).path = rail; });
+  refused(doc => { doc.features.at(-1).path = curved(); });
+  refused(doc => {
+    const otherRational = quarter(); otherRational.weights[1] = 0.75;
+    doc.features.at(-1).path = otherRational;
+  });
   refused(doc => { doc.features.at(-1).path.controlPoints[1][2] = 1e-12; });
   refused(doc => { doc.features.at(-1).path.controlPoints[1][0] += 1e-12; });
   for (const pitch of [0, -1]) refused(doc => { doc.parameters.pitch = pitch; }, ['PARAMETER']);
