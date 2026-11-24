@@ -1,6 +1,6 @@
 // The rules a pattern of instances keeps (assembly/patterns.ts), without the assembly's solver: the editing ops refuse by
 // them, expandPatterns skips a pattern that breaks them, and Open (engine/migrate.ts) refuses a file whose pattern does.
-import type { InstancePattern } from '../engine/doc';
+import type { InstancePattern, StudioDoc } from '../engine/doc';
 
 /** The most occurrences a pattern holds, the seed counted, and the least; the farthest a neighbour is, in mm. */
 export const PATTERN_MAX = 64, PATTERN_MIN = 2, PATTERN_SPACING_MAX = 100000;
@@ -44,6 +44,29 @@ export function patternsProblem(doc: { instances?: readonly Placed[]; instancePa
     const seed = own.find(i => i.id === p.seed), who = seed?.name ?? p.seed, why = patternProblem(who, p);
     if (why) return why;
     for (let k = 1; k < p.count; k++) if (!(p.skip ?? []).includes(k) && taken.has(`${p.id}-${k}`)) return `Pattern of ${who}: occurrence ${k} would be numbered ${p.id}-${k}, which a placed part has already; rename that part's id or use another pattern.`;
+  }
+  return undefined;
+}
+
+/** A native reader must never use a stale stored rotation for a fixed-orientation occurrence. */
+export function savedPatternOrientationProblem(doc: Pick<StudioDoc, 'instances' | 'instancePatterns'>): string | undefined {
+  const instances = Array.isArray(doc.instances) ? doc.instances.filter(i => i && typeof i === 'object') : [];
+  for (const pattern of doc.instancePatterns ?? []) {
+    if (pattern.kind !== 'circular-fixed') continue;
+    const seed = instances.find(i => !i.pattern && i.id === pattern.seed);
+    const rotation = seed?.rotation;
+    const label = `Pattern of ${seed?.name ?? pattern.seed}`;
+    if (!finite3(rotation)) return `${label}: a fixed-orientation pattern needs a seed with a finite rotation.`;
+    const expected = new Set(Array.from({ length: pattern.count - 1 }, (_, i) => i + 1).filter(k => !pattern.skip?.includes(k)));
+    for (const instance of instances) {
+      if (instance.pattern?.id !== pattern.id) continue;
+      const { k } = instance.pattern;
+      if (!expected.delete(k) || instance.id !== `${pattern.id}-${k}`) return `${label}: unexpected saved occurrence ${instance.id}.`;
+      if (!finite3(instance.rotation) || instance.rotation.some((angle, i) => angle !== rotation[i])) {
+        return `${label}: occurrence ${instance.id} does not keep the seed rotation in this file.`;
+      }
+    }
+    if (expected.size) return `${label}: missing saved occurrence ${pattern.id}-${expected.values().next().value}.`;
   }
   return undefined;
 }

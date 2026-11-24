@@ -22,7 +22,7 @@ import { documentBeadOwnershipError } from '../frames/beadOwnership';
 import { checkDocumentPrintPreview } from './printPreview';
 import { checkDocumentBearingHousing } from './bearingContext';
 import { firstProblem, refusal } from './refusal';
-import { patternsProblem } from '../assembly/patternCheck';
+import { patternsProblem, savedPatternOrientationProblem } from '../assembly/patternCheck';
 import { assemblyCutsProblem } from '../assembly/cuts';
 import { assemblyStepsProblem } from '../assembly/steps';
 import { assertRouteBundleDocument } from './routeBundle';
@@ -56,7 +56,8 @@ export function readStudioDoc(text: string): { doc: StudioDoc; notes: string[] }
   if (housingProblem) return { error: housingProblem };
   const ownershipError = documentBeadOwnershipError(o);
   if (ownershipError) return { error: ownershipError };
-  const patternError = patternsProblem(o as Parameters<typeof patternsProblem>[0]);
+  const patternError = patternsProblem(o as Parameters<typeof patternsProblem>[0])
+    ?? savedPatternOrientationProblem(o as Parameters<typeof savedPatternOrientationProblem>[0]);
   if (patternError) return { error: refusal('PATTERN_VALUE', patternError).message };
   const cutError = assemblyCutsProblem(o as Parameters<typeof assemblyCutsProblem>[0]);
   if (cutError) return { error: refusal('VALUE', cutError).message };

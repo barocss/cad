@@ -141,6 +141,28 @@ test('fixed orientation reaches native drawing bodies and STEP, while BOM keeps 
   assert.deepEqual([rows[0].qty, rows[0].parts], [4, ['p1', 'pat1-1', 'pat1-2', 'pat1-3']]);
 });
 
+test('the native reader refuses stale and missing fixed-orientation occurrences', async () => {
+  const fixed = addInstancePattern(bracketAssembly(), { ...circleOptions, orientation: 'keep', skip: [2] }).doc;
+  const stale = structuredClone(fixed);
+  stale.instances![1].rotation = [0, 0, 180];
+  const readStale = await readStudioFile(encodeStudioFile(stale));
+  assert.ok('error' in readStale);
+  assert.match(readStale.error, /PATTERN_VALUE.*occurrence pat1-1 does not keep the seed rotation/);
+  const missing = readStudioDoc(JSON.stringify({ ...fixed, instances: fixed.instances!.slice(0, -1) }));
+  assert.ok('error' in missing);
+  assert.match(missing.error, /PATTERN_VALUE.*missing saved occurrence pat1-3/);
+  const unexpected = structuredClone(fixed);
+  unexpected.instances![2].pattern!.k = 2;
+  const readUnexpected = readStudioDoc(JSON.stringify(unexpected));
+  assert.ok('error' in readUnexpected);
+  assert.match(readUnexpected.error, /PATTERN_VALUE.*unexpected saved occurrence pat1-3/);
+  const rotating = addInstancePattern(bracketAssembly(), circleOptions).doc;
+  rotating.instances![1].rotation = [0, 0, 180];
+  const legacy = readStudioDoc(JSON.stringify(rotating));
+  assert.ok('doc' in legacy);
+  assert.deepEqual(legacy.doc.instances, rotating.instances);
+});
+
 test('the seed gets a shared definition: occurrences are the same part to the BOM and the revisions', () => {
   const r = linear(withPin());
   const id = r.doc.instances![0].part!.id;
