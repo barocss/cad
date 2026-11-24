@@ -106,6 +106,7 @@ import { changesBeyondVariability } from './app/documentChanges';
 import { sameMeshes, withMasses, samePlacement } from './app/bodyResults';
 import { sketchRegion } from './app/sketchControls';
 import { createDocumentReplacement, type ReplacementIntent } from './app/documentReplacement';
+import { createStudioVersionActions } from './app/studioVersionActions';
 import { createStudioDocumentEntryActions } from './app/studioDocumentEntryActions';
 import { createStudioParameterActions } from './app/studioParameterActions';
 import { activeKey, type Active } from './app/commandState';
@@ -2113,6 +2114,14 @@ export function App() {
     edit: { current: parameterEdit, nextRequest: () => ++parameterRequest.current, stage: setParameterEdit },
     evidence: evaluationEvidence, canChangeDocument, commit: next => { commit(next, false); }, notice: setToast,
   });
+  const versionActions = createStudioVersionActions({
+    bodies, owner: { doc: docNow, open: openIntent, projectOpening: project.opening },
+    review: { canPrepareFace: marker === null && shownDoc === doc && !cutDraft,
+      attach: approvalAttachmentsEnabled ? approvalAttachments.attach : undefined,
+      openChat: () => setChat(true), evaluate: evaluateVersion },
+    restore: { replace: replaceDoc, clearComparison: () => setCompareBase(null), setDirty, fit: () => viewport.current?.fit() },
+    commit,
+  });
   const inspector = (
       <Profiler id="right-col" onRender={onBlockRender}><div className="right-col">
 
@@ -2131,26 +2140,13 @@ export function App() {
       {bomOpen && !libraryOpen && !paramsOpen && !rendering && !drawing && !sketch && !active && <BomPanel doc={doc} name={fileName} evaluate={d => engine.part(d, revision.current++, 'read')} onCommit={next => commit(next, false)} onClose={() => setBomOpen(false)} onError={(title, hint) => setToast({ title, hint, detail: '', documentSource: { doc, name: fileName } })} />}
       {rebuildOpen && !bomOpen && !libraryOpen && !paramsOpen && !rendering && !drawing && !sketch && !active && <RebuildPanel store={rebuildStore} evaluated={evaluated} busy={busy} problems={assembly.problems} mode={effectiveDisplayMode} viewport={viewport} onClose={() => setRebuildOpen(false)} />}
       {versionsVisible && <VersionsPanel project={project} projectOpenFocus={{ remember: workspaceModeExit.rememberFocus, take: workspaceModeExit.takeFocus }} doc={doc} onMakeVersion={makeVersion} comparing={compareBase} onCompare={setCompareBase} evaluate={evaluateVersion} checkpointReview={checkpointReview}
-        onPrepareFaceRepair={marker === null && shownDoc === doc && !cutDraft ? async (working, repair) => {
-          const scope = openIntent.current;
-          if (docNow.current !== working || project.opening()) return false;
-          const tools = await import('@barocss/cad-model/chat/tools');
-          const out = await tools.proposeNestedFaceReferenceRepair({ doc: working, bodies }, repair, evaluateVersion);
-          if (docNow.current !== working || openIntent.current !== scope || project.opening() || out.isError || !commit(out.state.doc)) return false;
-          setChat(true);
-          return true;
-        } : undefined}
-        onAttachApprovalEvidence={approvalAttachmentsEnabled ? async review => {
-          const attached = await approvalAttachments.attach(review);
-          if (attached) setChat(true);
-          return attached;
-        } : undefined}
+        onPrepareFaceRepair={versionActions.prepareFaceRepair}
+        onAttachApprovalEvidence={versionActions.attachApprovalEvidence}
         onCollapse={() => { cancelLocalCandidateReview(); hideCandidatePreview(); }}
         candidate={candidateReview ? { ...candidateReview, available: candidateAvailable, toggle: toggleCandidatePreview,
           decide: candidateReview.review.localRun ? decision => decideTaskRunCandidate(candidateReview.review, decision) : undefined } : undefined}
         onInsert={path => void project.fileOf(path).then(f => { if (f) void insertPart(f, linkSource(path)); })}
-        onOpen={d => { replaceDoc(d, 'project'); if (docNow.current !== d) return;
-          setCompareBase(null); setDirty(true); setTimeout(() => viewport.current?.fit(), 300); }} />}
+        onOpen={versionActions.openVersion} />}
       {stepsShown && <AssemblyStepsPanel {...stepsPanel} />}
       {variantsOpen && !bomOpen && !libraryOpen && !paramsOpen && !rendering && !drawing && !sketch && !active && <VariantsPanel doc={doc} variants={variants} onCommit={next => commit(next, false)} onError={hint => setToast({ title: 'Variants: refused', hint, detail: '' })} onClose={() => setVariantsOpen(false)} />}
       {libraryOpen && !paramsOpen && !rendering && !drawing && !sketch && !active && <LibraryPanel doc={doc} documentSession={docGeneration} onCommit={next => commit(next)} onFitTableCommit={next => { void commitFitTables(next); }} onClose={() => setLibraryOpen(false)} onError={(title, hint) => setToast({ title, hint, detail: '' })} onQuote={() => { void exportQuote(); }} />}

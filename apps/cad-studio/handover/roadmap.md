@@ -1,13 +1,13 @@
 # CAD roadmap — current status and execution order
 
-Updated 2026-11-25 · Priority authority: D520 · Latest delivery: D1969 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
+Updated 2026-11-25 · Priority authority: D520 · Latest delivery: D1970 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
 
 This is the only current status index. Detailed tracks define acceptance; the 34 stable row pages retain scope and issue navigation. Immutable decision notes retain results. Do not append chronological status paragraphs here. [D520 decision](notes/cad-roadmap-replan-2026-11-04/README.md) supersedes D445 execution order and historical next-item text, while retaining its safeguards and bounded proofs.
 
 ## Now and next
 
-- **Current position:** [D1969](notes/three-side-box-draft-interior-neutral-2026-11-25/README.md), P5 rows 7 and 30. Three selected original box sides accept a fixed interior neutral plane. Studio verifies both shared corners, opposing-wall clearance, signed edits and fresh Open.
-- **Next MAIN:** D1970, P4 rows 12 and 16. Extract Studio project version acceptance and approval actions for [#44](https://github.com/barocss/cad/issues/44). Compare actual named Restore and saved face repair and evidence flows before and after.
+- **Current position:** [D1970](notes/studio-project-version-actions-2026-11-25/README.md), P4 rows 12 and 16. Studio version actions moved out of App. Named Restore and saved face repair through the attachment chip match across desktop runs. The full scripted Chat turn fails at the same step before and after.
+- **Next MAIN:** D1971, P5 rows 7 and 30. Add exact Draft for all four original planar box sides with an explicitly fixed interior neutral plane for [#14](https://github.com/barocss/cad/issues/14). Verify both opposing wall pairs, preserve automatic Extrude Draft and check desktop edit, Save and fresh Open.
 - **Separate follow-ups:** Continue Studio App extraction in cohesive parts with affected desktop checks. [#608 Rendering](https://github.com/barocss/cad/issues/608) stays on HOLD. API inventory drift remains open. The issue tracker records [#126](https://github.com/barocss/cad/issues/126), [#613](https://github.com/barocss/cad/issues/613), [#152](https://github.com/barocss/cad/issues/152) and [#22](https://github.com/barocss/cad/issues/22) as closed.
 - **Active repository:** [barocss/cad](https://github.com/barocss/cad), based on `origin/main`. Fetch before work and preserve unexpected changes. The [migration record](../../../docs/migration/README.md) maps the former `local/cad-dev` history and issue numbers.
 - **Evidence correction:** D482 records2167 PASS/0 FAIL/2 existing SKIP in a later full-kernel run than D433. Neither result is a new full-suite PASS at this audit HEAD. [D482 record](notes/vertical-contact-refusal-2026-11-04/README.md).
