@@ -243,7 +243,7 @@ import { pickedSketches, planeOf } from '@barocss/cad-model/app/profiles';
 import type { Analysis } from './viewport/analysis';
 import { asSection, type AxisSection, type Section } from './viewport/sectionView';
 import { type MapKind } from './viewport/scalarMaps';
-import { edgeChain } from '@barocss/cad-model/app/edgeChain';
+import { useStudioViewportDevHooks } from './viewport/useStudioViewportDevHooks';
 import { sectionSketchAction } from './app/sectionSketch';
 import { bodyName, describeChange, lookOf } from '@barocss/cad-model/app/bodies';
 import { readBrief } from '@barocss/cad-model/chat/brief';
@@ -710,57 +710,9 @@ export function App() {
   const evaluateVersion = useCallback((input: StudioDoc) => engine.part(input, revision.current++, 'read'), [engine]);
   const requestNativeOpen = useRef<(accept: () => void, focus: HTMLElement | null) => void>(() => {});
   requestNativeOpen.current = (accept, focus) => workspaceModeExit.switchWhenReady(accept, { originFocus: focus });
-  const pickRef = useRef<(hit: { face: { body: number; face: number } | null; edge: { body: number; edge: number } | null; point: Vec3 | null }, additive: boolean) => void>(() => {});
 
   useEffect(() => { document.documentElement.dataset.theme = theme; viewport.current?.setTheme(theme); try { localStorage.setItem('cad-studio-theme', theme); } catch { /* storage unavailable */ } }, [theme]);
   useEffect(() => { viewport.current?.setAo(ao); }, [ao]);
-
-  // Dev/test hook: the flow test reads the accepted document.
-  useEffect(() => { if (import.meta.env.DEV) (window as unknown as { __studioDoc: StudioDoc }).__studioDoc = doc; }, [doc]);
-  // (Dev/test: the bodies as evaluated for the document shown — exact volumes and centroids, for checks to their tolerance.)
-  useEffect(() => { if (import.meta.env.DEV) (window as unknown as { __studioBodies: () => unknown }).__studioBodies = () => ({ fresh: bodiesFor === evaluated, bodies: bodies.map(b => ({ key: b.key, volume: b.volume, centroid: b.centroid ?? null, massRef: b.massRef ?? null })), massReady, colored: shownBodies.flatMap((b, i) => bodyColors.has(i) ? [b.key] : []) }); });
-  // (Dev/test: what is picked, as the commands see it.)
-  useEffect(() => { if (import.meta.env.DEV) (window as unknown as { __studioSelection: unknown }).__studioSelection = { selection, bodies: bodies.length, active: active?.cmd.id ?? null, sketch: !!sketch, measure: !!measure }; });
-  // Dev/test hooks: select an edge or a face by its persistent name (canvas picks are not reproducible).
-  useEffect(() => {
-    if (!import.meta.env.DEV) return;
-    (window as unknown as { __studioSelectEdge: (name: string) => boolean }).__studioSelectEdge = name => {
-      for (const [b, body] of bodies.entries()) { const i = body.mesh.edges.findIndex(e => e.names.includes(name)); if (i >= 0) { setSelection({ faces: [], edges: [{ body: b, edge: i }], bodies: [] }); return true; } }
-      return false;
-    };
-    (window as unknown as { __studioSelectFace: (name: string) => boolean }).__studioSelectFace = name => {
-      for (const [b, body] of bodies.entries()) { const i = body.mesh.faces.findIndex(f => f.name.split('+').includes(name)); if (i >= 0) { setInstanceSel([]); setDirectSel([]); setSelection({ faces: [{ body: b, face: i }], edges: [], bodies: [] }); return true; } }
-      return false;
-    };
-    // A click on a named face, as the viewport reports it (measure picks go through it).
-    (window as unknown as { __studioPickFace: (name: string) => boolean }).__studioPickFace = name => {
-      for (const [b, body] of bodies.entries()) { const i = body.mesh.faces.findIndex(f => f.name.split('+').includes(name)); if (i >= 0) { pickRef.current({ face: { body: b, face: i }, edge: null, point: null }, false); return true; } }
-      return false;
-    };
-    // The cage editor's session for tests: what is picked (and the picked faces' mean heights: which face a click
-    // took), the cage, its creases, mirror and undo depth (R8.3's browser flow).
-    (window as unknown as { __studioCage: () => unknown }).__studioCage = () => {
-      const s = cageEdRef.current.session; if (!s) return null;
-      const z = s.sel.faces.map(f => s.cage.faces[f].reduce((t, v) => t + s.cage.positions[3 * v + 2], 0) / s.cage.faces[f].length);
-      return { faces: s.sel.faces.length, edges: s.sel.edges.length, vertices: s.sel.vertices.length, z, cageFaces: s.cage.faces.length, creases: s.cage.creases?.length ?? 0, mirror: s.mirror ?? null, undo: s.undo.length, mode: s.mode, sel: s.sel, cage: s.cage };
-    };
-    // Where a model point is on the page (CSS px), for clicks that must land on a face.
-    (window as unknown as { __studioScreenOf: (p: Vec3) => [number, number] | null }).__studioScreenOf = p => {
-      const c = document.querySelector('.vp-canvas') as HTMLCanvasElement | null, cam = viewport.current?.camera; if (!c || !cam) return null;
-      const r = c.getBoundingClientRect(), q = cam.project(p, r.width, r.height); return [r.left + q[0], r.top + q[1]];
-    };
-    // A double-click on the first top edge of the first body, as the viewport reports it: how many edges it picks.
-    (window as unknown as { __studioChainTop: () => number }).__studioChainTop = () => {
-      const m = bodies[0]?.mesh, e = m ? m.edges.findIndex(x => x.straight && x.a[2] >= m.bounds.max[2] - 1e-6 && x.b[2] >= m.bounds.max[2] - 1e-6) : -1;
-      if (!m || e < 0) return 0;
-      const chain = edgeChain(m, e); setSelection({ faces: [], edges: chain.map(edge => ({ body: 0, edge })), bodies: [] }); return chain.length;
-    };
-    // A click on a named edge (`a|b`), as the viewport reports it.
-    (window as unknown as { __studioPickEdge: (name: string, additive?: boolean) => boolean }).__studioPickEdge = (name, additive = false) => {
-      for (const [b, body] of bodies.entries()) { const i = body.mesh.edges.findIndex(e => e.names.includes(name)); if (i >= 0) { pickRef.current({ face: null, edge: { body: b, edge: i }, point: null }, additive); return true; } }
-      return false;
-    };
-  }, [bodies]);
 
   // (Render settings do not change the model: nodes, parameters and consumed direct paths re-evaluate it.)
   // (FRc, O117: the section library is model input too — a frame on a row is built from it.)
@@ -1632,7 +1584,6 @@ export function App() {
   const { onPick, picking } = useViewportPicking({ meshCirclePick, doc, modelUnavailable, nativeVertexReady, nativePlanePickState: footprintState, sectionPickRef, activeStore, setActive, onFilletPick: pickFillet, onReferenceFacePick: pickCommandReferenceFace, onRevolveAxisPick: pickRevolveAxis, onTransformFacePick: pickTransformFace, retargetSweep: retargetActiveSweep, measure, assembly, sectionRef, sectionFacePickRef, viewBodiesRef,
     sectionBoxRef, setSection, setSectionFacePick, setToast, activeRef, halvesShownRef, setPick, setInstanceSel, setSelection, directSel, setDirectSel, setMeasure, measureNativeReady, measureInstances, placedMeasureContextReady, pickFilterRef,
     scene: { active, section, sketch: !!sketch, bodies, selection, setMenu } });
-  pickRef.current = onPick;
   const finishEdgePick = finishEdgeEditor.current ? finishEdgeEditor.pick : undefined;
   const pickProfile = picking.onPickProfile;
   const { freeSketches, innerSteps, profiles } = useStudioProfilePresentation(
@@ -2057,6 +2008,13 @@ export function App() {
   const appearance = useModelAppearance({ model: { doc, evaluated, bodies }, preview: { active, previewBodies: shownPreviewBodies, routePreviewBodies, ghost, proposalOverlay, compareOverlay },
     display: { inspectionVisibleKeys: inspection.visibleKeys, bodyDrag: !!bodyDrag, section: !!section, sketch: !!sketch, sectionBodies, sectionExactShown, sectionExact, animatedAt } });
   const { drawnBodies, shownBodies, animatedOffsets, bodyColors, hiddenBodies, faceColors, proposalTint, placeSkip } = appearance;
+  useStudioViewportDevHooks({
+    model: { doc, bodies, fresh: bodiesFor === evaluated, massReady },
+    view: { bodies: shownBodies, colors: bodyColors, viewport },
+    input: { selection, active: active?.cmd.id ?? null, sketch: !!sketch, measure: !!measure,
+      setSelection, setInstanceSel, setDirectSel, onPick },
+    cage: cageEdRef,
+  });
   // Mate faces show while a mate is being added, or while one is selected in the shown mates list.
   const mateFaces = !!assembly.draft || (!!assembly.selected && !!singleTop(instanceSel));
   // (G2: the viewer's clip plane while the section is open on WebGPU — on the bodies until their exact section is shown,
