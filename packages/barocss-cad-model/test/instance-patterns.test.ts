@@ -8,6 +8,7 @@ import { readStudioDoc } from '../src/engine/migrate';
 import { isRefusal } from '../src/engine/refusal';
 import { addMate, addPart, lockPart, placePart, solveDoc } from '../src/assembly/edit';
 import { acceptRevision, makeIndependent, offerRevision } from '../src/assembly/definitions';
+import { setInstanceLook } from '../src/assembly/looks';
 import { addInstancePattern, deleteInstancePattern, editInstancePattern, expandPatterns, skipOccurrence } from '../src/assembly/patterns';
 import { bomView, deriveBom } from '../src/team/assembly';
 import { threeMfModelOf } from '../src/print/export3mf';
@@ -101,6 +102,21 @@ test('changing orientation retains the fixed-side lock and moves the same depend
   refused(() => addInstancePattern(bracketAssembly(), { ...circleOptions, orientation: 'uniform' as never }), 'PATTERN_VALUE', /orientation/);
   refused(() => addInstancePattern(bracketAssembly(), { seed: 'p1', kind: 'linear', count: 4, dir: [1, 0, 0], spacing: 10, orientation: 'keep' }), 'PATTERN_VALUE', /orientation/);
   refused(() => editInstancePattern(linear(bracketAssembly()).doc, { id: 'pat1', orientation: 'keep' }), 'PATTERN_VALUE', /orientation/);
+});
+
+test('orientation changes preserve names, visibility, part revision, material, and the Skip list', () => {
+  const base = bracketAssembly();
+  const hidden = placePart(base, { part: 'p1', name: 'Concealed bracket', hidden: true }).doc;
+  const looked = setInstanceLook(hidden, { part: 'p1', body: 'b1', patch: { material: 'brass', color: '#112233' } }).doc;
+  const rotating = addInstancePattern(looked, { ...circleOptions, skip: [2] }).doc;
+  const fixed = editInstancePattern(rotating, { id: 'pat1', orientation: 'keep' }).doc;
+  assert.deepEqual(fixed.instancePatterns![0].skip, [2]);
+  assert.deepEqual(fixed.instances!.map(i => [i.id, i.name, i.hidden]), [
+    ['p1', 'Concealed bracket', true], ['pat1-1', 'Concealed bracket 2', true], ['pat1-3', 'Concealed bracket 4', true],
+  ]);
+  assert.deepEqual(fixed.instances!.map(i => i.looks!.b1.material), ['brass', 'brass', 'brass']);
+  const retained = (doc: StudioDoc) => doc.instances!.map(i => [i.id, i.name, i.position, i.part, i.doc, i.looks, i.hidden, i.pattern]);
+  assert.deepEqual(retained(fixed), retained(rotating));
 });
 
 test('fixed orientation reaches native drawing bodies and STEP, while BOM keeps one shared definition', async () => {

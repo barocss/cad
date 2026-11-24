@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D1930: [Qualify both circular orientations in actual Studio outputs](notes/circular-instance-orientation-output-2026-11-25/README.md), #263. Verify the downloaded SVG and STEP independently and check retained source metadata.
+
 - D1929: [Refuse a stale saved circular occurrence rotation](notes/circular-instance-orientation-admission-2026-11-25/README.md), #263. Verify atomic native Open, pending Apply and a late same-name file reply.
 
 - D1928: [Keep the seed orientation in a circular instance pattern](notes/circular-instance-orientation-2026-11-25/README.md), #263. Verify both modes, bounds, native Save/Open and the previous reader refusal.
