@@ -23,10 +23,10 @@ import { createCommandReferencePicking, type CommandPickScope } from './app/comm
 import { retireStudioNotice, type StudioNotice } from './app/studioNotice';
 import { filletStationInputKey } from './app/filletEndpoints';
 import { readFilletPickedEdgeHighlight, type FilletPickedEdgeRequest } from './app/filletPickedEdgeHighlight';
-import { SHARED_HOLE_LAYOUT_EDIT } from './app/sharedHoleLayout';
 import { useSketchReopenCamera } from './sketch/useSketchReopenCamera';
 import { useBrowserActions } from './app/useBrowserActions';
-import { commandApplyReadiness, createCommandApplyQueue } from './state/commandApply';
+import { createCommandApplyQueue } from './state/commandApply';
+import { useStudioCommandApply } from './state/useStudioCommandApply';
 import { sketchOffsetTarget } from './app/sketchOffsetTarget';
 import { useStudioReferenceReview } from './app/useStudioReferenceReview';
 import { bodyTopologyCounts } from './ui/bodyTopologyLabel';
@@ -97,7 +97,6 @@ import { createRoundedInsetHistoryEdit, LINKED_INSET_EXTRUDE } from './app/round
 import { ReferenceDecisions } from './ui/ReferenceDecisions';
 import { useRobotExports } from './robot/useRobotExports';
 import { RobotInspector } from './robot/RobotInspector';
-import { OFFSET_FACE_EDIT } from '@barocss/cad-model/app/offsetFaceEdit';
 import { useHistoryReferenceActions } from './app/useHistoryReferenceActions';
 import { filletLaunchAvailability, filletType, newFilletActive } from './app/filletFamily';
 import { currentNativePlanePick, SKETCH_AT_MIDPOINT } from './app/midpointSketch';
@@ -1221,86 +1220,16 @@ export function App() {
   useEffect(() => commandPreview.watch(), [active?.cmd, engine, bearingRootCurrent, activeStore, activeJoinView, activeJoinSource]);
 
   const [restart, setRestart] = useState<Command | null>(null);
-  const discardFeatureDraft = useCallback(() => {
-    if (!activeStore.get()) return;
-    commandApply.clear();
-    setRestart(null);
-    commandPreview.retire();
-    activeStore.set(null);
-  }, [activeStore, commandApply, commandPreview.retire]);
-  const apply = useCallback(() => {
-    // (R1d: the command as it is now, its values and preview state — the App may not have rendered since they changed.)
-    const active = activeStore.get();
-    if (!active?.cmd.build) return;
-    const readiness = commandApplyReadiness(active, { commandDoc, bearingRootCurrent, canChangeDocument,
-      modelCurrent: docNow.current === doc && evaluatedRef.current === evaluated });
-    if (readiness.kind === 'skip') return;
-    if (readiness.kind === 'wait') { commandApply.requestApply(active); return; }
-    commandApply.clearApply();
-    if (readiness.kind === 'blocked' || readiness.kind === 'retire') {
-      if (readiness.clearRepeat) commandApply.clearRepeat();
-      if (readiness.kind === 'retire') { commandPreview.retire(); setActive(null); }
-      return;
-    }
-    if (readiness.kind === 'source-changed') { setToast({ title: 'Source changed', hint: readiness.hint, detail: '' }); return; }
-    const independentPreview = readiness.preview;
-    // The preview is what the part becomes: shown as the part at once (no step back to the old bodies
-    // while the committed document evaluates).
-    const next = independentPreview?.doc ?? active.cmd.build(active.ctx, active.values);
-    if (active.cmd.id === SHARED_HOLE_LAYOUT_EDIT && next === doc) {
-      commandApply.clear(); setActive(null); setPreviewBodies(null); return;
-    }
-    if (active.cmd === LINKED_INSET_EXTRUDE) {
-      if (active.ctx.doc !== doc || markerNow.current !== null || !fresh || busy || !massReady) {
-        setToast({ title: 'Linked inset not created', hint: 'Show the latest History and wait for the current sketch.', detail: '' });
-        return;
-      }
-      stageFeatureCandidate({ next, input: prefixDoc(next, next.nodes.length), failureTitle: 'Linked inset not created', roundedInset: 'create' });
-      setActive(null); setPreviewBodies(null);
-      return;
-    }
-    // (Not when it places an instance: those bodies are the instance's, shown once it is evaluated.)
-    if (!commit(active.cmd.id === 'move' ? moveRenderAppearance(doc, next) : next)) return;
-    const clearSelection = active.cmd.id === 'offset-face' || active.cmd.id === 'delete-face' || active.cmd.id === 'replace-face' || active.cmd.id === 'replace-face-edit' || active.cmd.id === OFFSET_FACE_EDIT || active.cmd.id === 'fill-feature-pattern' || active.cmd.id === 'curve-feature-pattern';
-    if (clearSelection) setSelection(emptySel);
-    if (active.cmd.id === 'thicken' || active.cmd.id === 'sew') setDirectSel([]);
-    const acceptedPreview = independentPreview?.bodies ?? previewBodies;
-    if (acceptedPreview && Object.keys(next.outputs).length && (next.instances?.length ?? 0) === (active.ctx.doc.instances?.length ?? 0)) {
-      // Resolve the picks against the accepted topology before installing the preview's new indices.
-      const acceptedBodies = bodies;
-      if (!clearSelection) setSelection(sel => carrySelection(sel, acceptedBodies, acceptedPreview));
-      setBodies(acceptedPreview); claimBodies.current = true;
-    }
-    holeCloseFocus(active);
-    setActive(null); setPreviewBodies(null); setSketch(null);
-  }, [activeStore, commandApply, holeCloseFocus, commit, previewBodies, bodies, bearingRootCurrent, commandDoc, setSketch, acceptanceScope, doc, evaluated, commandPreview.retire, stageFeatureCandidate, fresh, busy, massReady]);
-  const uploadFont = useCallback(async (key: string, file: File) => {
-    const captured = activeStore.get();
-    if (!captured || key !== 'font') return;
-    const { cmd, ctx } = captured;
-    commandApply.clearApply();
-    lastTyped.current = Date.now(); handleDrag.current = null;
-    setPreviewBodies(null);
-    setActive(a => {
-      if (!a || a.cmd !== cmd || a.ctx !== ctx) return a;
-      const values = { ...a.values, [key]: '' }; hudValues.current = values;
-      return { ...a, values, upload: 'busy', preview: 'busy', error: undefined };
-    });
-    try {
-      const source = await fontUpload.load(ctx, file);
-      if (!source) return;
-      setActive(a => {
-        if (!a || a.cmd !== cmd || a.ctx !== ctx) return a;
-        const values = patchValues(a.cmd, a.ctx, a.values, { [key]: JSON.stringify(source) }); hudValues.current = values;
-        return { ...a, values, upload: undefined, preview: 'busy', error: undefined };
-      });
-    } catch (error) {
-      setActive(a => a && a.cmd === cmd && a.ctx === ctx ? { ...a, upload: 'error', preview: 'error', error: {
-        title: 'Could not read the font', hint: error instanceof Error ? error.message : String(error), detail: '',
-      } } : a);
-    }
-  }, [activeStore, commandApply, fontUpload]);
-  useEffect(() => commandApply.watch(activeStore, apply), [commandApply, previewBodies, active?.cmd, apply, activeStore]);
+  const commitApply = useCallback((id: string, next: StudioDoc) =>
+    commit(id === 'move' ? moveRenderAppearance(doc, next) : next), [commit, doc]);
+  const { discardFeatureDraft, apply, uploadFont } = useStudioCommandApply({
+    command: { activeStore, activeCommand: active?.cmd, commandApply, bearingRootCurrent, commandDoc },
+    model: { doc, evaluated, docNow, evaluatedRef, markerNow, acceptanceScope, fresh, busy, massReady,
+      canChangeDocument, commitApply, stageFeatureCandidate },
+    view: { commandPreview, bodies, previewBodies, claimBodies, setBodies, setPreviewBodies, setSelection,
+      setDirectSel, setSketch, setToast, holeCloseFocus },
+    draft: { fontUpload, hudValues, setRestart },
+  });
 
   const nativeVertexReady = fresh && !busy && marker === null && !inPlace && !doc.instances?.length &&
     !active && !rendering && !drawing && !section && previewMode === 'none';
