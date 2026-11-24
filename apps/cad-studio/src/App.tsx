@@ -52,8 +52,7 @@ import { ViewContextMenu } from './ui/ViewContextMenu';
 import { useCommandPreview } from './state/useCommandPreview';
 import { DirectInspector } from './ui/DirectInspector';
 import { ModelTools } from './ui/ModelTools';
-import { useSplitSourceBounds } from './app/useSplitSourceBounds';
-import { useCommandGizmos } from './viewport/useCommandGizmos';
+import { useStudioHistoryHandles } from './viewport/useStudioHistoryHandles';
 import { useModelAppearance } from './viewport/useModelAppearance';
 import { useTwoPointSnap } from './sketch/useTwoPointSnap';
 import { useCircleFromChord } from './sketch/useCircleFromChord';
@@ -108,13 +107,13 @@ import { changesBeyondVariability } from './app/documentChanges';
 import { sameMeshes, withMasses, samePlacement, meshVolume } from './app/bodyResults';
 import { sketchRegion } from './app/sketchControls';
 import { validateRoundedInsetDocument } from '@barocss/cad-model/sketch/internal/roundedInsetRecipe';
-import { activeKey, historyHandleIsCurrent, type Active } from './app/commandState';
+import { activeKey, type Active } from './app/commandState';
 import { emptySel, NO_CUTS, NO_INSTANCES, BROWSER_PLACEMENT, PALETTE_EXTRA } from './app/studioConstants';
 import { routeMessage } from './app/routeSession';
 import { CursorReadout } from './ui/CursorReadout';
 import { iconFor } from './ui/featureIcon';
 import { revokePersonRowFiles, isPersonRowFiles, type PersonRowFiles } from '@barocss/cad-model/engine/rowFiles';
-import { Profiler, Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties } from 'react';
+import { Profiler, Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties } from 'react';
 import { EngineClient, type ProposalOverlay } from './engine/client';
 import { beginWork, createWorkOwnership, finishWork, invalidateWork, reserveAcceptedChange, stopOwnedWork, workEditRefusal, type WorkHistory } from './state/workOwnership';
 import type { OpenScope } from './state/openOwnership';
@@ -245,7 +244,6 @@ import { extrudeProfile, isIndependentExtrudeJoinProfile } from '@barocss/cad-mo
 import { isBodyEyeVisibilityOnly } from './state/bodyVisibilityReferenceProblems';
 import { heldDraftFacePreviewClear, heldDraftFaceWorkCurrent } from './state/heldDraftFaceSession';
 import { useHeldDraftFace } from './state/useHeldDraftFace';
-import { useHistoryFilletRadius } from './app/useHistoryFilletRadius';
 import { useHeldFinishEdge } from './state/useHeldFinishEdge';
 import { resolveShopRows } from '@barocss/cad-model/engine/shopRows';
 import { openAccepted, type InPlaceSession } from './app/editInPlace';
@@ -1938,56 +1936,34 @@ export function App() {
     && !bodyDrag && !ghost && !workingComparison && shownBodies === drawnBodies
     ? drawnBodies : undefined;
   const sketchGhost = useMemo(() => new Set([...(sketch ? shownBodies.map((_, i) => i) : []), ...ghostExtra.map((_, i) => shownBodies.length + i)]), [sketch, shownBodies, ghostExtra]);
-  const splitSourceOpen = openIntent.current;
-  const splitSourceBounds = useSplitSourceBounds({
-    source: { doc, commandDoc, evaluated, worker: workerSession, open: splitSourceOpen, engine,
-      marker, variant: variants.showing, fresh, busy, instances: !!doc.instances?.length || !!instanceSel.length, inPlace: !!inPlace },
-    index: editNode, enabled: !active && !sketch && !rendering && !drawing && !measure && !assembly.draft
-      && !cageEd.session && !skel.session && !section && previewMode === 'none', engine,
-    nextRevision: () => revision.current++,
-    liveSourceCurrent: () => docNow.current === doc && evaluatedRef.current === evaluated && ownsEvaluatedSource()
-      && workerSessionNow.current === workerSession && openIntent.current === splitSourceOpen
-      && markerNow.current === null && !shownVariant.current && !inPlaceNow.current,
-    editorCurrent: () => editNodeNow.current === editNode && !activeStore.get() && !nodeEditorDraft.current,
+  const historyHandleOpen = openIntent.current, historyScope = workOwnership.current.scope;
+  const currentHistorySource = () => docNow.current === doc && evaluatedRef.current === evaluated && ownsEvaluatedSource()
+    && workerSessionNow.current === workerSession && openIntent.current === historyHandleOpen
+    && markerNow.current === null && !shownVariant.current && !inPlaceNow.current;
+  const { gizmo, handles, dragTransforms } = useStudioHistoryHandles({
+    model: { doc, evaluated, bodies, selection, marker, editNode },
+    source: { commandDoc, engine, worker: workerSession, open: historyHandleOpen, scope: historyScope, variant: variants.showing,
+      fresh, busy, instances: !!doc.instances?.length || !!instanceSel.length, inPlace: !!inPlace, nextRevision: () => revision.current++ },
+    context: { sketch, rendering, drawing, measure, assemblyDraft: assembly.draft, instanceCount: instanceSel.length, snapStep },
+    enabled: { viewport: !cageEd.session && !skel.session && !section && previewMode === 'none',
+      fillet: fresh && !busy && !workerFailure && marker === null && !variants.showing && !inPlace && !doc.instances?.length
+        && !instanceSel.length && !directSel.length && !bodyDrag && !exploded && !ghost && !workingComparison
+        && !candidateReview?.shown && !parameterEdit && !routePanelOpen && !routePreviewBodies },
+    ownership: {
+      split: currentHistorySource, editor: () => editNodeNow.current === editNode && !nodeEditorDraft.current,
+      idle: () => !activeStore.get() && !nodeEditorDraft.current, canChangeDocument,
+      fillet: () => currentHistorySource() && shownDocNow.current === doc && bodiesRef.current === bodies
+        && workOwnership.current.scope === historyScope && !workEditRefusal(workOwnership.current, historyScope)
+        && editNodeNow.current === editNode && !sectionRef.current && !nodeEditorDraft.current
+        && !parameterEditNow.current && !project.opening() && !referenceProblems.current.get(doc)?.length,
+    },
+    command: { active, ctx, setActive, handleDrag, previewFor, readActive: activeStore.get },
+    drag: { bodyDrag, setBodyDrag },
+    lifecycle: { previewBodies, retirePreview: commandPreview.retire, clearApply: commandApply.clearApply },
   });
-  const historyFilletOpen = openIntent.current, historyFilletWork = workOwnership.current.scope;
-  const historyFillet = useHistoryFilletRadius({
-    doc, commandDoc, evaluated, bodies, index:editNode, worker:workerSession, open:historyFilletOpen, scope:historyFilletWork, engine, readIdle:!active,
-    enabled:fresh && !busy && !workerFailure && marker===null && !variants.showing && !inPlace && !doc.instances?.length
-      && !instanceSel.length && !directSel.length && !sketch && !rendering && !drawing && !measure && !assembly.draft
-      && !cageEd.session && !skel.session && !section && previewMode==='none' && !bodyDrag && !exploded && !ghost
-      && !workingComparison && !candidateReview?.shown && !parameterEdit && !routePanelOpen && !routePreviewBodies,
-    revision:()=>revision.current++,
-    idle:()=>!activeStore.get() && !nodeEditorDraft.current,
-    liveSourceCurrent:()=>docNow.current===doc && shownDocNow.current===doc && evaluatedRef.current===evaluated
-      && bodiesRef.current===bodies && ownsEvaluatedSource() && workOwnership.current.scope===historyFilletWork
-      && !workEditRefusal(workOwnership.current,historyFilletWork) && workerSessionNow.current===workerSession
-      && openIntent.current===historyFilletOpen && editNodeNow.current===editNode && markerNow.current===null
-      && !shownVariant.current && !inPlaceNow.current && !sectionRef.current && !nodeEditorDraft.current
-      && !parameterEditNow.current && !project.opening() && !referenceProblems.current.get(doc)?.length,
-  });
-  useLayoutEffect(() => {
-    const running=activeStore.get();
-    if (!running || historyHandleIsCurrent(running)) return;
-    commandPreview.retire();
-    commandApply.clearApply();
-    setActive(current=>current===running?null:current);
-  });
-  const commandGizmos = useCommandGizmos({ historyFillet, model: { doc, evaluated, bodies, selection, marker, editNode }, command: { active, ctx, setActive, handleDrag, previewFor, readActive:activeStore.get },
-    splitSource: { evidence: splitSourceBounds, canStart: evidence => {
-      const running = activeStore.get();
-      return canChangeDocument() && (running
-        ? !!evidence && running.ctx.splitSourceBounds === evidence && running.ownsSource?.() === true
-        : editNodeNow.current === editNode && !nodeEditorDraft.current);
-    } },
-    context: { sketch, rendering, drawing, measure, assemblyDraft: assembly.draft, instanceCount: instanceSel.length, snapStep }, drag: { bodyDrag, setBodyDrag } });
-  const { gizmo, handles, cmdBody } = commandGizmos;
-  useEffect(() => commandGizmos.settleDrag(), [previewBodies, bodyDrag, active]);
-  useEffect(() => commandGizmos.resetDrag(), [active?.cmd.id]);
   sectionBoxRef.current = sectionBox;
   // (Where the camera is: a cut-out's default corner faces it, G20.)
   const cameraEye = (): Vec3 | null => { const c = viewport.current?.getCamera(); if (!c) return null; const cp = Math.cos(c.pitch); return [c.target[0] + c.distance * cp * Math.cos(c.yaw), c.target[1] + c.distance * cp * Math.sin(c.yaw), c.target[2] + c.distance * Math.sin(c.pitch)]; };
-  const dragTransforms = useMemo(() => cmdBody !== undefined && bodyDrag ? new Map([[cmdBody, bodyDrag.matrix]]) : null, [cmdBody, bodyDrag]);
   const mapHoverOwner = useMemo(() => fresh && previewMode === 'analysis' && mapLegend && scalarMaps?.length ? {} : null,
     [doc, evaluated, fresh, previewMode, mapKind, scalarMaps, mapLegend, shownBodies, hiddenBodies, viewBackend, animatedOffsets, dragTransforms, sectionClip, mapScope]);
   const { hover: mapHover, setHover: setMapHover } = useOwnedScalarHover(mapHoverOwner);
