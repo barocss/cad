@@ -1,5 +1,5 @@
 import { useStudioSheetPatterns } from './app/useStudioSheetPatterns';
-import { prepareParameterPatternHoleSpacing } from './state/parameterPatternHoleSpacing';
+import { useStudioModelEvaluation, type RouteEvaluationHandoff, type StudioParameterEdit } from './state/useStudioModelEvaluation';
 import { useStudioInspectionViews } from './app/useStudioInspectionViews';
 import { useStudioMeasurementReadouts, useStudioMeasurementSession } from './app/useStudioMeasurementReadouts';
 import { selectedInstanceActions } from './assembly/selectedInstanceActions';
@@ -11,8 +11,6 @@ import { useStudioProfilePresentation } from './app/useStudioProfilePresentation
 import { modelWheelZoomAvailable, useWheelZoomPreference } from './viewport/wheelZoomPreference';
 import { createStudioFilletPicking } from './app/studioFilletPicking';
 import { createEvaluationEvidence } from './state/evaluationEvidence';
-import { candidateReferenceProblem, refreshCandidateReferences } from './state/candidateReferences';
-import { prepareParameterHeightFinish } from './state/parameterHeightFinish';
 import { HistoryFeatureEditor } from './ui/HistoryFeatureEditor';
 import { createCommandHudActions } from './app/commandHudActions';
 import { InstanceInspector } from './ui/InstanceInspector';
@@ -118,7 +116,7 @@ import { iconFor } from './ui/featureIcon';
 import { revokePersonRowFiles, isPersonRowFiles, type PersonRowFiles } from '@barocss/cad-model/engine/rowFiles';
 import { Profiler, Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties } from 'react';
 import { EngineClient, type ProposalOverlay } from './engine/client';
-import { beginWork, createWorkOwnership, finishWork, invalidateWork, reserveAcceptedChange, settleWorkReservation, stopOwnedWork, workEditRefusal, type WorkHistory } from './state/workOwnership';
+import { beginWork, createWorkOwnership, finishWork, invalidateWork, reserveAcceptedChange, stopOwnedWork, workEditRefusal, type WorkHistory } from './state/workOwnership';
 import type { OpenScope } from './state/openOwnership';
 import { scheduleProjectOpenFit } from './app/projectOpenFit';
 import { prepareSignedFinishOpen, verifyStoredNativeOpen } from './files/documentFile';
@@ -129,7 +127,7 @@ import { usePlacedCandidatePreview } from './viewport/usePlacedCandidatePreview'
 import { usePlacedBodyEvaluation, type PlacedBodyMap } from './app/usePlacedBodyEvaluation';
 import { acceptedPlacedSketchSnaps } from './viewport/placedSketchSnaps';
 import { supportsPlacedBoxSnapRotation } from './viewport/placedBoxSnap';
-import { contentKey, evaluationKey } from '@barocss/cad-model/engine/evalMemo';
+import { contentKey } from '@barocss/cad-model/engine/evalMemo';
 import { bearingFaceInput } from './app/bearingEdit';
 import { usePlacedBearingEditor } from './app/usePlacedBearingEditor';
 import { resolveSkeletons, SKELETON_CODES } from '@barocss/cad-model/frames/skeleton';
@@ -137,10 +135,10 @@ import { carryOver, emptyDoc, featureLabel, fmt, prefixDoc, starterDoc, type Ske
 import { featureId, nextSerial } from '@barocss/cad-model/engine/ids';
 import { modelHash } from '@barocss/cad-model/chat/spec';
 import { captureSignatures, type Problem as RefProblem } from '@barocss/cad-model/engine/references';
-import { type BodyResult, type EvalResult } from '@barocss/cad-model/engine/evaluate';
+import type { BodyResult } from '@barocss/cad-model/engine/evaluate';
 import type { FriendlyError } from '@barocss/cad-model/engine/errors';
 import type { Vec3 } from '@barocss/cad-model/engine/mesh';
-import { carrySelection, commands, patchValues, refOf, selectedBodies, subdNodeOf, type Command, type Ctx, type Selection, type Values } from '@barocss/cad-model/app/commands';
+import { commands, patchValues, refOf, selectedBodies, subdNodeOf, type Command, type Ctx, type Selection, type Values } from '@barocss/cad-model/app/commands';
 import type { MeasurePick } from '@barocss/cad-model/app/measure';
 import { captureMeasureTarget, type PlacedMeasureSource } from './app/measureTargets';
 import { hostsOf, nestedCard, renderKeysOf, singleNested, singleTop, viewportInstanceSelection } from './assembly/nestedSelection';
@@ -213,7 +211,7 @@ import { useCageEditor } from './subd/useCageEditor';
 import { SKETCH3D_COMMAND, useSkeletonEditor } from './skeleton/useSkeletonEditor';
 import { SkeletonPanel } from './ui/SkeletonPanel';
 import { RouteBundlePanel } from './ui/RouteBundlePanel';
-import { assertRouteBundleDocument, routeBundleDocumentIdentity } from '@barocss/cad-model/engine/routeBundle';
+import { assertRouteBundleDocument } from '@barocss/cad-model/engine/routeBundle';
 import { loadUserLibraries, setLibraryStore } from '@barocss/cad-model/library/libraries';
 import { browserStore } from './ui/browserStore';
 import { processProfile } from '@barocss/cad-model/library/materials';
@@ -319,7 +317,7 @@ export function App() {
     else { docNow.current = update; setDocStateRaw(update); }
   }, [cancelNativeReview]);
   const discardRouteRef = useRef<() => void>(() => {});
-  const routeAcceptedHandoff = useRef<{ doc: StudioDoc; identity: string; evaluatedIdentity: string; revision: number; result: Extract<EvalResult, { ok: true }> } | null>(null);
+  const routeAcceptedHandoff = useRef<RouteEvaluationHandoff | null>(null);
   const workOwnership = useRef(createWorkOwnership<StudioDoc, StudioDoc>());
   const [, setWorkCompletionVersion] = useState(0);
   const acceptanceScope = workOwnership.current.scope;
@@ -389,7 +387,7 @@ export function App() {
   const [bodiesFor, setBodiesFor] = useState<StudioDoc | null>(null);
   // Parameter candidates use the normal evaluation lane before the accepted document changes.
   const parameterRequest = useRef(0);
-  const [parameterEdit, setParameterEdit] = useState<{ kind?: 'direct'; failureTitle?: string; roundedInset?: 'create' | 'edit' | 'detach'; request: number; base: StudioDoc; baseInput: StudioDoc; input: StudioDoc; next: StudioDoc; accept(next: StudioDoc): void } | null>(null);
+  const [parameterEdit, setParameterEdit] = useState<StudioParameterEdit | null>(null);
   const parameterEditNow = useRef(parameterEdit); parameterEditNow.current = parameterEdit;
   const evaluationEvidence = useMemo(createEvaluationEvidence, []);
   /** Bodies set at once for the commit about to happen (a command's preview, an emptied part): claimed by its document. */
@@ -739,123 +737,18 @@ export function App() {
     setSectionExact, doc, evaluated, bodies, viewport, engine, revision, lanes });
   const render = useMemo(() => doc.render ?? defaultRender(), [doc.render]);
 
-  // A display-only commit does not rerun the main effect: release its reservation on the same exact input.
-  useEffect(() => { workOwnership.current = settleWorkReservation(workOwnership.current, doc, evaluated); }, [doc, evaluated, acceptanceScope]);
-  // A parameter candidate and its BRep stay together. A refusal keeps the last accepted document and bodies.
-  const parameterCurrent = !parameterEdit || (parameterEdit.base === doc && parameterEdit.baseInput === evaluated && !shownVariant.current);
-  useEffect(() => {
-    let live = true;
-    if (parameterEdit && !parameterCurrent) {
-      // A display-only edit cancels the candidate without evaluating the unchanged accepted model again.
-      if (parameterEdit.baseInput === evaluated) evaluationEvidence.restoreAccepted(docNow.current, bodiesRef.current);
-      evaluationEvidence.discardUninstalled(parameterEdit.request);
-      if (parameterEdit.kind === 'direct') parameterEditNow.current = null;
-      setParameterEdit(null); return;
-    }
-    const edit = parameterEdit;
-    const input = edit?.input ?? evaluated;
-    const started = beginWork(workOwnership.current, doc, input, !!edit || !!variants.showing || marker !== null);
-    workOwnership.current = started;
-    const work = started.run!;
-    const current = () => live && workOwnership.current.run?.token === work.token && (!edit || (parameterRequest.current === edit.request && docNow.current === edit.base && evaluatedRef.current === evaluated && !shownVariant.current));
-    const refuse = (detail: string, hint = 'The accepted part and its references are unchanged.') => {
-      if (!edit || !current()) return;
-      evaluationEvidence.restoreAccepted(edit.base, bodiesRef.current);
-      evaluationEvidence.discardUninstalled(edit.request);
-      if (edit.kind === 'direct') parameterEditNow.current = null;
-      setParameterEdit(null); setBusy(false);
-      setToast({ title: edit.failureTitle ?? (edit.kind === 'direct' ? 'Direct geometry not changed' : 'Parameters not changed'), hint, detail });
-    };
-    setBusy(true);
-    const run = async () => {
-      if (edit?.roundedInset) {
-        // Detach stores the exact profile used to build the linked base.
-        const verified = await engine.verifyStoredInsets(edit.roundedInset === 'detach' ? edit.base : edit.next);
-        if (!current()) return;
-        if (!('ok' in verified)) {
-          const recipe = edit.next.nodes[1];
-          const hint = edit.roundedInset === 'edit' && verified.roundedInsetOpeningClosed && recipe?.kind === 'rounded-rectangle-inset'
-            ? `A ${recipe.insetMM} mm inset closes the opening. Increase Source width or reduce Inset distance.` : undefined;
-          refuse(verified.error, hint);
-          return;
-        }
-      }
-      // Only bounded parameter adapters may adjust dependent geometry/evidence before evaluation.
-      const heightCandidate = edit && !edit.kind && !edit.roundedInset
-        ? await prepareParameterHeightFinish({ before: edit.base, next: edit.next,
-          evaluateParent: (part, request) => engine.part(part, request, 'refs'),
-          nextRevision: () => revision.current++, isCurrent: current }) : edit?.next;
-      if (!current()) return;
-      const candidate = edit && !edit.kind && !edit.roundedInset
-        ? prepareParameterPatternHoleSpacing(edit.base, heightCandidate!) : heightCandidate;
-      const preparedParameter = !!edit && candidate !== edit.next;
-      const candidateInput = preparedParameter ? prefixDoc(candidate!, candidate!.nodes.length) : input;
-      const key = evaluationKey(candidateInput), handoff = !edit ? evaluationEvidence.takeHandoff() : null;
-      const routeHandoff = !edit ? routeAcceptedHandoff.current : null;
-      if (!edit) routeAcceptedHandoff.current = null;
-      // Only the exact accepted route document can consume its final result, once.
-      const routeResult = routeHandoff && routeHandoff.doc === doc && marker === null && !variants.showing
-        && routeHandoff.identity === routeBundleDocumentIdentity(doc) && routeHandoff.evaluatedIdentity === routeBundleDocumentIdentity(evaluated)
-        && routeHandoff.result.revision === routeHandoff.revision ? routeHandoff.result : null;
-      // A configuration-only parameter edit can keep the already fresh accepted result too.
-      const accepted = evaluationEvidence.accepted();
-      let evaluationRevision: number | undefined;
-      const result = edit && !preparedParameter && accepted?.key === key ? accepted.result
-        : handoff?.target === docNow.current && handoff.key === key ? handoff.result : routeResult ?? await engine.evaluate(candidateInput, evaluationRevision = revision.current++);
-      if (!current()) return;
-      if (preparedParameter && (evaluationRevision === undefined || result?.revision !== evaluationRevision)) {
-        refuse('The dependent parameter evaluation could not be verified.'); return;
-      }
-      if (!result) { if (edit) refuse('The evaluation was superseded.'); else setBusy(false); return; }
-      if (edit) {
-        if (!result.ok) { refuse(result.error.detail || result.error.hint); return; }
-        evaluationEvidence.stage(edit.request, result);
-        const referenceProblem = candidateReferenceProblem(candidate!, bodiesRef.current, result.bodies);
-        if (referenceProblem) { refuse(referenceProblem); return; }
-        const next = await refreshCandidateReferences({ candidate: candidate!, key, result,
-          accepted: evaluationEvidence.accepted,
-          evaluateParent: part => engine.part(part, revision.current++, 'refs'), isCurrent: current });
-        if (!current()) return;
-        // Compute the handoff key before accepting: a failed key cannot partially commit the candidate.
-        const nextKey = evaluationKey(prefixDoc(next, next.nodes.length));
-        // Reuse this exact result when installing the accepted document; do not evaluate it twice.
-        workCompletion.current = work.token;
-        try { edit.accept(next); } finally { workCompletion.current = null; }
-        if (docNow.current === edit.base) { refuse('The parameter change was not accepted.'); return; }
-        const installed = docNow.current;
-        evaluationEvidence.accept(edit.request, installed, nextKey, result);
-        if (edit.kind === 'direct') parameterEditNow.current = null;
-        setParameterEdit(null);
-        return;
-      }
-      setBusy(false); setLastMs(lastEvalMs.current = result.wallTime * 1000);
-      rebuildStore.set({ doc: evaluated, result });
-      if (result.ok) {
-        evaluationEvidence.remember(key, result);
-        const prev = bodiesRef.current;
-        setBodies(result.bodies); setBodiesFor(evaluated); claimBodies.current = false;
-        if (handoff) evaluationEvidence.markInstalled(result, docNow.current, evaluated);
-        if (chatSelection.current) setSelection(resolveNames(result.bodies, chatSelection.current).selection); else setSelection(sel => carrySelection(sel, prev, result.bodies));
-        const repeat = commandApply.takeRepeat();
-        if (repeat) setRestart(repeat);
-        chatSelection.current = null;
-      }
-      else {
-        setSelection(emptySel); setPick(null); setMeasure(null); setMenu(null);
-        setToast({ ...result.error, documentSource: { doc: docNow.current, evaluated } });
-      }
-    };
-    void run().catch(cause => { if (edit) refuse(cause instanceof Error ? cause.message : String(cause)); else if (current()) { setBusy(false); setToast({ title: 'Could not evaluate the part', hint: 'The previous part remains shown.', detail: String(cause), documentSource: { doc: docNow.current, evaluated } }); } }).finally(() => {
-      const previous = workOwnership.current;
-      workOwnership.current = finishWork(previous, work.token);
-      // Cached accepted-result handoffs can settle without changing any React state.
-      // Refresh handlers to the finished scope; never revive a superseded/unmounted run.
-      if (live && previous !== workOwnership.current) setWorkCompletionVersion(version => version + 1);
-    });
-    return () => { live = false; workOwnership.current = finishWork(workOwnership.current, work.token); };
-  }, [engine, evaluated, parameterEdit, parameterCurrent, importWorkerRecovery]);
-  // (A command's preview is what the part becomes: its bodies belong to the document it commits.)
-  useEffect(() => { if (claimBodies.current) { claimBodies.current = false; setBodiesFor(evaluated); } }, [evaluated]);
+  useStudioModelEvaluation({
+    model: { doc, evaluated, marker, variantShown: !!variants.showing },
+    owner: { docNow, readEvaluated: () => evaluatedRef.current, readBodies: () => bodiesRef.current, shownVariant },
+    work: { workOwnership, workCompletion, acceptanceScope, workFinished: () => setWorkCompletionVersion(version => version + 1) },
+    params: { parameterEdit, parameterEditNow, parameterRequest, setParameterEdit },
+    worker: { engine, revision, importWorkerRecovery },
+    evidence: { evaluationEvidence, routeAcceptedHandoff, claimBodies },
+    install: { setBusy, reportDuration: ms => setLastMs(lastEvalMs.current = ms), rebuildStore, setBodies, setBodiesFor, chatSelection, setSelection,
+      repeatCommand: () => { const repeat = commandApply.takeRepeat(); if (repeat) setRestart(repeat); },
+      clearFailedInspection: () => { setSelection(emptySel); setPick(null); setMeasure(null); setMenu(null); },
+      setToast },
+  });
   const fresh = bodiesFor === evaluated;
   const modelUnavailable = !fresh && !busy;
   const sectionExclusionControls = useSectionExclusion(doc, section, {

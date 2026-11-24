@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { createFlow } from './flow-helper.mjs';
 
-const pins = ['apps/cad-studio/src/App.tsx', 'apps/cad-studio/test/parameter-geometry-retry-browser.mjs'];
+const pins = ['apps/cad-studio/src/App.tsx', 'apps/cad-studio/src/state/useStudioModelEvaluation.ts', 'apps/cad-studio/test/parameter-geometry-retry-browser.mjs'];
 const f = await createFlow({
   name: 'parameter-geometry-retry', output: process.argv[2], envFrozen: 'PARAMETER_RETRY_SOURCE_FROZEN',
   initialFiles: pins, requiredFrozen: pins,
