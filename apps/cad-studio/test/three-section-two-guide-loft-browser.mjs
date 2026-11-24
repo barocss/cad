@@ -2,7 +2,9 @@ import assert from 'node:assert/strict';
 import { createFlow } from './flow-helper.mjs';
 
 const baseline = process.argv.includes('--baseline');
-const tilted = process.argv.includes('--tilted');
+const replaceBaseline = process.argv.includes('--replace-baseline');
+const replaceTilted = replaceBaseline || process.argv.includes('--replace-tilted');
+const tilted = replaceTilted || process.argv.includes('--tilted');
 const flow = await createFlow({
   name: 'three-section-two-guide-loft', output: process.argv[2], envFrozen: 'THREE_SECTION_TWO_GUIDE_SOURCE_FROZEN',
   initialFiles: ['packages/barocss-cad/src/features/loft-two-guides.ts', 'packages/barocss-cad-model/src/app/profileCommands.ts'],
@@ -39,12 +41,15 @@ const rectangle = (id, width, depth, z) => ({
   id, kind: 'sketch', profile: 'rectangle', min: [0, 0], max: [width, depth],
   ...(!tilted && z === 0 ? {} : { plane: { origin: world([0, 0, z]), normal: tilted ? [0, 0.8, 0.6] : [0, 0, 1], xAxis: [1, 0, 0] } }),
 });
+const sources = [
+  rectangle('n0', 10, 6, 0), rectangle('n1', 14, 12, 10),
+  rectangle('n2', 10, 6, 20), rectangle('n3', 14, 14, 10),
+  ...(replaceTilted ? [rectangle('n4', 15, 14, 10), rectangle('n5', 14, 14, 11)] : []),
+];
+const firstCopy = sources.length, loftIndex = firstCopy + 3;
 const seed = {
-  format: 'barocss-cad-model', schema: 3, units: 'mm', parameters: {}, nextId: 4, outputs: {},
-  nodes: [
-    rectangle('n0', 10, 6, 0), rectangle('n1', 14, 12, 10),
-    rectangle('n2', 10, 6, 20), rectangle('n3', 14, 14, 10),
-  ],
+  format: 'barocss-cad-model', schema: 3, units: 'mm', parameters: {}, nextId: sources.length, outputs: {},
+  nodes: sources,
   direct: {
     sources: { a: curve('left', 0), b: curve('right', 10) },
     objects: [{ id: 'a', name: 'Rail A', source: 'a', geometry: 'curve' },
@@ -60,14 +65,14 @@ const sameEdge = (a, b) => (samePoint(a[0], b[0]) && samePoint(a[1], b[1]))
   || (samePoint(a[0], b[1]) && samePoint(a[1], b[0]));
 
 async function verify(label, middleDepth, middleSource) {
-  const doc = await flow.doc(), node = doc.nodes[7];
-  assert.deepEqual(doc.nodes.slice(0, 4), seed.nodes);
+  const doc = await flow.doc(), node = doc.nodes[loftIndex];
+  assert.deepEqual(doc.nodes.slice(0, firstCopy), seed.nodes);
   assert.equal(node.kind, 'loft');
-  assert.equal(node.id, 'n7');
+  assert.equal(node.id, 'n' + loftIndex);
   assert.deepEqual(node.from, [0, middleSource, 2]);
   const stations = [0, 10, 20];
   assert.deepEqual(node.sections, stations.map((z, i) => tilted
-    ? { sketch: i + 4, frame: frame(z) } : { sketch: i + 4, z }));
+    ? { sketch: i + firstCopy, frame: frame(z) } : { sketch: i + firstCopy, z }));
   assert.deepEqual(node.guides.map(value => value.controlPoints), [guide(0), guide(10)]);
   const native = await flow.inspect(label, doc), [worker] = (await flow.bodies()).bodies;
   assert.equal(native.key, worker.key);
@@ -113,7 +118,7 @@ async function verify(label, middleDepth, middleSource) {
 await flow.run(async () => {
   flow.phase = 'Select three separate section sketches';
   await flow.newPage();
-  await flow.openFile({ name: 'guided-middle-section.bcad', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(seed)) }, 4);
+  await flow.openFile({ name: 'guided-middle-section.bcad', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(seed)) }, sources.length);
   await flow.same(seed);
   for (const [index, name] of ['Sketch 3', 'Sketch 1', 'Sketch 2'].entries())
     await button(name).click(index ? { modifiers: ['Shift'] } : {});
@@ -142,8 +147,15 @@ await flow.run(async () => {
   await button('Iso').click();
   await flow.page.getByTitle('Frame all (F)', { exact: true }).click();
   await flow.snapshot('01-three-section-loft');
-  await flow.openFeatureEditor(7, 'Loft three sections');
+  await flow.openFeatureEditor(loftIndex, 'Loft three sections');
   const editor = flow.editor();
+  const middleSource = editor.getByLabel('Section 2 source', { exact: true });
+  if (replaceBaseline) {
+    assert.equal(await middleSource.count(), 0, 'The prior editor only accepts a height-based middle source.');
+    await flow.same(first);
+    await flow.snapshot('00-prior-tilted-middle-source-missing');
+    return;
+  }
   const guideX = editor.getByLabel(tilted ? 'Guide 2 middle section X' : 'Guide 2 middle X', { exact: true });
   if (tilted) assert.equal(await editor.getByLabel('Guide 2 middle section Y', { exact: true }).inputValue(), '0');
   await guideX.fill('19');
@@ -151,7 +163,7 @@ await flow.run(async () => {
   await editor.locator('.hud-error-title').waitFor();
   await flow.same(first);
   await flow.snapshot('02-off-middle-guide-refused');
-  if (tilted) {
+  if (tilted && !replaceTilted) {
     await button('Reset', editor).click();
     assert.equal(await guideX.inputValue(), '18');
     await flow.closeEditor();
@@ -165,16 +177,34 @@ await flow.run(async () => {
     return;
   }
   await guideX.fill('18');
-  await editor.getByLabel('Section 2 source', { exact: true }).selectOption('n3');
+  if (replaceTilted) {
+    flow.phase = 'Refuse a different station and a middle rectangle that misses one guide';
+    assert.deepEqual(await middleSource.locator('option').evaluateAll(nodes => nodes.map(option => option.value)), ['n1', 'n3', 'n4']);
+    await middleSource.selectOption('n4');
+    await button('Apply', editor).click();
+    await editor.locator('.hud-error-title').waitFor();
+    await flow.same(first);
+    await flow.snapshot('03-off-rail-middle-source-refused');
+    await button('Reset', editor).click();
+    assert.equal(await middleSource.inputValue(), 'n1');
+  }
+  flow.phase = 'Replace the middle profile in the saved section frame';
+  await middleSource.selectOption('n3');
   await button('Apply', editor).click();
   await flow.changed(first);
   const second = await verify('middle-depth-14', 14, 3);
-  await flow.snapshot('03-middle-source-edited');
+  if (replaceTilted) {
+    const middleCopy = firstCopy + 1;
+    assert.ok(second.nodes.every((node, i) => i === middleCopy || i === loftIndex
+      || JSON.stringify(node) === JSON.stringify(first.nodes[i])));
+    assert.deepEqual(second.nodes[middleCopy], { ...seed.nodes[3], id: first.nodes[middleCopy].id });
+  }
+  await flow.snapshot(replaceTilted ? '04-middle-source-edited' : '03-middle-source-edited');
   await flow.undo();
   await flow.same(first);
   await flow.redo();
   await flow.same(second);
   const { file } = await flow.save('three-section-two-guide-loft');
-  await flow.freshOpen(file, second, '04-fresh-open');
+  await flow.freshOpen(file, second, replaceTilted ? '05-fresh-open' : '04-fresh-open');
   await verify('reopened-depth-14', 14, 3);
 });

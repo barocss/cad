@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1949: [Replace the tilted Loft middle source in History](notes/tilted-loft-middle-source-replacement-2026-11-25/README.md), #174. Verify the unchanged frame, rail contacts, copy ownership and desktop fresh Open.
 - D1948: [Loft three tilted rectangles along two exact guides](notes/tilted-three-section-two-guide-loft-2026-11-25/README.md), #174. Verify the original rails, strict middle ring and actual History and fresh Open.
 - D1947: [Discover and approve a three-section guided Loft through the local Agent](notes/agent-three-section-loft-approval-2026-11-25/README.md), #324. Verify descriptive refusal, explicit Studio approval and native reopen through local MCP.
 - D1946: [Keep blank Outline coordinates local to the input](notes/outline-point-blank-input-2026-11-25/README.md), #21. Preserve geometry, adjacent locks and History and verify explicit numeric entry in Studio.

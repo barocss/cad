@@ -1,10 +1,11 @@
 import test, { before } from 'node:test';
 import assert from 'node:assert/strict';
 import { sketch } from '../src/api';
-import { emptyDoc, withNode, type DocPlane, type ModelNode, type SketchNode, type StudioDoc } from '../src/engine/doc';
+import { emptyDoc, withNode, type Dim, type DocPlane, type ModelNode, type SketchNode, type StudioDoc } from '../src/engine/doc';
 import { directOps, emptyDirect, geometryOf, importSource } from '../src/engine/direct';
 import { loadDirect } from '../src/engine/directModule';
 import { loftCommand } from '../src/app/profileCommands';
+import { editFields } from '../src/app/editFields';
 import { framedLoftSections } from '../src/app/profiles';
 import { evaluateDoc } from '../src/engine/evaluate';
 import { copyLoftGuide } from '../src/app/loftGuides';
@@ -343,4 +344,49 @@ test('non-XY parallel height sections retain the existing two, three and eight s
     assert.ok(body.mesh.positions.length > 0 && body.mesh.indices.length > 0 && Array.from(body.mesh.positions).every(Number.isFinite));
     assert.deepEqual(doc, before);
   }
+});
+
+test('tilted two-guide Loft replaces only its owned middle rectangle from the same exact frame', () => {
+  const plane = (height: number): DocPlane => ({
+    origin: [20, 0.8 * height - 10, 0.6 * height + 7], xAxis: [1, 0, 0], normal: [0, 0.8, 0.6],
+  });
+  const rectangle = (w: number, d: Dim, height: number): SketchNode => ({
+    kind: 'sketch', profile: 'rectangle', min: [0, 0], max: [w, d], plane: plane(height),
+  });
+  const source = [
+    rectangle(10, 6, 0), rectangle(14, 12, 10), rectangle(10, 6, 20),
+    rectangle(14, { parameter: 'D' }, 10), rectangle(14, 14, 11),
+  ];
+  let doc = source.reduce<StudioDoc>((current, shape) => withNode(current, shape), { ...emptyDoc(), parameters: { D: 14 } });
+  const rail = (name: string, x: number, mid: number) => `@model ${name} {
+    version: 0; length-unit: mm;
+    @curve #g { type: nurbs; degree: 2; knots: [0,0,0,1,1,1];
+      control-points: [[${x},-10,7],[${mid},-2,13],[${x},6,19]]; weights: [1,1,1]; }
+  }`;
+  const direct = importSource(importSource(emptyDirect(), rail('left', 20, 20), 'left'), rail('right', 30, 38), 'right');
+  doc = { ...doc, direct };
+  const accepted = build(context(doc, [2, 0, 1]), { guide: direct.objects[0].id, guideB: direct.objects[1].id });
+  const feature = loft(accepted), index = accepted.nodes.length - 1, middle = feature.sections[1].sketch;
+  const fields = editFields(accepted.nodes, index, accepted.parameters).filter(field => field.key.startsWith('loftSource'));
+  assert.equal(fields.length, 1);
+  const [field] = fields;
+  assert.ok(field.kind === 'choice');
+  const from = accepted.nodes[1].id, to = accepted.nodes[3].id;
+  assert.ok(from && to);
+  assert.deepEqual(field.options.map(item => item.value), [from, to]);
+  assert.equal(field.get(accepted.nodes), from);
+  const replaced = field.set(accepted.nodes, to);
+  assert.deepEqual(replaced[index], { ...feature, from: [0, 3, 2] });
+  const previous = accepted.nodes[middle];
+  assert.ok(previous.kind === 'sketch' && previous.profile === 'rectangle');
+  assert.deepEqual(replaced[middle], { ...previous, max: [14, 14] });
+  assert.deepEqual(previous.max, [14, 12]);
+  assert.ok(replaced.every((node, i) => i === index || i === middle || node === accepted.nodes[i]));
+  const evaluated = evaluateDoc({ ...accepted, nodes: replaced, parameters: { D: 33 } }, 1);
+  assert.ok(evaluated.ok, evaluated.ok ? '' : evaluated.error.detail);
+  assert.ok(Math.abs(evaluated.bodies[0].volume! - 2656) < 1e-8);
+  const stale = accepted.nodes.map((node, i) => i === 3 ? { ...rectangle(14, 14, 11), id: to } : node);
+  assert.throws(() => field.set(stale, to), /existing section plane/);
+  const shared = withNode(accepted, { kind: 'extrude', sketch: middle, height: 1 });
+  assert.ok(editFields(shared.nodes, index, shared.parameters).every(field => !field.key.startsWith('loftSource')));
 });
