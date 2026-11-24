@@ -62,13 +62,12 @@ export function preparePathGap(shape: SketchShape, ordinaryDraft = false): Prepa
 
   if (shape.points.length > 2) {
     const { points } = shape;
-    if (!shape.construction ||
-        !points.every((point, i) => inRange(point) && (i === 0 || distance(point, points[i - 1]) > openJoinTolerance)) ||
+    if (!points.every((point, i) => inRange(point) && (i === 0 || distance(point, points[i - 1]) > openJoinTolerance)) ||
         distance(points[0], points[points.length - 1]) <= openJoinTolerance) return null;
     let arcs: (Arc | undefined)[] | undefined;
     for (let i = 0; i < points.length - 1; i++) {
       const bulge = shape.bulges?.[i] ?? 0;
-      if (!Number.isFinite(bulge)) return null;
+      if (!Number.isFinite(bulge) || (!shape.construction && bulge !== 0)) return null;
       if (bulge !== 0) {
         const geometry = boundedArc(points[i], points[i + 1], bulge);
         if (!geometry) return null;
@@ -146,7 +145,7 @@ function planPolylineGap(source: Extract<PreparedPathGap, { kind: 'polyline' }>,
   const arc = source.arcs?.[span];
   const gap = arc ? planArcGap(points[span], points[span + 1], arc, pointer, gapMm) : planLineGap(points[span], points[span + 1], pointer, gapMm);
   if (!gap || points.some(point => distance(point, gap.cutA) <= openJoinTolerance || distance(point, gap.cutB) <= openJoinTolerance)) return null;
-  if (source.arcs && points.some((point, i) => {
+  if ((source.arcs || !source.shape.construction) && points.some((point, i) => {
     if (i >= points.length - 1 || i === span) return false;
     const otherArc = source.arcs?.[i] ?? null;
     return spanDistance(point, points[i + 1], otherArc, gap.cutA) <= openJoinTolerance ||

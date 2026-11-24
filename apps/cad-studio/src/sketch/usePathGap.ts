@@ -1,7 +1,7 @@
 import { pathGapPreviewDraft } from './pathGapPreviewDraft';
 import { useEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import type { StudioDoc } from '@barocss/cad-model/engine/doc';
-import { nextIdOf, withIds } from '@barocss/cad-model/sketch/entityIds';
+import { nextIdOf, sidesOf, withIds } from '@barocss/cad-model/sketch/entityIds';
 import type { P2 } from '@barocss/cad-model/sketch/profile';
 import type { SketchShape, SketchState } from '@barocss/cad-model/sketch/types';
 import { detachSketchLink, switchTool } from '../app/sketchControls';
@@ -60,7 +60,7 @@ export function usePathGap(doc: StudioDoc, sketch: SketchState | null, docNow: R
       if (original.kind !== 'circle' || stored?.kind !== 'sketch' || stored.profile !== 'circle'
         || stored.on || stored.association || [...stored.center, stored.radius].some(value => typeof value !== 'number')) return null;
     }
-    if (original.ids && original.ids.length !== (original.kind === 'circle' ? 1 : 2)) return null;
+    if (original.ids && original.ids.length !== sidesOf(original)) return null;
     const source = preparePathGap(withIds([original])[0], true);
     return source && { original, source };
   }, [doc.nodes, sketch]);
@@ -95,9 +95,9 @@ export function usePathGap(doc: StudioDoc, sketch: SketchState | null, docNow: R
         const { points, ids } = source.shape, split = plan.span + 1;
         const bulges = points.map((_, i) => source.shape.bulges?.[i] ?? 0);
         fragments = [
-          pathFragment([...points.slice(0, split), plan.cutA], [...ids.slice(0, split), firstCutId], true,
+          pathFragment([...points.slice(0, split), plan.cutA], [...ids.slice(0, split), firstCutId], source.shape.construction,
             [...bulges.slice(0, plan.span), plan.bulges[0], 0]),
-          pathFragment([plan.cutB, ...points.slice(split)], [secondCutId, ...ids.slice(split)], true,
+          pathFragment([plan.cutB, ...points.slice(split)], [secondCutId, ...ids.slice(split)], source.shape.construction,
             [plan.bulges[1], ...bulges.slice(split, -1), 0]),
         ];
       } else if ((source.kind === 'line' || source.kind === 'arc') && plan.kind === 'segment') {

@@ -53,7 +53,18 @@ test('polyline gap chooses one straight span and refuses a corner or crossing', 
   assert.equal(planPathGap(crossing, [0, 0], 4), null);
   assert.equal(preparePathGap({ ...shape, closed: true }), null);
   assert.ok(preparePathGap({ ...shape, bulges: [0, 0.5, 0.5, 0] }));
-  assert.equal(preparePathGap({ ...shape, construction: undefined }, true), null);
+  const ordinary = { ...shape, construction: undefined };
+  assert.equal(preparePathGap(ordinary), null);
+  const ordinarySource = preparePathGap(ordinary, true);
+  assert.ok(ordinarySource?.kind === 'polyline');
+  assert.equal(ordinarySource.shape, ordinary);
+  assert.deepEqual(planPathGap(ordinarySource, [32, 29], 4), plan);
+  assert.equal(planPathGap(ordinarySource, [20, 20], 4), null);
+  assert.equal(preparePathGap({ ...ordinary, bulges: [0, 0.25, 0, 0] }, true), null);
+  assert.equal(preparePathGap({ ...ordinary, lengths: { 1: 30 } }, true), null);
+  const overlappingEnd = preparePathGap({ ...ordinary, points: [[0, 0], [20, 0], [20, 8], [4, -8]] }, true);
+  assert.ok(overlappingEnd?.kind === 'polyline');
+  assert.equal(planPathGap(overlappingEnd, [10, 0], 4), null);
 });
 
 function polyline(points: P2[], bulges: number[]) {
