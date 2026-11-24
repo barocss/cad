@@ -121,7 +121,7 @@ test('two perpendicular native quarter arcs retain the disk seam, solid mass and
   verify(reopened.outputs[0], 3);
 });
 
-test('the perpendicular extension refuses non-quarter, nonperpendicular, reversed, holed and axis-contact input', () => {
+test('the perpendicular extension refuses non-quarter, nonperpendicular, reversed, noncircular and axis-contact input', () => {
   const refused = (path, code, profile = section, mode = 'exact') => assert.throws(() => evaluateCadPart(document(path, profile, mode)),
     error => error instanceof CadPartError && error.feature === 'w' && error.code === code);
   const first = { kind: 'curve', id: 'first', degree: 2, knots: [0, 0, 0, 1, 1, 1],
@@ -136,7 +136,8 @@ test('the perpendicular extension refuses non-quarter, nonperpendicular, reverse
   refused(changedSecond([0, 1, 0], [0, 0, 1], Math.PI / 3), 'CAPABILITY');
   refused(changedSecond([0, 1, 0], [.6, 0, .8]), 'CAPABILITY');
   refused(changedSecond([0, -1, 0], [0, 0, 1]), 'GEOMETRY');
-  refused(rail, 'CAPABILITY', { ...section, holes: [[{ kind: 'arc', center: [0, 0], start: [1, 0], direction: 'ccw' }]] });
+  refused(rail, 'CAPABILITY', { ...section, holes: [[{ kind: 'line', start: [-.5, -.5] },
+    { kind: 'line', start: [.5, -.5] }, { kind: 'line', start: [0, .5] }]] });
   refused(rail, 'CAPABILITY', { id: 's', kind: 'sketch', profile: 'rectangle', min: [-1, -1], max: [1, 1] });
   refused(rail, 'CAPABILITY', section, 'exact-straight');
   for (const radius of [12, 13]) refused(rail, 'PARAMETER', { ...section, radius });

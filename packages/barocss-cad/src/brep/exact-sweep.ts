@@ -1404,7 +1404,7 @@ export function exactSweep(input: ExactSweepInput, refuse: Refuse): SweepSolid {
     return result;
   }
 
-  const perpendicular = mode === 'exact' && profileRadius !== undefined && !holes.length ? perpendicularQuarterPair(path, refuse) : undefined;
+  const perpendicular = mode === 'exact' && profileRadius !== undefined && holes.length <= 1 ? perpendicularQuarterPair(path, refuse) : undefined;
   const pair = perpendicular ?? tangentArcPair(path, refuse);
   if (pair) {
     const rectangle = profileRadius === undefined ? rectangleSection(outer) : undefined;

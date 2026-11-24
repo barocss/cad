@@ -1,13 +1,13 @@
 # CAD roadmap — current status and execution order
 
-Updated 2026-11-24 · Priority authority: D520 · Latest delivery: D1903 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
+Updated 2026-11-24 · Priority authority: D520 · Latest delivery: D1904 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
 
 This is the only current status index. Detailed tracks define acceptance; the 34 stable row pages retain scope and issue navigation. Immutable decision notes retain results. Do not append chronological status paragraphs here. [D520 decision](notes/cad-roadmap-replan-2026-11-04/README.md) supersedes D445 execution order and historical next-item text, while retaining its safeguards and bounded proofs.
 
 ## Now and next
 
-- **Current position:** [D1903](notes/independent-definition-notes-2026-11-24/README.md), P3 row 10. Edit a definition note after Make independent and again after native Save and fresh Open. Verify the actual BOM downloads and existing baseline.
-- **Next MAIN:** D1904, P5 rows [08](roadmap-rows/08.md) and [16](roadmap-rows/16.md), [#10](https://github.com/barocss/cad/issues/10). Sweep one concentric annulus through two perpendicular tangent quarter arcs. Verify both native openings, the two seam rings and bore editing.
+- **Current position:** [D1904](notes/perpendicular-quarter-arc-annular-sweep-2026-11-24/README.md), P5 rows 08 and 16. Sweep a concentric annulus through perpendicular quarter arcs, edit the bore and verify the two native seam rings in Studio.
+- **Next MAIN:** D1905, P4 rows [15](roadmap-rows/15.md) and [21](roadmap-rows/21.md), [#44](https://github.com/barocss/cad/issues/44). Extract History dimension-handle ownership and drag lifecycle from App. Compare the existing desktop Split and circular Fillet paths before and after.
 - **Separate follow-ups:** Continue Studio App extraction in cohesive parts with affected desktop checks. [#608 Rendering](https://github.com/barocss/cad/issues/608) stays on HOLD. API inventory drift remains open. The issue tracker records [#126](https://github.com/barocss/cad/issues/126), [#613](https://github.com/barocss/cad/issues/613), [#152](https://github.com/barocss/cad/issues/152) and [#22](https://github.com/barocss/cad/issues/22) as closed.
 - **Active repository:** [barocss/cad](https://github.com/barocss/cad), based on `origin/main`. Fetch before work and preserve unexpected changes. The [migration record](../../../docs/migration/README.md) maps the former `local/cad-dev` history and issue numbers.
 - **Evidence correction:** D482 records2167 PASS/0 FAIL/2 existing SKIP in a later full-kernel run than D433. Neither result is a new full-suite PASS at this audit HEAD. [D482 record](notes/vertical-contact-refusal-2026-11-04/README.md).
@@ -43,7 +43,7 @@ P0 findings that can lose work, export stale geometry or misattribute results ta
 
 ## GitHub requirement and issue inventory
 
-- The [current closeout queue](roadmap-tracks/18-issue-closeout.md) records 209 open issues after the Crossing sketch and three-vertex Sketch snapshot closeouts, with remaining acceptance gaps and held dependencies.
+- The [current closeout queue](roadmap-tracks/18-issue-closeout.md) records 209 open issues after the ordinary definition-note closeout and drawing multi-selection intake, with remaining acceptance gaps and held dependencies.
 
 The [November 20 routing snapshot](notes/open-issue-routing-2026-11-20/README.md) covers all 229 open issues in the standalone CAD repository. It links each issue to a primary route and identifies model-version tracking for agent visual review as the next AI workflow to measure (#324).
 

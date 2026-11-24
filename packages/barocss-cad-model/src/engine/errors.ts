@@ -243,7 +243,7 @@ const rules: { code?: string | readonly string[]; text?: RegExp; title: string; 
     hint: 'Align the arc tangents in the direction of travel at their shared point.' },
   { text: /Exact two-arc sweep needs two coplanar circular arcs/,
     title: 'The arc planes are outside the exact Sweep range',
-    hint: 'Use two coplanar tangent arcs, or two tangent quarter arcs in perpendicular planes with a solid circular profile.' },
+    hint: 'Use two coplanar tangent arcs, or two tangent quarter arcs in perpendicular planes with a circular disk or a concentric annulus.' },
   { text: /Exact two-arc sweep needs one circular outer section or one bend-aligned rectangular section/,
     title: 'The two-arc Sweep needs a circle or an aligned rectangle',
     hint: 'Use a circle with an optional concentric bore, or align one rectangle axis with the bend radius and center any rectangular opening.' },

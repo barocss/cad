@@ -7,7 +7,7 @@ import { createFlow } from './flow-helper.mjs';
 const annular = process.argv.includes('--annular');
 const sameTurn = process.argv.includes('--same-turn');
 const orthogonal = process.argv.includes('--orthogonal');
-assert.ok(!orthogonal || (!annular && !sameTurn));
+assert.ok(!orthogonal || !sameTurn);
 const weight = Math.SQRT1_2;
 const clamp = [0, 0, 0, 1, 1, 1];
 const first = [[0, 0, 0], [12, 0, 0], [12, 12, 0]];
@@ -37,11 +37,12 @@ const pins = ['packages/barocss-cad/src/brep/exact-sweep.ts',
   'packages/barocss-cad-model/src/chat/part/features.ts', 'apps/cad-studio/src/ui/SweepHistoryInputs.tsx'];
 const baseline = process.argv.includes('--expect-refused');
 const f = await createFlow({
-  name: orthogonal ? 'exact-orthogonal-arc-sweep' : sameTurn ? 'exact-same-turn-sweep' : 'exact-s-bend-sweep', output: process.argv[2],
-  envFrozen: orthogonal ? 'D1898_SOURCE_FROZEN' : sameTurn && annular ? 'D1708_SOURCE_FROZEN'
+  name: orthogonal && annular ? 'exact-orthogonal-annular-sweep'
+    : orthogonal ? 'exact-orthogonal-arc-sweep' : sameTurn ? 'exact-same-turn-sweep' : 'exact-s-bend-sweep', output: process.argv[2],
+  envFrozen: orthogonal && annular ? 'D1904_SOURCE_FROZEN' : orthogonal ? 'D1898_SOURCE_FROZEN' : sameTurn && annular ? 'D1708_SOURCE_FROZEN'
     : sameTurn ? 'D1706_SOURCE_FROZEN' : annular ? 'D1682_SOURCE_FROZEN' : 'D1681_SOURCE_FROZEN',
   initialFiles: pins, requiredFrozen: pins,
-  qualification: orthogonal ? 'Sweep a disk through two native perpendicular quarter arcs with one common tangent.' : annular ? 'Sweep a concentric annulus through two tangent bends and verify both editable bore openings.'
+  qualification: orthogonal && annular ? 'Sweep a concentric annulus through perpendicular quarter arcs and verify each bore opening and tangent joint.' : orthogonal ? 'Sweep a disk through two native perpendicular quarter arcs with one common tangent.' : annular ? 'Sweep a concentric annulus through two tangent bends and verify both editable bore openings.'
     : sameTurn ? 'Sweep an editable exact disk along two same-turn tangent arcs of unequal radii.'
     : 'Join opposite circular arcs, Sweep an editable exact disk and inspect the native tangent joint.',
   limits: [`Desktop WebGPU and local MCP, two 90° arcs with radii 12 and 18 mm, ${annular ? 'one concentric annulus' : 'one circular disk'}.`],
@@ -226,26 +227,29 @@ async function inspectBoreMouths(inner, outer) {
   const cube = f.page.getByRole('group', { name: 'View cube', exact: true });
   const middle = (inner + outer) / 2;
   const mouths = [
-    { name: 'start', view: 'Left', x: 0, y: 0 },
-    { name: 'end', view: sameTurn ? 'Left' : 'Right', x: secondEndX, y: 30 },
+    { name: 'start', view: 'Left', center: [0, 0, 0], depth: 0 },
+    orthogonal ? { name: 'end', view: 'Top', center: [12, 30, 18], depth: 2 }
+      : { name: 'end', view: sameTurn ? 'Left' : 'Right', center: [secondEndX, 30, 0], depth: 0 },
   ];
-  for (const { name, view, x, y } of mouths) {
+  for (const { name, view, center, depth } of mouths) {
     f.phase = `Inspect the ${name} bore opening`;
     await button('View cube directions', cube).click();
     await f.page.getByRole('menuitem', { name: view, exact: true }).click();
     if (await button('Ortho').getAttribute('aria-pressed') !== 'true') await button('Ortho').click();
     await f.page.getByTitle('Frame all (F)', { exact: true }).click();
-    await f.page.waitForFunction(([x, y, direction]) => {
-      const a = window.__studioScreenOf([x,y,0]), b = window.__studioScreenOf([x+1,y,0]);
+    await f.page.waitForFunction(({ center, depth, direction }) => {
+      const behind = center.map((value, axis) => axis === depth ? value + 1 : value);
+      const a = window.__studioScreenOf(center), b = window.__studioScreenOf(behind);
       return document.querySelector('.view-cube .vc-label')?.textContent === direction
         && Math.hypot(a[0]-b[0],a[1]-b[1]) < .01;
-    }, [x, y, view.toUpperCase()]);
-    const {opening,land} = await f.page.evaluate(([x, y, middle]) => ({
-      opening:window.__studioSurfacePoint([x,y,0]), land:window.__studioSurfacePoint([x,y,middle]),
-    }), [x, y, middle]);
+    }, { center, depth, direction: view.toUpperCase() });
+    const witness = center.map((value, axis) => axis === 2 - depth ? value + middle : value);
+    const {opening,land} = await f.page.evaluate(({ center, witness }) => ({
+      opening:window.__studioSurfacePoint(center), land:window.__studioSurfacePoint(witness),
+    }), { center, witness });
     assert.ok(land, JSON.stringify({view,opening,land}));
-    near(land[0], x, 1e-4);
-    assert.ok(!opening || (view === 'Left' ? opening[0]-x : x-opening[0]) > .25,
+    near(land[depth], center[depth], 1e-4);
+    assert.ok(!opening || (view === 'Left' ? opening[depth]-center[depth] : center[depth]-opening[depth]) > .25,
       JSON.stringify({view,opening,land}));
     const label = `10-${sameTurn ? name : view.toLowerCase()}-bore-opening`;
     f.report.observations.push({label,opening,land});
@@ -288,7 +292,7 @@ await f.run(async () => {
   await hud().getByLabel('Representation', { exact: true }).selectOption('exact');
   if (baseline) {
     await status('refused').waitFor();
-    const refusal = orthogonal ? 'The two arcs must lie in one plane'
+    const refusal = orthogonal ? 'The arc planes are outside the exact Sweep range'
       : sameTurn && annular ? 'The same-turn Sweep needs a circular disk'
       : annular ? 'This Sweep needs a circular disk' : 'Path is outside the exact Sweep range';
     await hud().getByText(refusal, { exact: true }).waitFor();
@@ -382,8 +386,8 @@ await f.run(async () => {
     const description = await call('describe', { command: 'sweep-curve' });
     assert.match(description.values.representation, /tangent circular arcs of opposite curvature/);
     if (sameTurn) assert.match(description.values.representation, /unequal-radius arcs that turn in the same direction/);
-    if (orthogonal) assert.match(description.values.representation, /two tangent quarter arcs in perpendicular planes with one solid circular profile/);
-    if (annular) assert.match(description.values.sketch, /concentric circular hole/);
+    if (orthogonal) assert.match(description.values.representation, /two tangent quarter arcs in perpendicular planes with a circular disk or a concentric annulus/);
+    if (annular) assert.match(description.values.sketch, /optional concentric bore/);
     const summary = await call('query', { action: 'summary' });
     const source = summary.direct_curves.find(candidate => candidate.id === rail.id);
     const kinked = summary.direct_curves.find(candidate => candidate.id === 'kink');

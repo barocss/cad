@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1904: [Sweep an exact circular tube through perpendicular quarter arcs](notes/perpendicular-quarter-arc-annular-sweep-2026-11-24/README.md), #10. Preserve both native seam rings and permit bore editing with the existing clearance checks.
 - D1903: [Edit an independent definition note after native reopen](notes/independent-definition-notes-2026-11-24/README.md), #274. Verify definition ownership, actual BOM downloads and baseline currentness.
 - D1902: [Replace a held Chamfer edge before an independent Through Hole](notes/held-chamfer-through-hole-2026-11-24/README.md), #20. Match the selected line to its original native parent and rebuild the full chain before accepting.
 - D1901: [Repeat an original circular through-Subtract on a signed XY line](notes/prior-circular-linear-cut-pattern-2026-11-24/README.md), #25. Certify both original native cavities before making a Linear copy.
