@@ -2,18 +2,26 @@ import assert from 'node:assert/strict';
 import { createFlow } from './flow-helper.mjs';
 
 const baseline = process.argv.includes('--baseline');
+const lateral = process.argv.includes('--right') ? 'Right' : process.argv.includes('--front') ? 'Front' : null;
+const supports = [
+  ['n1.side3', 'n1.side1'], ['n1.side0', 'n1.side2'], ['n1.bottom', 'n1.top'],
+];
+const open = lateral === 'Right' ? [0, 1] : lateral === 'Front' ? [1, 0] : [2, 1];
+const opening = supports[open[0]][open[1]];
 const pins = [
   'apps/cad-studio/test/box-wall-shell-browser.mjs',
   'packages/barocss-cad-model/src/app/commands.ts',
+  'packages/barocss-cad-model/src/app/boxShellSelection.ts',
   'packages/barocss-cad-model/src/app/editFields.ts',
   'packages/barocss-cad-model/src/engine/migrate.ts',
+  'packages/barocss-cad-model/src/engine/shellWalls.ts',
   'packages/barocss-cad/src/part/part-box-shell.ts',
   'packages/barocss-cad/src/part/part-shell.ts',
 ];
 const f = await createFlow({
-  name: 'box-wall-shell', output: process.argv[2], envFrozen: 'D1938_SOURCE_FROZEN',
+  name: 'box-wall-shell', output: process.argv[2], envFrozen: lateral ? 'D1954_SOURCE_FROZEN' : 'D1938_SOURCE_FROZEN',
   initialFiles: pins, requiredFrozen: pins,
-  qualification: 'Make and edit five named walls on one exact top-open box.',
+  qualification: 'Make and edit five named walls on one exact cardinal box.',
   limits: ['One ordinary 40 × 30 × 20 mm upright rectangular extrusion. Native desktop Studio and exact .bcad.'],
   inspectorSource: `
 import { readFileSync } from 'node:fs';
@@ -51,14 +59,16 @@ async function verify(label, doc, walls) {
   if (feature.kind === 'shell-walls') {
     assert.equal(doc.schema, 3);
     assert.deepEqual(feature.walls, walls);
-    assert.equal(feature.opening, 'n1.top');
+    assert.equal(feature.opening, opening);
+    assert.deepEqual(Object.keys(feature.sigs).sort(), supports.flat().sort());
   } else {
     assert.equal(feature.kind, 'shell');
     assert.equal(feature.thickness, 2);
-    assert.deepEqual(feature.open, ['n1.top']);
+    assert.deepEqual(feature.open, [opening]);
   }
-  const lo = [walls['n1.side3'], walls['n1.side0'], walls['n1.bottom']];
-  const hi = [40 - walls['n1.side1'], 30 - walls['n1.side2'], 20];
+  const extents = [40, 30, 20];
+  const lo = supports.map(([low]) => walls[low] ?? 0);
+  const hi = supports.map(([, high], axis) => extents[axis] - (walls[high] ?? 0));
   const removed = hi.reduce((volume, limit, i) => volume * (limit - lo[i]), 1);
   const expectedVolume = 24000 - removed;
   const expectedCentroid = [20, 15, 10].map((value, i) => (24000 * value - removed * (hi[i] + lo[i]) / 2) / expectedVolume);
@@ -75,10 +85,17 @@ async function verify(label, doc, walls) {
     assert.equal(found[0].loops, loops);
     return found[0];
   };
-  plane(0, 0, -1); plane(0, 40, 1); plane(1, 0, -1); plane(1, 30, 1); plane(2, 0, -1);
-  plane(2, 20, 1, 2);
-  for (const axis of [0, 1, 2]) plane(axis, lo[axis], 1);
-  for (const axis of [0, 1]) plane(axis, hi[axis], -1);
+  for (const [axis, pair] of supports.entries()) {
+    for (const side of [0, 1]) {
+      const name = pair[side], sign = side === 0 ? -1 : 1, isOpening = name === opening;
+      const outer = plane(axis, side === 0 ? 0 : extents[axis], sign, isOpening ? 2 : 1);
+      if (feature.kind === 'shell-walls') assert.equal(outer.name, name);
+      if (!isOpening) {
+        const inner = plane(axis, side === 0 ? lo[axis] : hi[axis], -sign);
+        if (feature.kind === 'shell-walls') assert.equal(inner.name, `n2.in.${name}`);
+      }
+    }
+  }
   f.report.observations.push({ label, volume: n.mass.volume, centroid: n.mass.centroid, opening: hi, innerCorner: lo });
   return n;
 }
@@ -89,9 +106,9 @@ await f.run(async () => {
     name: 'shell-wall-stock.bcad', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(source)),
   });
   await f.same(source);
-  await button('Top', f.page.locator('.views')).click();
+  await button(lateral ?? 'Top', f.page.locator('.views')).click();
   await f.page.getByTitle('Frame all (F)', { exact: true }).click();
-  await f.worldClick([20, 15, 20]);
+  await f.worldClick(lateral === 'Right' ? [40, 15, 10] : lateral === 'Front' ? [20, 0, 10] : [20, 15, 20]);
   await f.page.waitForFunction(() => window.__studioSelection?.selection?.faces?.length === 1);
   await f.command('Shell');
   if (baseline) {
@@ -100,6 +117,43 @@ await f.run(async () => {
     await hud().locator('.status').filter({ hasText: /^preview$/ }).waitFor();
     await f.same(source);
     await f.snapshot('00-previous-uniform-wall-only');
+    if (lateral) return;
+  } else if (lateral) {
+    await field(hud(), 'Wall thickness').selectOption({ label: 'Per face' });
+    const allWalls = {
+      'Left wall': ['n1.side3', 3], 'Right wall': ['n1.side1', 5], 'Front wall': ['n1.side0', 2],
+      'Back wall': ['n1.side2', 4], 'Bottom wall': ['n1.bottom', 4], 'Top wall': ['n1.top', 6],
+    };
+    const kept = Object.entries(allWalls).filter(([, [name]]) => name !== opening);
+    const walls = Object.fromEntries(kept.map(([, entry]) => entry));
+    assert.equal(await field(hud(), lateral + ' wall').count(), 0);
+    for (const [label, [, value]] of kept) await field(hud(), label).fill(String(value));
+    await hud().locator('.status').filter({ hasText: /^preview$/ }).waitFor();
+    await f.same(source);
+    await button('Apply', hud()).click();
+    await f.changed(source);
+    await hud().waitFor({ state: 'hidden' });
+    const made = await f.doc();
+    await verify('lateral-applied', made, walls);
+    await f.snapshot('01-lateral-applied');
+    await f.openFeatureEditor(2, 'Edit the original top wall');
+    const editor = f.editor();
+    assert.equal(await field(editor, lateral + ' wall').count(), 0);
+    await field(editor, 'Top wall').fill('16');
+    await button('Apply', editor).click();
+    await editor.getByText('Wall thicknesses leave no cavity', { exact: true }).waitFor();
+    await f.same(made);
+    await f.snapshot('02-lateral-cavity-collapse-refused');
+    await field(editor, 'Top wall').fill('7');
+    const edited = (await f.applyEditor(made, '03-lateral-wall-edited')).doc;
+    const nextWalls = { ...walls, 'n1.top': 7 };
+    const accepted = await verify('lateral-edited-native', edited, nextWalls);
+    await f.undo(); await f.same(made);
+    await f.redo(); await f.same(edited);
+    const saved = await f.save('per-face-' + lateral.toLowerCase());
+    await f.freshOpen(saved.file, edited, '04-lateral-fresh-open');
+    assert.deepEqual(await verify('lateral-reopened', edited, nextWalls), accepted);
+    return;
   } else {
     await field(hud(), 'Wall thickness').selectOption({ label: 'Per face' });
     await field(hud(), 'Bottom wall').fill('4');

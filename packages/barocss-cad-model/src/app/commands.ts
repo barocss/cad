@@ -39,7 +39,6 @@ import { linearSpanHandles } from './linearSpanHandles';
 import type { BodyResult } from '../engine/evaluate';
 import { circularFilletPair, closedCircularFilletPair } from './circularFilletPair';
 import { closedFilletDragLimit } from '../engine/nativeFilletTorus';
-import { boxShellWalls } from '../engine/shellWalls';
 import { boxShellSelection, buildBoxWallShell } from './boxShellSelection';
 import type { BearingAssemblyInput } from '../engine/bearingContext';
 import type { DisplayEdge } from '../engine/mesh';
@@ -823,13 +822,17 @@ const allCommands: Command[] = [
     available: ctx => selectedBodies(ctx.selection).length === 1 ? ok : no('Select the faces to open (Shift-click for more), or a body to hollow closed.'),
     fields: (ctx, values) => {
       const wall: Field = { key: 't', label: 'Wall', kind: 'mm', min: 0.1 };
-      if (!boxShellSelection(ctx)) return [wall];
+      const target = boxShellSelection(ctx);
+      if (!target) return [wall];
       const mode: Field = { key: 'wallMode', label: 'Wall thickness', kind: 'choice',
         options: [{ value: 'uniform', label: 'Uniform' }, { value: 'per-face', label: 'Per face' }] };
-      return [mode, ...(values?.wallMode === 'per-face' ? boxShellWalls.map(side =>
+      return [mode, ...(values?.wallMode === 'per-face' ? target.walls.map(side =>
         ({ key: side.key, label: side.label, kind: 'mm' as const, min: 0.1 })) : [wall])];
     },
-    defaults: ctx => boxShellSelection(ctx) ? { t: 2, wallMode: 'uniform', ...Object.fromEntries(boxShellWalls.map(side => [side.key, 2])) } : { t: 2 },
+    defaults: ctx => {
+      const target = boxShellSelection(ctx);
+      return target ? { t: 2, wallMode: 'uniform', ...Object.fromEntries(target.walls.map(side => [side.key, 2])) } : { t: 2 };
+    },
     // The wall: an arrow into the body from the (first) open face; deeper is thicker.
     handles: (ctx, v) => {
       if (v.wallMode === 'per-face') return [];

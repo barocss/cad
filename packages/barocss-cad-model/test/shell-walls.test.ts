@@ -46,3 +46,42 @@ test('Shell saves and edits all original box-wall names and refuses absent or ch
   assert.ok(!failed.ok);
   assert.match(failed.error.detail, /REFERENCE_MOVED|no longer the face/);
 });
+
+test('a lateral per-face Shell exposes its five retained walls and keeps the top wall editable after Open', () => {
+  const doc = rectanglePart(40, 30, 20);
+  const stock = evaluateDoc(doc, 1);
+  assert.ok(stock.ok);
+  const shell = commandById('shell')!;
+  const pick = (axis: 'x' | 'z', sign: 1 | -1) => {
+    const face = stock.bodies[0].mesh.faces.findIndex(candidate => candidate.nativeAlignFace?.axis === axis
+      && candidate.nativeAlignFace.sign === sign);
+    assert.ok(face >= 0);
+    return { doc, bodies: stock.bodies, selection: { bodies: [], edges: [], faces: [{ body: 0, face }] } };
+  };
+  const ctx = pick('x', 1);
+  const defaults = shell.defaults!(ctx), values = {
+    ...defaults, wallMode: 'per-face', leftWall: 3, frontWall: 2, backWall: 4, bottomWall: 4, topWall: 6,
+  };
+  assert.deepEqual(shell.fields!(ctx, values).map(field => field.key), ['wallMode', 'bottomWall', 'frontWall', 'backWall', 'leftWall', 'topWall']);
+  const built = shell.build!(ctx, values), node = built.nodes[2];
+  assert.ok(node.kind === 'shell-walls');
+  assert.equal(node.opening, 'n1.side1');
+  assert.deepEqual(node.walls, { 'n1.bottom': 4, 'n1.side0': 2, 'n1.side2': 4, 'n1.side3': 3, 'n1.top': 6 });
+  const read = readStudioDoc(JSON.stringify(built));
+  assert.ok('doc' in read);
+  assert.deepEqual(read.doc.nodes[2], node);
+  const native = evaluateDoc(read.doc, 2);
+  assert.ok(native.ok && Math.abs(native.bodies[0].volume! - 15120) < 1e-7);
+  const edits = editFields(read.doc.nodes, 2), top = edits.find(field => field.key === 'topWall');
+  assert.ok(top?.kind === 'number' && edits.every(field => field.key !== 'rightWall'));
+  const edited = { ...read.doc, nodes: top.set(read.doc.nodes, 7) };
+  const result = evaluateDoc(edited, 3);
+  assert.ok(result.ok && Math.abs(result.bodies[0].volume! - 16008) < 1e-7);
+  const wrong = structuredClone(built), invalid = wrong.nodes[2];
+  assert.ok(invalid.kind === 'shell-walls');
+  invalid.sigs['n1.top'].d = [1, 0, 0];
+  assert.match((readStudioDoc(JSON.stringify(wrong)) as { error?: string }).error ?? '', /five cardinal walls/);
+  const bottom = pick('z', -1);
+  assert.deepEqual(shell.fields!(bottom, values).map(field => field.key), ['t']);
+  assert.throws(() => shell.build!(bottom, values), /original upper or a side face/);
+});

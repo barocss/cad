@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { checkBrep, evaluateCadPart, faceGeometry, massPropertiesOf } from '../dist/index.js';
+import { brepMassProperties, checkBrep, evaluateCadPart, faceGeometry, loadCadPart, massPropertiesOf, saveCadPart } from '../dist/index.js';
 
 const sketch = { id: 'profile', kind: 'sketch', profile: 'rectangle', min: [0, 0], max: [40, 30] };
 const extrude = { id: 'box', kind: 'extrude', sketch: 'profile', height: 20 };
@@ -39,6 +39,57 @@ test('per-face box Shell preserves native names and the exact asymmetric cavity'
   }
   const thickOneSide = { ...shell, walls: { ...walls, 'box.side3': 25 } };
   near(massPropertiesOf(evaluate([sketch, extrude, thickOneSide]).outputs[0], 1).volume, 24000 - 10 * 24 * 16);
+});
+
+test('per-face Shell gives each original lateral opening one exact ring and five named inner walls', () => {
+  const pairs = [['box.side3', 'box.side1'], ['box.side0', 'box.side2'], ['box.bottom', 'box.top']];
+  const extents = [40, 30, 20];
+  for (const opening of pairs.slice(0, 2).flat()) {
+    const kept = { ...walls, 'box.top': 6 };
+    delete kept[opening];
+    const feature = { ...shell, opening, walls: kept };
+    const snapshot = evaluate([sketch, extrude, feature]);
+    const [output] = snapshot.outputs, { brep } = output;
+    const report = checkBrep(brep, { strict: true, pcurveSamples: 7 });
+    assert.ok(report.valid, report.issues.join('\n'));
+    assert.deepEqual(report.counts, { bodies: 1, shells: 1, faces: 11, loops: 12, coedges: 48, edges: 24, vertices: 16 });
+    assert.equal(report.topology[0].genus, 0);
+    assert.ok(brep.coedges.every(use => use.pcurve));
+    const low = pairs.map(([name]) => kept[name] ?? 0);
+    const high = pairs.map(([, name], axis) => extents[axis] - (kept[name] ?? 0));
+    for (const [axis, names] of pairs.entries()) {
+      for (const [side, name] of names.entries()) {
+        const outward = side === 0 ? -1 : 1;
+        const outer = brep.faces.find(face => face.name === name);
+        const inner = brep.faces.find(face => face.name === `wall.in.${name}`);
+        assert.ok(outer);
+        const plane = faceGeometry(outer);
+        assert.equal(plane.kind, 'plane');
+        near(plane.o[axis], side === 0 ? 0 : extents[axis]);
+        near(plane.n[axis], outward);
+        if (name === opening) {
+          assert.equal(outer.loops.length, 2);
+          assert.equal(inner, undefined);
+        } else {
+          assert.equal(outer.loops.length, 1);
+          assert.ok(inner);
+          const support = faceGeometry(inner);
+          assert.equal(support.kind, 'plane');
+          near(support.o[axis], side === 0 ? low[axis] : high[axis]);
+          near(support.n[axis], -outward);
+        }
+      }
+    }
+    const removed = high.reduce((volume, value, i) => volume * (value - low[i]), 1);
+    for (const properties of [massPropertiesOf(output, 1), brepMassProperties(brep, 1)]) {
+      near(properties.volume, 24000 - removed);
+      properties.centroid.forEach((value, axis) =>
+        near(value, (12000 * extents[axis] - removed * (high[axis] + low[axis]) / 2) / (24000 - removed)));
+    }
+    assert.deepEqual(loadCadPart(saveCadPart(snapshot)).outputs[0].brep, brep);
+    const collapsed = { ...feature, walls: { ...kept, 'box.top': 16 } };
+    assert.throws(() => evaluate([sketch, extrude, collapsed]), /no cavity/);
+  }
 });
 
 test('per-face box Shell refuses ambiguous walls, stale orientation and a closed cavity', () => {

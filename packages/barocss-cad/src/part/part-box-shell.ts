@@ -1,5 +1,6 @@
 import { faceGeometry } from '../brep/analytic-boolean.js';
 import { checkBrep, type Brep } from '../brep/brep-core.js';
+import { transformBrep, type BrepAffine } from '../brep/brep-transform.js';
 import type { CurveSegment2, XY } from '../brep/curved-arrangement.js';
 import { ExtrudedProfileLimits } from '../features/extruded-profile-solid.js';
 import { booleanPrismatic, brepFromPrismatic, prismaticExtrude, type PrismaticSolid } from '../features/prismatic-solid.js';
@@ -73,7 +74,7 @@ export function boxShellWallLimit(brep: Brep, open: string): number | undefined 
   return Math.min(...box.ranges.map(([low, high], axis) => (high - low) / (axis === openAxis ? 1 : 2)));
 }
 
-/** Subtract the interior of a certified cardinal box, with the cavity ending at its open top. */
+/** Subtract the interior of a certified cardinal box through one upper or lateral opening. */
 export function boxShellWithWalls(stock: PrismaticSolid, brep: Brep, opening: string, walls: Readonly<Record<string, unknown>>,
   id: string, fail: Tools['fail']): { solid: PrismaticSolid; brep: Brep } {
   const box = cardinalBoxOf(brep);
@@ -82,8 +83,9 @@ export function boxShellWithWalls(stock: PrismaticSolid, brep: Brep, opening: st
   if (!names.every(name => typeof name === 'string') || names.includes('') || new Set(names).size !== 6)
     return fail('REFERENCE', 'Per-face Shell needs six unique original face names.');
   const cap = brep.faces.find(face => face.name === opening);
-  const top = cap && box.sides.get(cap.id);
-  if (top?.axis !== 2 || top.side !== 1) return fail('SELECTION', 'Per-face Shell needs the original upper face as its opening.');
+  const openedSide = cap && box.sides.get(cap.id);
+  if (!openedSide || (openedSide.axis === 2 && openedSide.side !== 1))
+    return fail('SELECTION', 'Per-face Shell needs the original upper face or a lateral face as its opening.');
   if (Object.keys(walls).length !== 5 || Object.hasOwn(walls, opening) || names.some(name => name !== opening && !Object.hasOwn(walls, name)))
     return fail('REFERENCE', 'Per-face Shell needs one thickness for each of the five kept faces.');
 
@@ -100,6 +102,7 @@ export function boxShellWithWalls(stock: PrismaticSolid, brep: Brep, opening: st
   }
   if (ranges.some(([low, high]) => !(high - low >= minimum)))
     return fail('PARAMETER', 'The wall thicknesses leave no cavity in this box.');
+  if (openedSide.axis !== 2) return lateralBoxShellWithWalls(stock, brep, box, ranges, opening, walls, openedSide, id, fail);
   const [[x0, x1], [y0, y1], [floor, ceiling]] = ranges;
   const corners: XY[] = [[x0, y0], [x1, y0], [x1, y1], [x0, y1]];
   const sideNames = [wallNames[1][0], wallNames[0][1], wallNames[1][1], wallNames[0][0]];
@@ -116,5 +119,89 @@ export function boxShellWithWalls(stock: PrismaticSolid, brep: Brep, opening: st
   const report = checkBrep(result, { strict: true });
   if (!report.valid || report.counts.faces !== 11 || report.counts.loops !== 12 || report.topology[0]?.genus !== 0)
     return fail('GEOMETRY', 'Per-face Shell could not retain five exact walls and one top opening.');
+  return { solid, brep: result };
+}
+
+/** Rectangle tags belong to the actual cardinal supports, independent of authored segment order. */
+function namedBoxRing(ranges: readonly (readonly number[])[], names: readonly (readonly string[])[]): CurveSegment2[] {
+  const [[x0, x1], [y0, y1]] = ranges;
+  const corners: XY[] = [[x0, y0], [x1, y0], [x1, y1], [x0, y1]];
+  const tags = [names[1][0], names[0][1], names[1][1], names[0][0]];
+  return corners.map((a, i) => ({ kind: 'line', a, b: corners[(i + 1) % 4], tag: tags[i] }));
+}
+
+function namedBoxPrism(ranges: readonly (readonly number[])[], names: readonly (readonly string[])[]): PrismaticSolid {
+  const [floor, ceiling] = ranges[2], inside = prismaticExtrude([namedBoxRing(ranges, names)], floor, ceiling);
+  const regions = inside.slabs[0].regions;
+  return { ...inside, caps: [{ z: floor, regions, tag: names[2][0] }, { z: ceiling, regions, tag: names[2][1] }] };
+}
+
+/** A lateral cavity has the same world slab solid, but its single opening is a cap in a cardinal chart. */
+function lateralBoxShellWithWalls(stock: PrismaticSolid, source: Brep, box: CardinalBox,
+  cavity: readonly (readonly number[])[], opening: string, walls: Readonly<Record<string, unknown>>,
+  open: BoxSide, id: string, fail: Tools['fail']): { solid: PrismaticSolid; brep: Brep } {
+  const names = box.ranges.map(() => ['', '']);
+  for (const face of source.faces) {
+    const side = box.sides.get(face.id)!;
+    names[side.axis][side.side] = face.name!;
+  }
+  // The cached native box and the upright mass/Boolean operand must be the same named stock.
+  const slab = stock.slabs[0], region = slab?.regions[0], expected = namedBoxRing(box.ranges, names);
+  const pointEqual = (a: XY, b: XY) => a[0] === b[0] && a[1] === b[1];
+  if (stock.slabs.length !== 1 || slab.z0 !== box.ranges[2][0] || slab.z1 !== box.ranges[2][1]
+    || slab.regions.length !== 1 || !region || region.holes.length || region.outer.length !== 4
+    || new Set(region.outer.map(segment => segment.tag)).size !== 4
+    || !region.outer.every(segment => segment.kind === 'line' && expected.some(other => other.kind === 'line'
+      && segment.tag === other.tag && (pointEqual(segment.a, other.a) && pointEqual(segment.b, other.b)
+        || pointEqual(segment.a, other.b) && pointEqual(segment.b, other.a))))
+    || stock.caps?.length !== 2 || new Set(stock.caps.map(cap => cap.tag)).size !== 2
+    || !stock.caps.every(cap => cap.tag === names[2][0] && cap.z === slab.z0
+      || cap.tag === names[2][1] && cap.z === slab.z1))
+    return fail('CAPABILITY', 'Per-face Shell needs the same exact named upright box in its native and slab representations.');
+
+  // The maps have determinant +1 and entries 0/+1/-1. No rounded rotation or translation is used.
+  // local W points out through the chosen opening; local U x local V = local W.
+  const sign: 1 | -1 = open.side === 1 ? 1 : -1;
+  const axes: readonly { axis: 0 | 1 | 2; sign: 1 | -1 }[] = [
+    { axis: open.axis === 0 ? 1 : 0, sign: open.axis === 0 ? sign : sign === 1 ? -1 : 1 },
+    { axis: 2, sign: 1 }, { axis: open.axis, sign },
+  ];
+  const localRanges = axes.map(({ axis, sign }) => sign === 1 ? [...box.ranges[axis]] : [-box.ranges[axis][1], -box.ranges[axis][0]]);
+  const localNames = axes.map(({ axis, sign }) => sign === 1 ? [...names[axis]] : [names[axis][1], names[axis][0]]);
+  const localStock = namedBoxPrism(localRanges, localNames);
+  const localOriginal = brepFromPrismatic(localStock, { id: `${id}_box` });
+  const local = boxShellWithWalls(localStock, localOriginal, opening, walls, id, fail);
+  const matrix: [number, number, number, number, number, number, number, number, number] = [0, 0, 0, 0, 0, 0, 0, 0, 0];
+  axes.forEach(({ axis, sign }, i) => { matrix[3 * axis + i] = sign; });
+  const placement: BrepAffine = { matrix };
+  const result = transformBrep(local.brep, placement);
+
+  // The world upright representation retains its normal mass and downstream Boolean contract.
+  // Its cavity has precisely these same five inset supports and the original open support.
+  const innerNames = names.map(pair => pair.map(name => name === opening ? name : `${id}.in.${name}`));
+  const solid = booleanPrismatic(stock, namedBoxPrism(cavity, innerNames), 'difference');
+  const report = checkBrep(result, { strict: true });
+  const counts = report.counts, byName = new Map(result.faces.map(face => [face.name, face]));
+  const openingFace = byName.get(opening);
+  const loopKinds = openingFace?.loops.map(loop => result.loops.find(candidate => candidate.id === loop)?.kind);
+  if (!report.valid || counts.bodies !== 1 || counts.shells !== 1 || counts.faces !== 11 || counts.loops !== 12
+    || counts.coedges !== 48 || counts.edges !== 24 || counts.vertices !== 16 || report.topology.length !== 1
+    || report.topology[0].genus !== 0 || byName.size !== 11 || !result.coedges.every(use => use.pcurve)
+    || loopKinds?.length !== 2 || !loopKinds.includes('outer') || !loopKinds.includes('inner'))
+    return fail('GEOMETRY', 'Per-face Shell could not retain five exact walls and one lateral opening.');
+  const checkSupport = (face: Brep['faces'][number] | undefined, axis: 0 | 1 | 2, boundary: number, normal: number) => {
+    if (!face) return fail('GEOMETRY', 'Per-face Shell lost an original wall owner.');
+    const geometry = faceGeometry(face);
+    if (geometry.kind !== 'plane' || geometry.n[axis] !== normal || geometry.o[axis] !== boundary
+      || !geometry.n.every((value, i) => i === axis || value === 0)
+      || face.surface.kind !== 'surface' || !face.surface.controlPoints.every(row => row.every(point => point[axis] === boundary)))
+      return fail('GEOMETRY', 'Per-face Shell moved an original wall or its exact interior support.');
+  };
+  for (const original of source.faces) {
+    const { axis, side } = box.sides.get(original.id)!;
+    checkSupport(byName.get(original.name), axis, box.ranges[axis][side], side === 1 ? 1 : -1);
+    if (original.name !== opening)
+      checkSupport(byName.get(`${id}.in.${original.name}`), axis, cavity[axis][side], side === 1 ? -1 : 1);
+  }
   return { solid, brep: result };
 }

@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1954: [Set each wall thickness on a box with one side open](notes/per-face-lateral-box-shell-2026-11-25/README.md), #13. Verify the single native opening ring, retained walls and actual right/front desktop Open.
 - D1953: [Keep a blank Sketch Plane Angle out of placement](notes/sketch-plane-angle-blank-input-2026-11-25/README.md), #21. Verify explicit input, draft ownership and the native placed extrusion after fresh Open.
 - D1952: [Extract Studio document entry actions](notes/studio-document-entry-actions-2026-11-25/README.md), #44. Compare New Part, Template, Versions and cage confirmation in desktop Studio.
 - D1951: [Keep a blank Slot angle out of sketch geometry](notes/slot-angle-blank-input-2026-11-25/README.md), #21. Verify explicit zero, negative input, draft ownership and native reopen.
