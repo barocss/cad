@@ -1,7 +1,8 @@
 const solid = node => ({ node, side: 'solid' });
 
 export const tiltedDonor = { origin: [39.25, 55, 12], normal: [4 / Math.sqrt(17), -1 / Math.sqrt(17), 0], xAxis: [0, 0, 1] };
-export function pairedOutletFixture({ replace = false, donorMin, donorMax } = {}) {
+export const tiltedInletDonor = { origin: [-12.75, -15, 12], normal: [-4 / Math.sqrt(17), 1 / Math.sqrt(17), 0], xAxis: [0, 0, 1] };
+export function pairedOutletFixture({ replace = false, inlet = false, donorMin, donorMax } = {}) {
   return {
     format: 'barocss-cad-model', schema: 3, units: 'mm', parameters: {}, nextId: 5,
     nodes: [
@@ -13,7 +14,7 @@ export function pairedOutletFixture({ replace = false, donorMin, donorMax } = {}
           controlPoints: [[-10, 0, 0], [-5, 0, 0], [0, 0, 0], [12, 0, 0], [12, 12, 0], [12, 16, 0],
             [12, 20, 0], [12, 38, 0], [30, 38, 0], [33, 38, 0], [36, 38, 0]],
           weights: [1, 1, 1, Math.SQRT1_2, 1, 1, 1, Math.SQRT1_2, 1, 1, 1] } },
-      replace ? { id: 'n2', kind: 'sketch', profile: 'rectangle', min: [-3, -3], max: [3, 3], plane: tiltedDonor }
+      replace ? { id: 'n2', kind: 'sketch', profile: 'rectangle', min: [-3, -3], max: [3, 3], plane: inlet ? tiltedInletDonor : tiltedDonor }
         : { id: 'n2', kind: 'sketch', profile: 'rectangle', min: donorMin, max: donorMax },
       { id: 'n3', kind: 'extrude', sketch: 2, height: replace ? .5 : 4, ...(replace ? {} : { from: 10 }) },
       { id: 'n4', kind: 'translate', parent: solid(3), offset: [0, 0, 0] },

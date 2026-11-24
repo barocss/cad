@@ -33,7 +33,7 @@ import { weldVertices } from '../mesh/facet-brep.js';
 import { splitFacetBrep, type FacetSplitResult } from '../mesh/facet-split.js';
 import { facetBoolean, isFacetBooleanError, splitMixedBrep } from '../mesh/facet-boolean.js';
 import { selfIntersections } from '../mesh/mesh-repair.js';
-import { exactSweep, offsetExactPairedElbowOutletIfAdmitted, replaceExactPairedSweepOutletIfAdmitted } from '../brep/exact-sweep.js';
+import { exactSweep, offsetExactPairedElbowOutletIfAdmitted, replaceExactPairedSweepEndIfAdmitted } from '../brep/exact-sweep.js';
 import { sweepSolid } from '../brep/sweep-solid.js';
 import { validateCurve } from '../core/math.js';
 
@@ -794,8 +794,8 @@ function operation(f: CadPartFeature & Record<string, unknown>, t: Tools): () =>
             return one({ kind: 'brep', brep: replaced });
           }
           if (sweep?.path.controlPoints.length === 11) {
-            const replaced = replaceExactPairedSweepOutletIfAdmitted(brep, face, sweep, plane);
-            if (!replaced) return fail('CAPABILITY', 'Replace face needs the original straight outlet of one exact five-span sweep with two rectangular passages.');
+            const replaced = replaceExactPairedSweepEndIfAdmitted(brep, face, sweep, plane);
+            if (!replaced) return fail('CAPABILITY', 'Replace face needs the original straight inlet or outlet of one exact five-span sweep with two rectangular passages.');
             return one({ kind: 'brep', brep: replaced });
           }
           const replaced = replaceBoredCapIfAdmitted(brep, face, plane) ?? replaceCircularCapIfAdmitted(brep, face, plane)

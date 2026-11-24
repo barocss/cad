@@ -7,7 +7,7 @@ import { annularCapReplacementFrame, boredCapReplacementFrame, circularCapReplac
 import { exactSemicylinderCapOffsetFrame, exactSemicylinderCapReplacementAfterWallFrame, exactSemicylinderCapReplacementFrame } from '@barocss/cad/internal/exact-cylinder-cap-offset';
 import { exactPairedElbowOutletOffsetFrame } from '@barocss/cad/internal/exact-paired-elbow-offset';
 import { prismCapReplacementFrame, prismWallOffsetFrame, prismWallReplacementFrame } from '@barocss/cad/internal/prism-wall-offset';
-import { exactSemicylinderCapAfterWall, exactSemicylinderCapSource, isPairedFiveSpanCapPlaneSource, isPairedFiveSpanOutletPlaneSource, type OffsetFaceNode, type OffsetPlaneRef, type ReplaceFaceNode, type StudioDoc } from './doc';
+import { exactSemicylinderCapAfterWall, exactSemicylinderCapSource, isPairedFiveSpanCapPlaneSource, type OffsetFaceNode, type OffsetPlaneRef, type ReplaceFaceNode, type StudioDoc } from './doc';
 import { featureId } from './ids';
 import { refusal } from './refusal';
 import { cross, dot, len, sub, type Vec3 } from './vec3';
@@ -106,8 +106,8 @@ export function resolveOffsetPlaneDistance(doc: StudioDoc, binding: OffsetPlaneR
 export function resolveReplacementPlane(doc: StudioDoc, node: ReplaceFaceNode, prefix: CadPartFeature[], build?: BuildPart) {
   const missing = (reason: string) => refusal('BAD_REFERENCE', `Replace face: ${reason}`);
   const face = node.faces[0];
-  const pairedOutlet = isPairedFiveSpanOutletPlaneSource(doc.nodes, node.parent.node, face);
-  if (pairedOutlet) requireCurrentPairedDonor(doc, node.target, missing);
+  const pairedCap = isPairedFiveSpanCapPlaneSource(doc.nodes, node.parent.node, face);
+  if (pairedCap) requireCurrentPairedDonor(doc, node.target, missing);
   const { source, target } = boundSolids(doc, node.target, node.parent, prefix, missing, build);
   const paired = exactSemicylinderCapAfterWall(doc.nodes, node.parent.node, doc.parameters, face);
   const owner = doc.nodes[paired?.sourceIndex ?? node.parent.node];
@@ -118,9 +118,9 @@ export function resolveReplacementPlane(doc: StudioDoc, node: ReplaceFaceNode, p
       : exactSemicylinderCapReplacementFrame(source, face, authored));
     if (!frame) throw missing('pick the original upper cap of an Exact semicylinder.');
   } else if (owner?.kind === 'sweep-curve') {
-    if (!pairedOutlet || !exactPairedElbowOutletOffsetFrame(source, face, {
+    if (!pairedCap || !exactPairedElbowOutletOffsetFrame(source, face, {
       id: featureId(doc.nodes, node.parent.node), mode: 'exact', path: { kind: 'curve', id: 'path', ...owner.path },
-    })) throw missing('pick the original straight outlet of the five-span paired Exact Sweep.');
+    })) throw missing('pick the original straight inlet or outlet of the five-span paired Exact Sweep.');
   } else if (!boxFaceReplacementFrame(source, face) && !draftedCapReplacementFrame(source, face) &&
       !draftedWallReplacementFrame(source, face) && !prismCapReplacementFrame(source, face) && !prismWallReplacementFrame(source, face) &&
       !boredCapReplacementFrame(source, face) && !circularCapReplacementFrame(source, face) && !annularCapReplacementFrame(source, face)) {

@@ -3,7 +3,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { render } from './duct-proposal-review-browser-steps.mjs';
 import { createFlow } from './flow-helper.mjs';
-import { pairedOutletFixture, tiltedDonor } from './paired-outlet-fixture.mjs';
+import { pairedOutletFixture, tiltedDonor, tiltedInletDonor } from './paired-outlet-fixture.mjs';
 import { currentPartRevision, withMcpSession } from './mcp-browser-session.mjs';
 
 const solid = node => ({ node, side: 'solid' });
@@ -27,12 +27,12 @@ const dock = inlet ? {
   collapse: -15,
 };
 const endpoint = inlet ? 'inlet' : 'outlet';
-const input = pairedOutletFixture({ replace, donorMin: dock.donorMin, donorMax: dock.donorMax });
+const input = pairedOutletFixture({ replace, inlet, donorMin: dock.donorMin, donorMax: dock.donorMax });
 const pins = ['apps/cad-studio/test/paired-outlet-reference-plane-browser.mjs', 'apps/cad-studio/test/paired-outlet-fixture.mjs', 'apps/cad-studio/src/App.tsx',
   ...['engine/doc', 'engine/offsetPlane', 'app/nativeOffsetFace', 'app/offsetFaceEdit', 'app/profileCommands', 'app/offsetPlanePick']
     .map(path => `packages/barocss-cad-model/src/${path}.ts`),
   ...(replace ? ['packages/barocss-cad-model/src/app/replaceFaceCommand.ts', 'packages/barocss-cad/src/brep/exact-sweep.ts',
-    'packages/barocss-cad/src/brep/exact-sweep-outlet-trim.ts', 'packages/barocss-cad/src/part/part-model.ts'] : []),
+    'packages/barocss-cad/src/brep/exact-sweep-end-trim.ts', 'packages/barocss-cad/src/part/part-model.ts'] : []),
   ...(agent ? ['apps/cad-studio/test/mcp-browser-session.mjs', 'apps/cad-studio/src/ui/ProposalBrowser.tsx',
     ...['features', 'proposals'].map(file => `packages/barocss-cad-model/src/chat/part/${file}.ts`)] : []),
   ...(agentReview ? ['apps/cad-studio/test/duct-proposal-review-browser-steps.mjs',
@@ -42,9 +42,9 @@ const pins = ['apps/cad-studio/test/paired-outlet-reference-plane-browser.mjs', 
     'packages/barocss-cad-model/src/chat/part/views.ts'] : [])];
 const f = await createFlow({
   name: `paired-${endpoint}-reference-plane`, output: process.argv[2],
-  envFrozen: replace ? 'D1881_SOURCE_FROZEN' : agentReview ? inlet ? 'D1859_SOURCE_FROZEN' : 'D1856_SOURCE_FROZEN' : agent ? 'D1855_SOURCE_FROZEN' : inlet ? 'D1858_SOURCE_FROZEN' : 'D1854_SOURCE_FROZEN',
+  envFrozen: replace ? inlet ? 'D1885_SOURCE_FROZEN' : 'D1881_SOURCE_FROZEN' : agentReview ? inlet ? 'D1859_SOURCE_FROZEN' : 'D1856_SOURCE_FROZEN' : agent ? 'D1855_SOURCE_FROZEN' : inlet ? 'D1858_SOURCE_FROZEN' : 'D1854_SOURCE_FROZEN',
   initialFiles: pins, requiredFrozen: pins,
-  qualification: replace ? 'Replace the original five-span outlet with a tilted plane inside its straight tail in desktop Studio.'
+  qualification: replace ? `Replace the original five-span ${endpoint} with a tilted plane inside its straight span in desktop Studio.`
     : agent ? `#324 proposes a revision-bound ${endpoint} plane edit through local MCP and real Studio review.`
     : `#17 moves the original five-span paired ${endpoint} to a live parallel native face in desktop Studio.`,
   limits: [`One original five-span S-bend, one detached native donor and the original straight ${endpoint}.`],
@@ -115,27 +115,37 @@ async function verifyReplacement(label, doc, original, expectedX) {
   assert.deepEqual(part.incidence, original.incidence);
   assert.deepEqual(part.joins, original.joins);
   assert.deepEqual(part.planes[fixed], original.planes[fixed]);
-  const cap = part.planes[moving];
+  const cap = part.planes[moving], baselineY = inlet ? 0 : 38;
   assert.equal(cap.holes, 2);
-  cap.points.forEach(([x, y]) => near(x, expectedX + (y - 38) / 4));
+  cap.points.forEach(([x, y]) => near(x, expectedX + (y - baselineY) / 4));
+  const normal = (inlet ? [-4, 1, 0] : [4, -1, 0]).map(value => value / Math.sqrt(17));
+  cap.plane.n.forEach((value, axis) => near(value, normal[axis]));
   near(Math.min(...cap.points.map(([x]) => x)), expectedX - .5);
   near(Math.max(...cap.points.map(([x]) => x)), expectedX + .5);
-  const expectedVolume = 32 * (24 + 15 * Math.PI + expectedX - 36);
+  const trim = inlet ? expectedX + 10 : 36 - expectedX;
+  const expectedVolume = 32 * (24 + 15 * Math.PI - trim);
   near(part.volume, expectedVolume);
   near((await f.bodies()).bodies.find(body => body.key === 'b5').volume, expectedVolume);
-  if (expectedX === 35) part.centroid.forEach((value, axis) => near(value, [12.503292359971336, 18.397113817368265, 0][axis]));
+  if (inlet) {
+    const mx = 32 * (270 * Math.PI + 64) + 320 * trim - 16 * trim ** 2 - 19 / 12;
+    const my = 32 * (252 * Math.PI + 536) - 38 / 3;
+    part.centroid.forEach((value, axis) => near(value, [mx / expectedVolume, my / expectedVolume, 0][axis]));
+  } else if (expectedX === 35) part.centroid.forEach((value, axis) => near(value, [12.503292359971336, 18.397113817368265, 0][axis]));
   f.report.observations.push({ label, expectedX, expectedVolume, volume: part.volume, centroid: part.centroid, hash: part.hash, joins: 48 });
   return part.hash;
 }
 
 async function exerciseReplacement(original) {
+  const donor = inlet ? tiltedInletDonor : tiltedDonor;
+  const bottomView = inlet ? 'Right' : 'Left', topView = inlet ? 'Left' : 'Right';
+  const firstX = inlet ? -9 : 35, shift = inlet ? 1 : -1;
   // The same tilted donor must still refuse through the parallel Offset command.
   f.phase = 'Refuse the tilted donor through the parallel Offset command';
   await f.command('Offset face');
   const offset = hud('Offset face');
   await field(offset, 'Mode').selectOption('to-plane');
-  await view('Left');
-  await clickWorld(tiltedDonor.origin);
+  await view(bottomView);
+  await clickWorld(donor.origin);
   await status(offset, 'refused');
   assert.match(await offset.locator('.hud-error').innerText(), /parallel/i);
   await f.same(input);
@@ -145,11 +155,11 @@ async function exerciseReplacement(original) {
   await clickWorld(dock.sourcePoint);
   await f.page.evaluate(() => document.activeElement?.blur());
 
-  f.phase = 'Pick the separate tilted native plane for the original outlet';
+  f.phase = `Pick the separate tilted native plane for the original ${endpoint}`;
   await f.command('Replace face');
   const panel = hud('Replace face');
-  await view('Left');
-  await clickWorld(tiltedDonor.origin);
+  await view(bottomView);
+  await clickWorld(donor.origin);
   await status(panel, 'preview');
   await panel.getByText('n3.bottom', { exact: false }).waitFor();
   await f.same(input);
@@ -162,22 +172,22 @@ async function exerciseReplacement(original) {
   assert.deepEqual(binding.faces, [moving]);
   assert.deepEqual({ body: binding.target.body, feature: binding.target.feature, face: binding.target.face },
     { body: solid(4), feature: 'n4', face: 'n3.bottom' });
-  await verifyReplacement('replace-applied-native', first, original, 35);
+  await verifyReplacement('replace-applied-native', first, original, firstX);
   await button('Iso', f.page.locator('.views')).click();
   await f.snapshot('replace-applied');
 
   await f.openFeatureEditor(4, 'move the same tilted donor');
-  await field(f.editor(), 'ΔX').fill('-1');
+  await field(f.editor(), 'ΔX').fill(String(shift));
   const moved = (await f.applyEditor(first, 'replace-donor-moved')).doc;
   assert.deepEqual(moved.nodes[5], binding);
-  await verifyReplacement('replace-moved-native', moved, original, 34);
+  await verifyReplacement('replace-moved-native', moved, original, firstX + shift);
 
   f.phase = 'Retarget the original Replace face in History';
-  await f.openFeatureEditor(5, 'edit the tilted outlet binding');
+  await f.openFeatureEditor(5, `edit the tilted ${endpoint} binding`);
   const edit = hud('Edit Replace face');
   await button('Edit Replace face', f.editor()).click();
-  const top = tiltedDonor.origin.map((value, axis) => value + .5 * tiltedDonor.normal[axis] - (axis === 0 ? 1 : 0));
-  await view('Right');
+  const top = donor.origin.map((value, axis) => value + .5 * donor.normal[axis] + (axis === 0 ? shift : 0));
+  await view(topView);
   await clickWorld(top);
   await status(edit, 'preview');
   await edit.getByText('n3.top', { exact: false }).waitFor();
@@ -186,23 +196,23 @@ async function exerciseReplacement(original) {
   const retargeted = (await f.snapshot('replace-other-donor-face')).doc;
   assert.equal(retargeted.nodes[5].id, binding.id);
   assert.equal(retargeted.nodes[5].target.face, 'n3.top');
-  const expectedX = 34 + Math.sqrt(17) / 8;
+  const expectedX = firstX + shift - shift * Math.sqrt(17) / 8;
   const digest = await verifyReplacement('replace-retargeted-native', retargeted, original, expectedX);
   await f.undo(); await f.same(moved);
   await f.redo(); await f.same(retargeted);
-  const saved = await f.save('tilted-paired-outlet');
+  const saved = await f.save(`tilted-paired-${endpoint}`);
   await f.freshOpen(saved.file, retargeted, 'replace-fresh-open');
   assert.equal(await verifyReplacement('replace-reopened-native', retargeted, original, expectedX), digest);
 
-  const collapsed = { ...retargeted, nodes: retargeted.nodes.map((node, index) => index === 4 ? { ...node, offset: [-6, 0, 0] } : node) };
-  await open(collapsed, 'tilted-outlet-reaches-join.bcad');
+  const collapsed = { ...retargeted, nodes: retargeted.nodes.map((node, index) => index === 4 ? { ...node, offset: [inlet ? 10 : -6, 0, 0] } : node) };
+  await open(collapsed, `tilted-${endpoint}-reaches-join.bcad`);
   await f.waitToast(/strictly between.*Your part is unchanged/is);
   await f.same(retargeted);
   await f.snapshot('replace-collapse-refused');
 
   await f.dismissToasts();
   const held = { ...retargeted, nodes: retargeted.nodes.map((node, index) => index === 4 ? { ...node, held: 'stale donor' } : node) };
-  await open(held, 'tilted-outlet-held-donor.bcad');
+  await open(held, `tilted-${endpoint}-held-donor.bcad`);
   await f.waitToast(/available reference body.*Your part is unchanged/is);
   await f.same(retargeted);
   await f.snapshot('replace-held-donor-refused');
@@ -398,9 +408,9 @@ await f.run(async () => {
   await f.page.waitForFunction(index => window.__studioSelection.selection.faces.some(face => face.face === index), originalIndex);
   await f.page.evaluate(() => document.activeElement?.blur());
   if (replaceBaseline) {
-    f.phase = 'Check Replace face after picking the original outlet';
+    f.phase = `Check Replace face after picking the original ${endpoint}`;
     const { o: donor } = originalDonor.planes['n3.bottom'].plane;
-    near(donor[0] - (donor[1] - 38) / 4, 35);
+    near(donor[0] - (donor[1] - (inlet ? 0 : 38)) / 4, inlet ? -9 : 35);
     await f.page.keyboard.press('Space');
     await f.page.locator('.palette input').fill('Replace face');
     const row = f.page.getByRole('option').filter({ has: f.page.getByText('Replace face', { exact: true }) });
@@ -410,7 +420,7 @@ await f.run(async () => {
     await f.page.keyboard.press('Enter');
     assert.equal(await hud('Replace face').count(), 0);
     await f.same(input);
-    await f.snapshot('replace-outlet-unavailable');
+    await f.snapshot(`replace-${endpoint}-unavailable`);
     return;
   }
   if (replace) return exerciseReplacement(original);

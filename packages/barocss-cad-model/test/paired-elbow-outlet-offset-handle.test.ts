@@ -76,35 +76,39 @@ function pickedPair(doc: StudioDoc, sourceFace = 'n1.end', referenceFace = 'n3.s
   return { ctx, donor: find('b4', referenceFace) };
 }
 
-test('the original five-span outlet accepts a current inward tilted plane through the same named local command', async () => {
+for (const inlet of [false, true]) test(`the original five-span ${inlet ? 'inlet' : 'outlet'} accepts an inward tilted plane through the named local command`, async () => {
+  const cap = inlet ? 'n1.start' : 'n1.end';
+  const opposite = inlet ? 'n1.end' : 'n1.start';
   const n = Math.sqrt(17);
   const sketch = withNode(fixture(sBendPath), { kind: 'sketch', profile: 'rectangle', min: [-3, -3], max: [3, 3],
-    plane: { origin: [39.25, 55, 12], normal: [4 / n, -1 / n, 0], xAxis: [0, 0, 1] } });
+    plane: { origin: inlet ? [-12.75, -15, 12] : [39.25, 55, 12],
+      normal: inlet ? [-4 / n, 1 / n, 0] : [4 / n, -1 / n, 0], xAxis: [0, 0, 1] } });
   const extrude = withNode(sketch, { kind: 'extrude', sketch: 2, height: .5 });
   const doc = withNode(extrude, { kind: 'translate', parent: { node: 3, side: 'solid' }, offset: [0, 0, 0] });
-  const before = structuredClone(doc), { ctx } = pickedPair(doc, 'n1.end', 'n3.bottom');
+  const before = structuredClone(doc), { ctx } = pickedPair(doc, cap, 'n3.bottom');
   const run = (faces: string[], expectedRevision = revisionOf(doc)) => dispatchTool({ doc, bodies: ctx.bodies }, 'features', {
     action: 'command', command: 'replace-face', faces, expectedRevision,
   }, async candidate => evaluateDoc(candidate, 1));
-  const edited = await run(['n1.end', 'n3.bottom']);
+  const edited = await run([cap, 'n3.bottom']);
   assert.ok(!edited.isError && edited.changed, edited.content);
   assert.deepEqual(doc, before);
   const next = edited.state.doc, node = next.nodes[5];
-  assert.ok(node.kind === 'replace-face' && node.sigs?.['n1.end']?.k === 'plane');
-  assert.deepEqual([node.faces, node.target.feature, node.target.face], [['n1.end'], 'n4', 'n3.bottom']);
+  assert.ok(node.kind === 'replace-face' && node.sigs?.[cap]?.k === 'plane');
+  assert.deepEqual([node.faces, node.target.feature, node.target.face], [[cap], 'n4', 'n3.bottom']);
   assert.deepEqual(usesOf(node), [1, 4]);
   assert.equal(offsetFaceDocumentProblem(next), null);
   const read = await readStudioFile(encodeStudioFile(next));
   assert.ok('doc' in read);
-  assert.deepEqual(read.doc, next);
+  assert.deepEqual(read.doc, JSON.parse(JSON.stringify(next)));
   near(brepMassProperties(partBreps(read.doc).find(body => body.key === 'b5')!.brep, 1).volume, 32 * (23 + 15 * Math.PI));
   const held = { ...next, nodes: next.nodes.map((entry, index) => index === 4 ? { ...entry, held: 'stale donor' } : entry) };
   assert.match(offsetFaceDocumentProblem(held) ?? '', /available reference body/);
   const refused = evaluateDoc(held, 2);
   assert.ok(!refused.ok);
   assert.match(refused.error.detail, /available reference body|reference body.*held/);
-  for (const bad of [await run(['n1.end', 'n3.top']), await run(['n1.start', 'n3.bottom']),
-    await run(['n1.end', 'n3.bottom'], '0000000000000000')]) {
+  const invalid = [await run([opposite, 'n3.bottom']), await run([cap, 'n3.bottom'], '0000000000000000')];
+  if (!inlet) invalid.push(await run([cap, 'n3.top']));
+  for (const bad of invalid) {
     assert.ok(bad.isError && !bad.changed);
     assert.equal(bad.state.doc, doc);
   }

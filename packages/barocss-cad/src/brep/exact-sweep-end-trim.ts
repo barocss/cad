@@ -6,20 +6,20 @@ import { faceGeometry } from './analytic-boolean.js';
 import { affinePlaneBinding } from './affine-plane-binding.js';
 import { BrepError, checkBrep, type Brep } from './brep-core.js';
 
-export function trimExactSweepOutlet(
-  brep: Brep, outlet: string, rail: { axis: Point; length: number; wallPrefix: string },
+export function trimExactSweepEnd(
+  brep: Brep, faceName: string, rail: { end: 'inlet' | 'outlet'; axis: Point; length: number; wallPrefix: string },
   plane: { readonly origin: Point; readonly normal: Point },
 ): Brep {
-  const fail = (detail: string): never => { throw new BrepError('GEOMETRY', `Exact paired sweep outlet replacement: ${detail}`); };
+  const fail = (detail: string): never => { throw new BrepError('GEOMETRY', `Exact paired sweep ${rail.end} replacement: ${detail}`); };
   const size = len(plane.normal);
   if (![...plane.origin, ...plane.normal, size].every(Number.isFinite) || size <= 0 ||
     plane.origin.some(value => Math.abs(value) > CadNumericPolicy.coordinateAbs)) return fail('the reference plane is outside the native modeling range.');
   const normal = unit(plane.normal), alignment = dot(normal, rail.axis), angular = 256 * Number.EPSILON;
   if (len(cross(normal, rail.axis)) <= angular || Math.abs(alignment) <= angular)
-    return fail('the reference plane must be tilted across the original straight outlet.');
+    return fail(`the reference plane must be tilted across the original straight ${rail.end}.`);
 
-  const cap = brep.faces.find(face => face.name === outlet)!;
-  if (cap.surface.kind !== 'surface') return fail('the original outlet has no planar chart.');
+  const cap = brep.faces.find(face => face.name === faceName)!;
+  if (cap.surface.kind !== 'surface') return fail('the original cap has no planar chart.');
   const loops = new Map(brep.loops.map(loop => [loop.id, loop]));
   const capLoops = new Set(cap.loops);
   const rimIds = new Set(brep.coedges.filter(use => capLoops.has(use.loop)).map(use => use.edge));
@@ -33,7 +33,7 @@ export function trimExactSweepOutlet(
     if (!terminalIds.has(vertex.id)) return vertex;
     const shift = displacement(vertex.point);
     if (!(shift < -tolerance && rail.length + shift > Math.max(tolerance, ExtrudedProfileLimits.minimumLengthMM)))
-      return fail('the new cap must stay strictly between the original outlet and its preceding bend join.');
+      return fail(`the new cap must stay strictly between the original ${rail.end} and the adjacent bend join.`);
     return { ...vertex, point: lift(vertex.point) };
   });
   const points = new Map(vertices.map(vertex => [vertex.id, vertex.point]));
@@ -42,12 +42,12 @@ export function trimExactSweepOutlet(
     if (!edge.vertices.some(id => terminalIds.has(id))) return edge;
     const curve = edge.curve;
     if (curve.degree !== 1 || curve.controlPoints.length !== 2 || curve.weights[0] !== curve.weights[1])
-      return fail('the moved cap and its straight tail must have linear edges.');
+      return fail('the moved cap and its straight span must have linear edges.');
     const next = { ...edge, curve: { ...curve, controlPoints: edge.vertices.map(id => points.get(id)!) } };
     movedEdges.set(edge.id, next);
     return next;
   });
-  if (movedEdges.size !== 24) return fail('the outlet must have twelve straight rails and twelve rim edges.');
+  if (movedEdges.size !== 24) return fail('the cap must have twelve straight rails and twelve rim edges.');
 
   const newCap = { ...cap, surface: { ...cap.surface, controlPoints: cap.surface.controlPoints.map(row => row.map(lift)) } };
   const faces = brep.faces.map(face => face === cap ? newCap : face);
@@ -58,7 +58,7 @@ export function trimExactSweepOutlet(
     const wall = byFace.get(loops.get(use.loop)!.face);
     // The replacement is inward. Each shortened edge still lies in its original planar wall chart.
     if (!use.pcurve || !wall?.name?.startsWith(rail.wallPrefix) || wall.surface.kind !== 'surface')
-      return fail('the moved edges must stay on the original tail walls.');
+      return fail('the moved edges must stay on the original straight walls.');
     const binding = affinePlaneBinding(edge.curve, wall.surface, tolerance);
     if (!binding) return fail('a shortened edge could not bind to its original wall chart.');
     return { ...use, pcurve: { ...binding, id: use.pcurve.id } };
@@ -66,7 +66,7 @@ export function trimExactSweepOutlet(
   const result = { ...brep, vertices, edges, faces, coedges };
   const support = faceGeometry(newCap);
   if (support.kind !== 'plane' || dot(support.n, rail.axis) <= 0 || len(cross(support.n, normal)) > angular ||
-    Math.abs(dot(sub(support.o, plane.origin), normal)) > tolerance) return fail('the outlet could not match the reference plane.');
+    Math.abs(dot(sub(support.o, plane.origin), normal)) > tolerance) return fail('the cap could not match the reference plane.');
   const report = checkBrep(result, { strict: true });
   if (!report.valid || report.topology.length !== 1 || report.topology[0].genus !== 2)
     return fail(`the replacement could not retain both passages${report.issues[0] ? `: ${report.issues[0]}` : '.'}`);

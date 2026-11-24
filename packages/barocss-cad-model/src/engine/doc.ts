@@ -766,7 +766,7 @@ function isPairedFiveSpanEndPlaneSource(nodes: readonly unknown[], index: number
   return textRecord(sketch) && !sketch.suppressed && sketch.held === undefined;
 }
 
-/** Only an original five-span straight cap may bind its signed extension to another native plane. */
+/** Only an original five-span straight cap may use a native reference plane for Offset or Replace face. */
 export function isPairedFiveSpanCapPlaneSource(nodes: readonly unknown[], index: number, face: string): boolean {
   return isPairedFiveSpanEndPlaneSource(nodes, index, face, 'start') || isPairedFiveSpanEndPlaneSource(nodes, index, face, 'end');
 }
@@ -824,10 +824,10 @@ export function directFaceDocumentProblem(input: unknown): string | null {
       const [face] = node.faces as [string];
       const signature = (node.sigs as Record<string, Sig>)[face];
       if (node.kind === 'replace-face') {
-        if (isPairedFiveSpanOutletPlaneSource(value.nodes, parentIndex, face)) {
+        if (isPairedFiveSpanCapPlaneSource(value.nodes, parentIndex, face)) {
           const donor = value.nodes[(node.target as OffsetPlaneRef).body.node];
           if (signature.k !== 'plane' || !textRecord(donor) || donor.suppressed || donor.held !== undefined)
-            return 'Replace face: the paired outlet needs its original planar face and an available reference body.';
+            return 'Replace face: the paired sweep needs its original planar cap and an available reference body.';
           continue;
         }
         if (isExactCylinderThicken(value.nodes[parentIndex]) || isExactCylinderFaceEditChain(value.nodes, parentIndex)) {
