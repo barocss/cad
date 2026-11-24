@@ -5,17 +5,21 @@ import { evaluateDoc } from '@barocss/cad-model/engine/evaluate';
 import { signaturesOf } from '@barocss/cad-model/engine/rematch';
 import { toSig } from '@barocss/cad-model/engine/references';
 import { isShellOpeningChange, proveShellOpeningChange } from '../src/state/shellOpeningHistory';
-function fixture(mode: 'closed' | 'top' | 'bottom' = 'top') {
+const modes = { closed: '', top: 'top', bottom: 'bottom', left: 'side3', right: 'side1', front: 'side0', back: 'side2' } as const;
+const shellVolume = { closed: 6384, top: 4512, bottom: 4512, left: 6072, right: 6072, front: 5952, back: 5952 };
+type Opening = keyof typeof modes;
+function fixture(mode: Opening = 'top') {
   const base = rectanglePart(40, 30, 10), evaluated = evaluateDoc(base, 1);
   assert.ok(evaluated.ok); if (!evaluated.ok) throw new Error('parent');
-  const bodies = evaluated.bodies, open = mode === 'closed' ? [] : [`n1.${mode}`];
+  const bodies = evaluated.bodies, open = mode === 'closed' ? [] : [`n1.${modes[mode]}`];
   const sigs = Object.fromEntries(open.map(name => [name, toSig(signaturesOf(bodies[0], 'plane').faces.get(name)!)]));
   return { before: withNode(base, { kind: 'shell', parent: { node: 1, side: 'solid' }, thickness: 2, open, sigs }), bodies };
 }
-const mode = (doc: StudioDoc, value: string): StudioDoc => ({ ...doc, nodes: doc.nodes.map((n, i) => i === 2 ? { ...n, open: value === 'closed' ? [] : [`n1.${value}`] } as ModelNode : n) });
+const mode = (doc: StudioDoc, value: Opening): StudioDoc => ({ ...doc, nodes: doc.nodes.map((n, i) => i === 2 ? { ...n, open: value === 'closed' ? [] : [`n1.${modes[value]}`] } as ModelNode : n) });
 const patch = (doc: StudioDoc, i: number, change: object): StudioDoc => ({ ...doc, nodes: doc.nodes.map((n, j) => i === j ? { ...n, ...change } as ModelNode : n) });
-test('all six opening transitions prove the whole native parent, replace only signatures and preserve originals', () => {
-  for (const from of ['closed', 'top', 'bottom'] as const) for (const to of ['closed', 'top', 'bottom'] as const) {
+test('all 42 distinct opening transitions prove the original parent and retain exact wall volume', () => {
+  const choices = Object.keys(modes) as Opening[];
+  for (const from of choices) for (const to of choices) {
     const { before, bodies } = fixture(from), next = mode(before, to), saved = structuredClone({ before, next, bodies });
     assert.equal(isShellOpeningChange(before, next, 2), from !== to);
     const result = proveShellOpeningChange(before, next, bodies);
@@ -24,7 +28,7 @@ test('all six opening transitions prove the whole native parent, replace only si
     const sh = result.nodes[2]; assert.ok(sh.kind === 'shell'); if (sh.kind !== 'shell') throw new Error('shell');
     assert.deepEqual(Object.keys(sh.sigs ?? {}), sh.open);
     const actual = evaluateDoc(result, 2); assert.ok(actual.ok, actual.ok ? '' : actual.error.detail);
-    if (actual.ok) assert.ok(Math.abs(actual.bodies[0].volume! - (12000 - 36 * 26 * (to === 'closed' ? 6 : 8))) < 1e-7);
+    if (actual.ok) assert.ok(Math.abs(actual.bodies[0].volume! - shellVolume[to]) < 1e-7);
     assert.deepEqual({ before, next, bodies }, saved);
   }
 });
@@ -41,7 +45,7 @@ test('nonplain documents, bound values, foreign parents and ambiguous openings r
   for (const [i, change] of [[0, { plane: {} }], [0, { association: {} }], [0, { held: 'test' }], [1, { height: { parameter: 'H' } }],
     [1, { draft: 1 }], [1, { height: -10 }], [2, { thickness: { parameter: 'T' } }], [2, { held: 'test' }],
     [2, { made: {} }], [2, { suppressed: true }], [2, { parent: { node: 0, side: 'solid' } }],
-    [2, { open: ['n1.top', 'n1.bottom'] }], [2, { open: ['n1.side0'] }]] as [number, object][]) {
+    [2, { open: ['n1.top', 'n1.bottom'] }], [2, { open: ['n1.side4'] }]] as [number, object][]) {
     const old = patch(before, i, change), next = mode(old, 'bottom');
     assert.equal(isShellOpeningChange(old, next, 2), false, JSON.stringify(change));
     assert.equal(proveShellOpeningChange(old, next, bodies), null);
@@ -57,17 +61,17 @@ test('missing, stale, shared and extraneous old signatures are not repaired impl
     const old = patch(before, 2, { sigs }); assert.equal(proveShellOpeningChange(old, mode(old, 'bottom'), bodies), null);
   }
 });
-test('foreign body identity, damaged incidence and wrong cap geometry refuse without mutation', () => {
-  const { before, bodies } = fixture(), next = mode(before, 'bottom');
+test('foreign body identity, damaged incidence and wrong side geometry refuse without mutation', () => {
+  const { before, bodies } = fixture(), next = mode(before, 'right');
   const variants = [[], [bodies[0], bodies[0]], [{ ...bodies[0], key: 'foreign' }], [{ ...bodies[0], ref: { node: 0, side: 'solid' as const } }]];
   for (const bad of variants) assert.equal(proveShellOpeningChange(before, next, bad), null);
   for (const damage of ['edge', 'name', 'area', 'centroid', 'normal']) {
-    const bad = structuredClone(bodies), top = bad[0].mesh.faces.find(f => f.name === 'n1.top')!;
+    const bad = structuredClone(bodies), side = bad[0].mesh.faces.find(f => f.name === 'n1.side1')!;
     if (damage === 'edge') bad[0].mesh.edges.pop();
-    if (damage === 'name') top.nativePlaneName = 'foreign.top';
-    if (damage === 'area') top.area += 1;
-    if (damage === 'centroid') top.centroid[2] += 1;
-    if (damage === 'normal' && top.exact?.kind === 'plane') top.exact.n[2] = -1;
+    if (damage === 'name') side.nativePlaneName = 'foreign.side1';
+    if (damage === 'area') side.area += 1;
+    if (damage === 'centroid') side.centroid[1] += 1;
+    if (damage === 'normal' && side.exact?.kind === 'plane') side.exact.n[0] = -1;
     const copy = structuredClone(bad); assert.equal(proveShellOpeningChange(before, next, bad), null, damage); assert.deepEqual(bad, copy);
   }
 });
@@ -112,7 +116,7 @@ test('History proves the prefix and evaluates the newly signed opening before on
   f.good(f.full[0]); await pending; assert.deepEqual(f.commits, [candidate]); assert.deepEqual(f.doc, saved);
 });
 test('raw opening change cannot bypass proof through simultaneous or ineligible edits', async () => {
-  for (const [i, change] of [[2, { thickness: 3 }], [1, { height: 11 }], [2, { open: ['n1.side0'] }], [2, { sigs: {} }]] as [number, object][]) {
+  for (const [i, change] of [[2, { thickness: 3 }], [1, { height: 11 }], [2, { open: ['n1.side4'] }], [2, { sigs: {} }]] as [number, object][]) {
     const f = historyFixture(), candidate = patch(f.next, i, change), saved = structuredClone(f.doc);
     const failure = await f.apply(candidate.nodes); assert.ok(failure); assert.equal(failure.title, 'Opening not applied');
     assert.equal(f.parts.length, 0); assert.equal(f.full.length, 0); assert.equal(f.commits.length, 0); assert.deepEqual(f.doc, saved);

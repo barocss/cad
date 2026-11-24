@@ -8,12 +8,19 @@ const fixture = () => withNode(rectanglePart(40,30,20), {kind:'shell',parent:{no
 function field(doc:StudioDoc) { const f=editFields(doc.nodes,2).find(f=>f.key==='shellOpening');assert.ok(f?.kind==='choice');return f; }
 test('opening draft changes only open and retains signatures until native History proof',()=>{
  const doc=fixture(),before=structuredClone(doc),f=field(doc);assert.equal(f.get(doc.nodes),'closed');
- for(const mode of ['top','bottom']){const nodes=f.set(doc.nodes,mode);assert.equal(nodes[0],doc.nodes[0]);assert.equal(nodes[1],doc.nodes[1]);assert.deepEqual(nodes[2],{...doc.nodes[2],open:[`n1.${mode}`]});assert.deepEqual(f.set(nodes,'closed'),doc.nodes);}
+ const sides = { top: 'top', bottom: 'bottom', left: 'side3', right: 'side1', front: 'side0', back: 'side2' };
+ for (const [mode, suffix] of Object.entries(sides)) {
+   const nodes = f.set(doc.nodes, mode);
+   assert.equal(nodes[0], doc.nodes[0]); assert.equal(nodes[1], doc.nodes[1]);
+   assert.deepEqual(nodes[2], { ...doc.nodes[2], open: [`n1.${suffix}`] });
+   assert.equal(f.get(nodes), mode);
+   assert.deepEqual(f.set(nodes, 'closed'), doc.nodes);
+ }
  assert.deepEqual(f.set(doc.nodes,'side'),doc.nodes);assert.deepEqual(doc,before);
 });
 test('special or downstream Shells never expose or accept a captured opening setter',()=>{
  const doc=fixture(),f=field(doc);
- for(const [i,patch] of [[0,{plane:{}}],[0,{association:{}}],[1,{draft:1}],[1,{height:{parameter:'H'}}],[2,{held:{}}],[2,{open:['n1.side0']}],[2,{open:['n1.top','n1.bottom']}],[2,{thickness:{parameter:'T'}}],[2,{made:{}}]] as [number,object][]){
+ for(const [i,patch] of [[0,{plane:{}}],[0,{association:{}}],[1,{draft:1}],[1,{height:{parameter:'H'}}],[2,{held:{}}],[2,{open:['n1.side4']}],[2,{open:['n1.top','n1.bottom']}],[2,{thickness:{parameter:'T'}}],[2,{made:{}}]] as [number,object][]){
  const nodes=doc.nodes.map((n,k)=>k===i?{...n,...patch} as typeof n:n);assert.equal(editFields(nodes,2).some(f=>f.key==='shellOpening'),false);assert.deepEqual(f.set(nodes,'top'),nodes);
  }
  const nodes=[...doc.nodes,doc.nodes[0]];assert.equal(editFields(nodes,2).some(f=>f.key==='shellOpening'),false);assert.deepEqual(f.set(nodes,'top'),nodes);

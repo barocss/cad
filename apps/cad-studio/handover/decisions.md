@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1939: [Edit a uniform box Shell opening on any original side](notes/box-shell-side-opening-history-2026-11-25/README.md), #13. Verify all four side openings in desktop History with native area, mass, Cancel and fresh Open.
 - D1938: [Set the thickness of each wall of a box with its top open](notes/per-face-box-shell-2026-11-25/README.md), #13. Verify independent cavity dimensions, all native references, old reader refusal and Studio reopen.
 
 - D1937: [Share a Constant Fillet grip across both complete cylinder rims](notes/two-closed-circular-fillet-rims-2026-11-25/README.md), #214. Verify the original native seam, both rounded caps, shared History ownership and fresh Open.

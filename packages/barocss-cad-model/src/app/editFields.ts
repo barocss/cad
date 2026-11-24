@@ -18,6 +18,7 @@ import { hasLineArcScrewSections, hasLineArcTurnSections } from './lineArcScrew'
 import { copyLoftGuide } from './loftGuides';
 import { add, dot, scale, sub } from '../engine/vec3';
 import { boxShellWalls, sameWallNormal } from '../engine/shellWalls';
+import { rectangularShellFaces, rectangularShellOpening } from '../engine/rectangularShellOpening';
 import { SEW_TOLERANCE_LABEL, sewTolerance } from '../engine/sew';
 import { circularPatternCountRange, circularPatternStep } from '../engine/circularPatternSpan';
 import { eligibleFillPatternRegions, fillRegionSnapshot } from '../engine/fillFeaturePattern';
@@ -43,7 +44,7 @@ export type EditField =
   | { kind: 'toggle'; key: string; label: string; get(nodes: Nodes): boolean; set(nodes: Nodes, value: boolean): ModelNode[] };
 
 /** Opening changes require a native parent proof in History admission, never the drag HUD. */
-function shellOpening(nodes: Nodes, index: number): 'closed' | 'top' | 'bottom' | undefined {
+function shellOpening(nodes: Nodes, index: number) {
   if (index !== 2 || nodes.length !== 3) return;
   const [sk, ex, sh] = nodes;
   const only = (node: object, keys: string[]) => Object.keys(node).every(key => keys.includes(key));
@@ -54,21 +55,20 @@ function shellOpening(nodes: Nodes, index: number): 'closed' | 'top' | 'bottom' 
     || !finite(ex.height) || ex.height <= 0 || ex.height > CadPartLimits.length
     || (ex.from !== undefined && !finite(ex.from)) || (ex.draft !== undefined && ex.draft !== 0)) return;
   if (sh.kind !== 'shell' || !only(sh, ['id','kind','parent','thickness','open','sigs'])
-    || !only(sh.parent, ['node','side']) || sh.parent.node !== 1 || sh.parent.side !== 'solid' || !finite(sh.thickness) || sh.thickness <= 0 || sh.thickness > CadPartLimits.length) return;
-  if (sh.open.length === 0) return 'closed';
-  if (sh.open.length !== 1) return;
-  const id = featureId(nodes, 1);
-  return sh.open[0] === `${id}.top` ? 'top' : sh.open[0] === `${id}.bottom` ? 'bottom' : undefined;
+    || !only(sh.parent, ['node','side']) || sh.parent.node !== 1 || sh.parent.side !== 'solid' || !Array.isArray(sh.open)
+    || !finite(sh.thickness) || sh.thickness <= 0 || sh.thickness > CadPartLimits.length) return;
+  return rectangularShellOpening(sh.open, featureId(nodes, 1));
 }
 function shellOpeningField(index: number): EditField {
   return { kind: 'choice', key: 'shellOpening', label: 'Opening',
-    options: [{value:'closed',label:'Closed'},{value:'top',label:'Top'},{value:'bottom',label:'Bottom'}],
+    options: [{ value: 'closed', label: 'Closed' }, ...rectangularShellFaces.map(({ value, label }) => ({ value, label }))],
     get: nodes => shellOpening(nodes,index) ?? '',
     set: (nodes,value) => {
       const mode = shellOpening(nodes,index), node = nodes[index];
-      if (!mode || node?.kind !== 'shell' || !['closed','top','bottom'].includes(value) || mode === value) return [...nodes];
+      const face = rectangularShellFaces.find(face => face.value === value);
+      if (!mode || node?.kind !== 'shell' || (!face && value !== 'closed') || mode === value) return [...nodes];
       // Keep old signatures until the unchanged native parent is proved at Apply.
-      return nodes.map((n,i) => i === index ? {...node,open:value === 'closed' ? [] : [`${featureId(nodes,1)}.${value}`]} : n);
+      return nodes.map((n, i) => i === index ? { ...node, open: face ? [`${featureId(nodes, 1)}.${face.suffix}`] : [] } : n);
     },
   };
 }
