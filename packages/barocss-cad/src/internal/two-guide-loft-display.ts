@@ -67,7 +67,11 @@ function faceChart(face: BrepFace, uses: readonly BrepCoedge[], edges: ReadonlyM
     ring.push(boundary);
   }
   const rows = s.controlPoints.map(row => row.map(p => sub(p, origin)));
-  if (cap && !rows.every(row => row.every(p => p[2] === rows[0][0][2]))) return;
+  if (cap) {
+    const [[a, b], [c, d]] = rows, normal = cross(sub(c, a), sub(b, a));
+    const span = len(normal), roundoff = 256 * Number.EPSILON * Math.max(1, len(origin), len(a), len(b), len(c), len(d));
+    if (!(span > 0 && Math.abs(dot(normal, sub(d, a))) <= roundoff * span)) return;
+  }
   return { face, cap, rows, sides, ring };
 }
 

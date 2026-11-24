@@ -16,6 +16,7 @@ import { smoothLoftHeightField, smoothLoftHeightKey } from './smoothLoftHeight';
 import { hasExternalScrewSections, hasTriangularTurnSections, smoothLoftTurnAngleField, smoothLoftTurnWidthField, smoothTurnAngleKey, smoothTurnWidthKey } from './smoothLoftTurn';
 import { hasLineArcScrewSections, hasLineArcTurnSections } from './lineArcScrew';
 import { copyLoftGuide } from './loftGuides';
+import { add, dot, scale, sub } from '../engine/vec3';
 import { SEW_TOLERANCE_LABEL, sewTolerance } from '../engine/sew';
 import { circularPatternCountRange, circularPatternStep } from '../engine/circularPatternSpan';
 import { eligibleFillPatternRegions, fillRegionSnapshot } from '../engine/fillFeaturePattern';
@@ -512,13 +513,18 @@ function editFieldsRaw(nodes: Nodes, i: number, bearingAssembly?: BearingAssembl
         if (!Object.hasOwn(sec, 'frame')) number('z' + k, `Section ${k + 1} · height`, 'mm', n => num((n as typeof node).sections[k].z), (n, v) => ({ ...(n as typeof node), sections: (n as typeof node).sections.map((x, j) => j === k && !Object.hasOwn(x, 'frame') && x.frame === undefined ? { ...x, z: v } : x) }));
       });
       if (node.guides) {
+        const frame = node.sections[0].frame, upper = node.sections[1]?.frame;
+        const middleOrigin = frame && upper && add(frame.origin, scale(sub(upper.origin, frame.origin), 0.5));
         for (const slot of [0, 1] as const) for (const axis of [0, 1] as const) {
-          number(`loftGuideControl${slot}${axis}`, `Guide ${slot + 1} middle ${axis === 0 ? 'X' : 'Y'}`, 'mm',
-            n => (n as typeof node).guides![slot].controlPoints[1][axis],
+          const direction = frame && (axis === 0 ? frame.xAxis : frame.yAxis);
+          const coordinate = (point: readonly number[]) => middleOrigin && direction ? dot(sub(point, middleOrigin), direction) : point[axis];
+          number(`loftGuideControl${slot}${axis}`, `Guide ${slot + 1} middle ${frame ? 'section ' : ''}${axis === 0 ? 'X' : 'Y'}`, 'mm',
+            n => coordinate((n as typeof node).guides![slot].controlPoints[1]),
             (n, value) => {
               const current = n as typeof node, guides = structuredClone(current.guides!);
               const guide = guides[slot], [start, middle, end] = guide.controlPoints;
-              const moved = axis === 0 ? [value, middle[1], middle[2]] as const : [middle[0], value, middle[2]] as const;
+              const moved = direction ? add(middle, scale(direction, value - coordinate(middle))) : [...middle] as [number, number, number];
+              if (!direction) moved[axis] = value;
               const next = { ...guide, controlPoints: [start, moved, end] as const };
               return { ...current, guides: slot === 0 ? [next, guides[1]] : [guides[0], next] };
             });

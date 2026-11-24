@@ -10,6 +10,7 @@ import { loopOf } from '../sketch/loops';
 import { resolveSketchDims } from '../sketch/reopen';
 import { bandProfile } from '../sketch/band';
 import { isRefusal, refusal } from '../engine/refusal';
+import { dot, sub } from '../engine/vec3';
 
 type XY = [number, number];
 const num = (v: unknown) => Number(v);
@@ -104,21 +105,29 @@ function projectLoftSection(sketch: SketchNode, source: number, base: SketchPlan
 }
 
 /** Two-guide seams share the actual sketch vertices in world mm. Keep their exact coordinates. */
-export function twoGuideLoftSections(nodes: readonly ModelNode[], picked: readonly number[], params: Params): ReturnType<typeof loftSections> {
+export function twoGuideLoftSections(nodes: readonly ModelNode[], picked: readonly number[], params: Params):
+  { sections: ({ node: SketchNode; source: number } & ({ z: number } | { frame: LoftSectionFrame }))[] } | { error: string } {
   if (picked.length !== 2 || picked[0] === picked[1]) return { error: 'Pick two different rectangular sketches for a two-guide loft.' };
+  const sketches = picked.map(source => nodes[source]);
+  if (!sketches.every(sketch => sketch?.kind === 'sketch' || sketch?.kind === 'driven-sketch')) return { error: 'Pick two finished sketches.' };
+  const [first, second] = sketches.map(planeOf);
   const plane = xyPlane(), sections: { node: SketchNode; z: number; source: number }[] = [];
-  for (const source of picked) {
-    const sketch = nodes[source];
-    if (sketch?.kind !== 'sketch' && sketch?.kind !== 'driven-sketch') return { error: 'Pick two finished sketches.' };
-    if (!planeOf(sketch).normal.every((normal, axis) => normal === plane.normal[axis]))
-      return { error: `Sketch ${source + 1} must face +Z for a two-guide loft.` };
+  if (![first, second].every(p => p.normal.every((normal, axis) => normal === plane.normal[axis]))) {
+    if (!first.normal.every((normal, axis) => normal === second.normal[axis] && first.xAxis[axis] === second.xAxis[axis]))
+      return { error: 'For a two-guide loft, use two sketch planes with the same normal and X axis.' };
+    const height = dot(sub(second.origin, first.origin), first.normal);
+    if (height === 0) return { error: 'For a two-guide loft, put each sketch on a different offset plane.' };
+    return framedLoftSections(nodes, height > 0 ? picked : [picked[1], picked[0]], params);
+  }
+  for (const [i, source] of picked.entries()) {
+    const sketch = sketches[i];
     const section = projectLoftSection(valued(sketch, params, source), source, plane, true);
     if ('error' in section) return section;
     const { segments, z } = section;
     sections.push({ node: { kind: 'sketch', profile: 'loop', segments }, z, source });
   }
   sections.sort((a, b) => a.z - b.z);
-  return { plane, sections };
+  return { sections };
 }
 
 /**

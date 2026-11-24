@@ -1,11 +1,12 @@
-import { BrepError, buildBrep, lineCurve, type BrepFaceInput, type BrepLoopInput } from '../brep/brep-core.js';
-import { solidMassFromIntegrals } from '../brep/solid-mass.js';
+import { BrepError, buildBrep, lineCurve, type Brep, type BrepFaceInput, type BrepLoopInput } from '../brep/brep-core.js';
+import { solidMassFromIntegrals, type MassProperties } from '../brep/solid-mass.js';
 import { gauss } from '../core/quadrature.js';
 import { transferNativeMassBasis } from '../internal/native-si-mass-state.js';
 import { registerTwoGuideLoftDisplay } from '../internal/two-guide-loft-display.js';
 import type { Curve, Point } from '../types.js';
 import { buildProfileLoop, capSurface, ExtrudedProfileLimits, type XY } from './extruded-profile-solid.js';
-import type { LoftInput, LoftSectionInput } from './loft.js';
+import { admitLoftCommonFrame, loftFrameLocal, loftFramePoint, placeLoftInFrame } from './loft-common-frame.js';
+import type { LoftInput, LoftQuadraticGuide, LoftSectionInput } from './loft.js';
 
 const linearKnots = [0, 0, 1, 1], quadraticKnots = [0, 0, 0, 1, 1, 1], cubicKnots = [0, 0, 0, 0, 1, 1, 1, 1];
 const corners = [0, 1, 2, 3], G5 = gauss(5), G7 = gauss(7);
@@ -30,12 +31,17 @@ function rectangle(section: LoftSectionInput, index: number) {
   return { z, tags, points: positions.map(([x, y]): Point => [x, y, z]), bounds: loop.bounds, width: max[0] - min[0], depth: max[1] - min[1] };
 }
 
-function middleControl(value: unknown, index: number, start: Point, end: Point): Point {
+function guideControls(value: unknown, index: number): [Point, Point, Point] {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return fail(`require a quadratic Bézier for guide ${index}`);
   const guide = value as Record<string, unknown>, points = guide.controlPoints;
   if (Object.keys(guide).length !== 2 || !Object.hasOwn(guide, 'kind') || !Object.hasOwn(guide, 'controlPoints') || guide.kind !== 'quadratic-bezier'
     || !Array.isArray(points) || points.length !== 3 || !Array.from(points).every(pointInRange))
     return fail(`require guide ${index} to be a quadratic Bézier with three finite control points within ±${limit} mm`);
+  return points as [Point, Point, Point];
+}
+
+function middleControl(value: unknown, index: number, start: Point, end: Point): Point {
+  const points = guideControls(value, index);
   if (!start.every((x, i) => x === points[0][i]) || !end.every((x, i) => x === points[2][i]))
     return fail(`require guide ${index} endpoints to exactly match the ${index === 1 ? 'min X' : 'max X'}, min Y corners of both sections`);
   if (points[1][2] !== (start[2] + end[2]) / 2) return fail(`require the middle control of guide ${index} to lie on the section midplane`);
@@ -43,19 +49,56 @@ function middleControl(value: unknown, index: number, start: Point, end: Point):
 }
 
 /** The four upright curves share the same affine height. Each slice is a rectangle with a linearly varying aspect ratio. */
-export function twoGuideLoftSolid(input: LoftInput) {
+export function twoGuideLoftSolid(input: LoftInput): { brep: Brep; mass: (density: number) => MassProperties } {
   if (!Array.isArray(input.guides) || input.guides.length !== 2) return fail('require exactly two quadratic Béziers');
   if (Object.hasOwn(input, 'guide')) return fail('cannot be combined with the single guide');
   if (input.smooth !== undefined && input.smooth !== false) return fail('require ruled sections');
   if (!Array.isArray(input.sections) || input.sections.length !== 2) return fail('require exactly two sections');
+  if (!input.sections.some(section => section && Object.hasOwn(section, 'frame'))) return buildTwoGuideLoft(input, input.guides);
+
+  const frames = Array.from(input.sections, section => {
+    const frame = section?.frame;
+    if (!frame || Object.hasOwn(section, 'z') || !pointInRange(frame.origin) || !pointInRange(frame.xAxis) || !pointInRange(frame.yAxis))
+      return fail('require finite frames on both sections and no z heights');
+    return { origin: frame.origin, u: frame.xAxis, v: frame.yAxis };
+  });
+  const common = admitLoftCommonFrame(frames, fail);
+  const height = loftFrameLocal(common, frames[1].origin)[2];
+  if (!(height >= ExtrudedProfileLimits.minimumLengthMM)) return fail('require two separated heights in increasing order');
+  if (!loftFramePoint(common, [0, 0, height]).every((p, i) => p === frames[1].origin[i]))
+    return fail('require an exact offset along the common normal');
+  const sections = input.sections.map((section, i): LoftSectionInput => {
+    if (!Array.isArray(section.profile)) return fail('require a four-line rectangle on both framed sections');
+    return { profile: section.profile, z: i === 0 ? 0 : height };
+  });
+  const localGuide = (guide: LoftQuadraticGuide, index: number): LoftQuadraticGuide => {
+    const local = (world: Point, z: number): Point => {
+      // The authored point must round-trip at the required section height. Project within that
+      // section plane to avoid inventing a lateral offset when the point is its exact origin.
+      const origin = loftFramePoint(common, [0, 0, z]), [x, y] = loftFrameLocal({ ...common, origin }, world);
+      const point: Point = [x, y, z];
+      if (!loftFramePoint(common, point).every((p, i) => p === world[i]))
+        return fail(`require guide ${index} to lie at exact coordinates on its section ${z === height / 2 ? 'midplane' : 'plane'}`);
+      return point;
+    };
+    const [start, middle, end] = guideControls(guide, index);
+    return { kind: 'quadratic-bezier', controlPoints: [local(start, 0), local(middle, height / 2), local(end, height)] };
+  };
+  const local = buildTwoGuideLoft({ ...input, sections }, [localGuide(input.guides[0], 1), localGuide(input.guides[1], 2)]);
+  const world = placeLoftInFrame(local, common, fail);
+  registerTwoGuideLoftDisplay(world.brep);
+  return world;
+}
+
+function buildTwoGuideLoft(input: LoftInput, guides: NonNullable<LoftInput['guides']>) {
   const [lo, hi] = input.sections.map(rectangle);
   if (!(hi.z - lo.z >= ExtrudedProfileLimits.minimumLengthMM)) return fail('require two separated heights in increasing order');
   const sideTags = input.sideTags;
   if (sideTags && (sideTags.length !== 4 || !Array.from(sideTags).every(tag => typeof tag === 'string' && tag.length > 0) || new Set(sideTags).size !== 4))
     return fail('require a unique side tag for each rectangle edge');
 
-  const a = middleControl(input.guides[0], 1, lo.points[0], hi.points[0]);
-  const b = middleControl(input.guides[1], 2, lo.points[1], hi.points[1]);
+  const a = middleControl(guides[0], 1, lo.points[0], hi.points[0]);
+  const b = middleControl(guides[1], 2, lo.points[1], hi.points[1]);
   const dx = b[0] - a[0], dy = b[1] - a[1], aspectLo = lo.depth / lo.width, aspectHi = hi.depth / hi.width;
   const cubic = aspectLo !== aspectHi;
   // Multiply the guide span by the linear aspect in the Bernstein basis, then rotate it 90°.

@@ -620,7 +620,8 @@ export const loftCommand: Command = {
       const at: number[] = [];
       for (const section of sections.sections) { doc = withNode(doc, section.node); at.push(doc.nodes.length - 1); }
       return withNode(doc, {
-        kind: 'loft', sections: sections.sections.map((section, index) => ({ sketch: at[index], z: section.z })),
+        kind: 'loft', sections: sections.sections.map((section, index) => 'frame' in section
+          ? { sketch: at[index], frame: section.frame } : { sketch: at[index], z: section.z }),
         from: sections.sections.map(section => section.source), guides: [first.guide, second.guide],
       });
     }

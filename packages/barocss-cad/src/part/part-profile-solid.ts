@@ -82,10 +82,15 @@ export function profileSolidOperation(f: CadPartFeature & Record<string, unknown
     case 'loft': {
       const list = f.sections as unknown;
       if (!Array.isArray(list) || list.length < 2 || list.length > CadPartLimits.copies) fail('INPUT', 'sections must list 2 to 64 sections');
-      if (Object.hasOwn(f, 'guides')) {
+      const twoGuides = Object.hasOwn(f, 'guides');
+      const framedSections = (list as unknown[]).some(sec => isRecord(sec)
+        && (sec.frame !== undefined || Object.hasOwn(sec, 'profile') || (twoGuides && Object.hasOwn(sec, 'frame'))));
+      if (twoGuides) {
         if (Object.hasOwn(f, 'guide')) fail('INPUT', 'loft: two guides cannot be combined with the single guide');
         if (f.smooth !== undefined && f.smooth !== false) fail('INPUT', 'loft: two guides require ruled sections');
         if ((list as unknown[]).length !== 2) fail('INPUT', 'loft: two guides require exactly two sections');
+      }
+      if (twoGuides && !framedSections) {
         const sections = (list as unknown[]).map((sec, i) => {
           if (!isRecord(sec) || typeof sec.sketch !== 'string' || Object.hasOwn(sec, 'frame') || Object.hasOwn(sec, 'profile'))
             return fail('INPUT', `loft: sections[${i}] needs a sketch and z height for two guides`);
@@ -110,13 +115,14 @@ export function profileSolidOperation(f: CadPartFeature & Record<string, unknown
           return { kind: 'solid', parts: [{ solid: { kind: 'brep', brep }, mass }] };
         };
       }
-      const framedSections = (list as unknown[]).some(sec => isRecord(sec) && (sec.frame !== undefined || Object.hasOwn(sec, 'profile')));
       // (CG1.3: a general guide — kind nurbs — on sketches stacked along their plane's normal takes the z path.)
       const nurbsGuide = isRecord(f.guide) && (f.guide as { kind?: unknown }).kind === 'nurbs' && !framedSections;
       if ((f.guide !== undefined && !nurbsGuide) || framedSections) {
         if (f.smooth !== undefined && typeof f.smooth !== 'boolean') fail('INPUT', 'smooth must be true or false');
         const framed = (list as unknown[]).map((sec, i) => {
           if (!isRecord(sec) || sec.frame === undefined || sec.z !== undefined) return fail('INPUT', `sections[${i}] need an explicit frame without z`);
+          if (twoGuides && (Object.hasOwn(sec, 'z') || Object.hasOwn(sec, 'profile')))
+            return fail('INPUT', 'loft: two guides need two framed sketches without z heights');
           if (Object.hasOwn(sec, 'profile')) {
             if (Object.hasOwn(sec, 'sketch') || !isRecord(sec.profile) || sec.profile.kind !== 'ellipse') return fail('INPUT', `sections[${i}] must provide an ellipse profile or a sketch, never both`);
             return { profile: sec.profile as unknown as Exclude<LoftSectionInput['profile'], readonly ProfileSegmentInput[]>, frame: sec.frame as unknown as LoftSectionFrame, tags: undefined };
@@ -128,7 +134,8 @@ export function profileSolidOperation(f: CadPartFeature & Record<string, unknown
           return { profile: sketch.outer, frame: sec.frame as unknown as LoftSectionFrame, tags: sketch.tags };
         });
         return () => {
-          const { brep, mass } = loftSolid({ id: at, name: at, sections: framed, smooth: f.smooth === true, ...(f.guide !== undefined ? { guide: f.guide as LoftInput['guide'] } : {}), ...(framed[0].tags ? { sideTags: framed[0].tags.outer } : {}) });
+          const guide = twoGuides ? { guides: f.guides } : f.guide === undefined ? {} : { guide: f.guide as LoftInput['guide'] };
+          const { brep, mass } = loftSolid({ id: at, name: at, sections: framed, smooth: f.smooth === true, ...guide, ...(framed[0].tags ? { sideTags: framed[0].tags.outer } : {}) });
           return { kind: 'solid', parts: [{ solid: { kind: 'brep', brep }, mass }] };
         };
       }

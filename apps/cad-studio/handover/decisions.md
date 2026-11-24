@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D1936: [Loft two offset rectangles in a shared tilted frame](notes/tilted-two-guide-loft-2026-11-25/README.md), #174 and #177. Verify exact guide ownership, section-coordinate edits and native Open.
+
 - D1935: [Propose detaching Extrude to face at its current distance](notes/reviewed-extrude-detach-2026-11-25/README.md), #222. Verify revision ownership, explicit Studio approval and a retained independent solid.
 
 - D1934: [Draft three selected sides of a cardinal box](notes/three-side-box-draft-2026-11-25/README.md), #14. Verify signed angle editing, original shared edges, strict native geometry and fresh Open.

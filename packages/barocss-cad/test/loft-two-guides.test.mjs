@@ -139,6 +139,52 @@ test('two-guide Loft: accepts a depth-only change with the original guide endpoi
   close(result.mass(1).volume, 888.16);
 });
 
+test('two-guide Loft: exact tilted frame preserves rail controls, reciprocal UV and native measurements', () => {
+  const world = ([x, y, z]) => [10 + x, 20 + 0.8 * y - 0.6 * z, 30 + 0.6 * y + 0.8 * z];
+  const frame = z => ({ origin: world([0, 0, z]), xAxis: [1, 0, 0], yAxis: [0, 0.8, 0.6] });
+  const framed = [0, 25].map(z => ({ profile: rect(), frame: frame(z) }));
+  const worldGuides = [[0, 2], [10, 14]].map(([x, mid]) => ({
+    kind: 'quadratic-bezier',
+    controlPoints: [[x, 0, 0], [mid, 0, 12.5], [x, 0, 25]].map(world),
+  }));
+  const input = { sections: framed, guides: worldGuides };
+  const { brep, mass } = build(input), report = checkBrep(brep, { strict: true, pcurveSamples: 13 });
+  assert.equal(report.valid, true, report.issues.join('\n'));
+  assert.deepEqual(report.counts, { bodies: 1, shells: 1, faces: 6, loops: 6, coedges: 24, edges: 12, vertices: 8 });
+  assert.equal(report.topology[0].genus, 0);
+  assert.ok(report.maximumPcurveGap < 1e-10);
+  const qBar = 1021 / 2989;
+  for (const props of [mass(1), brepMassProperties(brep, 1)]) {
+    close(props.volume, 1708);
+    vector(props.centroid, [15 + 3 * qBar, 14.9 + 0.48 * qBar, 41.8 + 0.36 * qBar]);
+  }
+  for (const [i, guide] of worldGuides.entries()) {
+    const rail = brep.edges.find(edge => edge.id === `l0_${i}`);
+    assert.deepEqual(rail.curve.controlPoints, guide.controlPoints);
+    const uses = brep.coedges.filter(use => use.edge === rail.id);
+    assert.deepEqual(uses.map(use => use.twin), uses.map(use => use.id).reverse());
+    assert.notEqual(uses[0].sense, uses[1].sense);
+    for (const t of [0, 0.25, 0.5, 0.75, 1]) {
+      const q = 2 * t * (1 - t);
+      const point = world([i === 0 ? 2 * q : 10 + 4 * q, 0, 25 * t]);
+      vector(evaluateCurve(rail.curve, t), point);
+      for (const use of uses) {
+        const face = brep.faces.find(face => face.id === brep.loops.find(loop => loop.id === use.loop).face);
+        vector(evaluateSurface(face.surface, ...evaluateCurve(use.pcurve, t)), point);
+      }
+    }
+  }
+  const withUpper = upper => ({ ...input, sections: [framed[0], upper] });
+  assert.throws(() => build(withUpper(sections[1])), /frames on both/);
+  assert.throws(() => build(withUpper({ ...framed[1], frame: { ...frame(25), xAxis: [-1, 0, 0] } })), /identical frame axes/);
+  assert.throws(() => build(withUpper({ ...framed[1], frame: { ...frame(25), origin: world([1, 0, 25]) } })), /offset along the common normal/);
+  assert.throws(() => build(withUpper({ ...framed[1], frame: frame(0) })), /separated heights/);
+  assert.throws(() => build({ ...input, guides: [worldGuides[0], { ...worldGuides[1], weights: [1, 1, 1] }] }), /guide 2.*quadratic/);
+  const offPlane = structuredClone(worldGuides);
+  offPlane[1].controlPoints[1] = world([14, 0, 25]);
+  assert.throws(() => build({ ...input, guides: offPlane }), /guide 2.*midplane/);
+});
+
 test('two-guide Loft: a translated XY Part frame keeps authored world rails and same-feature edit invalidates cache', () => {
   const offset = [20, -10, 5], plane = { origin: offset, normal: [0, 0, 1], xAxis: [1, 0, 0] };
   const translate = g => ({ ...g, controlPoints: g.controlPoints.map(p => p.map((x, i) => x + offset[i])) });
