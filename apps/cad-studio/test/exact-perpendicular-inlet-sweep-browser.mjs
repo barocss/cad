@@ -6,15 +6,21 @@ import { createFlow } from './flow-helper.mjs';
 
 const output = process.argv[2];
 const baseline = process.argv.includes('--expect-refused');
+const bothEnds = process.argv.includes('--both-ends');
+const fixtureName = bothEnds ? 'perpendicular-both-ends-sweep' : 'perpendicular-inlet-sweep';
+const outletLength = bothEnds ? 10 : 0;
 const q = Math.SQRT1_2;
 const segments = [
   { id: 'inlet', name: 'Straight inlet', points: [[-10, 0, 0], [-5, 0, 0], [0, 0, 0]], weights: [1, 1, 1] },
   { id: 'first', name: 'First arc', points: [[0, 0, 0], [12, 0, 0], [12, 12, 0]], weights: [1, q, 1] },
   { id: 'second', name: 'Second arc', points: [[12, 12, 0], [12, 30, 0], [12, 30, 18]], weights: [1, q, 1] },
 ];
-const path = { degree: 2, knots: [0, 0, 0, 1, 1, 2, 2, 3, 3, 3],
-  controlPoints: [...segments[0].points, ...segments[1].points.slice(1), ...segments[2].points.slice(1)],
-  weights: [1, 1, 1, q, 1, q, 1] };
+if (bothEnds) segments.push({ id: 'outlet', name: 'Straight outlet',
+  points: [[12, 30, 18], [12, 30, 23], [12, 30, 28]], weights: [1, 1, 1] });
+const path = { degree: 2, knots: [0, 0, 0, ...segments.slice(1).flatMap((_, i) => [i + 1, i + 1]),
+  segments.length, segments.length, segments.length],
+  controlPoints: segments.flatMap((segment, i) => segment.points.slice(i ? 1 : 0)),
+  weights: segments.flatMap((segment, i) => segment.weights.slice(i ? 1 : 0)) };
 const section = { id: 'n0', kind: 'sketch', profile: 'circle', center: [0, 0], radius: 2,
   holes: [[{ kind: 'arc', start: [{ parameter: 'BoreRadius' }, 0], center: [0, 0], direction: 'cw' }]],
   sideTags: { outer: ['e0'], holes: [['bore']] } };
@@ -25,11 +31,14 @@ const seed = { format: 'barocss-cad-model', schema: 3, units: 'mm', parameters: 
       control-points:${JSON.stringify(points)}; weights:${JSON.stringify(weights)}; }`).join('\n')} }` },
     objects: segments.map(({ id, name }) => ({ id, name, source: 'rail', geometry: id })) } };
 const pins = ['packages/barocss-cad/src/brep/exact-sweep.ts',
-  'packages/barocss-cad-model/src/app/profileCommands.ts', 'packages/barocss-cad-model/src/engine/errors.ts'];
+  'packages/barocss-cad-model/src/app/profileCommands.ts', 'packages/barocss-cad-model/src/engine/errors.ts',
+  'packages/barocss-cad-model/src/chat/part/features.ts'];
 const f = await createFlow({
-  name: 'exact-perpendicular-inlet-sweep', output, envFrozen: 'D1914_SOURCE_FROZEN',
+  name: 'exact-' + fixtureName, output, envFrozen: bothEnds ? 'D1916_SOURCE_FROZEN' : 'D1914_SOURCE_FROZEN',
   initialFiles: pins, requiredFrozen: pins,
-  qualification: 'Join a straight tangent inlet and two perpendicular quarter arcs, then sweep an editable concentric annulus.',
+  qualification: bothEnds
+    ? 'Join a straight tangent inlet and outlet to two perpendicular quarter arcs, then sweep an editable concentric annulus.'
+    : 'Join a straight tangent inlet and two perpendicular quarter arcs, then sweep an editable concentric annulus.',
   ...(!baseline && { inspectorSource: `
 import { readFileSync } from 'node:fs';
 import { brepMassProperties, checkBrep, curveDomain, evaluateCurve, evaluateSurface, faceGeometry,
@@ -61,8 +70,7 @@ for (const face of brep.faces) {
     else other.push(witness);
   }
 }
-const seams = ['first', 'inlet'].map((kind, i) => {
-  const axis = i ? 0 : 1, constant = i ? 0 : 12;
+const seams = [['first', 1, 12], ['inlet', 0, 0]${bothEnds ? ", ['outlet', 2, 18]" : ''}].map(([kind, axis, constant]) => {
   return { kind, edges: brep.edges.filter(edge => edge.curve.controlPoints.every(p => Math.abs(p[axis] - constant) < 1e-8))
     .map(edge => {
       const uses = brep.coedges.filter(use => use.edge === edge.id);
@@ -81,7 +89,7 @@ const hud = () => f.page.getByRole('dialog', { name: 'Sweep', exact: true });
 const status = label => hud().locator('.status').filter({ hasText: new RegExp(`^${label}$`) });
 const near = (a, b, tolerance = 1e-7) =>
   assert.ok(Number.isFinite(a) && Math.abs(a - b) <= tolerance, JSON.stringify({ a, b, tolerance }));
-const volume = inner => Math.PI * (4 - inner ** 2) * (15 * Math.PI + 10);
+const volume = inner => Math.PI * (4 - inner ** 2) * (15 * Math.PI + 10 + outletLength);
 const isBore = name => /\[bore\]|\.hole0\./.test(name);
 
 function rimRadius(point, center, axis) {
@@ -98,9 +106,12 @@ async function verify(label, doc) {
   assert.equal(topology.topology.length, 1);
   assert.equal(topology.topology[0].shells, 1);
   assert.equal(topology.topology[0].genus, 1);
-  assert.deepEqual(topology.counts, { bodies: 1, shells: 1, faces: 14, loops: 16, coedges: 56, edges: 28, vertices: 16 });
+  const expected = bothEnds
+    ? { bodies: 1, shells: 1, faces: 18, loops: 20, coedges: 72, edges: 36, vertices: 20 }
+    : { bodies: 1, shells: 1, faces: 14, loops: 16, coedges: 56, edges: 28, vertices: 16 };
+  assert.deepEqual(topology.counts, expected);
   assert.equal(caps.length, 2);
-  for (const [center, normal, axis] of [[[-10, 0, 0], [-1, 0, 0], 0], [[12, 30, 18], [0, 0, 1], 2]]) {
+  for (const [center, normal, axis] of [[[-10, 0, 0], [-1, 0, 0], 0], [[12, 30, 18 + outletLength], [0, 0, 1], 2]]) {
     const cap = caps.find(c => c.geometry.n.every((value, i) => Math.abs(value - normal[i]) < 1e-8));
     assert.ok(cap);
     near(cap.geometry.o[axis], center[axis]);
@@ -113,21 +124,30 @@ async function verify(label, doc) {
       }
     }
   }
-  assert.equal(cylinders.length, 4);
+  assert.equal(cylinders.length, bothEnds ? 8 : 4);
   for (const [out, radius] of [[1, 2], [-1, inner]]) {
-    const walls = cylinders.filter(face => face.geometry.out === out);
-    assert.equal(walls.length, 2);
-    for (const { geometry, samples } of walls) {
-      near(geometry.c[1], 0); near(geometry.c[2], 0); near(geometry.r, radius);
-      near(Math.abs(geometry.a[0]), 1);
-      near(Math.min(...samples.map(point => point[0])), -10);
-      near(Math.max(...samples.map(point => point[0])), 0);
-      for (const [, y, z] of samples) near(Math.hypot(y, z), radius);
+    const legs = [{ center: [0, 0, 0], axis: 0, start: -10, end: 0 }];
+    if (bothEnds) legs.push({ center: [12, 30, 18], axis: 2, start: 18, end: 28 });
+    for (const { center, axis, start, end } of legs) {
+      const sides = cylinders.filter(({ geometry }) => geometry.out === out && Math.abs(geometry.a[axis]) > .99);
+      assert.equal(sides.length, 2);
+      for (const { geometry, samples } of sides) {
+        near(geometry.r, radius);
+        near(Math.abs(geometry.a[axis]), 1);
+        const position = samples.map(point => point[axis]);
+        near(Math.min(...position), start);
+        near(Math.max(...position), end);
+        for (const point of samples) {
+          const radial = point.flatMap((value, i) => i === axis ? [] : [value - center[i]]);
+          near(Math.hypot(...radial), radius);
+        }
+      }
     }
   }
   const angles = [];
+  const frames = { first: [[12, 12, 0], 1], inlet: [[0, 0, 0], 0], outlet: [[12, 30, 18], 2] };
   for (const { kind, edges } of seams) {
-    const [center, axis] = kind === 'first' ? [[12, 12, 0], 1] : [[0, 0, 0], 0];
+    const [center, axis] = frames[kind];
     const radii = edges.map(edge => {
       assert.equal(edge.degree, 2);
       assert.ok(edge.reciprocal);
@@ -142,9 +162,9 @@ async function verify(label, doc) {
     assert.equal(edges.length, 4);
     radii.forEach((radius, i) => near(radius, i < 2 ? inner : 2));
   }
-  const q = 4 + inner ** 2, length = 15 * Math.PI + 10;
+  const q = 4 + inner ** 2, length = 15 * Math.PI + 10 + outletLength;
   const arcCentroid = [36 / 5 + (576 + q) / (60 * Math.PI), 12 + 12 / Math.PI, 54 / 5 - (1296 + q) / (60 * Math.PI)];
-  const centroid = arcCentroid.map((value, i) => (15 * Math.PI * value + 10 * [-5, 0, 0][i]) / length);
+  const centroid = arcCentroid.map((value, i) => (15 * Math.PI * value + 10 * [-5, 0, 0][i] + outletLength * [12, 30, 23][i]) / length);
   const { bodies: [body] } = await f.bodies();
   for (const measured of [mass, quadrature, body]) {
     near(measured.volume, volume(inner), 2e-6);
@@ -157,7 +177,7 @@ async function verify(label, doc) {
 
 await f.run(async () => {
   await f.newPage();
-  await f.openFile({ name: 'orthogonal-inlet-sweep.bcad', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(seed)) }, 1);
+  await f.openFile({ name: fixtureName + '.bcad', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(seed)) }, 1);
   await f.same(seed);
   f.phase = 'join the two quarter arcs';
   await button('First arc', browser()).click();
@@ -170,6 +190,14 @@ await f.run(async () => {
   await button('Joined curve', browser()).last().click({ modifiers: ['Shift'] });
   await button('Join').click();
   await f.changed(twoArcs);
+  if (bothEnds) {
+    f.phase = 'append the outlet to the joined inlet and bends';
+    const inletAndArcs = await f.doc();
+    await button('Joined curve', browser()).last().click();
+    await button('Straight outlet', browser()).click({ modifiers: ['Shift'] });
+    await button('Join').click();
+    await f.changed(inletAndArcs);
+  }
   const joined = (await f.snapshot('01-joined-inlet-path')).doc;
   const rail = joined.direct.objects.find(object => object.name === 'Joined curve' && !object.hidden);
   assert.ok(rail);
@@ -189,7 +217,7 @@ await f.run(async () => {
     await f.snapshot('02-exact-inlet-refused');
     return;
   }
-  await hud().locator('.hud-step').getByText('Exact line–arc–arc', { exact: true }).waitFor();
+  await hud().locator('.hud-step').getByText(bothEnds ? 'Exact line–arc–arc–line' : 'Exact line–arc–arc', { exact: true }).waitFor();
   await status('preview').waitFor();
   await f.snapshot('02-exact-inlet-preview');
   await button('Apply', hud()).click();
@@ -214,24 +242,25 @@ await f.run(async () => {
   const changed = await verify('bore-edited', edited);
   const exterior = shape => [...shape.other.filter(face => !isBore(face.name)),
     ...shape.cylinders.filter(face => face.geometry.out === 1)].map(face => [face.name, face.digest]);
-  assert.equal(exterior(native).length, 6);
+  assert.equal(exterior(native).length, bothEnds ? 8 : 6);
   assert.deepEqual(exterior(changed), exterior(native));
   await f.undo(); await f.same(accepted);
   await f.redo(); await f.same(edited);
-  const saved = await f.save('perpendicular-inlet-sweep');
+  const saved = await f.save(fixtureName);
   await f.freshOpen(saved.file, edited, '06-native-reopened');
   assert.equal((await verify('reopened', await f.doc())).digest, changed.digest);
   await button('Iso', f.page.locator('.views')).click();
   await f.page.getByTitle('Frame all (F)', { exact: true }).click();
   await f.snapshot('07-inlet-reopened-view');
 
-  f.phase = 'approve the same inlet from a revision-bound local Agent proposal';
+  f.phase = 'approve the same path from a revision-bound local Agent proposal';
   const proposalFile = join(f.output, 'inlet-proposal.bcad');
   await copyFile(savedRail.file, proposalFile);
   await withMcpSession({ app: f.app, output: f.output, clientName: f.name }, proposalFile, 'inlet-sweep', async call => {
     const expectedRevision = await currentPartRevision(call);
     const description = await call('describe', { command: 'sweep-curve' });
     assert.match(description.values.representation, /perpendicular planes .* tangent inlet/);
+    if (bothEnds) assert.match(description.values.representation, /tangent inlet and outlet spans/);
     const summary = await call('query', { action: 'summary' });
     const source = summary.direct_curves.find(item => item.id === rail.id);
     assert.ok(source?.revision);
@@ -242,7 +271,8 @@ await f.run(async () => {
     assert.ok(dry.dryRun);
     near(dry.change.volume, volume(1), .001);
     assert.deepEqual(await readFile(proposalFile), before);
-    const proposed = await call('proposals', { action: 'propose', title: 'Exact perpendicular Sweep with inlet', ops: [op] });
+    const proposed = await call('proposals', { action: 'propose',
+      title: bothEnds ? 'Exact perpendicular Sweep with inlet and outlet' : 'Exact perpendicular Sweep with inlet', ops: [op] });
     assert.deepEqual([proposed.proposal, proposed.applied], ['P1', false]);
   });
   const pending = JSON.parse(await readFile(proposalFile, 'utf8'));

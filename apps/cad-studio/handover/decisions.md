@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D1916: [Add both straight ends to a perpendicular Exact Sweep](notes/perpendicular-quarter-arc-both-ends-sweep-2026-11-24/README.md), #10. Verify all three circular joins, bore editing, native Open and matching Agent approval.
+
 - D1915: [Qualify section hatch text clearance through edits](notes/section-hatch-clearance-lifecycle-2026-11-24/README.md), #247. Verify half-scale Studio and SVG text, unchanged material DXF, and hatch restoration after unresolved or removed ownership.
 
 - D1914: [Add a straight tangent inlet to a perpendicular Exact Sweep](notes/perpendicular-quarter-arc-inlet-sweep-2026-11-24/README.md), #10. Preserve both native joins and verify actual bore editing and explicit Agent approval.

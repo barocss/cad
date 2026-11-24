@@ -57,6 +57,8 @@ test('the closed circle option labels its stored span pattern without changing o
   assert.equal(sweepRepresentationLabel('exact', circle), 'Exact closed circle');
   assert.equal(sweepRepresentationLabel('exact', { ...circle, weights: [1, 1, 1, .707106781, 1, 1, 1, .707106781, 1] }),
     'Exact line–arc–line–arc');
+  assert.equal(sweepRepresentationLabel('exact', { ...circle, weights: [1, 1, 1, .707106781, 1, .707106781, 1, 1, 1] }),
+    'Exact line–arc–arc–line');
   assert.equal(sweepRepresentationLabel('exact-straight', circle), 'Exact straight path');
   assert.equal(sweepRepresentationLabel(undefined, circle), 'Faceted');
   assert.equal(sweepRepresentationLabel('exact', { ...circle, weights: Array(9).fill(1) }), 'Exact circular arc');

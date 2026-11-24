@@ -165,6 +165,7 @@ test('inlet path refuses short, reversed, kinked, weighted and nonperpendicular 
   refused(nonquarter, 'CAPABILITY');
   const pairedTails = rail(); pairedTails.controlPoints.push([12, 30, 23], [12, 30, 28]);
   pairedTails.weights.push(1, 1); pairedTails.knots = [0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 4];
+  pairedTails.controlPoints[6] = [22.8, 30, 14.4]; // A nonperpendicular pair keeps the original fallback refusal.
   const pairedSource = document(10, section(), pairedTails), unchanged = structuredClone(pairedSource);
   assert.throws(() => evaluateCadPart(pairedSource), e => e instanceof CadPartError && e.feature === 'w'
     && e.code === 'GEOMETRY' && e.message === 'w: The exact closed-circle sweep path must close with a common forward tangent.');

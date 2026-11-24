@@ -931,6 +931,19 @@ function perpendicularQuarterInlet(path: Curve, refuse: Refuse) {
   return { pair, suffix, line, tolerance };
 }
 
+/** Admit only the two existing straight-end encodings around the same perpendicular quarter pair. */
+function perpendicularQuarterEnds(path: Curve, refuse: Refuse) {
+  const { degree, controlPoints: p, weights: w, knots: k } = path;
+  if (degree !== 2 || p.length !== 9 || w.length !== 9 || k.length !== 12
+    || w[0] !== w[1] || w[1] !== w[2] || w[2] === w[3] || w[4] === w[5]
+    || w[6] !== w[7] || w[7] !== w[8]) return;
+  const inletPath: Curve = { ...path, controlPoints: p.slice(0, 7), weights: w.slice(0, 7), knots: [...k.slice(0, 9), k[8]] };
+  const outletPath: Curve = { ...path, controlPoints: p.slice(2), weights: w.slice(2), knots: [k[3], ...k.slice(3)] };
+  const inlet = perpendicularQuarterInlet(inletPath, refuse), outlet = perpendicularQuarterOutlet(outletPath, refuse);
+  if (!inlet || !outlet) return;
+  return { inlet, inletPath, outlet: { rail: outlet, path: outletPath, tolerance: pathTolerance(path, refuse) } };
+}
+
 /** Read two coplanar circular spans with one forward tangent quadratic straight span between them. */
 function tangentArcLineArc(path: Curve, refuse: Refuse) {
   const { degree, controlPoints: poles, weights, knots } = path;
@@ -1277,31 +1290,41 @@ function perpendicularOutletSweep(id: string, rail: NonNullable<ReturnType<typeo
 
 /** Preserve the first bend's frame and put one same-section native cylinder behind its original start. */
 function perpendicularInletSweep(id: string, rail: NonNullable<ReturnType<typeof perpendicularQuarterInlet>>,
-  section: JoinedSection, initial: SweepAxes, bore: Circle | undefined, tags: SideTags | undefined, path: Curve, refuse: Refuse): SweepSolid {
-  const { pair, line, tolerance } = rail, { first, second } = pair;
+  section: JoinedSection, initial: SweepAxes, bore: Circle | undefined, tags: SideTags | undefined, path: Curve, refuse: Refuse,
+  outlet?: NonNullable<ReturnType<typeof perpendicularQuarterEnds>>['outlet']): SweepSolid {
+  const { pair, line } = rail, { first, second } = pair, tolerance = outlet?.tolerance ?? rail.tolerance;
+  const style = outlet ? 'line-arc-arc-line' : 'line-arc-arc';
   const secondCentre = perpendicularSecondCentre(pair, initial, section.bendCentre, rail.suffix, refuse);
-  const existing = arcPairSweep(id, pair, section, bore, tags, refuse, secondCentre);
+  const existing = outlet ? perpendicularOutletSweep(id, outlet.rail, section, initial, bore, tags, outlet.path, refuse)
+    : arcPairSweep(id, pair, section, bore, tags, refuse, secondCentre);
   const offset: Point = [0, 0, -line.length], worldStart = add(first.start, scale(initial[2], -line.length));
   if (!tangentMatches(line, initial[2], sub(path.controlPoints[3], path.controlPoints[2]), geometryScaleMM(path.controlPoints), tolerance)
     || !(len(sub(worldStart, path.controlPoints[0])) + line.error + line.length * len(sub(initial[2], line.tangent)) <= tolerance))
-    return refuse('GEOMETRY', 'Exact perpendicular line-arc-arc sweep cannot retain the native inlet centreline.');
+    return refuse('GEOMETRY', `Exact perpendicular ${style} sweep cannot retain the native inlet centreline.`);
   const prism = prismaticFromProfile({ outer: section.profile, ...(bore ? { holes: [[bore]] } : {}), sideTags: tags,
     height: line.length, tag: `${id}.lead`, names: { bottom: `${id}.start`, top: `${id}.lead.end` } });
   const lead = transformBrep(brepFromPrismatic(prism, { id: `${id}_lead` }), { matrix: sweepMatrix(identityAxes), offset });
-  const roundoff = 128 * Number.EPSILON * Math.max(1, first.radius, second.radius, section.extent, line.length);
+  const roundoff = 128 * Number.EPSILON * Math.max(1, first.radius, second.radius, section.extent, line.length, outlet?.rail.line.length ?? 0);
   const wall = bore ? section.radialReach - circleRadius(bore) : undefined;
   if (wall !== undefined && !jointWallClear(lead, existing.brep, wall, roundoff))
-    return refuse('GEOMETRY', 'Exact perpendicular line-arc-arc sweep needs strictly positive wall clearance around the bore.');
+    return refuse('GEOMETRY', `Exact perpendicular ${style} sweep needs strictly positive wall clearance around the bore.`);
   // Positive native chart weights bound each piece by its control hull. Circular end fills
   // have the same support extrema as their rim, so the second bend stays strictly ahead of the inlet.
   const support = (faces: Brep['faces']) => faces.flatMap(face => {
     if (face.surface.kind !== 'surface' || face.surface.weights.some(row => row.some(weight => !(weight > 0))))
-      return refuse('GEOMETRY', 'Exact perpendicular line-arc-arc sweep needs positive native surface weights.');
+      return refuse('GEOMETRY', `Exact perpendicular ${style} sweep needs positive native surface weights.`);
     return face.surface.controlPoints.flat().map(point => point[2]);
   });
   const secondSupport = support(existing.brep.faces.filter(face => face.name?.startsWith(`${id}.second.`))), leadSupport = support(lead.faces);
   if (!secondSupport.length || !leadSupport.length || !(Math.min(...secondSupport) - Math.max(...leadSupport) > 10 * tolerance + 2 * roundoff))
-    return refuse('GEOMETRY', 'Exact perpendicular line-arc-arc sweep cannot certify separation of the inlet and second bend.');
+    return refuse('GEOMETRY', `Exact perpendicular ${style} sweep cannot certify separation of the inlet and second bend.`);
+  if (outlet) {
+    // The outlet's positive-weight native charts, including its end fill, must remain
+    // strictly ahead of the inlet in the first bend's unchanged tangent coordinate.
+    const tailSupport = support(existing.brep.faces.filter(face => face.name?.startsWith(`${id}.tail.`) || face.name === `${id}.end`));
+    if (!tailSupport.length || !(Math.min(...tailSupport) - Math.max(...leadSupport) > 10 * tolerance + 2 * roundoff))
+      return refuse('GEOMETRY', 'Exact perpendicular line-arc-arc-line sweep cannot certify separation of its inlet and outlet.');
+  }
   const leadWalls = lead.faces.filter(face => face.name?.startsWith(`${id}.lead.`) && face.name !== `${id}.lead.end`);
   if (leadWalls.length !== (bore ? 4 : 2) || leadWalls.some(face => {
     if (face.surface.kind !== 'surface') return true;
@@ -1309,20 +1332,23 @@ function perpendicularInletSweep(id: string, rail: NonNullable<ReturnType<typeof
     const expected = inner && bore ? circleRadius(bore) : section.radialReach;
     return geometry.kind !== 'cylinder' || Math.abs(geometry.r - expected) > roundoff || geometry.out !== (inner ? -1 : 1)
       || len(cross(geometry.a, identityAxes[2])) > roundoff / expected || len(cross(sub(geometry.c, offset), identityAxes[2])) > roundoff;
-  })) return refuse('GEOMETRY', 'Exact perpendicular line-arc-arc sweep could not retain the native inlet cylinders.');
+  })) return refuse('GEOMETRY', `Exact perpendicular ${style} sweep could not retain the native inlet cylinders.`);
   const shared: SharedSection = [2, bore ? 2 : 0];
   const glued = glueSection(lead, `${id}.lead.end`, existing.brep, `${id}.start`, origin, identityAxes[2], roundoff, shared, id);
   const joined = glued && bindArcPairJoin(glued, id, roundoff, bore ? 1 : 0, 2);
-  const brep = joined && bindPerpendicularStraightJoin(joined, id, roundoff, !!bore, true);
+  const inletBound = joined && bindPerpendicularStraightJoin(joined, id, roundoff, !!bore, true);
+  const brep = outlet && inletBound ? bindPerpendicularStraightJoin(inletBound, id, roundoff, !!bore) : inletBound;
   const [dx, dy] = section.bendCentre, radius = Math.hypot(dx, dy);
   const join = bendEndFrame(dx, dy, radius, first.angle * 180 / Math.PI * Math.PI / 180);
   const end = bendEndFrame(...secondCentre, Math.hypot(...secondCentre), second.angle * 180 / Math.PI * Math.PI / 180);
   const rotate = (p: Point) => add(add(scale(join.axes[0], p[0]), scale(join.axes[1], p[1])), scale(join.axes[2], p[2]));
-  const terminal = add(join.offset, rotate(end.offset)), normal = rotate(end.axes[2]);
-  if (!brep || brep.faces.length !== (bore ? 14 : 8)
+  const normal = rotate(end.axes[2]), terminal = add(add(join.offset, rotate(end.offset)), scale(normal, outlet?.rail.line.length ?? 0));
+  if (!brep || brep.faces.length !== (outlet ? bore ? 18 : 10 : bore ? 14 : 8)
+    || outlet && (brep.loops.length !== (bore ? 20 : 10) || brep.coedges.length !== (bore ? 72 : 36)
+      || brep.edges.length !== (bore ? 36 : 18) || brep.vertices.length !== (bore ? 20 : 10))
     || !sectionBoundary(brep, `${id}.start`, offset, [0, 0, -1], roundoff, shared)
     || !sectionBoundary(brep, `${id}.end`, terminal, normal, roundoff, shared))
-    return refuse('GEOMETRY', 'Exact perpendicular line-arc-arc sweep could not preserve both end caps and both tangent joins.');
+    return refuse('GEOMETRY', `Exact perpendicular ${style} sweep could not preserve both end caps and ${outlet ? 'all three' : 'both'} tangent joins.`);
   return { brep, mass: density => combineMassProperties([
     { props: existing.mass(density), axes: identityAxes, offset: origin },
     { props: prismaticMassProperties(prism, density), axes: identityAxes, offset },
@@ -1438,6 +1464,22 @@ export function exactSweep(input: ExactSweepInput, refuse: Refuse): SweepSolid {
     // Carry the outer area centroid at the path start, without changing the hole's offset from it.
     const offset = sub(start, add(scale(x, section.anchor[0]), scale(y, section.anchor[1])));
     return place({ brep: brepFromPrismatic(prism, { id }), mass: density => prismaticMassProperties(prism, density) }, axes, offset);
+  }
+
+  const perpendicularEnds = perpendicularQuarterEnds(path, refuse);
+  if (perpendicularEnds) {
+    if (!disk || profileRadius === undefined)
+      return refuse('CAPABILITY', 'Exact perpendicular line-arc-arc-line sweep needs one circular disk or one concentric circular bore.');
+    const hole = circularHole(holes, 'perpendicular line-arc-arc-line', refuse), bore = hole && concentricBore(disk, hole, refuse, 'perpendicular line-arc-arc-line');
+    const initial = frame(perpendicularEnds.inlet.pair.first.tangent), [x, y] = initial;
+    const section: JoinedSection = { profile: [originDisk(profileRadius)],
+      bendCentre: [dot(perpendicularEnds.inlet.pair.first.toCentre, x), dot(perpendicularEnds.inlet.pair.first.toCentre, y)],
+      radialReach: profileRadius, extent: profileRadius, edgeCount: 2 };
+    const local = perpendicularInletSweep(id, perpendicularEnds.inlet, section, initial, bore, sideTags, perpendicularEnds.inletPath, refuse, perpendicularEnds.outlet);
+    const result = place(local, initial, perpendicularEnds.inlet.pair.first.start), report = checkBrep(result.brep, { strict: true });
+    if (!report.valid || report.topology.length !== 1 || report.topology[0].shells !== 1 || report.topology[0].genus !== (bore ? 1 : 0))
+      return refuse('GEOMETRY', 'Exact perpendicular line-arc-arc-line sweep did not produce one valid closed solid.');
+    return result;
   }
 
   const perpendicularInlet = perpendicularQuarterInlet(path, refuse);

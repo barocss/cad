@@ -244,7 +244,7 @@ await f.run(async () => {
   await withMcpSession({ app: f.app, output: f.output, clientName: f.name }, proposalFile, 'outlet-sweep', async call => {
     const expectedRevision = await currentPartRevision(call);
     const description = await call('describe', { command: 'sweep-curve' });
-    assert.match(description.values.representation, /perpendicular planes .* optional straight tangent inlet or outlet/);
+    assert.match(description.values.representation, /perpendicular planes .* optional straight tangent inlet and outlet spans/);
     const summary = await call('query', { action: 'summary' });
     const source = summary.direct_curves.find(item => item.id === rail.id);
     assert.ok(source?.revision);

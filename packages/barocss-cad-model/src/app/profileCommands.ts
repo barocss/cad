@@ -688,6 +688,8 @@ export function sweepRepresentationLabel(mode: unknown, path?: SweepRail): strin
       return 'Exact line–arc–line–arc–line';
     if (controlPoints.length === 9 && weights.length === 9 && knots.length === 12
       && knots[3] === knots[4] && knots[5] === knots[6] && knots[7] === knots[8]) {
+      if (first > 0 && weights.every((weight, i) => i === 3 || i === 5 ? weight > 0 && weight < first : weight === first))
+        return 'Exact line–arc–arc–line';
       if (weights.every((weight, i) => i % 4 === 3 ? weight > 0 && weight < first : weight === first) && first > 0)
         return 'Exact line–arc–line–arc';
       if (weights.every((weight, i) => i % 2 === 0 ? weight === first : weight > 0 && weight < first))
