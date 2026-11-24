@@ -16,6 +16,7 @@ export function commandNumberRule(command: string, key: string, operation?: unkn
     if (key === 'len') return 'thread-length';
     if (key === 'relief' || key === 'clear') return 'nonnegative-mm';
   }
+  if (command === 'hole' && key === 'drillDepth') return 'positive';
   if (command === 'pipe' && key === 'bendAngle') return 'pipe-angle';
   if (command === 'keyway' && (key === 'b' || key === 't2')) return 'positive';
   if (command === 'scale' && key === 'factor') return 'scale-factor';
@@ -53,6 +54,7 @@ export function historyNumberRule(nodes: readonly ModelNode[], index: number, ke
   if (node?.kind === 'fillet' && ((node.section?.kind === 'conic' && key === 'rho') || (node.section?.kind === 'g2' && key === 'tension'))) return 'open-unit';
   if (node?.kind === 'chamfer' && key === 'd') return 'positive';
   if (node?.kind === 'align' && key === 'gap') return 'align-gap';
+  if (node?.kind === 'blind-drill-hole' && (key === 'depth' || key === 'dia')) return 'positive';
   if (node?.kind === 'hole' && node.depth !== undefined && key === 'depth') return 'positive';
   if (key.endsWith('linkedInsetMM')) return 'positive';
   if (node?.kind === 'extrude' && key === 'h') return isSketchAnchoredCut(nodes, index) ? 'positive' : commandNumberRule('extrude', key);

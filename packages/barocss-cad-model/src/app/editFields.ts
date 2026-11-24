@@ -555,6 +555,15 @@ function editFieldsRaw(nodes: Nodes, i: number, bearingAssembly?: BearingAssembl
       }
       break;
     }
+    case 'blind-drill-hole':
+      number('dia', 'Diameter', 'mm', n => num((n as typeof node).radius) * 2, (n, v) => ({ ...(n as typeof node), radius: v / 2 }));
+      (['X', 'Y'] as const).forEach((axis, k) => number('c' + k, 'Centre ' + axis, 'mm', n => num((n as typeof node).center[k]), (n, v) => {
+        const center: [Dim, Dim] = [...(n as typeof node).center];
+        center[k] = v;
+        return { ...(n as typeof node), center };
+      }));
+      number('depth', 'Cylindrical depth', 'mm', n => num((n as typeof node).depth), (n, v) => ({ ...(n as typeof node), depth: v }));
+      break;
     case 'hole':
       if (editableHoleEnd(nodes, i)) out.push(holeEndField(i));
       if (node.thread) out.push(holeThreadField(nodes, i, scope));

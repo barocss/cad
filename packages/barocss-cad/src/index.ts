@@ -455,6 +455,7 @@ export type { AnalyticBooleanOperation } from './brep/analytic-boolean.js';
 export { curveFaceRegions, locateInRegion, regionInteriorPoint } from './brep/curved-arrangement.js';
 export { revolveProfile, revolveMassProperties } from './features/revolve.js';
 export type { RevolveInput } from './features/revolve.js';
+export { blindDrillPointHeight } from './part/part-blind-drill-hole.js';
 export { finishBrepEdges } from './blend/edge-finish.js';
 export { draftedExtrusion } from './features/drafted-extrusion.js';
 export { exportStep, importStep, MESH_PLANAR_LIMIT, MESH_PLANAR_TRIANGLES, stepMeshes, stepTessellatedChars, stepValidationProperties, compareValidationProperties, type StepValidationProperties, type ValidationCheck } from './io/step.js';

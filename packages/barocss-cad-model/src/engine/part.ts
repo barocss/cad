@@ -29,6 +29,7 @@ import { mirrorCage, sprocketPitchDiameter, timingPitchDiameter } from '@barocss
 import type { BendTable, BeadSharedComponent, CadPartDocument, CadPartFeature, CadPartFrameOverride, CadPartNameSignature, CadPartSection } from '@barocss/cad';
 import type { Sig } from './references';
 import { frameGeometry, holeCentres, bevelSpiral, prefixDoc, directFaceDocumentProblem, rectangularPatternDocumentProblem, textDocumentProblem, textNodeProblem, textReliefNodeProblem, type TextNode, type TextReliefNode, type DocPlane, type Dim, type SketchNode, type BodyRef, type FrameOverride, type InlineSection, type MemberSection, type ModelNode, type PartInstance, type StudioDoc } from './doc';
+import { blindDrillHoleFieldsProblem } from './blindDrillHole';
 import { bodyKeyFor, bodyNodeOf, featureId, isAssemblyCut, nodeIndexOf, serialOf, withIds } from './ids';
 import { keyClasses } from './fits';
 import type { StudioRingRow } from './rings';
@@ -164,6 +165,11 @@ export function featureOf(node: ModelNode, index: number, nodes?: readonly Model
     // (B2: both sides' targets are read, not consumed; the stored signatures of both sides' names go as the kernel's `expect`.)
     case 'band-surface': return { ...at, kind: 'band-surface', a: { target: ref(node.a.parent), edges: [...node.a.edges] }, b: { target: ref(node.b.parent), edges: [...node.b.edges] }, ...(node.flip ? { flip: true } : {}), ...expectOf(node, [...node.a.edges, ...node.b.edges]) };
     case 'rectangular-relief': return { ...at, kind: 'rectangular-relief', target: ref(node.parent), min: structuredClone(node.min), max: structuredClone(node.max), depth: structuredClone(node.depth), mode: node.mode };
+    case 'blind-drill-hole': {
+      const problem = blindDrillHoleFieldsProblem(node);
+      if (problem) throw refusal('VALUE', problem);
+      return { ...at, kind: 'blind-drill-hole', target: ref(node.parent), center: node.center, radius: node.radius, depth: node.depth, face: node.face };
+    }
     case 'hole': return { ...at, kind: 'hole', target: ref(node.parent), center: node.center, radius: node.radius,
       ...(node.axis ? { axis: node.axis } : {}), ...(node.side ? { side: node.side } : {}), ...(node.depth === undefined ? {} : { depth: node.depth }), ...(node.countersink ? { countersink: node.countersink } : {}), ...(node.face ? { face: node.face } : {}) };
     case 'translate': return { ...at, kind: 'translate', target: ref(node.parent), offset: node.offset };

@@ -1,5 +1,6 @@
 import type { HeldFinishEdgeEditor } from '../state/useHeldFinishEdge';
 import type { HeldDraftFaceEditor } from '../state/heldDraftFaceSession';
+import { blindDrillPointHeight } from '@barocss/cad';
 import { oppositeFlangeOwnRadiusField } from '../state/oppositeFlangeRadiusHistory';
 import type { useOppositeFlangeRadiusPreview } from '../app/useOppositeFlangeRadiusPreview';
 import { heldFinishRadiusText } from '../state/heldFinishReplacement';
@@ -121,6 +122,11 @@ export function NodeEditor({ onFilletStations, filletEndpoints, nodes, index, on
     }
   };
   const node = draft[index];
+  const drillTotalDepth = node?.kind === 'blind-drill-hole' ? (() => {
+    const radius = typeof node.radius === 'number' ? node.radius : parameters[node.radius.parameter];
+    const depth = typeof node.depth === 'number' ? node.depth : parameters[node.depth.parameter];
+    return radius > 0 && depth > 0 ? depth + blindDrillPointHeight(radius) : null;
+  })() : null;
   const loftGuides = originalLoft?.guides;
   const guideGapError = current?.error?.feature === originalLoft?.id
     && current?.error?.detail.includes('loft: two guides require guide 2 to stay to the right');
@@ -386,6 +392,7 @@ export function NodeEditor({ onFilletStations, filletEndpoints, nodes, index, on
             setDraft(current => current.map((item, k) => k === index && item.kind === 'align' ? { ...item, target } : item));
           }} /> : <div className="field"><span>Target face</span><span>{node.target.face}</span></div>}
       </>}
+      {drillTotalDepth !== null && Number.isFinite(drillTotalDepth) && <div className="field"><span>Total depth</span><span>{drillTotalDepth.toFixed(3)} mm · 118° point</span></div>}
       {cutSource && <div className="field"><span>Cut source</span><span>{cutSource}</span></div>}
       {node?.kind === 'circular-pattern' && fields.some(f => f.key === 'span') && <p className="small" role="note" aria-label="Spread over behavior">360° or more uses one full turn. Negative values reverse direction. Spread over cannot be bound to a parameter.</p>}
       {fields.length ? fields.map(f => {

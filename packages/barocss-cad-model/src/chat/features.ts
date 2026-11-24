@@ -64,6 +64,7 @@ const SPECS: Record<string, Spec> = {
   chamfer: { parent: 'ref', edges: 'names1', distance: 'dim' },
   // (`radii`: a varying radius, R10.5a, D100; `section`: a conic or G2 section, R10.5b, D103.)
   fillet: { parent: 'ref', edges: 'names1', radius: 'dim', 'radii?': 'radii', 'section?': 'section' },
+  'blind-drill-hole': { parent: 'ref', center: 'dim2', radius: 'dim', depth: 'dim', face: 'text' },
   hole: { parent: 'ref', center: 'dim2', radius: 'dim', 'axis?': 'enum:x|y|z', 'side?': 'enum:min|max', 'depth?': 'dim' },
   // (R12.1, D116: sheet metal, its rules on each feature.)
   'sheet-base': { sketch: 'sketch', thickness: 'dim', bendRadius: 'dim', 'kFactor?': 'num', 'bendTable?': 'any', 'reverse?': 'bool' },
@@ -519,11 +520,11 @@ function renameNode(node: ModelNode, rename: (id: string) => string): ModelNode 
   if (node.kind === 'draft' || node.kind === 'full-round') return { ...node, faces: node.faces.map(r) };
   if (node.kind === 'face-fillet') return { ...node, faces: [r(node.faces[0]), r(node.faces[1])] };
   if (node.kind === 'band-surface') return { ...node, a: { ...node.a, edges: node.a.edges.map(r) }, b: { ...node.b, edges: node.b.edges.map(r) } };
-  if (node.kind === 'keyway' || node.kind === 'oring-gland' || node.kind === 'connector-opening' || node.kind === 'face-thread') return { ...node, face: r(node.face) };
+  if (node.kind === 'keyway' || node.kind === 'oring-gland' || node.kind === 'connector-opening' || node.kind === 'face-thread' || node.kind === 'blind-drill-hole') return { ...node, face: r(node.face) };
   return node;
 }
 /** The persistent names a node is built on. */
-const named = (n: ModelNode): readonly string[] => n.kind === 'band-surface' ? [...n.a.edges, ...n.b.edges] : n.kind === 'fillet' || n.kind === 'chamfer' || n.kind === 'sheet-flange' || n.kind === 'sheet-corner-relief' ? n.edges : n.kind === 'shell' ? n.open : n.kind === 'draft' || n.kind === 'full-round' || n.kind === 'face-fillet' || n.kind === 'offset-face' || n.kind === 'replace-face' || n.kind === 'delete-face' ? n.faces : n.kind === 'keyway' || n.kind === 'oring-gland' || n.kind === 'connector-opening' || n.kind === 'face-thread' ? [n.face] : [];
+const named = (n: ModelNode): readonly string[] => n.kind === 'band-surface' ? [...n.a.edges, ...n.b.edges] : n.kind === 'fillet' || n.kind === 'chamfer' || n.kind === 'sheet-flange' || n.kind === 'sheet-corner-relief' ? n.edges : n.kind === 'shell' ? n.open : n.kind === 'draft' || n.kind === 'full-round' || n.kind === 'face-fillet' || n.kind === 'offset-face' || n.kind === 'replace-face' || n.kind === 'delete-face' ? n.faces : n.kind === 'keyway' || n.kind === 'oring-gland' || n.kind === 'connector-opening' || n.kind === 'face-thread' || n.kind === 'blind-drill-hole' ? [n.face] : [];
 
 /** A drawing dimension's edge names, renamed (null when one of them is gone). */
 function renameDimension(d: DrawingDimension, rename: (name: string) => string | null): DrawingDimension | null {

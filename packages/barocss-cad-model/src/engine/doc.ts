@@ -1456,6 +1456,7 @@ type ModelNodeBase = DrivenSketchNode | RoundedRectangleInsetNode | SketchNode |
    */
   | { kind: 'decimate'; parent: BodyRef; ratio?: number; triangles?: number; maxError?: number; featureAngle?: number }
   /** `thread`: a tapped hole's cosmetic thread (the hole is its tap drill), e.g. "M6×1"; studio-only. */
+  | { kind: 'blind-drill-hole'; parent: BodyRef; center: [Dim, Dim]; radius: Dim; depth: Dim; face: string }
   | { kind: 'hole'; parent: BodyRef; center: [Dim, Dim]; radius: Dim; axis?: Axis; side?: 'min' | 'max'; depth?: Dim; thread?: string; pattern?: HolePattern;
     /** The command that made it with the steps before it (O14: a mount's last hole). */ made?: Made;
     /** The face it goes into, by name (D148): its depth and countersink from that face's plane, not the body's extreme. */ face?: string;
@@ -2011,6 +2012,7 @@ export function featureLabel(node: ModelNode, index: number, nodes: readonly Mod
     case 'delete-face': return node.sigs?.[node.faces[0]]?.k === 'plane'
       ? /\.face(?:#[12])?$/.test(node.faces[0]) ? 'Delete face · Heal chamfer' : 'Delete face · Heal boss'
       : node.faces[0].endsWith('.face') ? 'Delete face · Heal fillet' : 'Delete face · Heal through hole';
+    case 'blind-drill-hole': return `Blind drill Ø${typeof node.radius === 'number' ? fmt(node.radius * 2) : node.radius.parameter}`;
     case 'hole': return (node.thread ? `Tapped ${node.thread}` : `${node.countersink ? 'Countersunk' : 'Hole'} Ø${typeof node.radius === 'number' ? fmt(node.radius * 2) : node.radius.parameter}`) + (node.pattern && node.pattern.count > 1 ? ` × ${node.pattern.count}` : '');
     case 'chamfer': return `Chamfer ${n(node.distance)}`;
     case 'draft': return `Draft ${fmt(node.angle)}° × ${node.faces.length}`;

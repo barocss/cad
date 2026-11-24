@@ -121,6 +121,8 @@ export type CadPartFeature = Base & (
    * plane rather than the target's extreme on `side` (a boss's top inside a shell); its normal along ±axis gives the side.
    */
   | { readonly kind: 'hole'; readonly target: string; readonly center: CadPartPoint2; readonly radius: CadPartDim; readonly depth?: CadPartDim; readonly axis?: CadPartAxis; readonly side?: 'min' | 'max'; /** A 90° countersink: its diameter at the face (wider than the hole). */ readonly countersink?: CadPartDim; readonly face?: string }
+  /** Fixed 118° point below the required full-diameter depth, strictly blind in an original rectangular stock. */
+  | { readonly kind: 'blind-drill-hole'; readonly target: string; readonly center: CadPartPoint2; readonly radius: CadPartDim; readonly depth: CadPartDim; readonly face: string }
   | { readonly kind: 'translate'; readonly target: string; readonly offset: CadPartPoint3 }
   /** About an axis through `pivot` (default the origin) by any angle; off quarter turns about X or Y the body leaves the upright family. */
   | { readonly kind: 'rotate'; readonly target: string; readonly axis: CadPartAxis; readonly angle: number; readonly pivot?: CadPartPoint3 }

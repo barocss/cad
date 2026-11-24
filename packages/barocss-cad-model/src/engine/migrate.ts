@@ -1,3 +1,4 @@
+import { blindDrillHoleFieldsProblem } from './blindDrillHole';
 import { assertRevolveAxisBindings } from './revolveAxis';
 import { splitOutputDocumentProblem } from './splitOutput';
 import { assertPocketFloorBindings } from './pocketFloor';
@@ -35,7 +36,7 @@ import { sketch3dRefusal, type Constraint3D, type V3 } from '../frames/sketch3d'
 // Only schemas 3 and 4 are read; explicit route bundles require reader support for 4.
 export const SCHEMA = 3;
 const MAX_READ_SCHEMA = 4;
-const KINDS = new Set(['driven-sketch', 'rounded-rectangle-inset', 'skeleton', 'cylindrical-wrap', 'offset-face', 'replace-face', 'delete-face', 'text', 'text-relief', 'sketch', 'extrude', 'region-extrude', 'face-end-extrude', 'revolve', 'decimate', 'translate', 'rotate', 'align', 'mirror', 'scale', 'linear-pattern', 'linear-span-pattern', 'linear-feature-pattern', 'rectangular-feature-pattern', 'curve-feature-pattern', 'fill-feature-pattern', 'circular-pattern', 'union', 'intersect', 'difference', 'rib', 'rectangular-relief', 'split', 'separate', 'sweep', 'sweep-curve', 'loft', 'import', 'mesh', 'thread', 'shell', 'chamfer', 'fillet', 'draft', 'full-round', 'face-fillet', 'face-thread', 'thicken', 'band-surface', 'sew', 'subd', 'gear', 'internal-gear', 'bevel-gear', 'worm', 'worm-wheel', 'spring', 'cam', 'sprocket', 'pulley', 'belt', 'coupling', 'connector-opening', 'connector-body', 'gusset', 'end-cap', 'shaft', 'key', 'keyway', 'retaining-ring', 'pin', 'bearing', 'oring-gland', 'oring', 'rack', 'library', 'hole', 'sheet-base', 'sheet-contour', 'sheet-flange', 'sheet-corner-relief', 'frame-member', 'frame']);
+const KINDS = new Set(['driven-sketch', 'rounded-rectangle-inset', 'skeleton', 'cylindrical-wrap', 'offset-face', 'replace-face', 'delete-face', 'text', 'text-relief', 'sketch', 'extrude', 'region-extrude', 'face-end-extrude', 'revolve', 'decimate', 'translate', 'rotate', 'align', 'mirror', 'scale', 'linear-pattern', 'linear-span-pattern', 'linear-feature-pattern', 'rectangular-feature-pattern', 'curve-feature-pattern', 'fill-feature-pattern', 'circular-pattern', 'union', 'intersect', 'difference', 'rib', 'rectangular-relief', 'split', 'separate', 'sweep', 'sweep-curve', 'loft', 'import', 'mesh', 'thread', 'shell', 'chamfer', 'fillet', 'draft', 'full-round', 'face-fillet', 'face-thread', 'thicken', 'band-surface', 'sew', 'subd', 'gear', 'internal-gear', 'bevel-gear', 'worm', 'worm-wheel', 'spring', 'cam', 'sprocket', 'pulley', 'belt', 'coupling', 'connector-opening', 'connector-body', 'gusset', 'end-cap', 'shaft', 'key', 'keyway', 'retaining-ring', 'pin', 'bearing', 'oring-gland', 'oring', 'rack', 'library', 'hole', 'blind-drill-hole', 'sheet-base', 'sheet-contour', 'sheet-flange', 'sheet-corner-relief', 'frame-member', 'frame']);
 
 export function readStudioDoc(text: string): { doc: StudioDoc; notes: string[] } | { error: string } {
   let raw: unknown;
@@ -71,6 +72,12 @@ export function readStudioDoc(text: string): { doc: StudioDoc; notes: string[] }
   catch (cause) { return { error: cause instanceof Error ? cause.message : String(cause) }; }
   const unknown = [...new Set((o.nodes as Record<string, unknown>[]).map(n => String(n?.kind)).filter(k => !KINDS.has(k)))];
   if (unknown.length) return { error: `This model has features this cad-studio does not know: ${unknown.join(', ')}.` };
+  for (const node of o.nodes) {
+    if (record(node) && node.kind === 'blind-drill-hole') {
+      const problem = blindDrillHoleFieldsProblem(node);
+      if (problem) return { error: problem };
+    }
+  }
   const perpendicularProblem = savedPerpendicularProblem(o.nodes);
   if (perpendicularProblem) return { error: refusal('BAD_REFERENCE', perpendicularProblem).message };
   if (o.units !== undefined && o.units !== 'mm') return { error: `This model is in ${String(o.units)}: only millimetre models are read.` };

@@ -2,6 +2,7 @@ import { splitNormalProblem } from './splitPlaneInput';
 import { eligibleFillPatternRegions, fillFeaturePatternProblem, fillRegionSnapshot } from '../engine/fillFeaturePattern';
 import { appendMirrorRecipe } from './mirrorRecipe';
 import { splitOutputSide } from '../engine/splitOutput';
+import { blindDrillPointHeight } from '@barocss/cad';
 import type { FillFeaturePatternRegion } from '@barocss/cad/api';
 import { curveFeaturePatternProblem, eligibleCurvePatternPaths, type CurveFeaturePatternPath } from '../engine/curveFeaturePattern';
 // Commands are driven by the current selection. Each one says whether it applies (and why not),
@@ -565,17 +566,19 @@ const allCommands: Command[] = [
       return ok;
     },
     fields: ctx => {
-      const f = ctx.selection.faces[0], { axis } = holeAxis(ctx.bodies[f.body].mesh.faces[f.face].normal)!, [a, b] = HOLE_PLANE[axis];
-      return [{ key: 'type', label: 'Type', kind: 'choice', options: [{ value: 'through', label: 'Through' }, { value: 'blind', label: 'To a depth' }, { value: 'counterbore', label: 'Counterbored' }, { value: 'countersink', label: 'Countersunk' }, { value: 'tapped', label: 'Tapped' }] },
+      const f = ctx.selection.faces[0], { axis, side } = holeAxis(ctx.bodies[f.body].mesh.faces[f.face].normal)!, [a, b] = HOLE_PLANE[axis];
+      const drill = axis === 'z' && side === 'max' ? [{ value: 'blind-drill', label: 'Blind with 118° drill point' }] : [];
+      return [{ key: 'type', label: 'Type', kind: 'choice', options: [{ value: 'through', label: 'Through' }, { value: 'blind', label: 'To a depth' }, ...drill, { value: 'counterbore', label: 'Counterbored' }, { value: 'countersink', label: 'Countersunk' }, { value: 'tapped', label: 'Tapped' }] },
         { key: 'd', label: 'Diameter', kind: 'mm', min: 0.5 },
         { key: 'thread', label: 'Thread', kind: 'choice', options: Object.entries(fastenerSizesOf(ctx.doc)).map(([m, s]) => ({ value: m, label: `${m} × ${s.pitch} (drill Ø${s.tap})` })), empty: NO_SIZES, when: v => v.type === 'tapped' },
         { key: 'tend', label: 'Ends', kind: 'choice', options: [{ value: 'through', label: 'Through' }, { value: 'blind', label: 'To a depth' }], when: v => v.type === 'tapped' },
         { key: 'depth', label: 'Depth', kind: 'mm', min: 0.5, when: v => v.type === 'blind' || (v.type === 'tapped' && v.tend === 'blind') },
+        { key: 'drillDepth', label: 'Cylindrical depth', kind: 'mm', min: 0.5, when: v => v.type === 'blind-drill' },
         { key: 'csd', label: 'Countersink Ø', kind: 'mm', min: 1, when: v => v.type === 'countersink' },
-        { key: 'pat', label: 'Copies', kind: 'choice', options: [{ value: 'one', label: 'One hole' }, { value: 'row', label: 'In a row' }, { value: 'circle', label: 'On a circle' }] },
-        { key: 'pn', label: 'Count', kind: 'count', min: 2, max: 64, when: v => v.pat !== 'one' && v.pat !== undefined },
-        { key: 'pa', label: 'Step ' + a.toUpperCase(), kind: 'mm', when: v => v.pat === 'row' }, { key: 'pb', label: 'Step ' + b.toUpperCase(), kind: 'mm', when: v => v.pat === 'row' },
-        { key: 'qa', label: 'Circle centre ' + a.toUpperCase(), kind: 'mm', when: v => v.pat === 'circle' }, { key: 'qb', label: 'Circle centre ' + b.toUpperCase(), kind: 'mm', when: v => v.pat === 'circle' },
+        { key: 'pat', label: 'Copies', kind: 'choice', options: [{ value: 'one', label: 'One hole' }, { value: 'row', label: 'In a row' }, { value: 'circle', label: 'On a circle' }], when: v => v.type !== 'blind-drill' },
+        { key: 'pn', label: 'Count', kind: 'count', min: 2, max: 64, when: v => v.type !== 'blind-drill' && v.pat !== 'one' && v.pat !== undefined },
+        { key: 'pa', label: 'Step ' + a.toUpperCase(), kind: 'mm', when: v => v.type !== 'blind-drill' && v.pat === 'row' }, { key: 'pb', label: 'Step ' + b.toUpperCase(), kind: 'mm', when: v => v.type !== 'blind-drill' && v.pat === 'row' },
+        { key: 'qa', label: 'Circle centre ' + a.toUpperCase(), kind: 'mm', when: v => v.type !== 'blind-drill' && v.pat === 'circle' }, { key: 'qb', label: 'Circle centre ' + b.toUpperCase(), kind: 'mm', when: v => v.type !== 'blind-drill' && v.pat === 'circle' },
         { key: 'cd', label: 'Counterbore Ø', kind: 'mm', min: 1, when: v => v.type === 'counterbore' }, { key: 'ch', label: 'Counterbore depth', kind: 'mm', min: 0.5, when: v => v.type === 'counterbore' },
         { key: 'x', label: 'Centre ' + a.toUpperCase(), kind: 'mm' }, { key: 'y', label: 'Centre ' + b.toUpperCase(), kind: 'mm' }];
     },
@@ -586,14 +589,23 @@ const allCommands: Command[] = [
         ? ctx.holeSnapStep : 1;
       const coordinate = (value: number) => snap === 0 ? value : Math.round(value / snap) * snap;
       // (A bolt circle about the face's middle, a row along its first axis.)
-      return { type: 'through', d: 8, depth: 6, cd: 14, ch: 4, csd: 16, thread: 'M6', tend: 'through', x: coordinate(p[a]), y: coordinate(p[b]), pat: 'one', pn: 4, pa: 10, pb: 0, qa: r1(face.centroid[a]), qb: r1(face.centroid[b]) };
+      return { type: 'through', d: 8, depth: 6, drillDepth: 6, cd: 14, ch: 4, csd: 16, thread: 'M6', tend: 'through', x: coordinate(p[a]), y: coordinate(p[b]), pat: 'one', pn: 4, pa: 10, pb: 0, qa: r1(face.centroid[a]), qb: r1(face.centroid[b]) };
     },
     // Tapped: the diameter is the thread's tap drill.
-    derive: (ctx, v, changed) => { const size = fastenerSizesOf(ctx.doc)[String(v.thread)]; return v.type === 'tapped' && (changed.includes('thread') || changed.includes('type')) && size ? { ...v, d: size.tap } : v; },
+    derive: (ctx, v, changed) => {
+      if (v.type === 'blind-drill' && changed.includes('type')) return { ...v, pat: 'one' };
+      const size = fastenerSizesOf(ctx.doc)[String(v.thread)];
+      return v.type === 'tapped' && (changed.includes('thread') || changed.includes('type')) && size ? { ...v, d: size.tap } : v;
+    },
     steps: (ctx, v) => {
       const pick = ctx.selection.faces[0], face = ctx.bodies[pick.body].mesh.faces[pick.face];
       const size = fastenerSizesOf(ctx.doc)[String(v.thread)];
-      const details = v.type === 'tapped' && !size ? [{ label: 'Thread', text: noSizeRow(String(v.thread)), done: false }]
+      const radius = Number(v.d) / 2, drillDepth = Number(v.drillDepth);
+      const totalDepth = v.type === 'blind-drill' && radius > 0 && drillDepth > 0 && Number.isFinite(radius) && Number.isFinite(drillDepth)
+        ? drillDepth + blindDrillPointHeight(radius) : NaN;
+      const details = v.type === 'blind-drill' && Number.isFinite(totalDepth) && totalDepth > 0
+        ? [{ label: 'Total depth', text: `${totalDepth.toFixed(3)} mm including the 118° point`, done: true }]
+        : v.type === 'tapped' && !size ? [{ label: 'Thread', text: noSizeRow(String(v.thread)), done: false }]
         : v.type === 'tapped' && size ? [{ label: 'Thread', text: `${v.thread}×${size.pitch} right-hand, internal, cosmetic — drilled Ø${v.d}${Number(v.d) !== size.tap ? ` (the tap drill is Ø${size.tap})` : ''}`, done: Number(v.d) === size.tap }]
         : v.type === 'countersink' ? [{ label: 'Countersink', text: `Ø${v.csd} × 90° on a Ø${v.d} hole`, done: Number(v.csd) > Number(v.d) }] : [];
       return [{ label: 'Entry face', text: face.name.split('+')[0], done: true }, ...details];
@@ -609,6 +621,7 @@ const allCommands: Command[] = [
       const k = 'xyz'.indexOf(h.axis), down: [number, number, number] = [0, 0, 0]; down[k] = h.side === 'max' ? -1 : 1;
       const deep = (key: string, by: number, off: number): HandleSpec => { const p: [number, number, number] = [...centre]; p[k] += down[k] * by; p[a] += off; return { key, at: p, dir: [...down], min: 0.5, step: 0.5 }; };
       if (v.type === 'blind' || (v.type === 'tapped' && v.tend === 'blind')) out.push(deep('depth', Number(v.depth), 0));
+      if (v.type === 'blind-drill') out.push(deep('drillDepth', Number(v.drillDepth), 0));
       if (v.type === 'countersink') { const rim: [number, number, number] = [...centre]; rim[a] -= Number(v.csd) / 2; out.push({ key: 'csd', at: rim, dir: [-dir[0], -dir[1], -dir[2]], scale: 2, min: 1, step: 0.5 }); }
       if (v.type === 'counterbore') {
         const rim: [number, number, number] = [...centre]; rim[a] -= Number(v.cd) / 2;
@@ -622,6 +635,11 @@ const allCommands: Command[] = [
       // sits in the body — a boss's top inside a shell), are kept so a later depth edit drills in from that face. A
       // counterbore is a second, wider hole to its depth on the same centre.
       const at = { center: [Number(v.x), Number(v.y)] as [number, number], ...(axis === 'z' ? {} : { axis }), ...(side === 'min' ? { side } : {}), face: picked.name.split('+')[0] };
+      if (v.type === 'blind-drill') {
+        if (axis !== 'z' || side !== 'max') throw refusal('VALUE', 'Select the top face of the original rectangular extrusion.');
+        if (v.pat !== undefined && v.pat !== 'one') throw refusal('VALUE', 'A blind drill point supports one hole.');
+        return withNode(ctx.doc, { kind: 'blind-drill-hole', parent: refOf(body), center: at.center, radius: Number(v.d) / 2, depth: Number(v.drillDepth), face: at.face });
+      }
       if (v.type === 'counterbore' && !(Number(v.cd) > Number(v.d))) throw refusal('HOLE_SIZE', 'The counterbore must be wider than the hole.');
       if (v.type === 'countersink' && !(Number(v.csd) > Number(v.d))) throw refusal('HOLE_SIZE', 'The countersink must be wider than the hole.');
       if (v.type === 'tapped' && !fastenerSizesOf(ctx.doc)[String(v.thread)]) throw coded('FASTENER_SIZE_ROW', noSizeRow(String(v.thread)));

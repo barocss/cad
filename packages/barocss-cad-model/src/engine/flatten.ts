@@ -103,7 +103,7 @@ function shiftNode(node: ModelNode, k: number, s: number): ModelNode {
         : { ...node, parent: ref(node.parent), faces: [name(node.faces[0])] };
     case 'cylindrical-wrap': case 'text-relief': case 'delete-face': return { ...node, parent: ref(node.parent), faces: [name(node.faces[0])] };
     case 'face-fillet': return { ...node, parent: ref(node.parent), faces: [name(node.faces[0]), name(node.faces[1])] };
-    case 'face-thread': return { ...node, parent: ref(node.parent), face: name(node.face) };
+    case 'face-thread': case 'blind-drill-hole': return { ...node, parent: ref(node.parent), face: name(node.face) };
     case 'shell': return { ...node, parent: ref(node.parent), open: node.open.map(name) };
     default: return { ...node, parent: ref(node.parent) };
   }

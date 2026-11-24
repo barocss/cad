@@ -25,6 +25,7 @@ import { cylindricalWrapFeature } from '../features/cylindrical-wrap-feature.js'
 import { transformOperation } from './part-transform.js';
 import type { PriorRectangularCut } from './part-prior-rectangular-cut.js';
 import type { PriorCircularCut } from './part-prior-circular-cut.js';
+import { blindDrillHoleOperation } from './part-blind-drill-hole.js';
 import { prismaticDetailOperation } from './part-prismatic-detail.js';
 import { profileSolidOperation } from './part-profile-solid.js';
 import { faceFinishOperation } from './part-face-finish.js';
@@ -849,6 +850,7 @@ function operation(f: CadPartFeature & Record<string, unknown>, t: Tools): () =>
     case 'delete-face': return deleteFaceOperation(f, t, { namedFaceTargetBrep, one });
 
     case 'face-fillet': return faceFilletOperation(f, t);
+    case 'blind-drill-hole': return blindDrillHoleOperation(f, t, { brepOf, boolean });
     case 'hole': {
       const target = solids(f.target, 'target'), c = xy(f.center as CadPartPoint2, 'center'), r = dim(f.radius as CadPartDim, 'radius', true);
       const depth = f.depth === undefined ? null : dim(f.depth as CadPartDim, 'depth', true), axis = f.axis === undefined ? 'z' : axisOf(f.axis);

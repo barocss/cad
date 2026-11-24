@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1913: [Add a blind Hole with a fixed 118° drill point](notes/blind-drill-point-hole-2026-11-24/README.md), #746. Show cylinder and total depths, retain the exact conical cavity and refuse breakthrough before cutting.
 - D1912: [Extract Studio document replacement from App](notes/studio-document-replacement-2026-11-24/README.md), #44. Preserve project and History ownership across desktop replacement and in-place editing.
 - D1911: [Repeat an original circular through-Subtract on a linked straight Path](notes/prior-circular-path-cut-pattern-2026-11-24/README.md), #25. Own the path once and check both exact translated cavities.
 - D1910: [Adopt the independent orthogonal material footprint](notes/orthogonal-material-footprint-adoption-2026-11-24/README.md), #221. Recheck the adopted XY command and edit the copy after fresh Open.
