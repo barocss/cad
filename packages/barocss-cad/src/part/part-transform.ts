@@ -4,7 +4,7 @@ import { checkBrep, BrepError } from '../brep/brep-core.js';
 import { fillCutSnapshot, fillCutPlacements } from '../features/fill-cut-pattern.js';
 import { curveCutOffsets } from '../features/curve-cut-pattern.js';
 import { certifyPriorCutPlacements, certifyPriorRectangularCut } from './part-prior-rectangular-cut.js';
-import { certifyPriorCircularCut } from './part-prior-circular-cut.js';
+import { certifyPriorCircularCut, certifyPriorCircularGrid } from './part-prior-circular-cut.js';
 import { faceGeometry } from '../brep/analytic-boolean.js';
 import type { Brep, BrepFace } from '../brep/brep-core.js';
 import type { BrepAffine } from '../brep/brep-transform.js';
@@ -163,8 +163,9 @@ export function transformOperation(f: CadPartFeature & Record<string, unknown>, 
       const count = integer(f.count, 'count', 1, CadPartLimits.copies), count2 = integer(f.count2, 'count2', 1, CadPartLimits.copies);
       const cells = count * count2;
       if (!Number.isSafeInteger(cells) || cells > CadPartLimits.copies) fail('INPUT', `rectangular feature pattern must have at most ${CadPartLimits.copies} cells`);
-      const { seed, tool, prior } = t.cutSource(f.target, f.source), first = 'xyz'.indexOf(axis), second = 'xyz'.indexOf(axis2);
+      const { seed, tool, prior, priorCircular } = t.cutSource(f.target, f.source), first = 'xyz'.indexOf(axis), second = 'xyz'.indexOf(axis2);
       if (prior) certifyPriorRectangularCut(prior, first, spacing, count, second, spacing2, count2, fail);
+      if (priorCircular) certifyPriorCircularGrid(priorCircular, first, spacing, count, second, spacing2, count2, fail);
       const matrix: BrepAffine['matrix'] = [1, 0, 0, 0, 1, 0, 0, 0, 1];
       return () => {
         if (cells === 1 || !tool.length) return { kind: 'solid', parts: [seed] };

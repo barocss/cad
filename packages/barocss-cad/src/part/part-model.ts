@@ -397,7 +397,7 @@ function evaluateWith(input: CadPartDocument, previous: Cache | undefined, optio
           link = parent;
         }
         links.reverse();
-        if (pattern === 'linear') {
+        if (pattern === 'linear' || pattern === 'rectangular') {
           const sourceTool = ref(prototype.tool, `${label} original cutter`);
           const sourceSketch = sourceTool.author?.kind === 'extrude' ? ref(sourceTool.author.sketch, `${label} original sketch`).author : undefined;
           if (sourceSketch?.kind === 'sketch' && sourceSketch.profile === 'circle') {

@@ -2,6 +2,7 @@ import { CadNumericPolicy } from '../numeric-policy.js';
 import type { CurveSegment2 } from '../brep/curved-arrangement.js';
 import type { Part } from './part-types.js';
 import type { Tools } from './part-model.js';
+import type { Point } from '../types.js';
 import { priorCutRectangle } from './part-prior-rectangular-cut.js';
 
 export type PriorCircularCut = {
@@ -10,7 +11,8 @@ export type PriorCircularCut = {
   later: { result: Part; cutter: Part };
 };
 type Circle = { center: readonly [number, number]; radius: number; tag: string };
-const requirement = 'linear feature pattern source needs one original circular through cut followed by one original rectangular through cut on upright rectangular stock and one XY line';
+type Pattern = 'linear' | 'rectangular';
+const requirement = (pattern: Pattern) => `${pattern} feature pattern source needs one original circular through cut followed by one original rectangular through cut on upright rectangular stock and ${pattern === 'linear' ? 'one XY line' : 'an XY grid'}`;
 
 function profile(part: Part) {
   if (part.solid.kind !== 'upright' || part.solid.solid.slabs.length !== 1) return;
@@ -43,38 +45,64 @@ const sameRectangle = (a: readonly CurveSegment2[], b: readonly CurveSegment2[])
       && ((pointEqual(line.a, other.a) && pointEqual(line.b, other.b)) || (pointEqual(line.a, other.b) && pointEqual(line.b, other.a)))));
 };
 
-/** Certify both original native cavities, then every signed Linear copy, before changing the current solid. */
-export function certifyPriorCircularCut(prior: PriorCircularCut, axis: number, spacing: number, count: number, fail: Tools['fail']): void {
+/** Certify both original native cavities, then each explicit XY placement in its producer's order. */
+function certifyPriorCircularPlacements(prior: PriorCircularCut, offsets: readonly Point[], fail: Tools['fail'], pattern: Pattern): void {
+  const label = `${pattern} feature pattern source`;
   const stock = profile(prior.stock), first = profile(prior.first.cutter), later = profile(prior.later.cutter);
   const firstResult = profile(prior.first.result), laterResult = profile(prior.later.result);
   const box = stock && priorCutRectangle(stock.outer), source = first && circle(first.outer), rectangle = later && priorCutRectangle(later.outer);
-  if ((axis !== 0 && axis !== 1) || !stock || stock.holes.length || !box || !first || first.holes.length || !source
+  if (!stock || stock.holes.length || !box || !first || first.holes.length || !source
     || !later || later.holes.length || !rectangle || !firstResult || !laterResult
     || first.z0 > stock.z0 || first.z1 < stock.z1 || later.z0 > stock.z0 || later.z1 < stock.z1)
-    return fail('CAPABILITY', requirement);
+    return fail('CAPABILITY', requirement(pattern));
   const margin = 10 * CadNumericPolicy.linearTolerance;
   const insideCircle = (c: Circle) => c.center.every((v, i) => v - c.radius - box.min[i] > margin && box.max[i] - v - c.radius > margin);
   const insideRectangle = rectangle.min.every((v, i) => v - box.min[i] > margin && box.max[i] - rectangle.max[i] > margin);
   const separateRectangle = (c: Circle) => Math.hypot(...c.center.map((v, i) => v - Math.max(rectangle.min[i], Math.min(rectangle.max[i], v)))) > c.radius + margin;
   if (!insideCircle(source) || !insideRectangle)
-    return fail('GEOMETRY', 'linear feature pattern source needs strictly interior original through cuts');
-  if (!separateRectangle(source)) return fail('GEOMETRY', 'linear feature pattern source needs disjoint original through cuts');
+    return fail('GEOMETRY', `${label} needs strictly interior original through cuts`);
+  if (!separateRectangle(source)) return fail('GEOMETRY', `${label} needs disjoint original through cuts`);
   for (const [i, result] of [firstResult, laterResult].entries()) {
     const circles = result.holes.map(circle).filter((c): c is Circle => !!c);
     const rectangles = result.holes.filter(hole => priorCutRectangle(hole));
     if (result.z0 !== stock.z0 || result.z1 !== stock.z1 || !sameRectangle(result.outer, stock.outer)
       || result.holes.length !== i + 1 || circles.length !== 1 || !sameCircle(circles[0], source)
       || rectangles.length !== i || (i === 1 && !sameRectangle(rectangles[0], later.outer)))
-      return fail('CAPABILITY', 'linear feature pattern source must retain its separate original full-height circular and rectangular cavities at each cut');
+      return fail('CAPABILITY', `${label} must retain its separate original full-height circular and rectangular cavities at each cut`);
   }
   const placed: Circle[] = [source];
-  for (let k = 1; k < count; k++) {
-    const center: [number, number] = [...source.center]; center[axis] += spacing * k;
+  for (const offset of offsets) {
+    if (offset.length !== 3 || offset[2] !== 0 || !offset.every(Number.isFinite))
+      return fail('CAPABILITY', `${label} needs finite XY copy offsets`);
+    const center: [number, number] = [source.center[0] + offset[0], source.center[1] + offset[1]];
     const copy = { ...source, center };
     if (!center.every(Number.isFinite) || !insideCircle(copy))
-      return fail('GEOMETRY', 'linear feature pattern source cells must stay strictly inside the original stock');
+      return fail('GEOMETRY', `${label} cells must stay strictly inside the original stock`);
     if (!separateRectangle(copy) || placed.some(previous => Math.hypot(center[0] - previous.center[0], center[1] - previous.center[1]) <= source.radius + previous.radius + margin))
-      return fail('GEOMETRY', 'linear feature pattern source cells must stay disjoint from the newer cut and every other cell');
+      return fail('GEOMETRY', `${label} cells must stay disjoint from the newer cut and every other cell`);
     placed.push(copy);
   }
+}
+
+/** Preserve the original signed Linear schedule and its diagnostics. */
+export function certifyPriorCircularCut(prior: PriorCircularCut, axis: number, spacing: number, count: number, fail: Tools['fail']): void {
+  if (axis !== 0 && axis !== 1) return fail('CAPABILITY', requirement('linear'));
+  const offsets: Point[] = [];
+  for (let k = 1; k < count; k++) {
+    const offset: Point = [0, 0, 0]; offset[axis] = spacing * k; offsets.push(offset);
+  }
+  certifyPriorCircularPlacements(prior, offsets, fail, 'linear');
+}
+
+/** The existing Rectangular producer visits columns inside rows and omits only its already-cut origin. */
+export function certifyPriorCircularGrid(prior: PriorCircularCut, first: number, spacing: number, count: number,
+  second: number, spacing2: number, count2: number, fail: Tools['fail']): void {
+  if ((first !== 0 && first !== 1) || (second !== 0 && second !== 1) || first === second)
+    return fail('CAPABILITY', requirement('rectangular'));
+  const offsets: Point[] = [];
+  for (let j = 0; j < count2; j++) for (let i = 0; i < count; i++) {
+    if (!i && !j) continue;
+    const offset: Point = [0, 0, 0]; offset[first] = spacing * i; offset[second] = spacing2 * j; offsets.push(offset);
+  }
+  certifyPriorCircularPlacements(prior, offsets, fail, 'rectangular');
 }

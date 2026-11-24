@@ -122,7 +122,7 @@ test('source radius/centre, later size and spacing are independent dependencies 
   assert.deepEqual(verify(reevaluate(initial, { parameters: {} })).brep, initial.outputs[0].brep);
 });
 
-test('partial, transformed, holed, longer and non-Linear source families remain outside the circular certificate', () => {
+test('partial, transformed, holed, longer and unsupported source families remain outside the circular certificate', () => {
   const refused = change => { const doc = document(); change(doc); const before = structuredClone(doc);
     assert.throws(() => evaluateCadPart(doc), e => e instanceof CadPartError && e.feature === 'repeat' && ['CAPABILITY', 'REFERENCE'].includes(e.code));
     assert.deepEqual(doc, before);
@@ -138,7 +138,7 @@ test('partial, transformed, holed, longer and non-Linear source families remain 
     { id: 'extraSketch', kind: 'sketch', profile: 'rectangle', min: [40, 20], max: [44, 24] },
     { id: 'extraTool', kind: 'extrude', sketch: 'extraSketch', height: 10 },
     { id: 'third', kind: 'difference', target: 'second', tool: 'extraTool' }); doc.features.at(-1).target = 'third'; });
-  refused(doc => { Object.assign(doc.features.at(-1), { kind: 'rectangular-feature-pattern', axis2: 'y', spacing2: 8, count2: 1 }); });
+  refused(doc => { Object.assign(doc.features.at(-1), { kind: 'fill-feature-pattern', region: { points: [[0, 0], [60, 0], [60, 40], [0, 40]] }, anchor: [10, 10], spacing2: 8, count2: 1 }); });
   refused(doc => { Object.assign(doc.features.at(-1), { kind: 'curve-feature-pattern', path: { degree: 1, knots: [0, 0, 1, 1], controlPoints: [[0, 0, 0], [8, 0, 0]], weights: [1, 1] } }); });
   refused(doc => { doc.features.at(-1).source = 'first/0'; });
   refused(doc => { doc.features.at(-1).source = 'second'; });

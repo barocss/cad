@@ -449,3 +449,38 @@ test('the local Linear command repeats an original circular through-cut and pres
     assert.equal(refused.state.doc, doc);
   }
 });
+
+test('the local Rectangular command repeats the original circular through-cut on one owned XY grid', async () => {
+  const first = part('earlier circular through-cut').box({ w: 60, d: 40, h: 10 })
+    .subtract(tool => tool.cylinder({ r: 2, h: 10, x: 10, y: 10 }));
+  const { doc } = first.subtract(tool => tool.box({ w: 4, d: 2, h: 10, x: 24, y: 8 }));
+  const source: BodyRef = { node: first.doc.nodes.length - 1, side: 'solid' };
+  const parent: BodyRef = { node: doc.nodes.length - 1, side: 'solid' };
+  const ctx = context(doc);
+  const values = { source: featureId(doc.nodes, source.node), axis: 'x', spacing: 8, count: 2, axis2: 'y', spacing2: 8, count2: 2 };
+  const run = (next: typeof values) => dispatchTool({ doc, bodies: ctx.bodies }, 'features', {
+    action: 'command', command: 'rectangular-feature-pattern', expectedRevision: revisionOf(doc),
+    bodies: [ctx.bodies[0].key], values: next,
+  }, async candidate => evaluateDoc(candidate, 2));
+
+  const made = await run(values);
+  assert.equal(made.isError, false, made.content);
+  const pattern = made.state.doc.nodes.at(-1);
+  assert.ok(pattern?.kind === 'rectangular-feature-pattern');
+  assert.deepEqual({ source: pattern.source, parent: pattern.parent }, { source, parent });
+  assert.deepEqual(made.state.doc.nodes.slice(0, -1), doc.nodes);
+  const opened = await readStudioFile(encodeStudioFile(made.state.doc));
+  assert.ok('doc' in opened);
+  assert.deepEqual(opened.doc, made.state.doc);
+  const [{ brep }] = partBreps(opened.doc);
+  const shape = checkBrep(brep, { strict: true });
+  assert.ok(shape.valid, shape.issues.join('\n'));
+  assert.equal(shape.topology[0].genus, 5);
+  assert.ok(Math.abs(brepMassProperties(brep, 1).volume - (23920 - 160 * Math.PI)) < 1e-8);
+
+  for (const invalid of [{ spacing: 4 }, { spacing2: 4 }, { spacing: 12 }, { spacing: 16 }, { spacing: -6 }, { axis2: 'x' }, { axis2: 'z' }]) {
+    const refused = await run({ ...values, ...invalid });
+    assert.equal(refused.isError, true, refused.content);
+    assert.equal(refused.state.doc, doc);
+  }
+});
