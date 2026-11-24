@@ -284,25 +284,32 @@ function downwardCircleFits(doc: StudioDoc, node: FaceEndExtrudeNode, sketch: Li
   });
 }
 
-/** One original lower annulus of a forward upright coaxial circular Extrude and through Hole. */
-function annularProfileTarget(doc: StudioDoc, node: FaceEndExtrudeNode, sketch: LiteralRectangle | LiteralPolygon | LiteralCircle,
-  brep: Brep, face: BrepFace, axes: EndFrame, min: readonly number[], max: readonly number[]): RadialTarget | undefined {
-  if (axes !== XY) return;
-  const source = annularSource(doc.nodes, node.target.body.node);
-  if (!source) return;
+function annularStockCircle(source: NonNullable<ReturnType<typeof annularSource>>, nodes: readonly unknown[], parameters: unknown): LiteralCircle | undefined {
   const { hole, stock, circle } = source;
   if (hole.suppressed || hole.held || stock.suppressed || stock.held || circle.suppressed || circle.held
     || (hole.axis !== undefined && hole.axis !== 'z') || hole.depth !== undefined || hole.pattern !== undefined
     || hole.countersink !== undefined || hole.csk !== undefined || hole.thread !== undefined || hole.face !== undefined
     || stock.draft || stock.cutDepth !== undefined || circle.plane !== undefined
-    || !(targetDimension(stock.height, doc.parameters) > 0) || face.name !== `${stock.id}.bottom`
-    || !uniqueIdentity(doc.nodes, stock.id) || !uniqueIdentity(doc.nodes, circle.id)) return;
-  const authoredCircle = doc.nodes[source.sketchIndex];
-  if (authoredCircle.kind !== 'sketch' || authoredCircle.profile !== 'circle' || !literalCircle(authoredCircle)
-    || !Array.isArray(hole.center) || hole.center.length !== 2
-    || !hole.center.every((value, i) => targetDimension(value, doc.parameters) === authoredCircle.center[i])) return;
+    || !(targetDimension(stock.height, parameters) > 0)
+    || !uniqueIdentity(nodes, stock.id) || !uniqueIdentity(nodes, circle.id)) return;
+  const authoredCircle = circle as unknown as Extract<SketchNode, { profile: 'circle' }>;
+  if (!literalCircle(authoredCircle) || !Array.isArray(hole.center) || hole.center.length !== 2
+    || !hole.center.every((value, i) => targetDimension(value, parameters) === authoredCircle.center[i])) return;
+  return authoredCircle;
+}
+
+/** One original annulus of a forward upright coaxial circular Extrude and through Hole. */
+function annularProfileTarget(doc: StudioDoc, node: FaceEndExtrudeNode, sketch: LiteralRectangle | LiteralPolygon | LiteralCircle,
+  brep: Brep, face: BrepFace, axes: EndFrame, min: readonly number[], max: readonly number[]): RadialTarget | undefined {
+  const downward = axes === DOWN_XY && sketch.profile === 'circle';
+  if (!downward && axes !== XY) return;
+  const source = annularSource(doc.nodes, node.target.body.node);
+  const cap = downward ? 'top' : 'bottom';
+  if (!source || face.name !== `${source.stock.id}.${cap}`) return;
+  const authoredCircle = annularStockCircle(source, doc.nodes, doc.parameters);
+  if (!authoredCircle) return;
   const frame = annularCapReplacementFrame(brep, face.name!);
-  if (!frame || frame.normal[0] !== 0 || frame.normal[1] !== 0 || frame.normal[2] !== -1) return;
+  if (!frame || frame.normal[0] !== 0 || frame.normal[1] !== 0 || frame.normal[2] !== -axes.sign) return;
   // The kernel certifies the entire annular trim and both pairs of native half cylinders.
   // Its anchor is a material point: only its Z station is a cap coordinate.
   const cylinders = brep.faces.map(candidate => faceGeometry(candidate)).filter(support => support.kind === 'cylinder');
@@ -419,6 +426,16 @@ export function isFaceEndExtrudeSketch(sketch: ModelNode | undefined): sketch is
 
 /** A reversed XY profile keeps the original upper end of one supported forward upright extrusion. */
 function downwardTargetProblem(nodes: readonly unknown[], target: FaceEndExtrudeNode['target'], parameters: unknown, sourceProfile: unknown): string | null {
+  const annulus = sourceProfile === 'circle' ? annularSource(nodes, target.body.node) : undefined;
+  if (annulus) {
+    if (!uniqueIdentity(nodes, annulus.stock.id) || !uniqueIdentity(nodes, annulus.circle.id))
+      return 'the target stock or source sketch identity is missing, changed or ambiguous.';
+    if (target.face !== `${annulus.stock.id}.top`) return 'the original upper target face identity has changed.';
+    if (!(targetDimension(annulus.stock.height, parameters) > 0))
+      return 'the target extrusion must stay forward to preserve its authored end cap.';
+    return annularStockCircle(annulus, nodes, parameters) ? null
+      : 'the downward circle needs an intact original upper annulus of a forward upright circular extrusion and one coaxial through Hole.';
+  }
   const stock = nodes[target.body.node];
   const admitsDisk = sourceProfile === 'rectangle' || sourceProfile === 'circle';
   const profile = admitsDisk ? 'rectangular or circular' : 'rectangular';
@@ -465,7 +482,7 @@ export function faceEndExtrudeHeight(doc: StudioDoc, node: FaceEndExtrudeNode, p
   const disk = circularProfileTarget(doc, node, sketch, brep, faces[0], axes);
   const radial = disk ?? annularProfileTarget(doc, node, sketch, brep, faces[0], axes, [u0, v0], [u1, v1]);
   const box = radial ?? targetPolygon(brep, faces[0], axes);
-  if (axes === DOWN_XY && !box.rectangle && !disk) throw invalid('the downward profile needs a native rectangular face or an original upper circular disk.');
+  if (axes === DOWN_XY && !box.rectangle && !radial) throw invalid('the downward profile needs a native rectangular face or an admitted original upper circular cap.');
   if (!(sketch.profile === 'circle' && radial)) {
     if (u0 < box.min[0] || v0 < box.min[1] || u1 > box.max[0] || v1 > box.max[1]) throw invalid('the target face must contain the entire projected profile.');
     if (!box.rectangle) {

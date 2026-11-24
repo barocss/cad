@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1967: [End a downward circular Extrude at the original upper annulus](notes/downward-circle-to-upper-annulus-2026-11-25/README.md), #222. Verify exact bore and rim clearance, the current Hole and retained cap identities, and desktop fresh Open.
 - D1966: [Retire an obsolete Sketch Finish refusal](notes/sketch-finish-notice-lifetime-2026-11-25/README.md), #44. Verify the current error, Keep and Discard, corrected Finish and exact native parity.
 - D1965: [Retry a transient browser-project autosave abort](notes/browser-autosave-transient-retry-2026-11-25/README.md), #170 DOC-05. Verify the native checkpoint, stale request revocation and actual project Restore.
 - D1964: [End a downward rectangular Extrude at the original upper disk](notes/downward-rectangle-to-original-disk-2026-11-25/README.md), #222. Verify reflected corners, strict radial contact, live edits and desktop fresh Open.

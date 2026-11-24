@@ -5,9 +5,11 @@ import { join } from 'node:path';
 import { createFlow } from './flow-helper.mjs';
 
 const polygonSource = process.argv.includes('--polygon');
-const circleSource = process.argv.includes('--circle');
+const downward = process.argv.includes('--downward');
+const baseline = process.argv.includes('--baseline');
+const circleSource = downward || process.argv.includes('--circle');
 const exchange = process.argv.includes('--step');
-assert.ok(!exchange || circleSource, 'The STEP oracle requires the circular profile.');
+assert.ok(!exchange || (circleSource && !downward), 'The STEP oracle requires the circular profile.');
 assert.ok(!polygonSource || !circleSource, 'Choose only one source profile.');
 const profile = circleSource ? 'circle' : polygonSource ? 'polygon' : 'rectangle';
 const pins = [
@@ -26,10 +28,10 @@ if (exchange) pins.push(
   'packages/barocss-cad/src/io/step.ts',
 );
 const f = await createFlow({
-  name: 'annular-face-end-extrude', output: process.argv[2], envFrozen: exchange ? 'D1866_SOURCE_FROZEN' : circleSource ? 'D1861_SOURCE_FROZEN' : polygonSource ? 'D1621_SOURCE_FROZEN' : 'D1609_SOURCE_FROZEN',
+  name: 'annular-face-end-extrude', output: process.argv[2], envFrozen: downward ? 'D1967_SOURCE_FROZEN' : exchange ? 'D1866_SOURCE_FROZEN' : circleSource ? 'D1861_SOURCE_FROZEN' : polygonSource ? 'D1621_SOURCE_FROZEN' : 'D1609_SOURCE_FROZEN',
   initialFiles: pins, requiredFrozen: pins,
   qualification: exchange ? 'Export two current annulus and post states from Studio, read the STEP bytes independently, and reopen the native and exchanged models.'
-    : 'Select the original lower annular face in Studio. Refuse a footprint over the bore and retain the exact accepted target through History and Open.',
+    : `Select the original ${downward ? 'upper' : 'lower'} annular face in Studio. Refuse bore and rim contact and keep the target through History and Open.`,
   limits: [`One upright tube with a 12 mm outer radius and a centred 4 mm through bore, and one horizontal ${profile} profile.`],
   inspectorSource: `
 import { readFileSync } from 'node:fs';
@@ -45,13 +47,19 @@ console.log(JSON.stringify(partBreps(doc).map(({ brep, key }) => ({
 });
 const button = (scope, name) => scope.getByRole('button', { name, exact: true });
 const field = (scope, name) => scope.getByLabel(name, { exact: true });
-const originalZ = 20, nextZ = 28, height = 6, targetName = 'n1.bottom';
+const originalZ = downward ? 5 : 20, nextZ = downward ? 8 : 28, height = 6;
+const targetName = downward ? 'n1.top' : 'n1.bottom';
+const targetCentre = downward ? [10, 10] : [0, 0];
+const postCentre = downward ? [16, 16] : [6, 6];
+const view = downward ? 'Top' : 'Bottom';
+const capPick = downward ? [10, 2, originalZ] : [0, 8, originalZ];
 const acceptedPoints = [[0, 7], [7, 0], [8, 8]], refusedPoints = [[0, 5], [5, 0], [8, 8]];
-const acceptedSketch = circleSource ? { id: 'n3', kind: 'sketch', profile, center: [6, 6], radius: 3 }
+const acceptedSketch = circleSource ? { id: 'n3', kind: 'sketch', profile, center: downward ? [15, -14] : [6, 6], radius: 3,
+  ...(downward ? { plane: { origin: [1, 2, 20], normal: [0, 0, -1], xAxis: [1, 0, 0] } } : {}) }
   : polygonSource
   ? { id: 'n3', kind: 'sketch', profile, points: acceptedPoints }
   : { id: 'n3', kind: 'sketch', profile, min: [6, -2], max: [9, 2] };
-const refusedSketch = circleSource ? { ...acceptedSketch, center: [5.5, 0], radius: 2 }
+const refusedSketch = circleSource ? { ...acceptedSketch, center: downward ? [15, -8] : [5.5, 0], radius: 2 }
   : polygonSource ? { ...acceptedSketch, points: refusedPoints }
   : { ...acceptedSketch, min: [-5, -1], max: [5, 1] };
 // The triangle has base direction (7, -7) and the third point is (8, 1)
@@ -61,9 +69,9 @@ const footprint = polygonSource ? acceptedPoints : [[6, -2], [6, 2], [9, -2], [9
 const model = sketch => ({
   format: 'barocss-cad-model', schema: 3, units: 'mm', parameters: {},
   nodes: [
-    { id: 'n0', kind: 'sketch', profile: 'circle', center: [0, 0], radius: 12 },
-    { id: 'n1', kind: 'extrude', sketch: 0, from: originalZ, height },
-    { id: 'n2', kind: 'hole', parent: { node: 1, side: 'solid' }, center: [0, 0], radius: 4 },
+    { id: 'n0', kind: 'sketch', profile: 'circle', center: targetCentre, radius: 12 },
+    { id: 'n1', kind: 'extrude', sketch: 0, ...(downward ? { height: originalZ } : { from: originalZ, height }) },
+    { id: 'n2', kind: 'hole', parent: { node: 1, side: 'solid' }, center: targetCentre, radius: 4 },
     sketch,
   ],
   outputs: { b2: { node: 2, side: 'solid' } }, nextId: 4,
@@ -109,36 +117,39 @@ async function inspect(label, doc, z) {
   assert.deepEqual(native.map(body => body.key), ['b2', 'b4']);
   assert.ok(native.every(body => body.check.valid));
   const [tube, post] = native;
+  const tubeHeight = downward ? z : height, travel = downward ? 20 - z : z;
+  assert.equal(tube.check.topology[0].genus, 1);
+  assert.equal(post.check.topology[0].genus, 0);
   const cap = tube.faces.filter(face => face.name === targetName);
   assert.equal(cap.length, 1);
   assert.equal(cap[0].loops, 2);
   assert.equal(cap[0].geometry.kind, 'plane');
   near(cap[0].geometry.o[2], z);
-  assert.equal(cap[0].geometry.n[2], -1);
+  assert.equal(cap[0].geometry.n[2], downward ? 1 : -1);
   const walls = tube.faces.filter(face => face.geometry.kind === 'cylinder').map(face => face.geometry);
   assert.equal(walls.length, 4);
   for (const wall of walls) {
-    near(wall.c[0], 0);
-    near(wall.c[1], 0);
+    near(wall.c[0], targetCentre[0]);
+    near(wall.c[1], targetCentre[1]);
     near(wall.r, wall.out === 1 ? 12 : 4);
   }
-  near(tube.mass.volume, Math.PI * (144 - 16) * height);
-  near(post.mass.volume, sourceArea * z);
+  near(tube.mass.volume, Math.PI * (144 - 16) * tubeHeight);
+  near(post.mass.volume, sourceArea * travel);
   if (polygonSource) [5, 5, z / 2].forEach((expected, axis) => near(post.mass.centroid[axis], expected));
   if (circleSource) {
-    [6, 6, z / 2].forEach((expected, axis) => near(post.mass.centroid[axis], expected));
+    [...postCentre, downward ? (20 + z) / 2 : z / 2].forEach((expected, axis) => near(post.mass.centroid[axis], expected));
     const cylinders = post.faces.map(face => face.geometry).filter(face => face.kind === 'cylinder');
     assert.equal(cylinders.length, 2);
     for (const wall of cylinders) {
-      near(wall.c[0], 6);
-      near(wall.c[1], 6);
+      near(wall.c[0], postCentre[0]);
+      near(wall.c[1], postCentre[1]);
       near(wall.r, 3);
       near(Math.abs(wall.a[2]), 1);
     }
     const end = post.faces.find(face => face.name === 'n4.top').geometry;
     assert.equal(end.kind, 'plane');
     near(end.o[2], z);
-    assert.equal(end.n[2], 1);
+    assert.equal(end.n[2], downward ? -1 : 1);
   } else {
     const top = post.vertices.filter(point => Math.abs(point[2] - z) < 1e-8).map(point => point.slice(0, 2));
     assert.equal(top.length, footprint.length);
@@ -146,8 +157,8 @@ async function inspect(label, doc, z) {
   }
   const bodies = (await f.bodies()).bodies;
   assert.deepEqual(bodies.map(body => body.key), ['b2', 'b4']);
-  near(bodies[0].volume, Math.PI * (144 - 16) * height);
-  near(bodies[1].volume, sourceArea * z);
+  near(bodies[0].volume, Math.PI * (144 - 16) * tubeHeight);
+  near(bodies[1].volume, sourceArea * travel);
   f.report.observations.push({ label, level: z, target: targetName, tubeVolume: tube.mass.volume, postVolume: post.mass.volume });
   return native;
 }
@@ -231,6 +242,16 @@ await f.run(async () => {
   };
   await f.newPage();
   const refused = model(refusedSketch), source = model(acceptedSketch);
+  if (baseline) {
+    await open('previous-downward-annulus', source);
+    await begin();
+    await pickCap(view, capPick);
+    await status('refused');
+    assert.match(await f.hud().locator('.hud-error').textContent(), /forward upright rectangular or circular extrusion/i);
+    await f.same(source);
+    await f.snapshot('00-previous-upper-annulus-refused');
+    return;
+  }
   f.phase = 'refuse a footprint spanning the bore although its vertices clear it';
   if (circleSource) {
     assert.ok(Math.hypot(6, 6) + 3 < 12 && Math.hypot(6, 6) - 3 > 4);
@@ -244,7 +265,7 @@ await f.run(async () => {
   } else assert.ok([-5, 5].every(x => [-1, 1].every(y => Math.hypot(x, y) > 4)));
   await open(`${profile}-crosses-bore`, refused);
   await begin();
-  await pickCap('Bottom', [0, 8, originalZ]);
+  await pickCap(view, capPick);
   await status('refused');
   assert.equal(await button(f.hud(), 'Apply').isDisabled(), true);
   assert.match(await f.hud().locator('.hud-error').textContent(), /projected profile|bore/i);
@@ -255,10 +276,10 @@ await f.run(async () => {
 
   if (circleSource) {
     f.phase = 'refuse the circular profile crossing the outer rim';
-    const outside = model({ ...acceptedSketch, center: [9.5, 0] });
+    const outside = model({ ...acceptedSketch, center: downward ? [18, -8] : [9.5, 0] });
     await open('circle-crosses-outer-trim', outside);
     await begin();
-    await pickCap('Bottom', [0, 8, originalZ]);
+    await pickCap(view, capPick);
     await status('refused');
     assert.equal(await button(f.hud(), 'Apply').isDisabled(), true);
     assert.match(await f.hud().locator('.hud-error').textContent(), /projected profile|outer/i);
@@ -268,10 +289,10 @@ await f.run(async () => {
     await f.hud().waitFor({ state: 'hidden' });
   }
 
-  f.phase = 'pick the exact lower annulus and create a separate solid';
+  f.phase = `pick the exact ${downward ? 'upper' : 'lower'} annulus and create a separate solid`;
   await open(`${profile}-clears-bore`, source);
   await begin();
-  await pickCap('Bottom', [0, 8, originalZ]);
+  await pickCap(view, capPick);
   await status('preview');
   await f.hud().getByText(targetName, { exact: true }).waitFor();
   await f.same(source);
@@ -286,22 +307,40 @@ await f.run(async () => {
   await f.same(authored);
   const stepBefore = exchange ? await exportStep(authored, originalZ) : undefined;
 
-  f.phase = 'move the target start and retain the same cap through Save and Open';
-  await f.openFeatureEditor(1, 'annular target start');
-  await field(f.editor(), 'Start Z').fill(String(nextZ));
+  f.phase = 'move the target and retain the same cap through Save and Open';
+  const targetField = downward ? 'Distance' : 'Start Z';
+  await f.openFeatureEditor(1, 'annular target station');
+  if (downward) {
+    await field(f.editor(), targetField).fill('-5');
+    await button(f.editor(), 'Apply').click();
+    const error = f.editor().locator('.hud-error');
+    await error.waitFor();
+    assert.match(await error.textContent(), /stay forward.*authored end cap/i);
+    await f.same(authored);
+    await f.snapshot('02b-original-annulus-reversal-refused');
+  }
+  await field(f.editor(), targetField).fill(String(nextZ));
   await button(f.editor(), 'Apply').click();
   await f.changed(authored);
   const moved = await f.doc();
-  assert.deepEqual(moved.nodes[1], { ...authored.nodes[1], from: nextZ });
+  assert.deepEqual(moved.nodes[1], { ...authored.nodes[1], ...(downward ? { height: nextZ } : { from: nextZ }) });
   assert.deepEqual(moved.nodes.slice(2), authored.nodes.slice(2));
   const after = await inspect('moved-native-annulus', moved, nextZ);
   await button(f.page.locator('.views'), 'Iso').click();
   await f.page.getByTitle('Frame all (F)', { exact: true }).click();
   await f.snapshot('03-associative-height');
   const stepAfter = exchange ? await exportStep(moved, nextZ) : undefined;
-  const saved = await f.save('post-to-annular-face');
+  const saved = await f.save(downward ? 'post-to-upper-annular-face' : 'post-to-annular-face');
   await f.freshOpen(saved.file, moved, '04-reopened-annular-post');
   assert.deepEqual(await inspect('reopened-native-annulus', moved, nextZ), after);
+  if (downward) {
+    await f.openFeatureEditor(1, 'reopened upper annular target');
+    await field(f.editor(), targetField).fill(String(originalZ));
+    await button(f.editor(), 'Apply').click();
+    await f.same(authored);
+    await inspect('reopened-upper-target-edited', authored, originalZ);
+    await f.snapshot('04b-reopened-upper-target-edited');
+  }
   if (stepBefore && stepAfter) {
     await f.openFeatureEditor(1, 'reopened annular target start');
     await field(f.editor(), 'Start Z').fill(String(originalZ));

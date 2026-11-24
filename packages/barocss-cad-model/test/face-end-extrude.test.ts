@@ -242,6 +242,68 @@ function circleSourceTarget(center: [number, number] = [5, 5], radius = 9, from 
   return replaceNode(circularTarget(from), 2, { id: 'n2', kind: 'sketch', profile: 'circle', center, radius });
 }
 
+function downwardAnnularTarget(height = 5, localX = 15, localY = -14, radius = 3): StudioDoc {
+  const doc = annularTarget(), end = doc.nodes[4];
+  assert.ok(end.kind === 'face-end-extrude');
+  return { ...doc, nodes: [
+    { id: 'n0', kind: 'sketch', profile: 'circle', center: [10, 10], radius: 12 },
+    { id: 'n1', kind: 'extrude', sketch: 0, height },
+    { id: 'n2', kind: 'hole', parent: { node: 1, side: 'solid' }, center: [10, 10], radius: 4 },
+    { id: 'n3', kind: 'sketch', profile: 'circle', center: [localX, localY], radius,
+      plane: { origin: [1, 2, 20], normal: [0, 0, -1], xAxis: [1, 0, 0] } },
+    { ...end, target: { ...end.target, face: 'n1.top' } },
+  ] };
+}
+
+test('a translated downward circle reaches the original upper annulus of the current coaxial Hole', () => {
+  assert.ok(Math.hypot(6, 6) - 3 > 4 && Math.hypot(6, 6) + 3 < 12 && Math.hypot(9, 9) > 12);
+  for (const height of [5, 8]) {
+    const doc = downwardAnnularTarget(height), travel = 20 - height;
+    const opened = readStudioDoc(JSON.stringify(doc));
+    assert.ok('doc' in opened); assert.deepEqual(opened.doc, doc);
+    const part = toPartDocument(opened.doc), { outputs } = evaluateCadPart(part);
+    assert.equal(currentFaceEndDistance(doc, 4), travel);
+    assert.deepEqual(part.features[4], { id: 'n4', kind: 'extrude', sketch: 'n3', height: travel });
+    assert.deepEqual(outputs.map(output => output.id), ['n2', 'n4']);
+    assert.ok(outputs.every(output => checkOutput(output).valid));
+    const [tube, post] = outputs, mass = massPropertiesOf(post);
+    assert.deepEqual(tube.brep, evaluateCadPart(toPartDocument(prefixDoc(doc, 4))).outputs[0].brep);
+    assert.equal(tube.brep.faces.length, 6);
+    assert.equal(post.brep.faces.length, 4);
+    assert.ok(Math.abs(massPropertiesOf(tube).volume - 128 * Math.PI * height) < 1e-8);
+    assert.ok(Math.abs(mass.volume - 9 * Math.PI * travel) < 1e-8);
+    mass.centroid.forEach((value, axis) => assert.ok(Math.abs(value - [16, 16, (20 + height) / 2][axis]) < 1e-8));
+    const ring = tube.brep.faces.find(face => face.name === 'n1.top')!;
+    assert.equal(ring.loops.length, 2);
+    const target = faceGeometry(ring), reached = faceGeometry(post.brep.faces.find(face => face.name === 'n4.top')!);
+    assert.ok(target.kind === 'plane' && reached.kind === 'plane');
+    assert.equal(target.o[2], height); assert.equal(target.n[2], 1);
+    assert.equal(reached.o[2], height); assert.equal(reached.n[2], -1);
+  }
+});
+
+test('a downward annular target refuses contact, loss of authored authority and unsupported profiles', () => {
+  for (const [x, radius] of [[18 - 1e-6, 3], [15 + 1e-6, 2]])
+    assert.equal(currentFaceEndDistance(downwardAnnularTarget(5, x, -8, radius), 4), 15);
+  for (const [x, radius] of [[18, 3], [18 + 1e-6, 3], [15, 2], [15 - 1e-6, 2]])
+    assert.throws(() => toPartDocument(downwardAnnularTarget(5, x, -8, radius)), /entire projected profile clear of its bore/);
+  for (const height of [-5, 0])
+    assert.throws(() => toPartDocument(downwardAnnularTarget(height)), /stay forward.*authored end cap/);
+  for (const height of [20, 21])
+    assert.throws(() => toPartDocument(downwardAnnularTarget(height)), /positive extrusion direction/);
+  const doc = downwardAnnularTarget(), [stockCircle, stock, hole, source, end] = doc.nodes;
+  assert.ok(stockCircle.kind === 'sketch' && stock.kind === 'extrude' && hole.kind === 'hole' && source.kind === 'sketch' && end.kind === 'face-end-extrude');
+  for (const face of ['n1.bottom', 'n2.top'])
+    assert.throws(() => toPartDocument(replaceNode(doc, 4, { ...end, target: { ...end.target, face } })), /original upper target face identity/);
+  const unsupportedHoles: ModelNode[] = [{ ...hole, depth: 2 }, { ...hole, center: [11, 10] }, { ...hole, suppressed: true }];
+  for (const changed of unsupportedHoles)
+    assert.throws(() => toPartDocument(replaceNode(doc, 2, changed)), /intact original upper annulus/);
+  assert.throws(() => toPartDocument(replaceNode(doc, 0, { ...stockCircle, id: stock.id })), /stock or source sketch identity/);
+  assert.throws(() => toPartDocument(replaceNode(doc, 3, {
+    id: 'n3', kind: 'sketch', profile: 'rectangle', min: [14, -15], max: [16, -13], plane: source.plane,
+  })), /forward upright rectangular or circular extrusion/);
+});
+
 function annularPolygonTarget(points: [number, number][], from = 20, origin: [number, number, number] = [0, 0, 0]): StudioDoc {
   const doc = annularTarget(from);
   return { ...doc, nodes: doc.nodes.map((node, i): ModelNode => {
