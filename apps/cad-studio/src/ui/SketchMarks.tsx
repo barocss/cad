@@ -215,7 +215,11 @@ export function sketchMarks({ shape: s, project, outlinePath, view, dimensionAre
   };
   (s.rules ?? []).forEach((r, k) => {
     if (r.kind === 'parallel' || r.kind === 'perpendicular' || r.kind === 'equal') {
-      const sym = r.kind === 'parallel' ? '∥' : r.kind === 'perpendicular' ? '⊥' : '=', title = `${r.kind[0].toUpperCase() + r.kind.slice(1)} edges ${r.a + 1} and ${r.b + 1}`;
+      const sym = r.kind === 'parallel' ? '∥' : r.kind === 'perpendicular' ? '⊥' : '=';
+      const edgeName = (index: number) => `${s.bulges?.[index] ? 'arc' : 'edge'} ${index + 1}`;
+      const title = r.kind === 'perpendicular' && r.at === 'shared-endpoint'
+        ? `Perpendicular at the shared endpoint of ${edgeName(r.a)} and ${edgeName(r.b)}`
+        : `${r.kind[0].toUpperCase() + r.kind.slice(1)} edges ${r.a + 1} and ${r.b + 1}`;
       onEdge(r.a, sym, `ga${k}`, title); onEdge(r.b, sym, `gb${k}`, title);
     } else if (r.kind === 'fix') onPoint(r.point, '⚓', `gf${k}`, `Point ${r.point + 1} fixed`);
     else if (r.kind === 'coincident') onPoint(r.point, '◎', `gc${k}`, `Point ${r.point + 1} on the centre of arc ${r.arc + 1}`);

@@ -2,6 +2,7 @@
 // Edges and points are an outline's segment and point indices (see profile.ts); horizontal and vertical
 // edges are kept in the outline's own `hv` lists, so they are not rules.
 import type { solveXYNumericalSketch } from '@barocss/cad';
+import { endpointPerpendicular, hasEndpointMarker } from './endpointPerpendicular';
 
 type P2 = [number, number];
 type Doc = Parameters<typeof solveXYNumericalSketch>[0];
@@ -11,7 +12,9 @@ export type KernelPoint = Doc['points'][number];
 
 export type SketchRule =
   /** Two straight edges at 0° / 180° (parallel) or ±90° (perpendicular), whichever is nearest the drawing. */
-  | { kind: 'parallel' | 'perpendicular'; a: number; b: number }
+  | { kind: 'parallel'; a: number; b: number }
+  /** Marked line/arc rules use the tangent at their unique shared endpoint. */
+  | { kind: 'perpendicular'; a: number; b: number; at?: 'shared-endpoint' }
   /** Two straight edges of the same length. */
   | { kind: 'equal'; a: number; b: number }
   /** A point held where it is. */
@@ -92,7 +95,11 @@ export function ruleTerms(rules: readonly SketchRule[], points: readonly P2[], b
   circles.forEach((_, j) => centre(j));
   rules.forEach((r, k) => {
     const id = 'u' + k;
-    if ((r.kind === 'parallel' || r.kind === 'perpendicular') && line(r.a) && line(r.b))
+    if (r.kind === 'perpendicular' && hasEndpointMarker(r)) {
+      const match = endpointPerpendicular(points, bulges, r.a, r.b);
+      if (r.at === 'shared-endpoint' && match)
+        constraints.push({ id, kind: 'signed-angle', segmentA: 's' + match.line, segmentB: match.radiusSegment, angle: match.angle });
+    } else if ((r.kind === 'parallel' || r.kind === 'perpendicular') && line(r.a) && line(r.b))
       constraints.push({ id, kind: 'signed-angle', segmentA: 's' + r.a, segmentB: 's' + r.b, angle: ruleAngle(r.kind, points, r.a, r.b) });
     else if (r.kind === 'equal' && line(r.a) && line(r.b)) constraints.push({ id, kind: 'equal-length', segmentA: 's' + r.a, segmentB: 's' + r.b });
     else if (r.kind === 'fix' && point(r.point)) constraints.push({ id, kind: 'fixed', pointId: 'p' + r.point, target: [r.at[0], r.at[1]] });

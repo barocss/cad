@@ -1,6 +1,7 @@
 import { arcOf, signedArea, settledOutlineMobility } from './profile';
 import { constraintsOf, hvOf, type Polygon } from './rules';
 import type { SketchRule } from './terms';
+import { endpointRuleProblem, hasEndpointMarker } from './endpointPerpendicular';
 
 export type PointMotion = { dimension: 1; direction: readonly [number, number] } | { dimension: 2 } | null;
 export interface OutlineMobility {
@@ -17,7 +18,10 @@ function supportedRule(rule: SketchRule, count: number, arcs: readonly number[] 
   const line = (index: number) => valid(index) && !arcs.includes(index);
   switch (rule.kind) {
     case 'fix': return valid(rule.point) && Array.isArray(rule.at) && rule.at.length === 2 && rule.at.every(Number.isFinite);
-    case 'parallel': case 'perpendicular': case 'equal': case 'angle':
+    case 'perpendicular':
+      if (hasEndpointMarker(rule)) return !!shape && !endpointRuleProblem(rule, shape.points, shape.bulges ?? []);
+      return line(rule.a) && line(rule.b) && rule.a !== rule.b;
+    case 'parallel': case 'equal': case 'angle':
       return line(rule.a) && line(rule.b) && rule.a !== rule.b;
     case 'distance': case 'dx': case 'dy':
       return valid(rule.a) && valid(rule.b) && rule.a !== rule.b;

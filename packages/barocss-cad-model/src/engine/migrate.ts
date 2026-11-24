@@ -30,6 +30,7 @@ import { assertRouteBundleDocument } from './routeBundle';
 import { assertSavedDrawingDocument } from './savedDrawing';
 import { valuesProblem } from './jointValues';
 import { sketch3dRefusal, type Constraint3D, type V3 } from '../frames/sketch3d';
+import { hasEndpointMarker, savedEndpointPerpendicularProblem } from '../sketch/endpointPerpendicular';
 
 /**
  * 3: bodies are keyed by feature ids (`b<k>` for `n<k>`), not by index. 4: the route bundle. Older schemas are refused.
@@ -155,6 +156,11 @@ function savedPerpendicularProblem(nodes: readonly unknown[]): string | null {
       return node.profile === 'polygon' && Array.isArray(node.points) && index < node.points.length;
     };
     for (const [index, rule] of node.outline.rules.entries()) {
+      if (record(rule) && rule.kind === 'perpendicular' && hasEndpointMarker(rule)) {
+        const problem = savedEndpointPerpendicularProblem(node, rule);
+        if (problem) return `Sketch ${sketch + 1}, perpendicular constraint ${index + 1}: ${problem}`;
+        continue;
+      }
       if (record(rule) && rule.kind === 'perpendicular' && (rule.a === rule.b || !straight(rule.a) || !straight(rule.b)))
         return `Sketch ${sketch + 1}, perpendicular constraint ${index + 1} needs two different straight edges.`;
     }

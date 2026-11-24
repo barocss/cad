@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1980: [Constrain a line perpendicular to an arc at the shared endpoint](notes/shared-endpoint-perpendicular-2026-11-25/README.md), #281. Verify native geometry, dimensions, fresh Open and an explicit previous-reader refusal.
 - D1979: [Add the CAD React Hole component](notes/cad-react-native-hole-2026-11-25/README.md). Verify current native and visible Viewer frames, then edit, save and reopen the returned Hole in actual Studio.
 - D1978: [Extract Studio Section viewport ownership](notes/studio-section-viewport-extraction-2026-11-25/README.md), #44. Compare actual desktop exact vertex, occurrence clipping, Frame and document reopen before and after.
 - D1977: [End a downward polygonal Extrude at the original upper annulus](notes/downward-polygon-to-upper-annulus-2026-11-25/README.md), #222. Verify reflected whole-footprint bore and rim clearance, native rebuild and actual desktop reopen.

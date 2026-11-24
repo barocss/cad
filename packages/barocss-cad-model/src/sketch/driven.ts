@@ -9,6 +9,7 @@ import { commitDimension } from './rules';
 import { edgeAngle } from './terms';
 import { matchesRegionLengths } from './internal/regionLengths';
 import { matchesHoleOutline } from './internal/holeOutline';
+import { endpointPerpendicular, endpointPerpendicularMet, endpointRuleProblem, hasEndpointMarker } from './endpointPerpendicular';
 
 type Params = Readonly<Record<string, number>>;
 type Obj = Record<string, unknown>;
@@ -48,13 +49,16 @@ function loop(x: unknown, label: string): asserts x is Obj[] {
     }
   }
 }
-function rule(x: unknown, n: number, bulges: number[], circles: number): void {
+function rule(x: unknown, n: number, bulges: number[], circles: number, points: [number, number][]): void {
   input(record(x) && typeof x.kind === 'string', 'outline rule must have a supported kind');
   const p = (v: unknown) => index(v, n), l = (v: unknown) => p(v) && !bulges[v as number], a = (v: unknown) => p(v) && !!bulges[v as number], c = (v: unknown) => index(v, circles);
   const pair = (check: (v: unknown) => boolean) => check(x.a) && check(x.b) && x.a !== x.b;
   let fields: string[], valid: boolean;
   switch (x.kind) {
-    case 'parallel': case 'perpendicular': case 'equal': fields = ['kind', 'a', 'b']; valid = pair(l); break;
+    case 'perpendicular':
+      fields = hasEndpointMarker(x) ? ['kind', 'a', 'b', 'at'] : ['kind', 'a', 'b'];
+      valid = hasEndpointMarker(x) ? !endpointRuleProblem(x, points, bulges) : pair(l); break;
+    case 'parallel': case 'equal': fields = ['kind', 'a', 'b']; valid = pair(l); break;
     case 'fix': fields = ['kind', 'point', 'at']; valid = p(x.point) && point(x.at); break;
     case 'coincident': fields = ['kind', 'point', 'arc']; valid = p(x.point) && a(x.arc); break;
     case 'distance': case 'dx': case 'dy': fields = ['kind', 'a', 'b', 'value']; valid = pair(p) && num(x.value) && x.value >= .001; break;
@@ -97,7 +101,7 @@ function outline(x: unknown, segments: Obj[]): void {
     input(Array.isArray(x.circles), 'outline circles must be numeric circles');
     for (const c of x.circles) { keys(c, ['c', 'r'], ['c', 'r'], 'outline circle'); input(point(c.c) && num(c.r) && c.r >= .001, 'outline circle needs finite center and positive radius'); }
   }
-  if (x.rules !== undefined) { input(Array.isArray(x.rules), 'outline rules must be a list'); for (const r of x.rules) rule(r, n, bulges, (x.circles as unknown[] | undefined)?.length ?? 0); }
+  if (x.rules !== undefined) { input(Array.isArray(x.rules), 'outline rules must be a list'); for (const r of x.rules) rule(r, n, bulges, (x.circles as unknown[] | undefined)?.length ?? 0, points); }
 }
 function construction(x: unknown, ids: string[]): void {
   input(Array.isArray(x), 'construction must be a list');
@@ -143,7 +147,13 @@ function sourceConstraints(seed: NumericDrivenSketchSeed): void {
   for (const r of o.rules ?? []) {
     switch (r.kind) {
       case 'parallel': parallel(line(r.a), line(r.b), 'parallel rule'); break;
-      case 'perpendicular': angular(gap(line(r.a), line(r.b)), Math.PI / 2, 'perpendicular rule'); break;
+      case 'perpendicular': {
+        if (r.at === 'shared-endpoint') {
+          const match = endpointPerpendicular(p, b, r.a, r.b);
+          input(match && endpointPerpendicularMet(match.direction, match.radial), 'source shared-endpoint perpendicular rule does not meet its existing angular constraint');
+        } else angular(gap(line(r.a), line(r.b)), Math.PI / 2, 'perpendicular rule');
+        break;
+      }
       case 'equal': linear(length(r.a), length(r.b), 'equal line rule'); break;
       case 'fix': linear(distance(p[r.point], r.at), 0, 'fixed point'); break;
       case 'coincident': linear(distance(p[r.point], arc(r.arc).center), 0, 'point/arc center coincidence'); break;

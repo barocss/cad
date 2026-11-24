@@ -5,6 +5,7 @@ import { diagnoseXYNumericalSketchMobility, solveXYNumericalSketchPoints, type X
 import { ruleTerms, type SketchRule } from './terms';
 import { rectilinearConflict } from './conflict';
 import type { FixedTriangleSeed } from './fixedTriangleLength';
+import { endpointRuleProblem } from './endpointPerpendicular';
 
 export type P2 = [number, number];
 export type LoopSegment = { kind: 'line'; start: P2 } | { kind: 'arc'; start: P2; center: P2; direction: 'ccw' | 'cw' };
@@ -163,6 +164,7 @@ export const canBeTangent = (points: P2[], bulges: number[] | undefined, j: numb
 /** The same authored constraint system serves solving and read-only diagnosis. */
 function outlineSystem(points: P2[], c: OutlineConstraints, bulgesIn?: number[]) {
   const n = points.length, bulges = points.map((_, i) => bulgesIn?.[i] ?? 0), arcs = bulges.flatMap((b, i) => b ? [i] : []);
+  if (c.rules?.some(rule => endpointRuleProblem(rule, points, bulges))) return null;
   // Points = outline + one centre per arc; segments = lines + two radii per arc. Both are n + arcs.
   const extra = ruleTerms(c.rules ?? [], points, bulges, c.circles ?? [], c.circleRadii ?? []);
   // (The kernel's -v1 sketch profile: 64 points, 64 segments, 128 constraints.)
@@ -240,6 +242,10 @@ export function settledOutlineMovablePoints(points: P2[], c: OutlineConstraints,
  */
 export function solveOutline(points: P2[], c: OutlineConstraints = {}, bulgesIn?: number[],
   recoverFixedTriangle?: () => FixedTriangleSeed | null): SolveResult {
+  for (const rule of c.rules ?? []) {
+    const problem = endpointRuleProblem(rule, points, bulgesIn ?? []);
+    if (problem) return { ok: false, reason: problem };
+  }
   const system = outlineSystem(points, c, bulgesIn);
   if (!system) return { ok: false, reason: 'Too many points, arcs and point dimensions for the sketch solver (64 points / 64 segments)' };
   const { bulges, hv, document } = system, n = points.length;

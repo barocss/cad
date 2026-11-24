@@ -8,6 +8,7 @@ import { edgeAngle, type SketchRule } from './terms';
 import { circleRelation } from './loops';
 import { fixedTriangleLengthSeed } from './fixedTriangleLength';
 import { matchesPinnedRound, planPinnedLineArcRadiusEdit } from './internal/pinnedLineArcRound';
+import { endpointPerpendicular } from './endpointPerpendicular';
 
 export type Polygon = Extract<SketchShape, { kind: 'polygon' }>;
 /**
@@ -123,13 +124,16 @@ export function constraintOptions(s: Polygon, picks: readonly SketchPick[]): Rec
     : lines.every(i => hv[key].includes(i)) ? `Already ${name}` : null;
   const pair = (kind: 'parallel' | 'perpendicular') => !onlyLines(2, 2) ? 'Select two straight edges'
     : hasRule(s, pairRule(kind, lines[0], lines[1])) ? `Already ${kind}` : null;
+  const endpoint = isSettled(s) && picks.length === 2 && picks.every(p => p.kind === 'edge' && !p.done)
+    && endpointPerpendicular(s.points, s.bulges ?? [], edges[0], edges[1]);
   const fixable = points.filter(i => i !== 0 && !hasRule(s, r => r.kind === 'fix' && r.point === i));
   const coincident = points.length === 1 && arcs.length === 1 && lines.length === 0 ? (pointOnArcEnd(s, points[0], arcs[0]) ?? (hasRule(s, r => r.kind === 'coincident' && r.point === points[0] && r.arc === arcs[0]) ? 'Already coincident' : null))
     : points.length === 0 && lines.length === 0 && arcs.length === 2 ? ((s.concentric ?? []).some(p => samePair(p, pairOf(arcs[0], arcs[1]))) ? 'Already concentric' : null)
       : 'Select a point and an arc (point on its centre), or two arcs (same centre)';
   return {
     horizontal: axis('h', 'horizontal'), vertical: axis('v', 'vertical'),
-    parallel: pair('parallel'), perpendicular: pair('perpendicular'),
+    parallel: pair('parallel'), perpendicular: endpoint
+      ? hasRule(s, pairRule('perpendicular', edges[0], edges[1])) ? 'Already perpendicular' : null : pair('perpendicular'),
     equal: points.length || edges.length < 2 || (lines.length && arcs.length) ? 'Select two or more lines (same length) or arcs (same radius)' : null,
     fix: !points.length || edges.length ? 'Select one or more points' : !fixable.length ? (points.includes(0) && points.length === 1 ? 'Point 1 is the sketch anchor: it is already fixed' : 'Already fixed') : null,
     coincident, tangent: tangentJoint === null ? tangentSelectionHint : s.tangents?.includes(tangentJoint) ? 'Already tangent' : null,
@@ -191,9 +195,16 @@ export function applyConstraint(s: Polygon, picks: readonly SketchPick[], kind: 
       const next = { ...hv, [key]: [...hv[key], ...add].sort((x, y) => x - y) };
       return checkEdit({ ...s, hv: next }, s, `${kind === 'horizontal' ? 'Horizontal' : 'Vertical'} ${list(add.map(i => edgeName(s, i)))}`);
     }
-    case 'parallel': case 'perpendicular':
+    case 'perpendicular':
+      // Save line then arc regardless of the user's pick order.
+      if (lines.length === 1 && arcs.length === 1) return checkEdit({ ...s, hv, rules: [...rules,
+        { kind, a: lines[0], b: arcs[0], at: 'shared-endpoint' }] }, s, `Perpendicular ${edgeName(s, lines[0])} and ${edgeName(s, arcs[0])}`);
+      // Two straight edges retain their original unmarked rule and solve.
       return checkEdit({ ...s, hv, rules: [...rules, { kind, a: lines[0], b: lines[1] }] }, s,
-        `${kind === 'parallel' ? 'Parallel' : 'Perpendicular'} ${edgeName(s, lines[0])} and ${edgeName(s, lines[1])}`);
+        `Perpendicular ${edgeName(s, lines[0])} and ${edgeName(s, lines[1])}`);
+    case 'parallel':
+      return checkEdit({ ...s, hv, rules: [...rules, { kind, a: lines[0], b: lines[1] }] }, s,
+        `Parallel ${edgeName(s, lines[0])} and ${edgeName(s, lines[1])}`);
     case 'equal': {
       if (arcs.length) {
         const pairs = arcs.slice(1).map(b => pairOf(arcs[0], b)).filter(p => !(s.equalRadii ?? []).some(q => samePair(p, q)));
@@ -390,7 +401,8 @@ export function constraintEntries(s: Polygon): ConstraintEntry[] {
   (s.rules ?? []).forEach((r, k) => {
     const id = 'rule:' + k;
     if (r.kind === 'parallel') add(id, 'Parallel', `edge ${r.a + 1} ∥ edge ${r.b + 1}`, [E(r.a), E(r.b)]);
-    else if (r.kind === 'perpendicular') add(id, 'Perpendicular', `edge ${r.a + 1} ⊥ edge ${r.b + 1}`, [E(r.a), E(r.b)]);
+    else if (r.kind === 'perpendicular') add(id, 'Perpendicular', r.at === 'shared-endpoint'
+      ? `${edgeName(s, r.a)} ⊥ ${edgeName(s, r.b)} at shared endpoint` : `edge ${r.a + 1} ⊥ edge ${r.b + 1}`, [E(r.a), E(r.b)]);
     else if (r.kind === 'equal') add(id, 'Equal length', `edge ${r.a + 1} = edge ${r.b + 1}`, [E(r.a), E(r.b)]);
     else if (r.kind === 'fix') add(id, 'Fixed', `point ${r.point + 1}`, [P(r.point)]);
     else if (r.kind === 'coincident') add(id, 'Coincident', `point ${r.point + 1} · arc ${r.arc + 1} centre`, [P(r.point), E(r.arc)]);
