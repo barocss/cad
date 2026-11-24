@@ -7,9 +7,14 @@ import { readFileSync } from 'node:fs';
 import { brepMassProperties, checkBrep, faceGeometry } from '@barocss/cad';
 import { emptyDoc, withNode, type BodyRef } from '@barocss/cad-model/engine/doc';
 import { resolveCurveFeaturePatternPath } from '@barocss/cad-model/engine/curveFeaturePattern';
+import { modelOf } from '@barocss/cad-model/engine/direct';
 import { partBreps } from '@barocss/cad-model/engine/evaluate';
 const input = JSON.parse(readFileSync(process.argv[2], 'utf8'));
-if (input.pathDocument) {
+if (input.rawPath) {
+  const { sources, objects } = input.pathDocument.direct;
+  const object = objects.find(object => object.id === input.objectId);
+  console.log(JSON.stringify(modelOf(sources[object.source]).objects.find(shape => shape.id === object.geometry)));
+} else if (input.pathDocument) {
   console.log(JSON.stringify(resolveCurveFeaturePatternPath(input.pathDocument, { objectId: input.objectId })));
 } else if (!input.nodes) {
   let doc = emptyDoc();

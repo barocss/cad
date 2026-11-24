@@ -3,6 +3,7 @@ import { validateCurve } from '../core/math.js';
 import { binary64Dyadic } from '../core/dyadic.js';
 import type { Curve, Point } from '../types.js';
 import { QuadraticCutWork } from './quadratic-cut-arithmetic.js';
+import { planQuarterCircleCut } from './quarter-circle-cut-plan.js';
 import { cutNormBounds, cutLengthNumbers, planQuadraticCut, type CurveCutPathPlan } from './quadratic-cut-plan.js';
 
 /** The same raw NURBS fields accepted by the part model's sweep-curve feature. */
@@ -116,14 +117,15 @@ function curved(path: RawNurbsPath, work: QuadraticCutWork): boolean {
   return false;
 }
 function quadratic(path: RawNurbsPath, spacing: number, count: number, limit: number, fail: Refuse, work: QuadraticCutWork): CurveCutPathPlan {
-  for (const weight of path.weights) if (weight !== 1) return fail('CAPABILITY', 'path cut pattern weights must all be 1');
   const k = path.knots;
-  if (k.length !== 6 || k[0] !== k[1] || k[1] !== k[2] || k[3] !== k[4] || k[4] !== k[5] || !(k[2] < k[3])) return fail('CAPABILITY', 'a curved quadratic needs one clamped polynomial span');
+  if (k.length !== 6 || k[0] !== k[1] || k[1] !== k[2] || k[3] !== k[4] || k[4] !== k[5] || !(k[2] < k[3])) return fail('CAPABILITY', 'a curved quadratic needs one clamped span');
   for (const point of path.controlPoints) for (const value of point) if (Math.abs(value) > limit) return fail('PARAMETER', 'path coordinates must be within ±10000 mm');
+  if (path.weights[1] === Math.SQRT1_2) return planQuarterCircleCut(path, spacing, count, limit, work);
+  for (const weight of path.weights) if (weight !== 1) return fail('CAPABILITY', 'path cut pattern weights must all be 1 or the canonical quarter-arc weights');
   const plan = planQuadraticCut(path.controlPoints, spacing, count, limit, fail, work);
   return { offsets: plan.offsets, length: plan.length };
 }
-/** Preserve the legacy offset leaf; only a single nonstraight three-pole quadratic uses certification. */
+/** Preserve the legacy offset leaf; only a single nonstraight three-pole span uses certification. */
 export function curveCutOffsets(path: unknown, spacing: number, count: number, lengthLimit: number, fail: Refuse, scope?: 'prior-xy-linear'): Point[] {
   if (scope === 'prior-xy-linear') {
     // Read authored data once. Both the certified quadratic and legacy straight leaf use this owned copy.

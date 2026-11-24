@@ -4,15 +4,20 @@ import { clickModelCommand, modelRail } from './model-rail-helper.mjs';
 import { choosePriorCutSource, inspectorSource, later, newest, older, shift, verifyPriorCut } from './prior-cut-pattern-browser-fixture.mjs';
 
 const quadratic = process.argv.includes('--quadratic');
-const third = quadratic || process.argv.includes('--three');
+const quarter = process.argv.includes('--quarter');
+const baseline = process.argv.includes('--baseline');
+assert.ok(!baseline || quarter);
+assert.ok(!quarter || !quadratic);
+const curved = quadratic || quarter;
+const third = curved || process.argv.includes('--three');
 const stock = third ? [older, later, newest] : [older, later];
-const spacing = quadratic ? 10 : third ? 20 : 16;
-const revisedSpacing = quadratic ? 12 : third ? 22 : 14;
+const spacing = curved ? 10 : third ? 20 : 16;
+const revisedSpacing = curved ? 12 : third ? 22 : 14;
 const points = quadratic ? [[0, 0, 0], [20, 20, 0]] : third ? [[0, 0, 0], [34, 0, 0], [34, 18, 0], [0, 18, 0]] : [[0, 0, 0], [16, 0, 0], [16, 24, 0]];
 
 const f = await createFlow({
-  name: 'prior-path-cut-pattern', output: process.argv[2], envFrozen: quadratic ? 'D1862_SOURCE_FROZEN' : third ? 'D1853_SOURCE_FROZEN' : 'D1832_SOURCE_FROZEN',
-  qualification: `#25 repeat an earlier rectangular through-cut on a Studio-authored ${quadratic ? 'quadratic' : 'straight-segment'} XY path.`,
+  name: 'prior-path-cut-pattern', output: process.argv[2], envFrozen: quarter ? 'D1872_SOURCE_FROZEN' : quadratic ? 'D1862_SOURCE_FROZEN' : third ? 'D1853_SOURCE_FROZEN' : 'D1832_SOURCE_FROZEN',
+  qualification: `#25 repeat an earlier rectangular through-cut on a Studio-authored ${quarter ? 'quarter-circle' : quadratic ? 'quadratic' : 'straight-segment'} XY path.`,
   limits: ['One original rectangular stock, two or three full-height rectangular cuts, fixed orientation and a linked planar path.'],
   initialFiles: ['apps/cad-studio/test/prior-path-cut-pattern-browser.mjs', 'apps/cad-studio/test/prior-cut-pattern-browser-fixture.mjs',
     'apps/cad-studio/src/app/cutPatternSource.ts', 'packages/barocss-cad-model/src/app/commands.ts',
@@ -35,16 +40,39 @@ function quadraticOffset(distance) {
   const t = (lower + upper) / 2;
   return [40 * t - 20 * t ** 2, 20 * t ** 2];
 }
-const quadraticApertures = pitch => [pitch, 2 * pitch].map(distance => shift(older, ...quadraticOffset(distance)));
-const positionTolerance = quadratic ? 1e-7 : 1e-8;
-const apertures = quadratic ? [...stock, ...quadraticApertures(spacing)] : third ? [...stock, shift(older, 20, 0), shift(older, 34, 6)] : [...stock, shift(older, 16, 0), shift(older, 16, 16)];
-const revisedApertures = quadratic ? [...stock, ...quadraticApertures(revisedSpacing)] : third ? [...stock, shift(older, 22, 0), shift(older, 34, 10)] : [...stock, shift(older, 14, 0), shift(older, 16, 12)];
+const quarterOffset = distance => [20 * Math.sin(distance / 20), 20 * (1 - Math.cos(distance / 20))];
+const curveOffset = quarter ? quarterOffset : quadraticOffset;
+const curveApertures = pitch => [pitch, 2 * pitch].map(distance => shift(older, ...curveOffset(distance)));
+const positionTolerance = curved ? 1e-7 : 1e-8;
+const apertures = curved ? [...stock, ...curveApertures(spacing)] : third ? [...stock, shift(older, 20, 0), shift(older, 34, 6)] : [...stock, shift(older, 16, 0), shift(older, 16, 16)];
+const revisedApertures = curved ? [...stock, ...curveApertures(revisedSpacing)] : third ? [...stock, shift(older, 22, 0), shift(older, 34, 10)] : [...stock, shift(older, 14, 0), shift(older, 16, 12)];
 
 async function createPath() {
   f.phase = 'Create the linked XY path through Sketch and Make curves';
   await button('Sketch', modelRail(f.page)).click();
   await f.sketchPanel().waitFor();
   await field(f.sketchPanel(), 'Sketch plane').selectOption('xy');
+  if (quarter) {
+    const center = [6, 24], start = [6, 4], end = [26, 24];
+    await f.frame([center, start, end]);
+    await f.tool('Centre arc', 'q');
+    await f.worldClick(center);
+    await f.worldClick(start);
+    for (const point of [[18, 8], [22, 12], end]) {
+      const pixel = await f.screenOf(point);
+      await f.page.mouse.move(...pixel, { steps: 3 });
+    }
+    await f.worldClick(end);
+    assert.equal(Number(await field(f.sketchPanel(), 'Arc 1 radius').inputValue()), 20);
+    await button('Make curves', f.sketchPanel()).click();
+    await f.page.waitForFunction(() => window.__studioDoc.direct?.objects.length === 1);
+    await f.ready();
+    const { doc } = await f.snapshot('01-path-made-in-studio'), objectId = doc.direct.objects[0].id;
+    const raw = await f.inspect('authored-quarter', { pathDocument: doc, objectId, rawPath: true });
+    assert.deepEqual([raw.degree, raw.knots, raw.weights], [2, [0, 0, 0, 1, 1, 1], [1, Math.SQRT1_2, 1]]);
+    assert.deepEqual(raw.controlPoints, [[6, 4, 0], [26, 4, 0], [26, 24, 0]]);
+    return { doc, objectId };
+  }
   await button('Line').click();
   await f.page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
   for (const point of points) {
@@ -108,6 +136,7 @@ await f.run(async () => {
     await clickModelCommand(f.page, 'Pattern', 'Path cut pattern');
     const panel = f.page.getByRole('dialog', { name: 'Path cut pattern', exact: true });
     await panel.getByText(entry ? 'Subtract 1 (n4)' : third ? 'Subtract 3 (n10)' : 'Subtract 2 (n7)', { exact: true }).waitFor();
+    if (baseline) return panel;
     await field(panel, 'Path').selectOption(objectId);
     await field(panel, 'Count').fill(String(count));
     await field(panel, 'Spacing').fill(String(entry ? spacing : currentSpacing));
@@ -127,14 +156,23 @@ await f.run(async () => {
     assert.deepEqual([node.kind, node.spacing, node.count], ['curve-feature-pattern', earlier ? spacing : currentSpacing, earlier ? 3 : 2]);
     return doc;
   };
+  if (baseline) {
+    const panel = await open('Browser', 3);
+    assert.equal(await field(panel, 'Path').locator(`option[value="${objectId}"]`).count(), 0);
+    assert.ok(await button('Apply', panel).isDisabled());
+    await f.same(source);
+    await f.snapshot('02-authored-quarter-not-offered');
+    f.report.observations.push({ quarterPathAdmission: 'FAIL: exact authored quarter omitted from the Path selector' });
+    return;
+  }
   const control = await apply(await open(null, 2), '02-path-current-control', false);
-  const currentOffset = quadratic ? quadraticOffset(currentSpacing) : [currentSpacing, 0];
+  const currentOffset = curved ? curveOffset(currentSpacing) : [currentSpacing, 0];
   await verifyPriorCut(f, 'current-cut-path', control, [...stock, shift(third ? newest : later, ...currentOffset)], positionTolerance);
   await f.undo();
   await f.same(source);
 
   const panel = await open('Browser', 3), undo = await button('Undo').getAttribute('data-tip');
-  const attempts = quadratic ? [[17, 3, /exceeds.*path length/i, '03-quadratic-path-too-short']]
+  const attempts = curved ? [[17, 3, /exceeds.*path length/i, '03-curved-path-too-short']]
     : third ? [[44, 3, /exceeds.*path length/i, '03-path-too-short'], [32, 3, /disjoint from the newer cut/, '03a-path-third-collision'], [86, 2, /disjoint from the newer cut/, '03b-path-second-collision']]
     : [[21, 3, /exceeds.*path length/i, '03-path-too-short'], [3, 3, /disjoint from the newer cut/, '03-path-overlap-refused']];
   for (const [attempt, count, reason, label] of attempts) {

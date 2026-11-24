@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1872: [Repeat an earlier cut along one quarter arc](notes/three-cut-quarter-arc-path-2026-11-24/README.md), #25. Certify arc-length placements, keep all three original native apertures, and verify desktop edit and fresh Open.
 - D1871: [Read held Fillet recovery choices](notes/agent-held-fillet-recovery-2026-11-24/README.md), #322 and #20. Compare the current local MCP revision to the saved desktop model and retain explicit History Apply.
 - D1870: [Replace three held Constant Fillet edges](notes/triple-held-fillet-history-replacement-2026-11-24/README.md), #20. Use one explicit History Apply, distinguish the correct native owners and retain signatures through fresh Open.
 - D1869: [Keep shared placed surfaces alive through selection changes](notes/placed-shared-surface-ownership-2026-11-24/README.md), #44. Fix released geometry on the unchanged peer and verify its actual native-face picks, project reopen and 24-copy control.

@@ -419,3 +419,35 @@ test('Path proves its full authored snapshot and all three original cuts even at
     verify(evaluateCadPart(doc), true, { offsets: [[0, 0, 0]] });
   }
 });
+
+test('the first-of-three CUT on a canonical quarter arc keeps all native apertures and rejects either later collision', () => {
+  const doc = pathDocument();
+  const node = feature(doc, 'repeat');
+  node.path = { degree: 2, knots: [0, 0, 0, 1, 1, 1], controlPoints: [[6, 4, 0], [26, 4, 0], [26, 24, 0]], weights: [1, Math.SQRT1_2, 1] };
+  doc.parameters.pitch = 10;
+  const before = structuredClone(doc);
+  const expected = pitch => [0, 1, 2].map(i => [20 * Math.sin(i * pitch / 20), 20 * (1 - Math.cos(i * pitch / 20)), 0]);
+  const source = { ...doc, features: doc.features.slice(0, -1) };
+  const originalSurfaces = brep => brep.faces.filter(face => /^(olderTool|newerTool|lastTool)\.side[0-3]$/.test(face.name))
+    .map(face => ({ name: face.name, plane: faceGeometry(face),
+      bounds: face.loops.map(id => bounds(brep, brep.loops.find(loop => loop.id === id))) }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+  const sourceSurfaces = originalSurfaces(evaluateCadPart(source).outputs[0].brep);
+  assert.equal(sourceSurfaces.length, 12);
+  const original = evaluateCadPart(doc);
+  assert.deepEqual(originalSurfaces(verify(original, false, { offsets: expected(10), approximate: true })), sourceSurfaces);
+  const saved = saveCadPart(original);
+  const edited = { ...doc, parameters: { ...doc.parameters, pitch: 12 } };
+  const result = reevaluate(original, { document: edited });
+  const brep = verify(result, false, { offsets: expected(12), approximate: true });
+  assert.deepEqual(originalSurfaces(brep), sourceSurfaces);
+  assert.deepEqual(verify(loadCadPart(saveCadPart(result)), false, { offsets: expected(12), approximate: true }), brep);
+  for (const name of ['newerSketch', 'lastSketch']) {
+    const colliding = structuredClone(doc);
+    Object.assign(feature(colliding, name), { min: [18, 11], max: [20, 13] });
+    assert.throws(() => reevaluate(original, { document: colliding }),
+      error => error instanceof CadPartError && error.feature === 'repeat' && error.code === 'GEOMETRY' && /disjoint from the newer cuts/.test(error.message));
+    assert.equal(saveCadPart(original), saved);
+  }
+  assert.deepEqual(doc, before);
+});

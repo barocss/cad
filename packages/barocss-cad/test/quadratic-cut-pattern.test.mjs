@@ -132,3 +132,41 @@ test('quadratic cut: small signed reflections and XY swap respect independent ce
     assert.ok(result.length.lower <= source.totalLength[1] * scale && result.length.upper >= source.totalLength[0] * scale);
   }
 });
+
+test('canonical quarter arc: fixed-orientation translations agree with the independent circle law', () => {
+  const quarter = { ...path(), weights: [1, Math.SQRT1_2, 1] };
+  const cases = [
+    { raw: quarter, radius: 20, sign: 1, swap: false },
+    { raw: { ...quarter, controlPoints: [[30, 40, 2], [30, 20, 2], [10, 20, 2]] }, radius: 20, sign: -1, swap: true },
+    { raw: { ...quarter, controlPoints: [[0, 0, 0], [10000, 0, 0], [10000, 10000, 0]] }, radius: 10000, sign: 1, swap: false },
+  ];
+  for (const { raw, radius, sign, swap } of cases) {
+    const original = structuredClone(raw), spacing = radius / 64;
+    const plan = planCurveFeaturePatternPath(raw, spacing, 64);
+    assert.ok(plan.length.lower <= Math.PI * radius / 2 && plan.length.upper >= Math.PI * radius / 2);
+    assert.deepEqual(curveCutOffsets(raw, spacing, 64, 10000, fail), plan.offsets);
+    assert.deepEqual(curveCutOffsets(raw, spacing, 64, 10000, fail, 'prior-xy-linear'), plan.offsets);
+    plan.offsets.forEach(([x, y, z], i) => {
+      const angle = i * spacing / radius;
+      const u = sign * radius * Math.sin(angle), v = sign * radius * (1 - Math.cos(angle));
+      assert.ok(Math.hypot(x - (swap ? v : u), y - (swap ? u : v), z) < 1e-9);
+    });
+    assert.deepEqual(raw, original);
+  }
+});
+
+test('canonical quarter arc: close-to-end, noncanonical knots and approximate shapes cannot be substituted', () => {
+  const quarter = { ...path(), weights: [1, Math.SQRT1_2, 1] };
+  assert.deepEqual(planCurveFeaturePatternPath(quarter, 10000, 1).offsets, [[0, 0, 0]]);
+  assert.equal(planCurveFeaturePatternPath(quarter, 31.41592653588, 2).offsets.length, 2);
+  refused(() => planCurveFeaturePatternPath(quarter, 10 * Math.PI, 2));
+  refused(() => planCurveFeaturePatternPath(quarter, 16, 3));
+  for (const raw of [
+    { ...quarter, weights: [1, .7071067811865475, 1] },
+    { ...quarter, weights: [1.000001, Math.SQRT1_2, 1] },
+    { ...quarter, knots: [-1, -1, -1, 1, 1, 1] },
+    { ...quarter, controlPoints: [[0, 0, 0], [20, 0, Number.MIN_VALUE], [20, 20, 0]] },
+    { ...quarter, controlPoints: [[0, 0, 0], [20, 0, 0], [20, 19.999999999999996, 0]] },
+    { ...quarter, controlPoints: [[0, 0, 0], [16, 12, 0], [4, 28, 0]] },
+  ]) refused(() => planCurveFeaturePatternPath(raw, 10, 1));
+});
