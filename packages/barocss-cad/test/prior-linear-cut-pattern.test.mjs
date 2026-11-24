@@ -136,6 +136,7 @@ test('bad chain, unsupported source geometry, invalid values and unsafe cells re
   for (const id of ['olderTool', 'newerTool']) refused(doc => { doc.features.find(feature => feature.id === id).height = 5; }, 'CAPABILITY', /linear feature pattern source/);
   refused(doc => {
     Object.assign(doc.features.find(feature => feature.id === 'olderSketch'), { profile: 'circle', center: [10, 9], radius: 1, sideTags: { outer: ['a'] } });
+    Object.assign(doc.features.find(feature => feature.id === 'newerSketch'), { profile: 'circle', center: [11, 27], radius: 1, sideTags: { outer: ['p'] } });
   }, 'CAPABILITY', /linear feature pattern source/);
   refused(doc => { doc.features.splice(4, 0, { id: 'movedTool', kind: 'translate', target: 'olderTool', offset: [0, 0, 0] }); doc.features.find(feature => feature.id === 'first').tool = 'movedTool'; }, 'CAPABILITY', /linear feature pattern source/);
   for (const count of [0, 65, 2.5, NaN, Infinity]) refused(doc => { doc.features.at(-1).count = count; }, 'INPUT');

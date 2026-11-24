@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1901: [Repeat an original circular through-Subtract on a signed XY line](notes/prior-circular-linear-cut-pattern-2026-11-24/README.md), #25. Certify both original native cavities before making a Linear copy.
 - D1900: [Verify the three-vertex Sketch snapshot lifecycle](notes/three-vertex-snapshot-lifecycle-2026-11-24/README.md), #216. Complete the bounded capture and source-free edit checks in desktop Studio.
 - D1899: [Describe and approve an earlier CUT through the direct Difference chain](notes/agent-original-cut-chain-2026-11-24/README.md), #25. Verify local revision and explicit Studio approval for the first of four cuts.
 - D1898: [Sweep a disk through perpendicular native quarter arcs](notes/perpendicular-quarter-arc-sweep-2026-11-24/README.md), #10. Share the first bend exit frame and verify native edges, mass and editable Studio replay.

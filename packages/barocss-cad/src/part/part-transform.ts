@@ -4,6 +4,7 @@ import { checkBrep, BrepError } from '../brep/brep-core.js';
 import { fillCutSnapshot, fillCutPlacements } from '../features/fill-cut-pattern.js';
 import { curveCutOffsets } from '../features/curve-cut-pattern.js';
 import { certifyPriorCutPlacements, certifyPriorRectangularCut } from './part-prior-rectangular-cut.js';
+import { certifyPriorCircularCut } from './part-prior-circular-cut.js';
 import { faceGeometry } from '../brep/analytic-boolean.js';
 import type { Brep, BrepFace } from '../brep/brep-core.js';
 import type { BrepAffine } from '../brep/brep-transform.js';
@@ -137,10 +138,11 @@ export function transformOperation(f: CadPartFeature & Record<string, unknown>, 
       }));
     }
     case 'linear-feature-pattern': {
-      const { seed, tool, prior } = t.cutSource(f.target, f.source, 'linear'), axis = axisOf(f.axis), spacing = dim(f.spacing as CadPartDim, 'spacing'), count = integer(f.count, 'count', 1, CadPartLimits.copies);
+      const { seed, tool, prior, priorCircular } = t.cutSource(f.target, f.source, 'linear'), axis = axisOf(f.axis), spacing = dim(f.spacing as CadPartDim, 'spacing'), count = integer(f.count, 'count', 1, CadPartLimits.copies);
       if (spacing === 0) fail('PARAMETER', 'spacing must not be zero');
       // One member in the unused direction reuses the exact same native interior/disjointness proof.
       if (prior) certifyPriorRectangularCut(prior, 'xyz'.indexOf(axis), spacing, count, axis === 'x' ? 1 : 0, 0, 1, fail, 'linear');
+      if (priorCircular) certifyPriorCircularCut(priorCircular, 'xyz'.indexOf(axis), spacing, count, fail);
       return () => {
         if (count === 1 || !tool.length) return { kind: 'solid', parts: [seed] };
         const joined = tool.slice(1).reduce<Solid>((acc, p) => boolean(acc, p.solid, 'union', at), tool[0].solid);

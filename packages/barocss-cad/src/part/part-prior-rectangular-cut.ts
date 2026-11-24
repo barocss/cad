@@ -27,6 +27,8 @@ function rectangle(ring: readonly CurveSegment2[]): Rectangle | undefined {
   return { min, max };
 }
 
+export { rectangle as priorCutRectangle };
+
 function profile(part: Part) {
   if (part.solid.kind !== 'upright' || part.solid.solid.slabs.length !== 1) return;
   const slab = part.solid.solid.slabs[0];

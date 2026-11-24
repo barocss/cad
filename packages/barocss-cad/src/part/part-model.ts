@@ -24,6 +24,7 @@ import { booleanAnalytic, faceGeometry, splitFaceAlongCurve, splitFaceAlongIsocl
 import { cylindricalWrapFeature } from '../features/cylindrical-wrap-feature.js';
 import { transformOperation } from './part-transform.js';
 import type { PriorRectangularCut } from './part-prior-rectangular-cut.js';
+import type { PriorCircularCut } from './part-prior-circular-cut.js';
 import { prismaticDetailOperation } from './part-prismatic-detail.js';
 import { profileSolidOperation } from './part-profile-solid.js';
 import { faceFinishOperation } from './part-face-finish.js';
@@ -395,8 +396,32 @@ function evaluateWith(input: CadPartDocument, previous: Cache | undefined, optio
           if (cut.target !== parent.id) return invalidChain();
           link = parent;
         }
+        links.reverse();
+        if (pattern === 'linear') {
+          const sourceTool = ref(prototype.tool, `${label} original cutter`);
+          const sourceSketch = sourceTool.author?.kind === 'extrude' ? ref(sourceTool.author.sketch, `${label} original sketch`).author : undefined;
+          if (sourceSketch?.kind === 'sketch' && sourceSketch.profile === 'circle') {
+            const requirement = `${label} needs one original circular extrusion followed by one original rectangular extrusion on upright rectangular stock`;
+            if (links.length !== 2) return fail('CAPABILITY', requirement);
+            const exactOriginal = (reference: unknown, profile: 'circle' | 'rectangle', what: string): Part => {
+              const producer = ref(reference, what);
+              if (reference !== producer.id || producer.part !== null || producer.author?.kind !== 'extrude' || ('suppressed' in producer.author && producer.author.suppressed)
+                || (producer.author.draft !== undefined && producer.author.draft !== 0)) return fail('CAPABILITY', requirement);
+              const sketch = ref(producer.author.sketch, `${what} sketch`).author;
+              if (sketch?.kind !== 'sketch' || sketch.profile !== profile || ('suppressed' in sketch && sketch.suppressed)
+                || sketch.holes?.length || sketch.regions?.length) return fail('CAPABILITY', requirement);
+              if (producer.result.kind !== 'solid' || producer.result.parts.length !== 1 || empty(producer.result.parts[0].solid))
+                return fail('REFERENCE', `${what} must be one nonempty solid`);
+              return producer.result.parts[0];
+            };
+            const stock = exactOriginal(prototype.target, 'rectangle', 'source stock');
+            const first = { result: links[0].result, cutter: exactOriginal(links[0].cutterRef, 'circle', 'source circular cutter') };
+            const later = { result: links[1].result, cutter: exactOriginal(links[1].cutterRef, 'rectangle', 'source later cutter') };
+            return { seed: solids(r, 'target')[0], tool: [first.cutter], priorCircular: { stock, first, later } };
+          }
+        }
         const stock = original(prototype.target, 'source stock');
-        const stages = links.reverse().map((link, i) => ({ result: link.result, cutter: original(link.cutterRef, `source chain cutter ${i + 1}`) }));
+        const stages = links.map((link, i) => ({ result: link.result, cutter: original(link.cutterRef, `source chain cutter ${i + 1}`) }));
         return { seed: solids(r, 'target')[0], tool: [stages[0].cutter], prior: { stock, stages } };
       }
       // Resolve the original operands as dependencies; never replace or truncate their history.
@@ -522,7 +547,7 @@ export type Tools = {
   integer: (v: unknown, what: string, lo: number, hi: number) => number; axisOf: (v: unknown) => CadPartAxis; solids: (r: unknown, what: string, allowEmpty?: boolean) => Part[];
   ref: (r: unknown, what: string) => { id: string; part: number | null; result: Result; author?: CadPartFeature };
   featureKind: (id: string) => CadPartFeature['kind'] | undefined;
-  cutSource: (r: unknown, source?: unknown, pattern?: 'rectangular' | 'linear' | 'fill' | 'path') => { seed: Part; tool: Part[]; prior?: PriorRectangularCut };
+  cutSource: (r: unknown, source?: unknown, pattern?: 'rectangular' | 'linear' | 'fill' | 'path') => { seed: Part; tool: Part[]; prior?: PriorRectangularCut; priorCircular?: PriorCircularCut };
   fail: (code: CadPartErrorCode, detail: string) => never; at: string;
   endpointBead: (f: EndpointBead, byMember: ReadonlyMap<number, Part>, frame: string) => Result;
 };
