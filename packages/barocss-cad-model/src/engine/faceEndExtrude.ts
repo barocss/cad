@@ -301,7 +301,7 @@ function annularStockCircle(source: NonNullable<ReturnType<typeof annularSource>
 /** One original annulus of a forward upright coaxial circular Extrude and through Hole. */
 function annularProfileTarget(doc: StudioDoc, node: FaceEndExtrudeNode, sketch: LiteralRectangle | LiteralPolygon | LiteralCircle,
   brep: Brep, face: BrepFace, axes: EndFrame, min: readonly number[], max: readonly number[]): RadialTarget | undefined {
-  const downward = axes === DOWN_XY && sketch.profile === 'circle';
+  const downward = axes === DOWN_XY && (sketch.profile === 'rectangle' || sketch.profile === 'circle');
   if (!downward && axes !== XY) return;
   const source = annularSource(doc.nodes, node.target.body.node);
   const cap = downward ? 'top' : 'bottom';
@@ -426,7 +426,8 @@ export function isFaceEndExtrudeSketch(sketch: ModelNode | undefined): sketch is
 
 /** A reversed XY profile keeps the original upper end of one supported forward upright extrusion. */
 function downwardTargetProblem(nodes: readonly unknown[], target: FaceEndExtrudeNode['target'], parameters: unknown, sourceProfile: unknown): string | null {
-  const annulus = sourceProfile === 'circle' ? annularSource(nodes, target.body.node) : undefined;
+  const admitsRadial = sourceProfile === 'rectangle' || sourceProfile === 'circle';
+  const annulus = admitsRadial ? annularSource(nodes, target.body.node) : undefined;
   if (annulus) {
     if (!uniqueIdentity(nodes, annulus.stock.id) || !uniqueIdentity(nodes, annulus.circle.id))
       return 'the target stock or source sketch identity is missing, changed or ambiguous.';
@@ -434,11 +435,10 @@ function downwardTargetProblem(nodes: readonly unknown[], target: FaceEndExtrude
     if (!(targetDimension(annulus.stock.height, parameters) > 0))
       return 'the target extrusion must stay forward to preserve its authored end cap.';
     return annularStockCircle(annulus, nodes, parameters) ? null
-      : 'the downward circle needs an intact original upper annulus of a forward upright circular extrusion and one coaxial through Hole.';
+      : 'the downward profile needs an intact original upper annulus of a forward upright circular extrusion and one coaxial through Hole.';
   }
   const stock = nodes[target.body.node];
-  const admitsDisk = sourceProfile === 'rectangle' || sourceProfile === 'circle';
-  const profile = admitsDisk ? 'rectangular or circular' : 'rectangular';
+  const profile = admitsRadial ? 'rectangular or circular' : 'rectangular';
   const unsupported = `the downward profile needs the original upper cap of a forward upright ${profile} extrusion with zero draft.`;
   if (!record(stock) || stock.kind !== 'extrude' || stock.suppressed || stock.held !== undefined
     || !previous(stock.sketch, target.body.node) || stock.cutDepth !== undefined || (stock.draft ?? 0) !== 0
@@ -449,7 +449,7 @@ function downwardTargetProblem(nodes: readonly unknown[], target: FaceEndExtrude
   if (!record(sketch) || sketch.kind !== 'sketch' || sketch.held !== undefined
     || sketch.pocketFloor !== undefined || faceEndAxes(sketch.plane as DocPlane | undefined) !== XY
     || !isFaceEndExtrudeSketch(sketch as unknown as ModelNode)) return unsupported;
-  return sketch.profile === 'rectangle' || (admitsDisk && sketch.profile === 'circle' && sketch.plane === undefined)
+  return sketch.profile === 'rectangle' || (admitsRadial && sketch.profile === 'circle' && sketch.plane === undefined)
     ? null : unsupported;
 }
 

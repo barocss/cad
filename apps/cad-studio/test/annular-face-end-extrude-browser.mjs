@@ -5,12 +5,13 @@ import { join } from 'node:path';
 import { createFlow } from './flow-helper.mjs';
 
 const polygonSource = process.argv.includes('--polygon');
-const downward = process.argv.includes('--downward');
+const downwardRectangle = process.argv.includes('--downward-rectangle');
+const downward = downwardRectangle || process.argv.includes('--downward');
 const baseline = process.argv.includes('--baseline');
-const circleSource = downward || process.argv.includes('--circle');
+const circleSource = !downwardRectangle && (downward || process.argv.includes('--circle'));
 const exchange = process.argv.includes('--step');
 assert.ok(!exchange || (circleSource && !downward), 'The STEP oracle requires the circular profile.');
-assert.ok(!polygonSource || !circleSource, 'Choose only one source profile.');
+assert.ok(!polygonSource || (!circleSource && !downwardRectangle), 'Choose only one source profile.');
 const profile = circleSource ? 'circle' : polygonSource ? 'polygon' : 'rectangle';
 const pins = [
   'apps/cad-studio/test/annular-face-end-extrude-browser.mjs',
@@ -28,11 +29,11 @@ if (exchange) pins.push(
   'packages/barocss-cad/src/io/step.ts',
 );
 const f = await createFlow({
-  name: 'annular-face-end-extrude', output: process.argv[2], envFrozen: downward ? 'D1967_SOURCE_FROZEN' : exchange ? 'D1866_SOURCE_FROZEN' : circleSource ? 'D1861_SOURCE_FROZEN' : polygonSource ? 'D1621_SOURCE_FROZEN' : 'D1609_SOURCE_FROZEN',
+  name: 'annular-face-end-extrude', output: process.argv[2], envFrozen: downwardRectangle ? 'D1972_SOURCE_FROZEN' : downward ? 'D1967_SOURCE_FROZEN' : exchange ? 'D1866_SOURCE_FROZEN' : circleSource ? 'D1861_SOURCE_FROZEN' : polygonSource ? 'D1621_SOURCE_FROZEN' : 'D1609_SOURCE_FROZEN',
   initialFiles: pins, requiredFrozen: pins,
   qualification: exchange ? 'Export two current annulus and post states from Studio, read the STEP bytes independently, and reopen the native and exchanged models.'
     : `Select the original ${downward ? 'upper' : 'lower'} annular face in Studio. Refuse bore and rim contact and keep the target through History and Open.`,
-  limits: [`One upright tube with a 12 mm outer radius and a centred 4 mm through bore, and one horizontal ${profile} profile.`],
+  limits: [`One upright tube with a ${downwardRectangle ? 13 : 12} mm outer radius and a centred 4 mm through bore, and one horizontal ${profile} profile.`],
   inspectorSource: `
 import { readFileSync } from 'node:fs';
 import { brepMassProperties, checkBrep, faceGeometry } from '@barocss/cad';
@@ -50,6 +51,7 @@ const field = (scope, name) => scope.getByLabel(name, { exact: true });
 const originalZ = downward ? 5 : 20, nextZ = downward ? 8 : 28, height = 6;
 const targetName = downward ? 'n1.top' : 'n1.bottom';
 const targetCentre = downward ? [10, 10] : [0, 0];
+const targetRadius = downwardRectangle ? 13 : 12, tubeArea = Math.PI * (targetRadius ** 2 - 16);
 const postCentre = downward ? [16, 16] : [6, 6];
 const view = downward ? 'Top' : 'Bottom';
 const capPick = downward ? [10, 2, originalZ] : [0, 8, originalZ];
@@ -58,18 +60,22 @@ const acceptedSketch = circleSource ? { id: 'n3', kind: 'sketch', profile, cente
   ...(downward ? { plane: { origin: [1, 2, 20], normal: [0, 0, -1], xAxis: [1, 0, 0] } } : {}) }
   : polygonSource
   ? { id: 'n3', kind: 'sketch', profile, points: acceptedPoints }
+  : downwardRectangle
+  ? { id: 'n3', kind: 'sketch', profile, min: [15, -13], max: [18, -10],
+    plane: { origin: [1, 2, 20], normal: [0, 0, -1], xAxis: [1, 0, 0] } }
   : { id: 'n3', kind: 'sketch', profile, min: [6, -2], max: [9, 2] };
 const refusedSketch = circleSource ? { ...acceptedSketch, center: downward ? [15, -8] : [5.5, 0], radius: 2 }
   : polygonSource ? { ...acceptedSketch, points: refusedPoints }
+  : downwardRectangle ? { ...acceptedSketch, min: [4, -9], max: [14, -7] }
   : { ...acceptedSketch, min: [-5, -1], max: [5, 1] };
 // The triangle has base direction (7, -7) and the third point is (8, 1)
 // from its first vertex. The determinant gives 31.5 square millimetres.
-const sourceArea = circleSource ? 9 * Math.PI : polygonSource ? 31.5 : 12;
-const footprint = polygonSource ? acceptedPoints : [[6, -2], [6, 2], [9, -2], [9, 2]];
+const sourceArea = circleSource ? 9 * Math.PI : polygonSource ? 31.5 : downwardRectangle ? 9 : 12;
+const footprint = polygonSource ? acceptedPoints : downwardRectangle ? [[16, 12], [16, 15], [19, 12], [19, 15]] : [[6, -2], [6, 2], [9, -2], [9, 2]];
 const model = sketch => ({
   format: 'barocss-cad-model', schema: 3, units: 'mm', parameters: {},
   nodes: [
-    { id: 'n0', kind: 'sketch', profile: 'circle', center: targetCentre, radius: 12 },
+    { id: 'n0', kind: 'sketch', profile: 'circle', center: targetCentre, radius: targetRadius },
     { id: 'n1', kind: 'extrude', sketch: 0, ...(downward ? { height: originalZ } : { from: originalZ, height }) },
     { id: 'n2', kind: 'hole', parent: { node: 1, side: 'solid' }, center: targetCentre, radius: 4 },
     sketch,
@@ -131,9 +137,9 @@ async function inspect(label, doc, z) {
   for (const wall of walls) {
     near(wall.c[0], targetCentre[0]);
     near(wall.c[1], targetCentre[1]);
-    near(wall.r, wall.out === 1 ? 12 : 4);
+    near(wall.r, wall.out === 1 ? targetRadius : 4);
   }
-  near(tube.mass.volume, Math.PI * (144 - 16) * tubeHeight);
+  near(tube.mass.volume, tubeArea * tubeHeight);
   near(post.mass.volume, sourceArea * travel);
   if (polygonSource) [5, 5, z / 2].forEach((expected, axis) => near(post.mass.centroid[axis], expected));
   if (circleSource) {
@@ -154,10 +160,17 @@ async function inspect(label, doc, z) {
     const top = post.vertices.filter(point => Math.abs(point[2] - z) < 1e-8).map(point => point.slice(0, 2));
     assert.equal(top.length, footprint.length);
     for (const [x, y] of footprint) assert.equal(top.filter(p => p[0] === x && p[1] === y).length, 1);
+    if (downwardRectangle) {
+      [17.5, 13.5, (20 + z) / 2].forEach((expected, axis) => near(post.mass.centroid[axis], expected));
+      const end = post.faces.find(face => face.name === 'n4.top').geometry;
+      assert.equal(end.kind, 'plane');
+      near(end.o[2], z);
+      assert.equal(end.n[2], -1);
+    }
   }
   const bodies = (await f.bodies()).bodies;
   assert.deepEqual(bodies.map(body => body.key), ['b2', 'b4']);
-  near(bodies[0].volume, Math.PI * (144 - 16) * tubeHeight);
+  near(bodies[0].volume, tubeArea * tubeHeight);
   near(bodies[1].volume, sourceArea * travel);
   f.report.observations.push({ label, level: z, target: targetName, tubeVolume: tube.mass.volume, postVolume: post.mass.volume });
   return native;
@@ -273,6 +286,26 @@ await f.run(async () => {
   await f.snapshot('01-bore-overlap-refused');
   await button(f.hud(), 'Cancel').click();
   await f.hud().waitFor({ state: 'hidden' });
+
+  if (downwardRectangle) {
+    for (const [rim, min, max, message] of [
+      ['bore', [13, -9], [16, -6], /clear of its bore/],
+      ['outer', [18, -13], [21, -11], /entire projected profile/],
+    ]) {
+      f.phase = `refuse exact rectangle contact at the ${rim} rim`;
+      const touching = model({ ...acceptedSketch, min, max });
+      await open(`rectangle-touches-${rim}`, touching);
+      await begin();
+      await pickCap(view, capPick);
+      await status('refused');
+      assert.equal(await button(f.hud(), 'Apply').isDisabled(), true);
+      assert.match(await f.hud().locator('.hud-error').textContent(), message);
+      await f.same(touching);
+      await f.snapshot(`01-rectangle-${rim}-contact-refused`);
+      await button(f.hud(), 'Cancel').click();
+      await f.hud().waitFor({ state: 'hidden' });
+    }
+  }
 
   if (circleSource) {
     f.phase = 'refuse the circular profile crossing the outer rim';

@@ -300,8 +300,59 @@ test('a downward annular target refuses contact, loss of authored authority and 
     assert.throws(() => toPartDocument(replaceNode(doc, 2, changed)), /intact original upper annulus/);
   assert.throws(() => toPartDocument(replaceNode(doc, 0, { ...stockCircle, id: stock.id })), /stock or source sketch identity/);
   assert.throws(() => toPartDocument(replaceNode(doc, 3, {
-    id: 'n3', kind: 'sketch', profile: 'rectangle', min: [14, -15], max: [16, -13], plane: source.plane,
-  })), /forward upright rectangular or circular extrusion/);
+    id: 'n3', kind: 'sketch', profile: 'polygon', points: [[14, -15], [16, -15], [16, -13]], plane: source.plane,
+  })), /forward upright rectangular extrusion/);
+});
+
+function downwardRectangleToAnnulus(height = 5, min: [number, number] = [15, -13], max: [number, number] = [18, -10]): StudioDoc {
+  const doc = downwardAnnularTarget(height);
+  const stock = doc.nodes[0], source = doc.nodes[3];
+  assert.ok(stock.kind === 'sketch' && stock.profile === 'circle' && source.kind === 'sketch');
+  return replaceNode(replaceNode(doc, 0, { ...stock, radius: 13 }), 3, {
+    id: 'n3', kind: 'sketch', profile: 'rectangle', min, max, plane: source.plane,
+  });
+}
+
+test('a translated downward rectangle reaches the original upper annulus with four reflected corners', () => {
+  for (const height of [5, 8]) {
+    const doc = downwardRectangleToAnnulus(height), travel = 20 - height;
+    const opened = readStudioDoc(JSON.stringify(doc));
+    assert.ok('doc' in opened); assert.deepEqual(opened.doc, doc);
+    const { outputs } = evaluateCadPart(toPartDocument(opened.doc));
+    assert.equal(currentFaceEndDistance(doc, 4), travel);
+    assert.deepEqual(outputs.map(output => output.id), ['n2', 'n4']);
+    assert.ok(outputs.every(output => checkOutput(output).valid));
+    const [tube, post] = outputs;
+    assert.deepEqual(tube.brep, evaluateCadPart(toPartDocument(prefixDoc(doc, 4))).outputs[0].brep);
+    const mass = massPropertiesOf(post);
+    assert.ok(Math.abs(mass.volume - 9 * travel) < 1e-8);
+    mass.centroid.forEach((value, axis) => assert.ok(Math.abs(value - [17.5, 13.5, (20 + height) / 2][axis]) < 1e-8));
+    const targetFace = tube.brep.faces.find(face => face.name === 'n1.top')!;
+    const endFace = post.brep.faces.find(face => face.name === 'n4.top')!;
+    assert.equal(targetFace.loops.length, 2);
+    const target = faceGeometry(targetFace), end = faceGeometry(endFace);
+    assert.ok(target.kind === 'plane' && end.kind === 'plane');
+    assert.equal(target.o[2], height); assert.equal(target.n[2], 1);
+    assert.equal(end.o[2], height); assert.equal(end.n[2], -1);
+    for (const x of [16, 19]) for (const y of [12, 15]) {
+      assert.equal(post.brep.vertices.filter(vertex => vertex.point.join() === [x, y, height].join()).length, 1);
+    }
+  }
+});
+
+test('a downward rectangle to the original upper annulus clears the bore and outer rim as a whole', () => {
+  // All four corners are material points here, but the rectangle spans the bore.
+  assert.ok([-5, 5].every(x => [-1, 1].every(y => Math.hypot(x, y) > 4)));
+  assert.throws(() => toPartDocument(downwardRectangleToAnnulus(5, [4, -9], [14, -7])), /clear of its bore/);
+  assert.throws(() => toPartDocument(downwardRectangleToAnnulus(5, [13, -9], [16, -6])), /clear of its bore/);
+  assert.equal(currentFaceEndDistance(downwardRectangleToAnnulus(5, [13 + 1e-6, -9], [16, -6]), 4), 15);
+  assert.equal(Math.hypot(12, 5), 13);
+  assert.throws(() => toPartDocument(downwardRectangleToAnnulus(5, [18, -13], [21, -11])), /entire projected profile/);
+  assert.equal(currentFaceEndDistance(downwardRectangleToAnnulus(5, [18, -13], [21 - 1e-6, -11]), 4), 15);
+  for (const height of [-5, 0])
+    assert.throws(() => toPartDocument(downwardRectangleToAnnulus(height)), /stay forward.*authored end cap/);
+  for (const height of [20, 21])
+    assert.throws(() => toPartDocument(downwardRectangleToAnnulus(height)), /positive extrusion direction/);
 });
 
 function annularPolygonTarget(points: [number, number][], from = 20, origin: [number, number, number] = [0, 0, 0]): StudioDoc {
