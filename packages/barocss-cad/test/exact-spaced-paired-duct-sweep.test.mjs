@@ -699,3 +699,39 @@ test('five-span inlet offset admits its exact minimum and refuses join collapse,
   assert.equal(saveCadPart(initial), saved);
   assert.deepEqual(initial.outputs[0].brep, evaluateCadPart(source).outputs[0].brep);
 });
+
+test('an inward tilted replacement trims the original five-span outlet without changing either passage or any join', () => {
+  const source = document(rail({ leadLength: 10, tailLength: 6 }).path);
+  const initial = evaluateCadPart(source), base = initial.outputs[0].brep, untouched = structuredClone(base);
+  const normal = [4, -1, 0], origin = [35, 38, 0];
+  const recipe = (plane, face = 'w.end') => ({ ...source, features: [...source.features,
+    { id: 'r', kind: 'replace-face', target: 'w', face, plane }] });
+  const after = evaluateCadPart(recipe({ origin, normal })), brep = after.outputs[0].brep;
+  const report = checkBrep(brep, { strict: true });
+  assert.ok(report.valid, report.issues.join('\n'));
+  assert.deepEqual(report.counts, { bodies: 1, shells: 1, faces: 62, loops: 66, coedges: 264, edges: 132, vertices: 72 });
+  assert.equal(report.topology[0].genus, 2);
+  assert.deepEqual(identity(after), identity(initial));
+  assert.deepEqual(brep.faces.filter(face => face.name !== 'w.end'), base.faces.filter(face => face.name !== 'w.end'));
+  const changedEdges = brep.edges.filter((edge, index) => JSON.stringify(edge) !== JSON.stringify(base.edges[index]));
+  assert.equal(changedEdges.length, 24);
+  for (const edge of changedEdges) {
+    assert.ok(verifyCharts(brep, edge).every(face => face.name === 'w.end' || face.name.startsWith('w.tail.')));
+  }
+  assert.deepEqual(brep.coedges.filter(use => !changedEdges.some(edge => edge.id === use.edge)),
+    base.coedges.filter(use => !changedEdges.some(edge => edge.id === use.edge)));
+  const cap = brep.faces.find(face => face.name === 'w.end');
+  assert.equal(brep.loops.filter(loop => cap.loops.includes(loop.id) && loop.kind === 'inner').length, 2);
+  pointNear(faceGeometry(cap).n, scale(normal, 1 / Math.sqrt(17)));
+  for (const point of faceSamples(brep, cap)) near(point[0], 35 + (point[1] - 38) / 4);
+  const { volume, centroid } = brepMassProperties(brep, 1);
+  near(volume, 32 * (23 + 15 * Math.PI));
+  pointNear(centroid, [12.503292359971336, 18.397113817368265, 0]);
+  assert.deepEqual(evaluateCadPart(recipe({ origin, normal: scale(normal, -1) })).outputs[0].brep, brep);
+  for (const x of [36, 35.5, 30.5, 30])
+    assert.throws(() => evaluateCadPart(recipe({ origin: [x, 38, 0], normal })), /strictly between/);
+  assert.throws(() => evaluateCadPart(recipe({ origin, normal: [1, 0, 0] })), /must be tilted/);
+  assert.throws(() => evaluateCadPart(recipe({ origin, normal: [0, 1, 0] })), /must be tilted/);
+  assert.throws(() => evaluateCadPart(recipe({ origin, normal }, 'w.start')), /original straight outlet/);
+  assert.deepEqual(base, untouched);
+});

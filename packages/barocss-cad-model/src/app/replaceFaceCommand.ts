@@ -1,5 +1,5 @@
 import {
-  exactSemicylinderCapAfterWall, exactSemicylinderCapSource, isAnnularReplacementSource, isBoredPlateReplacementSource, isBoxReplacementSource, isCylinderReplacementSource, isDraftedFaceReplacementSource,
+  exactSemicylinderCapAfterWall, exactSemicylinderCapSource, isAnnularReplacementSource, isBoredPlateReplacementSource, isBoxReplacementSource, isCylinderReplacementSource, isDraftedFaceReplacementSource, isPairedFiveSpanOutletPlaneSource,
   isStraightPolygonReplacementSource, withNode, type StudioDoc,
 } from '../engine/doc';
 import { captureSignatures } from '../engine/references';
@@ -7,7 +7,7 @@ import { refusal } from '../engine/refusal';
 import type { Command, Ctx } from './commands';
 import { captureOffsetPlane, offsetPlaneStep, pickReferencePlane, restoreOffsetPlaneValues } from './offsetPlanePick';
 
-const SOURCE = 'Select a supported extrusion face, through-bore cap or original Exact semicylinder upper cap.';
+const SOURCE = 'Select a supported extrusion face, through-bore cap, original Exact semicylinder upper cap, or original five-span paired sweep outlet.';
 const REFERENCE = 'Pick a tilted face on another solid.';
 
 function pickedFace(ctx: Ctx) {
@@ -24,7 +24,8 @@ function pickedFace(ctx: Ctx) {
      isAnnularReplacementSource(ctx.doc.nodes, parent.node));
   const semicylinderCap = exactSemicylinderCapSource(ctx.doc.nodes, parent.node, ctx.doc.parameters)?.upperFace === face.name
     || exactSemicylinderCapAfterWall(ctx.doc.nodes, parent.node, ctx.doc.parameters, face.name) !== undefined;
-  if (!boxFace && !polygonFace && !circularCap && !semicylinderCap && !isDraftedFaceReplacementSource(ctx.doc.nodes, parent.node)) return;
+  const sweepOutlet = isPairedFiveSpanOutletPlaneSource(ctx.doc.nodes, parent.node, face.name);
+  if (!boxFace && !polygonFace && !circularCap && !semicylinderCap && !sweepOutlet && !isDraftedFaceReplacementSource(ctx.doc.nodes, parent.node)) return;
   return { parent, face: face.name };
 }
 

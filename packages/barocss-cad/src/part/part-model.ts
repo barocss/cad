@@ -33,7 +33,7 @@ import { weldVertices } from '../mesh/facet-brep.js';
 import { splitFacetBrep, type FacetSplitResult } from '../mesh/facet-split.js';
 import { facetBoolean, isFacetBooleanError, splitMixedBrep } from '../mesh/facet-boolean.js';
 import { selfIntersections } from '../mesh/mesh-repair.js';
-import { exactSweep, offsetExactPairedElbowOutletIfAdmitted } from '../brep/exact-sweep.js';
+import { exactSweep, offsetExactPairedElbowOutletIfAdmitted, replaceExactPairedSweepOutletIfAdmitted } from '../brep/exact-sweep.js';
 import { sweepSolid } from '../brep/sweep-solid.js';
 import { validateCurve } from '../core/math.js';
 
@@ -621,6 +621,19 @@ function sideTagsOf(v: unknown, drawn: { outer: readonly unknown[]; regions?: re
   return { outer: list(v.outer, drawn.outer.length, 'outer'), ...lists('regions'), ...lists('holes') };
 }
 
+function exactSweepFaceEditSource(author: CadPartFeature | undefined, ref: Tools['ref']) {
+  if (author?.kind !== 'sweep-curve' || author.mode !== 'exact') return;
+  const sketch = ref(author.sketch, 'face edit sweep sketch').result;
+  if (sketch.kind !== 'sketch' || sketch.regions?.length) return;
+  const frame = sketch.frame?.m ?? [1, 0, 0, 0, 1, 0, 0, 0, 1];
+  return {
+    id: author.id, mode: 'exact' as const, outer: sketch.outer, holes: sketch.holes, sideTags: sketch.tags,
+    path: { ...structuredClone(author.path), kind: 'curve', id: 'path' } as Curve,
+    xAxis: [frame[0], frame[3], frame[6]] as Point,
+    yAxis: [frame[1], frame[4], frame[7]] as Point,
+  };
+}
+
 // ---- operations ---------------------------------------------------------------------------------------
 function operation(f: CadPartFeature & Record<string, unknown>, t: Tools): () => Result {
   const { dim, xy, xyz, axisOf, solids, ref, fail, at } = t;
@@ -682,15 +695,7 @@ function operation(f: CadPartFeature & Record<string, unknown>, t: Tools): () =>
         id: hole.id, surface: { ...structuredClone(hole.surface), kind: 'surface', id: 'surface' } as Surface,
         thickness: dim(hole.thickness, 'Thicken thickness', true), side: hole.side,
       } : undefined;
-      const sweepSketch = hole?.kind === 'sweep-curve' && hole.mode === 'exact' ? ref(hole.sketch, 'outlet sweep sketch').result : undefined;
-      const sweepFrame = sweepSketch?.kind === 'sketch' ? sweepSketch.frame?.m ?? [1, 0, 0, 0, 1, 0, 0, 0, 1] : undefined;
-      const pairedElbow = hole?.kind === 'sweep-curve' && hole.mode === 'exact' && sweepSketch?.kind === 'sketch'
-        && !sweepSketch.regions?.length && sweepFrame ? {
-          id: hole.id, mode: 'exact' as const, outer: sweepSketch.outer, holes: sweepSketch.holes, sideTags: sweepSketch.tags,
-          path: { ...structuredClone(hole.path), kind: 'curve', id: 'path' } as Curve,
-          xAxis: [sweepFrame[0], sweepFrame[3], sweepFrame[6]] as Point,
-          yAxis: [sweepFrame[1], sweepFrame[4], sweepFrame[7]] as Point,
-        } : undefined;
+      const pairedElbow = exactSweepFaceEditSource(hole, ref);
       const firstOffset = hole?.kind === 'offset-face' ? hole : undefined;
       const original = firstOffset ? ref(firstOffset.target, 'first Offset source').author : undefined;
       const secondCylinder = original?.kind === 'thicken' && original.mode === 'exact-cylinder' ? {
@@ -761,6 +766,7 @@ function operation(f: CadPartFeature & Record<string, unknown>, t: Tools): () =>
       if (target.length !== 1) return fail('REFERENCE', 'Replace face needs one closed solid.');
       if (typeof face !== 'string' || !face.trim() || /[+\0]/.test(face)) return fail('INPUT', 'Replace face needs one exact native face name.');
       const author = ref(f.target, 'target').author;
+      const sweep = exactSweepFaceEditSource(author, ref);
       const exactCylinder = author?.kind === 'thicken' && author.mode === 'exact-cylinder' ? {
         id: author.id, surface: { ...structuredClone(author.surface), kind: 'surface', id: 'surface' } as Surface,
         thickness: dim(author.thickness, 'Thicken thickness', true), side: author.side,
@@ -785,6 +791,11 @@ function operation(f: CadPartFeature & Record<string, unknown>, t: Tools): () =>
             const replaced = replaceExactSemicylinderCapAfterWallIfAdmitted(brep, face, radialCylinder,
               { face: firstOffset.face, distance: firstOffset.distance }, plane);
             if (!replaced) return fail('CAPABILITY', 'Replace face needs the original upper cap after exactly one signed radial Offset of an Exact semicylinder.');
+            return one({ kind: 'brep', brep: replaced });
+          }
+          if (sweep?.path.controlPoints.length === 11) {
+            const replaced = replaceExactPairedSweepOutletIfAdmitted(brep, face, sweep, plane);
+            if (!replaced) return fail('CAPABILITY', 'Replace face needs the original straight outlet of one exact five-span sweep with two rectangular passages.');
             return one({ kind: 'brep', brep: replaced });
           }
           const replaced = replaceBoredCapIfAdmitted(brep, face, plane) ?? replaceCircularCapIfAdmitted(brep, face, plane)

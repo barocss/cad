@@ -9,6 +9,7 @@ import type { Curve, Point, Surface } from '../types.js';
 import { BrepError, checkBrep, type Brep, type BrepCoedge } from './brep-core.js';
 import { faceGeometry } from './analytic-boolean.js';
 import { affinePlaneBinding } from './affine-plane-binding.js';
+import { trimExactSweepOutlet } from './exact-sweep-outlet-trim.js';
 import { glueAtSharedFace } from './brep-glue.js';
 import { transformBrep } from './brep-transform.js';
 import { curveTolerance, intersectSegments, locateInRegion, segDistance, type CurveSegment2 } from './curved-arrangement.js';
@@ -1513,6 +1514,21 @@ function retainedElbowBoundary(before: Brep, after: Brep, face: Brep['faces'][nu
     && uses.every(use => same(use, after.coedges.find(value => value.id === use.id)))
     && before.edges.every(edge => !edges.has(edge.id) || same(edge, after.edges.find(value => value.id === edge.id)))
     && before.vertices.every(vertex => !vertices.has(vertex.id) || same(vertex, after.vertices.find(value => value.id === vertex.id)));
+}
+
+/** Trim an original five-span paired outlet against a tilted plane inside its straight tail. */
+export function replaceExactPairedSweepOutletIfAdmitted(brep: Brep, faceName: string, source: ExactSweepInput,
+  plane: { readonly origin: Point; readonly normal: Point }): Brep | undefined {
+  if (faceName !== `${source.id}.end` || source.path.controlPoints.length !== 11 ||
+    !exactPairedElbowOutletOffsetFrame(brep, faceName, source) || source.outer.length !== 4 ||
+    source.outer.some(segment => segment.kind !== 'line') || source.holes?.length !== 2 ||
+    source.holes.some(loop => loop.length !== 4 || loop.some(segment => segment.kind !== 'line'))) return;
+  const original = exactSweep(source, (code, detail) => { throw new BrepError(code === 'GEOMETRY' ? 'GEOMETRY' : 'INPUT', detail); }).brep;
+  if (JSON.stringify(original) !== JSON.stringify(brep)) return;
+  const rail = pairedStraightCapRail(source.path, false);
+  if (!rail || !('endpoint' in rail) || rail.wallPiece !== 'tail') return;
+  const axis = unit(sub(source.path.controlPoints[10], source.path.controlPoints[8]));
+  return trimExactSweepOutlet(brep, faceName, { axis, length: rail.length, wallPrefix: `${source.id}.tail.` }, plane);
 }
 
 /** Continue only an admitted original straight cap. Replaying its producer binds every original native coefficient. */

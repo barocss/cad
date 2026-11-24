@@ -1,13 +1,13 @@
 # CAD roadmap — current status and execution order
 
-Updated 2026-11-24 · Priority authority: D520 · Latest delivery: D1880 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
+Updated 2026-11-24 · Priority authority: D520 · Latest delivery: D1881 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
 
 This is the only current status index. Detailed tracks define acceptance; the 34 stable row pages retain scope and issue navigation. Immutable decision notes retain results. Do not append chronological status paragraphs here. [D520 decision](notes/cad-roadmap-replan-2026-11-04/README.md) supersedes D445 execution order and historical next-item text, while retaining its safeguards and bounded proofs.
 
 ## Now and next
 
-- **Current position:** [D1880](notes/studio-sketch-inspector-extraction-2026-11-24/README.md), P4 rows 15 and 20. The Sketch inspector is separate from the App. Desktop Studio verifies the numeric, rotation and saved Bézier workflows. GitHub closed [#277](https://github.com/barocss/cad/issues/277) after exact CI and the scoped STEP evidence.
-- **Next MAIN:** D1881, P5 rows [07](roadmap-rows/07.md) and [31](roadmap-rows/31.md), [#17](https://github.com/barocss/cad/issues/17). Check the first bounded tilted native replacement plane on the original straight outlet of the five-span paired Exact Sweep. Keep the parallel Offset path and verify the two passages and all joins against the exact stock.
+- **Current position:** [D1881](notes/tilted-paired-sweep-outlet-replacement-2026-11-24/README.md), P5 rows 07 and 31. Replace face can shorten the original five-span paired Sweep outlet to a tilted donor plane while retaining both passages and all 48 native joins. Studio confirms donor movement, History retargeting and native reopen.
+- **Next MAIN:** D1882, P5 rows [16](roadmap-rows/16.md) and [31](roadmap-rows/31.md), [#324](https://github.com/barocss/cad/issues/324). Check the existing local Agent proposal, revision-pinned visual review and explicit Studio approval for the tilted outlet. Bind any missing evidence to the exact admitted replacement and its current donor.
 - **Separate follow-ups:** Continue Studio App extraction in cohesive parts with affected desktop checks. [#608 Rendering](https://github.com/barocss/cad/issues/608) stays on HOLD. API inventory drift remains open. The issue tracker records [#126](https://github.com/barocss/cad/issues/126), [#613](https://github.com/barocss/cad/issues/613), [#152](https://github.com/barocss/cad/issues/152) and [#22](https://github.com/barocss/cad/issues/22) as closed.
 - **Active repository:** [barocss/cad](https://github.com/barocss/cad), based on `origin/main`. Fetch before work and preserve unexpected changes. The [migration record](../../../docs/migration/README.md) maps the former `local/cad-dev` history and issue numbers.
 - **Evidence correction:** D482 records2167 PASS/0 FAIL/2 existing SKIP in a later full-kernel run than D433. Neither result is a new full-suite PASS at this audit HEAD. [D482 record](notes/vertical-contact-refusal-2026-11-04/README.md).

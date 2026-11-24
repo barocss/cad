@@ -824,6 +824,12 @@ export function directFaceDocumentProblem(input: unknown): string | null {
       const [face] = node.faces as [string];
       const signature = (node.sigs as Record<string, Sig>)[face];
       if (node.kind === 'replace-face') {
+        if (isPairedFiveSpanOutletPlaneSource(value.nodes, parentIndex, face)) {
+          const donor = value.nodes[(node.target as OffsetPlaneRef).body.node];
+          if (signature.k !== 'plane' || !textRecord(donor) || donor.suppressed || donor.held !== undefined)
+            return 'Replace face: the paired outlet needs its original planar face and an available reference body.';
+          continue;
+        }
         if (isExactCylinderThicken(value.nodes[parentIndex]) || isExactCylinderFaceEditChain(value.nodes, parentIndex)) {
           const originalCap = exactSemicylinderCapSource(value.nodes, parentIndex, parameters)?.upperFace === face;
           if (signature.k !== 'plane' || (!originalCap && !exactSemicylinderCapAfterWall(value.nodes, parentIndex, parameters, face)))
