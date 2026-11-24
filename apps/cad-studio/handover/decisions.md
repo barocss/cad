@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1880: [Extract the Studio Sketch inspector](notes/studio-sketch-inspector-extraction-2026-11-24/README.md), #44. Keep draft guards and verify numeric edits, outline rotation and saved Bézier selection in desktop Studio.
 - D1879: [Preserve non-cone STEP with an active degree declaration](notes/step-angle-non-cone-retention-2026-11-24/README.md), #277. Verify pure planar and tessellated originals in mm and cm and document the cone admission boundary.
 - D1878: [Anchor a saved lower closed-rim Fillet](notes/lower-closed-circular-fillet-history-2026-11-24/README.md), #214. Verify the original seam, end-on drag and native Save/Open on an upright cylinder.
 - D1877: [Restore the full GPU suite](notes/gpu-tests-cad-export-resolution-2026-11-24/README.md), #197. Use package exports and current fixtures, then verify all tests and the actual Studio display control.

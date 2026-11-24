@@ -1,13 +1,13 @@
 # CAD roadmap — current status and execution order
 
-Updated 2026-11-24 · Priority authority: D520 · Latest delivery: D1879 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
+Updated 2026-11-24 · Priority authority: D520 · Latest delivery: D1880 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
 
 This is the only current status index. Detailed tracks define acceptance; the 34 stable row pages retain scope and issue navigation. Immutable decision notes retain results. Do not append chronological status paragraphs here. [D520 decision](notes/cad-roadmap-replan-2026-11-04/README.md) supersedes D445 execution order and historical next-item text, while retaining its safeguards and bounded proofs.
 
 ## Now and next
 
-- **Current position:** [D1879](notes/step-angle-non-cone-retention-2026-11-24/README.md), P0/P2 rows 13 and 30. The four explicitly degree-declared planar and tessellated STEP files preserve their exact physical geometry. The remaining bounded [#277](https://github.com/barocss/cad/issues/277) acceptance has desktop evidence; publication follows the exact CI.
-- **Next MAIN:** D1880, P4 rows [15](roadmap-rows/15.md) and [20](roadmap-rows/20.md), [#44](https://github.com/barocss/cad/issues/44). Extract the live Sketch inspector composition from `App.tsx` with its existing draft ownership checks. Verify actual saved outline selection, numeric editing and native reopen in desktop Studio.
+- **Current position:** [D1880](notes/studio-sketch-inspector-extraction-2026-11-24/README.md), P4 rows 15 and 20. The Sketch inspector is separate from the App. Desktop Studio verifies the numeric, rotation and saved Bézier workflows. GitHub closed [#277](https://github.com/barocss/cad/issues/277) after exact CI and the scoped STEP evidence.
+- **Next MAIN:** D1881, P5 rows [07](roadmap-rows/07.md) and [31](roadmap-rows/31.md), [#17](https://github.com/barocss/cad/issues/17). Check the first bounded tilted native replacement plane on the original straight outlet of the five-span paired Exact Sweep. Keep the parallel Offset path and verify the two passages and all joins against the exact stock.
 - **Separate follow-ups:** Continue Studio App extraction in cohesive parts with affected desktop checks. [#608 Rendering](https://github.com/barocss/cad/issues/608) stays on HOLD. API inventory drift remains open. The issue tracker records [#126](https://github.com/barocss/cad/issues/126), [#613](https://github.com/barocss/cad/issues/613), [#152](https://github.com/barocss/cad/issues/152) and [#22](https://github.com/barocss/cad/issues/22) as closed.
 - **Active repository:** [barocss/cad](https://github.com/barocss/cad), based on `origin/main`. Fetch before work and preserve unexpected changes. The [migration record](../../../docs/migration/README.md) maps the former `local/cad-dev` history and issue numbers.
 - **Evidence correction:** D482 records2167 PASS/0 FAIL/2 existing SKIP in a later full-kernel run than D433. Neither result is a new full-suite PASS at this audit HEAD. [D482 record](notes/vertical-contact-refusal-2026-11-04/README.md).

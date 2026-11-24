@@ -5,10 +5,7 @@ import { useStudioMeasurementReadouts, useStudioMeasurementSession } from './app
 import { selectedInstanceActions } from './assembly/selectedInstanceActions';
 import { pickPlacedPart } from './assembly/groundSelection';
 import { SelectedInstancesPanel } from './ui/SelectedInstancesPanel';
-import { commitOutlineRotation } from './sketch/outlineRotationCommit';
 import { useDirectPoleEditor } from './state/useDirectPoleEditor';
-import { SavedBezierPicker } from './ui/SavedBezierPicker';
-import { currentCoordinateFeedback } from './sketch/coordinateFeedback';
 import { useSketchDraftHistory } from './sketch/useSketchDraftHistory';
 import { useStudioProfilePresentation } from './app/useStudioProfilePresentation';
 import { modelWheelZoomAvailable, useWheelZoomPreference } from './viewport/wheelZoomPreference';
@@ -30,7 +27,6 @@ import { SHARED_HOLE_LAYOUT_EDIT } from './app/sharedHoleLayout';
 import { useSketchReopenCamera } from './sketch/useSketchReopenCamera';
 import { useBrowserActions } from './app/useBrowserActions';
 import { commandApplyReadiness, createCommandApplyQueue } from './state/commandApply';
-import { ownsEllipseAxesRecovery } from './sketch/ellipseAxesRecovery';
 import { sketchOffsetTarget } from './app/sketchOffsetTarget';
 import { useStudioReferenceReview } from './app/useStudioReferenceReview';
 import { bodyTopologyCounts } from './ui/bodyTopologyLabel';
@@ -38,7 +34,7 @@ import { viewportRecoveryToast } from './viewport/viewportRecovery';
 import { useSpecificationActions } from './state/useSpecificationActions';
 import { useViewportPicking, type ViewportMenu } from './viewport/useViewportPicking';
 import { useViewportHoleRegions } from './viewport/useViewportHoleRegions';
-import { isOutlinePickIssue, ownsPanelDrivingLength, studioSketchViewportActions } from './viewport/studioSketchViewportActions';
+import { isOutlinePickIssue, studioSketchViewportActions } from './viewport/studioSketchViewportActions';
 import { sewPreviewDirect } from './viewport/sewPreviewDirect';
 import { useSectionState } from './viewport/useSectionState';
 import { useSectionExclusion } from './viewport/useSectionExclusion';
@@ -63,14 +59,10 @@ import { useCommandGizmos } from './viewport/useCommandGizmos';
 import { useModelAppearance } from './viewport/useModelAppearance';
 import { useTwoPointSnap } from './sketch/useTwoPointSnap';
 import { useCircleFromChord } from './sketch/useCircleFromChord';
-import { CircleChordControls } from './sketch/CircleChordControls';
 import { useArcExtensionSnap } from './sketch/useArcExtensionSnap';
-import { SketchSnapControls } from './sketch/SketchSnapControls';
-import { defaultObjectSnapKinds, toggleObjectSnapKind } from './sketch/objectSnapKinds';
+import { defaultObjectSnapKinds } from './sketch/objectSnapKinds';
 import { usePathGap } from './sketch/usePathGap';
-import { PathGapControls } from './sketch/PathGapControls';
 import { useOverlaidLines } from './sketch/useOverlaidLines';
-import { OverlaidLinesControls } from './ui/OverlaidLinesControls';
 import { useInsetRelink } from './sketch/useInsetRelink';
 import { useMidpointSketch } from './sketch/useMidpointSketch';
 import { useSketchActions } from './sketch/useSketchActions';
@@ -117,7 +109,7 @@ import { ModelExportDialogs } from './files/ModelExportDialogs';
 import { StepExportPanel } from './files/StepExportPanel';
 import { changesBeyondVariability } from './app/documentChanges';
 import { sameMeshes, withMasses, samePlacement, meshVolume } from './app/bodyResults';
-import { activateDraftBezier, activateDraftOutline, draftShapeOrder, sketchCutInputs, TOOLS, sketchRegion } from './app/sketchControls';
+import { sketchRegion } from './app/sketchControls';
 import { validateRoundedInsetDocument } from '@barocss/cad-model/sketch/internal/roundedInsetRecipe';
 import { activeKey, historyHandleIsCurrent, type Active } from './app/commandState';
 import { emptySel, NO_CUTS, NO_INSTANCES, BROWSER_PLACEMENT, PALETTE_EXTRA } from './app/studioConstants';
@@ -206,8 +198,7 @@ import { Palette } from './ui/Palette';
 import { ShortcutHelp } from './ui/ShortcutHelp';
 import { InsetSourceReview } from './ui/InsetSourceReview';
 import { MidpointSketchReview } from './ui/MidpointSketchReview';
-import { SketchOutlineTools } from './ui/SketchOutlineTools';
-import { SketchPanel } from './ui/SketchPanel';
+import { StudioSketchInspector } from './ui/StudioSketchInspector';
 import { Timeline } from './ui/Timeline';
 import { clearRecovery, keepRecovery, offerRecovery, settleRecovery, type Recovery } from './app/recovery';
 import { blobStats, collectRecoveryBlobs, evictBlobs, loadRecoveryBlobs, saveRecoveryBlobs, setBlobStore } from '@barocss/cad-model/engine/blobs';
@@ -2397,30 +2388,16 @@ export function App() {
 
       {insetReview && <InsetSourceReview review={insetReview} cancel={() => insetRelink.cancel(true)} apply={insetRelink.apply} />}
       {midpointReview && <MidpointSketchReview review={midpointReview} cancel={cancelNativeReview} adopt={midpointSketch.adopt} />}
-      {sketch && <SketchPanel sketch={sketch} constraintInspection={constraintInspection} constraintDocument={doc} toolControls={<><SketchSnapControls
-        twoPoint={{ ...twoPointSnap, begin: () => { circleChord.cancel(); twoPointSnap.begin(); } }} extension={arcExtensionSnap} objectKinds={objectSnapKinds}
-        crossingToolSupported={usesNativeCrossings}
-        placedRotationLimited={placedSketchSnaps?.sources.some(({ instance }) => !supportsPlacedBoxSnapRotation(instance.rotation))}
-        onToggleObjectKind={kind => setObjectSnapKinds(kinds => toggleObjectSnapKind(kinds, kind))}
-        onExitObjectKinds={sketch.editDim ? () => sketchViewportActions.onDimEdit?.(null) : undefined} /><PathGapControls gap={pathGap} />
-        <CircleChordControls circle={{ ...circleChord, begin: () => { twoPointSnap.cancel(); circleChord.begin(); } }} /><OverlaidLinesControls scan={overlaidLines} /></>} toolLabel={TOOLS.find(t => t.tool === sketch.tool)!.label} finishError={sketchFinishError} error={sketchIssue?.ellipse && !ownsEllipseAxesRecovery(sketchIssue.ellipse, doc, sketch) ? null : sketchIssue?.reason ?? null}
-        onEditEllipseAxes={ownsEllipseAxesRecovery(sketchIssue?.ellipse, doc, sketch) ? () => ownsEllipseAxesRecovery(sketchIssue?.ellipse, docNow.current, renderedSketch.current.draft) && renderedSketch.current.generation === sketchGeneration.current : undefined}
-        referencePicker={<SavedBezierPicker sketch={sketch} onActivate={source => {
-          if (docNow.current !== doc || renderedSketch.current.draft !== sketch
-            || renderedSketch.current.generation !== bezierPickerOwner.generation
-            || sketchGeneration.current !== bezierPickerOwner.generation || liveShape.current !== sketch.shape) return;
-          const ordered = draftShapeOrder(sketch), index = ordered.indexOf(source);
-          if (index < 0 || ordered.lastIndexOf(source) !== index) return;
-          const next = source.kind === 'bezier' ? activateDraftBezier(sketch, source) : activateDraftOutline(sketch, index);
-          if (next && next !== sketch) setActiveOutline(next);
-        }} />}
-        onActivateOutline={sketch.editNode !== undefined && (sketch.tool === 'select' || sketch.tool === 'dimension') ? index => {
-          const source = sketchCutInputs(sketch).shapes[index];
-          const next = activateDraftOutline(sketch, draftShapeOrder(sketch).indexOf(source));
-          if (next && next !== sketch) setActiveOutline(next);
-        } : undefined}
-        conflictIds={!sketchFinishError && sketchIssue?.conflict?.doc === doc && sketchIssue.conflict.source === sketch.shape ? sketchIssue?.conflict?.ids : undefined} coordinateFeedback={currentCoordinateFeedback(coordinateFeedback, doc, sketch.shape, sketchGeneration.current)} onTransformOutline={(owner, ownerDoc, candidate) => commitOutlineRotation(owner, ownerDoc, candidate, { doc: docNow.current, rendered: renderedSketch.current.draft, liveShape: liveShape.current, generation: sketchGeneration.current, renderedGeneration: renderedSketch.current.generation }, shape => updateShape(shape, false, 'panel'))} onShape={(shape, coordinate, origin) => { if (origin && (origin.doc !== docNow.current || origin.source !== liveShape.current)) return; updateShape(shape, false, origin?.kind ?? 'panel', coordinate); }} onDrivingLength={(source, edge, value) => !ownsPanelDrivingLength(doc, docNow.current, sketch, renderedSketch.current.draft, bezierPickerOwner.generation, sketchGeneration.current) || sketchViewportActions.recoverPanelLength(source, edge, value)} onPlace={sketch.editNode === undefined ? placeSketch : undefined} onUi={patch => setSketch(s => s && { ...s, ...patch })} onBand={{ make: makeSketchBand, edit: editSketchBand, remove: removeSketchBand }} outlineTools={<SketchOutlineTools sketch={sketch} onOffset={offsetSketch} onLinkedInset={sketch.anchor?.kind === 'face' && sketch.anchor.face?.linkSource && !sketch.anchor.offset && !sketch.anchor.angle ? linkSketchInset : undefined} onToCurves={sketchToCurves} onUseOutline={sketch.anchor?.kind === 'face' && sketch.anchor.face?.outline?.length && !sketch.anchor.offset && !sketch.anchor.angle
-        ? useFaceOutline : undefined} />} />}
+      {sketch && <StudioSketchInspector sketch={sketch} document={{ shown: doc, live: docNow }} constraints={constraintInspection}
+        draft={{ coordinateFeedback, sketchIssue, renderedSketch, liveShape, updateShape, setActiveOutline, setSketch,
+          generation: sketchGeneration, pickerGeneration: bezierPickerOwner.generation, finishError: sketchFinishError }}
+        tools={{ twoPoint: twoPointSnap, circle: circleChord, extension: arcExtensionSnap, objectKinds: objectSnapKinds,
+          setObjectKinds: setObjectSnapKinds, crossingToolSupported: usesNativeCrossings,
+          placedRotationLimited: placedSketchSnaps?.sources.some(({ instance }) => !supportsPlacedBoxSnapRotation(instance.rotation)),
+          closeDimension: () => sketchViewportActions.onDimEdit?.(null), gap: pathGap, scan: overlaidLines }}
+        edit={{ place: placeSketch, recoverLength: sketchViewportActions.recoverPanelLength,
+          onOffset: offsetSketch, onLinkedInset: linkSketchInset, onToCurves: sketchToCurves, onUseOutline: useFaceOutline,
+          band: { make: makeSketchBand, edit: editSketchBand, remove: removeSketchBand } }} />}
       {bomOpen && !libraryOpen && !paramsOpen && !rendering && !drawing && !sketch && !active && <BomPanel doc={doc} name={fileName} evaluate={d => engine.part(d, revision.current++, 'read')} onCommit={next => commit(next, false)} onClose={() => setBomOpen(false)} onError={(title, hint) => setToast({ title, hint, detail: '', documentSource: { doc, name: fileName } })} />}
       {rebuildOpen && !bomOpen && !libraryOpen && !paramsOpen && !rendering && !drawing && !sketch && !active && <RebuildPanel store={rebuildStore} evaluated={evaluated} busy={busy} problems={assembly.problems} mode={effectiveDisplayMode} viewport={viewport} onClose={() => setRebuildOpen(false)} />}
       {versionsVisible && <VersionsPanel project={project} projectOpenFocus={{ remember: workspaceModeExit.rememberFocus, take: workspaceModeExit.takeFocus }} doc={doc} onMakeVersion={makeVersion} comparing={compareBase} onCompare={setCompareBase} evaluate={evaluateVersion} checkpointReview={checkpointReview}
