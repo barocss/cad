@@ -8,3 +8,6 @@ export {Revolve} from './components.js';
 export type {RevolveProps} from './components.js';
 export {Loop,LineSegment,ArcSegment,Profile,Outer,Voids} from './components.js';
 export type {LoopProps,LineSegmentProps,ArcSegmentProps,ProfileProps,OuterProps,VoidsProps} from './components.js';
+
+export {Hole} from './components.js';
+export type {HoleProps} from './components.js';

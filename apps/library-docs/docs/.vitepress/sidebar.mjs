@@ -120,6 +120,7 @@ export const sidebar = [
           { text: 'Definitions', link: '/packages/cad-react/components/definitions', lane: 'outer' },
           { text: 'Translate', link: '/packages/cad-react/components/translate', lane: 'outer' },
           { text: 'Rotate', link: '/packages/cad-react/components/rotate', lane: 'outer' },
+          { text: 'Hole', link: '/packages/cad-react/components/hole', lane: 'outer' },
         ],
       },
       { text: 'References and compiler', link: '/packages/cad-react/references', lane: 'outer' },

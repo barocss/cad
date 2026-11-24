@@ -18,7 +18,8 @@
     "revolve-api.tsx",
     "polygon-api.tsx",
     "profiles-api.tsx",
-    "observation-api.tsx"
+    "observation-api.tsx",
+    "hole-api.tsx"
   ],
   "extends": "../../tsconfig.json"
 }

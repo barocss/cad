@@ -2,6 +2,7 @@
 import * as React from 'react';
 import {createRoot} from 'react-dom/client';
 import {ProfileApp} from '../examples/ProfileApp';
+import {HolePropsFixture} from './hole-props-fixture';
 import type {EnginePort, ModelHost, MassPolicy} from '../src/engine';
 import {EngineClient} from '../../../apps/cad-studio/src/engine/client';
 import {withMasses} from '../../../apps/cad-studio/src/app/bodyResults';
@@ -58,4 +59,5 @@ Object.defineProperty(window, 'd529Profiles', {value: Object.freeze({
 })});
 const root = createRoot(document.getElementById('root')!);
 window.addEventListener('pagehide', () => { try { root.unmount(); } finally { client.dispose(); } }, {once: true});
-root.render(<ProfileApp engine={engine} massPolicy={massPolicy} onHost={onHost}/>);
+const App = new URLSearchParams(window.location.search).has('hole') ? HolePropsFixture : ProfileApp;
+root.render(<App engine={engine} massPolicy={massPolicy} onHost={onHost}/>);

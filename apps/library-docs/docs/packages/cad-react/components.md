@@ -119,3 +119,7 @@ D509 implements Loop, LineSegment, ArcSegment, Profile, Outer and Voids. The exi
 | [Voids](/packages/cad-react/components/voids) | 1..64 single-loop children or dense profile references |
 
 Profile and Loop produce typed profile data. Outer/Voids and LineSegment/ArcSegment are structural descriptors, not independent native features. Composite Profile emits its own consumed sketch without emitting orphan sketches for its sources. Extrude.profile and optional same-Part refs remain valid. Circle sources convert through the existing exact loop helper; no sampled approximation. Extrude admits explicit holes in its existing native bounds. Revolve uses one outer with holes, no additional regions; its geometry admission differs and new holed Revolve physical proof is NOT_RUN. Sweep/Loft, Regions, arbitrary planes, face inputs and constraints remain unexported. Part is one logical Model output and can contain multiple native pieces; no connected-solid guard is added.
+
+## Hole
+
+[Hole](/packages/cad-react/components/hole) cuts an existing solid with numeric center/radius and optional axis, side and flat-bottom depth. Supply one solid child or SolidRef. Omitted depth requests a through hole. Native geometry and refusal remain authoritative. This component does not expose face selection, pointed drilling, threads or patterns. Its new physical/Chrome qualification is NOT_RUN.

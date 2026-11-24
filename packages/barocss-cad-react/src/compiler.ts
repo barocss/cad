@@ -42,7 +42,8 @@ export type Difference = Identity & { kind: 'difference'; children: readonly (Ta
 export type TransformInput = {children:readonly Solid[];solid?:never}|{solid:RefToken;children?:never};
 export type Translate = Identity & {kind:'translate';offset:Point3} & TransformInput;
 export type Rotate = Identity & {kind:'rotate';axis:Axis;angle:number;pivot?:Point3} & TransformInput;
-export type Solid = Extrude | Revolve | Union | Difference | Translate | Rotate | SolidRef;
+export type Hole = Identity & {kind:'hole';center:Point2;radius:number;axis?:Axis;side?:'min'|'max';depth?:number} & TransformInput;
+export type Solid = Hole | Extrude | Revolve | Union | Difference | Translate | Rotate | SolidRef;
 export interface Definitions { kind: 'definitions'; children: readonly (Profile | Solid)[]; key?: string }
 export interface Part { kind: 'part'; units: 'mm'; children: readonly (Solid | Definitions)[] }
 export type Node = Profile | Solid | Target | Tools | Definitions | Outer | Voids | Segment;
@@ -60,6 +61,7 @@ export type NativeNode =
   | {id:string;kind:'revolve';sketch:number;axis:'x'|'y';angle:number;origin?:[number,number]}
   | { id: string; kind: 'union'; left: BodyRef; right: BodyRef }
   | { id: string; kind: 'difference'; parent: BodyRef; tool: BodyRef }
+  | {id:string;kind:'hole';parent:BodyRef;center:[number,number];radius:number;axis?:Axis;side?:'min'|'max';depth?:number}
   | {id:string;kind:'translate';parent:BodyRef;offset:[number,number,number]}
   | {id:string;kind:'rotate';parent:BodyRef;axis:Axis;angle:number;pivot?:[number,number,number]};
 export interface NativeDoc {
@@ -86,8 +88,8 @@ interface RecordNode { node: Node; path: string }
 interface IdRecord { id: string; kind: NativeNode['kind'] }
 const fail = (code: ErrorCode, message: string): never => { throw new IrError(code, message); };
 const profileKind = (kind:string) => ['rectangle','circle','polygon','loop','profile'].includes(kind);
-const geometric = (kind: string) => ['rectangle', 'circle', 'polygon', 'loop', 'profile', 'extrude', 'revolve', 'union', 'difference', 'translate', 'rotate'].includes(kind);
-const solid = (kind: string) => ['extrude', 'revolve', 'union', 'difference', 'translate', 'rotate', 'solid-ref'].includes(kind);
+const geometric = (kind: string) => ['rectangle', 'circle', 'polygon', 'loop', 'profile', 'extrude', 'revolve', 'union', 'difference', 'hole', 'translate', 'rotate'].includes(kind);
+const solid = (kind: string) => ['extrude', 'revolve', 'union', 'difference', 'hole', 'translate', 'rotate', 'solid-ref'].includes(kind);
 const list = (n: Node): readonly Node[] => 'children' in n && n.children !== undefined ? n.children : [];
 const pair = (value: Point2): [number, number] => {
   if (!Array.isArray(value) || value.length !== 2 || !value.every(Number.isFinite)) fail('INVALID_PARAMETER', 'Two finite coordinates required');
@@ -120,7 +122,7 @@ export class CompositionCompiler {
         const keys = new Set<string>();
         return children.map((node, index) => {
           if (!node || typeof node !== 'object' || typeof node.kind !== 'string') fail('TYPE', 'Expected realized typed host node');
-          if (!['rectangle', 'circle', 'polygon', 'loop', 'profile', 'outer', 'voids', 'line-segment', 'arc-segment', 'extrude', 'revolve', 'union', 'difference', 'translate', 'rotate', 'solid-ref', 'target', 'tools', 'definitions'].includes(node.kind)) {
+          if (!['rectangle', 'circle', 'polygon', 'loop', 'profile', 'outer', 'voids', 'line-segment', 'arc-segment', 'extrude', 'revolve', 'union', 'difference', 'hole', 'translate', 'rotate', 'solid-ref', 'target', 'tools', 'definitions'].includes(node.kind)) {
             fail('UNSUPPORTED_CAPABILITY', `Unsupported geometry capability: ${node.kind}`);
           }
           if (node.key !== undefined) {
@@ -182,7 +184,7 @@ export class CompositionCompiler {
         if (items.length !== 1) fail('CARDINALITY', `${label} requires one output`); return items[0];
       };
       const input = (r: RecordNode, field: 'profile' | 'solid'): RecordNode => {
-        const n = r.node as Extrude | Revolve | Target | Translate | Rotate | Outer;
+        const n = r.node as Extrude | Revolve | Target | Hole | Translate | Rotate | Outer;
         const token = field in n ? (n as unknown as Record<string, RefToken>)[field] : undefined;
         const hasChildren = 'children' in n && n.children !== undefined;
         if ((token !== undefined) === hasChildren) fail('EXCLUSIVE_INPUT', `Supply ${field} reference OR children`);
@@ -291,6 +293,15 @@ export class CompositionCompiler {
             if((n.axis!=='x'&&n.axis!=='y')||!Number.isFinite(n.angle)||!(n.angle>0&&n.angle<=360)) fail('INVALID_PARAMETER','Revolve requires sketch x/y axis and finite angle in (0,360]');
             if(n.origin!==undefined&&(!Array.isArray(n.origin)||n.origin.length!==2||!Number.isFinite(n.origin[0])||!Number.isFinite(n.origin[1]))) fail('INVALID_PARAMETER','Revolve origin requires two finite mm coordinates');
             index=emit({id:id(r,'solid','revolve'),kind:'revolve',sketch,axis:n.axis,angle:n.angle,...(n.origin===undefined?{}:{origin:[...n.origin] as [number,number]})});break;
+          }
+          case 'hole': {
+            const parent=lower(input(r,'solid'),'solid'),center=strictPair(n.center);
+            if(!Number.isFinite(n.radius)||n.radius<=0) fail('INVALID_PARAMETER','Hole radius must be finite and positive');
+            if(n.axis!==undefined&&!['x','y','z'].includes(n.axis)) fail('INVALID_PARAMETER','Hole axis must be x, y or z');
+            if(n.side!==undefined&&n.side!=='min'&&n.side!=='max') fail('INVALID_PARAMETER','Hole side must be min or max');
+            if(n.depth!==undefined&&(!Number.isFinite(n.depth)||n.depth<=0)) fail('INVALID_PARAMETER','Hole depth must be finite and positive');
+            index=emit({id:id(r,'solid','hole'),kind:'hole',parent:body(parent),center,radius:n.radius,
+              ...(n.axis===undefined?{}:{axis:n.axis}),...(n.side===undefined?{}:{side:n.side}),...(n.depth===undefined?{}:{depth:n.depth})});break;
           }
           case 'translate': {
             const parent=lower(input(r,'solid'),'solid');

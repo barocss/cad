@@ -9,9 +9,9 @@ export interface ModelLifecycle {
   complete(model: Compiled): void;
   detached(): void;
 }
-type Kind = 'part' | 'rectangle' | 'circle' | 'polygon' | 'loop' | 'profile' | 'outer' | 'voids' | 'line-segment' | 'arc-segment' | 'extrude' | 'revolve' | 'union' | 'difference' | 'target' | 'tools' | 'definitions' | 'translate' | 'rotate';
+type Kind = 'part' | 'rectangle' | 'circle' | 'polygon' | 'loop' | 'profile' | 'outer' | 'voids' | 'line-segment' | 'arc-segment' | 'extrude' | 'revolve' | 'union' | 'difference' | 'target' | 'tools' | 'definitions' | 'hole' | 'translate' | 'rotate';
 export interface ProfileHandle { readonly kind: 'rectangle' | 'circle' | 'polygon' | 'loop' | 'profile' }
-export interface SolidHandle { readonly kind: 'extrude' | 'revolve' | 'union' | 'difference' | 'translate' | 'rotate' }
+export interface SolidHandle { readonly kind: 'extrude' | 'revolve' | 'union' | 'difference' | 'hole' | 'translate' | 'rotate' }
 export type ProfileRef = React.RefObject<ProfileHandle | null>;
 export type SolidRef = React.RefObject<SolidHandle | null>;
 type CadRef = React.RefObject<ProfileHandle | SolidHandle | null>;
@@ -74,6 +74,7 @@ class Session {
         case 'extrude': return { ...meta, kind: 'extrude', distance: p.distance as number,
           ...(p.from === undefined ? {} : { from: p.from as number }),
           ...(p.profile === undefined ? {children:nested} : {profile:p.profile,...(nested.length ? {children:nested} : {})}) } as NodeIR;
+        case 'hole': return {...meta,kind:'hole',center:p.center,radius:p.radius,...(p.axis===undefined?{}:{axis:p.axis}),...(p.side===undefined?{}:{side:p.side}),...(p.depth===undefined?{}:{depth:p.depth}),...(p.solid===undefined?{children:nested}:{solid:p.solid,...(nested.length?{children:nested}:{})})} as NodeIR;
         case 'translate': case 'rotate': return {...meta,kind:entry.kind,...(entry.kind==='translate'?{offset:p.offset}:{axis:p.axis,angle:p.angle,...(p.pivot===undefined?{}:{pivot:p.pivot})}),...(p.solid===undefined?{children:nested}:{solid:p.solid,...(nested.length?{children:nested}:{})})} as NodeIR;
         case 'union': return { ...meta, kind: 'union', children: nested } as NodeIR;
         case 'difference': return { ...meta, kind: 'difference', children: nested } as NodeIR;
@@ -171,3 +172,6 @@ export function ArcSegment(props:ArcSegmentProps){return <Host kind="arc-segment
 export function Profile({ref,children}:ProfileProps){return <Host kind="profile" props={{}} binding={ref}>{children}</Host>;}
 export function Outer({children,...props}:OuterProps){return <Host kind="outer" props={props}>{children}</Host>;}
 export function Voids({children,...props}:VoidsProps){return <Host kind="voids" props={props}>{children}</Host>;}
+
+export type HoleProps={center:Point2;radius:number;axis?:Axis;side?:'min'|'max';depth?:number;ref?:SolidRef}&SolidInput;
+export function Hole({ref,children,...props}:HoleProps){return <Host kind="hole" props={props} binding={ref}>{children}</Host>;}
