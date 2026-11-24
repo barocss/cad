@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createFlow, sha256 } from './flow-helper.mjs';
+import { installCrossingRebuildHold, verifyCrossingLifetime } from './native-edge-plane-snap-lifetime.mjs';
 
 const anchorTools = process.argv[3] === '--anchor-tools';
 const centreArc = process.argv[3] === '--centre-arc';
@@ -14,8 +15,10 @@ const nearbyCrossings = process.argv[3] === '--nearby-crossings';
 const snappedCircleHole = process.argv[3] === '--snapped-circle-hole';
 const crossingLimits = process.argv[3] === '--crossing-limits';
 const normalSketchView = process.argv[3] === '--normal-sketch-view';
+const lifetime = process.argv[3] === '--lifetime';
 const pins = [
   'apps/cad-studio/test/native-edge-plane-snap-browser.mjs',
+  ...(lifetime ? ['apps/cad-studio/test/native-edge-plane-snap-lifetime.mjs', 'apps/cad-studio/src/ui/NodeEditor.tsx'] : []),
   'apps/cad-studio/src/App.tsx',
   ...(normalSketchView ? ['apps/cad-studio/src/viewport/Viewport.tsx', 'apps/cad-studio/src/ui/ViewDisplayControls.tsx'] : []),
   'apps/cad-studio/src/viewport/modelSketchSnaps.ts',
@@ -29,7 +32,7 @@ const pins = [
 ];
 const f = await createFlow({
   name: 'native-edge-plane-snap', output: process.argv[2],
-  envFrozen: normalSketchView ? 'D1124_SOURCE_FROZEN' : crossingLimits ? 'D1123_SOURCE_FROZEN'
+  envFrozen: lifetime ? 'D1895_SOURCE_FROZEN' : normalSketchView ? 'D1124_SOURCE_FROZEN' : crossingLimits ? 'D1123_SOURCE_FROZEN'
     : snappedCircleHole ? 'D1122_SOURCE_FROZEN' : nearbyCrossings ? 'D1121_SOURCE_FROZEN'
     : smallCircleRadius ? 'D1120_SOURCE_FROZEN' : constructionCircleRadius ? 'D1117_SOURCE_FROZEN' : slotEndWidth ? 'D1111_SOURCE_FROZEN'
     : circleEndRadius ? 'D1110_SOURCE_FROZEN' : centreArc ? 'D1109_SOURCE_FROZEN' : anchorTools ? 'D1108_SOURCE_FROZEN' : 'D864_SOURCE_FROZEN',
@@ -802,6 +805,7 @@ await f.run(async () => {
   f.browser.newContext = async options => {
     const context = await newContext({ ...options, deviceScaleFactor, acceptDownloads: false, serviceWorkers: 'block' });
     context.setDefaultTimeout(10000);
+    if (lifetime) await context.addInitScript(installCrossingRebuildHold);
     await context.route('**/*', route => {
       const url = new URL(route.request().url());
       if (url.hostname === 'fonts.googleapis.com') return route.fulfill({ contentType: 'text/css', body: '' });
@@ -817,6 +821,11 @@ await f.run(async () => {
   await chooser.setFiles({ name: fileName, mimeType: 'application/json', buffer: bytes });
   await f.same(source);
   f.report.observations.push({ label: 'source', bytes: bytes.length, sha256: sha256(bytes) });
+  if (lifetime) {
+    await verifyCrossingLifetime({ f, source, fileName, begin, pixel, hover, cue, target, endpoint, other, saveInProject });
+    assert.deepEqual(f.report.downloads, []);
+    return;
+  }
   checkNative(await f.inspect('source-edge', source));
   if (normalSketchView) {
     await checkNormalSketchView();
