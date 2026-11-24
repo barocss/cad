@@ -1,16 +1,20 @@
 import assert from 'node:assert/strict';
 import { join } from 'node:path';
-import { writeFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 import { createFlow, sha256 } from './flow-helper.mjs';
 import { clickModelCommand } from './model-rail-helper.mjs';
 import { holdFitDrawingReply } from './hold-fit-drawing-reply.mjs';
 
 const late = process.argv.includes('--late');
-const paired = late || process.argv.includes('--pair');
+const unsupported = process.argv.includes('--unsupported');
+const paired = late || unsupported || process.argv.includes('--pair');
+const assemblyFixture = 'apps/cad-studio/test/fixtures/assembly-cut.bcad';
 const shaftEstimate = { class: 'g6', over: 10, upTo: 18, upper: -.006, lower: -.017, estimate: true };
-const f=await createFlow({name:'drawing-fit-list',output:process.argv[2],envFrozen: late ? 'D1875_SOURCE_FROZEN' : paired ? 'D1874_SOURCE_FROZEN' : 'DRAWING_FITS_FROZEN',initialFiles:['apps/cad-studio/test/drawing-fit-list-browser.mjs','apps/cad-studio/test/model-rail-helper.mjs', ...(late ? ['apps/cad-studio/test/hold-fit-drawing-reply.mjs','apps/cad-studio/src/ui/useDrawingSheet.ts'] : [])],
+const f=await createFlow({name:'drawing-fit-list',output:process.argv[2],envFrozen: unsupported ? 'D1883_SOURCE_FROZEN' : late ? 'D1875_SOURCE_FROZEN' : paired ? 'D1874_SOURCE_FROZEN' : 'DRAWING_FITS_FROZEN',initialFiles:['apps/cad-studio/test/drawing-fit-list-browser.mjs','apps/cad-studio/test/model-rail-helper.mjs', ...(unsupported ? [assemblyFixture] : []), ...(late ? ['apps/cad-studio/test/hold-fit-drawing-reply.mjs','apps/cad-studio/src/ui/useDrawingSheet.ts'] : [])],
  qualification: late
   ? '#269 late fit-list Drawing replies after File Open and New part.'
+  : unsupported
+  ? '#269 distinguish an empty list from source loss and unsupported drawing scope in Studio and both actual exports.'
   : paired
   ? '#269 an actual fitted bore and shaft, mixed sourced/estimate rows, two separate diameter identities, and reversible row deletion.'
   : '#269 single base-part sheet, two authored diameter dimensions of one Ø12 bore, explicit fit list and source-table replacement.',
@@ -30,7 +34,8 @@ import {dispatchTool} from '@barocss/cad-model/chat/tools';
 const extra=JSON.parse(process.argv[3]);
 if(extra.prepare){
  const c=commands.find(c=>c.id==='tube')!,ctx={doc:emptyDoc(),bodies:[],selection:{faces:[],edges:[],bodies:[]}};
- const tube=c.build!(ctx,{...c.defaults!(ctx),r:10,ri:6,h:24,x:0,y:0,z:0});
+ const built=c.build!(ctx,{...c.defaults!(ctx),r:10,ri:6,h:24,x:0,y:0,z:0});
+ const tube=extra.right?{...built,nodes:built.nodes.map((node,i)=>i===0&&node.kind==='sketch'?{...node,plane:{origin:[0,0,0],normal:[1,0,0],xAxis:[0,1,0]}}:node)}:built;
  const cylinder=commands.find(c=>c.id==='cylinder')!, pinCtx={...ctx,doc:tube};
  const base=extra.paired?cylinder.build!(pinCtx,{...cylinder.defaults!(pinCtx),r:6,h:24,x:0,y:0,z:-5}):tube;
  const hole={face:'n1.hole0.side0',class:'H7'}, shaft={face:'n3.side0',class:'g6'};
@@ -39,14 +44,25 @@ if(extra.prepare){
  const doc={...base,fits:{version:1 as const,faces:extra.paired?[hole,shaft]:[hole],tables,
    ...(extra.paired?{pairs:[{hole:hole.face,shaft:shaft.face}]}:{})}};
  const e=evaluateDoc(doc,1);assert.ok(e.ok,e.ok?'':e.error.detail);
- const auto=await dispatchTool({doc,bodies:e.bodies},'auto_dimension',{},async d=>evaluateDoc(d,1));assert.ok(!auto.isError,auto.content);
- const input=drawingInputs(auto.state.doc);assert.ok(typeof input!=='string',String(input));
- const bore=issueContext(input).sheet.dimensions.find(r=>r.ok&&r.kind==='diameter'&&r.dim.view==='top'&&r.dim.kind==='diameter'&&r.dim.edge.includes(hole.face)&&Math.abs(r.value-12)<1e-9);assert.ok(bore?.ok&&bore.dim.kind==='diameter','actual ordinary Ø12 reference');
- const drawing=readDrawing({scope:{kind:'part'},sheet:'A3',scale:1,projection:'third',views:['front','top'],dimensions:[{...bore.dim,id:'fit-a',place:[28,20]},{...bore.dim,id:'fit-b',place:[-28,20],count:2}]});
+ const drawingViews=extra.right?['front','top','right']:['front','top'];
+ let dimension;
+ if(extra.right){
+   const input=drawingInputs(doc);assert.ok(typeof input!=='string',String(input));
+   const rim=input.views.right.edges.find(edge=>edge.kind==='circle'&&edge.circle&&edge.name.includes(hole.face)&&Math.abs(edge.circle.radius-6)<1e-9);
+   assert.ok(rim?.circle,'actual right-view Ø12 bore');
+   dimension={kind:'diameter',view:'right',edge:rim.name,near:rim.circle.center};
+ }else{
+   const auto=await dispatchTool({doc,bodies:e.bodies},'auto_dimension',{},async d=>evaluateDoc(d,1));assert.ok(!auto.isError,auto.content);
+   const input=drawingInputs(auto.state.doc);assert.ok(typeof input!=='string',String(input));
+   const bore=issueContext(input).sheet.dimensions.find(r=>r.ok&&r.kind==='diameter'&&r.dim.view==='top'&&r.dim.kind==='diameter'&&r.dim.edge.includes(hole.face)&&Math.abs(r.value-12)<1e-9);
+   assert.ok(bore?.ok&&bore.dim.kind==='diameter','actual ordinary Ø12 reference');
+   dimension=bore.dim;
+ }
+ const drawing=readDrawing({scope:{kind:'part'},sheet:'A3',scale:1,projection:'third',views:drawingViews,dimensions:[{...dimension,id:'fit-a',place:[28,20]},{...dimension,id:'fit-b',place:[-28,20],count:2}]});
  const prepared={...doc,drawing};
  const signed=extra.paired?captureSignatures(prepared,e.bodies):prepared;
  if(extra.paired)assert.ok(signed.drawing?.dimensions.every(d=>d.kind==='diameter'&&d.sig?.k==='curve'));
- console.log(JSON.stringify({doc:signed,fixtureReference:bore.dim}));
+ console.log(JSON.stringify({doc:signed,fixtureReference:dimension}));
 }else{const doc=JSON.parse(readFileSync(process.argv[2],'utf8'));const input=drawingInputs(doc);assert.ok(typeof input!=='string',String(input));const ctx=issueContext(input);console.log(JSON.stringify({doc,sheet:ctx.sheet}));}
 `,oracleSource:String.raw`
 import json,sys,re,xml.etree.ElementTree as ET
@@ -64,6 +80,22 @@ if cur:entities.append(cur)
 def value(e,k):return next((v for c,v in e if c==k),'')
 def decode(s):return re.sub(re.escape(chr(92)+'U+')+r'([a-fA-F0-9]{4})',lambda m:chr(int(m[1],16)),s)
 dxf=[decode(value(e,1)) for e in entities if value(e,0)=='TEXT']
+if 'scopeCase' in q:
+ for texts in [svg,dxf]:
+  joined=' '.join(' '.join(texts).split())
+  assert 'Fit scope witness' in texts, texts
+  assert not any(re.fullmatch(r'fit-[ab] \((front|top|right)\)', text) for text in texts), texts
+  assert 'shop-test row' not in joined and not any(re.match(r'^H7(?:/g6)?(?:\s+\(|$)', text) for text in texts), texts
+  if q['scopeCase']=='missing-source-edge':
+   assert any(text.startswith('2') and 'H7/g6' in text for text in texts), texts
+  if q['reason']:
+   assert 'NOT AVAILABLE' in texts and q['reason'] in joined, texts
+   assert 'No classed diameter dimensions' not in joined, texts
+  else:
+   assert 'FIT DIMENSIONS' in texts and 'No classed diameter dimensions' in joined, texts
+   assert 'NOT AVAILABLE' not in texts, texts
+ print(json.dumps({'status':'PASS','case':q['scopeCase'],'reason':q['reason'],'formats':['SVG','DXF']}))
+ sys.exit(0)
 ids=q['ids']
 expected=['FIT DIMENSIONS','12',*[id+' (top)' for id in ids]]
 for texts in [svg,dxf]:
@@ -199,6 +231,51 @@ async function verifyLateFitList(original) {
   f.report.observations.push({ realDelayedReplies: [first, second], fileOpenSamples: after.length, newPartSamples: blankSamples.length });
 }
 
+async function verifyUnsupportedFitLists(accepted) {
+  const tables = [...accepted.drawing.tables,
+    { id: 'fit-scope-witness', title: 'CONTROL', columns: [{ key: 'check', label: 'CHECK' }], rows: [['Fit scope witness']], at: [18, 135] }];
+  const normal = { ...accepted, drawing: { ...accepted.drawing, tables } };
+  const { doc: right } = await f.inspect('prepare-right', {}, { prepare: true, right: true });
+  const shown = { ...right, drawing: { ...right.drawing, tables } };
+  await openFitDocument(shown, 'right-source-shown');
+  await drawing();
+  await f.page.waitForFunction(() => window.__studioDrawing()?.tables?.some(table => table.id === 'fits' && !table.error) &&
+    document.querySelector('[aria-label="Drawing sheet"]')?.textContent.includes('fit-a (right)'));
+  await f.snapshot('right-source-shown');
+  const [first, second] = normal.drawing.dimensions;
+  const lost = { ...first, edge: 'missing-face|missing-rim' };
+  delete lost.sig;
+  const { instances } = JSON.parse(await readFile(join(f.repo, assemblyFixture), 'utf8'));
+  const placed = { ...normal, instances, drawing: { ...normal.drawing, dimensions: [] } };
+  const cases = [
+    { label: 'empty-supported-list', fit: { ...normal.fits, faces: [], pairs: [] } },
+    { label: 'hidden-source-view', source: shown, drawing: { views: ['front', 'top'] }, reason: 'view (right) is not shown' },
+    { label: 'missing-source-edge', drawing: { dimensions: [lost, second] }, reason: 'The circle it measured is no longer in the part' },
+    { label: 'classed-radius', drawing: { dimensions: [{ ...first, kind: 'radius' }, second] }, reason: 'only ordinary-view diameter dimensions are supported' },
+    { label: 'multiple-sheets', drawing: { sheets: [{ id: 'second', name: 'Second sheet', views: ['front'] }] }, reason: 'only a single sheet is supported' },
+    { label: 'assembly-scope', source: placed, drawing: { scope: { kind: 'assembly' } }, reason: 'only the base part is supported' },
+    { label: 'instance-scope', source: placed, drawing: { scope: { kind: 'part', part: instances[0].id } }, reason: 'only the base part is supported' },
+    { label: 'base-scope-with-instances', source: placed, reason: 'documents with placed instances are not supported' },
+  ];
+  for (const item of cases) {
+    f.phase = `Check live Fit dimensions: ${item.label}`;
+    const source = item.source ?? normal;
+    const doc = { ...source, fits: item.fit ?? source.fits, drawing: { ...source.drawing, ...item.drawing } };
+    await openFitDocument(doc, item.label);
+    await drawing(doc.drawing.dimensions.length);
+    await f.page.waitForFunction(reason => {
+      const table = window.__studioDrawing?.()?.tables?.find(t => t.id === 'fits');
+      return table && (reason ? table.error?.includes(reason) :
+        !table.error && document.querySelector('[aria-label="Drawing sheet"]')?.textContent.includes('No classed diameter dimensions'));
+    }, item.reason ?? null);
+    await f.ready();
+    assert.deepEqual(await f.doc(), doc);
+    await f.runOracle({ ...await exported(item.label), scopeCase: item.label, reason: item.reason ?? null }, item.label);
+    assert.deepEqual(await f.doc(), doc);
+    await f.snapshot(item.label);
+  }
+}
+
 await f.run(async()=>{
  const { doc: prepared } = await f.inspect('prepare', {}, { prepare: true, paired, shaftEstimate });
  if (late) {
@@ -222,6 +299,7 @@ await f.run(async()=>{
  await drawing();
  await controls().locator(':scope > summary').click();await button('Add fit dimension list').click();await listReady();const added=await f.doc();assert.deepEqual(added.drawing.tables,[{id:'fits',from:'fits'}]);assert.deepEqual(added.nodes,seed.nodes);assert.deepEqual(added.drawing.dimensions,seed.drawing.dimensions);
  await verifyFits('01-added', seed, false);await f.snapshot('01-added');
+ if (unsupported) return verifyUnsupportedFitLists(added);
  if (late) {
    await verifyLateFitList(added);
    return;
