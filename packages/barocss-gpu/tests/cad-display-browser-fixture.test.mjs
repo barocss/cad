@@ -11,7 +11,7 @@ const root = fileURLToPath(new URL('../../../', import.meta.url)), temporary = a
 let api;
 try {
   const outfile = join(temporary, 'fixture.mjs');
-  await build({ stdin: { contents: "export * from './packages/barocss-gpu/tests/fixtures/cad-display-browser.ts'; export {sectionedBodies,sectionedInstances} from './apps/cad-studio/src/viewport/sectionView.ts';", resolveDir: root, loader: 'ts' }, outfile, bundle: true, platform: 'node', format: 'esm', logLevel: 'silent', alias: { '@barocss/gpu': resolve(root, 'packages/barocss-gpu/src'), '@barocss/cad-model': resolve(root, 'packages/barocss-cad-model/src'), '@barocss/cad': resolve(root, 'packages/barocss-cad/src') } });
+  await build({ stdin: { contents: "export * from './packages/barocss-gpu/tests/fixtures/cad-display-browser.ts'; export {sectionedBodies,sectionedInstances} from './apps/cad-studio/src/viewport/sectionView.ts';", resolveDir: root, loader: 'ts' }, outfile, bundle: true, platform: 'node', format: 'esm', logLevel: 'silent', alias: { '@barocss/gpu': resolve(root, 'packages/barocss-gpu/src'), '@barocss/cad-model': resolve(root, 'packages/barocss-cad-model/src') } });
   api = await import(pathToFileURL(outfile).href);
 } finally { await rm(temporary, { recursive: true, force: true }); }
 

@@ -5,20 +5,41 @@ import assert from 'node:assert/strict';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
+import { createRequire } from 'node:module';
+import { act, createElement } from 'react';
+import { JSDOM } from 'jsdom';
 
 const root = fileURLToPath(new URL('../../../', import.meta.url));
 const temporary = await mkdtemp(join(tmpdir(), 'cad-instance-diagnostics-'));
+const dom = new JSDOM('<!doctype html><body></body>', { url: 'http://localhost' });
+Object.assign(globalThis, { window: dom.window, document: dom.window.document, IS_REACT_ACT_ENVIRONMENT: true });
+test.after(() => {
+  dom.window.close();
+  delete globalThis.window;
+  delete globalThis.document;
+  delete globalThis.IS_REACT_ACT_ENVIRONMENT;
+});
+const { createRoot } = await import('react-dom/client');
+const require = createRequire(import.meta.url);
 let displayModeScope, instanceDisplayStatus, instancePickFields, snapshotInstanceIsolation, ViewDisplayControls;
 try {
-  const outfile = join(temporary, 'diagnostics.mjs');
+  const outfile = join(temporary, 'diagnostics.cjs');
   await build({
     stdin: { contents: 'export { displayModeScope, instanceDisplayStatus, instancePickFields, snapshotInstanceIsolation } from "./apps/cad-studio/src/viewport/Viewport.tsx"; export { ViewDisplayControls } from "./apps/cad-studio/src/ui/ViewDisplayControls.tsx";', resolveDir: root },
-    outfile, bundle: true, platform: 'node', format: 'esm', jsx: 'automatic', logLevel: 'silent',
-    alias: { '@': resolve(root, 'apps/cad-studio/src'), '@barocss/gpu/viewer': resolve(root, 'packages/barocss-gpu/src/viewer/index.ts'), '@barocss/gpu': resolve(root, 'packages/barocss-gpu/src/index.ts'), '@barocss/cad-model': resolve(root, 'packages/barocss-cad-model/src'), '@barocss/cad': resolve(root, 'packages/barocss-cad/src') },
+    outfile, bundle: true, platform: 'node', format: 'cjs', jsx: 'automatic', logLevel: 'silent',
+    plugins: [{
+      name: 'shared-react',
+      setup(builder) {
+        builder.onResolve({ filter: /^react(?:-dom)?(?:\/|$)/ }, ({ path }) => ({
+          path: require.resolve(path), external: true,
+        }));
+      },
+    }],
+    alias: { '@': resolve(root, 'apps/cad-studio/src'), '@barocss/gpu/viewer': resolve(root, 'packages/barocss-gpu/src/viewer/index.ts'), '@barocss/gpu': resolve(root, 'packages/barocss-gpu/src/index.ts'), '@barocss/cad-model': resolve(root, 'packages/barocss-cad-model/src') },
   });
-  ({ displayModeScope, instanceDisplayStatus, instancePickFields, snapshotInstanceIsolation, ViewDisplayControls } = await import(pathToFileURL(outfile).href));
+  ({ displayModeScope, instanceDisplayStatus, instancePickFields, snapshotInstanceIsolation, ViewDisplayControls } = require(outfile));
 } finally { await rm(temporary, { recursive: true, force: true }); }
 
 const defaultStatus = Object.freeze({ requested: 'shaded-with-edges', effective: 'shaded-with-edges', supported: true });
@@ -61,32 +82,51 @@ test('placed instances do not create a scope guard; Render/analysis/direct/propo
   ]) assert.match(displayModeScope({ instances, ...props }), reason);
 });
 
-// Inspect the real component's React elements and invoke its actual control handlers.
-function controls(display) {
-  return ViewDisplayControls({
-    model: { doc: { nodes: [], instances: [] }, bodies: [], instancesPlaced: [] }, viewport: { current: null }, cornerRight: { current: null },
-    display: { displayOpen: true, displayMode: 'shaded-with-edges', effectiveDisplayMode: 'shaded-with-edges', ...display },
-    view: { ortho: false, ao: true, theme: 'dark', rendering: false, printing: false, viewBackend: 'webgpu' },
-    section: { section: null }, analysis: { analysis: null, mapKind: null, mapLegend: null }, picking: { pickFilter: 'all', snapStep: 1 }, explodeStore: {},
-  });
+// Mount the actual controls so React owns their state and input events.
+function controls(t) {
+  const host = document.createElement('div');
+  document.body.append(host);
+  const root = createRoot(host);
+  const doc = { nodes: [], instances: [] };
+  t.after(async () => { await act(async () => root.unmount()); host.remove(); });
+  return {
+    labeled: name => [...host.querySelectorAll('[aria-label]')].filter(node => node.getAttribute('aria-label') === name),
+    host,
+    async update(display) {
+      await act(async () => root.render(createElement(ViewDisplayControls, {
+        doc, viewport: { current: null }, cornerRight: { current: null },
+        display: { displayOpen: true, displayMode: 'shaded-with-edges', effectiveDisplayMode: 'shaded-with-edges', ...display },
+        view: { ortho: false, ao: true, theme: 'dark', rendering: false, printing: false, viewBackend: 'webgpu' },
+        section: { section: null }, analysis: { analysis: null, mapKind: null, mapLegend: null },
+        picking: { pickFilter: 'all', snapStep: 1 }, explodeStore: {},
+      })));
+    },
+  };
 }
-function elements(tree, predicate, found = []) {
-  if (Array.isArray(tree)) { for (const child of tree) elements(child, predicate, found); }
-  else if (tree?.props) { if (predicate(tree)) found.push(tree); elements(tree.props.children, predicate, found); }
-  return found;
-}
-const labeled = (tree, name) => elements(tree, element => element.props['aria-label'] === name);
 
-test('one real display selector exposes five modes, guarded fallback and the mode-change handler', () => {
-  const calls = [], display = { displayMode: 'wireframe', effectiveDisplayMode: 'shaded-with-edges', displayScopeReason: 'Model view only', displayModeReason: 'Model view only', displayModeNotice: 'Model view only', clearDisplayModeFailure: () => calls.push('clear'), setDisplayMode: mode => calls.push(mode) };
-  const tree = controls(display), selectors = labeled(tree, 'CAD display mode'); assert.equal(selectors.length, 1);
-  const select = selectors[0]; assert.equal(select.props.value, 'shaded-with-edges'); assert.equal(select.props.disabled, true);
-  assert.equal(select.props['data-display-mode-requested'], 'wireframe'); assert.equal(select.props['data-display-mode-supported'], false);
-  assert.deepEqual(elements(select, element => element.type === 'option').map(element => element.props.value), ['shaded-with-edges', 'hidden-lines-removed', 'hidden-lines-dashed', 'wireframe', 'x-ray']);
-  assert.equal(elements(tree, element => element.props.role === 'status')[0].props.children.join(''), 'Model view only Shaded with edges is active.');
-  const enabled = labeled(controls({ ...display, displayScopeReason: undefined, displayModeReason: undefined, effectiveDisplayMode: 'wireframe' }), 'CAD display mode')[0];
-  assert.equal(enabled.props.disabled, false); assert.equal(enabled.props.value, 'wireframe');
-  enabled.props.onChange({ target: { value: 'x-ray' } }); assert.deepEqual(calls, ['clear', 'x-ray']);
+test('one real display selector exposes five modes, guarded fallback and the mode-change handler', async t => {
+  const calls = [], display = { displayMode: 'wireframe', effectiveDisplayMode: 'shaded-with-edges', displayScopeReason: 'Model view only',
+    displayModeReason: 'Model view only', displayModeNotice: 'Model view only', clearDisplayModeFailure: () => calls.push('clear'),
+    setDisplayMode: mode => calls.push(mode) };
+  const panel = controls(t);
+  await panel.update(display);
+  const selectors = panel.labeled('CAD display mode');
+  assert.equal(selectors.length, 1);
+  const [select] = selectors;
+  assert.equal(select.value, 'shaded-with-edges');
+  assert.equal(select.disabled, true);
+  assert.equal(select.dataset.displayModeRequested, 'wireframe');
+  assert.equal(select.dataset.displayModeSupported, 'false');
+  assert.deepEqual([...select.options].map(option => option.value), ['shaded-with-edges', 'hidden-lines-removed', 'hidden-lines-dashed', 'wireframe', 'x-ray']);
+  assert.equal(panel.host.querySelector('[role="status"]').textContent, 'Model view only Shaded with edges is active.');
+  await panel.update({ ...display, displayScopeReason: undefined, displayModeReason: undefined, effectiveDisplayMode: 'wireframe' });
+  assert.equal(select.disabled, false);
+  assert.equal(select.value, 'wireframe');
+  await act(async () => {
+    select.value = 'x-ray';
+    select.dispatchEvent(new window.Event('change', { bubbles: true }));
+  });
+  assert.deepEqual(calls, ['clear', 'x-ray']);
   assert.equal(display.displayMode, 'wireframe', 'the controlled request is not mutated');
 });
 
@@ -118,19 +158,30 @@ test('isolation snapshots only selected visible placed instances and survives la
   assert.equal(snapshotInstanceIsolation(['hidden', 'unevaluated', 'empty'], placed), undefined);
 });
 
-test('one real Display isolate toggle snapshots selected instances and restores with empty selection', async () => {
+test('one real Display isolate toggle snapshots selected instances and restores with empty selection', async t => {
   const snapshot = ['placed-a']; let isolated;
   const setIsolatedInstances = update => { isolated = update(isolated); };
   const display = { isolationSelection: snapshot, setIsolatedInstances };
-  let tree = controls(display); const isolate = labeled(tree, 'Isolate selection');
-  assert.equal(isolate.length, 1); assert.equal(isolate[0].props.disabled, false); assert.equal(isolate[0].props['aria-pressed'], false);
-  isolate[0].props.onClick(); assert.equal(isolated, snapshot);
-  tree = controls({ ...display, isolatedInstances: isolated, isolationSelection: undefined, isolationReason: 'Select a visible placed instance to isolate.' });
-  assert.equal(labeled(tree, 'Isolate selection').length, 0);
-  const restore = labeled(tree, 'Restore view'); assert.equal(restore.length, 1); assert.equal(restore[0].props.disabled, false); assert.equal(restore[0].props['aria-pressed'], true);
-  restore[0].props.onClick(); assert.equal(isolated, undefined);
-  assert.equal(labeled(controls({ ...display, isolationSelection: undefined, isolationReason: 'Select a visible placed instance to isolate.' }), 'Isolate selection')[0].props.disabled, true);
-  assert.equal(labeled(controls({ ...display, displayOpen: false }), 'Isolate selection').length, 0, 'the toggle only exists in the open Display card');
+  const panel = controls(t);
+  await panel.update(display);
+  const isolate = panel.labeled('Isolate selection');
+  assert.equal(isolate.length, 1);
+  assert.equal(isolate[0].disabled, false);
+  assert.equal(isolate[0].getAttribute('aria-pressed'), 'false');
+  await act(async () => isolate[0].click());
+  assert.equal(isolated, snapshot);
+  await panel.update({ ...display, isolatedInstances: isolated, isolationSelection: undefined, isolationReason: 'Select a visible placed instance to isolate.' });
+  assert.equal(panel.labeled('Isolate selection').length, 0);
+  const restore = panel.labeled('Restore view');
+  assert.equal(restore.length, 1);
+  assert.equal(restore[0].disabled, false);
+  assert.equal(restore[0].getAttribute('aria-pressed'), 'true');
+  await act(async () => restore[0].click());
+  assert.equal(isolated, undefined);
+  await panel.update({ ...display, isolationSelection: undefined, isolationReason: 'Select a visible placed instance to isolate.' });
+  assert.equal(panel.labeled('Isolate selection')[0].disabled, true);
+  await panel.update({ ...display, displayOpen: false });
+  assert.equal(panel.labeled('Isolate selection').length, 0, 'the toggle only exists in the open Display card');
   // Document replacement ownership remains in App, outside this controlled component.
   const app = await readFile(resolve(root, 'apps/cad-studio/src/App.tsx'), 'utf8');
   const replace = app.slice(app.indexOf('const replaceDoc ='), app.indexOf('const writeFile ='));

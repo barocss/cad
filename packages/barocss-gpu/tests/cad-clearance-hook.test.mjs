@@ -13,7 +13,7 @@ let api;
 try {
   const outfile = join(temporary, 'hook.mjs');
   await build({ stdin: { contents: 'export {useClearanceAnalysis} from "./apps/cad-studio/src/viewport/useClearanceAnalysis.ts"; export {putKnownBlob} from "./packages/barocss-cad-model/src/engine/blobs.ts";', resolveDir: root }, outfile, bundle: true, platform: 'node', format: 'esm', logLevel: 'silent',
-    alias: { '@barocss/cad-model': resolve(root, 'packages/barocss-cad-model/src'), '@barocss/cad': resolve(root, 'packages/barocss-cad/src') },
+    alias: { '@barocss/cad-model': resolve(root, 'packages/barocss-cad-model/src') },
     // (The studio's modules read Vite's import.meta.env; bundled here without Vite, a production stand-in.)
     define: { 'import.meta.env.DEV': 'false' },
     plugins: [{ name: 'hook-recorder', setup(builder) {

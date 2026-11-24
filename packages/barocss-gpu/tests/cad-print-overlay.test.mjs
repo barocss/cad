@@ -15,7 +15,7 @@ try {
   await build({
     stdin: { contents: 'export * from "./apps/cad-studio/src/viewport/printOverlayGeometry.ts"; export {PrintOverlayGL} from "./apps/cad-studio/src/viewport/printOverlayGL.ts"; export {GpuRenderer} from "./apps/cad-studio/src/viewport/gpuRenderer.ts"; export {Renderer} from "./apps/cad-studio/src/viewport/renderer.ts";', resolveDir: root },
     outfile, bundle: true, platform: 'node', format: 'esm', logLevel: 'silent',
-    alias: { '@barocss/gpu/viewer': resolve(root, 'packages/barocss-gpu/src/viewer/index.ts'), '@barocss/gpu': resolve(root, 'packages/barocss-gpu/src/index.ts'), '@barocss/cad-model': resolve(root, 'packages/barocss-cad-model/src'), '@barocss/cad': resolve(root, 'packages/barocss-cad/src') },
+    alias: { '@barocss/gpu/viewer': resolve(root, 'packages/barocss-gpu/src/viewer/index.ts'), '@barocss/gpu': resolve(root, 'packages/barocss-gpu/src/index.ts'), '@barocss/cad-model': resolve(root, 'packages/barocss-cad-model/src') },
   });
   ({ PrintOverlayGeometry, printLoopSegments, clipPrintSupport, PrintOverlayGL, GpuRenderer, Renderer } = await import(pathToFileURL(outfile).href));
 } finally { await rm(temp, { recursive: true, force: true }); }

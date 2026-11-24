@@ -13,7 +13,7 @@ let usePrintLayers;
 try {
   const outfile = join(temporary, 'hook.mjs');
   await build({ entryPoints: [resolve(root, 'apps/cad-studio/src/viewport/usePrintLayers.ts')], outfile, bundle: true, platform: 'node', format: 'esm', logLevel: 'silent',
-    alias: { '@barocss/cad-model': resolve(root, 'packages/barocss-cad-model/src'), '@barocss/cad': resolve(root, 'packages/barocss-cad/src') },
+    alias: { '@barocss/cad-model': resolve(root, 'packages/barocss-cad-model/src') },
     plugins: [{ name: 'hook-recorder', setup(builder) {
       builder.onResolve({ filter: /^react$/ }, () => ({ path: 'react', namespace: 'recorder' }));
       builder.onLoad({ filter: /.*/, namespace: 'recorder' }, () => ({ contents: 'export const useRef=(...a)=>globalThis.__g23Hooks.useRef(...a),useState=(...a)=>globalThis.__g23Hooks.useState(...a),useMemo=(...a)=>globalThis.__g23Hooks.useMemo(...a),useEffect=(...a)=>globalThis.__g23Hooks.useEffect(...a);' }));

@@ -14,7 +14,7 @@ const root = fileURLToPath(new URL('../../../', import.meta.url));
 async function workerFixture(t) {
   const dir = await mkdtemp(join(tmpdir(), 'cad-print-worker-'));
   await build({ entryPoints: [resolve(root, 'apps/cad-studio/src/viewport/print.worker.ts')], outfile: join(dir, 'worker.mjs'), bundle: true, platform: 'node', format: 'esm', logLevel: 'silent',
-    alias: { '@barocss/cad-model': resolve(root, 'packages/barocss-cad-model/src'), '@barocss/cad': resolve(root, 'packages/barocss-cad/src') } });
+    alias: { '@barocss/cad-model': resolve(root, 'packages/barocss-cad-model/src') } });
   await writeFile(join(dir, 'adapter.mjs'), `import {parentPort} from 'node:worker_threads';
 globalThis.self={postMessage:v=>parentPort.postMessage(v)};
 await import('./worker.mjs');

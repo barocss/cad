@@ -12,7 +12,7 @@ const root = fileURLToPath(new URL('../../../', import.meta.url)), temporary = a
 let clipClearanceGeometry;
 try {
   const outfile = join(temporary, 'clip.mjs');
-  await build({ entryPoints: [resolve(root, 'apps/cad-studio/src/viewport/clearanceDisplay.ts')], outfile, bundle: true, platform: 'node', format: 'esm', logLevel: 'silent', alias: { '@barocss/cad-model': resolve(root, 'packages/barocss-cad-model/src'), '@barocss/cad': resolve(root, 'packages/barocss-cad/src') } });
+  await build({ entryPoints: [resolve(root, 'apps/cad-studio/src/viewport/clearanceDisplay.ts')], outfile, bundle: true, platform: 'node', format: 'esm', logLevel: 'silent', alias: { '@barocss/cad-model': resolve(root, 'packages/barocss-cad-model/src') } });
   ({ clipClearanceGeometry } = await import(pathToFileURL(outfile).href));
 } finally { await rm(temporary, { recursive: true, force: true }); }
 

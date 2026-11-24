@@ -114,7 +114,7 @@ export async function prepareHarness({ root = resolve(dirname(runnerFile), '../.
   const startedAt = stamp(), state = gitState(root), bundle = join(outDir, 'fixture.js');
   const result = await build({
     absWorkingDir: root, entryPoints: [fixture], outfile: bundle, bundle: true, platform: 'browser', format: 'esm', target: 'es2022', metafile: true, logLevel: 'silent',
-    alias: { '@barocss/gpu/viewer': resolve(root, 'packages/barocss-gpu/src/viewer/index.ts'), '@barocss/gpu': resolve(root, 'packages/barocss-gpu/src/index.ts'), '@barocss/cad-model': resolve(root, 'packages/barocss-cad-model/src'), '@barocss/cad': resolve(root, 'packages/barocss-cad/src') },
+    alias: { '@barocss/gpu/viewer': resolve(root, 'packages/barocss-gpu/src/viewer/index.ts'), '@barocss/gpu': resolve(root, 'packages/barocss-gpu/src/index.ts'), '@barocss/cad-model': resolve(root, 'packages/barocss-cad-model/src') },
   });
   const sources = [];
   for (const input of [...Object.keys(result.metafile.inputs).map(path => resolve(root, path)), runnerFile].sort()) {

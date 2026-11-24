@@ -15,7 +15,7 @@ try {
   await build({
     stdin: { contents: 'export {Renderer} from "./apps/cad-studio/src/viewport/renderer.ts"; export {ClearanceOverlayGL} from "./apps/cad-studio/src/viewport/clearanceOverlayGL.ts";', resolveDir: root },
     outfile, bundle: true, platform: 'node', format: 'esm', logLevel: 'silent',
-    alias: { '@barocss/gpu/viewer': resolve(root, 'packages/barocss-gpu/src/viewer/index.ts'), '@barocss/gpu': resolve(root, 'packages/barocss-gpu/src/index.ts'), '@barocss/cad-model': resolve(root, 'packages/barocss-cad-model/src'), '@barocss/cad': resolve(root, 'packages/barocss-cad/src') },
+    alias: { '@barocss/gpu/viewer': resolve(root, 'packages/barocss-gpu/src/viewer/index.ts'), '@barocss/gpu': resolve(root, 'packages/barocss-gpu/src/index.ts'), '@barocss/cad-model': resolve(root, 'packages/barocss-cad-model/src') },
   });
   ({ Renderer, ClearanceOverlayGL } = await import(pathToFileURL(outfile).href));
 } finally { await rm(temp, { recursive: true, force: true }); }

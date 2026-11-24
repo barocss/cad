@@ -17,7 +17,7 @@ try {
     stdin: { contents: 'export { GpuRenderer } from "./apps/cad-studio/src/viewport/gpuRenderer.ts"; export { PALETTE } from "./apps/cad-studio/src/viewport/displayPolicy.ts";', resolveDir: root }, outfile, bundle: true, platform: 'node', format: 'esm', logLevel: 'silent',
     alias: {
       '@barocss/gpu/viewer': resolve(root, 'packages/barocss-gpu/src/viewer/index.ts'), '@barocss/gpu': resolve(root, 'packages/barocss-gpu/src/index.ts'),
-      '@barocss/cad-model': resolve(root, 'packages/barocss-cad-model/src'), '@barocss/cad': resolve(root, 'packages/barocss-cad/src'),
+      '@barocss/cad-model': resolve(root, 'packages/barocss-cad-model/src'),
     },
   });
   ({ GpuRenderer, PALETTE } = await import(pathToFileURL(outfile).href));
@@ -56,7 +56,7 @@ function fixture() {
     const mesh = { positions: new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0]), normals: new Float32Array([0, 0, 1, 0, 0, 1, 0, 0, 1]), indices: new Uint32Array([0, 1, 2]), faceOfVertex: new Uint32Array([0, 0, 0]), faces: [{ index: 0, id: 'native-plane', kind: 'plane' }], edgeLines: new Float32Array([0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 1, 0]), edgeOfSegment: new Uint32Array([7, 7, 9, 9]), bounds: { min: [-1, -1, -1], max: [1, 1, 1] } };
     const surface = viewer.add(geometry({ positions: mesh.positions }), { material: { opacity: 1 } });
     const edges = viewer.add(geometry({ positions: mesh.edgeLines, topology: 'lines' }), { material: { color: renderer.theme.edge, lineWidth: 1.2 } });
-    return { result: { key: `body-${bi}`, mesh }, surface, edges, highlight: null, state: '', painted: null, runs: { vertexCount: 3, byFace: new Map([[0, [0, 3]]]) } };
+    return { result: { key: `body-${bi}`, mesh }, surface, edges, highlights: [], state: '', painted: null, runs: { vertexCount: 3, byFace: new Map([[0, [0, 3]]]) } };
   });
   renderer.ground = viewer.add(geometry({}), { material: { shadowOnly: true, opacity: 0.45 } });
   renderer.setSectionHatch([0, 1, 2].map(body => ({ body, segments: new Float32Array([0, 0, 0, 1, 1, 0]) })));
@@ -90,20 +90,27 @@ for (const dpr of [1, 2]) {
       assert.equal(ghost.surface.visible, true); assert.equal(ghost.surface.pickable, false); assert.equal(ghost.surface.material.opacity, 0.35); assert.equal(ghost.surface.pickTransparent, true);
       assert.equal(hidden.surface.visible, false); assert.equal(hidden.surface.pickable, false); assert.equal(hidden.edges.visible, false);
       assert.equal(solid.edges.geometry.input.positions.length, 12, 'retains two native CAD segments, not tessellation edges');
-      assert.equal(solid.highlight.geometry.input.positions.length, 6, 'only the selected native edge gets a highlight');
-      assert.equal(solid.highlight.pickable, false); assert.equal(solid.highlight.clipped, true); assert.deepEqual(solid.highlight.material.lineHiddenDash, solid.edges.material.lineHiddenDash);
-      assert.deepEqual(Array.from(solid.edges.transform), Array.from(solid.surface.transform)); assert.deepEqual(Array.from(solid.highlight.transform), Array.from(solid.surface.transform));
+      assert.equal(solid.highlights.length, 1);
+      assert.equal(solid.highlights[0].geometry.input.positions.length, 6, 'only the selected native edge gets a highlight');
+      assert.equal(solid.highlights[0].pickable, false); assert.equal(solid.highlights[0].clipped, true); assert.deepEqual(solid.highlights[0].material.lineHiddenDash, solid.edges.material.lineHiddenDash);
+      assert.deepEqual(Array.from(solid.edges.transform), Array.from(solid.surface.transform)); assert.deepEqual(Array.from(solid.highlights[0].transform), Array.from(solid.surface.transform));
       assert.equal(f.renderer.ground.visible, false); assert.equal(f.viewer.environment.ambientOcclusion, false);
       assert.deepEqual(f.renderer.getDisplayModeStatus(), { requested: mode, effective: mode, supported: true });
       assert.deepEqual(f.calls.at(-2), ['resize', dpr]); assert.deepEqual(f.calls.at(-1), ['render']);
       f.viewer.raycast = () => ({ mesh: solid.surface, face: 12 });
       assert.deepEqual(f.renderer.pickFace(10, 20, camera(), view(mode)), { body: 0, face: 12 });
-      f.viewer.pickLine = (...args) => { assert.deepEqual(args, [10, 20, 6, { throughSurfaces: false, respectSurfaceDepth: true }]); return { mesh: solid.edges, edge: 7 }; };
+      const requests = [];
+      f.viewer.pickLine = (...args) => { requests.push(args); return { mesh: solid.edges, edge: 7 }; };
       assert.deepEqual(f.renderer.pickEdge(10, 20, camera(), view(mode)), { body: 0, edge: 7 });
+      assert.deepEqual(f.renderer.pickEdge(10, 20, camera(), view(mode), 6, true), { body: 0, edge: 7 });
+      assert.deepEqual(requests, [
+        [10, 20, 6, { throughSurfaces: mode === 'wireframe', respectSurfaceDepth: true }],
+        [10, 20, 6, { throughSurfaces: false, respectSurfaceDepth: true }],
+      ]);
     }
     f.render(undefined, dpr);
     const solid = f.renderer.bodies[0];
-    assert.equal(solid.surface.material.colorWrite, true); assert.ok(solid.surface.outline);
+    assert.equal(solid.surface.material.colorWrite, true); assert.equal(solid.surface.outline, null); assert.deepEqual(solid.edges.material.color, f.renderer.theme.selection);
     assert.equal(solid.edges.material.lineOver, false); assert.equal(solid.edges.material.lineHidden, 0); assert.equal(solid.edges.material.lineHiddenDash, null);
     assert.equal(f.renderer.hatchLines.get(0).visible, true); assert.equal(f.renderer.ground.visible, true); assert.ok(f.viewer.environment.ambientOcclusion);
     assert.deepEqual(f.renderer.pickFace(10, 20, camera(), view(undefined)), { body: 0, face: 12 });
@@ -120,13 +127,14 @@ for (const dpr of [1, 2]) {
     assert.equal(ghost.surface.material.opacity, 0.25 * 0.35); assert.equal(ghost.surface.pickTransparent, true); assert.equal(ghost.surface.pickable, false);
     assert.equal(hidden.surface.visible, false); assert.equal(hidden.surface.pickable, false);
     assert.equal(solid.surface.cap, true); assert.equal(solid.surface.material.colorWrite, true);
-    assert.equal(solid.highlight.pickable, false);
+    assert.equal(solid.highlights[0].pickable, false);
     f.viewer.raycast = () => ({ mesh: solid.surface, face: 12, triangle: 2, scalar: 7, instance: 0 });
     assert.deepEqual(f.renderer.pickFace(10, 20, camera(), view('x-ray')), { body: 0, face: 12 });
     f.render(undefined, dpr);
     assert.equal(solid.surface.material.opacity, 1); assert.equal(ghost.surface.material.opacity, 0.35);
     assert.equal(solid.surface.pickTransparent, false); assert.equal(ghost.surface.pickTransparent, true);
-    assert.ok(solid.surface.outline); assert.equal(solid.edges.material.lineOver, false); assert.equal(solid.edges.material.lineHidden, 0); assert.equal(solid.edges.material.lineHiddenDash, null);
+    assert.equal(solid.surface.outline, null); assert.deepEqual(solid.edges.material.color, f.renderer.theme.selection);
+    assert.equal(solid.edges.material.lineOver, false); assert.equal(solid.edges.material.lineHidden, 0); assert.equal(solid.edges.material.lineHiddenDash, null);
     assert.equal(f.renderer.hatchLines.get(0).visible, true); assert.equal(f.renderer.hatchLines.get(1).visible, true); assert.equal(f.renderer.hatchLines.get(2).visible, false);
     assert.equal(f.renderer.ground.visible, true); assert.ok(f.viewer.environment.ambientOcclusion); assert.equal(f.renderer.aoEnabled, true);
     assert.deepEqual(f.renderer.getDisplayModeStatus(), { requested: 'shaded-with-edges', effective: 'shaded-with-edges', supported: true });
@@ -188,7 +196,8 @@ for (const dpr of [1, 2]) test(`GPU instance adapter DPR ${dpr}: five modes pres
     assert.equal(surface.material.colorWrite, !lineOnly); assert.equal(surface.material.opacity, mode === 'x-ray' ? 0.25 : 1);
     assert.equal(surface.pickTransparent, false); assert.equal(surface.pickable, true); assert.equal(surface.visible, true);
     assert.equal(surface.cap, true); assert.equal(surface.clipped, true); assert.ok(surface.capHatch);
-    assert.equal(!!surface.outline, !lineOnly); assert.equal(two.threads.visible, !lineOnly); assert.equal(two.threads.pickable, false);
+    assert.equal(surface.outline, null); assert.deepEqual(edge.material.color, f.renderer.theme.selection);
+    assert.equal(two.threads.visible, !lineOnly); assert.equal(two.threads.pickable, false);
     assert.equal(edge.material.lineOver, mode === 'wireframe'); assert.equal(edge.material.lineDash, null);
     assert.equal(edge.material.lineHidden, mode === 'hidden-lines-dashed' ? 0.55 : 0);
     assert.deepEqual(edge.material.lineHiddenDash, mode === 'hidden-lines-dashed' ? [6, 4] : null, 'CSS dash contract is independent of DPR');
@@ -243,7 +252,7 @@ for (const dpr of [1, 2]) test(`GPU isolation DPR ${dpr}: focus/fade/restore sca
     }
     near(surfaces[0].material.opacity, modeAlpha * 0.15); near(surfaces[1].material.opacity, modeAlpha);
     assert.equal(surfaces[0].pickable, false); assert.equal(surfaces[0].pickTransparent, true); assert.equal(surfaces[0].outline, null);
-    assert.equal(surfaces[1].pickable, true); assert.equal(surfaces[1].pickTransparent, false); assert.equal(!!surfaces[1].outline, !lineOnly);
+    assert.equal(surfaces[1].pickable, true); assert.equal(surfaces[1].pickTransparent, false); assert.equal(surfaces[1].outline, null); assert.deepEqual(two.edges[0].material.color, f.renderer.theme.selection);
     assert.equal(surfaces[0].visible, !lineOnly, 'faded line-only surfaces do not occlude focus edges'); assert.equal(surfaces[1].visible, true);
     near(one.edges[0].material.opacity, 0.15); near(two.edges[0].material.opacity, 1);
     near(one.threads.material.opacity, 0.55 * 0.15); near(two.threads.material.opacity, 0.55);

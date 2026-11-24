@@ -15,7 +15,7 @@ try {
   await build({
     stdin: { contents: 'export {Renderer} from "./apps/cad-studio/src/viewport/renderer.ts"; export {boxBody} from "./packages/barocss-gpu/tests/fixtures/cad-display-browser.ts"; export {multiply,translation,rotation} from "./packages/barocss-gpu/src/viewer/math.ts";', resolveDir: root },
     outfile, bundle: true, platform: 'node', format: 'esm', logLevel: 'silent',
-    alias: { '@barocss/gpu/viewer': resolve(root, 'packages/barocss-gpu/src/viewer/index.ts'), '@barocss/gpu': resolve(root, 'packages/barocss-gpu/src/index.ts'), '@barocss/cad-model': resolve(root, 'packages/barocss-cad-model/src'), '@barocss/cad': resolve(root, 'packages/barocss-cad/src') },
+    alias: { '@barocss/gpu/viewer': resolve(root, 'packages/barocss-gpu/src/viewer/index.ts'), '@barocss/gpu': resolve(root, 'packages/barocss-gpu/src/index.ts'), '@barocss/cad-model': resolve(root, 'packages/barocss-cad-model/src') },
   });
   ({ Renderer, boxBody, multiply, translation, rotation } = await import(pathToFileURL(outfile).href));
 } finally { await rm(temp, { recursive: true, force: true }); }
@@ -156,7 +156,7 @@ test('instance modes retain surface depth, classify native edges and cap x-ray o
     assert.deepEqual(surface.colors, Array(4).fill(!['hidden-lines-removed', 'hidden-lines-dashed', 'wireframe'].includes(mode))); 
     const edges = draws.filter(d => d.vao === gpu.lineVao);
     assert.equal(edges.length, mode === 'hidden-lines-dashed' ? 2 : 1);
-    assert.equal(edges[0].enabled.has('DEPTH_TEST'), mode !== 'wireframe');
+    assert.equal(edges[0].enabled.has('DEPTH_TEST'), mode !== 'wireframe' && mode !== 'x-ray');
     assert.equal(edges[0].depth, mode === 'shaded-with-edges');
     if (mode === 'hidden-lines-dashed') {
       assert.equal(edges[1].func, 'GREATER'); assert.deepEqual(edges[1].uniforms.uDash, [6, 4]);

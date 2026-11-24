@@ -264,7 +264,7 @@ async function runCurvedAppFlow({ page, backend, result, out, root, doc, choose,
   await build({
     stdin: { contents: 'export { cylinderPart, withNode } from "./packages/barocss-cad-model/src/engine/doc.ts";', resolveDir: root },
     outfile: helper, bundle: true, platform: 'node', format: 'esm', logLevel: 'silent',
-    alias: { '@barocss/cad-model': resolve(root, 'packages/barocss-cad-model/src'), '@barocss/cad': resolve(root, 'packages/barocss-cad/src') },
+    alias: { '@barocss/cad-model': resolve(root, 'packages/barocss-cad-model/src') },
   });
   const { cylinderPart, withNode } = await import(pathToFileURL(helper).href);
   result.curvedSolids = [];

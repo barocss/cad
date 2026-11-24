@@ -15,7 +15,7 @@ try {
   await build({
     stdin: { contents: 'export * from "./apps/cad-studio/src/viewport/printSettings.ts"; export {emptyDoc,carryOver} from "./packages/barocss-cad-model/src/engine/doc.ts"; export {readStudioDoc} from "./packages/barocss-cad-model/src/engine/migrate.ts";', resolveDir: root },
     outfile, bundle: true, platform: 'node', format: 'esm', logLevel: 'silent',
-    alias: { '@barocss/cad-model': resolve(root, 'packages/barocss-cad-model/src'), '@barocss/cad': resolve(root, 'packages/barocss-cad/src') },
+    alias: { '@barocss/cad-model': resolve(root, 'packages/barocss-cad-model/src') },
   });
   ({ printOptionsOf, withPrintPreviewSettings, emptyDoc, carryOver, readStudioDoc } = await import(pathToFileURL(outfile).href));
 } finally { await rm(temp, { recursive: true, force: true }); }
