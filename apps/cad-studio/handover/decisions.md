@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1943: [Restore the local Agent tool description budget](notes/agent-tool-description-budget-2026-11-25/README.md), #324. Compare actual MCP discovery bytes and Studio edit recovery under the retained v2 tool contract.
 - D1942: [Move Model command entry and return focus out of App](notes/studio-command-entry-focus-2026-11-25/README.md), #44. Compare desktop keyboard focus and the Extrude, Hole and Fillet paths.
 - D1941: [Admit a shifted upper frame in an exact two-guide Loft](notes/shifted-frame-two-guide-loft-2026-11-25/README.md), #174. Verify exact rails, geometry identity, Studio History and fresh Open.
 - D1940: [Diagnose a held Chamfer before a Through Hole](notes/agent-held-chamfer-through-hole-2026-11-25/README.md), #20. Verify current local Agent geometry, explicit Studio repair and preservation of the native Hole.

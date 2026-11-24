@@ -22,7 +22,7 @@ function groupTool(name: string): ToolDefinition {
     input_schema: { type: 'object', properties: { tool: { type: 'string' }, action: { type: 'string' }, command: { type: 'string' }, feature: { type: 'string' } }, additionalProperties: false },
   };
   const extra = name === 'features' ? ` Commands: ${FEATURE_COMMANDS.join(', ')}. Feature kinds: ${featureKinds().join(', ')}.` : '';
-  return { name, description: `${g.about} Pass "action" and its arguments. Actions: ${actionList(name)}.${extra}`, input_schema: { type: 'object', properties: { action: { type: 'string', enum: actions } }, required: ['action'] } };
+  return { name, description: `${g.about} Actions: ${actionList(name)}.${extra}`, input_schema: { type: 'object', properties: { action: { type: 'string', enum: actions } }, required: ['action'] } };
 }
 /** The consolidated tools. */
 export const TOOLS_V2: ToolDefinition[] = Object.keys(GROUPS).map(groupTool);
