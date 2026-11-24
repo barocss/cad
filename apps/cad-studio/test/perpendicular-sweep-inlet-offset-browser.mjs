@@ -240,7 +240,7 @@ await f.run(async () => {
   }
   await distance(panel).fill('4');
   await status(panel,'preview').waitFor();
-  assert.equal(await panel.getByLabel('Mode',{exact:true}).count(),outlet ? 1 : 0);
+  assert.equal(await panel.getByLabel('Mode', { exact: true }).inputValue(), 'distance');
   await f.snapshot('01-outward-preview');
   await button('Apply',panel).click();
   await f.changed(source);

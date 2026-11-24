@@ -5,7 +5,7 @@ import {
 import { boxFaceReplacementFrame, draftedCapReplacementFrame, draftedFaceOffsetFrame, draftedWallReplacementFrame } from '@barocss/cad/internal/drafted-cap-offset';
 import { annularCapReplacementFrame, boredCapReplacementFrame, circularCapReplacementFrame } from '@barocss/cad/internal/bored-cap-offset';
 import { exactSemicylinderCapOffsetFrame, exactSemicylinderCapReplacementAfterWallFrame, exactSemicylinderCapReplacementFrame } from '@barocss/cad/internal/exact-cylinder-cap-offset';
-import { exactPairedElbowOutletOffsetFrame, exactPerpendicularAnnularOutletOffsetFrame } from '@barocss/cad/internal/exact-paired-elbow-offset';
+import { exactPairedElbowOutletOffsetFrame, exactPerpendicularAnnularInletOffsetFrame, exactPerpendicularAnnularOutletOffsetFrame } from '@barocss/cad/internal/exact-paired-elbow-offset';
 import { prismCapReplacementFrame, prismWallOffsetFrame, prismWallReplacementFrame } from '@barocss/cad/internal/prism-wall-offset';
 import { exactSemicylinderCapAfterWall, exactSemicylinderCapSource, isPairedFiveSpanCapPlaneSource, pairedFiveSpanOppositeReplacementSourceIndex, sweepOffsetPlaneSource, type OffsetFaceNode, type OffsetPlaneRef, type ReplaceFaceNode, type StudioDoc } from './doc';
 import { featureId } from './ids';
@@ -84,7 +84,9 @@ export function resolveOffsetPlaneDistance(doc: StudioDoc, binding: OffsetPlaneR
   let frame: { anchor: Vec3; normal: Vec3 } | undefined;
   if (owner?.kind === 'sweep-curve') {
     if (sweepCap) {
-      const readFrame = sweepCap === 'paired' ? exactPairedElbowOutletOffsetFrame : exactPerpendicularAnnularOutletOffsetFrame;
+      const readFrame = sweepCap === 'paired' ? exactPairedElbowOutletOffsetFrame
+        : sweepCap === 'perpendicular-annular-inlet' ? exactPerpendicularAnnularInletOffsetFrame
+        : exactPerpendicularAnnularOutletOffsetFrame;
       frame = readFrame(source, face, {
         id: featureId(doc.nodes, node.parent.node), mode: 'exact', path: { kind: 'curve', id: 'path', ...owner.path },
       });

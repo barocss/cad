@@ -124,13 +124,17 @@ test('the outlet review binds the exact signed command, base and native output',
   assert.equal(reviewedPerpendicularAnnularOutletEvidence(changed, selected.bodies, candidate, edit), undefined);
 });
 
-test('only the original perpendicular outlet binds a live parallel native plane', async () => {
-  let source = withNode(fixture(), { kind: 'sketch', profile: 'rectangle', min: [40, 48], max: [48, 54] });
-  source = withNode(source, { kind: 'extrude', sketch: 2, from: 32, height: 5 });
+for (const scenario of [
+  { cap: 'n1.start', kind: 'perpendicular-annular-inlet', min: [-19, 40], max: [-14, 48], from: undefined,
+    donor: 'n3.side1', nonparallel: 'n3.top', axis: 0, initial: -14, moved: -6, shift: 8, collapse: 14, refusal: /inlet-to-bend join/ },
+  { cap: 'n1.end', kind: 'perpendicular-annular-outlet', min: [40, 48], max: [48, 54], from: 32,
+    donor: 'n3.bottom', nonparallel: 'n3.side1', axis: 2, initial: 32, moved: 24, shift: -8, collapse: -14, refusal: /bend-to-outlet join/ },
+] as const) test(`the original perpendicular ${scenario.cap} binds a live parallel native plane`, async () => {
+  let source = withNode(fixture(), { kind: 'sketch', profile: 'rectangle', min: [...scenario.min], max: [...scenario.max] });
+  source = withNode(source, { kind: 'extrude', sketch: 2, from: scenario.from, height: 5 });
   source = withNode(source, { kind: 'translate', parent: { node: 3, side: 'solid' }, offset: [0, 0, 0] });
-  const end = 'n1.end';
-  assert.equal(sweepOffsetPlaneSource(source.nodes, 1, face), undefined);
-  assert.equal(sweepOffsetPlaneSource(source.nodes, 1, end), 'perpendicular-annular-outlet');
+  assert.equal(sweepOffsetPlaneSource(source.nodes, 1, scenario.cap), scenario.kind);
+  assert.equal(sweepOffsetPlaneSource(source.nodes, 1, 'n1.lead.side[e0]#1'), undefined);
   const result = evaluateDoc(source, 0);
   assert.ok(result.ok);
   const bodies = result.bodies;
@@ -140,35 +144,42 @@ test('only the original perpendicular outlet binds a live parallel native plane'
     assert.ok(face !== undefined);
     return { body, face };
   };
-  const ctx: Ctx = { doc: source, bodies, selection: { faces: [pick('b1',end)], edges: [], bodies: [] } };
+  const ctx: Ctx = { doc: source, bodies, selection: { faces: [pick('b1', scenario.cap)], edges: [], bodies: [] } };
   const toPlane = { offsetMode: 'to-plane' };
-  const picked = offsetFaceCommand.onPick!(ctx, toPlane, { face: pick('b4','n3.bottom'), edge: null });
+  const picked = offsetFaceCommand.onPick!(ctx, toPlane, { face: pick('b4', scenario.donor), edge: null });
   assert.ok(picked && !picked.error);
   const linked = offsetFaceCommand.build!(ctx, picked), node = linked.nodes[5];
   assert.ok(node.kind === 'offset-face' && node.target);
-  assert.deepEqual([node.target.feature,node.target.face,node.target.body], ['n4','n3.bottom',{node:4,side:'solid'}]);
+  assert.deepEqual([node.target.feature,node.target.face,node.target.body], ['n4', scenario.donor, { node: 4, side: 'solid' }]);
   assert.equal(offsetFaceDocumentProblem(linked),null);
 
-  const zOf = (doc: StudioDoc) => {
+  const stationOf = (doc: StudioDoc) => {
     const part = partBreps(doc).find(candidate => candidate.key === 'b5');
     assert.ok(part && checkBrep(part.brep, { strict:true }).valid);
-    const cap = faceGeometry(part.brep.faces.find(candidate => candidate.name === end)!);
+    const cap = faceGeometry(part.brep.faces.find(candidate => candidate.name === scenario.cap)!);
     assert.ok(cap.kind === 'plane');
-    return cap.o[2];
+    return cap.o[scenario.axis];
   };
-  assert.ok(Math.abs(zOf(linked)-32)<1e-7);
-  const move = (z: number): StudioDoc => ({ ...linked, nodes: linked.nodes.map((node,i) =>
-    i === 4 && node.kind === 'translate' ? { ...node, offset:[0,0,z] } : node) });
-  const moved = move(-8);
+  assert.ok(Math.abs(stationOf(linked) - scenario.initial) < 1e-7);
+  const move = (distance: number): StudioDoc => {
+    const offset: [number, number, number] = [0, 0, 0];
+    offset[scenario.axis] = distance;
+    return { ...linked, nodes: linked.nodes.map((node, i) =>
+      i === 4 && node.kind === 'translate' ? { ...node, offset } : node) };
+  };
+  const moved = move(scenario.shift);
   assert.deepEqual(moved.nodes[5],node);
-  assert.ok(Math.abs(zOf(moved)-24)<1e-7);
+  assert.ok(Math.abs(stationOf(moved) - scenario.moved) < 1e-7);
   const opened = await readStudioFile(encodeStudioFile(moved));
-  assert.ok('doc' in opened && Math.abs(zOf(opened.doc)-24)<1e-7);
+  assert.ok('doc' in opened && Math.abs(stationOf(opened.doc) - scenario.moved) < 1e-7);
 
-  const collapse = evaluateDoc(move(-14),0);
+  const collapse = evaluateDoc(move(scenario.collapse), 0);
   assert.ok(!collapse.ok);
-  assert.match(collapse.error.detail,/reach or cross the retained bend-to-outlet join/);
-  const nonparallel = offsetFaceCommand.onPick!(ctx, toPlane, { face: pick('b4','n3.side1'), edge: null });
+  assert.match(collapse.error.detail, scenario.refusal);
+  const coplanar = evaluateDoc(move(scenario.shift / 2), 0);
+  assert.ok(!coplanar.ok);
+  assert.match(coplanar.error.detail, /already on the same plane/);
+  const nonparallel = offsetFaceCommand.onPick!(ctx, toPlane, { face: pick('b4', scenario.nonparallel), edge: null });
   assert.ok(nonparallel && !nonparallel.error);
   const invalid = evaluateDoc(offsetFaceCommand.build!(ctx,nonparallel),0);
   assert.ok(!invalid.ok);

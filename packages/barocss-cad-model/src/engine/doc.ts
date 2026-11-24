@@ -797,9 +797,12 @@ export function isPairedFiveSpanCapPlaneSource(nodes: readonly unknown[], index:
 }
 
 /** Native Sweep families admitted to Offset face with a live reference plane. */
-export function sweepOffsetPlaneSource(nodes: readonly unknown[], index: number, face: string): 'paired' | 'perpendicular-annular-outlet' | undefined {
+export function sweepOffsetPlaneSource(nodes: readonly unknown[], index: number, face: string):
+  'paired' | 'perpendicular-annular-inlet' | 'perpendicular-annular-outlet' | undefined {
   if (isPairedFiveSpanCapPlaneSource(nodes, index, face)) return 'paired';
-  if (perpendicularAnnularOffsetEnd(nodes, index, face) === 'end') return 'perpendicular-annular-outlet';
+  const end = perpendicularAnnularOffsetEnd(nodes, index, face);
+  if (end === 'start') return 'perpendicular-annular-inlet';
+  if (end === 'end') return 'perpendicular-annular-outlet';
 }
 
 /** Preserve the outlet-only authority used by the pinned Agent review. */
