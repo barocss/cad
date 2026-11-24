@@ -93,7 +93,7 @@ test('downward XY containment uses reflected world Y and preserves the target au
   for (const height of [20, 21]) assert.throws(() => toPartDocument(downwardDocument(height)), /positive extrusion direction/);
 });
 
-test('downward XY admission stays on the supported literal profiles and the original upright rectangular upper cap', () => {
+test('downward XY admission stays on the supported literal profiles and original upright upper caps', () => {
   const doc = downwardDocument(), sketch = doc.nodes[2], target = doc.nodes[1], end = doc.nodes[3];
   assert.ok(sketch.kind === 'sketch' && sketch.profile === 'rectangle' && sketch.plane && target.kind === 'extrude' && end.kind === 'face-end-extrude');
   for (const plane of [
@@ -110,7 +110,7 @@ test('downward XY admission stays on the supported literal profiles and the orig
   assert.throws(() => toPartDocument({ ...doc, nodes: doc.nodes.map((node, index) => index === 3
     ? { ...end, target: { ...end.target, face: 'n1.bottom' } } : node) }), /original upper cap/);
   assert.throws(() => toPartDocument({ ...doc, nodes: doc.nodes.map((node, index) => index === 0
-    ? { id: 'n0', kind: 'sketch', profile: 'circle', center: [10, 10], radius: 10 } : node) }), /forward upright rectangular/);
+    ? { id: 'n0', kind: 'sketch', profile: 'circle', center: [10, 10], radius: 10 } : node) }), /entire projected profile/);
 });
 
 function circularTarget(from = 20, radius = 12): StudioDoc {
@@ -191,6 +191,51 @@ test('a downward circle refuses disk contact, reversed travel and changes in ori
   ] as ModelNode[]) assert.throws(() => toPartDocument(replaceNode(doc, 1, changed)), /original upper cap/);
   assert.throws(() => toPartDocument(replaceNode(doc, 3, { ...end, target: { ...end.target, face: 'n1.bottom' } })), /original upper cap/);
   assert.throws(() => toPartDocument(replaceNode(doc, 0, { ...disk, plane: sketch.plane })), /original upper cap/);
+});
+
+function downwardRectangleToDisk(height = 5, width = 5): StudioDoc {
+  const doc = downwardCircleToDisk(height);
+  return replaceNode(doc, 2, {
+    id: 'n2', kind: 'sketch', profile: 'rectangle', min: [9, -16], max: [9 + width, -12],
+    plane: { origin: [1, 2, 20], normal: [0, 0, -1], xAxis: [1, 0, 0] },
+  });
+}
+
+test('a translated downward rectangle reaches the original upper disk with its reflected corners', () => {
+  for (const height of [5, 8]) {
+    const doc = downwardRectangleToDisk(height), travel = 20 - height;
+    const opened = readStudioDoc(JSON.stringify(doc));
+    assert.ok('doc' in opened); assert.deepEqual(opened.doc, doc);
+    const part = toPartDocument(opened.doc), { outputs } = evaluateCadPart(part);
+    assert.equal(currentFaceEndDistance(doc, 3), travel);
+    assert.deepEqual(part.features[3], { id: 'n3', kind: 'extrude', sketch: 'n2', height: travel });
+    assert.deepEqual(outputs.map(output => output.id), ['n1', 'n3']);
+    assert.ok(outputs.every(output => checkOutput(output).valid));
+    const [target, source] = outputs, mass = massPropertiesOf(source);
+    assert.deepEqual(target.brep, evaluateCadPart(toPartDocument(prefixDoc(doc, 3))).outputs[0].brep);
+    assert.equal(source.brep.vertices.length, 8);
+    for (const x of [10, 15]) for (const y of [14, 18]) for (const z of [height, 20])
+      assert.ok(source.brep.vertices.some(vertex => vertex.point.every((value, axis) => value === [x, y, z][axis])));
+    assert.ok(Math.abs(mass.volume - 20 * travel) < 1e-8);
+    mass.centroid.forEach((value, axis) => assert.ok(Math.abs(value - [12.5, 16, (20 + height) / 2][axis]) < 1e-8));
+    const cap = faceGeometry(source.brep.faces.find(face => face.name === 'n3.top')!);
+    assert.ok(cap.kind === 'plane' && cap.o[2] === height && cap.n[2] === -1);
+  }
+});
+
+test('a downward rectangle refuses radial corner contact, out-of-disk corners and unreflected coordinates', () => {
+  assert.equal(currentFaceEndDistance(downwardRectangleToDisk(5, 6 - 1e-6), 3), 15);
+  // The far corner at width 6 has distance hypot(6, 8) = 10 inside the disk bounding square.
+  for (const width of [6, 6 + 1e-6, 7])
+    assert.throws(() => toPartDocument(downwardRectangleToDisk(5, width)), /entire projected profile/);
+  const doc = downwardRectangleToDisk(), source = doc.nodes[2], end = doc.nodes[3];
+  assert.ok(source.kind === 'sketch' && source.profile === 'rectangle' && end.kind === 'face-end-extrude');
+  assert.throws(() => toPartDocument(replaceNode(doc, 2, { ...source, min: [9, 3], max: [14, 7] })), /entire projected profile/);
+  assert.throws(() => toPartDocument(replaceNode(doc, 3, { ...end, target: { ...end.target, face: 'n1.bottom' } })), /original upper cap/);
+  for (const height of [-5, 0])
+    assert.throws(() => toPartDocument(downwardRectangleToDisk(height)), /stay forward.*authored end cap/);
+  for (const height of [20, 21])
+    assert.throws(() => toPartDocument(downwardRectangleToDisk(height)), /positive extrusion direction/);
 });
 
 function circleSourceTarget(center: [number, number] = [5, 5], radius = 9, from = 20): StudioDoc {

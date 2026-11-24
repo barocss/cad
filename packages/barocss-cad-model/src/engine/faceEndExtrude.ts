@@ -63,7 +63,7 @@ function recipeProblem(node: Record<string, unknown>, index: number, nodes: read
   }
   const sketch = nodes[node.sketch as number];
   if (node.suppressed !== true && record(sketch) && faceEndAxes(sketch.plane as DocPlane | undefined) === DOWN_XY) {
-    const problem = downwardTargetProblem(nodes, target as unknown as FaceEndExtrudeNode['target'], parameters, sketch.profile === 'circle');
+    const problem = downwardTargetProblem(nodes, target as unknown as FaceEndExtrudeNode['target'], parameters, sketch.profile);
     if (problem) return problem;
   }
   const annular = annularSource(nodes, body.node);
@@ -204,9 +204,8 @@ function literalCircle(sketch: Extract<SketchNode, { profile: 'circle' }>): sket
 function circularProfileTarget(doc: StudioDoc, node: FaceEndExtrudeNode, sketch: LiteralRectangle | LiteralPolygon | LiteralCircle,
   brep: Brep, face: BrepFace, axes: EndFrame): RadialTarget | undefined {
   const target = doc.nodes[node.target.body.node];
-  const downward = axes === DOWN_XY && sketch.profile === 'circle';
-  if (!downward && (axes !== XY || (sketch.profile !== 'rectangle' && sketch.profile !== 'circle'))) return;
-  const cap = downward ? 'top' : 'bottom';
+  if ((axes !== XY && axes !== DOWN_XY) || (sketch.profile !== 'rectangle' && sketch.profile !== 'circle')) return;
+  const cap = axes === DOWN_XY ? 'top' : 'bottom';
   if (target?.kind !== 'extrude' || target.held || target.cutDepth !== undefined
     || target.draft || face.name !== `${node.target.feature}.${cap}`) return;
   const circle = doc.nodes[target.sketch];
@@ -419,9 +418,10 @@ export function isFaceEndExtrudeSketch(sketch: ModelNode | undefined): sketch is
 }
 
 /** A reversed XY profile keeps the original upper end of one supported forward upright extrusion. */
-function downwardTargetProblem(nodes: readonly unknown[], target: FaceEndExtrudeNode['target'], parameters: unknown, circleSource: boolean): string | null {
+function downwardTargetProblem(nodes: readonly unknown[], target: FaceEndExtrudeNode['target'], parameters: unknown, sourceProfile: unknown): string | null {
   const stock = nodes[target.body.node];
-  const profile = circleSource ? 'rectangular or circular' : 'rectangular';
+  const admitsDisk = sourceProfile === 'rectangle' || sourceProfile === 'circle';
+  const profile = admitsDisk ? 'rectangular or circular' : 'rectangular';
   const unsupported = `the downward profile needs the original upper cap of a forward upright ${profile} extrusion with zero draft.`;
   if (!record(stock) || stock.kind !== 'extrude' || stock.suppressed || stock.held !== undefined
     || !previous(stock.sketch, target.body.node) || stock.cutDepth !== undefined || (stock.draft ?? 0) !== 0
@@ -432,7 +432,7 @@ function downwardTargetProblem(nodes: readonly unknown[], target: FaceEndExtrude
   if (!record(sketch) || sketch.kind !== 'sketch' || sketch.held !== undefined
     || sketch.pocketFloor !== undefined || faceEndAxes(sketch.plane as DocPlane | undefined) !== XY
     || !isFaceEndExtrudeSketch(sketch as unknown as ModelNode)) return unsupported;
-  return sketch.profile === 'rectangle' || (circleSource && sketch.profile === 'circle' && sketch.plane === undefined)
+  return sketch.profile === 'rectangle' || (admitsDisk && sketch.profile === 'circle' && sketch.plane === undefined)
     ? null : unsupported;
 }
 
@@ -443,7 +443,7 @@ export function faceEndExtrudeHeight(doc: StudioDoc, node: FaceEndExtrudeNode, p
   const axes = faceEndAxes(sketch.plane)!;
   const { axes: [u, v, w], sign } = axes, origin = sketch.plane?.origin ?? [0, 0, 0];
   if (axes === DOWN_XY) {
-    const problem = downwardTargetProblem(doc.nodes, node.target, doc.parameters, sketch.profile === 'circle');
+    const problem = downwardTargetProblem(doc.nodes, node.target, doc.parameters, sketch.profile);
     if (problem) throw invalid(problem);
   }
   // Bounds use the actual native profile fields, never the editor's optional outline snapshot.

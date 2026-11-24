@@ -5,10 +5,12 @@ import { join } from 'node:path';
 import { createFlow, sha256 } from './flow-helper.mjs';
 
 const baseline = process.argv.includes('--baseline');
-const disk = process.argv.includes('--disk');
-const circle = disk || process.argv.includes('--circle');
+const rectangleDisk = process.argv.includes('--rectangle-disk');
+const disk = rectangleDisk || process.argv.includes('--disk');
+const circle = !rectangleDisk && (disk || process.argv.includes('--circle'));
 const sourceCenter = disk ? [11, 10] : [5, 4];
 const sourceRadius = disk ? 8 : 2;
+const sourceSize = rectangleDisk ? 5 : sourceRadius;
 const pins = [
   'apps/cad-studio/test/reversed-extrude-end-face-browser.mjs',
   'packages/barocss-cad-model/src/app/profileCommands.ts',
@@ -16,7 +18,7 @@ const pins = [
   'packages/barocss-cad-model/src/engine/part.ts',
 ];
 const f = await createFlow({
-  name: 'reversed-extrude-end-face', output: process.argv[2], envFrozen: disk ? 'D1958_SOURCE_FROZEN' : circle ? 'D1932_SOURCE_FROZEN' : 'D1896_SOURCE_FROZEN',
+  name: 'reversed-extrude-end-face', output: process.argv[2], envFrozen: rectangleDisk ? 'D1964_SOURCE_FROZEN' : disk ? 'D1958_SOURCE_FROZEN' : circle ? 'D1932_SOURCE_FROZEN' : 'D1896_SOURCE_FROZEN',
   initialFiles: pins, requiredFrozen: pins,
   qualification: `Extrude a ${circle ? 'circular' : 'rectangular'} profile from an exact -Z sketch plane to the original top face.`,
   limits: ['One top-level upright rectangular or circular target Extrude and one literal source in desktop Studio.'],
@@ -49,28 +51,39 @@ const seed = {
     disk ? { id: 'n0', kind: 'sketch', profile: 'circle', center: [10, 10], radius: 10 }
       : { id: 'n0', kind: 'sketch', profile: 'rectangle', min: circle ? [0, 0] : [-5, -5], max: circle ? [10, 10] : [15, 15] },
     { id: 'n1', kind: 'extrude', sketch: 0, height: 5 },
-    { id: 'n2', kind: 'sketch', ...(circle ? { profile: 'circle', center: disk ? [10, -8] : [5, -4], radius: sourceRadius } : { profile: 'rectangle', min: [2, -6], max: [8, -2] }),
+    { id: 'n2', kind: 'sketch', ...(circle ? { profile: 'circle', center: disk ? [10, -8] : [5, -4], radius: sourceRadius }
+      : rectangleDisk ? { profile: 'rectangle', min: [9, -16], max: [14, -12], sideTags: { outer: ['e1', 'e2', 'e3', 'e4'] } }
+        : { profile: 'rectangle', min: [2, -6], max: [8, -2] }),
       plane: { origin: disk ? [1, 2, 20] : [0, 0, 20], normal: [0, 0, -1], xAxis: [1, 0, 0] } },
   ],
   outputs: { b1: { node: 1, side: 'solid' } }, nextId: 3,
 };
-const fileName = disk ? 'downward-circle-to-original-disk.bcad' : circle ? 'reversed-circle-extrude-end-face.bcad' : 'reversed-extrude-end-face.bcad';
+const fileName = rectangleDisk ? 'downward-rectangle-to-original-disk.bcad' : disk ? 'downward-circle-to-original-disk.bcad' : circle ? 'reversed-circle-extrude-end-face.bcad' : 'reversed-extrude-end-face.bcad';
 const feature = { id: 'n3', kind: 'face-end-extrude', sketch: 2,
   target: { body: { node: 1, side: 'solid' }, feature: 'n1', face: 'n1.top' } };
-const bound = (height, radius = sourceRadius) => ({
-  ...seed, nodes: [seed.nodes[0], { ...seed.nodes[1], height },
-    circle ? { ...seed.nodes[2], radius, ...(radius !== sourceRadius ? { sideTags: { outer: ['e1'] } } : {}) } : seed.nodes[2], feature],
+function sourceAt(size) {
+  if (size === sourceSize) return seed.nodes[2];
+  if (rectangleDisk) return { ...seed.nodes[2], max: [9 + size, -12] };
+  return { ...seed.nodes[2], radius: size, sideTags: { outer: ['e1'] } };
+}
+const bound = (height, size = sourceSize) => ({
+  ...seed, nodes: [seed.nodes[0], { ...seed.nodes[1], height }, sourceAt(size), feature],
   outputs: { ...seed.outputs, b3: { node: 3, side: 'solid' } }, nextId: 4,
 });
 const button = (name, scope = f.page) => scope.getByRole('button', { name, exact: true });
 const field = (label, scope) => scope.getByLabel(label, { exact: true });
 const equal = (a, b) => Math.abs(a - b) <= 1e-8;
 
-async function verify(label, height, radius = sourceRadius) {
-  const doc = bound(height, radius), travel = 20 - height;
+async function verify(label, height, size = sourceSize) {
+  const expected = bound(height, size), travel = 20 - height;
   await f.page.waitForFunction(height => window.__studioDoc?.nodes?.length === 4 && window.__studioDoc.nodes[1].height === height, height);
   await f.ready();
-  assert.deepEqual(await f.doc(), doc);
+  const doc = await f.doc();
+  if (rectangleDisk && size !== sourceSize) {
+    const { outline, ...profile } = doc.nodes[2];
+    assert.equal(outline?.lengths?.[0], size);
+    assert.deepEqual({ ...doc, nodes: doc.nodes.map((node, i) => i === 2 ? profile : node) }, expected);
+  } else assert.deepEqual(doc, expected);
   const { extrude, solids } = await f.inspect(label, doc);
   assert.deepEqual(extrude, { id: 'n3', kind: 'extrude', sketch: 'n2', height: travel });
   assert.deepEqual(solids.map(solid => solid.id), ['n1', 'n3']);
@@ -89,22 +102,26 @@ async function verify(label, height, radius = sourceRadius) {
     assert.equal(stock.corners.length, 8);
     assert.ok(equal(stock.mass.volume, (circle ? 100 : 400) * height));
   }
-  assert.ok(equal(added.mass.volume, (circle ? radius ** 2 * Math.PI : 24) * travel));
-  [...sourceCenter, (20 + height) / 2].forEach((value, i) => assert.ok(equal(added.mass.centroid[i], value)));
+  const area = rectangleDisk ? size * 4 : circle ? size ** 2 * Math.PI : 24;
+  const centre = rectangleDisk ? [10 + size / 2, 16] : sourceCenter;
+  assert.ok(equal(added.mass.volume, area * travel));
+  [...centre, (20 + height) / 2].forEach((value, i) => assert.ok(equal(added.mass.centroid[i], value)));
   if (circle) {
     assert.equal(added.cylinders.length, 2);
     for (const support of added.cylinders) {
       sourceCenter.forEach((value, i) => assert.ok(equal(support.c[i], value)));
-      assert.ok(equal(support.r, radius) && equal(Math.abs(support.a[2]), 1));
+      assert.ok(equal(support.r, size) && equal(Math.abs(support.a[2]), 1));
       assert.equal(support.out, 1);
     }
     for (const point of added.corners) {
-      assert.ok(equal(Math.hypot(point[0] - sourceCenter[0], point[1] - sourceCenter[1]), radius));
+      assert.ok(equal(Math.hypot(point[0] - sourceCenter[0], point[1] - sourceCenter[1]), size));
       assert.ok(equal(point[2], height) || equal(point[2], 20));
     }
   } else {
     assert.equal(added.corners.length, 8);
-    for (const x of [2, 8]) for (const y of [2, 6]) for (const z of [height, 20])
+    const xs = rectangleDisk ? [10, 10 + size] : [2, 8];
+    const ys = rectangleDisk ? [14, 18] : [2, 6];
+    for (const x of xs) for (const y of ys) for (const z of [height, 20])
       assert.ok(added.corners.some(point => point.every((value, axis) => equal(value, [x, y, z][axis]))));
   }
   const lower = added.caps.find(({ geometry }) => geometry.kind === 'plane' && geometry.n[2] === -1);
@@ -175,6 +192,25 @@ async function editCircleDiameter(height) {
   await verify('reopened-radius-edit', height, disk ? 7.5 : 2.5);
 }
 
+async function editRectangleWidth(height) {
+  f.phase = 'Refuse a tangent rectangle then edit the reopened width';
+  const original = await f.doc();
+  await f.openFeatureEditor(3, 'linked face termination');
+  await button('Edit sketch', f.editor()).click();
+  await f.sketchPanel().waitFor();
+  const width = f.sketchPanel().getByLabel('Edge 1 length', { exact: true });
+  await width.fill('6');
+  await width.press('Tab');
+  await f.page.locator('.topbar button.finish').click();
+  await f.waitToast(/contain the entire projected profile/);
+  await f.same(original);
+  await f.snapshot('06-rectangle-contact-refused');
+  await width.fill('4');
+  await width.press('Tab');
+  await f.finishSketch('07-reopened-rectangle-width-edited');
+  await verify('reopened-width-edit', height, 4);
+}
+
 await f.run(async () => {
   await f.newPage();
   if (circle && process.env.D1932_EDIT_FROM) {
@@ -222,7 +258,7 @@ await f.run(async () => {
     const details = refusal.locator('details:not([open]) > summary');
     if (await details.count()) await details.click();
     assert.match(await refusal.innerText(), /original upper cap.*forward upright rectangular extrusion/i);
-    await f.snapshot('00-previous-downward-circle-to-disk-refused');
+    await f.snapshot(rectangleDisk ? '00-previous-downward-rectangle-to-disk-refused' : '00-previous-downward-circle-to-disk-refused');
     await button('Cancel', hud).click();
     await f.same(seed);
     return;
@@ -255,7 +291,6 @@ await f.run(async () => {
   await editDistance(6, true);
   await verify('reopened-edit', 6);
   await f.snapshot('05-reopened-target-edit');
-  if (!circle) return;
-
-  await editCircleDiameter(6);
+  if (rectangleDisk) await editRectangleWidth(6);
+  if (circle) await editCircleDiameter(6);
 });
