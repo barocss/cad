@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { createFlow } from './flow-helper.mjs';
 
 const baseline = process.argv.includes('--baseline');
-const pins = ['apps/cad-studio/src/App.tsx', 'apps/cad-studio/src/viewport/useViewportPicking.ts',
+const pins = ['apps/cad-studio/test/sweep-input-order-browser.mjs', 'apps/cad-studio/src/App.tsx', 'apps/cad-studio/src/viewport/useViewportPicking.ts',
   'packages/barocss-cad-model/src/app/profileCommands.ts'];
 const f = await createFlow({
   name: 'sweep-input-order', output: process.argv[2], envFrozen: 'D1167_SOURCE_FROZEN',
@@ -17,7 +17,7 @@ const doc = JSON.parse(readFileSync(process.argv[2], 'utf8')), part = toPartDocu
 const out = evaluateCadPart(part).outputs.find(body => body.id === 'n2');
 const points = out.brep.vertices.map(vertex => vertex.point);
 const rings = [0, 32].map(z => points.filter(p => Math.abs(p[2] - z) < 1e-7).map(([x,y]) => Math.hypot(x, y)));
-console.log(JSON.stringify({ valid: checkOutput(out).valid, count: out.bodyCount, z: [Math.min(...points.map(p => p[2])), Math.max(...points.map(p => p[2]))],
+console.log(JSON.stringify({ valid: checkOutput(out).valid, count: out.bodyCount, representation: out.representation, z: [Math.min(...points.map(p => p[2])), Math.max(...points.map(p => p[2]))],
   rings: rings.map(r => ({ count: r.length, min: Math.min(...r), max: Math.max(...r) })) }));
 `,
 });
@@ -53,6 +53,8 @@ async function verify(label, doc) {
   assert.equal(node.sketch, 0);
   assert.equal(node.name, 'Rail A');
   assert.deepEqual(node.path.controlPoints, curveA);
+  assert.equal(node.mode, undefined);
+  assert.equal(native.representation, 'planar');
   assert.ok(native.valid && native.count === 1 && near(native.z[0], 0) && near(native.z[1], 32), JSON.stringify(native));
   for (const ring of native.rings) assert.ok(ring.count >= 8 && near(ring.min, 3) && near(ring.max, 3), JSON.stringify(ring));
 }
@@ -80,7 +82,9 @@ await f.run(async () => {
     const hud = f.page.getByRole('dialog', { name: 'Sweep', exact: true });
     await hud.locator('.status').filter({ hasText: /^preview$/ }).waitFor();
     await hud.locator('.hud-step').filter({ hasText: 'Profile' }).getByText('Sketch 1', { exact: true }).waitFor();
-    await hud.locator('.hud-step').filter({ hasText: 'Path' }).getByText(/Rail A/).waitFor();
+    await hud.locator('.hud-step').filter({ hasText: 'Path' }).getByText('Rail A · Line', { exact: true }).waitFor();
+    await hud.locator('.hud-step').filter({ hasText: 'Solid' }).getByText('Faceted', { exact: true }).waitFor();
+    assert.equal(await hud.getByLabel('Representation', { exact: true }).inputValue(), 'faceted');
     await f.same(seed);
     await f.snapshot(`sweep-preview-${label}`);
     await button('Apply', hud).click();

@@ -152,9 +152,14 @@ test('Sweep resolves exactly one visible path and uses the explicitly picked old
   const doc = { ...docOf(sk({ profile: 'circle', center: [0, 0], radius: 3 }), sk({ profile: 'circle', center: [30, 0], radius: 6 })), direct };
   const ctx = { ...ctxOf(doc, [0]), direct: [object.id] };
   assert.deepEqual(sweepCurveCommand.available(ctx), { ok: true });
-  assert.deepEqual(sweepCurveCommand.steps!(ctx, {}).map(step => [step.label, step.text, step.done]),
-    [['Profile', 'Sketch 1', true], ['Path', 'Sweep rail · rail · Faceted', true]]);
-  const swept = sweepCurveCommand.build!(ctx, {}).nodes.at(-1);
+  const values = sweepCurveCommand.defaults!(ctx);
+  assert.equal(values.representation, 'faceted');
+  assert.deepEqual(sweepCurveCommand.steps!(ctx, values).map(step => [step.label, step.text, step.done]), [
+    ['Profile', 'Sketch 1', true],
+    ['Path', 'Sweep rail · rail · Line', true],
+    ['Solid', 'Faceted', true],
+  ]);
+  const swept = sweepCurveCommand.build!(ctx, values).nodes.at(-1);
   assert.ok(swept?.kind === 'sweep-curve');
   assert.equal(swept.sketch, 0);
   assert.deepEqual(swept.path.controlPoints, [[0, 0, 0], [0, 0, 32]]);

@@ -1,13 +1,13 @@
 # CAD roadmap — current status and execution order
 
-Updated 2026-11-25 · Priority authority: D520 · Latest delivery: D1958 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
+Updated 2026-11-25 · Priority authority: D520 · Latest delivery: D1959 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
 
 This is the only current status index. Detailed tracks define acceptance; the 34 stable row pages retain scope and issue navigation. Immutable decision notes retain results. Do not append chronological status paragraphs here. [D520 decision](notes/cad-roadmap-replan-2026-11-04/README.md) supersedes D445 execution order and historical next-item text, while retaining its safeguards and bounded proofs.
 
 ## Now and next
 
-- **Current position:** [D1958](notes/downward-circle-to-original-disk-2026-11-25/README.md), P1 rows 8 and 16. A downward circular Extrude can stop at an original upper circular disk. Studio verifies exact radial containment, upstream changes and fresh Open.
-- **Next MAIN:** D1959, P1 rows 7 and 16. Restore the existing Sweep command regression for explicit older sketch ownership under the current path and representation labels. Verify both input orders in Studio for [#10](https://github.com/barocss/cad/issues/10).
+- **Current position:** [D1959](notes/sweep-input-order-label-regression-2026-11-25/README.md), P1 rows 7 and 16. The Sweep regression now checks the separate path and solid labels. Both desktop selection orders retain the explicitly chosen sketch and produce the same saved geometry.
+- **Next MAIN:** D1960, P5 rows 16 and 31. Link the original inlet of the exact perpendicular annular Sweep to a native parallel plane for [#17](https://github.com/barocss/cad/issues/17). Verify donor edits, reference replacement, collapse refusal, and fresh Open.
 - **Separate follow-ups:** Continue Studio App extraction in cohesive parts with affected desktop checks. [#608 Rendering](https://github.com/barocss/cad/issues/608) stays on HOLD. API inventory drift remains open. The issue tracker records [#126](https://github.com/barocss/cad/issues/126), [#613](https://github.com/barocss/cad/issues/613), [#152](https://github.com/barocss/cad/issues/152) and [#22](https://github.com/barocss/cad/issues/22) as closed.
 - **Active repository:** [barocss/cad](https://github.com/barocss/cad), based on `origin/main`. Fetch before work and preserve unexpected changes. The [migration record](../../../docs/migration/README.md) maps the former `local/cad-dev` history and issue numbers.
 - **Evidence correction:** D482 records2167 PASS/0 FAIL/2 existing SKIP in a later full-kernel run than D433. Neither result is a new full-suite PASS at this audit HEAD. [D482 record](notes/vertical-contact-refusal-2026-11-04/README.md).
