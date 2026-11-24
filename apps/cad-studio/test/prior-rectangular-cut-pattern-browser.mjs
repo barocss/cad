@@ -8,8 +8,10 @@ import { choosePriorCutSource, equivalent, fillMask, fourthCut, inspectorSource,
 
 const mode = process.argv[3];
 const linearFour = mode === '--linear-four';
+const agentFour = mode === '--agent-four';
 const baseline = process.argv.includes('--baseline');
 const workflows = {
+  '--agent-four': ['D1899_SOURCE_FROZEN', '#25 revision-bound local Agent proposal for the first of four original through-Subtracts.'],
   '--agent': ['D1829_SOURCE_FROZEN', '#25 revision-bound local Agent proposal for the earlier through-Subtract.'],
   '--linear': ['D1830_SOURCE_FROZEN', '#25 repeat the earlier rectangular through-cut along a signed XY line.'],
   '--linear-four': ['D1894_SOURCE_FROZEN', '#25 repeat the initial rectangular through-cut across three newer cuts.'],
@@ -76,28 +78,37 @@ async function apply(p, before, label, usesEarlier, firstSpacing = 16) {
 
 async function approveAgentPattern(source) {
   const file = join(f.output, 'agent-proposal.bcad');
+  const target = source.nodes.length - 1, targetId = source.nodes[target].id;
+  const pitch = agentFour ? 8 : 16;
+  const retained = agentFour ? [later, newest, fourthCut] : [later];
   const original = Buffer.from(JSON.stringify(source));
   await writeFile(file, original);
   const session = { app: f.app, output: f.output, clientName: f.name };
   await withMcpSession(session, file, 'earlier-cut-agent', async call => {
     const command = 'rectangular-feature-pattern';
-    const description = await call('describe', { command });
-    assert.match(description.values.source, /stable feature ID.*expectedRevision/);
+    const descriptions = agentFour ? [command, 'linear-feature-pattern', 'fill-feature-pattern', 'curve-feature-pattern'] : [command];
+    for (const id of descriptions) {
+      const description = await call('describe', { command: id });
+      assert.match(description.values.source, /stable feature ID.*expectedRevision/);
+      if (agentFour) assert.match(description.values.source, /contiguous chain of original rectangular through-Subtracts/);
+    }
     const expectedRevision = await currentPartRevision(call);
-    const values = { source: 'n4', axis: 'x', spacing: 16, count: 2, axis2: 'y', spacing2: 8, count2: 2 };
-    const op = (override = {}) => ({ tool: 'features', args: { action: 'command', command, bodies: ['b7'], expectedRevision, values, ...override } });
+    const values = { source: 'n4', axis: 'x', spacing: pitch, count: 2, axis2: 'y', spacing2: 8, count2: 2 };
+    const op = (override = {}) => ({ tool: 'features', args: { action: 'command', command, bodies: [`b${targetId.slice(1)}`], expectedRevision, values, ...override } });
     const dry = (operation, error = false) => call('features', { action: 'batch', dryRun: true, ops: [operation] }, error);
     const result = await dry(op());
     assert.equal(result.dryRun, true);
     equivalent(result.change.volume, -240);
     assert.match(result.would_apply[0].did, /"source":"n4"/);
     assert.match((await dry(op({ expectedRevision: '0000000000000000' }), true)).error, /part changed/);
-    assert.match((await dry(op({ values: { ...values, source: 'n7' } }), true)).error, /distinct/);
-    const overlap = await dry(op({ values: { ...values, spacing2: 18 } }), true);
-    assert.deepEqual([overlap.failed_op, overlap.kept], [0, 'nothing was applied']);
-    assert.match(overlap.error, /kernel could not build/i);
+    assert.match((await dry(op({ values: { ...values, source: targetId } }), true)).error, /distinct/);
+    for (const unsafe of agentFour ? [{ spacing: 16 }, { spacing2: 18 }] : [{ spacing2: 18 }]) {
+      const overlap = await dry(op({ values: { ...values, ...unsafe } }), true);
+      assert.deepEqual([overlap.failed_op, overlap.kept], [0, 'nothing was applied']);
+      assert.match(overlap.error, /kernel could not build/i);
+    }
     assert.deepEqual(await readFile(file), original);
-    const proposal = await call('proposals', { action: 'propose', title: 'Repeat earlier Subtract n4 on current stock n7', ops: [op()] });
+    const proposal = await call('proposals', { action: 'propose', title: `Repeat earlier Subtract n4 on current stock ${targetId}`, ops: [op()] });
     assert.deepEqual([proposal.proposal, proposal.applied], ['P1', false]);
     const pendingBytes = await readFile(file);
     assert.match((await call('proposals', { action: 'accept', id: 'P1' }, true)).error, /user accepts.*studio/i);
@@ -117,23 +128,23 @@ async function approveAgentPattern(source) {
   await button('Hide', card).waitFor();
   await f.same(pending);
   await card.getByLabel('Volume change').getByText(/^[−-]240(?:\.0+)? mm³(?: \(.*\))?$/).waitFor();
-  await native('pending-original-cuts', pending, [older, later]);
+  await native('pending-original-cuts', pending, [older, ...retained]);
   await f.snapshot('02-agent-preview');
   await button('Accept', card).click();
   await f.changed(pending);
   const approved = (await f.snapshot('03-agent-approved')).doc;
   assert.deepEqual(approved.nodes.slice(0, -1), source.nodes);
   assert.deepEqual(approved.nodes.at(-1).source, { node: 4, side: 'solid' });
-  assert.deepEqual(approved.nodes.at(-1).parent, { node: 7, side: 'solid' });
+  assert.deepEqual(approved.nodes.at(-1).parent, { node: target, side: 'solid' });
   assert.deepEqual(approved.proposals.map(proposal => proposal.status), ['accepted']);
   const { kind, proposal, by } = approved.history.at(-1);
   assert.deepEqual([kind, proposal, by.agent], ['accept', 'P1', 'user']);
-  await native('agent-approved-five-cuts', approved, [...grid(older, 16), later]);
+  await native('agent-approved-cuts', approved, [...grid(older, pitch), ...retained]);
   const saved = await f.save('agent-earlier-cut');
   const reopened = await f.freshOpen(saved.file, approved, 'agent-approved-fresh-open');
   await button('Top', f.page.locator('.views')).click();
   await f.page.getByTitle('Frame all (F)', { exact: true }).click();
-  await native('agent-reopened-five-cuts', reopened.doc, [...grid(older, 16), later]);
+  await native('agent-reopened-cuts', reopened.doc, [...grid(older, pitch), ...retained]);
   await f.snapshot('04-agent-reopened');
 }
 
@@ -347,10 +358,10 @@ async function applyFillPattern(source) {
 }
 
 await f.run(async () => {
-  const third = mode === '--linear-three' || linearFour || rectangularThree || fillThree;
+  const third = mode === '--linear-three' || linearFour || agentFour || rectangularThree || fillThree;
   const fill = mode === '--fill' || fillThree;
-  const source = await f.inspect('seed', { fill, third, fourth: linearFour });
-  if (mode === '--agent') return approveAgentPattern(source);
+  const source = await f.inspect('seed', { fill, third, fourth: linearFour || agentFour });
+  if (mode === '--agent' || agentFour) return approveAgentPattern(source);
   await f.newPage();
   await f.page.getByLabel('Model file', { exact: true }).setInputFiles({
     name: linearFour ? 'four-rectangular-through-cuts.bcad' : third ? 'three-rectangular-through-cuts.bcad' : 'two-rectangular-through-cuts.bcad',
