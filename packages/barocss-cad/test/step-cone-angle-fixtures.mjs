@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { frustumStep, holedBoxStep } from './step-fixtures.mjs';
+import { frustumStep, holedBoxStep, tetrahedronStep } from './step-fixtures.mjs';
 
 function append(text, records) {
   const end = 'ENDSEC;\nEND-ISO-10303-21;';
@@ -56,4 +56,8 @@ export function coneAngleFixture(kind, angle = 1, wrapped = false, distance = '0
 }
 export function nonConeAngleFixture(kind = 'degree') {
   return withAngles(holedBoxStep(), kind);
+}
+
+export function tetrahedronAngleFixture(kind, geometry) {
+  return withAngles(tetrahedronStep(geometry), kind);
 }

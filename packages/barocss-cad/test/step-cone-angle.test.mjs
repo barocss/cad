@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { BrepError, brepMassProperties, checkBrep, evaluateCadPart, importStep } from '../dist/index.js';
-import { coneAngleFixture, nonConeAngleFixture } from './step-cone-angle-fixtures.mjs';
+import { BrepError, brepMassProperties, checkBrep, evaluateCadPart, importStep, stepMeshes } from '../dist/index.js';
+import { coneAngleFixture, nonConeAngleFixture, tetrahedronAngleFixture } from './step-cone-angle-fixtures.mjs';
 
 const unsupportedAngle = /CONICAL_SURFACE plane-angle unit.*(?:not supported|ambiguous)/;
 const refusal = error => error instanceof BrepError && error.code === 'INPUT' && unsupportedAngle.test(error.message);
@@ -61,4 +61,36 @@ test('attached context references must resolve unambiguously for an angle-consum
   const invalid = coneAngleFixture('radian').replace(/(ADVANCED_BREP_SHAPE_REPRESENTATION[^\n]+,)#\d+\);/, '$1#987654);');
   assert.throws(() => importStep(invalid), refusal);
   assert.throws(() => importStep(coneAngleFixture('degree', 1, true, '1E-9999')), /basis CONICAL_SURFACE is not supported yet/);
+});
+
+for (const tessellated of [false, true]) test(`active DEGREE leaves a pure ${tessellated ? 'tessellated' : 'planar'} solid unchanged`, () => {
+  for (const cm of [false, true]) {
+    const step = tetrahedronAngleFixture('degree', { tessellated, cm });
+    const legacy = tetrahedronAngleFixture('unitless', { tessellated, cm });
+    // Read the explicit fixture graph independently of STEP import. The solid owns this representation.
+    const solid = step.match(tessellated ? /^(#\d+)=TESSELLATED_SOLID\(/m : /^(#\d+)=MANIFOLD_SOLID_BREP\(/m)?.[1];
+    const owner = step.match(tessellated ? /^#\d+=TESSELLATED_SHAPE_REPRESENTATION\('',\((#\d+)\),(#\d+)\);/m
+      : /^#\d+=ADVANCED_BREP_SHAPE_REPRESENTATION\('',\((#\d+)\),(#\d+)\);/m);
+    assert.ok(solid && owner);
+    assert.equal(owner[1], solid);
+    const record = ref => step.split('\n').find(line => line.startsWith(`${ref}=`)) ?? '';
+    const assignment = record(owner[2]).match(/GLOBAL_UNIT_ASSIGNED_CONTEXT\(\((#\d+),(#\d+)\)\)/);
+    assert.ok(assignment);
+    assert.ok(record(assignment[1]).includes(`SI_UNIT(${cm ? '.CENTI.' : '.MILLI.'},.METRE.)`));
+    const conversion = record(assignment[2]).match(/CONVERSION_BASED_UNIT\('DEGREE',(#\d+)\)/);
+    assert.ok(conversion);
+    const factor = record(conversion[1]).match(/PLANE_ANGLE_MEASURE\(([^)]+)\),(#\d+)/);
+    assert.ok(factor);
+    assert.equal(Number(factor[1]), Math.PI / 180);
+    assert.match(record(factor[2]), /SI_UNIT\(\$,\.RADIAN\.\)/);
+    assert.doesNotMatch(step, /CONICAL_SURFACE|CYLINDRICAL_SURFACE|OFFSET_SURFACE/);
+    assert.deepEqual(stepMeshes(step), stepMeshes(legacy));
+    const brep = importStep(step);
+    assert.deepEqual(brep, importStep(legacy));
+    assert.equal(checkBrep(brep, { strict: true }).valid, true);
+    assert.deepEqual(brep.faces.map(face => face.name).sort(), ['bottom', 'front', 'left', 'slope']);
+    const scale = cm ? 10 : 1, { volume, centroid } = brepMassProperties(brep, 1);
+    assert.ok(Math.abs(volume * scale ** 3 - 32) < 1e-8);
+    assert.ok(centroid.every((axis, index) => Math.abs(axis * scale - [1, 1.5, 2][index]) < 1e-8));
+  }
 });

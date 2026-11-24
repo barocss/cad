@@ -130,7 +130,10 @@ none 1000, …) or a `CONVERSION_BASED_UNIT` named `INCH` (25.4) or `FOOT` (304.
 adds a `scale` step about the origin to each solid it opened. A file that declares no unit is read as millimetres, and
 the studio says so.
 
-**Angles.** A cone's half-angle is taken in radians. `PLANE_ANGLE_UNIT` is not read.
+**Angles.** A cone's half-angle uses radians. The solid's owning representation can declare the unprefixed SI
+`RADIAN` unit. A file without a plane-angle declaration retains the radian default. The reader refuses an ambiguous
+declaration or an unsupported unit such as degrees before it builds the cone. This check also applies to the supported
+literal-zero cone offset. A degree declaration does not affect planar or tessellated solids.
 
 **Tolerance.** The reader looks for the file's `UNCERTAINTY_MEASURE_WITH_UNIT` named `distance_accuracy_value`. When
 it is larger than 10⁻⁶ mm, the B-rep's tolerance is that accuracy, capped at 10⁻⁵ × max(1 mm, the model's largest
@@ -253,8 +256,9 @@ built kernel.
   reports a message saying *not supported* as `CAPABILITY`, anything else as `INPUT`:
   - other surfaces, curves, edges, faces, shells, and bounds that are not edge loops;
   - `OFFSET_SURFACE` except one level over a direct plane or cylinder, with analytically checked line/conic
-    boundaries for planes and coaxial circle/axis-parallel line boundaries for cylinders. Nested offsets, other
-    boundary families and collapsed or crossed cylinder offsets remain unsupported. Offset distance follows the
+    boundaries for planes and coaxial circle/axis-parallel line boundaries for cylinders, or the literal-zero offset
+    of a supported regular cone frustum. Nested offsets, other boundary families and collapsed or crossed cylinder
+    offsets remain unsupported. Offset distance follows the
     basis normal; face orientation and the informational `self_intersect` flag do not change that sign.
     Reductions whose normalization/arithmetic error leaves no tolerance budget are refused;
   - a hole across a seam, and holes that leave no angle to cut;
@@ -263,8 +267,8 @@ built kernel.
     without a seam;
   - a profile of revolution off a plane through its axis, on the axis, or a line square to it;
   - a file with no DATA section or no solid.
-- **Not read:** the file's length and angle units (the studio scales lengths; angles are taken as radians), the product
-  structure and assemblies, colours, layers and PMI. A void's `ORIENTED_CLOSED_SHELL` flag and a trimmed curve's trim
-  parameters are not applied.
+- **Not read:** the file's length units (Studio scales lengths), the product structure and assemblies, colours, layers
+  and PMI. See [Angles](#4-units-tolerances-and-repair) for the supported cone unit. A void's `ORIENTED_CLOSED_SHELL`
+  flag and a trimmed curve's trim parameters are not applied.
 - **No healing:** faces are not sewn and gaps are not closed, except that each curve's ends are set to its vertices.
 - **IGES** is read only as the kernel's writer writes it: curves and surfaces, never a solid.

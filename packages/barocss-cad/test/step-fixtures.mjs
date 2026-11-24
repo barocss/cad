@@ -16,15 +16,17 @@ function writer() {
   const loop = (...oes) => e(`EDGE_LOOP('',(${oes.join(',')}))`);
   const face = (bounds, surface, same, name = '') => e(`ADVANCED_FACE('${name}',(${bounds.join(',')}),${surface},${same ? '.T.' : '.F.'})`);
   const outer = l => e(`FACE_OUTER_BOUND('',${l},.T.)`), inner = l => e(`FACE_BOUND('',${l},.T.)`);
-  const finish = (faces, name) => {
+  const text = (schema = 'AUTOMOTIVE_DESIGN') => ['ISO-10303-21;', 'HEADER;', "FILE_DESCRIPTION((''),'2;1');",
+    "FILE_NAME('f.stp','',(''),(''),'','','');", `FILE_SCHEMA(('${schema}'));`, 'ENDSEC;', 'DATA;',
+    '/* written as OCCT writes it */', ...lines, 'ENDSEC;', 'END-ISO-10303-21;', ''].join('\n');
+  const finish = (faces, name, prefix = '.MILLI.') => {
     const shell = e(`CLOSED_SHELL('',(${faces.join(',')}))`), solid = e(`MANIFOLD_SOLID_BREP('${name}',${shell})`);
-    const mm = e(`(LENGTH_UNIT()NAMED_UNIT(*)SI_UNIT(.MILLI.,.METRE.))`);
-    const ctx = e(`(GEOMETRIC_REPRESENTATION_CONTEXT(3)GLOBAL_UNIT_ASSIGNED_CONTEXT((${mm}))REPRESENTATION_CONTEXT('',''))`);
+    const length = e(`(LENGTH_UNIT()NAMED_UNIT(*)SI_UNIT(${prefix},.METRE.))`);
+    const ctx = e(`(GEOMETRIC_REPRESENTATION_CONTEXT(3)GLOBAL_UNIT_ASSIGNED_CONTEXT((${length}))REPRESENTATION_CONTEXT('',''))`);
     e(`ADVANCED_BREP_SHAPE_REPRESENTATION('',(${solid}),${ctx})`);
-    return ['ISO-10303-21;', 'HEADER;', "FILE_DESCRIPTION((''),'2;1');", "FILE_NAME('f.stp','',(''),(''),'','','');", "FILE_SCHEMA(('AUTOMOTIVE_DESIGN'));", 'ENDSEC;', 'DATA;',
-      '/* written as OCCT writes it */', ...lines, 'ENDSEC;', 'END-ISO-10303-21;', ''].join('\n');
+    return text();
   };
-  return { e, pt, dir, ax, vtx, line, edge, oe, loop, face, outer, inner, finish };
+  return { e, pt, dir, ax, vtx, line, edge, oe, loop, face, outer, inner, finish, text };
 }
 
 /** A cylinder about z: two discs bounded by closed circles, a wall with a seam at x = r. */
@@ -61,6 +63,37 @@ export function holedBoxStep(a = 40, b = 30, h = 10, r = 4) {
     w.face([w.outer(w.loop(w.oe(hc0, false), w.oe(seam, true), w.oe(hc1, true), w.oe(seam, false)))], w.e(`CYLINDRICAL_SURFACE('',${w.ax([cx, cy, 0])},${r}.)`), false, 'hole'),
   ];
   return w.finish(faces, 'holed box');
+}
+
+/** A closed tetrahedron with perpendicular edges of 4, 6 and 8 mm. */
+export function tetrahedronStep({ tessellated = false, cm = false } = {}) {
+  const vertices = [[0, 0, 0], [4, 0, 0], [0, 6, 0], [0, 0, 8]].map(point => point.map(x => cm ? x / 10 : x));
+  const sides = [[0, 2, 1], [0, 1, 3], [0, 3, 2], [1, 2, 3]];
+  const names = ['bottom', 'front', 'left', 'slope'];
+  const w = writer(), prefix = cm ? '.CENTI.' : '.MILLI.';
+  if (tessellated) {
+    const points = w.e(`COORDINATES_LIST('',4,(${vertices.map(point => `(${point.join(',')})`).join(',')}))`);
+    const faces = sides.map((side, i) => w.e(`TRIANGULATED_FACE('${names[i]}',${points},4,(),$,(),((${side.map(index => index + 1).join(',')})))`));
+    const solid = w.e(`TESSELLATED_SOLID('Tetrahedron',(${faces.join(',')}),$)`);
+    const length = w.e(`(LENGTH_UNIT()NAMED_UNIT(*)SI_UNIT(${prefix},.METRE.))`);
+    const context = w.e(`(GEOMETRIC_REPRESENTATION_CONTEXT(3)GLOBAL_UNIT_ASSIGNED_CONTEXT((${length}))REPRESENTATION_CONTEXT('',''))`);
+    w.e(`TESSELLATED_SHAPE_REPRESENTATION('',(${solid}),${context})`);
+    return w.text('AP242_MANAGED_MODEL_BASED_3D_ENGINEERING_MIM_LF { 1 0 10303 442 1 1 4 }');
+  }
+  const points = vertices.map(w.vtx), edges = new Map();
+  const normals = [[0, 0, -1], [0, -1, 0], [-1, 0, 0], [48, 32, 24]];
+  const difference = (a, b) => vertices[b].map((value, i) => value - vertices[a][i]);
+  const unit = direction => direction.map(value => value / Math.hypot(...direction));
+  const use = (start, end) => {
+    const a = Math.min(start, end), b = Math.max(start, end), key = `${a}-${b}`;
+    if (!edges.has(key)) edges.set(key, w.edge(points[a], points[b], w.line(vertices[a], unit(difference(a, b)))));
+    return w.oe(edges.get(key), start === a);
+  };
+  const faces = sides.map(([a, b, c], i) => {
+    const plane = w.e(`PLANE('',${w.ax(vertices[a], unit(normals[i]), unit(difference(a, b)))})`);
+    return w.face([w.outer(w.loop(use(a, b), use(b, c), use(c, a)))], plane, true, names[i]);
+  });
+  return w.finish(faces, 'Tetrahedron', prefix);
 }
 
 /** A cone frustum about z: radius R at z = 0 to radius R − h·tan α at z = h, its wall with a seam. */

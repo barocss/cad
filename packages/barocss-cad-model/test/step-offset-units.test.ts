@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 // @ts-expect-error The test-only .mjs factory has no TypeScript declaration.
 import { planeOffsetStep, cylinderOffsetStep, unsupportedOffsetStep } from '../../barocss-cad/test/step-offset-fixtures.mjs';
 // @ts-expect-error The test-only .mjs factory has no TypeScript declaration.
-import { coneAngleFixture } from '../../barocss-cad/test/step-cone-angle-fixtures.mjs';
+import { coneAngleFixture, tetrahedronAngleFixture } from '../../barocss-cad/test/step-cone-angle-fixtures.mjs';
 import { emptyDoc, withNode, type StudioDoc } from '../src/engine/doc';
 import { evaluatePart, partBreps } from '../src/engine/evaluate';
 import { stepLengthUnit } from '../src/engine/stepUnits';
@@ -49,6 +49,22 @@ function accepted(doc: StudioDoc, expectedVolume: number, expectedBounds: number
   volumeNear(brepMassProperties(native[0].brep, 1).volume, expectedVolume);
   return native[0].brep;
 }
+
+for (const tessellated of [false, true]) test(`degree-declared ${tessellated ? 'tessellated' : 'planar'} STEP retains its scale in native files`, async () => {
+  for (const cm of [false, true]) {
+    const step = tetrahedronAngleFixture('degree', { tessellated, cm });
+    const doc = imported(step);
+    assert.equal(doc.nodes.length, cm ? 2 : 1);
+    assert.ok(doc.nodes[0].kind === 'import');
+    assert.equal(doc.nodes[0].step, step);
+    if (cm) assert.deepEqual(doc.nodes[1], { id: 'n1', kind: 'scale', parent: { node: 0, side: 'solid' }, factor: 10, pivot: [0, 0, 0] });
+    const read = await readStudioFile(encodeStudioFile(doc));
+    assert.ok('doc' in read);
+    assert.deepEqual(read.doc, doc);
+    const bounds = [0, 0, 0, 4, 6, 8];
+    assert.deepEqual(accepted(read.doc, 32, bounds), accepted(doc, 32, bounds));
+  }
+});
 
 test('analytic plane OFFSET source remains exact and evaluates at its physical millimetre size', () => {
   const step = planeOffsetStep();

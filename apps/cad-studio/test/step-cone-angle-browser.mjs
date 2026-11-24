@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
 import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { coneAngleFixture, nonConeAngleFixture } from '../../../packages/barocss-cad/test/step-cone-angle-fixtures.mjs';
+import { coneAngleFixture, nonConeAngleFixture, tetrahedronAngleFixture } from '../../../packages/barocss-cad/test/step-cone-angle-fixtures.mjs';
 import { createFlow } from './flow-helper.mjs';
 
 const baseline = process.argv.includes('--baseline');
+const retention = process.argv.includes('--non-cone-controls');
 const inputs = [
   'apps/cad-studio/test/step-cone-angle-browser.mjs',
   'apps/cad-studio/src/files/importedFile.ts',
@@ -15,18 +16,23 @@ const inputs = [
 const flow = await createFlow({
   name: 'step-cone-angle',
   output: process.argv[2],
-  envFrozen: 'D1867_SOURCE_FROZEN',
+  envFrozen: retention ? 'D1879_SOURCE_FROZEN' : 'D1867_SOURCE_FROZEN',
   initialFiles: inputs,
   requiredFrozen: inputs,
-  qualification: 'Read supported cone angles and refuse explicit unsupported units before replacing the current Studio document.',
-  limits: ['Local synthetic AP214, desktop WebGPU and the existing zero-offset identity route.'],
+  qualification: retention ? 'Open and retain planar and tessellated geometry and length units when no surface consumes the degree declaration.'
+    : 'Read supported cone angles and refuse explicit unsupported units before replacing the current Studio document.',
+  limits: retention ? ['One tetrahedron as pure AP214 planar and AP242 tessellated solids in millimetres and centimetres.']
+    : ['Local synthetic AP214, desktop WebGPU and the existing zero-offset identity route.'],
   inspectorSource: `
 import { readFileSync } from 'node:fs';
 import { brepMassProperties, checkBrep } from '@barocss/cad';
 import { partBreps } from '@barocss/cad-model/engine/evaluate';
+import { digestOf } from '@barocss/cad-model/util/digest';
 const doc = JSON.parse(readFileSync(process.argv[2], 'utf8'));
 const [{ brep }] = partBreps(doc);
-console.log(JSON.stringify({ volume: brepMassProperties(brep, 1).volume, strict: checkBrep(brep, { strict: true }).valid }));
+const { volume, centroid } = brepMassProperties(brep, 1);
+console.log(JSON.stringify({ volume, centroid, digest: digestOf(brep), strict: checkBrep(brep, { strict: true }).valid,
+  faces: brep.faces.map(face => face.name).sort(), kinds: [...new Set(brep.faces.map(face => face.surface.kind))] }));
 `,
 });
 const input = () => flow.page.getByLabel('Model file', { exact: true });
@@ -96,7 +102,48 @@ function holdStepFailure() {
   };
 }
 
+async function verifyTetrahedron(label, doc, tessellated) {
+  const result = await flow.inspect(label, doc);
+  assert.ok(result.strict);
+  assert.deepEqual(result.faces.map(name => name.replace(/^n\d+\./, '')).sort(), ['bottom', 'front', 'left', 'slope']);
+  assert.deepEqual(result.kinds, [tessellated ? 'facets' : 'surface']);
+  near(result.volume, 32, 1e-7);
+  result.centroid.forEach((coordinate, i) => near(coordinate, [1, 1.5, 2][i], 1e-7));
+  const { bodies } = await flow.bodies();
+  assert.equal(bodies.length, 1);
+  near(bodies[0].volume, 32, 1e-7);
+  flow.report.observations.push({ label, ...result });
+  return result.digest;
+}
+
+async function retainNonConeSources() {
+  await flow.newPage();
+  for (const tessellated of [false, true]) for (const cm of [false, true]) {
+    const label = `${tessellated ? 'tessellated' : 'planar'}-degree-${cm ? 'cm' : 'mm'}`;
+    flow.phase = `Open ${label}`;
+    const step = tetrahedronAngleFixture('degree', { tessellated, cm });
+    await flow.dismissToasts();
+    await flow.openFile(await file(label, step), cm ? 2 : 1);
+    if (cm) await flow.waitToast(/STEP opened.*in centimetres, scaled ×10 to millimetres/is);
+    else await flow.waitToast(/STEP opened.*in millimetres/is);
+    assert.equal(await flow.page.getByRole('dialog', { name: 'Mesh repair', exact: true }).count(), 0);
+    const doc = await flow.doc();
+    assert.equal(doc.nodes[0].kind, 'import');
+    assert.equal(doc.nodes[0].step, step);
+    assert.deepEqual(doc.nodes.slice(1), cm ? [{ id: 'n1', kind: 'scale', parent: { node: 0, side: 'solid' }, factor: 10, pivot: [0, 0, 0] }] : []);
+    await frame();
+    const expected = await verifyTetrahedron(label, doc, tessellated);
+    await flow.snapshot(label);
+    if (cm) {
+      const saved = await flow.save(label);
+      await flow.freshOpen(saved.file, doc, `${label}-reopened`);
+      assert.equal(await verifyTetrahedron(`${label}-reopened`, doc, tessellated), expected);
+    }
+  }
+}
+
 await flow.run(async () => {
+  if (retention) return retainNonConeSources();
   const radian = await file('radian-one-degree', coneAngleFixture('radian'));
   const degree = await file('degree-one-degree', coneAngleFixture('degree'));
   const offset = await file('degree-zero-offset', coneAngleFixture('degree', 1, true));
