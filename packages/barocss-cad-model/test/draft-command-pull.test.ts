@@ -96,3 +96,34 @@ test('Studio Draft retains three selected box sides through its editable History
   assert.deepEqual(edited.nodes[index], { ...node, angle: -12 });
   checkVolume(edited, -12);
 });
+
+test('Studio Draft keeps all four original sides and the fixed interior plane through a signed edit', () => {
+  const source = rectanglePart(40, 30, 40);
+  const ctx = ctxOn(source, [[1, 0, 0], [0, -1, 0], [-1, 0, 0], [0, 1, 0]]);
+  const defaults = draft.defaults!(ctx);
+  const automatic = draft.build!(ctx, { ...defaults, deg: 10 });
+  assert.equal(automatic.nodes.length, source.nodes.length);
+  const extrusion = automatic.nodes.at(-1);
+  assert.ok(extrusion?.kind === 'extrude');
+  assert.equal(extrusion.draft, 10);
+
+  const fixed = draft.build!(ctx, { ...defaults, deg: 10, neutralMode: 'fixed', neutral: 4 });
+  const index = source.nodes.length, node = fixed.nodes[index];
+  assert.ok(node.kind === 'draft');
+  assert.equal(node.neutral, 4);
+  assert.equal(new Set(node.faces).size, 4);
+  assert.deepEqual(fixed.nodes.slice(0, index), source.nodes);
+  const expected = (angle: number) => {
+    const slope = Math.tan(angle * Math.PI / 180);
+    const area = (z: number) => (40 - 2 * (z - 4) * slope) * (30 - 2 * (z - 4) * slope);
+    return 40 * (area(0) + 4 * area(20) + area(40)) / 6;
+  };
+  assert.ok(Math.abs(volume(fixed) - expected(10)) < 1e-7);
+  const edit = editSavedDraftCommand(fixed, index);
+  assert.ok(edit?.build && edit.defaults);
+  const editContext = { ...ctx, doc: fixed };
+  const changed = edit.build(editContext, { ...edit.defaults(editContext), deg: -12 });
+  assert.deepEqual(changed.nodes[index], { ...node, angle: -12 });
+  assert.deepEqual(changed.nodes.slice(0, index), source.nodes);
+  assert.ok(Math.abs(volume(changed) - expected(-12)) < 1e-7);
+});

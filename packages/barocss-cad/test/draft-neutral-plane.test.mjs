@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { evaluateCadPart, reevaluate, massPropertiesOf, checkBrep, faceGeometry } from '../dist/index.js';
+import { evaluateCadPart, reevaluate, massPropertiesOf, brepMassProperties, checkBrep, faceGeometry, saveCadPart, loadCadPart } from '../dist/index.js';
 import { brepBounds } from '../dist/brep/brep-bounds.js';
 
 // D449: nominal drafting of an ordinary 80 x 40 x 10 box, not a lifted cutting plane.
@@ -333,4 +333,123 @@ test('opposing drafted walls keep a positive depth at both sides of an interior 
       else assert.throws(() => evaluateCadPart(input), e => e.code === 'GEOMETRY' && /closes a box wall/.test(e.message));
     }
   }
+});
+
+const left = 'n1.side[e4]';
+const fourSides = [front, right, back, left];
+function fourSideBox(angle = 10, pull = 'z', neutral = pull === 'z' ? 4 : 36) {
+  const input = threeSideBox(angle, pull);
+  Object.assign(input.features.at(-1), { faces: [...fourSides], neutral });
+  return input;
+}
+function draftIncidence(brep) {
+  return { bodies: brep.bodies, shells: brep.shells, loops: brep.loops,
+    faces: brep.faces.map(({ surface: _surface, ...face }) => face), coedges: brep.coedges,
+    edges: brep.edges.map(({ curve: _curve, ...edge }) => edge), vertices: brep.vertices.map(({ point: _point, ...vertex }) => vertex) };
+}
+
+test('four original box sides turn around one strict interior neutral with native identity and signed-pull mass', () => {
+  const W = 40, D = 30, H = 40, N = 4, byPull = new Map();
+  for (const pull of ['z', '-z']) for (const angle of [10, -10]) {
+    const sign = pull === 'z' ? 1 : -1, start = sign === 1 ? 0 : H;
+    const input = fourSideBox(angle, pull), before = structuredClone(input);
+    const source = evaluateCadPart({ ...input, features: input.features.slice(0, -1) });
+    const snapshot = evaluateCadPart(input), out = snapshot.outputs[0], brep = out.brep;
+    assert.deepEqual(input, before); assert.equal(snapshot.outputs.length, 1); assert.equal(out.id, 'n2');
+    const report = checkBrep(brep, { strict: true });
+    assert.equal(report.valid, true, report.issues.join('\n'));
+    assert.deepEqual(report.counts, { bodies: 1, shells: 1, faces: 6, loops: 6, coedges: 24, edges: 12, vertices: 8 });
+    assert.equal(report.topology.length, 1); assert.equal(report.topology[0].genus, 0);
+    assert.ok(brep.coedges.every(use => use.pcurve === null));
+    assert.deepEqual(brep.faces.map(face => face.name).sort(), source.outputs[0].brep.faces.map(face => face.name).sort());
+    assert.deepEqual(brep.edges.map(edge => edge.name).sort(), source.outputs[0].brep.edges.map(edge => edge.name).sort());
+    if (byPull.has(pull)) assert.deepEqual(draftIncidence(brep), byPull.get(pull));
+    else byPull.set(pull, draftIncidence(brep));
+    const reversed = structuredClone(input); reversed.features.at(-1).faces.reverse();
+    assert.deepEqual(evaluateCadPart(reversed).outputs[0].brep, brep);
+    assert.deepEqual(reevaluate(source, { document: input }).outputs[0].brep, brep);
+
+    // Integrate the independent rectangular slices: (W-2*k*s)*(D-2*k*s), s in [-N,H-N].
+    const k = Math.tan(angle * Math.PI / 180), integral = degree => ((H - N) ** (degree + 1) - (-N) ** (degree + 1)) / (degree + 1);
+    const volume = W * D * H - 2 * (W + D) * k * integral(1) + 4 * k * k * integral(2);
+    const centre = N + (W * D * integral(1) - 2 * (W + D) * k * integral(2) + 4 * k * k * integral(3)) / volume;
+    for (const mass of [massPropertiesOf(out), brepMassProperties(brep, 1)]) {
+      close(mass.volume, volume, 1e-7, 'four-side independent volume');
+      [W / 2, D / 2, start + sign * centre].forEach((value, i) => close(mass.centroid[i], value, coordinateLimit, 'four-side centroid'));
+    }
+    for (const station of [0, H]) {
+      const inset = k * (station - N), z = start + sign * station;
+      for (const x of [inset, W - inset]) for (const y of [inset, D - inset])
+        assert.ok(brep.vertices.some(vertex => samePoint(vertex.point, [x, y, z])));
+    }
+    for (const [name, normal] of [[left, [-1, 0, sign * k]], [right, [1, 0, sign * k]],
+      [front, [0, -1, sign * k]], [back, [0, 1, sign * k]]]) {
+      const plane = faceGeometry(brep.faces.find(face => face.name === name));
+      assert.equal(plane.kind, 'plane');
+      plane.n.forEach((value, i) => close(value, normal[i] / Math.hypot(...normal), coordinateLimit, 'four-side support normal'));
+    }
+    for (const [xFace, xAt, xNeutral] of [[left, q => q, 0], [right, q => W - q, W]]) {
+      for (const [yFace, yAt, yNeutral] of [[front, q => q, 0], [back, q => D - q, D]]) {
+        const edge = brep.edges.find(candidate => candidate.name === [xFace, yFace].sort().join('|'));
+        assert.ok(edge && edge.curve.degree === 1 && edge.curve.controlPoints.length === 2);
+        const endpoints = [0, H].map(station => {
+          const q = k * (station - N), point = [xAt(q), yAt(q), start + sign * station];
+          assert.ok(edge.curve.controlPoints.some(pole => samePoint(pole, point)));
+          return point;
+        });
+        const neutral = [xNeutral, yNeutral, start + sign * N];
+        const onEdge = endpoints[0].map((value, axis) => value + (endpoints[1][axis] - value) * N / H);
+        assert.ok(samePoint(onEdge, neutral));
+        for (const name of [xFace, yFace]) {
+          const plane = faceGeometry(brep.faces.find(face => face.name === name));
+          for (const point of [...endpoints, neutral]) close(point.reduce((sum, value, axis) => sum + (value - plane.o[axis]) * plane.n[axis], 0),
+            0, coordinateLimit, 'shared line and neutral point on both supports');
+        }
+      }
+    }
+    if (pull === 'z' && angle === 10) {
+      const reopened = loadCadPart(saveCadPart(snapshot));
+      assert.deepEqual(reopened.document, snapshot.document); assert.deepEqual(reopened.outputs[0].brep, brep);
+      const edited = reevaluate(reopened, { document: fourSideBox(-10) });
+      assert.deepEqual(draftIncidence(edited.outputs[0].brep), draftIncidence(brep));
+      assert.deepEqual(reevaluate(edited, { document: input }).outputs[0].brep, brep);
+    }
+  }
+});
+
+test('four-side Draft refuses opposing X or Y collapse at either end and end-coordinate overflow', () => {
+  for (const [width, depth] of [[40, 30], [20, 30]]) {
+    const boundary = Math.atan(Math.min(width, depth) / (2 * 36)) * 180 / Math.PI;
+    for (const [neutral, sign] of [[4, 1], [36, -1]]) for (const delta of [-0.01, 0, 0.01]) {
+      const input = fourSideBox(sign * (boundary + delta), 'z', neutral);
+      input.features[0].max = [width, depth];
+      const before = structuredClone(input);
+      if (delta < 0) assert.doesNotThrow(() => evaluateCadPart(input));
+      else assert.throws(() => evaluateCadPart(input), error => error.code === 'GEOMETRY' && /closes a box wall/.test(error.message));
+      assert.deepEqual(input, before);
+    }
+  }
+  for (const angle of [10, -10]) {
+    const input = fourSideBox(angle);
+    input.features.splice(2, 0, { id: 'm', kind: 'translate', target: 'n1', offset: [9960, 9970, 0] });
+    input.features.at(-1).target = 'm';
+    assert.throws(() => evaluateCadPart(input), error => error.code === 'PARAMETER' && /modeling coordinate range/.test(error.message));
+  }
+});
+
+test('four-side native Draft preserves the omitted or noninterior neutral and unsupported-source refusals', () => {
+  const rejects = input => {
+    const before = structuredClone(input);
+    assert.throws(() => evaluateCadPart(input), error => ['CAPABILITY', 'SELECTION'].includes(error.code));
+    assert.deepEqual(input, before);
+  };
+  for (const pull of ['z', '-z']) {
+    const automatic = fourSideBox(10, pull); delete automatic.features.at(-1).neutral; rejects(automatic);
+    for (const neutral of [-1, 0, 40, 41]) rejects(fourSideBox(10, pull, neutral));
+  }
+  const duplicate = fourSideBox(); duplicate.features.at(-1).faces = [front, right, back, right]; rejects(duplicate);
+  const cap = fourSideBox(); cap.features.at(-1).faces = [front, right, back, 'n1.top']; rejects(cap);
+  const holed = fourSideBox();
+  holed.features.splice(2, 0, { id: 'h', kind: 'hole', target: 'n1', center: [20, 15], radius: 2 });
+  holed.features.at(-1).target = 'h'; rejects(holed);
 });

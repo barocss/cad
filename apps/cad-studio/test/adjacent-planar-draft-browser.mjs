@@ -2,8 +2,10 @@ import assert from 'node:assert/strict';
 import { createFlow } from './flow-helper.mjs';
 
 const width = 40, depth = 30, height = 40;
+const four = process.argv.includes('--four');
 const three = process.argv.includes('--three');
-const interior = process.argv.includes('--interior');
+const sideCount = four ? 4 : three ? 3 : 2;
+const interior = four || process.argv.includes('--interior');
 const neutral = interior ? 4 : 0;
 const baseline = process.argv.includes('--baseline');
 const pins = [
@@ -17,9 +19,9 @@ const pins = [
   'packages/barocss-cad/src/part/part-box-shell.ts',
 ];
 const f = await createFlow({
-  name: 'adjacent-planar-draft', output: process.argv[2], envFrozen: interior && three ? 'D1969_SOURCE_FROZEN' : interior ? 'D1968_SOURCE_FROZEN' : three ? 'D1934_SOURCE_FROZEN' : 'D1252_SOURCE_FROZEN',
+  name: 'adjacent-planar-draft', output: process.argv[2], envFrozen: four ? 'D1971_SOURCE_FROZEN' : interior && three ? 'D1969_SOURCE_FROZEN' : interior ? 'D1968_SOURCE_FROZEN' : three ? 'D1934_SOURCE_FROZEN' : 'D1252_SOURCE_FROZEN',
   initialFiles: pins, requiredFrozen: pins,
-  qualification: `Author Draft on ${three ? 'three' : 'two'} rectangular stock sides, edit the angle, reject collapse, and reopen.`,
+  qualification: `Author Draft on ${sideCount} rectangular stock sides, edit the angle, reject collapse, and reopen.`,
   limits: [`One rectangular solid, +Z pull, selected planar sides and the ${interior ? 'fixed interior' : 'body-end'} neutral plane.`],
   inspectorSource: `
 import { readFileSync } from 'node:fs';
@@ -49,10 +51,10 @@ const near = (a, b) => Math.abs(a - b) < 1e-7;
 const samePoint = (a, b) => a.every((v, i) => near(v, b[i]));
 
 async function pick(view, point, count) {
-  if (view === 'Back') {
+  if (view === 'Back' || view === 'Left') {
     await button('View cube directions').click();
-    await f.page.getByRole('menuitem', { name: 'Back', exact: true }).click();
-    await f.page.locator('.vc-label').getByText('BACK', { exact: true }).waitFor();
+    await f.page.getByRole('menuitem', { name: view, exact: true }).click();
+    await f.page.locator('.vc-label').getByText(view.toUpperCase(), { exact: true }).waitFor();
   } else await button(view, f.page.locator('.views')).click();
   await f.page.evaluate(() => new Promise(done => requestAnimationFrame(() => requestAnimationFrame(done))));
   const pixel = await f.page.evaluate(point => window.__studioScreenOf(point), point);
@@ -70,48 +72,53 @@ async function inspect(label, doc, angle, source) {
   assert.equal(read.shellClosed, true);
   assert.deepEqual(read.check.counts, { bodies: 1, shells: 1, faces: 6, loops: 6, coedges: 24, edges: 12, vertices: 8 });
   const slope = Math.tan(angle * Math.PI / 180);
-  const movingY = three ? 2 : 1;
-  const areaSlope = (movingY * width + depth) * slope;
-  const areaCurve = movingY * slope ** 2;
+  const movingX = four ? 2 : 1, movingY = sideCount >= 3 ? 2 : 1;
+  const areaSlope = (movingY * width + movingX * depth) * slope;
+  const areaCurve = movingX * movingY * slope ** 2;
   const offset = z => z - neutral;
   const integral = degree => (offset(height) ** (degree + 1) - offset(0) ** (degree + 1)) / (degree + 1);
   const volume = width * depth * integral(0) - areaSlope * integral(1) + areaCurve * integral(2);
   const centreOffset = (width * depth * integral(1) - areaSlope * integral(2) + areaCurve * integral(3)) / volume;
-  const centroid = [(width - slope * centreOffset) / 2, (depth + (three ? 0 : slope * centreOffset)) / 2, neutral + centreOffset];
+  const centroid = [(width - (four ? 0 : slope * centreOffset)) / 2, (depth + (sideCount >= 3 ? 0 : slope * centreOffset)) / 2, neutral + centreOffset];
   assert.ok(samePoint(read.centroid, centroid), JSON.stringify({ label, actual: read.centroid, centroid }));
   assert.ok(near(read.volume, volume), JSON.stringify({ label, actual: read.volume, volume }));
   const current = (await f.bodies()).bodies;
   assert.equal(current.length, 1);
   assert.ok(near(current[0].volume, volume), JSON.stringify({ label, studioVolume: current[0].volume, volume }));
-  for (const z of [0, height]) for (const x of [0, width - offset(z) * slope]) for (const y of [offset(z) * slope, depth - (three ? offset(z) * slope : 0)]) {
+  for (const z of [0, height]) for (const x of [four ? offset(z) * slope : 0, width - offset(z) * slope]) for (const y of [offset(z) * slope, depth - (sideCount >= 3 ? offset(z) * slope : 0)]) {
     assert.ok(read.points.some(point => samePoint(point, [x, y, z])), JSON.stringify({ label, missing: [x, y, z], points: read.points }));
   }
   if (source) {
     assert.deepEqual(Object.keys(read.faces).sort(), Object.keys(source.faces).sort());
     assert.deepEqual(read.edges.map(edge => edge.name).sort(), source.edges.map(edge => edge.name).sort());
     const nameAt = normal => Object.keys(source.normals).find(name => samePoint(source.normals[name], normal));
-    const xHigh = nameAt([1, 0, 0]), yLow = nameAt([0, -1, 0]), yHigh = nameAt([0, 1, 0]);
-    const picked = [xHigh, yLow, ...(three ? [yHigh] : [])];
+    const xHigh = nameAt([1, 0, 0]), xLow = nameAt([-1, 0, 0]);
+    const yLow = nameAt([0, -1, 0]), yHigh = nameAt([0, 1, 0]);
+    const picked = [xHigh, yLow, ...(sideCount >= 3 ? [yHigh] : []), ...(four ? [xLow] : [])];
     assert.deepEqual(new Set(doc.nodes.at(-1).faces), new Set(picked));
     const scale = Math.hypot(1, slope);
     const supports = [
       [xHigh, [1 / scale, 0, slope / scale]],
       [yLow, [0, -1 / scale, slope / scale]],
-      [yHigh, three ? [0, 1 / scale, slope / scale] : [0, 1, 0]],
-      [nameAt([-1, 0, 0]), [-1, 0, 0]],
+      [yHigh, sideCount >= 3 ? [0, 1 / scale, slope / scale] : [0, 1, 0]],
+      [xLow, four ? [-1 / scale, 0, slope / scale] : [-1, 0, 0]],
       [nameAt([0, 0, -1]), [0, 0, -1]],
       [nameAt([0, 0, 1]), [0, 0, 1]],
     ];
     for (const [name, normal] of supports) assert.ok(samePoint(read.normals[name], normal));
     const shared = [];
-    for (const [yFace, yAt] of [[yLow, z => offset(z) * slope], ...(three ? [[yHigh, z => depth - offset(z) * slope]] : [])]) {
-      const along = read.faces[xHigh].filter(id => read.faces[yFace].includes(id));
+    const xSides = [[xHigh, z => width - offset(z) * slope]];
+    const ySides = [[yLow, z => offset(z) * slope]];
+    if (four) xSides.push([xLow, z => offset(z) * slope]);
+    if (sideCount >= 3) ySides.push([yHigh, z => depth - offset(z) * slope]);
+    for (const [xFace, xAt] of xSides) for (const [yFace, yAt] of ySides) {
+      const along = read.faces[xFace].filter(id => read.faces[yFace].includes(id));
       assert.equal(along.length, 1);
       const edge = read.edges.find(edge => edge.id === along[0]);
       assert.equal(edge.degree, 1);
       assert.equal(edge.poles.length, 2);
       for (const z of [0, height]) {
-        const point = [width - offset(z) * slope, yAt(z), z];
+        const point = [xAt(z), yAt(z), z];
         assert.ok(edge.endpoints.some(end => samePoint(end, point)), JSON.stringify({ label, edge, point }));
         assert.ok(edge.poles.some(pole => samePoint(pole, point)));
       }
@@ -119,10 +126,11 @@ async function inspect(label, doc, angle, source) {
         const start = edge.endpoints.find(point => near(point[2], 0));
         const end = edge.endpoints.find(point => near(point[2], height));
         const cross = start.map((value, axis) => value + (end[axis] - value) * neutral / height);
-        assert.ok(samePoint(cross, [width, yAt(neutral), neutral]));
+        assert.ok(samePoint(cross, [xAt(neutral), yAt(neutral), neutral]));
       }
       shared.push(edge.endpoints);
     }
+    assert.equal(read.faces[xLow].some(id => read.faces[xHigh].includes(id)), false);
     assert.equal(read.faces[yLow].some(id => read.faces[yHigh].includes(id)), false);
     f.report.observations.push({ label, angle, volume: read.volume, expectedVolume: volume, centroid, shared,
       studioVolume: current[0].volume, maximumEdgeSurfaceGap: read.check.maximumEdgeSurfaceGap });
@@ -162,7 +170,8 @@ await f.run(async () => {
   f.phase = 'Pick the box sides and start Draft';
   await pick('Front', [width * 0.4, 0, height * 0.4], 1);
   await pick('Right', [width, depth * 0.4, height * 0.4], 2);
-  if (three) await pick('Back', [width * 0.5, depth, height * 0.45], 3);
+  if (sideCount >= 3) await pick('Back', [width * 0.5, depth, height * 0.45], 3);
+  if (four) await pick('Left', [0, depth * 0.5, height * 0.55], 4);
   await f.page.evaluate(() => document.activeElement?.blur());
   await f.command('Draft');
   const creation = hud('Draft'), angle = creation.getByLabel('Angle', { exact: true });
@@ -202,7 +211,7 @@ await f.run(async () => {
   assert.equal(node.kind, 'draft');
   assert.equal(node.angle, 10);
   if (interior) assert.equal(node.neutral, neutral);
-  assert.equal(new Set(node.faces).size, three ? 3 : 2);
+  assert.equal(new Set(node.faces).size, sideCount);
   await inspect('inward-native', inward, 10, original);
 
   await f.openFeatureEditor(index, 'numeric Draft angle');

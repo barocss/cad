@@ -25,9 +25,9 @@ function boxDraftPlane(id: string, axis: 0 | 1 | 2, side: 0 | 1, base: Ranges, t
     controlPoints, weights: [[1, 1], [1, 1]] };
 }
 
-/** Draft adjacent box sides and retain one intersection at each cap. */
+/** Draft original box sides and retain one intersection at each cap. */
 export function draftBoxCorner(brep: Brep, names: readonly string[], neutral: number, angle: number, id: string, fail: Tools['fail']): Brep | undefined {
-  if ((names.length !== 2 && names.length !== 3) || new Set(names).size !== names.length) return undefined;
+  if ((names.length !== 2 && names.length !== 3 && names.length !== 4) || new Set(names).size !== names.length) return undefined;
   const chosen = names.map(name => brep.faces.filter(face => face.name === name));
   if (chosen.some(faces => faces.length !== 1)) return undefined;
   const box = cardinalBoxOf(brep);
@@ -36,6 +36,8 @@ export function draftBoxCorner(brep: Brep, names: readonly string[], neutral: nu
   // Both transverse axes must participate. Two opposite faces use the existing wedge path.
   if (sides.some(side => side.axis === 2) || new Set(sides.map(side => side.axis)).size !== 2) return undefined;
   const [start, end] = box.ranges[2];
+  // Four sides retain the existing whole-extrusion and raw noninterior routes.
+  if (names.length === 4 && !(neutral > start && neutral < end)) return undefined;
   if (neutral < start) fail('CAPABILITY', 'Draft on adjacent box sides needs the neutral plane at the start of the pull');
   if (neutral >= end) return undefined;
 
