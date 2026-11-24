@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D1915: [Qualify section hatch text clearance through edits](notes/section-hatch-clearance-lifecycle-2026-11-24/README.md), #247. Verify half-scale Studio and SVG text, unchanged material DXF, and hatch restoration after unresolved or removed ownership.
+
 - D1914: [Add a straight tangent inlet to a perpendicular Exact Sweep](notes/perpendicular-quarter-arc-inlet-sweep-2026-11-24/README.md), #10. Preserve both native joins and verify actual bore editing and explicit Agent approval.
 - D1913: [Add a blind Hole with a fixed 118° drill point](notes/blind-drill-point-hole-2026-11-24/README.md), #746. Show cylinder and total depths, retain the exact conical cavity and refuse breakthrough before cutting.
 - D1912: [Extract Studio document replacement from App](notes/studio-document-replacement-2026-11-24/README.md), #44. Preserve project and History ownership across desktop replacement and in-place editing.
