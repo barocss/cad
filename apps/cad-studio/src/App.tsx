@@ -107,6 +107,7 @@ import { sameMeshes, withMasses, samePlacement } from './app/bodyResults';
 import { sketchRegion } from './app/sketchControls';
 import { createDocumentReplacement, type ReplacementIntent } from './app/documentReplacement';
 import { createStudioDocumentEntryActions } from './app/studioDocumentEntryActions';
+import { createStudioParameterActions } from './app/studioParameterActions';
 import { activeKey, type Active } from './app/commandState';
 import { emptySel, NO_INSTANCES, BROWSER_PLACEMENT, PALETTE_EXTRA } from './app/studioConstants';
 import { routeMessage } from './app/routeSession';
@@ -128,7 +129,6 @@ import { supportsPlacedBoxSnapRotation } from './viewport/placedBoxSnap';
 import { contentKey } from '@barocss/cad-model/engine/evalMemo';
 import { bearingFaceInput } from './app/bearingEdit';
 import { usePlacedBearingEditor } from './app/usePlacedBearingEditor';
-import { resolveSkeletons, SKELETON_CODES } from '@barocss/cad-model/frames/skeleton';
 import { carryOver, featureLabel, fmt, prefixDoc, starterDoc, type StudioDoc } from '@barocss/cad-model/engine/doc';
 import { featureId, nextSerial } from '@barocss/cad-model/engine/ids';
 import { modelHash } from '@barocss/cad-model/chat/spec';
@@ -164,7 +164,7 @@ import { useViewportBodyDetails } from './state/useViewportBodyDetails';
 import { useInstanceGizmo } from './assembly/useInstanceGizmo';
 import type { CamOptions } from './viewport/camDisplay';
 import { withPrintPreviewSettings, type PrintPreviewPatch } from './viewport/printSettings';
-import { isRefusal, refusal } from '@barocss/cad-model/engine/refusal';
+import { refusal } from '@barocss/cad-model/engine/refusal';
 import { StudioNoticeStack } from './ui/StudioNoticeStack';
 import { InPlaceEditStatus } from './ui/InPlaceEditStatus';
 import { FlatPatternDialog } from './ui/FlatPatternDialog';
@@ -2100,6 +2100,13 @@ export function App() {
     changes: { canChangeDocument, commit: next => commit(next, false, false, true),
       onNotice: setToast, focusHistory: historyLayout.focusStep },
   });
+  const parameterActions = createStudioParameterActions({
+    model: { doc, evaluated, bodies, fresh, massReady, hasReferenceProblems: refProblems.length > 0 },
+    owner: { scope: acceptanceScope, document: () => docNow.current, work: () => workOwnership.current,
+      showingVariant: () => !!shownVariant.current },
+    edit: { current: parameterEdit, nextRequest: () => ++parameterRequest.current, stage: setParameterEdit },
+    evidence: evaluationEvidence, canChangeDocument, commit: next => { commit(next, false); }, notice: setToast,
+  });
   const inspector = (
       <Profiler id="right-col" onRender={onBlockRender}><div className="right-col">
 
@@ -2142,25 +2149,7 @@ export function App() {
       {variantsOpen && !bomOpen && !libraryOpen && !paramsOpen && !rendering && !drawing && !sketch && !active && <VariantsPanel doc={doc} variants={variants} onCommit={next => commit(next, false)} onError={hint => setToast({ title: 'Variants: refused', hint, detail: '' })} onClose={() => setVariantsOpen(false)} />}
       {libraryOpen && !paramsOpen && !rendering && !drawing && !sketch && !active && <LibraryPanel doc={doc} documentSession={docGeneration} onCommit={next => commit(next)} onFitTableCommit={next => { void commitFitTables(next); }} onClose={() => setLibraryOpen(false)} onError={(title, hint) => setToast({ title, hint, detail: '' })} onQuote={() => { void exportQuote(); }} />}
       {paramsOpen && !rendering && !drawing && !sketch && !active && <ParametersPanel doc={doc} onClose={() => setParamsOpen(false)}
-        onChange={p => {
-          const ownCandidate = workOwnership.current.run?.candidate && parameterEdit?.base === doc && parameterEdit.baseInput === evaluated && docNow.current === doc && acceptanceScope === workOwnership.current.scope;
-          if (!ownCandidate && !canChangeDocument()) return;
-          const request = ++parameterRequest.current;
-          const cancelCandidate = () => {
-            if (parameterEdit?.base === doc) evaluationEvidence.restoreAccepted(doc, bodies);
-            evaluationEvidence.discardUninstalled();
-            setParameterEdit(null);
-          };
-          // (O140: the skeletons bound to a parameter re-solved with it — a conflict refused, the parameter named, nothing changed.)
-          let r: ReturnType<typeof resolveSkeletons>;
-          try { r = resolveSkeletons({ ...doc, ...p, ...(p.configurations ? {} : { configurations: undefined }) }); }
-          catch (e) { cancelCandidate(); if (!isRefusal(e, ...SKELETON_CODES)) throw e; setToast({ title: 'That value does not hold', hint: e.message.replace(/^\[\w+\] /, ''), detail: 'The parameters are as they were.' }); return; }
-          if (!fresh || !massReady || shownVariant.current || refProblems.length) { cancelCandidate(); setToast({ title: 'Parameters not changed', hint: refProblems.length ? 'Choose the unresolved references first.' : !massReady ? 'Wait for the accepted part’s mass results before changing parameters.' : 'Wait for the accepted part to finish evaluating.', detail: '' }); return; }
-          // Keep deferred mass updates with the accepted result when a candidate is refused.
-          evaluationEvidence.retainAcceptedBodies(bodies);
-          evaluationEvidence.discardUninstalled();
-          setParameterEdit({ request, base: doc, baseInput: evaluated, input: prefixDoc(r.doc, r.doc.nodes.length), next: r.doc, accept: next => commit(next, false) });
-        }} onError={m => setToast({ title: 'Parameters', hint: m, detail: '' })} />}
+        onChange={parameterActions.submit} onError={parameterActions.invalidInput} />}
       {rendering && !sketch && <Suspense fallback={null}><RenderPanel render={render} lookDisabled={renderKeysOf(instanceSel).mode === 'disabled' && !selectedBodies(selection).length} note={renderKeysOf(instanceSel).nested ? 'A part inside a sub-assembly is styled through its sub-assembly: select the sub-assembly.' : undefined} onError={m => {
         if (docNow.current === doc) setToast({ title: 'Could not use that image', hint: m, detail: '', documentSource: { doc } });
       }} available={viewport.current?.backend === 'webgpu'} geometryReady={renderGeometryReady}

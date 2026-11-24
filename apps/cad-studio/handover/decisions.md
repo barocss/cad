@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1961: [Extract Studio Parameters panel actions](notes/studio-parameter-panel-actions-2026-11-25/README.md), #44. Compare exact before and after desktop states, configuration ownership and saved bytes.
 - D1960: [Link the original perpendicular annular inlet to a native plane](notes/perpendicular-annular-inlet-reference-plane-2026-11-25/README.md), #17. Verify live donor movement, History reselection, retained joins and desktop fresh Open.
 - D1959: [Restore the Sweep selection-order regression](notes/sweep-input-order-label-regression-2026-11-25/README.md), #10. Verify the distinct path and solid labels, both actual input orders, and native replay.
 - D1958: [End a downward circular Extrude at the original upper disk](notes/downward-circle-to-original-disk-2026-11-25/README.md), #222. Verify radial clearance, History editing and desktop fresh Open.
