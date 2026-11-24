@@ -1,5 +1,5 @@
 import { brepMassProperties, CadNumericPolicy, checkBrep, faceGeometry, type Brep } from '@barocss/cad';
-import { isPairedFiveSpanOutletPlaneSource, type StudioDoc } from '../engine/doc';
+import { isPairedFiveSpanCapPlaneSource, type StudioDoc } from '../engine/doc';
 import { partBreps } from '../engine/evaluate';
 import { bodyKeyFor, featureId } from '../engine/ids';
 import type { Proposal } from '../engine/schema/proposals';
@@ -10,8 +10,8 @@ import { canonical, canonicalOf, revisionOf } from '../util/revision';
 
 const solid = (node: number) => ({ node, side: 'solid' as const });
 
-/** Only the native outlet and detached donor from the admitted Replace face recipe. */
-export function pairedTiltedOutletProposal(doc: StudioDoc, proposal: Proposal) {
+/** Only an original native cap and detached donor from the admitted Replace face recipe. */
+function pairedTiltedCapProposal<End extends 'start' | 'end'>(doc: StudioDoc, proposal: Proposal, end: End) {
   if (proposal.status !== 'open' || proposal.ops.length !== 1 || doc.nodes.length !== 5 || doc.direct ||
     doc.instances?.length || doc.nodes.some(node => node.suppressed || node.held !== undefined)) return;
   const [{ tool, args }] = proposal.ops;
@@ -23,17 +23,20 @@ export function pairedTiltedOutletProposal(doc: StudioDoc, proposal: Proposal) {
     donorSketch.holes?.length || donorSketch.regions?.length || donor.kind !== 'extrude' || donor.sketch !== 2 ||
     placement.kind !== 'translate' || canonical(placement.parent) !== canonical(solid(3))) return;
   const sourceFeature = featureId(doc.nodes, 1), referenceFeature = featureId(doc.nodes, 4);
-  const donorFeature = featureId(doc.nodes, 3), sourceFace = `${sourceFeature}.end`;
-  if (args.faces[0] !== sourceFace || !isPairedFiveSpanOutletPlaneSource(doc.nodes, 1, sourceFace)) return;
+  const donorFeature = featureId(doc.nodes, 3), sourceFace = `${sourceFeature}.${end}`;
+  if (args.faces[0] !== sourceFace || !isPairedFiveSpanCapPlaneSource(doc.nodes, 1, sourceFace)) return;
   const referenceFace = args.faces[1];
   if (referenceFace !== `${donorFeature}.bottom` && referenceFace !== `${donorFeature}.top`) return;
   const sourceBody = bodyKeyFor(doc.nodes, 1, 'solid'), referenceBody = bodyKeyFor(doc.nodes, 4, 'solid');
   if (canonical(doc.outputs) !== canonical({ [sourceBody]: solid(1), [referenceBody]: solid(4) })) return;
-  return { revision: digestOf(proposal), source: canonicalOf(doc), sourceFeature, sourceFace, sourceBody,
+  return { end, revision: digestOf(proposal), source: canonicalOf(doc), sourceFeature, sourceFace, sourceBody,
     referenceFeature, referenceFace, referenceBody };
 }
 
-type Review = NonNullable<ReturnType<typeof pairedTiltedOutletProposal>>;
+export const pairedTiltedOutletProposal = (doc: StudioDoc, proposal: Proposal) => pairedTiltedCapProposal(doc, proposal, 'end');
+export const pairedTiltedInletProposal = (doc: StudioDoc, proposal: Proposal) => pairedTiltedCapProposal(doc, proposal, 'start');
+
+type Review = NonNullable<ReturnType<typeof pairedTiltedCapProposal>>;
 
 function owner(brep: Brep, body: string, feature: string, name: string) {
   const [face, second] = brep.faces.filter(candidate => candidate.name === name);
@@ -62,7 +65,7 @@ function joinCharts(brep: Brep, feature: string) {
 }
 
 /** Bind the native candidate that both image orientations and inspection will use. */
-export function reviewedPairedTiltedOutletEvidence(base: StudioDoc, preview: StudioDoc, review: Review) {
+function reviewedPairedTiltedCapEvidence(base: StudioDoc, preview: StudioDoc, review: Review) {
   if (canonicalOf(base) !== review.source || preview.nodes.length !== base.nodes.length + 1 ||
     canonical(preview.nodes.slice(0, -1)) !== canonical(base.nodes)) return;
   const index = base.nodes.length, edit = preview.nodes[index];
@@ -94,7 +97,17 @@ export function reviewedPairedTiltedOutletEvidence(base: StudioDoc, preview: Stu
     if (apertures.length !== 2 || apertures.some(loop => loop.edges.length !== 4)) return;
     const before = brepMassProperties(stock, 1).volume, after = brepMassProperties(result, 1).volume;
     if (!(after > 0 && after < before)) return;
-    return { brep: result, pairedTiltedOutletReplacement: { source, reference, candidate, apertures,
+    return { brep: result, replacement: { source, reference, candidate, apertures,
       joins: afterJoins.map(join => join.edge.id), volume: { before, after, delta: after - before } } };
   } catch { return; }
+}
+
+export function reviewedPairedTiltedOutletEvidence(base: StudioDoc, preview: StudioDoc, review: Review & { end: 'end' }) {
+  const result = reviewedPairedTiltedCapEvidence(base, preview, review);
+  if (result) return { brep: result.brep, pairedTiltedOutletReplacement: result.replacement };
+}
+
+export function reviewedPairedTiltedInletEvidence(base: StudioDoc, preview: StudioDoc, review: Review & { end: 'start' }) {
+  const result = reviewedPairedTiltedCapEvidence(base, preview, review);
+  if (result) return { brep: result.brep, pairedTiltedInletReplacement: result.replacement };
 }

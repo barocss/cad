@@ -72,6 +72,7 @@ const renderViewsTool: PartHandler = async (state, args, evaluate, _options, dis
           : 'pairedElbowOutletPlaneOffset' in review.geometry ? 'Paired duct outlet Offset to plane'
             : 'pairedElbowInletPlaneOffset' in review.geometry ? 'Paired duct inlet Offset to plane'
             : 'pairedTiltedOutletReplacement' in review.geometry ? 'Paired duct tilted outlet replacement'
+            : 'pairedTiltedInletReplacement' in review.geometry ? 'Paired duct tilted inlet replacement'
             : 'chamferResize' in review.geometry ? 'Saved Chamfer resize'
             : 'cornerBatch' in review.geometry ? 'Sketch corner proposal' : 'Bored wall proposal';
     return { state, content: json({ revision: review.revision, ...views, candidate: review.candidate, ...review.geometry }),

@@ -7,8 +7,13 @@ import { currentPartRevision, withMcpSession } from './mcp-browser-session.mjs';
 import { pairedOutletFixture } from './paired-outlet-fixture.mjs';
 
 const baseline = process.argv.includes('--baseline');
-const seed = pairedOutletFixture({ replace: true });
-const faces = ['n1.end', 'n3.bottom'];
+const inlet = process.argv.includes('--inlet');
+const endpoint = inlet ? 'inlet' : 'outlet';
+const sourceFace = inlet ? 'n1.start' : 'n1.end';
+const evidenceKey = inlet ? 'pairedTiltedInletReplacement' : 'pairedTiltedOutletReplacement';
+const otherEvidenceKey = inlet ? 'pairedTiltedOutletReplacement' : 'pairedTiltedInletReplacement';
+const seed = pairedOutletFixture({ replace: true, inlet });
+const faces = [sourceFace, 'n3.bottom'];
 const pins = [
   'apps/cad-studio/test/paired-outlet-fixture.mjs', 'apps/cad-studio/test/mcp-browser-session.mjs',
   'apps/cad-studio/src/ui/ProposalBrowser.tsx', 'packages/barocss-cad-model/src/chat/part/proposals.ts',
@@ -16,10 +21,10 @@ const pins = [
   ...(!baseline ? ['packages/barocss-cad-model/src/chat/pairedTiltedOutletProposalReview.ts'] : []),
 ];
 const f = await createFlow({
-  name: 'paired-tilted-outlet-agent', output: process.argv[2], envFrozen: 'D1882_SOURCE_FROZEN',
+  name: `paired-tilted-${endpoint}-agent`, output: process.argv[2], envFrozen: inlet ? 'D1886_SOURCE_FROZEN' : 'D1882_SOURCE_FROZEN',
   initialFiles: pins, requiredFrozen: pins,
-  qualification: 'Review and explicitly approve the same revision-bound inward tilted outlet through local MCP and Studio.',
-  limits: ['One native five-span paired duct, its original outlet, and one isolated tilted donor. The Agent is local.'],
+  qualification: `Review and explicitly approve the same revision-bound inward tilted ${endpoint} through local MCP and Studio.`,
+  limits: [`One native five-span paired duct, its original ${endpoint}, and one isolated tilted donor. The Agent is local.`],
   inspectorSource: `
 import { readFileSync } from 'node:fs';
 import { brepMassProperties, checkBrep } from '@barocss/cad';
@@ -36,17 +41,17 @@ const button = (name, scope = f.page) => scope.getByRole('button', { name, exact
 const near = (actual, expected) => assert.ok(Math.abs(actual - expected) < 1e-8, `${actual} vs ${expected}`);
 
 await f.run(async () => {
-  const file = join(f.output, 'tilted-outlet-pending.bcad'), seedBytes = Buffer.from(JSON.stringify(seed));
+  const file = join(f.output, `tilted-${endpoint}-pending.bcad`), seedBytes = Buffer.from(JSON.stringify(seed));
   await writeFile(file, seedBytes);
   const session = { app: f.app, output: f.output, clientName: f.name };
-  f.phase = 'Propose the named native tilted outlet through local MCP';
+  f.phase = `Propose the named native tilted ${endpoint} through local MCP`;
   const reviewed = await withMcpSession(session, file, 'tilted-pending', async (call, request) => {
     const expectedRevision = await currentPartRevision(call);
     const action = { tool: 'features', args: { action: 'command', command: 'replace-face', faces, expectedRevision } };
     const trial = await call('features', { action: 'batch', dryRun: true, ops: [action] });
     near(trial.change.volume, -32);
     assert.deepEqual(await readFile(file), seedBytes);
-    const pending = await call('proposals', { action: 'propose', title: 'Replace the original paired duct outlet', ops: [action] });
+    const pending = await call('proposals', { action: 'propose', title: `Replace the original paired duct ${endpoint}`, ops: [action] });
     assert.deepEqual([pending.proposal, pending.applied], ['P1', false]);
     const proposedBytes = await readFile(file);
     assert.match((await call('proposals', { action: 'accept', id: 'P1' }, true)).error, /user accepts.*studio/i);
@@ -63,13 +68,21 @@ await f.run(async () => {
     assert.match(entry.modelReviewRevision, /^[a-f0-9]{64}$/);
     const pin = { expectedRevision, proposal: 'P1', expectedProposalRevision: entry.modelReviewRevision };
     const image = await render(request, pin), opposite = await render(request, { ...pin, orientation: 'opposite' });
-    const geometry = image.meta.pairedTiltedOutletReplacement;
-    assert.deepEqual(geometry, opposite.meta.pairedTiltedOutletReplacement);
+    const geometry = image.meta[evidenceKey];
+    assert.deepEqual(geometry, opposite.meta[evidenceKey]);
+    assert.equal(image.meta[otherEvidenceKey], undefined);
+    assert.equal(opposite.meta[otherEvidenceKey], undefined);
     assert.notDeepEqual(image.png, opposite.png);
     assert.notEqual(image.meta.candidate.reviewRevision, opposite.meta.candidate.reviewRevision);
     const identities = [geometry.source, geometry.reference, geometry.candidate];
     assert.deepEqual(identities.map(owner => [owner.body, owner.feature, owner.face]),
-      [['b1', 'n1', 'n1.end'], ['b4', 'n4', 'n3.bottom'], ['b5', 'n5', 'n1.end']]);
+      [['b1', 'n1', sourceFace], ['b4', 'n4', 'n3.bottom'], ['b5', 'n5', sourceFace]]);
+    if (inlet) {
+      const outward = [-4, 1, 0].map(value => value / Math.sqrt(17));
+      geometry.candidate.plane.n.forEach((value, axis) => near(value, outward[axis]));
+      geometry.reference.plane.n.forEach((value, axis) => near(value, -outward[axis]));
+      near(geometry.candidate.plane.o[0] - geometry.candidate.plane.o[1] / 4, -9);
+    }
     assert.equal(geometry.source.faceId, geometry.candidate.faceId);
     assert.equal(image.meta.candidate.bodySha256, geometry.candidate.bodySha256);
     assert.equal(opposite.meta.candidate.bodySha256, geometry.candidate.bodySha256);
@@ -80,14 +93,15 @@ await f.run(async () => {
     const first = await call('query', inspect);
     const second = await call('query', { ...inspect, orientation: 'opposite', expectedReviewRevision: opposite.meta.candidate.reviewRevision });
     assert.deepEqual(first.faces, second.faces);
-    assert.deepEqual(first.pairedTiltedOutletReplacement, geometry);
+    assert.deepEqual(first[evidenceKey], geometry);
+    assert.equal(first[otherEvidenceKey], undefined);
     assert.equal(first.imageSha256, image.meta.imageSha256);
     assert.equal(second.imageSha256, opposite.meta.imageSha256);
     assert.equal((await call('query', { ...inspect, orientation: 'opposite' }, true)).code, 'MODEL_REVIEW_IMAGE_STALE');
     assert.deepEqual(await readFile(file), proposedBytes);
     await writeFile(join(f.output, 'tilted-review-normal.png'), image.png);
     await writeFile(join(f.output, 'tilted-review-opposite.png'), opposite.png);
-    f.report.observations.push({ label: 'pinned-tilted-outlet', geometry, normal: image.meta.candidate, opposite: opposite.meta.candidate });
+    f.report.observations.push({ label: `pinned-tilted-${endpoint}`, geometry, normal: image.meta.candidate, opposite: opposite.meta.candidate });
     return { geometry, inspect };
   });
   const pending = JSON.parse(await readFile(file, 'utf8'));
@@ -122,7 +136,7 @@ await f.run(async () => {
   if (baseline) return;
   await button('Hide', card).click();
   await f.openFeatureEditor(4, 'change the donor after native review');
-  await f.editor().getByLabel('ΔX').fill('-1');
+  await f.editor().getByLabel('ΔX').fill(inlet ? '1' : '-1');
   const moved = (await f.applyEditor(pending, 'tilted-donor-changed')).doc;
   assert.equal(moved.nodes.length, 5);
   await card.getByText('stale ·', { exact: true }).waitFor();

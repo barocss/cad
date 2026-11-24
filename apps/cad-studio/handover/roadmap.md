@@ -1,13 +1,13 @@
 # CAD roadmap — current status and execution order
 
-Updated 2026-11-24 · Priority authority: D520 · Latest delivery: D1885 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
+Updated 2026-11-24 · Priority authority: D520 · Latest delivery: D1886 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
 
 This is the only current status index. Detailed tracks define acceptance; the 34 stable row pages retain scope and issue navigation. Immutable decision notes retain results. Do not append chronological status paragraphs here. [D520 decision](notes/cad-roadmap-replan-2026-11-04/README.md) supersedes D445 execution order and historical next-item text, while retaining its safeguards and bounded proofs.
 
 ## Now and next
 
-- **Current position:** [D1885](notes/tilted-paired-sweep-inlet-replacement-2026-11-24/README.md), P5 rows 07 and 31. Studio replaces the original straight five-span Sweep inlet with an inward tilted plane, preserves both passages and all 48 joins, and reopens the editable linked native result.
-- **Next MAIN:** D1886, P5 rows [21](roadmap-rows/21.md) and [31](roadmap-rows/31.md), [#324](https://github.com/barocss/cad/issues/324). Review the linked inlet replacement through the local Agent. Pin both image orientations and inspection to the same candidate, reject stale references, and verify explicit Studio approval and native reopen.
+- **Current position:** [D1886](notes/pinned-tilted-paired-inlet-agent-review-2026-11-24/README.md), P5 rows 16 and 31. The local Agent pins both inward tilted Sweep inlet review images and exact inspection to the same native candidate. Studio verifies stale refusal, explicit approval and fresh Open.
+- **Next MAIN:** D1887, P1 rows [09](roadmap-rows/09.md) and [16](roadmap-rows/16.md), [#233](https://github.com/barocss/cad/issues/233). Exclude hidden construction from click and drag Trim boundaries, preserving visible construction, draft identity and Undo. Check real desktop tab-away cancellation before closeout.
 - **Separate follow-ups:** Continue Studio App extraction in cohesive parts with affected desktop checks. [#608 Rendering](https://github.com/barocss/cad/issues/608) stays on HOLD. API inventory drift remains open. The issue tracker records [#126](https://github.com/barocss/cad/issues/126), [#613](https://github.com/barocss/cad/issues/613), [#152](https://github.com/barocss/cad/issues/152) and [#22](https://github.com/barocss/cad/issues/22) as closed.
 - **Active repository:** [barocss/cad](https://github.com/barocss/cad), based on `origin/main`. Fetch before work and preserve unexpected changes. The [migration record](../../../docs/migration/README.md) maps the former `local/cad-dev` history and issue numbers.
 - **Evidence correction:** D482 records2167 PASS/0 FAIL/2 existing SKIP in a later full-kernel run than D433. Neither result is a new full-suite PASS at this audit HEAD. [D482 record](notes/vertical-contact-refusal-2026-11-04/README.md).
