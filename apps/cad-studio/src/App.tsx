@@ -1377,7 +1377,7 @@ export function App() {
       !previewBodies && !assembly.draft && !cageEd.session && !skel.session,
     ownsSource: () => finishEdgeOpen === openIntent.current && ownsEvaluatedSource() && shownDocNow.current === doc
       && editNodeNow.current === editNode && bodiesRef.current === bodies && referenceProblems.current.get(doc) === refProblems,
-    evaluate: next => engine.part(prefixDoc(next, next.nodes.length), revision.current++, 'refs'),
+    evaluate: (next, marker) => engine.part(prefixDoc(next, marker ?? next.nodes.length), revision.current++, 'refs'),
     accept: (next, resolved) => {
       if (!commit(next, false, false, true)) return false;
       referenceProblems.current.set(next, refProblems.filter(value => !resolved.includes(value)));

@@ -7,6 +7,7 @@ import { toSig } from '@barocss/cad-model/engine/references';
 import { signaturesOf } from '@barocss/cad-model/engine/rematch';
 import { heldFinishGroupProblems, heldFinishRadiusText, heldFinishCandidate, heldFinishProblem, heldFinishReplaceable,
  heldFinishReplacement, replaceHeldFinishGroup, type HeldFinish } from '../src/state/heldFinishReplacement';
+import { heldChamferThroughHole, parentChamferEdge } from '../src/state/heldChamferThroughHole';
 const finish:Extract<HeldFinish,{kind:'fillet'}>={id:'repair',kind:'fillet',parent:{node:1,side:'solid'},edges:['missing'],radius:1,held:'missing edge',suppressed:true,radii:[{at:[0,0,0],radius:1,atEnd:true},{at:[10,0,0],radius:3,atEnd:true}]};
 const edge:DisplayEdge={index:0,faces:[0,1],a:[0,20,10],b:[30,20,10],straight:true,axis:'x',names:['new-edge'],nativeLine:true};
 const sig={k:'curve' as const,p:[15,20,10] as [number,number,number],s:30};
@@ -38,6 +39,47 @@ test('constant fillet and chamfer keep their existing unconstrained edge replace
  for(const node of [constant,{id:'chamfer',kind:'chamfer' as const,parent:finish.parent,edges:['missing'],distance:2,held:'missing edge'}]){
   assert.ok(heldFinishReplaceable(node));const source=withNode(rectanglePart(30,20,10),node),next=heldFinishReplacement(source,2,curved,[curved],sig);assert.ok(next);assert.equal(next.nodes[2].kind,node.kind);assert.ok('edges'in next.nodes[2]);if('edges'in next.nodes[2])assert.deepEqual(next.nodes[2].edges,['new-edge']);
  }
+});
+
+test('a through Hole leaves a complete original top edge available for the held Chamfer', () => {
+ const stock = rectanglePart(60, 40, 10);
+ const chamfer = withNode(stock, {
+  kind: 'chamfer', parent: { node: 1, side: 'solid' }, edges: ['retired'], distance: 3,
+  held: 'Missing Chamfer edge', suppressed: true, sigs: { retired: { k: 'line', p: [30, -4, 10], d: [1, 0, 0], s: 60 } },
+ });
+ const hole = { kind: 'hole', parent: { node: 2, side: 'solid' }, face: 'n1.top', center: [20, 20], radius: 2 } as const;
+ const through = (center: [number, number]) => withNode(chamfer, { ...hole, center });
+ const doc = through([20, 20]);
+ const before = evaluatePart(stock, 1), held = evaluatePart(doc, 2);
+ assert.ok(before.ok && held.ok);
+ const [parent] = before.bodies, [visible] = held.bodies;
+ const scope = heldChamferThroughHole(doc, 2, held.bodies);
+ assert.ok(scope);
+ const edge = visible.mesh.edges.find(edge => edge.nativeLine && edge.a[1] === 0 && edge.b[1] === 0 && edge.a[2] === 10 && edge.b[2] === 10);
+ assert.ok(edge);
+ const original = parent.mesh.edges.find(item => item.names[0] === edge.names[0]);
+ assert.ok(original);
+ assert.equal(parentChamferEdge(scope, parent, edge), original);
+ assert.equal(parentChamferEdge(scope, parent, visible.mesh.edges.find(edge => edge.nativeCircle)), undefined);
+
+ const using = (changed: DisplayEdge, extra: DisplayEdge[] = []) => {
+  const edges = visible.mesh.edges.map(item => item === edge ? changed : item).concat(extra);
+  return { ...scope, body: { ...visible, mesh: { ...visible.mesh, edges } } };
+ };
+ const reversed = { ...edge, a: edge.b, b: edge.a };
+ assert.equal(parentChamferEdge(using(reversed), parent, reversed), original);
+ const shortened: DisplayEdge = { ...edge, a: [edge.a[0] + Math.sign(edge.b[0] - edge.a[0]) * 1e-8, edge.a[1], edge.a[2]] };
+ assert.equal(parentChamferEdge(using(shortened), parent, shortened), undefined);
+ assert.equal(parentChamferEdge(using(edge, [{ ...edge }]), parent, edge), undefined);
+
+ const close = through([20, 4]), closeResult = evaluatePart(close, 3);
+ assert.ok(closeResult.ok);
+ const closeScope = heldChamferThroughHole(close, 2, closeResult.bodies);
+ assert.ok(closeScope);
+ const closeEdge = closeScope.body.mesh.edges.find(item => item.names[0] === edge.names[0]);
+ assert.ok(closeEdge?.nativeLine);
+ assert.equal(parentChamferEdge(closeScope, parent, closeEdge), undefined);
+ assert.equal(heldChamferThroughHole(withNode(chamfer, { ...hole, center: [20, 20], depth: 2 }), 2, held.bodies), undefined);
 });
 
 test('paired Constant Fillet replaces only the held slot and its signature', () => {

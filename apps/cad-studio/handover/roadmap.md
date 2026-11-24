@@ -1,13 +1,13 @@
 # CAD roadmap — current status and execution order
 
-Updated 2026-11-24 · Priority authority: D520 · Latest delivery: D1901 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
+Updated 2026-11-24 · Priority authority: D520 · Latest delivery: D1902 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
 
 This is the only current status index. Detailed tracks define acceptance; the 34 stable row pages retain scope and issue navigation. Immutable decision notes retain results. Do not append chronological status paragraphs here. [D520 decision](notes/cad-roadmap-replan-2026-11-04/README.md) supersedes D445 execution order and historical next-item text, while retaining its safeguards and bounded proofs.
 
 ## Now and next
 
-- **Current position:** [D1901](notes/prior-circular-linear-cut-pattern-2026-11-24/README.md), P1 rows 15 and 16. Repeat an original circular through-Subtract across one newer rectangular through-Subtract on a signed XY line.
-- **Next MAIN:** D1902, P1 rows [15](roadmap-rows/15.md) and [16](roadmap-rows/16.md), [#20](https://github.com/barocss/cad/issues/20). Verify History replacement of one held constant Chamfer before an independent Through Hole. Require the picked edge to match the original parent.
+- **Current position:** [D1902](notes/held-chamfer-through-hole-2026-11-24/README.md), P1 rows 15 and 16. Replace one held constant Chamfer on its original native parent before a separate Through Hole.
+- **Next MAIN:** D1903, P3 row [10](roadmap-rows/10.md), [#274](https://github.com/barocss/cad/issues/274). Verify editing a shared definition after Make independent, then re-edit after native Save and fresh Open. Compare the actual BOM downloads and existing baseline.
 - **Separate follow-ups:** Continue Studio App extraction in cohesive parts with affected desktop checks. [#608 Rendering](https://github.com/barocss/cad/issues/608) stays on HOLD. API inventory drift remains open. The issue tracker records [#126](https://github.com/barocss/cad/issues/126), [#613](https://github.com/barocss/cad/issues/613), [#152](https://github.com/barocss/cad/issues/152) and [#22](https://github.com/barocss/cad/issues/22) as closed.
 - **Active repository:** [barocss/cad](https://github.com/barocss/cad), based on `origin/main`. Fetch before work and preserve unexpected changes. The [migration record](../../../docs/migration/README.md) maps the former `local/cad-dev` history and issue numbers.
 - **Evidence correction:** D482 records2167 PASS/0 FAIL/2 existing SKIP in a later full-kernel run than D433. Neither result is a new full-suite PASS at this audit HEAD. [D482 record](notes/vertical-contact-refusal-2026-11-04/README.md).
