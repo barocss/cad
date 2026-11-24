@@ -4,11 +4,12 @@ import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createFlow } from './flow-helper.mjs';
 
-const polygonSource = process.argv.includes('--polygon');
+const downwardPolygon = process.argv.includes('--downward-polygon');
+const polygonSource = downwardPolygon || process.argv.includes('--polygon');
 const downwardRectangle = process.argv.includes('--downward-rectangle');
-const downward = downwardRectangle || process.argv.includes('--downward');
+const downward = downwardRectangle || downwardPolygon || process.argv.includes('--downward');
 const baseline = process.argv.includes('--baseline');
-const circleSource = !downwardRectangle && (downward || process.argv.includes('--circle'));
+const circleSource = !downwardRectangle && !downwardPolygon && (downward || process.argv.includes('--circle'));
 const exchange = process.argv.includes('--step');
 assert.ok(!exchange || (circleSource && !downward), 'The STEP oracle requires the circular profile.');
 assert.ok(!polygonSource || (!circleSource && !downwardRectangle), 'Choose only one source profile.');
@@ -29,11 +30,11 @@ if (exchange) pins.push(
   'packages/barocss-cad/src/io/step.ts',
 );
 const f = await createFlow({
-  name: 'annular-face-end-extrude', output: process.argv[2], envFrozen: downwardRectangle ? 'D1972_SOURCE_FROZEN' : downward ? 'D1967_SOURCE_FROZEN' : exchange ? 'D1866_SOURCE_FROZEN' : circleSource ? 'D1861_SOURCE_FROZEN' : polygonSource ? 'D1621_SOURCE_FROZEN' : 'D1609_SOURCE_FROZEN',
+  name: 'annular-face-end-extrude', output: process.argv[2], envFrozen: downwardPolygon ? 'D1977_SOURCE_FROZEN' : downwardRectangle ? 'D1972_SOURCE_FROZEN' : downward ? 'D1967_SOURCE_FROZEN' : exchange ? 'D1866_SOURCE_FROZEN' : circleSource ? 'D1861_SOURCE_FROZEN' : polygonSource ? 'D1621_SOURCE_FROZEN' : 'D1609_SOURCE_FROZEN',
   initialFiles: pins, requiredFrozen: pins,
   qualification: exchange ? 'Export two current annulus and post states from Studio, read the STEP bytes independently, and reopen the native and exchanged models.'
     : `Select the original ${downward ? 'upper' : 'lower'} annular face in Studio. Refuse bore and rim contact and keep the target through History and Open.`,
-  limits: [`One upright tube with a ${downwardRectangle ? 13 : 12} mm outer radius and a centred 4 mm through bore, and one horizontal ${profile} profile.`],
+  limits: [`One upright tube with a ${downwardRectangle || downwardPolygon ? 13 : 12} mm outer radius and a centred 4 mm through bore, and one horizontal ${profile} profile.`],
   inspectorSource: `
 import { readFileSync } from 'node:fs';
 import { brepMassProperties, checkBrep, faceGeometry } from '@barocss/cad';
@@ -51,15 +52,17 @@ const field = (scope, name) => scope.getByLabel(name, { exact: true });
 const originalZ = downward ? 5 : 20, nextZ = downward ? 8 : 28, height = 6;
 const targetName = downward ? 'n1.top' : 'n1.bottom';
 const targetCentre = downward ? [10, 10] : [0, 0];
-const targetRadius = downwardRectangle ? 13 : 12, tubeArea = Math.PI * (targetRadius ** 2 - 16);
+const targetRadius = downwardRectangle || downwardPolygon ? 13 : 12, tubeArea = Math.PI * (targetRadius ** 2 - 16);
 const postCentre = downward ? [16, 16] : [6, 6];
 const view = downward ? 'Top' : 'Bottom';
 const capPick = downward ? [10, 2, originalZ] : [0, 8, originalZ];
-const acceptedPoints = [[0, 7], [7, 0], [8, 8]], refusedPoints = [[0, 5], [5, 0], [8, 8]];
+const acceptedPoints = downwardPolygon ? [[15, -10], [11, -15], [18, -15]] : [[0, 7], [7, 0], [8, 8]];
+const refusedPoints = downwardPolygon ? [[14, -8], [9, -13], [17, -16]] : [[0, 5], [5, 0], [8, 8]];
 const acceptedSketch = circleSource ? { id: 'n3', kind: 'sketch', profile, center: downward ? [15, -14] : [6, 6], radius: 3,
   ...(downward ? { plane: { origin: [1, 2, 20], normal: [0, 0, -1], xAxis: [1, 0, 0] } } : {}) }
   : polygonSource
-  ? { id: 'n3', kind: 'sketch', profile, points: acceptedPoints }
+  ? { id: 'n3', kind: 'sketch', profile, points: acceptedPoints,
+    ...(downwardPolygon ? { plane: { origin: [1, 2, 20], normal: [0, 0, -1], xAxis: [1, 0, 0] } } : {}) }
   : downwardRectangle
   ? { id: 'n3', kind: 'sketch', profile, min: [15, -13], max: [18, -10],
     plane: { origin: [1, 2, 20], normal: [0, 0, -1], xAxis: [1, 0, 0] } }
@@ -70,8 +73,8 @@ const refusedSketch = circleSource ? { ...acceptedSketch, center: downward ? [15
   : { ...acceptedSketch, min: [-5, -1], max: [5, 1] };
 // The triangle has base direction (7, -7) and the third point is (8, 1)
 // from its first vertex. The determinant gives 31.5 square millimetres.
-const sourceArea = circleSource ? 9 * Math.PI : polygonSource ? 31.5 : downwardRectangle ? 9 : 12;
-const footprint = polygonSource ? acceptedPoints : downwardRectangle ? [[16, 12], [16, 15], [19, 12], [19, 15]] : [[6, -2], [6, 2], [9, -2], [9, 2]];
+const sourceArea = circleSource ? 9 * Math.PI : downwardPolygon ? 17.5 : polygonSource ? 31.5 : downwardRectangle ? 9 : 12;
+const footprint = downwardPolygon ? [[16, 12], [12, 17], [19, 17]] : polygonSource ? acceptedPoints : downwardRectangle ? [[16, 12], [16, 15], [19, 12], [19, 15]] : [[6, -2], [6, 2], [9, -2], [9, 2]];
 const model = sketch => ({
   format: 'barocss-cad-model', schema: 3, units: 'mm', parameters: {},
   nodes: [
@@ -98,6 +101,7 @@ async function pickCap(view, point) {
     const face = document.querySelectorAll('.view-cube .vc-label');
     return face.length === 1 && face[0].textContent === name;
   }, view.toUpperCase());
+  if (downwardPolygon && await button(f.page, 'Ortho').getAttribute('aria-pressed') !== 'true') await button(f.page, 'Ortho').click();
   const pixel = await f.page.evaluate(p => {
     const xy = window.__studioScreenOf(p);
     return xy && document.elementFromPoint(...xy)?.closest('.vp-canvas') ? xy : null;
@@ -141,7 +145,7 @@ async function inspect(label, doc, z) {
   }
   near(tube.mass.volume, tubeArea * tubeHeight);
   near(post.mass.volume, sourceArea * travel);
-  if (polygonSource) [5, 5, z / 2].forEach((expected, axis) => near(post.mass.centroid[axis], expected));
+  if (polygonSource && !downwardPolygon) [5, 5, z / 2].forEach((expected, axis) => near(post.mass.centroid[axis], expected));
   if (circleSource) {
     [...postCentre, downward ? (20 + z) / 2 : z / 2].forEach((expected, axis) => near(post.mass.centroid[axis], expected));
     const cylinders = post.faces.map(face => face.geometry).filter(face => face.kind === 'cylinder');
@@ -160,8 +164,9 @@ async function inspect(label, doc, z) {
     const top = post.vertices.filter(point => Math.abs(point[2] - z) < 1e-8).map(point => point.slice(0, 2));
     assert.equal(top.length, footprint.length);
     for (const [x, y] of footprint) assert.equal(top.filter(p => p[0] === x && p[1] === y).length, 1);
-    if (downwardRectangle) {
-      [17.5, 13.5, (20 + z) / 2].forEach((expected, axis) => near(post.mass.centroid[axis], expected));
+    if (downwardRectangle || downwardPolygon) {
+      const centroid = downwardPolygon ? [47 / 3, 46 / 3] : [17.5, 13.5];
+      [...centroid, (20 + z) / 2].forEach((expected, axis) => near(post.mass.centroid[axis], expected));
       const end = post.faces.find(face => face.name === 'n4.top').geometry;
       assert.equal(end.kind, 'plane');
       near(end.o[2], z);
@@ -260,7 +265,7 @@ await f.run(async () => {
     await begin();
     await pickCap(view, capPick);
     await status('refused');
-    assert.match(await f.hud().locator('.hud-error').textContent(), /forward upright rectangular or circular extrusion/i);
+    assert.match(await f.hud().locator('.hud-error').textContent(), downwardPolygon ? /forward upright circular extrusion/i : /forward upright rectangular or circular extrusion/i);
     await f.same(source);
     await f.snapshot('00-previous-upper-annulus-refused');
     return;
@@ -269,6 +274,9 @@ await f.run(async () => {
   if (circleSource) {
     assert.ok(Math.hypot(6, 6) + 3 < 12 && Math.hypot(6, 6) - 3 > 4);
     assert.ok(Math.hypot(9, 9) > 12);
+  } else if (downwardPolygon) {
+    assert.ok([[5, 0], [0, 5], [8, 8]].every(point => Math.hypot(...point) > 4 && Math.hypot(...point) < 13));
+    assert.ok(5 / Math.sqrt(2) < 4 && 38 / Math.sqrt(41) > 4);
   } else if (polygonSource) {
     assert.ok(refusedPoints.every(point => Math.hypot(...point) > 4 && Math.hypot(...point) < 12));
     const edgeDistanceSquared = ([[ax, ay], [bx, by]]) =>
@@ -287,24 +295,26 @@ await f.run(async () => {
   await button(f.hud(), 'Cancel').click();
   await f.hud().waitFor({ state: 'hidden' });
 
-  if (downwardRectangle) {
-    for (const [rim, min, max, message] of [
-      ['bore', [13, -9], [16, -6], /clear of its bore/],
-      ['outer', [18, -13], [21, -11], /entire projected profile/],
-    ]) {
-      f.phase = `refuse exact rectangle contact at the ${rim} rim`;
-      const touching = model({ ...acceptedSketch, min, max });
-      await open(`rectangle-touches-${rim}`, touching);
-      await begin();
-      await pickCap(view, capPick);
-      await status('refused');
-      assert.equal(await button(f.hud(), 'Apply').isDisabled(), true);
-      assert.match(await f.hud().locator('.hud-error').textContent(), message);
-      await f.same(touching);
-      await f.snapshot(`01-rectangle-${rim}-contact-refused`);
-      await button(f.hud(), 'Cancel').click();
-      await f.hud().waitFor({ state: 'hidden' });
-    }
+  const contacts = downwardRectangle ? [
+    ['bore', { min: [13, -9], max: [16, -6] }, /clear of its bore/],
+    ['outer', { min: [18, -13], max: [21, -11] }, /entire projected profile/],
+  ] : downwardPolygon ? [
+    ['bore', { points: [[13, -6], [13, -10], [17, -8]] }, /clear of its bore/],
+    ['outer', { points: [[15, -10], [11, -15], [21, -13]] }, /entire projected profile/],
+  ] : [];
+  for (const [rim, values, message] of contacts) {
+    f.phase = `refuse exact ${profile} contact at the ${rim} rim`;
+    const touching = model({ ...acceptedSketch, ...values });
+    await open(`${profile}-touches-${rim}`, touching);
+    await begin();
+    await pickCap(view, capPick);
+    await status('refused');
+    assert.equal(await button(f.hud(), 'Apply').isDisabled(), true);
+    assert.match(await f.hud().locator('.hud-error').textContent(), message);
+    await f.same(touching);
+    await f.snapshot(`01-${profile}-${rim}-contact-refused`);
+    await button(f.hud(), 'Cancel').click();
+    await f.hud().waitFor({ state: 'hidden' });
   }
 
   if (circleSource) {

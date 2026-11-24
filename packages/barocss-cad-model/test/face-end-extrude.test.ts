@@ -350,8 +350,8 @@ test('a downward annular target refuses contact, loss of authored authority and 
     assert.throws(() => toPartDocument(replaceNode(doc, 2, changed)), /intact original upper annulus/);
   assert.throws(() => toPartDocument(replaceNode(doc, 0, { ...stockCircle, id: stock.id })), /stock or source sketch identity/);
   assert.throws(() => toPartDocument(replaceNode(doc, 3, {
-    id: 'n3', kind: 'sketch', profile: 'polygon', points: [[14, -15], [16, -15], [16, -13]], plane: source.plane,
-  })), /forward upright circular extrusion/);
+    id: 'n3', kind: 'sketch', profile: 'polygon', points: [[14, -15], [15, -15], [16, -15]], plane: source.plane,
+  })), /straight convex polygon/);
 });
 
 function downwardRectangleToAnnulus(height = 5, min: [number, number] = [15, -13], max: [number, number] = [18, -10]): StudioDoc {
@@ -403,6 +403,58 @@ test('a downward rectangle to the original upper annulus clears the bore and out
     assert.throws(() => toPartDocument(downwardRectangleToAnnulus(height)), /stay forward.*authored end cap/);
   for (const height of [20, 21])
     assert.throws(() => toPartDocument(downwardRectangleToAnnulus(height)), /positive extrusion direction/);
+});
+
+function downwardPolygonToAnnulus(height = 5, points: [number, number][] = [[15, -10], [11, -15], [18, -15]]): StudioDoc {
+  const doc = downwardRectangleToAnnulus(height), source = doc.nodes[3];
+  assert.ok(source.kind === 'sketch');
+  return replaceNode(doc, 3, { id: 'n3', kind: 'sketch', profile: 'polygon', points, plane: source.plane });
+}
+
+test('a reflected downward convex polygon reaches the original upper annulus with its entire footprint clear', () => {
+  for (const height of [5, 8]) {
+    const doc = downwardPolygonToAnnulus(height), source = doc.nodes[3], travel = 20 - height;
+    assert.ok(source.kind === 'sketch' && source.profile === 'polygon');
+    for (const working of [doc, replaceNode(doc, 3, { ...source, points: [...source.points].reverse() })]) {
+      const opened = readStudioDoc(JSON.stringify(working));
+      assert.ok('doc' in opened);
+      assert.deepEqual(opened.doc, working);
+      assert.equal(currentFaceEndDistance(opened.doc, 4), travel);
+      const { outputs } = evaluateCadPart(toPartDocument(opened.doc));
+      assert.deepEqual(outputs.map(output => output.id), ['n2', 'n4']);
+      assert.ok(outputs.every(output => checkOutput(output).valid));
+      const [tube, post] = outputs, mass = massPropertiesOf(post);
+      assert.deepEqual(tube.brep, evaluateCadPart(toPartDocument(prefixDoc(doc, 4))).outputs[0].brep);
+      assert.ok(Math.abs(massPropertiesOf(tube).volume - 153 * Math.PI * height) < 1e-8);
+      assert.ok(Math.abs(mass.volume - 17.5 * travel) < 1e-8);
+      mass.centroid.forEach((value, i) => assert.ok(Math.abs(value - [47 / 3, 46 / 3, (20 + height) / 2][i]) < 1e-8));
+      const top = tube.brep.faces.find(face => face.name === 'n1.top')!;
+      assert.equal(top.loops.length, 2);
+      const target = faceGeometry(top), end = faceGeometry(post.brep.faces.find(face => face.name === 'n4.top')!);
+      assert.ok(target.kind === 'plane' && end.kind === 'plane');
+      assert.equal(target.o[2], height); assert.equal(target.n[2], 1);
+      assert.equal(end.o[2], height); assert.equal(end.n[2], -1);
+      for (const [x, y] of [[16, 12], [12, 17], [19, 17]]) for (const z of [height, 20]) {
+        assert.equal(post.brep.vertices.filter(vertex => vertex.point.join() === [x, y, z].join()).length, 1);
+      }
+    }
+  }
+});
+
+test('a downward polygon to the upper annulus refuses hidden bore overlap and exact native rim contacts', () => {
+  assert.ok([[5, 0], [0, 5], [8, 8]].every(point => Math.hypot(...point) > 4 && Math.hypot(...point) < 13));
+  // The chord between (15,10) and (10,15) crosses the bore.
+  assert.ok(5 / Math.sqrt(2) < 4);
+  for (const points of [
+    [[14, -8], [9, -13], [17, -16]],
+    [[3, -2], [16, -4], [10, -16]],
+    [[13, -6], [13, -10], [17, -8]],
+  ] as [number, number][][]) {
+    assert.throws(() => toPartDocument(downwardPolygonToAnnulus(5, points)), /clear of its bore/);
+  }
+  assert.equal(currentFaceEndDistance(downwardPolygonToAnnulus(5, [[13 + 1e-6, -6], [13 + 1e-6, -10], [17, -8]]), 4), 15);
+  assert.throws(() => toPartDocument(downwardPolygonToAnnulus(5, [[15, -10], [11, -15], [21, -13]])), /entire projected profile/);
+  assert.equal(currentFaceEndDistance(downwardPolygonToAnnulus(5, [[15, -10], [11, -15], [21 - 1e-6, -13]]), 4), 15);
 });
 
 function annularPolygonTarget(points: [number, number][], from = 20, origin: [number, number, number] = [0, 0, 0]): StudioDoc {
