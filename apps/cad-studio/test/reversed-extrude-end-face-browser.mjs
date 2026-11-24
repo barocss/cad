@@ -6,6 +6,7 @@ import { createFlow, sha256 } from './flow-helper.mjs';
 
 const baseline = process.argv.includes('--baseline');
 const rectangleDisk = process.argv.includes('--rectangle-disk');
+const finishNotice = process.argv.includes('--finish-notice');
 const disk = rectangleDisk || process.argv.includes('--disk');
 const circle = !rectangleDisk && (disk || process.argv.includes('--circle'));
 const sourceCenter = disk ? [11, 10] : [5, 4];
@@ -18,7 +19,7 @@ const pins = [
   'packages/barocss-cad-model/src/engine/part.ts',
 ];
 const f = await createFlow({
-  name: 'reversed-extrude-end-face', output: process.argv[2], envFrozen: rectangleDisk ? 'D1964_SOURCE_FROZEN' : disk ? 'D1958_SOURCE_FROZEN' : circle ? 'D1932_SOURCE_FROZEN' : 'D1896_SOURCE_FROZEN',
+  name: 'reversed-extrude-end-face', output: process.argv[2], envFrozen: finishNotice ? 'D1966_SOURCE_FROZEN' : rectangleDisk ? 'D1964_SOURCE_FROZEN' : disk ? 'D1958_SOURCE_FROZEN' : circle ? 'D1932_SOURCE_FROZEN' : 'D1896_SOURCE_FROZEN',
   initialFiles: pins, requiredFrozen: pins,
   qualification: `Extrude a ${circle ? 'circular' : 'rectangular'} profile from an exact -Z sketch plane to the original top face.`,
   limits: ['One top-level upright rectangular or circular target Extrude and one literal source in desktop Studio.'],
@@ -195,18 +196,43 @@ async function editCircleDiameter(height) {
 async function editRectangleWidth(height) {
   f.phase = 'Refuse a tangent rectangle then edit the reopened width';
   const original = await f.doc();
-  await f.openFeatureEditor(3, 'linked face termination');
-  await button('Edit sketch', f.editor()).click();
-  await f.sketchPanel().waitFor();
-  const width = f.sketchPanel().getByLabel('Edge 1 length', { exact: true });
-  await width.fill('6');
-  await width.press('Tab');
-  await f.page.locator('.topbar button.finish').click();
-  await f.waitToast(/contain the entire projected profile/);
-  await f.same(original);
+  const notice = f.page.locator('.toast[role="alert"]').filter({ hasText: /contain the entire projected profile/ });
+  const reopen = async () => {
+    await f.openFeatureEditor(3, 'linked face termination');
+    await button('Edit sketch', f.editor()).click();
+    await f.sketchPanel().waitFor();
+    return f.sketchPanel().getByLabel('Edge 1 length', { exact: true });
+  };
+  const refuse = async width => {
+    await width.fill('6');
+    await width.press('Tab');
+    await f.page.locator('.topbar button.finish').click();
+    await f.waitToast(/contain the entire projected profile/);
+    await f.same(original);
+  };
+  let width = await reopen();
+  await refuse(width);
   await f.snapshot('06-rectangle-contact-refused');
+  if (finishNotice) {
+    const model = button('Model', f.page.getByRole('group', { name: 'Mode', exact: true }));
+    const prompt = f.page.getByRole('dialog', { name: 'Discard sketch changes?', exact: true });
+    await model.click();
+    await button('Keep editing', prompt).click();
+    await prompt.waitFor({ state: 'hidden' });
+    await notice.waitFor();
+    await f.snapshot('06a-keep-refused-sketch');
+    await model.click();
+    await button('Discard changes', prompt).click();
+    await f.sketchPanel().waitFor({ state: 'hidden' });
+    await notice.waitFor({ state: 'hidden' });
+    await f.same(original);
+    await f.snapshot('06b-discard-retires-refusal');
+    width = await reopen();
+    await refuse(width);
+  }
   await width.fill('4');
   await width.press('Tab');
+  if (finishNotice) await notice.waitFor({ state: 'hidden' });
   await f.finishSketch('07-reopened-rectangle-width-edited');
   await verify('reopened-width-edit', height, 4);
 }

@@ -7,6 +7,8 @@ export type StudioNotice = FriendlyError & {
   action?: { label: string; run(): void };
   bodyCopy?: true;
   inputPick?: Command;
+  /** A refusal about the exact draft that attempted Finish. */
+  sketchGeneration?: number;
   documentSource?: { doc: StudioDoc; name?: string; evaluated?: StudioDoc; placed?: { view: StudioDoc; workerSession: number } };
 };
 

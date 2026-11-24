@@ -35,7 +35,7 @@ import { startPicking } from '@barocss/cad-model/sketch/select';
 import type { Dispatch, SetStateAction, RefObject } from 'react';
 import type { StudioDoc } from '@barocss/cad-model/engine/doc';
 import type { BodyResult } from '@barocss/cad-model/engine/evaluate';
-import type { FriendlyError } from '@barocss/cad-model/engine/errors';
+import type { StudioNotice } from '../app/studioNotice';
 import type { Selection } from '@barocss/cad-model/app/commands';
 import type { DirectGeometry } from '@barocss/cad-model/engine/direct';
 import type { ViewportHandle, SketchState } from '../viewport/Viewport';
@@ -56,7 +56,7 @@ interface SketchActionOptions {
   viewport: RefObject<ViewportHandle | null>;
   autoFrameReopened?: boolean;
   changes: { canChangeDocument(): boolean; commit(next: StudioDoc): boolean; commitDirect(next: DirectGeometry, select?: string[]): boolean; setSelection: Dispatch<SetStateAction<Selection>>; setEditNode(value: null): void; setActive(value: null): void; setPreviewBodies(value: null): void };
-  onNotice(notice: FriendlyError): void;
+  onNotice(notice: StudioNotice): void;
 }
 /** Said after Finish when parameters' bindings did not survive: those values are plain numbers now. */
 const droppedBindingsToast = (names: string[]) => ({ title: 'Bindings became numbers', hint: `${names.join(', ')}: ${names.length > 1 ? 'these values changed or their shape changed form, so they are now plain numbers' : 'this value changed or its shape changed form, so it is now a plain number'}. Bind them again in the feature editor.`, detail: '' });
@@ -323,6 +323,9 @@ export function useSketchActions({ model, editor, owner, worker, viewport, chang
       return;
     }
     const requestedGeneration = sketchGeneration.current;
+    const publishRefusal = (notice: StudioNotice) => setToast({
+      ...notice, documentSource: { doc }, sketchGeneration: requestedGeneration,
+    });
     const pending = pendingFinish.current;
     if (pending?.doc === doc && pending.generation === requestedGeneration) return;
     const linked = !!(sketch.association || sketch.associationDetached);
@@ -334,7 +337,7 @@ export function useSketchActions({ model, editor, owner, worker, viewport, chang
       result.then(reply => {
         if (pendingFinish.current === request) pendingFinish.current = null;
         if (!reply || !requestCurrent()) return;
-        if (!reply.ok) { setToast(reply.error); return; }
+        if (!reply.ok) { publishRefusal(reply.error); return; }
         apply();
       });
     };
@@ -359,9 +362,9 @@ export function useSketchActions({ model, editor, owner, worker, viewport, chang
     const shapes = withIds(joined, undefined, protectedShapes);
     // A band sketch holds the band and its construction sources only (the model refuses anything else, and a band that cannot be made).
     const banded = sketch.band ? bandSketchNode(shapes, sketch.band) : null;
-    if (banded && 'error' in banded) { setToast({ title: 'Cannot finish the band', hint: banded.error, detail: '' }); return; }
+    if (banded && 'error' in banded) { publishRefusal({ title: 'Cannot finish the band', hint: banded.error, detail: '' }); return; }
     const profile = banded ?? profileOf(shapes);
-    if ('error' in profile) { setToast({ title: 'Finish the profile first', hint: profile.error, detail: '' }); return; }
+    if ('error' in profile) { publishRefusal({ title: 'Finish the profile first', hint: profile.error, detail: '' }); return; }
     // Construction shapes and Bézier curves are kept with the sketch (they come back when it is reopened). A Bézier is stored without `construction`: it is no reference to hide or snap as one, and drawing and Make curves treat it as the curve it is.
     let refs = banded ? [] : shapes.filter(x => x.construction || x.kind === 'bezier').map(x => x.kind === 'bezier' && x.construction ? (({ construction: _c, ...rest }) => rest as SketchShape)(x) : x);
     const storedSketch = sketch.editNode === undefined ? undefined : doc.nodes[sketch.editNode];

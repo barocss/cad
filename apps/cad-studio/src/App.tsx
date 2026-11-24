@@ -721,10 +721,12 @@ export function App() {
   }, [shownDoc.nodes, shownDoc.direct, marker]);
   const evaluated = useMemo(() => prefixDoc(shownDoc, marker ?? shownDoc.nodes.length), [shownDoc.nodes, shownDoc.parameters, shownDoc.frames?.sections, rootContextKey, curvePathKey, followsParts ? shownDoc.instances : null, marker]);
   const noticeSource = notice?.documentSource, placedNotice = noticeSource?.placed;
-  const noticeExpired = !!noticeSource && (noticeSource.doc !== doc
+  const sketchNoticeExpired = notice?.sketchGeneration !== undefined
+    && (!sketch || sketchGeneration.current !== notice.sketchGeneration);
+  const noticeExpired = sketchNoticeExpired || (!!noticeSource && (noticeSource.doc !== doc
     || (noticeSource.name !== undefined && noticeSource.name !== fileName)
     || (noticeSource.evaluated !== undefined && noticeSource.evaluated !== evaluated)
-    || (!!placedNotice && (placedNotice.view !== shownDoc || placedNotice.workerSession !== workerSession)));
+    || (!!placedNotice && (placedNotice.view !== shownDoc || placedNotice.workerSession !== workerSession))));
   useEffect(() => {
     if (noticeExpired) setToast(current => current === notice ? null : current);
   }, [noticeExpired, notice]);
