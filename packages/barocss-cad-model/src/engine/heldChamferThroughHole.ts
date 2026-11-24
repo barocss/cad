@@ -1,9 +1,9 @@
 import { CadNumericPolicy } from '@barocss/cad';
-import type { StudioDoc } from '@barocss/cad-model/engine/doc';
-import type { BodyResult } from '@barocss/cad-model/engine/evaluate';
-import { validFinishGroupEdge } from '@barocss/cad-model/engine/heldFinishGroup';
-import { bodyKeyFor, featureId } from '@barocss/cad-model/engine/ids';
-import type { DisplayEdge, Vec3 } from '@barocss/cad-model/engine/mesh';
+import type { StudioDoc } from './doc';
+import type { BodyResult } from './evaluate';
+import { validFinishGroupEdge } from './heldFinishGroup';
+import { bodyKeyFor, featureId } from './ids';
+import type { DisplayEdge, Vec3 } from './mesh';
 
 export function heldChamferThroughHole(doc: StudioDoc, index: number, bodies: readonly BodyResult[]) {
   const finish = doc.nodes[index], hole = doc.nodes[index + 1], [body] = bodies;

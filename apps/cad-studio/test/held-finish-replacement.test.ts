@@ -7,7 +7,7 @@ import { toSig } from '@barocss/cad-model/engine/references';
 import { signaturesOf } from '@barocss/cad-model/engine/rematch';
 import { heldFinishGroupProblems, heldFinishRadiusText, heldFinishCandidate, heldFinishProblem, heldFinishReplaceable,
  heldFinishReplacement, replaceHeldFinishGroup, type HeldFinish } from '../src/state/heldFinishReplacement';
-import { heldChamferThroughHole, parentChamferEdge } from '../src/state/heldChamferThroughHole';
+import { heldChamferThroughHole, parentChamferEdge } from '@barocss/cad-model/engine/heldChamferThroughHole';
 const finish:Extract<HeldFinish,{kind:'fillet'}>={id:'repair',kind:'fillet',parent:{node:1,side:'solid'},edges:['missing'],radius:1,held:'missing edge',suppressed:true,radii:[{at:[0,0,0],radius:1,atEnd:true},{at:[10,0,0],radius:3,atEnd:true}]};
 const edge:DisplayEdge={index:0,faces:[0,1],a:[0,20,10],b:[30,20,10],straight:true,axis:'x',names:['new-edge'],nativeLine:true};
 const sig={k:'curve' as const,p:[15,20,10] as [number,number,number],s:30};

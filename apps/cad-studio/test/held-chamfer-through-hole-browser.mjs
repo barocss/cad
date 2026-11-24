@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict';
 import { createFlow } from './flow-helper.mjs';
+import { readHeldFinishSummary } from './held-finish-recovery-mcp.mjs';
 import { seedJSON } from './hole-chamfer-lifecycle-oracles.mjs';
 
 const baseline = process.argv.includes('--baseline');
+const mcp = process.argv.includes('--mcp');
 const target = 'n1.side[e1]|n1.top';
 const old = 'n1.side[retired]|n1.top';
 const seed = JSON.parse(seedJSON);
@@ -16,6 +18,11 @@ seed.nextId = 4;
 const files = [
   'apps/cad-studio/src/state/useHeldFinishEdge.ts', 'apps/cad-studio/src/state/heldFinishReplacement.ts',
   'apps/cad-studio/test/hole-chamfer-lifecycle-oracles.mjs',
+  ...(mcp ? [
+    'apps/cad-studio/test/held-finish-recovery-mcp.mjs', 'apps/cad-studio/test/mcp-browser-session.mjs',
+    'packages/barocss-cad-model/src/chat/part/heldFinishRecovery.ts', 'packages/barocss-cad-model/src/chat/tools-v2.json',
+    'packages/barocss-cad-model/src/engine/heldChamferThroughHole.ts',
+  ] : []),
 ];
 const f = await createFlow({
   name: 'held-chamfer-through-hole', output: process.argv[2], envFrozen: 'D1902_SOURCE_FROZEN',
@@ -96,6 +103,29 @@ await f.run(async () => {
   }
 
   const history = await stack();
+  let diagnosedPick, heldRevision;
+  if (mcp) {
+    f.phase = 'diagnose the held Chamfer on the saved Studio document';
+    const saved = await f.save('held-for-local-agent');
+    f.phase = 'read the held Chamfer through local MCP';
+    const { summary, revision } = await readHeldFinishSummary(f, saved.file, 'held-chamfer', 'b3');
+    heldRevision = revision;
+    const recovery = summary.held_finish_recovery;
+    assert.ok(recovery);
+    assert.deepEqual([recovery.feature, recovery.body, recovery.source_body, recovery.downstream_feature, recovery.revision,
+      recovery.mode, recovery.page, recovery.pages], ['n2', 'b3', 'b1', 'n3', revision, 'studio_history_review', 1, 1]);
+    assert.deepEqual(recovery.slots, [{ slot: 1, authored_edge: old, signature_matches: [target] }]);
+    assert.equal(recovery.pick_edges.length, 4);
+    assert.ok(recovery.pick_edges.every(edge => edge.name.endsWith('|n1.top') && edge.from[2] === 10 && edge.to[2] === 10));
+    diagnosedPick = recovery.pick_edges.find(edge => edge.name === target);
+    assert.deepEqual([diagnosedPick.from, diagnosedPick.to].sort(), [[-20, -20, 10], [60, -20, 10]]);
+    assert.equal(summary.bodies[0].volume, 31874.336);
+    await f.same(opened.doc);
+    assert.deepEqual(await stack(), history);
+    await f.snapshot('01b-unchanged-after-agent-read');
+    f.report.observations.push({ label: 'local-mcp-read', revision, recovery, documentBytesAfterRead: 'SAME' });
+  }
+  const pickPoint = diagnosedPick ? diagnosedPick.from.map((value, axis) => (value + diagnosedPick.to[axis]) / 2) : [20, -20, 10];
   const apply = () => button('Apply edge replacement', f.editor());
   f.phase = 'refuse the Hole rim';
   await repick.click();
@@ -107,7 +137,7 @@ await f.run(async () => {
   await f.snapshot('02-hole-rim-refused');
 
   f.phase = 'select the original straight lip and cancel';
-  await pick([20, -20, 10]);
+  await pick(pickPoint);
   await f.editor().getByText(target, { exact: true }).waitFor();
   assert.equal(await apply().isEnabled(), true);
   await f.same(opened.doc);
@@ -119,7 +149,7 @@ await f.run(async () => {
 
   f.phase = 'apply one explicit History replacement';
   await repick.click();
-  await pick([20, -20, 10]);
+  await pick(pickPoint);
   await f.editor().getByText(target, { exact: true }).waitFor();
   await apply().click();
   await f.page.waitForFunction(name => window.__studioDoc?.nodes[2]?.edges[0] === name, target);
@@ -140,4 +170,13 @@ await f.run(async () => {
   const { file } = await f.save('chamfer-through-hole');
   const reopened = await f.freshOpen(file, repaired.doc, '06-fresh-open-with-hole');
   await verify('reopened-native', reopened, true);
+  if (mcp) {
+    f.phase = 'verify resolved status through the local MCP host';
+    const result = await readHeldFinishSummary(f, file, 'repaired-chamfer', 'b3');
+    assert.equal(result.summary.held_finish_recovery, undefined);
+    assert.notEqual(result.revision, heldRevision);
+    assert.equal(result.summary.bodies[0].volume, 31514.336);
+    await f.same(repaired.doc);
+    f.report.observations.push({ label: 'local-mcp-resolved', revision: result.revision, recovery: 'absent' });
+  }
 });

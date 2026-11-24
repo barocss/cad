@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { createFlow } from './flow-helper.mjs';
-import { readHeldFilletSummary } from './held-finish-recovery-mcp.mjs';
+import { readHeldFinishSummary } from './held-finish-recovery-mcp.mjs';
 
 const baseline = process.argv.includes('--baseline');
 const fillet = process.argv.includes('--fillet');
@@ -178,7 +178,7 @@ await f.run(async () => {
   if (mcp) {
     const savedHeld = await f.save('held-source-for-local-agent');
     f.phase = 'Read the same held model through the local MCP host';
-    const { summary, revision } = await readHeldFilletSummary(f, savedHeld.file, 'held-source');
+    const { summary, revision } = await readHeldFinishSummary(f, savedHeld.file, 'held-source', 'b2');
     heldRevision = revision;
     const recovery = summary.held_finish_recovery;
     assert.ok(recovery);
@@ -270,7 +270,7 @@ await f.run(async () => {
   qualifyTarget(await f.inspect('10-reopened-native', await f.doc()));
   if (mcp) {
     f.phase = 'Confirm local reads retire the recovery view at the repaired revision';
-    const repaired = await readHeldFilletSummary(f, saved.file, 'repaired-source');
+    const repaired = await readHeldFinishSummary(f, saved.file, 'repaired-source', 'b2');
     assert.notEqual(repaired.revision, heldRevision);
     assert.equal(repaired.summary.held_finish_recovery, undefined);
     await f.same(accepted.doc);

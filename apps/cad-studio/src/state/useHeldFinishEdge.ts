@@ -1,6 +1,6 @@
 import { heldFinishGroupProblems, heldFinishProblem, heldFinishCandidate, heldFinishReplacement,
   replaceHeldFinishGroup, validFinishGroupEdge, type ReplacementEndpoints } from './heldFinishReplacement';
-import { heldChamferThroughHole, parentChamferEdge } from './heldChamferThroughHole';
+import { heldChamferThroughHole, parentChamferEdge } from '@barocss/cad-model/engine/heldChamferThroughHole';
 import { useCallback, useLayoutEffect, useRef, useState } from 'react';
 import type { DisplayEdge } from '@barocss/cad-model/engine/mesh';
 import type { ModelNode, StudioDoc } from '@barocss/cad-model/engine/doc';
