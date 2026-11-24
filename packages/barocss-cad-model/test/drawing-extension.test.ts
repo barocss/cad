@@ -6,6 +6,8 @@ import { projectViews } from '../src/drawing/project';
 import { snapPoints } from '../src/drawing/dimensions';
 import { defaultDrawing, readDrawing, type DrawingDimension } from '../src/drawing/types';
 import { buildSheet } from '../src/drawing/sheet';
+import { modelAnnotations } from '../src/drawing/annotations3d';
+import { sheetPdf } from '../src/io/pdf';
 import { layoutSheet } from '../src/drawing/views';
 import { sheetDxfDocument } from '../src/io/dxf';
 import { checkSavedExtension } from '../src/drawing/savedExtension';
@@ -43,4 +45,30 @@ test('new field is strict, unmarked legacy settings unchanged, nested raw Open r
   }
   assert.ok(checkSavedExtension({...raw,scope:{kind:'assembly'}}).length);
   assert.deepEqual(checkSavedExtension({...defaultDrawing(),dimensions:[dim]}),[]);
+});
+
+test('the PDF stream and 3D annotation each omit just the selected extension', () => {
+  const before = built(dim), after = built({ ...dim, hideExtension: 'a' });
+  const marks = before.sheet.groups.find(group => group.id === dim.id && group.role === 'dimension')!.marks;
+  const line = marks.find(mark => mark.kind === 'line' && mark.role === 'extension');
+  assert.ok(line?.kind === 'line');
+  const operators = (sheet: typeof before.sheet) => {
+    const pdf = Buffer.from(sheetPdf(sheet, 'Witness selection')).toString('latin1');
+    const stream = /\nstream\n([\s\S]+?)endstream/.exec(pdf);
+    assert.ok(stream);
+    return stream[1].trimEnd().split('\n');
+  };
+  const original = operators(before.sheet), hidden = operators(after.sheet);
+  const [x0, y0, x1, y1] = [...line.a, ...line.b].map(point => Number(point.toFixed(4)));
+  const lineOps = ` ${x0} ${y0} m ${x1} ${y1} l S`;
+  const suppressed = original.filter(operator => operator.endsWith(lineOps));
+  assert.equal(suppressed.length, 1);
+  assert.deepEqual(hidden, original.filter(operator => operator !== suppressed[0]));
+
+  const item = ({ sheet, layout, s }: typeof before) => modelAnnotations({ views, sheet, layout, settings: s })
+    .items.find(annotation => annotation.id === dim.id)!;
+  const original3d = item(before);
+  const extensions = original3d.lines.filter(mark => mark.role === 'extension');
+  assert.equal(extensions.length, 2);
+  assert.deepEqual(item(after), { ...original3d, lines: original3d.lines.filter(mark => mark !== extensions[0]) });
 });
