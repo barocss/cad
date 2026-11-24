@@ -842,6 +842,58 @@ function tangentArcPair(path: Curve, refuse: Refuse) {
   return { first, second, turn };
 }
 
+/** Two explicit quarter carriers may change bend plane once, without a general frame law. */
+function perpendicularQuarterPair(path: Curve, refuse: Refuse) {
+  const { degree, controlPoints: p, weights: w, knots: k } = path;
+  if (degree !== 2 || p.length !== 5 || w.length !== 5 || k.length !== 8 || w[0] !== w[2] || w[2] !== w[4]
+    || !(w[1] > 0 && w[1] < w[0] && w[3] > 0 && w[3] < w[0])
+    || k[0] !== k[1] || k[1] !== k[2] || k[3] !== k[4] || k[5] !== k[6] || k[6] !== k[7]
+    || !(k[2] < k[3] && k[4] < k[5])) return;
+  const tolerance = pathTolerance(path, refuse);
+  const first = circularSpan(p[0], p[1], p[2], w[1] / w[0], tolerance / 4);
+  const second = circularSpan(p[2], p[3], p[4], w[3] / w[0], tolerance / 4);
+  if (!first || !second) return;
+  const roundoff = 256 * Number.EPSILON * Math.max(1, geometryScaleMM(p), first.radius, second.radius);
+  const lead = sub(p[2], p[1]), tail = sub(p[3], p[2]);
+  const angular = Math.min(CadNumericPolicy.relativeComparison, roundoff / Math.min(first.radius, second.radius, len(lead), len(tail)));
+  if (Math.abs(first.angle - Math.PI / 2) > angular || Math.abs(second.angle - Math.PI / 2) > angular) return;
+  const inward = (arc: typeof first) => unit(sub(arc.toCentre, scale(arc.tangent, dot(arc.toCentre, arc.tangent))));
+  const n1 = inward(first), n2 = inward(second);
+  const forward = add(scale(first.tangent, Math.cos(first.angle)), scale(n1, Math.sin(first.angle)));
+  if ([unit(lead), unit(tail), second.tangent].some(tangent => len(sub(forward, tangent)) > angular)
+    || Math.abs(dot(unit(cross(first.tangent, n1)), unit(cross(second.tangent, n2)))) > angular) return;
+  return { first: { ...first, tolerance }, second: { ...second, tolerance } };
+}
+
+/** Preserve the first exit's disk seam and certify every pole of both represented centreline spans. */
+function perpendicularSecondCentre(pair: NonNullable<ReturnType<typeof perpendicularQuarterPair>>, initial: SweepAxes,
+  centre: XY, path: Curve, refuse: Refuse): XY {
+  const rotate = (axes: SweepAxes, p: Point) => add(add(scale(axes[0], p[0]), scale(axes[1], p[1])), scale(axes[2], p[2]));
+  const [dx, dy] = centre, radius = Math.hypot(dx, dy);
+  // Match the exact degree/radian round trip used by the existing Revolve producer.
+  const a = pair.first.angle * 180 / Math.PI * Math.PI / 180, b = pair.second.angle * 180 / Math.PI * Math.PI / 180;
+  const join = bendEndFrame(dx, dy, radius, a), joinWorld = add(pair.first.start, rotate(initial, join.offset));
+  const axes: SweepAxes = [rotate(initial, join.axes[0]), rotate(initial, join.axes[1]), rotate(initial, join.axes[2])];
+  const secondCentre: XY = [dot(pair.second.toCentre, axes[0]), dot(pair.second.toCentre, axes[1])];
+  const secondRadius = Math.hypot(...secondCentre), end = bendEndFrame(...secondCentre, secondRadius, b);
+  const controls: Point[][] = [
+    [pair.first.start, add(pair.first.start, scale(initial[2], radius * Math.tan(a / 2))), joinWorld],
+    [joinWorld, add(joinWorld, scale(axes[2], secondRadius * Math.tan(b / 2))), add(joinWorld, rotate(axes, end.offset))],
+  ];
+  for (const [index, poles] of controls.entries()) {
+    const source = path.controlPoints.slice(index * 2, index * 2 + 3);
+    const weight = path.weights[index * 2 + 1] / path.weights[0], nativeWeight = Math.cos((index ? b : a) / 2);
+    const poleError = Math.max(...poles.map((p, i) => len(sub(p, source[i]))));
+    const diameter = Math.max(len(sub(poles[0], poles[1])), len(sub(poles[0], poles[2])), len(sub(poles[1], poles[2])));
+    // Positive rational weights bound pole errors by their convex average. The middle
+    // Bernstein term is at most one half; this is the existing circular-span weight bound.
+    const weightError = 0.5 * Math.abs(weight - nativeWeight) * diameter / Math.min(1, weight, nativeWeight);
+    if (!(poleError + weightError <= pair.first.tolerance))
+      return refuse('GEOMETRY', 'The perpendicular quarter arcs cannot retain their native centreline and common section frame.');
+  }
+  return secondCentre;
+}
+
 /** Read two coplanar circular spans with one forward tangent quadratic straight span between them. */
 function tangentArcLineArc(path: Curve, refuse: Refuse) {
   const { degree, controlPoints: poles, weights, knots } = path;
@@ -1025,8 +1077,8 @@ function bindArcLineArcJoins(brep: Brep, id: string, tolerance: number, aperture
     return { ...brep, coedges };
 }
 
-function arcPairSweep(id: string, arcs: NonNullable<ReturnType<typeof tangentArcPair>> & { length?: number }, section: JoinedSection,
-  bore: Circle | undefined, tags: SideTags | undefined, refuse: Refuse): SweepSolid {
+function arcPairSweep(id: string, arcs: Omit<NonNullable<ReturnType<typeof tangentArcPair>>, 'turn'> & { turn?: 1 | -1; length?: number }, section: JoinedSection,
+  bore: Circle | undefined, tags: SideTags | undefined, refuse: Refuse, secondCentre?: XY): SweepSolid {
   const { first, second, turn, length } = arcs, { profile, opening, apertures, radialReach, extent, edgeCount, bendCentre: [dx, dy] } = section;
   const rectangle = edgeCount !== 2, hasOpening = opening !== undefined || bore !== undefined;
   const hasLine = length !== undefined, style = hasLine ? 'arc-line-arc' : 'two-arc';
@@ -1034,7 +1086,7 @@ function arcPairSweep(id: string, arcs: NonNullable<ReturnType<typeof tangentArc
     return refuse('PARAMETER', 'Exact sweep path radius must be at most 10000 mm.');
   const radius = Math.hypot(dx, dy);
   // The transported frame keeps the first center on its local ray. Same-turn keeps it; an S-bend reverses it.
-  const ratio = turn * second.radius / radius, sx = dx * ratio, sy = dy * ratio;
+  const ratio = (turn ?? 1) * second.radius / radius, [sx, sy] = secondCentre ?? [dx * ratio, dy * ratio];
   const clearance = () => refuse('PARAMETER', rectangle
     ? `Exact rectangular ${style} sweep needs radial half-width smaller than both path radii.`
     : `Exact ${style} sweep needs both path radii larger than the profile radius.`);
@@ -1352,7 +1404,8 @@ export function exactSweep(input: ExactSweepInput, refuse: Refuse): SweepSolid {
     return result;
   }
 
-  const pair = tangentArcPair(path, refuse);
+  const perpendicular = mode === 'exact' && profileRadius !== undefined && !holes.length ? perpendicularQuarterPair(path, refuse) : undefined;
+  const pair = perpendicular ?? tangentArcPair(path, refuse);
   if (pair) {
     const rectangle = profileRadius === undefined ? rectangleSection(outer) : undefined;
     if (!rectangle && (!disk || profileRadius === undefined))
@@ -1368,7 +1421,8 @@ export function exactSweep(input: ExactSweepInput, refuse: Refuse): SweepSolid {
     };
     if (paired) joined.section = { ...joined.section, edgeCount: 12,
       apertures: pairedRectangularApertures(rectangle, holes, joined.section, pair.first.tolerance, refuse, 'two-arc rectangular') };
-    const result = place(arcPairSweep(id, pair, joined.section, bore, sideTags, refuse), joined.axes, pair.first.start);
+    const secondCentre = perpendicular ? perpendicularSecondCentre(perpendicular, joined.axes, joined.section.bendCentre, path, refuse) : undefined;
+    const result = place(arcPairSweep(id, pair, joined.section, bore, sideTags, refuse, secondCentre), joined.axes, pair.first.start);
     const report = checkBrep(result.brep, { strict: true });
     if (!report.valid || report.topology.length !== 1 || report.topology[0].shells !== 1
       || report.topology[0].genus !== (paired ? 2 : bore || joined.section.opening ? 1 : 0))

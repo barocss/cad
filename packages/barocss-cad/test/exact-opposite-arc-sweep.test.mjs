@@ -186,7 +186,7 @@ test('exact two-arc sweep refuses a kink, reversal, nonplanarity and axis contac
     { curveId: 'changedPair' }).curve;
   refused(joinedWith([1, 0, 0], [0, 1, 0]), 'GEOMETRY', /common forward tangent/);
   refused(joinedWith(scale(first.atExit, -1), [1, 0, 0]), 'GEOMETRY', /common forward tangent/);
-  refused(joinedWith(first.atExit, [0, 0, 1]), 'CAPABILITY', /two coplanar circular arcs/);
+  refused(joinedWith(first.atExit, [.6, 0, .8]), 'CAPABILITY', /two coplanar circular arcs/);
   refused(pair({ a: 29 }).curve, 'CAPABILITY', /30° to 120°/);
   refused(pair({ b: 121 }).curve, 'CAPABILITY', /30° to 120°/);
   refused({ ...curve, knots: [0, 0, 0, 1, 1.1, 2, 2, 2] }, 'CAPABILITY', /30° to 120°/);
@@ -384,7 +384,7 @@ test('same-turn pair refuses either axis contact, kink, reversal, nonplanarity a
     refused(pair({ R1, R2, turn: 1 }).curve, 'PARAMETER', /both path radii larger/, { ...circle, radius });
   refused(joinedWith([1, 0, 0], [0, 1, 0]), 'GEOMETRY', /common forward tangent/);
   refused(joinedWith(scale(first.atExit, -1), [-1, 0, 0]), 'GEOMETRY', /common forward tangent/);
-  refused(joinedWith(first.atExit, [0, 0, 1]), 'CAPABILITY', /two coplanar circular arcs/);
+  refused(joinedWith(first.atExit, [.6, 0, .8]), 'CAPABILITY', /two coplanar circular arcs/);
   for (const angles of [{ a: 29 }, { b: 121 }]) refused(pair({ ...angles, turn: 1 }).curve, 'CAPABILITY', /30° to 120°/);
 });
 
