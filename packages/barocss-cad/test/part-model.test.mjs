@@ -398,7 +398,7 @@ test('sweep: a profile along straight runs and bends, exact mass, joined into on
   const plated = evaluateCadPart(D([circle('s', 0, 0, 3), { id: 'w', kind: 'sweep', sketch: 's', path: [straight(8), bend(20, 90, 'x'), straight(8)] }, rect('r', -10, -10, 10, 10), extrude('p', 'r', 4, -4), { id: 'u', kind: 'union', target: 'w', tool: 'p' }])).outputs.at(-1);
   assert.equal(checkBrep(plated.brep).valid, true);
   assert.ok(close(massPropertiesOf(plated, 1).volume, 9 * pi * (16 + 10 * pi) + 1600, 1e-3));
-  refused(sweep(tube, [bend(1, 90, 'x')]), 'PARAMETER', /reaches the bend's axis/);
+  refused(sweep(tube, [bend(1, 90, 'x')]), 'PARAMETER', /crosses or touches the bend's axis/);
   refused(sweep(tube, [{ kind: 'twist' }]), 'INPUT', /straight or bend/);
 });
 

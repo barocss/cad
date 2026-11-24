@@ -45,6 +45,7 @@ test('exact three-span labels distinguish a straight lead and tail from a straig
     weights: [1, 1, 1, Math.SQRT1_2, 1, 1, 1] };
   assert.equal(sweepRepresentationLabel('exact', elbow), 'Exact line–arc–line');
   assert.equal(sweepRepresentationLabel('exact', { ...elbow, weights: [1, Math.SQRT1_2, 1, Math.SQRT1_2, 1, 1, 1] }), 'Exact arc–arc–line');
+  assert.equal(sweepRepresentationLabel('exact', { ...elbow, weights: [1, 1, 1, Math.SQRT1_2, 1, Math.SQRT1_2, 1] }), 'Exact line–arc–arc');
   assert.equal(sweepRepresentationLabel('exact', { ...elbow, weights: [1, Math.SQRT1_2, 1, 1, 1, Math.SQRT1_2, 1] }), 'Exact arc–line–arc');
   assert.equal(sweepRepresentationLabel(undefined, elbow), 'Faceted');
   assert.equal(sweepRepresentationLabel('exact', { ...elbow, weights: [1, 1, 1, 1, 1, 1, 1] }), 'Exact circular arc');
