@@ -990,12 +990,13 @@ export function rectangularFeaturePatternProblem(node: Record<string, unknown>, 
 /** An explicit prototype is an earlier Difference; it is never consumed again. */
 export function rectangularFeaturePatternSourceProblem(prototype: unknown, parent: BodyRef, nodes: readonly ModelNode[], label = 'Rectangular cut pattern'): string | null {
   if (prototype !== undefined) {
-    const bad = `[BAD_REFERENCE] ${label} source must be the current target's direct earlier or next earlier unsuppressed solid Difference.`;
+    const bad = `[BAD_REFERENCE] ${label} source must be an earlier unsuppressed solid Difference in the current target's direct Difference chain.`;
     if (!textRecord(prototype) || !Number.isSafeInteger(prototype.node) || prototype.side !== 'solid'
       || Object.keys(prototype).some(key => key !== 'node' && key !== 'side') || (prototype.node as number) < 0
       || (prototype.node as number) >= parent.node) return bad;
+    const sourceIndex = prototype.node as number;
     let at = parent.node;
-    for (let step = 0; step <= 2 && at >= (prototype.node as number); step++) {
+    while (at >= sourceIndex) {
       const cut = nodes[at];
       if (cut?.kind !== 'difference' || cut.suppressed || cut.held !== undefined
         || !textRecord(cut.parent) || !textRecord(cut.tool)
@@ -1003,7 +1004,7 @@ export function rectangularFeaturePatternSourceProblem(prototype: unknown, paren
         || !Number.isSafeInteger(cut.tool.node) || cut.tool.node < 0 || cut.tool.node >= at || cut.tool.side !== 'solid') return bad;
       const stock = nodes[cut.parent.node], tool = nodes[cut.tool.node];
       if (!textRecord(stock) || stock.suppressed || stock.held !== undefined || !textRecord(tool) || tool.suppressed || tool.held !== undefined) return bad;
-      if (at === prototype.node) return null;
+      if (at === sourceIndex) return null;
       at = cut.parent.node;
     }
     return bad;

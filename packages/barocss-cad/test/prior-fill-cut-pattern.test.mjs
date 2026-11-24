@@ -145,7 +145,7 @@ test('invalid source chains, unsupported native tools, masks and selected overla
   for (const source of ['missing', 'second', 'stock', 'olderTool', 'first/0', null, 4]) refused(doc => { doc.features.at(-1).source = source; }, 'REFERENCE');
   refused(doc => { doc.features.find(feature => feature.id === 'first').suppressed = true; }, 'REFERENCE', /fill feature pattern source/);
   refused(doc => { doc.features.splice(-1, 0, { id: 'moved', kind: 'translate', target: 'second', offset: [0, 0, 1] }); }, 'REFERENCE', /must still be active/);
-  refused(doc => { doc.features.splice(-1, 0, { id: 'foreign', kind: 'difference', target: 'stock', tool: 'olderTool' }); doc.features.at(-1).source = 'foreign'; }, 'REFERENCE', /direct earlier/);
+  refused(doc => { doc.features.splice(-1, 0, { id: 'foreign', kind: 'difference', target: 'stock', tool: 'olderTool' }); doc.features.at(-1).source = 'foreign'; }, 'REFERENCE', /direct Difference chain/);
   for (const id of ['olderTool', 'newerTool']) refused(doc => { doc.features.find(feature => feature.id === id).height = 5; }, 'CAPABILITY', /fill feature pattern source/);
   refused(doc => { Object.assign(doc.features.find(feature => feature.id === 'olderSketch'), { profile: 'circle', center: [10, 9], radius: 1, sideTags: { outer: ['a'] } }); }, 'CAPABILITY');
   refused(doc => { doc.features.splice(4, 0, { id: 'movedTool', kind: 'translate', target: 'olderTool', offset: [0, 0, 0] }); doc.features.find(feature => feature.id === 'first').tool = 'movedTool'; }, 'CAPABILITY');

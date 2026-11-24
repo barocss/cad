@@ -4,12 +4,15 @@ import { join } from 'node:path';
 import { createFlow } from './flow-helper.mjs';
 import { currentPartRevision, withMcpSession } from './mcp-browser-session.mjs';
 import { clickModelCommand } from './model-rail-helper.mjs';
-import { choosePriorCutSource, equivalent, fillMask, inspectorSource, later, newest, older, shift, threeCutFillMask, verifyPriorCut } from './prior-cut-pattern-browser-fixture.mjs';
+import { choosePriorCutSource, equivalent, fillMask, fourthCut, inspectorSource, later, newest, older, shift, threeCutFillMask, verifyPriorCut } from './prior-cut-pattern-browser-fixture.mjs';
 
 const mode = process.argv[3];
+const linearFour = mode === '--linear-four';
+const baseline = process.argv.includes('--baseline');
 const workflows = {
   '--agent': ['D1829_SOURCE_FROZEN', '#25 revision-bound local Agent proposal for the earlier through-Subtract.'],
   '--linear': ['D1830_SOURCE_FROZEN', '#25 repeat the earlier rectangular through-cut along a signed XY line.'],
+  '--linear-four': ['D1894_SOURCE_FROZEN', '#25 repeat the initial rectangular through-cut across three newer cuts.'],
   '--linear-three': ['D1850_SOURCE_FROZEN', '#25 repeat a rectangular through-cut along a signed XY line after two newer cuts.'],
   '--rectangular-three': ['D1851_SOURCE_FROZEN', '#25 repeat the first of three rectangular through-cuts on an XY grid.'],
   '--fill': ['D1831_SOURCE_FROZEN', '#25 repeat the earlier rectangular through-cut at the captured mask cells.'],
@@ -20,7 +23,7 @@ const [envFrozen, qualification] = workflows[mode] ?? [
 ];
 const f = await createFlow({
   name: 'prior-rectangular-cut-pattern', output: process.argv[2], envFrozen, qualification,
-  limits: ['One original rectangular stock and two or three disjoint full-height rectangular cuts in desktop Studio.'],
+  limits: ['One original rectangular stock and a contiguous chain of disjoint full-height rectangular cuts in desktop Studio.'],
   initialFiles: [import.meta.filename, 'apps/cad-studio/test/prior-cut-pattern-browser-fixture.mjs', 'apps/cad-studio/src/App.tsx', 'apps/cad-studio/src/app/cutPatternSource.ts',
     'apps/cad-studio/src/ui/Hud.tsx', 'apps/cad-studio/src/ui/NodeEditor.tsx', 'packages/barocss-cad-model/src/app/commands.ts',
     'packages/barocss-cad-model/src/chat/part/features.ts',
@@ -137,14 +140,15 @@ async function approveAgentPattern(source) {
 async function applyLinearPattern(source) {
   const target = source.nodes.length - 1;
   const acrossTwoCuts = mode === '--linear-three';
-  const retained = acrossTwoCuts ? [older, later, newest] : [older, later];
+  const retained = linearFour ? [older, later, newest, fourthCut] : acrossTwoCuts ? [older, later, newest] : [older, later];
+  const pitch = linearFour ? 8 : 16;
   const open = async entry => {
     await chooseSource(entry);
     await clickModelCommand(f.page, 'Pattern', 'Linear cut pattern');
     const panel = f.page.getByRole('dialog', { name: 'Linear cut pattern', exact: true });
     await panel.getByText(entry ? 'Subtract 1 (n4)' : 'Subtract 2 (n7)', { exact: true }).waitFor();
     await field(panel, 'Count').fill('2');
-    await field(panel, 'Spacing').fill('16');
+    await field(panel, 'Spacing').fill(String(pitch));
     return panel;
   };
   const applyLinear = async (panel, label, earlier) => {
@@ -156,10 +160,20 @@ async function applyLinearPattern(source) {
     assert.deepEqual(doc.nodes.slice(0, -1), source.nodes);
     assert.deepEqual(node.parent, { node: target, side: 'solid' });
     assert.deepEqual(node.source, earlier ? { node: 4, side: 'solid' } : undefined);
-    assert.deepEqual([node.kind, node.axis, node.spacing, node.count], ['linear-feature-pattern', 'x', 16, 2]);
+    assert.deepEqual([node.kind, node.axis, node.spacing, node.count], ['linear-feature-pattern', 'x', pitch, 2]);
     return doc;
   };
-  if (!acrossTwoCuts) {
+  if (linearFour && baseline) {
+    f.phase = 'The deeper original source does not own the baseline pattern';
+    await chooseSource('Browser');
+    await clickModelCommand(f.page, 'Pattern', 'Linear cut pattern');
+    await f.waitToast(/can.t repeat Subtract 1 \(n4\).*Subtract 4 \(n13\)/is);
+    assert.equal(await f.page.getByRole('dialog', { name: 'Linear cut pattern', exact: true }).count(), 0);
+    await f.same(source);
+    await f.snapshot('00-older-source-unavailable');
+    return;
+  }
+  if (!acrossTwoCuts && !linearFour) {
     const control = await applyLinear(await open(null), '01-linear-current-control', false);
     await native('linear-current-source', control, [older, later, shift(later, 16, 0)]);
     await f.undo();
@@ -175,7 +189,24 @@ async function applyLinearPattern(source) {
     await f.same(source);
     assert.equal(await button('Undo').getAttribute('data-tip'), undo);
   }
-  if (acrossTwoCuts) {
+  if (linearFour) {
+    for (const spacing of [16, 34]) {
+      await field(panel, 'Spacing').fill(String(spacing));
+      await phase(panel, 'refused');
+      assert.equal(await button('Apply', panel).isDisabled(), true);
+      await f.same(source);
+      assert.equal(await button('Undo').getAttribute('data-tip'), undo);
+      await f.snapshot(`02-overlap-x-${spacing}-refused`);
+    }
+    await field(panel, 'Direction').selectOption('y');
+    await field(panel, 'Spacing').fill('18');
+    await phase(panel, 'refused');
+    assert.equal(await button('Apply', panel).isDisabled(), true);
+    await f.same(source);
+    assert.equal(await button('Undo').getAttribute('data-tip'), undo);
+    await f.snapshot('02-overlap-y-18-refused');
+    await field(panel, 'Direction').selectOption('x');
+  } else if (acrossTwoCuts) {
     await field(panel, 'Spacing').fill('16');
     await phase(panel, 'preview');
     await field(panel, 'Count').fill('3');
@@ -197,9 +228,9 @@ async function applyLinearPattern(source) {
     await f.snapshot('02b-overlap-with-second-cut-refused');
     await field(panel, 'Direction').selectOption('x');
   } else await f.snapshot('02-linear-overlap-refused');
-  await field(panel, 'Spacing').fill('16');
+  await field(panel, 'Spacing').fill(String(pitch));
   const browser = await applyLinear(panel, '03-linear-earlier-positive', true);
-  const positive = [...retained, shift(older, 16, 0)];
+  const positive = [...retained, shift(older, pitch, 0)];
   await native('linear-positive', browser, positive);
   await f.undo();
   await f.same(source);
@@ -316,13 +347,13 @@ async function applyFillPattern(source) {
 }
 
 await f.run(async () => {
-  const third = mode === '--linear-three' || rectangularThree || fillThree;
+  const third = mode === '--linear-three' || linearFour || rectangularThree || fillThree;
   const fill = mode === '--fill' || fillThree;
-  const source = await f.inspect('seed', { fill, third });
+  const source = await f.inspect('seed', { fill, third, fourth: linearFour });
   if (mode === '--agent') return approveAgentPattern(source);
   await f.newPage();
   await f.page.getByLabel('Model file', { exact: true }).setInputFiles({
-    name: third ? 'three-rectangular-through-cuts.bcad' : 'two-rectangular-through-cuts.bcad',
+    name: linearFour ? 'four-rectangular-through-cuts.bcad' : third ? 'three-rectangular-through-cuts.bcad' : 'two-rectangular-through-cuts.bcad',
     mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(source)),
   });
   await f.same(source);
@@ -330,8 +361,8 @@ await f.run(async () => {
   await button('Show its features', browser).click();
   await button('Top', f.page.locator('.views')).click();
   await f.page.getByTitle('Frame all (F)', { exact: true }).click();
-  await native('original-through-cuts', source, third ? [older, later, newest] : [older, later]);
-  if (mode === '--linear' || mode === '--linear-three') return applyLinearPattern(source);
+  await native('original-through-cuts', source, linearFour ? [older, later, newest, fourthCut] : third ? [older, later, newest] : [older, later]);
+  if (mode === '--linear' || mode === '--linear-three' || linearFour) return applyLinearPattern(source);
   if (fill) return applyFillPattern(source);
 
   const latest = await openPattern(null);

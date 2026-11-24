@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1894: [Reuse the first rectangular through-cut across later Differences](notes/rectangular-cut-difference-chain-2026-11-24/README.md), #25. Check original aperture ownership and collision refusal across the direct chain.
 - D1893: [Pin the local Agent review of a second tilted Sweep cap](notes/pinned-second-tilted-cap-agent-review-2026-11-24/README.md), #324. Cover both orders, retained prior native geometry, stale inputs and explicit Studio approval.
 - D1892: [Replace the original Sweep inlet after its inward tilted outlet](notes/paired-sweep-outlet-then-inlet-replacement-2026-11-24/README.md), #17. Qualify the reverse order and the current first donor across both native caps.
 - D1891: [Replace the original Sweep outlet after its inward tilted inlet](notes/paired-sweep-inlet-then-outlet-replacement-2026-11-24/README.md), #17. Verify two linked end caps, the first donor edit and exact native Studio reopen.

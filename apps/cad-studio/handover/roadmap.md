@@ -1,13 +1,13 @@
 # CAD roadmap — current status and execution order
 
-Updated 2026-11-24 · Priority authority: D520 · Latest delivery: D1893 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
+Updated 2026-11-24 · Priority authority: D520 · Latest delivery: D1894 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
 
 This is the only current status index. Detailed tracks define acceptance; the 34 stable row pages retain scope and issue navigation. Immutable decision notes retain results. Do not append chronological status paragraphs here. [D520 decision](notes/cad-roadmap-replan-2026-11-04/README.md) supersedes D445 execution order and historical next-item text, while retaining its safeguards and bounded proofs.
 
 ## Now and next
 
-- **Current position:** [D1893](notes/pinned-second-tilted-cap-agent-review-2026-11-24/README.md), P5 rows 16 and 31. The local Agent pins the second proposed tilted cap to the current body, both native donor references and the unchanged first cap in either order. Stale inspection and approval refuse.
-- **Next MAIN:** D1894, P1 rows [15](roadmap-rows/15.md) and [16](roadmap-rows/16.md), [#25](https://github.com/barocss/cad/issues/25). Reuse an earlier rectangular through-cut across a contiguous certified chain of later original rectangular cuts within current limits. Verify the first of four in Studio, collision refusal, native identity and fresh Open.
+- **Current position:** [D1894](notes/rectangular-cut-difference-chain-2026-11-24/README.md), P1 rows 15 and 16. Reuse the first original rectangular through-cut across a certified Difference chain. Studio verifies four original cuts and signed Linear copies. Kernel checks all four pattern kinds across five cuts.
+- **Next MAIN:** D1895, P1 rows [09](roadmap-rows/09.md) and [15](roadmap-rows/15.md), [#228](https://github.com/barocss/cad/issues/228). Verify Crossing snap through New, same-document source rebuild and rapid input. Fix the first reproduced defect and close only after the original scope passes.
 - **Separate follow-ups:** Continue Studio App extraction in cohesive parts with affected desktop checks. [#608 Rendering](https://github.com/barocss/cad/issues/608) stays on HOLD. API inventory drift remains open. The issue tracker records [#126](https://github.com/barocss/cad/issues/126), [#613](https://github.com/barocss/cad/issues/613), [#152](https://github.com/barocss/cad/issues/152) and [#22](https://github.com/barocss/cad/issues/22) as closed.
 - **Active repository:** [barocss/cad](https://github.com/barocss/cad), based on `origin/main`. Fetch before work and preserve unexpected changes. The [migration record](../../../docs/migration/README.md) maps the former `local/cad-dev` history and issue numbers.
 - **Evidence correction:** D482 records2167 PASS/0 FAIL/2 existing SKIP in a later full-kernel run than D433. Neither result is a new full-suite PASS at this audit HEAD. [D482 record](notes/vertical-contact-refusal-2026-11-04/README.md).

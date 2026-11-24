@@ -369,31 +369,35 @@ function evaluateWith(input: CadPartDocument, previous: Cache | undefined, optio
       if (source !== undefined) {
         const label = `${pattern} feature pattern source`;
         const previous = ref(source, label), prototype = previous.author;
-        // All cut patterns may cross one additional Difference, never an arbitrary ancestry walk.
-        const bridge = author.target !== previous.id ? ref(author.target, `${label} intervening difference`) : undefined;
-        const bridgePart = bridge?.result.kind === 'solid' && bridge.result.parts.length === 1 ? bridge.result.parts[0] : undefined;
-        const connected = author.target === previous.id || (bridge && bridge.part === null && author.target === bridge.id
-          && bridge.author?.kind === 'difference' && !('suppressed' in bridge.author && bridge.author.suppressed)
-          && bridge.author.target === previous.id && bridgePart && !empty(bridgePart.solid));
-        if (selected.part !== null || previous.part !== null || source !== previous.id || !connected
-          || prototype?.kind !== 'difference' || ('suppressed' in prototype && prototype.suppressed) || previous.result.kind !== 'solid'
-          || previous.result.parts.length !== 1 || empty(previous.result.parts[0].solid))
-          return fail('REFERENCE', `${label} must be the current difference target's direct earlier unsuppressed difference${bridge ? `; ${pattern[0].toUpperCase()}${pattern.slice(1)} also supports its second ancestor through one intervening unsuppressed difference` : ''}`);
+        const invalidChain = () => fail('REFERENCE', `${label} must be an earlier unsuppressed difference in the current target's direct Difference chain`);
+        if (selected.part !== null || previous.part !== null || source !== previous.id || selected.id === previous.id
+          || prototype?.kind !== 'difference' || ('suppressed' in prototype && prototype.suppressed)) return invalidChain();
         const original = (reference: unknown, what: string): Part => {
           const producer = ref(reference, what);
           if (producer.part !== null || producer.author?.kind !== 'extrude' || ('suppressed' in producer.author && producer.author.suppressed))
-            return fail('CAPABILITY', `${label} needs original rectangular extrusions for the stock and ${bridge ? 'all three' : 'both'} cutters`);
+            return fail('CAPABILITY', `${label} needs original rectangular extrusions for the stock and every cutter`);
           const sketch = ref(producer.author.sketch, `${what} sketch`).author;
           if (sketch?.kind !== 'sketch' || sketch.profile !== 'rectangle' || ('suppressed' in sketch && sketch.suppressed) || sketch.holes?.length || sketch.regions?.length)
-            return fail('CAPABILITY', `${label} needs original rectangular extrusions for the stock and ${bridge ? 'all three' : 'both'} cutters`);
-          const parts = solids(reference, what, true);
-          if (parts.length !== 1) return fail('REFERENCE', `${what} must be one nonempty solid`);
-          return parts[0];
+            return fail('CAPABILITY', `${label} needs original rectangular extrusions for the stock and every cutter`);
+          if (producer.result.kind !== 'solid' || producer.result.parts.length !== 1 || empty(producer.result.parts[0].solid))
+            return fail('REFERENCE', `${what} must be one nonempty solid`);
+          return producer.result.parts[0];
         };
-        const stock = original(prototype.target, 'source stock'), tool = original(prototype.tool, 'source tool'), other = original(author.tool, 'newer tool');
-        const middleTool = bridge?.author?.kind === 'difference' ? original(bridge.author.tool, 'intervening tool') : undefined;
-        return { seed: solids(r, 'target')[0], tool: [tool], prior: { stock, previous: previous.result.parts[0], other,
-          ...(bridgePart && middleTool ? { bridge: { previous: bridgePart, other: middleTool } } : {}) } };
+        const links: { result: Part; cutterRef: string }[] = [], seen = new Set<string>();
+        for (let link = selected; ; ) {
+          const cut = link.author;
+          if (link.part !== null || seen.has(link.id) || cut?.kind !== 'difference' || ('suppressed' in cut && cut.suppressed)
+            || link.result.kind !== 'solid' || link.result.parts.length !== 1 || empty(link.result.parts[0].solid)) return invalidChain();
+          seen.add(link.id);
+          links.push({ result: link.result.parts[0], cutterRef: cut.tool });
+          if (link.id === previous.id) break;
+          const parent = ref(cut.target, `${label} parent`);
+          if (cut.target !== parent.id) return invalidChain();
+          link = parent;
+        }
+        const stock = original(prototype.target, 'source stock');
+        const stages = links.reverse().map((link, i) => ({ result: link.result, cutter: original(link.cutterRef, `source chain cutter ${i + 1}`) }));
+        return { seed: solids(r, 'target')[0], tool: [stages[0].cutter], prior: { stock, stages } };
       }
       // Resolve the original operands as dependencies; never replace or truncate their history.
       const base = solids(author.target, 'difference target', true), tool = solids(author.tool, 'difference tool', true);

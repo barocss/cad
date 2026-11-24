@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { createFlow } from './flow-helper.mjs';
 import { clickModelCommand } from './model-rail-helper.mjs';
 const baseline=process.argv.includes('--baseline');
-const f=await createFlow({name:'history-cut-source',output:process.argv[2],envFrozen:'HISTORY_CUT_SOURCE_FROZEN',initialFiles:['apps/cad-studio/test/history-cut-source-browser.mjs'],requiredFrozen:['apps/cad-studio/src/App.tsx','apps/cad-studio/src/app/cutPatternSource.ts'],qualification:baseline?'Reproduce History silently substituting the latest cut':'History and Browser refuse a more distant earlier cut source until body reselection',limits:['Four same-stock Subtracts and the Path cut-pattern launch/Cancel path. The historical two-cut baseline is available with --baseline.'],inspectorSource:`
+const f=await createFlow({name:'history-cut-source',output:process.argv[2],envFrozen:'HISTORY_CUT_SOURCE_FROZEN',initialFiles:['apps/cad-studio/test/history-cut-source-browser.mjs'],requiredFrozen:['apps/cad-studio/src/App.tsx','apps/cad-studio/src/app/cutPatternSource.ts'],qualification:baseline?'Reproduce History silently substituting the latest cut':'History and Browser keep the first Path cut source through later direct Differences',limits:['Four same-stock Subtracts and the Path cut-pattern launch/Cancel path. The historical two-cut baseline is available with --baseline.'],inspectorSource:`
 import {emptyDoc,withNode} from '@barocss/cad-model/engine/doc';
 let doc=emptyDoc();const ref=node=>({node,side:'solid'});
 const box=(min,max)=>{const sketch=doc.nodes.length;doc=withNode(doc,{kind:'sketch',profile:'rectangle',min,max});doc=withNode(doc,{kind:'extrude',sketch,height:10});};
@@ -14,5 +14,46 @@ if (!${baseline}) {
 console.log(JSON.stringify(doc));
 `});
 const button=(name,scope=f.page)=>scope.getByRole('button',{name,exact:true});
-await f.run(async()=>{const seed=await f.inspect('seed',{});for(const width of baseline?[1024]:[1024,1440]){await f.newPage();await f.page.setViewportSize({width,height:width===1024?800:900});await f.page.locator('input[aria-label="Model file"]').setInputFiles({name:baseline?'two-subtracts.bcad':'four-subtracts.bcad',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(seed))});await f.same(seed);const browser=f.page.getByRole('complementary',{name:'Browser',exact:true});await button('Show its features',browser).click();const body=browser.locator('.ol:not(.ol-step)').first();for(const label of baseline?['Rectangular cut pattern']:['Path cut pattern']){for(const entry of baseline?['History']:['Browser','History']){await body.click();if(entry==='Browser')await browser.locator('.ol-step').filter({hasText:'Subtract'}).first().click();else await f.page.locator('.history [data-node-index="4"]').click();await button('Close editor').click();const before=await f.doc(),selection=(await f.snapshot(`${width}-${label}-${entry}-before`)).selection;const undo=await button('Undo').getAttribute('data-tip');await clickModelCommand(f.page,'Pattern',label);if(baseline){await f.page.getByRole('dialog',{name:label,exact:true}).waitFor();await f.snapshot('baseline-wrong-latest-cut-preview');await button('Cancel',f.page.getByRole('dialog',{name:label,exact:true})).click();return;}
-await f.waitToast(/Subtract 1 \(n4\).*Select the body to repeat Subtract 4 \(n13\)/);assert.equal(await f.page.getByRole('dialog',{name:label,exact:true}).count(),0);await f.same(before);assert.equal(await button('Undo').getAttribute('data-tip'),undo);assert.deepEqual((await f.snapshot(`${width}-${label}-${entry}-refused`)).selection,selection);await f.dismissToasts();await body.click();await clickModelCommand(f.page,'Pattern',label);const hud=f.page.getByRole('dialog',{name:label,exact:true});await hud.waitFor();assert.match(await hud.innerText(),/Cut source.*Subtract 4 \(n13\)/s);await button('Cancel',hud).click();await f.same(seed);}}assert.equal(await f.page.getByLabel('Unsaved changes',{exact:true}).count(),0);}});
+await f.run(async () => {
+  const seed = await f.inspect('seed', {});
+  for (const width of baseline ? [1024] : [1024, 1440]) {
+    await f.newPage();
+    await f.page.setViewportSize({ width, height: width === 1024 ? 800 : 900 });
+    await f.page.getByLabel('Model file', { exact: true }).setInputFiles({
+      name: baseline ? 'two-subtracts.bcad' : 'four-subtracts.bcad',
+      mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(seed)),
+    });
+    await f.same(seed);
+    const browser = f.page.getByRole('complementary', { name: 'Browser', exact: true });
+    await button('Show its features', browser).click();
+    const body = browser.locator('.ol:not(.ol-step)').first();
+    const label = baseline ? 'Rectangular cut pattern' : 'Path cut pattern';
+    const hud = f.page.getByRole('dialog', { name: label, exact: true });
+    for (const entry of baseline ? ['History'] : ['Browser', 'History']) {
+      await body.click();
+      if (entry === 'Browser') await browser.locator('.ol-step').filter({ hasText: 'Subtract' }).first().click();
+      else await f.page.locator('.history [data-node-index="4"]').click();
+      await button('Close editor').click();
+      const undo = await button('Undo').getAttribute('data-tip');
+      await clickModelCommand(f.page, 'Pattern', label);
+      await hud.waitFor();
+      if (baseline) {
+        await f.snapshot('baseline-wrong-latest-cut-preview');
+        await button('Cancel', hud).click();
+        return;
+      }
+      assert.match(await hud.innerText(), /Cut source.*Subtract 1 \(n4\)/s);
+      await f.snapshot(`${width}-${entry}-earlier-cut`);
+      await button('Cancel', hud).click();
+      await f.same(seed);
+      assert.equal(await button('Undo').getAttribute('data-tip'), undo);
+      await body.click();
+      await clickModelCommand(f.page, 'Pattern', label);
+      await hud.waitFor();
+      assert.match(await hud.innerText(), /Cut source.*Subtract 4 \(n13\)/s);
+      await button('Cancel', hud).click();
+      await f.same(seed);
+    }
+    assert.equal(await f.page.getByLabel('Unsaved changes', { exact: true }).count(), 0);
+  }
+});

@@ -140,7 +140,7 @@ export function transformOperation(f: CadPartFeature & Record<string, unknown>, 
       const { seed, tool, prior } = t.cutSource(f.target, f.source, 'linear'), axis = axisOf(f.axis), spacing = dim(f.spacing as CadPartDim, 'spacing'), count = integer(f.count, 'count', 1, CadPartLimits.copies);
       if (spacing === 0) fail('PARAMETER', 'spacing must not be zero');
       // One member in the unused direction reuses the exact same native interior/disjointness proof.
-      if (prior) certifyPriorRectangularCut(seed, tool[0], prior, 'xyz'.indexOf(axis), spacing, count, axis === 'x' ? 1 : 0, 0, 1, fail, 'linear');
+      if (prior) certifyPriorRectangularCut(prior, 'xyz'.indexOf(axis), spacing, count, axis === 'x' ? 1 : 0, 0, 1, fail, 'linear');
       return () => {
         if (count === 1 || !tool.length) return { kind: 'solid', parts: [seed] };
         const joined = tool.slice(1).reduce<Solid>((acc, p) => boolean(acc, p.solid, 'union', at), tool[0].solid);
@@ -162,7 +162,7 @@ export function transformOperation(f: CadPartFeature & Record<string, unknown>, 
       const cells = count * count2;
       if (!Number.isSafeInteger(cells) || cells > CadPartLimits.copies) fail('INPUT', `rectangular feature pattern must have at most ${CadPartLimits.copies} cells`);
       const { seed, tool, prior } = t.cutSource(f.target, f.source), first = 'xyz'.indexOf(axis), second = 'xyz'.indexOf(axis2);
-      if (prior) certifyPriorRectangularCut(seed, tool[0], prior, first, spacing, count, second, spacing2, count2, fail);
+      if (prior) certifyPriorRectangularCut(prior, first, spacing, count, second, spacing2, count2, fail);
       const matrix: BrepAffine['matrix'] = [1, 0, 0, 0, 1, 0, 0, 0, 1];
       return () => {
         if (cells === 1 || !tool.length) return { kind: 'solid', parts: [seed] };
@@ -184,7 +184,7 @@ export function transformOperation(f: CadPartFeature & Record<string, unknown>, 
       const snapshot = fillCutSnapshot(f.region, f.anchor, fail);
       const placements = fillCutPlacements(snapshot.region, snapshot.anchor, spacing, count, spacing2, count2);
       const { seed, tool, prior } = t.cutSource(f.target, f.source, 'fill');
-      if (prior) certifyPriorCutPlacements(seed, tool[0], prior, placements.map(placement => placement.offset), fail);
+      if (prior) certifyPriorCutPlacements(prior, placements.map(placement => placement.offset), fail);
       const matrix: BrepAffine['matrix'] = [1, 0, 0, 0, 1, 0, 0, 0, 1];
       return () => {
         if (!placements.length || !tool.length) return { kind: 'solid', parts: [seed] };
@@ -199,7 +199,7 @@ export function transformOperation(f: CadPartFeature & Record<string, unknown>, 
       const source = f.source;
       const offsets = curveCutOffsets(f.path, spacing, count, CadPartLimits.length, fail, source === undefined ? undefined : 'prior-xy-linear');
       const { seed, tool, prior } = t.cutSource(f.target, source, 'path');
-      if (prior) certifyPriorCutPlacements(seed, tool[0], prior, offsets.slice(1), fail, 'path');
+      if (prior) certifyPriorCutPlacements(prior, offsets.slice(1), fail, 'path');
       const matrix: BrepAffine['matrix'] = [1, 0, 0, 0, 1, 0, 0, 0, 1];
       return () => {
         if (count === 1 || !tool.length) return { kind: 'solid', parts: [seed] };

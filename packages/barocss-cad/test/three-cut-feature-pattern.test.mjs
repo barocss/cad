@@ -71,14 +71,14 @@ function bounds(brep, loop) {
     .concat([0, 1].map(axis => Math.max(...points.map(point => point[axis]))));
 }
 
-function verify(snapshot, current = false, { cells, lastBox, offsets, approximate = false } = {}) {
+function verify(snapshot, current = false, { cells, lastBox, offsets, laterHoles = [], approximate = false } = {}) {
   const doc = snapshot.document, p = doc.parameters, pattern = feature(doc, 'repeat');
   assert.equal(snapshot.outputs.length, 1);
   const output = snapshot.outputs[0], brep = output.brep, check = checkBrep(brep, { strict: true });
   assert.ok(check.valid, check.issues.join('\n')); assert.equal(output.id, 'repeat');
   const rectangular = pattern.kind === 'rectangular-feature-pattern', fill = pattern.kind === 'fill-feature-pattern', path = pattern.kind === 'curve-feature-pattern';
   const last = lastBox ?? [42, 8, p.lastRight, 10];
-  const holes = [[8, 26, p.newerRight, 28], current ? [p.left, p.bottom, p.right, p.top] : last];
+  const holes = [[8, 26, p.newerRight, 28], current ? [p.left, p.bottom, p.right, p.top] : last, ...laterHoles];
   const prototype = current ? last : [p.left, p.bottom, p.right, p.top];
   if (fill) assert.ok(cells, 'Fill oracle supplies literal selected cells independently of the planner');
   if (path) assert.ok(offsets, 'Path oracle supplies literal offsets independently of the planner');
@@ -132,6 +132,41 @@ test('the original cut crosses two newer Differences with exact four-hole materi
   assert.deepEqual(verify(loadCadPart(saveCadPart(snapshot))), brep);
 });
 
+test('all four patterns reuse the first cut through five direct original Differences', () => {
+  const laterHoles = [[24, 8, 28, 10], [30, 30, 32, 32]];
+  const addCuts = doc => {
+    for (const [i, [x0, y0, x1, y1]] of laterHoles.entries()) {
+      const id = `extra${i}`, pattern = feature(doc, 'repeat');
+      doc.features.splice(-1, 0,
+        { id: id + 'Sketch', kind: 'sketch', profile: 'rectangle', min: [x0, y0], max: [x1, y1] },
+        { id: id + 'Tool', kind: 'extrude', sketch: id + 'Sketch', height: 10 },
+        { id, kind: 'difference', target: pattern.target, tool: id + 'Tool' });
+      pattern.target = id;
+    }
+    doc.parameters.pitch = 8;
+    return doc;
+  };
+  for (const [doc, oracle] of [
+    [document(), {}],
+    [rectangularDocument(), {}],
+    [fillDocument(), { cells: fillCells }],
+    [pathDocument(1, [[0, 0, 2], [8, 0, 2], [8, 24, 2]]), { offsets: [[0, 0, 0], [8, 0, 0], [8, 8, 0]] }],
+  ]) {
+    addCuts(doc);
+    const before = structuredClone(doc), snapshot = evaluateCadPart(doc);
+    const expected = { ...oracle, laterHoles }, brep = verify(snapshot, false, expected);
+    assert.deepEqual(doc, before);
+    assert.deepEqual(snapshot.document.features, before.features);
+    for (let i = 0; i < laterHoles.length; i++) for (let side = 0; side < 4; side++)
+      assert.ok(brep.faces.some(face => face.name === `extra${i}Tool.side${side}`));
+    assert.deepEqual(verify(loadCadPart(saveCadPart(snapshot)), false, expected), brep);
+    const invalid = structuredClone(doc);
+    feature(invalid, 'extra0Sketch').min[0] = 16;
+    assert.throws(() => reevaluate(snapshot, { document: invalid }), error => error instanceof CadPartError && error.feature === 'repeat'
+      && error.code === 'GEOMETRY' && /disjoint from the newer cuts/.test(error.message));
+  }
+});
+
 test('both XY axes and signed pitches retain the selected source instead of either newer tool', () => {
   for (const [axis, pitch, edits] of [['x', 16, {}], ['x', -16, { left: 24, right: 28 }],
     ['y', 6, {}], ['y', -6, { bottom: 14, top: 16 }]]) {
@@ -164,7 +199,7 @@ test('count one still proves all stages while omitted source repeats only the cu
   assert.ok(!brep.faces.some(face => face.name?.startsWith('olderTool.side0@')));
 });
 
-test('invalid intervening history, unsupported tools, distant sources and collisions refuse before copying', () => {
+test('invalid intervening history, unsupported tools, duplicate original cuts and collisions refuse before copying', () => {
   const accepted = evaluateCadPart(document()), saved = saveCadPart(accepted);
   const refused = change => {
     const doc = document(); change(doc); const before = structuredClone(doc);
@@ -246,7 +281,7 @@ test('Rectangular refuses either downstream collision and unused Z axes without 
   refused(doc => { Object.assign(feature(doc, 'repeat'), { count: 1, count2: 1 }); feature(doc, 'newerTool').height = 5; }, 'CAPABILITY');
   refused(doc => {
     doc.features.splice(-1, 0, { id: 'fourth', kind: 'difference', target: 'third', tool: 'lastTool' }); feature(doc, 'repeat').target = 'fourth';
-  }, 'REFERENCE');
+  }, 'GEOMETRY');
   assert.deepEqual(verify(loadCadPart(saved)), verify(accepted));
 });
 
@@ -297,7 +332,7 @@ test('Fill refuses selected collisions with either newer cutter and malformed br
   refused(doc => { Object.assign(feature(doc, 'repeat'), { count: 1, count2: 1 }); feature(doc, 'newerTool').height = 5; }, 'CAPABILITY');
   refused(doc => {
     doc.features.splice(-1, 0, { id: 'fourth', kind: 'difference', target: 'third', tool: 'lastTool' }); feature(doc, 'repeat').target = 'fourth';
-  }, 'REFERENCE');
+  }, 'GEOMETRY');
 });
 
 test('Path repeats the original across two newer cuts in both straight encodings with independent turn and pitch oracles', () => {
@@ -407,7 +442,7 @@ test('Path proves its full authored snapshot and all three original cuts even at
   const blind = pathDocument(); feature(blind, 'repeat').count = 1; feature(blind, 'newerTool').height = 5; refused(blind, 'CAPABILITY');
   const stale = pathDocument(); feature(stale, 'second').suppressed = true; refused(stale, 'REFERENCE');
   const farther = pathDocument(); farther.features.splice(-1, 0, { id: 'fourth', kind: 'difference', target: 'third', tool: 'lastTool' });
-  feature(farther, 'repeat').target = 'fourth'; refused(farther, 'REFERENCE');
+  feature(farther, 'repeat').target = 'fourth'; refused(farther, 'GEOMETRY');
   const closed = pathDocument(); feature(closed, 'repeat').count = 1;
   feature(closed, 'repeat').path.controlPoints.at(-1).splice(0, 3, 0, 0, 2); refused(closed, 'CAPABILITY');
   for (const raw of [

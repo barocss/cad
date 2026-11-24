@@ -132,7 +132,7 @@ test('bad chain, unsupported source geometry, invalid values and unsafe cells re
     refused(doc => { doc.features.at(-1).source = source; }, 'REFERENCE');
   refused(doc => { doc.features.find(feature => feature.id === 'first').suppressed = true; }, 'REFERENCE', /linear feature pattern source/);
   refused(doc => { doc.features.splice(-1, 0, { id: 'moved', kind: 'translate', target: 'second', offset: [0, 0, 1] }); }, 'REFERENCE', /must still be active/);
-  refused(doc => { doc.features.splice(-1, 0, { id: 'foreign', kind: 'difference', target: 'stock', tool: 'olderTool' }); doc.features.at(-1).source = 'foreign'; }, 'REFERENCE', /direct earlier unsuppressed difference/);
+  refused(doc => { doc.features.splice(-1, 0, { id: 'foreign', kind: 'difference', target: 'stock', tool: 'olderTool' }); doc.features.at(-1).source = 'foreign'; }, 'REFERENCE', /earlier unsuppressed difference.*direct Difference chain/);
   for (const id of ['olderTool', 'newerTool']) refused(doc => { doc.features.find(feature => feature.id === id).height = 5; }, 'CAPABILITY', /linear feature pattern source/);
   refused(doc => {
     Object.assign(doc.features.find(feature => feature.id === 'olderSketch'), { profile: 'circle', center: [10, 9], radius: 1, sideTags: { outer: ['a'] } });

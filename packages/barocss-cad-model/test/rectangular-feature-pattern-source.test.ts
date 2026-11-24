@@ -83,7 +83,7 @@ test('the Agent command binds an explicit earlier cut to one current body and re
     [{ expectedRevision: '0000000000000000' }, /part changed/],
     [{ values: { ...values, source: first } }, /stable ID/],
     [{ values: { ...values, source: targetId } }, /distinct/],
-    [{ values: { ...values, source: featureId(doc.nodes, first - 1) } }, /direct earlier/],
+    [{ values: { ...values, source: featureId(doc.nodes, first - 1) } }, /direct Difference chain/],
     [{ bodies: [body, body] }, /one current solid/],
     [{ point: [0, 0, 0] }, /no face, edge or point/],
   ];
@@ -302,8 +302,10 @@ test('arbitrary consumed or cross-scope sources and missing, suppressed or non-D
   for (const nodes of variants) assert.ok(rectangularFeaturePatternProblem(node, nodes, doc.parameters));
   const third = part('three cuts', doc).subtract(tool => tool.box({ w: 4, d: 4, h: 10, x: 52, y: 4 })).doc;
   const fourth = part('four cuts', third).subtract(tool => tool.box({ w: 4, d: 4, h: 10, x: 4, y: 28 })).doc;
-  assert.ok(rectangularFeaturePatternProblem({ ...node, parent: { node: fourth.nodes.length - 1, side: 'solid' } }, fourth.nodes, fourth.parameters),
-    'the source cannot cross three newer cuts');
+  const parent: BodyRef = { node: fourth.nodes.length - 1, side: 'solid' };
+  assert.equal(rectangularFeaturePatternProblem({ ...node, parent }, fourth.nodes, fourth.parameters), null);
+  const held = fourth.nodes.map((node, index) => index === third.nodes.length - 1 ? { ...node, held: 'held' } : node);
+  assert.ok(rectangularFeaturePatternProblem({ ...node, parent }, held, fourth.parameters));
   assert.deepEqual(doc, before);
 });
 
@@ -348,7 +350,7 @@ test('All four cut patterns can repeat the first cut on the third Difference wit
   const invalid = doc.nodes.map((node, index) => index === second.doc.nodes.length - 1 ? { ...node, held: 'held' } : node);
   assert.ok(priorLinearFeaturePatternProblem(node, invalid, doc.parameters));
   const fourth = part('four cuts', doc).subtract(tool => tool.box({ w: 2, d: 2, h: 10, x: 42, y: 26 })).doc;
-  assert.ok(priorLinearFeaturePatternProblem({ ...node, parent: ref(fourth.nodes.length - 1) }, fourth.nodes, fourth.parameters));
+  assert.equal(priorLinearFeaturePatternProblem({ ...node, parent: ref(fourth.nodes.length - 1) }, fourth.nodes, fourth.parameters), null);
   const rectangular = command();
   const gridValues = { ...values, axis2: 'y', spacing2: 8, count2: 2 };
   assert.equal(rectangular.available(ctx).ok, true);
