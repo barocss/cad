@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1884: [Rebuild both Fit limits across adjacent nominal ranges](notes/paired-fit-adjacent-range-boundary-2026-11-24/README.md), #269. Qualify native paired geometry, narrow inch limits, dual callout and four independent export pairs.
 - D1883: [Qualify Fit list scope and source loss](notes/drawing-fit-list-scope-matrix-2026-11-24/README.md), #269. Verify the empty list, seven unavailable cases and ordinary table retention in actual Studio and both exports.
 - D1882: [Pin Agent review for the tilted paired outlet](notes/pinned-tilted-paired-outlet-agent-review-2026-11-24/README.md), #324. Match both actual image orientations and exact inspection to the same explicitly approved native result.
 - D1881: [Trim the five-span Sweep outlet to a tilted plane](notes/tilted-paired-sweep-outlet-replacement-2026-11-24/README.md), #17. Preserve both passages and 48 joins through exact reference edits and actual Studio reopen.

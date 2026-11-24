@@ -1,13 +1,13 @@
 # CAD roadmap — current status and execution order
 
-Updated 2026-11-24 · Priority authority: D520 · Latest delivery: D1883 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
+Updated 2026-11-24 · Priority authority: D520 · Latest delivery: D1884 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
 
 This is the only current status index. Detailed tracks define acceptance; the 34 stable row pages retain scope and issue navigation. Immutable decision notes retain results. Do not append chronological status paragraphs here. [D520 decision](notes/cad-roadmap-replan-2026-11-04/README.md) supersedes D445 execution order and historical next-item text, while retaining its safeguards and bounded proofs.
 
 ## Now and next
 
-- **Current position:** [D1883](notes/drawing-fit-list-scope-matrix-2026-11-24/README.md), P2 rows 11 and 13. Actual Studio and both exports distinguish the empty supported Fit dimensions list from hidden, lost and unsupported sources. The ordinary table and the remaining valid dimension stay intact.
-- **Next MAIN:** D1884, P2 rows [11](roadmap-rows/11.md) and [13](roadmap-rows/13.md), [#269](https://github.com/barocss/cad/issues/269). Change the bore and shaft through one parameter across adjacent valid Fit rows. Independently verify both printed zones in primary inches and the dual callout in Studio, SVG and DXF. Review the complete finite issue acceptance after the result.
+- **Current position:** [D1884](notes/paired-fit-adjacent-range-boundary-2026-11-24/README.md), P2 rows 11 and 13. One parameter drives a bore and shaft across adjacent H7/g6 ranges. Studio and both independent export readers confirm the same rows, provenance and noncollapsed limits with inch-primary and dual display.
+- **Next MAIN:** D1885, P5 rows [07](roadmap-rows/07.md) and [31](roadmap-rows/31.md), [#17](https://github.com/barocss/cad/issues/17). Add inward tilted Replace Face for the original five-span paired Sweep inlet. Verify the exact retained passages and joins, reference edit, undo/redo and fresh Open.
 - **Separate follow-ups:** Continue Studio App extraction in cohesive parts with affected desktop checks. [#608 Rendering](https://github.com/barocss/cad/issues/608) stays on HOLD. API inventory drift remains open. The issue tracker records [#126](https://github.com/barocss/cad/issues/126), [#613](https://github.com/barocss/cad/issues/613), [#152](https://github.com/barocss/cad/issues/152) and [#22](https://github.com/barocss/cad/issues/22) as closed.
 - **Active repository:** [barocss/cad](https://github.com/barocss/cad), based on `origin/main`. Fetch before work and preserve unexpected changes. The [migration record](../../../docs/migration/README.md) maps the former `local/cad-dev` history and issue numbers.
 - **Evidence correction:** D482 records2167 PASS/0 FAIL/2 existing SKIP in a later full-kernel run than D433. Neither result is a new full-suite PASS at this audit HEAD. [D482 record](notes/vertical-contact-refusal-2026-11-04/README.md).
