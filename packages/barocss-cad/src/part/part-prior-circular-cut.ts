@@ -11,8 +11,8 @@ export type PriorCircularCut = {
   later: { result: Part; cutter: Part };
 };
 type Circle = { center: readonly [number, number]; radius: number; tag: string };
-type Pattern = 'linear' | 'rectangular';
-const requirement = (pattern: Pattern) => `${pattern} feature pattern source needs one original circular through cut followed by one original rectangular through cut on upright rectangular stock and ${pattern === 'linear' ? 'one XY line' : 'an XY grid'}`;
+type Pattern = 'linear' | 'rectangular' | 'fill';
+const requirement = (pattern: Pattern) => `${pattern} feature pattern source needs one original circular through cut followed by one original rectangular through cut on upright rectangular stock and ${pattern === 'linear' ? 'one XY line' : pattern === 'fill' ? 'selected XY placements' : 'an XY grid'}`;
 
 function profile(part: Part) {
   if (part.solid.kind !== 'upright' || part.solid.solid.slabs.length !== 1) return;
@@ -46,7 +46,7 @@ const sameRectangle = (a: readonly CurveSegment2[], b: readonly CurveSegment2[])
 };
 
 /** Certify both original native cavities, then each explicit XY placement in its producer's order. */
-function certifyPriorCircularPlacements(prior: PriorCircularCut, offsets: readonly Point[], fail: Tools['fail'], pattern: Pattern): void {
+export function certifyPriorCircularPlacements(prior: PriorCircularCut, offsets: readonly Point[], fail: Tools['fail'], pattern: Pattern): void {
   const label = `${pattern} feature pattern source`;
   const stock = profile(prior.stock), first = profile(prior.first.cutter), later = profile(prior.later.cutter);
   const firstResult = profile(prior.first.result), laterResult = profile(prior.later.result);

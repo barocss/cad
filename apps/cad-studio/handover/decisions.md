@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1909: [Repeat an original circular through-Subtract under a Fill mask](notes/prior-circular-fill-cut-pattern-2026-11-24/README.md), #25. Check only captured grid placements and preserve the original through cut outside the mask.
 - D1908: [Repeat an original circular through-Subtract on an XY Rectangular grid](notes/prior-circular-rectangular-cut-pattern-2026-11-24/README.md), #25. Check each grid cell against both original cavities and the stock.
 - D1907: [Move two parallel drawing dimensions together](notes/parallel-drawing-dimension-move-2026-11-24/README.md), #745. Apply one common paper offset, preserve the actual label coordinates relative to each other, and verify the native file and SVG.
 - D1906: [Add a straight tangent outlet to a perpendicular Exact Sweep](notes/perpendicular-quarter-arc-outlet-sweep-2026-11-24/README.md), #10. Verify the native cylinder, both charted joins, actual bore editing and explicit Agent approval.

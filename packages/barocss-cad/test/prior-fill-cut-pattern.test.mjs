@@ -147,7 +147,10 @@ test('invalid source chains, unsupported native tools, masks and selected overla
   refused(doc => { doc.features.splice(-1, 0, { id: 'moved', kind: 'translate', target: 'second', offset: [0, 0, 1] }); }, 'REFERENCE', /must still be active/);
   refused(doc => { doc.features.splice(-1, 0, { id: 'foreign', kind: 'difference', target: 'stock', tool: 'olderTool' }); doc.features.at(-1).source = 'foreign'; }, 'REFERENCE', /direct Difference chain/);
   for (const id of ['olderTool', 'newerTool']) refused(doc => { doc.features.find(feature => feature.id === id).height = 5; }, 'CAPABILITY', /fill feature pattern source/);
-  refused(doc => { Object.assign(doc.features.find(feature => feature.id === 'olderSketch'), { profile: 'circle', center: [10, 9], radius: 1, sideTags: { outer: ['a'] } }); }, 'CAPABILITY');
+  refused(doc => {
+    Object.assign(doc.features.find(feature => feature.id === 'olderSketch'), { profile: 'circle', center: [10, 9], radius: 1, sideTags: { outer: ['a'] } });
+    Object.assign(doc.features.find(feature => feature.id === 'newerSketch'), { profile: 'circle', center: [11, 27], radius: 1, sideTags: { outer: ['p'] } });
+  }, 'CAPABILITY');
   refused(doc => { doc.features.splice(4, 0, { id: 'movedTool', kind: 'translate', target: 'olderTool', offset: [0, 0, 0] }); doc.features.find(feature => feature.id === 'first').tool = 'movedTool'; }, 'CAPABILITY');
   refused(doc => { doc.parameters.pitchX = 1; Object.assign(doc.features.at(-1), { count2: 1, region: mask(10.5, 11.5, 10) }); }, 'GEOMETRY', /disjoint/);
   refused(doc => { doc.parameters.pitchX = -8; doc.features.at(-1).region = mask(1, 3); }, 'GEOMETRY', /strictly inside/);

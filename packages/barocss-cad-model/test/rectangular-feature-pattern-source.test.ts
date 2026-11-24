@@ -484,3 +484,48 @@ test('the local Rectangular command repeats the original circular through-cut on
     assert.equal(refused.state.doc, doc);
   }
 });
+
+test('Fill repeats the original circular through-cut at the captured references and checks each admitted copy', async () => {
+  const first = part('original circular Fill source').box({ w: 60, d: 40, h: 10 })
+    .subtract(tool => tool.cylinder({ r: 2, h: 10, x: 10, y: 10 }));
+  const later = first.subtract(tool => tool.box({ w: 4, d: 2, h: 10, x: 24, y: 8 }));
+  const doc = withNode(later.doc, { kind: 'sketch', profile: 'rectangle', min: [17, 5], max: [29, 23] });
+  const source: BodyRef = { node: first.doc.nodes.length - 1, side: 'solid' };
+  const parent: BodyRef = { node: later.doc.nodes.length - 1, side: 'solid' };
+  const mask = doc.nodes.length - 1;
+  const ctx = context(doc);
+  const values = {
+    source: featureId(doc.nodes, source.node), region: String(mask),
+    anchorX: 10, anchorY: 10, spacing: 8, count: 2, spacing2: 8, count2: 2,
+  };
+  const run = (next: typeof values) => dispatchTool({ doc, bodies: ctx.bodies }, 'features', {
+    action: 'command', command: 'fill-feature-pattern', expectedRevision: revisionOf(doc),
+    bodies: [ctx.bodies[0].key], values: next,
+  }, async candidate => evaluateDoc(candidate, 2));
+
+  const made = await run(values);
+  assert.equal(made.isError, false, made.content);
+  const pattern = made.state.doc.nodes.at(-1);
+  assert.ok(pattern?.kind === 'fill-feature-pattern');
+  assert.deepEqual({ source: pattern.source, parent: pattern.parent, anchor: pattern.anchor },
+    { source, parent, anchor: [10, 10] });
+  assert.deepEqual(usesOf(pattern), [parent.node, source.node]);
+  assert.deepEqual(made.state.doc.nodes.slice(0, -1), doc.nodes);
+  const opened = await readStudioFile(encodeStudioFile(made.state.doc));
+  assert.ok('doc' in opened);
+  assert.deepEqual(opened.doc, made.state.doc);
+  const [{ brep }] = partBreps(opened.doc);
+  const shape = checkBrep(brep, { strict: true });
+  assert.ok(shape.valid, shape.issues.join('\n'));
+  assert.equal(shape.topology[0].genus, 4);
+  assert.ok(Math.abs(brepMassProperties(brep, 1).volume - (23920 - 120 * Math.PI)) < 1e-8);
+  const changedMask: StudioDoc = { ...opened.doc, nodes: opened.doc.nodes.map((node, index) =>
+    index === mask ? { ...node, suppressed: true } : node) };
+  assert.deepEqual(partBreps(changedMask)[0].brep, brep);
+
+  for (const invalid of [{ spacing: 14 }, { spacing: 16 }]) {
+    const refused = await run({ ...values, ...invalid });
+    assert.equal(refused.isError, true, refused.content);
+    assert.equal(refused.state.doc, doc);
+  }
+});
