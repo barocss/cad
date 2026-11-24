@@ -11,7 +11,7 @@ import { SketchSolverDiagnostics } from './sketchPresentation';
 import { sketchStatus } from './sketchSettledStatus';
 import type { StudioDoc } from '@barocss/cad-model/engine/doc';
 import { bezierError, wellFormedBezier } from '@barocss/cad-model/sketch/bezier';
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ChangeEvent, type ReactNode } from 'react';
 import type { SketchAnchor, SketchShape, SketchState } from '../viewport/Viewport';
 import { arcOf, arcPairs, canBeTangent, inferredHV, radiusToBulge, samePair, type ArcPair, type P2 } from '@barocss/cad-model/sketch/profile';
 import { isSettled, solveShape, type SketchPick } from '@barocss/cad-model/sketch/rules';
@@ -62,22 +62,27 @@ export function SketchPanel({ sketch, constraintInspection, constraintDocument, 
   const activeOutline = outlines.find(outline => outline.shape === s)?.index ?? '';
   // A refusal belongs to the shape it was made on.
   useEffect(() => setSplineError(null), [s]);
+  const liveNumber = (id: string, value: number, set: (v: number) => void) => ({
+    value: blankField?.owner === s && blankField?.id === id ? '' : round(value),
+    onChange(event: ChangeEvent<HTMLInputElement>) {
+      const value = event.currentTarget.value;
+      if (value === '') {
+        if (s) setBlankField({ id, owner: s });
+        return;
+      }
+      const next = Number(value);
+      if (!Number.isFinite(next)) return;
+      setBlankField(null);
+      set(next);
+    },
+    onBlur() {
+      setBlankField(current => current?.id === id && current.owner === s ? null : current);
+    },
+  });
   const num = (id: string, label: string, value: number, set: (v: number) => void, min?: number) => (
     <label className={FIELD} key={id}><span>{label}</span>
-      <span className={NUM}><Input id={'sk-' + id} type="number" step="any" min={min} value={blankField?.owner === s && blankField?.id === id ? '' : round(value)}
-        onChange={event => {
-          const text = event.currentTarget.value;
-          if (text === '') {
-            if (s) setBlankField({ id, owner: s });
-            return;
-          }
-          const next = Number(text);
-          if (Number.isFinite(next)) {
-            setBlankField(null);
-            set(next);
-          }
-        }}
-        onBlur={() => setBlankField(current => current?.id === id && current.owner === s ? null : current)} /><em>mm</em></span></label>);
+      <span className={NUM}><Input id={'sk-' + id} type="number" step="any" min={min} {...liveNumber(id, value, set)} /><em>mm</em></span>
+    </label>);
   const solved = useMemo(() => isSettled(s) ? solveShape(s) : null, [s]);
   const status = sketchStatus(s, solved, sketch.tool);
   // A matching ellipse is edited by its definition: its 192 outline points, joints and arc pairs are not listed, and its constraint list is one summary row (plus any non-arc constraint).
@@ -190,12 +195,16 @@ export function SketchPanel({ sketch, constraintInspection, constraintDocument, 
           const locked = driving !== undefined;
           return [
             <span key={'n' + i}>{i + 1}</span>,
-            ...[0, 1].map(k => <Input key={i + '_' + k} type="number" step="any" aria-label={`Point ${i + 1} ${'XY'[k]}`} value={round(p[k])}
-              onChange={e => {
-                const v = Number(e.target.value); if (!Number.isFinite(v)) return;
-                const lengths = { ...(s.lengths ?? {}) }; delete lengths[i]; delete lengths[(i - 1 + n) % n];
-                onShape({ ...s, points: movePoint(s.points, i, k, v, s.closed), lengths }, { source: s, point: i, axis: k as 0 | 1, requested: v });
-              }} />),
+            ...([0, 1] as const).map(k => {
+              const id = `point-${i}-${k}`;
+              return <Input key={id} type="number" step="any" aria-label={`Point ${i + 1} ${'XY'[k]}`}
+                {...liveNumber(id, p[k], v => {
+                  const lengths = { ...(s.lengths ?? {}) };
+                  delete lengths[i];
+                  delete lengths[(i - 1 + n) % n];
+                  onShape({ ...s, points: movePoint(s.points, i, k, v, s.closed), lengths }, { source: s, point: i, axis: k, requested: v });
+                })} />;
+            }),
             hasEdge ? <span key={'e' + i} className="edge-cell">{b ? <em>R</em> : null}
               <Input id={'sk-' + (b ? 'rad' : 'len') + i} type="number" step="any" min={0.5} className={locked ? 'locked' : ''} value={driving ?? round(edge)}
                 aria-label={b ? `Arc ${i + 1} radius` : `Edge ${i + 1} length`}
