@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D1927: [Link the original perpendicular annular outlet to a native plane](notes/perpendicular-annular-outlet-reference-plane-2026-11-24/README.md), #17. Verify a parallel donor, its live translation, reference reselection and atomic collapse refusal in Studio.
+
 - D1926: [Move section and overlay test observations out of App](notes/studio-section-overlay-dev-hooks-2026-11-24/README.md), #44. Compare actual section, selection, Save/Open and affected overlay behavior.
 
 - D1925: [Pin Agent review of the original annular outlet Offset](notes/perpendicular-annular-outlet-agent-review-2026-11-24/README.md), #324. Verify both image orientations, exact native inspection, stale pin refusal, explicit Studio approval and matching reopen.

@@ -5,9 +5,9 @@ import {
 import { boxFaceReplacementFrame, draftedCapReplacementFrame, draftedFaceOffsetFrame, draftedWallReplacementFrame } from '@barocss/cad/internal/drafted-cap-offset';
 import { annularCapReplacementFrame, boredCapReplacementFrame, circularCapReplacementFrame } from '@barocss/cad/internal/bored-cap-offset';
 import { exactSemicylinderCapOffsetFrame, exactSemicylinderCapReplacementAfterWallFrame, exactSemicylinderCapReplacementFrame } from '@barocss/cad/internal/exact-cylinder-cap-offset';
-import { exactPairedElbowOutletOffsetFrame } from '@barocss/cad/internal/exact-paired-elbow-offset';
+import { exactPairedElbowOutletOffsetFrame, exactPerpendicularAnnularOutletOffsetFrame } from '@barocss/cad/internal/exact-paired-elbow-offset';
 import { prismCapReplacementFrame, prismWallOffsetFrame, prismWallReplacementFrame } from '@barocss/cad/internal/prism-wall-offset';
-import { exactSemicylinderCapAfterWall, exactSemicylinderCapSource, isPairedFiveSpanCapPlaneSource, pairedFiveSpanOppositeReplacementSourceIndex, type OffsetFaceNode, type OffsetPlaneRef, type ReplaceFaceNode, type StudioDoc } from './doc';
+import { exactSemicylinderCapAfterWall, exactSemicylinderCapSource, isPairedFiveSpanCapPlaneSource, pairedFiveSpanOppositeReplacementSourceIndex, sweepOffsetPlaneSource, type OffsetFaceNode, type OffsetPlaneRef, type ReplaceFaceNode, type StudioDoc } from './doc';
 import { featureId } from './ids';
 import { refusal } from './refusal';
 import { cross, dot, len, sub, type Vec3 } from './vec3';
@@ -67,7 +67,7 @@ function checkedPlane(target: Brep, binding: OffsetPlaneRef, missing: (reason: s
   return plane;
 }
 
-function requireCurrentPairedDonor(doc: StudioDoc, binding: OffsetPlaneRef, missing: (reason: string) => Error) {
+function requireCurrentSweepDonor(doc: StudioDoc, binding: OffsetPlaneRef, missing: (reason: string) => Error) {
   const reference = doc.nodes[binding.body.node];
   if (!reference || reference.suppressed || reference.held !== undefined || featureId(doc.nodes, binding.body.node) !== binding.feature)
     throw missing('the original reference body is missing, held, suppressed or changed.');
@@ -78,14 +78,17 @@ export function resolveOffsetPlaneDistance(doc: StudioDoc, binding: OffsetPlaneR
   prefix: CadPartFeature[], build?: BuildPart): number {
   const missing = (reason: string) => refusal('BAD_REFERENCE', `Offset face: ${reason}`);
   const owner = doc.nodes[node.parent.node], face = node.faces[0];
-  const pairedCap = isPairedFiveSpanCapPlaneSource(doc.nodes, node.parent.node, face);
-  if (pairedCap) requireCurrentPairedDonor(doc, binding, missing);
+  const sweepCap = sweepOffsetPlaneSource(doc.nodes, node.parent.node, face);
+  if (sweepCap) requireCurrentSweepDonor(doc, binding, missing);
   const { source, target } = boundSolids(doc, binding, node.parent, prefix, missing, build);
   let frame: { anchor: Vec3; normal: Vec3 } | undefined;
   if (owner?.kind === 'sweep-curve') {
-    if (pairedCap) frame = exactPairedElbowOutletOffsetFrame(source, face, {
-      id: featureId(doc.nodes, node.parent.node), mode: 'exact', path: { kind: 'curve', id: 'path', ...owner.path },
-    });
+    if (sweepCap) {
+      const readFrame = sweepCap === 'paired' ? exactPairedElbowOutletOffsetFrame : exactPerpendicularAnnularOutletOffsetFrame;
+      frame = readFrame(source, face, {
+        id: featureId(doc.nodes, node.parent.node), mode: 'exact', path: { kind: 'curve', id: 'path', ...owner.path },
+      });
+    }
   } else if (owner?.kind === 'thicken' && owner.mode === 'exact-cylinder') {
     const cap = exactSemicylinderCapSource(doc.nodes, node.parent.node, doc.parameters);
     if (cap?.faces.includes(face)) frame = exactSemicylinderCapOffsetFrame(source, face, {
@@ -108,7 +111,7 @@ export function resolveReplacementPlane(doc: StudioDoc, node: ReplaceFaceNode, p
   const face = node.faces[0];
   const originalSweep = pairedFiveSpanOppositeReplacementSourceIndex(doc.nodes, node.parent.node, face);
   const pairedCap = originalSweep !== undefined || isPairedFiveSpanCapPlaneSource(doc.nodes, node.parent.node, face);
-  if (pairedCap) requireCurrentPairedDonor(doc, node.target, missing);
+  if (pairedCap) requireCurrentSweepDonor(doc, node.target, missing);
   const { source, target } = boundSolids(doc, node.target, node.parent, prefix, missing, build);
   const paired = exactSemicylinderCapAfterWall(doc.nodes, node.parent.node, doc.parameters, face);
   const owner = doc.nodes[paired?.sourceIndex ?? originalSweep ?? node.parent.node];

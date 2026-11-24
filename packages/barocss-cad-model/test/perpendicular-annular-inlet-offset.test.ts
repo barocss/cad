@@ -6,7 +6,7 @@ import { editSavedOffsetFaceCommand } from '../src/app/offsetFaceEdit';
 import { offsetFaceCommand } from '../src/app/profileCommands';
 import { perpendicularAnnularOutletProposal, reviewedPerpendicularAnnularOutletEvidence } from '../src/chat/perpendicularAnnularOutletProposalReview';
 import { encodeStudioFile, readStudioFile } from '../src/engine/container';
-import { emptyDoc, perpendicularAnnularOffsetEnd, offsetFaceDocumentProblem, withNode, type StudioDoc } from '../src/engine/doc';
+import { emptyDoc, perpendicularAnnularOffsetEnd, offsetFaceDocumentProblem, sweepOffsetPlaneSource, withNode, type StudioDoc } from '../src/engine/doc';
 import { evaluateDoc, partBreps } from '../src/engine/evaluate';
 import type { Proposal } from '../src/engine/schema/proposals';
 import { digestOf } from '../src/util/digest';
@@ -122,4 +122,55 @@ test('the outlet review binds the exact signed command, base and native output',
   const changed = { ...source, parameters: { revisionProbe: 1 } };
   assert.equal(perpendicularAnnularOutletProposal(changed, proposal), undefined);
   assert.equal(reviewedPerpendicularAnnularOutletEvidence(changed, selected.bodies, candidate, edit), undefined);
+});
+
+test('only the original perpendicular outlet binds a live parallel native plane', async () => {
+  let source = withNode(fixture(), { kind: 'sketch', profile: 'rectangle', min: [40, 48], max: [48, 54] });
+  source = withNode(source, { kind: 'extrude', sketch: 2, from: 32, height: 5 });
+  source = withNode(source, { kind: 'translate', parent: { node: 3, side: 'solid' }, offset: [0, 0, 0] });
+  const end = 'n1.end';
+  assert.equal(sweepOffsetPlaneSource(source.nodes, 1, face), undefined);
+  assert.equal(sweepOffsetPlaneSource(source.nodes, 1, end), 'perpendicular-annular-outlet');
+  const result = evaluateDoc(source, 0);
+  assert.ok(result.ok);
+  const bodies = result.bodies;
+  const pick = (key: string, name: string) => {
+    const body = bodies.findIndex(candidate => candidate.key === key);
+    const face = bodies[body]?.mesh.faces.find(candidate => candidate.name === name)?.index;
+    assert.ok(face !== undefined);
+    return { body, face };
+  };
+  const ctx: Ctx = { doc: source, bodies, selection: { faces: [pick('b1',end)], edges: [], bodies: [] } };
+  const toPlane = { offsetMode: 'to-plane' };
+  const picked = offsetFaceCommand.onPick!(ctx, toPlane, { face: pick('b4','n3.bottom'), edge: null });
+  assert.ok(picked && !picked.error);
+  const linked = offsetFaceCommand.build!(ctx, picked), node = linked.nodes[5];
+  assert.ok(node.kind === 'offset-face' && node.target);
+  assert.deepEqual([node.target.feature,node.target.face,node.target.body], ['n4','n3.bottom',{node:4,side:'solid'}]);
+  assert.equal(offsetFaceDocumentProblem(linked),null);
+
+  const zOf = (doc: StudioDoc) => {
+    const part = partBreps(doc).find(candidate => candidate.key === 'b5');
+    assert.ok(part && checkBrep(part.brep, { strict:true }).valid);
+    const cap = faceGeometry(part.brep.faces.find(candidate => candidate.name === end)!);
+    assert.ok(cap.kind === 'plane');
+    return cap.o[2];
+  };
+  assert.ok(Math.abs(zOf(linked)-32)<1e-7);
+  const move = (z: number): StudioDoc => ({ ...linked, nodes: linked.nodes.map((node,i) =>
+    i === 4 && node.kind === 'translate' ? { ...node, offset:[0,0,z] } : node) });
+  const moved = move(-8);
+  assert.deepEqual(moved.nodes[5],node);
+  assert.ok(Math.abs(zOf(moved)-24)<1e-7);
+  const opened = await readStudioFile(encodeStudioFile(moved));
+  assert.ok('doc' in opened && Math.abs(zOf(opened.doc)-24)<1e-7);
+
+  const collapse = evaluateDoc(move(-14),0);
+  assert.ok(!collapse.ok);
+  assert.match(collapse.error.detail,/reach or cross the retained bend-to-outlet join/);
+  const nonparallel = offsetFaceCommand.onPick!(ctx, toPlane, { face: pick('b4','n3.side1'), edge: null });
+  assert.ok(nonparallel && !nonparallel.error);
+  const invalid = evaluateDoc(offsetFaceCommand.build!(ctx,nonparallel),0);
+  assert.ok(!invalid.ok);
+  assert.match(invalid.error.detail,/parallel/);
 });

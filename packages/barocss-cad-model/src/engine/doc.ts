@@ -791,9 +791,15 @@ function isPairedFiveSpanEndPlaneSource(nodes: readonly unknown[], index: number
   return textRecord(sketch) && !sketch.suppressed && sketch.held === undefined;
 }
 
-/** Only an original five-span straight cap may use a native reference plane for Offset or Replace face. */
+/** The original five-span paired cap recipe used by Offset and Replace face. */
 export function isPairedFiveSpanCapPlaneSource(nodes: readonly unknown[], index: number, face: string): boolean {
   return isPairedFiveSpanEndPlaneSource(nodes, index, face, 'start') || isPairedFiveSpanEndPlaneSource(nodes, index, face, 'end');
+}
+
+/** Native Sweep families admitted to Offset face with a live reference plane. */
+export function sweepOffsetPlaneSource(nodes: readonly unknown[], index: number, face: string): 'paired' | 'perpendicular-annular-outlet' | undefined {
+  if (isPairedFiveSpanCapPlaneSource(nodes, index, face)) return 'paired';
+  if (perpendicularAnnularOffsetEnd(nodes, index, face) === 'end') return 'perpendicular-annular-outlet';
 }
 
 /** Preserve the outlet-only authority used by the pinned Agent review. */
@@ -891,8 +897,8 @@ export function directFaceDocumentProblem(input: unknown): string | null {
           || perpendicularAnnularOffsetEnd(value.nodes, parentIndex, face)))
           return 'Offset face: the Exact Sweep needs a supported original straight end and a signed distance.';
         if (node.target !== undefined) {
-          if (!isPairedFiveSpanCapPlaneSource(value.nodes, parentIndex, face))
-            return 'Offset face: To plane needs the original five-span paired inlet or outlet.';
+          if (!sweepOffsetPlaneSource(value.nodes, parentIndex, face))
+            return 'Offset face: To plane needs an admitted original straight Sweep cap.';
           const reference = value.nodes[(node.target as OffsetPlaneRef).body.node];
           if (!textRecord(reference) || reference.suppressed || reference.held !== undefined)
             return 'Offset face: the reference body must remain available and unsuppressed.';
