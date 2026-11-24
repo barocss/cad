@@ -1,0 +1,48 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { commandById } from '../src/app/commands';
+import { editFields } from '../src/app/editFields';
+import { rectanglePart } from '../src/engine/doc';
+import { evaluateDoc } from '../src/engine/evaluate';
+import { readStudioDoc } from '../src/engine/migrate';
+
+test('Shell saves and edits all original box-wall names and refuses absent or changed ownership', () => {
+  const doc = rectanglePart(40, 30, 20);
+  const stock = evaluateDoc(doc, 1);
+  assert.ok(stock.ok);
+  const top = stock.bodies[0].mesh.faces.findIndex(face => face.nativeAlignFace?.axis === 'z' && face.nativeAlignFace.sign === 1);
+  assert.ok(top >= 0);
+  const shell = commandById('shell')!;
+  const ctx = { doc, bodies: stock.bodies, selection: { bodies: [], edges: [], faces: [{ body: 0, face: top }] } };
+  const defaults = shell.defaults!(ctx);
+  const uniform = shell.build!(ctx, defaults);
+  assert.equal(uniform.nodes.at(-1)?.kind, 'shell');
+  const created = shell.build!(ctx, { ...defaults, wallMode: 'per-face', bottomWall: 4 });
+  const node = created.nodes[2];
+  assert.ok(node.kind === 'shell-walls');
+  assert.equal(node.walls['n1.bottom'], 4);
+  assert.deepEqual(Object.keys(node.sigs).sort(), [node.opening, ...Object.keys(node.walls)].sort());
+  const read = readStudioDoc(JSON.stringify(created));
+  assert.ok('doc' in read);
+  assert.deepEqual(read.doc.nodes[2], node);
+  const evalCreated = evaluateDoc(created, 2);
+  assert.ok(evalCreated.ok && Math.abs(evalCreated.bodies[0].volume! - 9024) < 1e-7);
+  const left = editFields(created.nodes, 2).find(field => field.label === 'Left wall');
+  assert.ok(left?.kind === 'number');
+  const edited = { ...created, nodes: left.set(created.nodes, 3) };
+  const evalEdited = evaluateDoc(edited, 3);
+  assert.ok(evalEdited.ok && Math.abs(evalEdited.bodies[0].volume! - 9440) < 1e-7);
+  const sketch = created.nodes[0];
+  assert.ok(sketch.kind === 'sketch' && sketch.profile === 'rectangle');
+  const resized = evaluateDoc({ ...created, nodes: [{ ...sketch, max: [45, 30] }, ...created.nodes.slice(1)] }, 4);
+  assert.ok(resized.ok && Math.abs(resized.bodies[0].volume! - 9944) < 1e-7);
+
+  const unsigned = { ...created, nodes: [...created.nodes.slice(0, 2), { ...node, sigs: {} }] };
+  assert.match((readStudioDoc(JSON.stringify(unsigned)) as { error?: string }).error ?? '', /six original face signatures/);
+  const sigs = structuredClone(node.sigs);
+  [sigs['n1.side1'].d, sigs['n1.side3'].d] = [sigs['n1.side3'].d, sigs['n1.side1'].d];
+  const swapped = { ...created, nodes: [...created.nodes.slice(0, 2), { ...node, sigs }] };
+  const failed = evaluateDoc(swapped, 5);
+  assert.ok(!failed.ok);
+  assert.match(failed.error.detail, /REFERENCE_MOVED|no longer the face/);
+});

@@ -978,7 +978,7 @@ function operation(f: CadPartFeature & Record<string, unknown>, t: Tools): () =>
         }
       };
     }
-    case 'shell': case 'thicken': return shellOperation(f, t, HELPERS);
+    case 'shell': case 'shell-walls': case 'thicken': return shellOperation(f, t, HELPERS);
     case 'band-surface': return bandOperation(f, t);
     case 'sweep-curve': {
       const sketch = ref(f.sketch, 'sketch').result;

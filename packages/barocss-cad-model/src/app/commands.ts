@@ -39,6 +39,8 @@ import { linearSpanHandles } from './linearSpanHandles';
 import type { BodyResult } from '../engine/evaluate';
 import { circularFilletPair, closedCircularFilletPair } from './circularFilletPair';
 import { closedFilletDragLimit } from '../engine/nativeFilletTorus';
+import { boxShellWalls } from '../engine/shellWalls';
+import { boxShellSelection, buildBoxWallShell } from './boxShellSelection';
 import type { BearingAssemblyInput } from '../engine/bearingContext';
 import type { DisplayEdge } from '../engine/mesh';
 import { refOf } from './bodyRef';
@@ -819,15 +821,24 @@ const allCommands: Command[] = [
   {
     id: 'shell', label: 'Shell', icon: 'cad-shell', hint: 'Hollow a body, leaving the picked faces open', group: 'modify', keywords: 'hollow wall thickness case enclosure',
     available: ctx => selectedBodies(ctx.selection).length === 1 ? ok : no('Select the faces to open (Shift-click for more), or a body to hollow closed.'),
-    fields: () => [{ key: 't', label: 'Wall', kind: 'mm', min: 0.1 }],
-    defaults: () => ({ t: 2 }),
+    fields: (ctx, values) => {
+      const wall: Field = { key: 't', label: 'Wall', kind: 'mm', min: 0.1 };
+      if (!boxShellSelection(ctx)) return [wall];
+      const mode: Field = { key: 'wallMode', label: 'Wall thickness', kind: 'choice',
+        options: [{ value: 'uniform', label: 'Uniform' }, { value: 'per-face', label: 'Per face' }] };
+      return [mode, ...(values?.wallMode === 'per-face' ? boxShellWalls.map(side =>
+        ({ key: side.key, label: side.label, kind: 'mm' as const, min: 0.1 })) : [wall])];
+    },
+    defaults: ctx => boxShellSelection(ctx) ? { t: 2, wallMode: 'uniform', ...Object.fromEntries(boxShellWalls.map(side => [side.key, 2])) } : { t: 2 },
     // The wall: an arrow into the body from the (first) open face; deeper is thicker.
     handles: (ctx, v) => {
+      if (v.wallMode === 'per-face') return [];
       const f = ctx.selection.faces[0], face = f && ctx.bodies[f.body]?.mesh.faces[f.face]; if (!face || face.kind !== 'plane') return [];
       const n = face.normal, t = Number(v.t);
       return [{ key: 't', at: [face.centroid[0] - n[0] * t, face.centroid[1] - n[1] * t, face.centroid[2] - n[2] * t], dir: [-n[0], -n[1], -n[2]], min: 0.1, step: 0.5 }];
     },
     build: (ctx, v) => {
+      if (v.wallMode === 'per-face') return buildBoxWallShell(ctx, v);
       const body = ctx.bodies[selectedBodies(ctx.selection)[0]];
       const open = [...new Set(ctx.selection.faces.filter(f => f.body === ctx.bodies.indexOf(body)).flatMap(f => body.mesh.faces[f.face].name.split('+')))];
       return withNode(ctx.doc, { kind: 'shell', parent: refOf(body), thickness: Number(v.t), open });

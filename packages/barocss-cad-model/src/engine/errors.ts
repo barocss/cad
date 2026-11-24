@@ -512,6 +512,8 @@ export function friendly(message: string, kind?: string): FriendlyError {
       detail, ...extra };
   if (code === 'INPUT' && detail === 'angle must be a number of degrees, not 0, below 45 in size')
     return { ...DRAFT_ANGLE_HELP, detail, ...extra };
+  if (code === 'PARAMETER' && detail === 'The wall thicknesses leave no cavity in this box.')
+    return { title: 'Wall thicknesses leave no cavity', hint: 'Reduce the thickness of one or more walls.', detail, ...extra };
   // Preserve the measured strict limit; rounded guidance can recommend a refused wall.
   const shellLimit = code === 'PARAMETER' ? /^a wall of (\d+(?:\.\d+)?(?:e[+-]?\d+)?) mm leaves no hollow at ([^\r\n;]+); use a wall less than (\d+(?:\.\d+)?(?:e[+-]?\d+)?) mm$/i.exec(detail) : null;
   if (shellLimit && [shellLimit[1], shellLimit[3]].every(value => Number.isFinite(Number(value)) && Number(value) > 0)

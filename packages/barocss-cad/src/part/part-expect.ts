@@ -37,6 +37,10 @@ export function storedNames(f: { readonly kind: string } & Record<string, unknow
     return { names: [...side(f.a), ...side(f.b)], edges: true };
   }
   if (f.kind === 'offset-face' || f.kind === 'delete-face' || f.kind === 'replace-face') return { names: typeof f.face === 'string' ? [f.face] : [], edges: false };
+  if (f.kind === 'shell-walls') return {
+    names: typeof f.opening === 'string' && f.walls && typeof f.walls === 'object' ? [f.opening, ...Object.keys(f.walls)] : [],
+    edges: false,
+  };
   const list = f.kind === 'fillet' || f.kind === 'chamfer' ? f.edges : f.kind === 'shell' ? f.open : f.kind === 'draft' || f.kind === 'full-round' || f.kind === 'face-fillet' || f.kind === 'profile-relief' || f.kind === 'cylindrical-wrap' ? f.faces : undefined;
   if (list === undefined && f.kind !== 'shell') return null;
   return { names: Array.isArray(list) ? list.filter((x): x is string => typeof x === 'string') : [], edges: f.kind === 'fillet' || f.kind === 'chamfer' };

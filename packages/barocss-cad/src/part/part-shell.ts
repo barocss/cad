@@ -14,7 +14,7 @@ import { transformBrep } from '../brep/brep-transform.js';
 import { unsupportedNativeMass } from '../internal/native-si-mass-state.js';
 import { withCavities } from '../brep/brep-glue.js';
 import { generalShell } from '../blend/general-shell.js';
-import { boxShellWallLimit } from './part-box-shell.js';
+import { boxShellWallLimit, boxShellWithWalls } from './part-box-shell.js';
 import { offsetCavity, offsetShell, smoothOffsetBody } from '../blend/offset-cavity.js';
 import { regionShell } from '../blend/region-shell.js';
 import { meshInnerOffset } from '../mesh/mesh-offset.js';
@@ -79,6 +79,24 @@ export function shellOperation(f: CadPartFeature & Record<string, unknown>, t: T
           if (expect) checkExpected(brep, expect, false, 'shell', fail);
         }
         return { kind: 'solid', parts: [shellOf(part, thickness, names, at, fail)] };
+      };
+    }
+    case 'shell-walls': {
+      const target = solids(f.target, 'target'), part = target[0];
+      if (target.length !== 1 || t.featureKind(f.target) !== 'extrude' || part.solid.kind !== 'upright')
+        return fail('CAPABILITY', 'Per-face Shell needs one original upright box extrusion.');
+      const { opening, walls } = f;
+      if (typeof opening !== 'string' || !opening || !isRecord(walls))
+        return fail('INPUT', 'Per-face Shell needs an opening name and a map of wall thicknesses.');
+      const stock = part.solid.solid, expect = expectOf(f, fail);
+      return () => {
+        const original = brepOf(part, f.target);
+        if (expect) {
+          if (expect.size !== 6) fail('REFERENCE', 'Per-face Shell needs all six original face signatures.');
+          checkExpected(original, expect, false, 'shell-walls', fail);
+        }
+        const { solid, brep } = boxShellWithWalls(stock, original, opening, walls, at, fail);
+        return { kind: 'solid', parts: [{ solid: { kind: 'upright', solid }, brep }] };
       };
     }
   }

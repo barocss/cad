@@ -17,6 +17,7 @@ import { hasExternalScrewSections, hasTriangularTurnSections, smoothLoftTurnAngl
 import { hasLineArcScrewSections, hasLineArcTurnSections } from './lineArcScrew';
 import { copyLoftGuide } from './loftGuides';
 import { add, dot, scale, sub } from '../engine/vec3';
+import { boxShellWalls, sameWallNormal } from '../engine/shellWalls';
 import { SEW_TOLERANCE_LABEL, sewTolerance } from '../engine/sew';
 import { circularPatternCountRange, circularPatternStep } from '../engine/circularPatternSpan';
 import { eligibleFillPatternRegions, fillRegionSnapshot } from '../engine/fillFeaturePattern';
@@ -1107,6 +1108,14 @@ function editFieldsRaw(nodes: Nodes, i: number, bearingAssembly?: BearingAssembl
       break;
     }
     case 'shell': if (scope?.doc?.direct === undefined && !scope?.doc?.instances?.length && shellOpening(nodes,i)) out.push(shellOpeningField(i)); number('t', 'Wall', 'mm', n => num((n as typeof node).thickness), (n, v) => ({ ...(n as typeof node), thickness: v })); break;
+    case 'shell-walls':
+      for (const side of boxShellWalls) {
+        const face = Object.keys(node.walls).find(name => sameWallNormal(node.sigs[name]?.d, side.normal));
+        if (!face) continue;
+        number(side.key, side.label, 'mm', n => (n as typeof node).walls[face],
+          (n, value) => ({ ...(n as typeof node), walls: { ...(n as typeof node).walls, [face]: value } }));
+      }
+      break;
     case 'translate': [0, 1, 2].forEach(k => number('o' + k, 'Δ' + 'XYZ'[k], 'mm', n => num((n as typeof node).offset[k]), (n, v) => { const o = [...(n as typeof node).offset] as [Dim, Dim, Dim]; o[k] = v; return { ...(n as typeof node), offset: o }; })); break;
     case 'rotate':
       out.push({ kind: 'choice', key: 'axis', label: 'Axis', options: axes(['x', 'y', 'z']), get: n => self<typeof node>(n).axis, set: (n, v) => replace(n, i, { ...self<typeof node>(n), axis: v as Axis }) });

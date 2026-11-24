@@ -1,5 +1,9 @@
 import { faceGeometry } from '../brep/analytic-boolean.js';
 import { checkBrep, type Brep } from '../brep/brep-core.js';
+import type { CurveSegment2, XY } from '../brep/curved-arrangement.js';
+import { ExtrudedProfileLimits } from '../features/extruded-profile-solid.js';
+import { booleanPrismatic, brepFromPrismatic, prismaticExtrude, type PrismaticSolid } from '../features/prismatic-solid.js';
+import type { Tools } from './part-model.js';
 
 interface BoxSide { readonly axis: 0 | 1 | 2; readonly side: 0 | 1 }
 interface CardinalBox {
@@ -67,4 +71,50 @@ export function boxShellWallLimit(brep: Brep, open: string): number | undefined 
   for (const face of brep.faces) if (face.name === open) openAxis = box.sides.get(face.id)?.axis;
   if (openAxis === undefined) return undefined;
   return Math.min(...box.ranges.map(([low, high], axis) => (high - low) / (axis === openAxis ? 1 : 2)));
+}
+
+/** Subtract the interior of a certified cardinal box, with the cavity ending at its open top. */
+export function boxShellWithWalls(stock: PrismaticSolid, brep: Brep, opening: string, walls: Readonly<Record<string, unknown>>,
+  id: string, fail: Tools['fail']): { solid: PrismaticSolid; brep: Brep } {
+  const box = cardinalBoxOf(brep);
+  if (!box) return fail('CAPABILITY', 'Per-face Shell needs one exact cardinal box.');
+  const names = brep.faces.map(face => face.name);
+  if (!names.every(name => typeof name === 'string') || names.includes('') || new Set(names).size !== 6)
+    return fail('REFERENCE', 'Per-face Shell needs six unique original face names.');
+  const cap = brep.faces.find(face => face.name === opening);
+  const top = cap && box.sides.get(cap.id);
+  if (top?.axis !== 2 || top.side !== 1) return fail('SELECTION', 'Per-face Shell needs the original upper face as its opening.');
+  if (Object.keys(walls).length !== 5 || Object.hasOwn(walls, opening) || names.some(name => name !== opening && !Object.hasOwn(walls, name)))
+    return fail('REFERENCE', 'Per-face Shell needs one thickness for each of the five kept faces.');
+
+  const ranges = box.ranges.map(range => [...range]), wallNames = ranges.map(() => ['', '']);
+  const minimum = ExtrudedProfileLimits.minimumLengthMM;
+  for (const face of brep.faces) {
+    if (face === cap) continue;
+    const name = face.name!, value = walls[name];
+    if (typeof value !== 'number' || !Number.isFinite(value) || value < minimum)
+      return fail('PARAMETER', `Wall thickness for ${name} must be at least ${minimum} mm.`);
+    const { axis, side } = box.sides.get(face.id)!;
+    ranges[axis][side] += side === 0 ? value : -value;
+    wallNames[axis][side] = name;
+  }
+  if (ranges.some(([low, high]) => !(high - low >= minimum)))
+    return fail('PARAMETER', 'The wall thicknesses leave no cavity in this box.');
+  const [[x0, x1], [y0, y1], [floor, ceiling]] = ranges;
+  const corners: XY[] = [[x0, y0], [x1, y0], [x1, y1], [x0, y1]];
+  const sideNames = [wallNames[1][0], wallNames[0][1], wallNames[1][1], wallNames[0][0]];
+  const ring: CurveSegment2[] = corners.map((a, i) => ({
+    kind: 'line', a, b: corners[(i + 1) % 4], tag: `${id}.in.${sideNames[i]}`,
+  }));
+  const inside = prismaticExtrude([ring], floor, ceiling);
+  const regions = inside.slabs[0]?.regions;
+  if (inside.slabs.length !== 1 || regions?.length !== 1) return fail('GEOMETRY', 'Per-face Shell could not build the exact cavity.');
+  const solid = booleanPrismatic(stock, { ...inside, caps: [
+    { z: floor, regions, tag: `${id}.in.${wallNames[2][0]}` }, { z: ceiling, regions, tag: `${id}.ceiling` },
+  ] }, 'difference');
+  const result = brepFromPrismatic(solid, { id });
+  const report = checkBrep(result, { strict: true });
+  if (!report.valid || report.counts.faces !== 11 || report.counts.loops !== 12 || report.topology[0]?.genus !== 0)
+    return fail('GEOMETRY', 'Per-face Shell could not retain five exact walls and one top opening.');
+  return { solid, brep: result };
 }

@@ -30,6 +30,7 @@ import type { BendTable, BeadSharedComponent, CadPartDocument, CadPartFeature, C
 import type { Sig } from './references';
 import { frameGeometry, holeCentres, bevelSpiral, prefixDoc, directFaceDocumentProblem, rectangularPatternDocumentProblem, textDocumentProblem, textNodeProblem, textReliefNodeProblem, type TextNode, type TextReliefNode, type DocPlane, type Dim, type SketchNode, type BodyRef, type FrameOverride, type InlineSection, type MemberSection, type ModelNode, type PartInstance, type StudioDoc } from './doc';
 import { blindDrillHoleFieldsProblem } from './blindDrillHole';
+import { shellWallFieldsProblem } from './shellWalls';
 import { bodyKeyFor, bodyNodeOf, featureId, isAssemblyCut, nodeIndexOf, serialOf, withIds } from './ids';
 import { keyClasses } from './fits';
 import type { StudioRingRow } from './rings';
@@ -215,6 +216,12 @@ export function featureOf(node: ModelNode, index: number, nodes?: readonly Model
     case 'mesh': return { ...at, kind: 'mesh', ...meshArrays(node.repair ? { blob: node.repair.result } : node), ...(node.repair ? repaired(node.repair) : {}), ...(node.representation ? { representation: node.representation } : {}), ...((node.pieces ?? 1) > 1 ? { each: true } : {}) };
     case 'thread': return { ...at, kind: 'thread', diameter: node.diameter, pitch: node.pitch, center: node.center, seat: node.seat, ...(node.length !== undefined ? { length: node.length } : {}), ...(node.hex ? { hex: node.hex } : {}), ...(node.form ? { form: node.form } : {}) };
     case 'shell': return { ...at, kind: 'shell', target: ref(node.parent), thickness: node.thickness, open: node.open, ...expectOf(node, node.open) };
+    case 'shell-walls': {
+      const problem = shellWallFieldsProblem(node);
+      if (problem) throw refusal('VALUE', problem);
+      return { ...at, kind: 'shell-walls', target: ref(node.parent), opening: node.opening, walls: node.walls,
+        ...expectOf(node, [node.opening, ...Object.keys(node.walls)]) };
+    }
     case 'chamfer': return { ...at, kind: 'chamfer', target: ref(node.parent), edges: node.edges, distance: node.distance, ...expectOf(node, node.edges) };
     case 'sheet-base': return { ...at, kind: 'sheet-base', sketch: id(node.sketch), thickness: node.thickness, bendRadius: node.bendRadius, ...sheetK(node), ...(node.reverse ? { reverse: true } : {}) };
     case 'sheet-corner-relief': return { ...at, kind: 'sheet-corner-relief', target: ref(node.parent), corner: node.edges[0], shape: node.shape, size: node.size };

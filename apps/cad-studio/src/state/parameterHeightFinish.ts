@@ -69,5 +69,6 @@ export async function prepareParameterHeightFinish({ before, next, evaluateParen
  if (!proved) throw fail();
  const finish = proved.nodes[2];
  if (finish.kind !== 'fillet' && finish.kind !== 'chamfer') throw fail();
- return { ...next, nodes: next.nodes.map((node, i) => i === 2 ? { ...node, sigs: finish.sigs } : node) };
+ return { ...next, nodes: next.nodes.map((node, i) =>
+  i === 2 && (node.kind === 'fillet' || node.kind === 'chamfer') ? { ...node, sigs: finish.sigs } : node) };
 }

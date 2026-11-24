@@ -1261,6 +1261,7 @@ type ModelNodeBase = DrivenSketchNode | RoundedRectangleInsetNode | SketchNode |
   | { kind: 'thread'; diameter: number; pitch: number; center: [number, number]; seat: number; length?: number; hex?: { across: number; height: number; internal?: true }; form?: 'helical' | 'faceted'; made?: Made }
   /** Hollowed to walls `thickness` thick, the named faces removed (none: a closed hollow). */
   | { kind: 'shell'; parent: BodyRef; thickness: Dim; open: string[] }
+  | { kind: 'shell-walls'; parent: BodyRef; opening: string; walls: Record<string, number>; sigs: Record<string, Sig> }
   /** Edges by their persistent B-rep names (they follow the features, so edits keep the selection). */
   | { kind: 'chamfer'; parent: BodyRef; edges: string[]; distance: Dim }
   /**
@@ -2087,6 +2088,7 @@ export function featureLabel(node: ModelNode, index: number, nodes: readonly Mod
     case 'separate': return 'Separate pieces';
     case 'decimate': return `Simplify mesh ${node.triangles !== undefined ? `to ${node.triangles.toLocaleString('en-US')} triangles` : node.ratio !== undefined ? `to ${+(100 * node.ratio).toPrecision(3)}%` : `within ${fmt(node.maxError ?? 0)} mm`}`;
     case 'shell': return typeof node.thickness === 'number' ? `Shell ${node.thickness} mm` : `Shell ${node.thickness.parameter}`;
+    case 'shell-walls': return 'Shell · Per face';
     case 'import': return `Import ${node.name}`;
     case 'mesh': return `Mesh ${node.name}`;
     case 'subd': return `SubD ${node.name} (${node.cage.faces.length} ${node.cage.faces.every(f => f.length === 4) ? 'quads' : 'faces'})`;
