@@ -96,11 +96,7 @@ function revolveHollow(input: RevolveInput, clearance?: SweepClearance): Brep {
     bodies: [{ id: `${id}_body`, kind: 'solid', shells: full
       ? [{ id: 's', closed: true, faces }, ...boreFaces.map((f, i) => ({ id: `hole${i}`, closed: true, faces: f }))]
       : [{ id: 's', closed: true, faces: [...faces, ...boreFaces.flat()] }] }] });
-  const faceName = new Map(brep.faces.map(f => [f.id, f.name!])), loopFace = new Map(brep.loops.map(l => [l.id, l.face]));
-  const names = new Map<string, string[]>(); for (const c of brep.coedges) names.set(c.edge, [...(names.get(c.edge) ?? []), faceName.get(loopFace.get(c.loop)!)!]);
-  const baseOf = (edge: string) => [...new Set(names.get(edge))].sort().join('|'), counts = new Map<string, number>(), used = new Map<string, number>();
-  for (const e of brep.edges) { const base = baseOf(e.id); counts.set(base, (counts.get(base) ?? 0) + 1); }
-  return { ...brep, edges: brep.edges.map(e => { const base = baseOf(e.id), k = (used.get(base) ?? 0) + 1; used.set(base, k); return { ...e, name: counts.get(base)! > 1 ? `${base}#${k}` : base }; }) };
+  return nameRevolvedEdges(brep);
 }
 
 /** Unit circle arc from 0 through `sweep` (≤ 2π) as rational quadratic control points (x, y) and weights. */
@@ -283,11 +279,31 @@ function revolveOuterProfile(input: RevolveInput, clearance?: SweepClearance): B
   }
   const brep = buildBrep({ source: { family: 'revolve', id }, vertices, edges: edges.map(e => ({ ...e, name: e.id })),
     bodies: [{ id: `${id}_body`, kind: 'solid', shells: [{ id: 's', closed: true, faces }] }] });
-  // Edge names from their faces.
-  const faceName = new Map(brep.faces.map(f => [f.id, f.name!])), loopFace = new Map(brep.loops.map(l => [l.id, l.face]));
-  const names = new Map<string, string[]>(); for (const c of brep.coedges) names.set(c.edge, [...(names.get(c.edge) ?? []), faceName.get(loopFace.get(c.loop)!)!]);
-  const used = new Map<string, number>();
-  return { ...brep, edges: brep.edges.map(e => { const base = [...new Set(names.get(e.id))].sort().join('|'); const k = (used.get(base) ?? 0) + 1; used.set(base, k); return { ...e, name: k > 1 || brep.edges.filter(x => [...new Set(names.get(x.id))].sort().join('|') === base).length > 1 ? `${base}#${k}` : base }; }) };
+  return nameRevolvedEdges(brep);
+}
+
+/** Name each edge from its current face owners in native revolve order. */
+export function nameRevolvedEdges(brep: Brep): Brep {
+  const faceName = new Map(brep.faces.map(face => [face.id, face.name!]));
+  const loopFace = new Map(brep.loops.map(loop => [loop.id, loop.face]));
+  const owners = new Map<string, string[]>();
+  for (const use of brep.coedges) {
+    const names = owners.get(use.edge) ?? [];
+    names.push(faceName.get(loopFace.get(use.loop)!)!);
+    owners.set(use.edge, names);
+  }
+  const base = (edge: Brep['edges'][number]) => [...new Set(owners.get(edge.id))].sort().join('|');
+  const counts = new Map<string, number>(), seen = new Map<string, number>();
+  for (const edge of brep.edges) {
+    const name = base(edge);
+    counts.set(name, (counts.get(name) ?? 0) + 1);
+  }
+  const edges = brep.edges.map(edge => {
+    const name = base(edge), index = (seen.get(name) ?? 0) + 1;
+    seen.set(name, index);
+    return { ...edge, name: counts.get(name)! > 1 ? `${name}#${index}` : name };
+  });
+  return { ...brep, edges };
 }
 
 /**

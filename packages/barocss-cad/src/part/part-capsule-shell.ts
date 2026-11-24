@@ -1,0 +1,89 @@
+import { checkBrep, type Brep } from '../brep/brep-core.js';
+import { buildProfileLoop, ExtrudedProfileLimits, type ProfileSegmentInput } from '../features/extruded-profile-solid.js';
+import { nameRevolvedEdges, revolveMassProperties, revolveProfile, type RevolveInput } from '../features/revolve.js';
+import { SIDE_TAG, sideName } from '../document/side-names.js';
+import { CadNumericPolicy } from '../numeric-policy.js';
+import type { Tools } from './part-model.js';
+import type { Part } from './part-types.js';
+
+const samePoint = (a: readonly number[], x: number, y: number) => a.length === 2 && a[0] === x && a[1] === y;
+
+/** One canonical positive-X capsule meridian about the original positive Y axis. */
+function capsule(input: RevolveInput) {
+  if (input.angle !== 360 || !input.id
+    || !samePoint(input.axis.origin, 0, 0) || !samePoint(input.axis.direction, 0, 1)
+    || input.holes !== undefined || input.holeTags !== undefined
+    || !Array.isArray(input.profile) || input.profile.length !== 4) return;
+  const tags = input.sideTags;
+  if (tags && (tags.length !== 4 || !Array.from(tags).every(tag => typeof tag === 'string' && SIDE_TAG.test(tag))
+    || new Set(tags).size !== 4)) return;
+  const loop = buildProfileLoop(input.profile), segments = loop.segments;
+  if (segments.length !== 4) return;
+  const lowerIndex = segments.findIndex(segment => segment.kind === 'arc' && samePoint(segment.center, 0, 0));
+  if (lowerIndex < 0) return;
+  const lower = segments[lowerIndex], barrel = segments[(lowerIndex + 1) % 4];
+  const upper = segments[(lowerIndex + 2) % 4], axis = segments[(lowerIndex + 3) % 4];
+  if (lower.kind !== 'arc' || barrel.kind !== 'line' || upper.kind !== 'arc' || axis.kind !== 'line') return;
+  const radius = lower.radius, height = upper.center[1];
+  if (!(radius >= ExtrudedProfileLimits.minimumRadiusMM && height >= ExtrudedProfileLimits.minimumLengthMM)
+    || !samePoint(lower.start, 0, -radius) || !samePoint(lower.end, radius, 0)
+    || lower.startAngle !== -Math.PI / 2 || lower.sweep !== Math.PI / 2
+    || !samePoint(barrel.start, radius, 0) || !samePoint(barrel.end, radius, height)
+    || !samePoint(upper.center, 0, height) || upper.radius !== radius
+    || !samePoint(upper.start, radius, height) || !samePoint(upper.end, 0, height + radius)
+    || upper.end[1] - height !== radius || upper.startAngle !== 0 || upper.sweep !== Math.PI / 2
+    || !samePoint(axis.start, 0, height + radius) || !samePoint(axis.end, 0, -radius)) return;
+  // Match Revolve's normalization and authored-tag mapping, including reversed or cyclic input order.
+  const name = (index: number) => sideName(input.id!, tags && loop.reversed ? 3 - index : index, tags);
+  return { radius, height, lower: name(lowerIndex), barrel: name((lowerIndex + 1) % 4), upper: name((lowerIndex + 2) % 4) };
+}
+
+/** Keep native azimuth suffixes; rebuild edge names from the renamed owning faces. */
+function wallNames(brep: Brep, id: string, names: readonly string[]): Brep {
+  const byName = new Map(names.map((name, index) => [`${id}.side${index}`, name]));
+  const faces = brep.faces.map(face => {
+    if (!face.name) return face;
+    const suffix = face.name.lastIndexOf('#'), renamed = byName.get(face.name.slice(0, suffix));
+    return renamed ? { ...face, name: renamed + face.name.slice(suffix) } : face;
+  });
+  return nameRevolvedEdges({ ...brep, source: { family: 'shell', id }, faces });
+}
+
+/** Open only the complete bare upper hemisphere of an unchanged full capsule Revolve.
+ * The caller owns the original Revolve provenance; unsupported inputs retain the old Shell path.
+ */
+export function openRevolvedCapsuleShell(input: RevolveInput, wall: number, open: readonly string[], id: string,
+  fail: Tools['fail']): Part | undefined {
+  if (open.length !== 1 || open[0].includes('#')) return;
+  const source = capsule(input);
+  if (!source || open[0] !== source.upper) return;
+  const { radius, height } = source, inner = radius - wall;
+  if (!Number.isFinite(wall) || wall < ExtrudedProfileLimits.minimumLengthMM || wall > CadNumericPolicy.coordinateAbs)
+    return fail('PARAMETER', `Capsule Shell needs a positive wall of at least ${ExtrudedProfileLimits.minimumLengthMM} mm within the modeling range.`);
+  if (!(wall < radius && inner >= ExtrudedProfileLimits.minimumRadiusMM))
+    return fail('PARAMETER', `Capsule Shell needs a wall smaller than the radius, leaving an inner radius of at least ${ExtrudedProfileLimits.minimumRadiusMM} mm.`);
+  // Material stays on the left: outer lower quarter, barrel, annular lip, inner barrel,
+  // clockwise inner lower quarter, then the short axis closure between the two poles.
+  const profile: ProfileSegmentInput[] = [
+    { kind: 'arc', start: [0, -radius], center: [0, 0], direction: 'ccw' },
+    { kind: 'line', start: [radius, 0] },
+    { kind: 'line', start: [radius, height] },
+    { kind: 'line', start: [inner, height] },
+    { kind: 'arc', start: [inner, 0], center: [0, 0], direction: 'cw' },
+    { kind: 'line', start: [0, -inner] },
+  ];
+  const recipe: RevolveInput = { id, profile, axis: { origin: [0, 0], direction: [0, 1] }, angle: 360 };
+  const brep = wallNames(revolveProfile(recipe), id,
+    [source.lower, source.barrel, `${id}.rim`, `${id}.in.${source.barrel}`, `${id}.in.${source.lower}`]);
+  const inside = (point: readonly number[]) => point.every(value => Number.isFinite(value) && Math.abs(value) <= CadNumericPolicy.coordinateAbs);
+  if (brep.vertices.some(vertex => !inside(vertex.point)) || brep.edges.some(edge => edge.curve.controlPoints.some(point => !inside(point)))
+    || brep.faces.some(face => face.surface.kind !== 'surface' || face.surface.controlPoints.some(row => row.some(point => !inside(point)))))
+    return fail('PARAMETER', 'Capsule Shell leaves the native modeling coordinate range.');
+  const report = checkBrep(brep, { strict: true });
+  const counts = report.counts;
+  if (!report.valid || report.topology.length !== 1 || report.topology[0].genus !== 0
+    || counts.bodies !== 1 || counts.shells !== 1 || counts.faces !== 10 || counts.loops !== 10
+    || counts.coedges !== 36 || counts.edges !== 18 || counts.vertices !== 10)
+    return fail('GEOMETRY', `Capsule Shell must retain one closed native wall: ${report.issues[0] ?? 'unexpected topology'}.`);
+  return { solid: { kind: 'brep', brep }, mass: density => revolveMassProperties(recipe, density) };
+}

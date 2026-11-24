@@ -15,6 +15,7 @@ import { unsupportedNativeMass } from '../internal/native-si-mass-state.js';
 import { withCavities } from '../brep/brep-glue.js';
 import { generalShell } from '../blend/general-shell.js';
 import { boxShellWallLimit, boxShellWithWalls } from './part-box-shell.js';
+import { openRevolvedCapsuleShell } from './part-capsule-shell.js';
 import { offsetCavity, offsetShell, smoothOffsetBody } from '../blend/offset-cavity.js';
 import { regionShell } from '../blend/region-shell.js';
 import { meshInnerOffset } from '../mesh/mesh-offset.js';
@@ -290,6 +291,8 @@ const renamed = (b: Brep, from: string, to: string) => transformBrep(b, { matrix
  */
 function shellRevolved(part: Part, input: RevolveInput, t: number, open: string[], at: string, fail: Tools['fail']): Part {
   if (input.angle !== 360) fail('CAPABILITY', 'shell works on bodies turned a full turn yet (this one stops at its start and end faces)');
+  const capsule = openRevolvedCapsuleShell(input, t, open, at, fail);
+  if (capsule) return capsule;
   const id = input.id!, ring = sectionRing(input.profile, input.sideTags), tags = new Set(ring.map(g => g.tag!)), tol = curveTolerance([ring]);
   const openTags = new Set(open.map(n => { const tag = n.startsWith(id + '.') ? n.slice(id.length + 1).replace(/#\d+$/, '') : ''; if (!tags.has(tag)) fail('SELECTION', `no face named ${n} to open; faces: ${[...tags].map(x => `${id}.${x}`).slice(0, 12).join(', ')}`); return tag; }));
   // The axis, its side the profile is on, and the mirror across it.
