@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1896: [Extrude a downward XY rectangle to the original upper face](notes/downward-rectangle-extrude-to-face-2026-11-24/README.md), #222. Preserve the authored target end and check the reflected world footprint.
 - D1895: [Verify the native Crossing snap lifecycle](notes/native-crossing-lifetime-closeout-2026-11-24/README.md), #228. Cover New, the held rebuild response and quick repeated inputs in actual Studio.
 - D1894: [Reuse the first rectangular through-cut across later Differences](notes/rectangular-cut-difference-chain-2026-11-24/README.md), #25. Check original aperture ownership and collision refusal across the direct chain.
 - D1893: [Pin the local Agent review of a second tilted Sweep cap](notes/pinned-second-tilted-cap-agent-review-2026-11-24/README.md), #324. Cover both orders, retained prior native geometry, stale inputs and explicit Studio approval.

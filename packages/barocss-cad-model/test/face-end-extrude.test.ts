@@ -10,7 +10,7 @@ import { dispatchTool } from '../src/chat/tools';
 import { parentsOf, prefixDoc, usesOf, type ModelNode, type StudioDoc } from '../src/engine/doc';
 import { readStudioDoc } from '../src/engine/migrate';
 import { currentFaceEndDistance, toPartDocument } from '../src/engine/part';
-import { detachFaceEndExtrude } from '../src/engine/faceEndExtrude';
+import { detachFaceEndExtrude, isFaceEndExtrudeSketch } from '../src/engine/faceEndExtrude';
 import { revisionOf } from '../src/util/revision';
 
 const recipe = {
@@ -26,6 +26,91 @@ const documentAt = (from: number): StudioDoc => ({
     recipe,
   ],
   outputs: { b1: { node: 1, side: 'solid' }, b3: { node: 3, side: 'solid' } }, nextId: 4,
+});
+
+const downwardDocument = (height = 5): StudioDoc => ({
+  format: 'barocss-cad-model', schema: 3, units: 'mm', parameters: {}, nextId: 4,
+  nodes: [
+    { id: 'n0', kind: 'sketch', profile: 'rectangle', min: [0, 0], max: [20, 20] },
+    { id: 'n1', kind: 'extrude', sketch: 0, height },
+    { id: 'n2', kind: 'sketch', profile: 'rectangle', min: [2, -6], max: [8, -2],
+      plane: { origin: [0, 0, 20], normal: [0, 0, -1], xAxis: [1, 0, 0] } },
+    { ...recipe, target: { ...recipe.target, face: 'n1.top' } },
+  ],
+  outputs: { b1: { node: 1, side: 'solid' }, b3: { node: 3, side: 'solid' } },
+});
+
+test('an exact downward XY rectangle reaches the original upper rectangular cap with positive local height', () => {
+  for (const height of [5, 8]) {
+    const doc = downwardDocument(height), before = structuredClone(doc), travel = 20 - height;
+    const opened = readStudioDoc(JSON.stringify(doc));
+    assert.ok('doc' in opened); assert.deepEqual(opened.doc, doc);
+    const part = toPartDocument(doc);
+    assert.deepEqual(part.features[3], { id: 'n3', kind: 'extrude', sketch: 'n2', height: travel });
+    assert.equal(currentFaceEndDistance(doc, 3), travel);
+    const outputs = evaluateCadPart(part).outputs;
+    assert.deepEqual(outputs.map(output => output.id), ['n1', 'n3']);
+    assert.ok(outputs.every(output => checkOutput(output).valid));
+    const [target, source] = outputs;
+    assert.equal(source.brep.faces.length, 6); assert.equal(source.brep.vertices.length, 8);
+    for (const x of [2, 8]) for (const y of [2, 6]) for (const z of [height, 20]) {
+      assert.ok(source.brep.vertices.some(vertex => vertex.point.every((value, axis) => value === [x, y, z][axis])));
+    }
+    const mass = massPropertiesOf(source);
+    assert.ok(Math.abs(mass.volume - 24 * travel) < 1e-8);
+    mass.centroid.forEach((value, axis) => assert.ok(Math.abs(value - [5, 4, (height + 20) / 2][axis]) < 1e-8));
+    assert.ok(Math.abs(massPropertiesOf(target).volume - 400 * height) < 1e-8);
+    for (const [body, name, level, direction] of [
+      [target, 'n1.top', height, 1], [source, 'n3.bottom', 20, 1], [source, 'n3.top', height, -1],
+    ] as const) {
+      const face = faceGeometry(body.brep.faces.find(face => face.name === name)!);
+      assert.ok(face.kind === 'plane');
+      assert.equal(face.o[2], level);
+      face.n.forEach((value, axis) => assert.ok(Math.abs(value - (axis === 2 ? direction : 0)) < 1e-8));
+    }
+    const node = doc.nodes[3]; assert.ok(node.kind === 'face-end-extrude');
+    const detached = { ...doc, nodes: doc.nodes.map((current, index) => index === 3 ? detachFaceEndExtrude(node, travel) : current) };
+    assert.deepEqual(evaluateCadPart(toPartDocument(detached)).outputs[1].brep, source.brep);
+    assert.deepEqual(doc, before);
+  }
+  const doc = downwardDocument(), target = doc.nodes[1]; assert.ok(target.kind === 'extrude');
+  const parameterized = { ...doc, parameters: { targetHeight: 8 },
+    nodes: doc.nodes.map((node, index) => index === 1 ? { ...target, height: { parameter: 'targetHeight' } } : node) };
+  assert.equal(currentFaceEndDistance(parameterized, 3), 12);
+});
+
+test('downward XY containment uses reflected world Y and preserves the target authored upper end', () => {
+  const doc = downwardDocument(), targetSketch = doc.nodes[0], target = doc.nodes[1];
+  assert.ok(targetSketch.kind === 'sketch' && targetSketch.profile === 'rectangle' && target.kind === 'extrude');
+  // The unreflected local Y interval fits this target, but the actual world footprint does not.
+  const outside = { ...doc, nodes: doc.nodes.map((node, index) => index === 0
+    ? { ...targetSketch, min: [0, -8], max: [20, -1] } : node) } as StudioDoc;
+  assert.throws(() => toPartDocument(outside), /entire projected profile/);
+  for (const height of [-5, 0]) assert.throws(() => toPartDocument(downwardDocument(height)), /stay forward.*authored end cap/);
+  const reversed = { ...doc, parameters: { targetHeight: -5 }, nodes: doc.nodes.map((node, index) => index === 1
+    ? { ...target, height: { parameter: 'targetHeight' } } : node) };
+  assert.throws(() => toPartDocument(reversed), /stay forward.*authored end cap/);
+  for (const height of [20, 21]) assert.throws(() => toPartDocument(downwardDocument(height)), /positive extrusion direction/);
+});
+
+test('downward XY admission stays on literal rectangles and the original upright rectangular upper cap', () => {
+  const doc = downwardDocument(), sketch = doc.nodes[2], target = doc.nodes[1], end = doc.nodes[3];
+  assert.ok(sketch.kind === 'sketch' && sketch.profile === 'rectangle' && sketch.plane && target.kind === 'extrude' && end.kind === 'face-end-extrude');
+  for (const plane of [
+    { ...sketch.plane, normal: [0, 0, -2] }, { ...sketch.plane, normal: [0, 1e-13, -1] },
+    { ...sketch.plane, xAxis: [2, 0, 0] }, { ...sketch.plane, xAxis: [-1, 0, 0] },
+  ]) assert.equal(isFaceEndExtrudeSketch({ ...sketch, plane } as ModelNode), false);
+  for (const profile of [
+    { id: 'n2', kind: 'sketch', profile: 'circle', center: [5, -4], radius: 1, plane: sketch.plane },
+    { id: 'n2', kind: 'sketch', profile: 'polygon', points: [[2, -6], [8, -6], [5, -2]], plane: sketch.plane },
+  ] as const) assert.equal(isFaceEndExtrudeSketch(profile as unknown as ModelNode), false);
+  for (const changed of [
+    { ...target, draft: 1 }, { ...target, held: 'stale target' },
+  ]) assert.throws(() => toPartDocument({ ...doc, nodes: doc.nodes.map((node, index) => index === 1 ? changed : node) }), /forward upright rectangular/);
+  assert.throws(() => toPartDocument({ ...doc, nodes: doc.nodes.map((node, index) => index === 3
+    ? { ...end, target: { ...end.target, face: 'n1.bottom' } } : node) }), /original upper cap/);
+  assert.throws(() => toPartDocument({ ...doc, nodes: doc.nodes.map((node, index) => index === 0
+    ? { id: 'n0', kind: 'sketch', profile: 'circle', center: [10, 10], radius: 10 } : node) }), /forward upright rectangular/);
 });
 
 function circularTarget(from = 20, radius = 12): StudioDoc {
@@ -751,8 +836,9 @@ test('the translated end uses world trim, exact raw axes and positive local trav
   assert.throws(() => toPartDocument(movedSource({ ...plane, origin: [10001, 0, 30] })), /translated XY plane/i);
   for (const next of [
     { ...plane, xAxis: [0, 1, 0] }, { ...plane, xAxis: [-1, 0, 0] }, { ...plane, xAxis: [2, 0, 0] },
-    { ...plane, normal: [0, 0, -1] }, { ...plane, normal: [0, 1e-10, 1] },
+    { ...plane, normal: [0, 1e-10, 1] },
   ] as (typeof plane)[]) assert.throws(() => toPartDocument(movedSource(next)), /translated XY plane/i);
+  assert.throws(() => toPartDocument(movedSource({ ...plane, normal: [0, 0, -1] })), /original upper cap/i);
   for (const travel of [0, -10, 1e-8]) assert.throws(() => toPartDocument(translatedDocument([0, 0, 30], travel)), /positive extrusion direction/i);
 });
 

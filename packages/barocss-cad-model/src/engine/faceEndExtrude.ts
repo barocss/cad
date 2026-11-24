@@ -61,6 +61,11 @@ function recipeProblem(node: Record<string, unknown>, index: number, nodes: read
     && target.face === `${target.feature}.bottom` && !(targetDimension(source.height, parameters) > 0)) {
     return 'the target extrusion must stay forward to preserve its authored start cap.';
   }
+  const sketch = nodes[node.sketch as number];
+  if (node.suppressed !== true && record(sketch) && faceEndAxes(sketch.plane as DocPlane | undefined) === DOWN_XY) {
+    const problem = downwardTargetProblem(nodes, target as unknown as FaceEndExtrudeNode['target'], parameters);
+    if (problem) return problem;
+  }
   const annular = annularSource(nodes, body.node);
   if (annular && target.face.endsWith('.bottom')) {
     if (!uniqueIdentity(nodes, annular.stock.id) || !uniqueIdentity(nodes, annular.circle.id)) {
@@ -97,6 +102,7 @@ type AxisOrder = readonly [Axis, Axis, Axis];
 type EndFrame = { axes: AxisOrder; sign: 1 | -1 };
 const XY: EndFrame = { axes: [0, 1, 2], sign: 1 }, YZ: EndFrame = { axes: [1, 2, 0], sign: 1 };
 const FRONT: EndFrame = { axes: [0, 2, 1], sign: -1 };
+const DOWN_XY: EndFrame = { axes: [0, 1, 2], sign: -1 };
 
 type ExactPoint = readonly [bigint, bigint];
 const turn = (a: ExactPoint, b: ExactPoint, c: ExactPoint) => (b[0]-a[0])*(c[1]-a[1])-(b[1]-a[1])*(c[0]-a[0]);
@@ -359,7 +365,7 @@ function exactAxis(vector: unknown, axis: Axis): boolean {
     && vector[1] === Number(axis === 1) && vector[2] === Number(axis === 2);
 }
 
-/** Only the three admitted exact raw frames reach the native prism placement. */
+/** Only the admitted exact raw frames reach the native prism placement. */
 function faceEndAxes(plane: DocPlane | undefined): EndFrame | null {
   if (plane === undefined) return XY;
   if (!Array.isArray(plane?.origin) || plane.origin.length !== 3 || !plane.origin.every(finiteCoordinate)) return null;
@@ -367,12 +373,16 @@ function faceEndAxes(plane: DocPlane | undefined): EndFrame | null {
   if (exactAxis(plane.normal, 0) && exactAxis(plane.xAxis, 1)) return YZ;
   if (Array.isArray(plane.normal) && plane.normal.length === 3 && plane.normal[0] === 0 && plane.normal[1] === -1
     && plane.normal[2] === 0 && exactAxis(plane.xAxis, 0)) return FRONT;
+  if (Array.isArray(plane.normal) && plane.normal.length === 3 && plane.normal[0] === 0 && plane.normal[1] === 0
+    && plane.normal[2] === -1 && exactAxis(plane.xAxis, 0)) return DOWN_XY;
   return null;
 }
 
 export function isFaceEndExtrudeSketch(sketch: ModelNode | undefined): sketch is LiteralRectangle | LiteralPolygon | LiteralCircle {
   if (sketch?.kind !== 'sketch' || sketch.suppressed || faceEndAxes(sketch.plane) === null || sketch.on
     || sketch.association || sketch.regions?.length || sketch.holes?.length) return false;
+  if (faceEndAxes(sketch.plane) === DOWN_XY &&
+    (sketch.profile !== 'rectangle' || sketch.held !== undefined || sketch.pocketFloor !== undefined)) return false;
   if (sketch.profile === 'circle') return literalCircle(sketch);
   if (sketch.profile === 'polygon') return literalPolygon(sketch);
   return sketch.profile === 'rectangle'
@@ -380,17 +390,37 @@ export function isFaceEndExtrudeSketch(sketch: ModelNode | undefined): sketch is
     && Array.isArray(sketch.max) && sketch.max.length === 2 && sketch.max.every(finiteCoordinate);
 }
 
+/** A reversed XY rectangle keeps the original upper end of one forward upright rectangular extrusion. */
+function downwardTargetProblem(nodes: readonly unknown[], target: FaceEndExtrudeNode['target'], parameters: unknown): string | null {
+  const stock = nodes[target.body.node];
+  const unsupported = 'the downward rectangle needs the original upper cap of a forward upright rectangular extrusion with zero draft.';
+  if (!record(stock) || stock.kind !== 'extrude' || stock.suppressed || stock.held !== undefined
+    || !previous(stock.sketch, target.body.node) || stock.cutDepth !== undefined || (stock.draft ?? 0) !== 0
+    || target.face !== `${target.feature}.top`) return unsupported;
+  if (!(targetDimension(stock.height, parameters) > 0))
+    return 'the target extrusion must stay forward to preserve its authored end cap.';
+  const sketch = nodes[stock.sketch];
+  if (!record(sketch) || sketch.kind !== 'sketch' || sketch.profile !== 'rectangle' || sketch.held !== undefined
+    || sketch.pocketFloor !== undefined || faceEndAxes(sketch.plane as DocPlane | undefined) !== XY
+    || !isFaceEndExtrudeSketch(sketch as unknown as ModelNode)) return unsupported;
+  return null;
+}
+
 /** Resolve from the live preceding native results. A consumed target has no eligible output. */
 export function faceEndExtrudeHeight(doc: StudioDoc, node: FaceEndExtrudeNode, prefix: readonly CadPartFeature[]): number {
   const sketch = doc.nodes[node.sketch];
-  if (!isFaceEndExtrudeSketch(sketch)) throw invalid('the source needs a literal rectangle, straight convex polygon of 3 to 8 points or circle on a default or translated XY plane, on the supported +X-normal YZ plane, or on the exact -Y-normal Front XZ plane.');
+  if (!isFaceEndExtrudeSketch(sketch)) throw invalid('the source needs a literal rectangle, straight convex polygon of 3 to 8 points or circle on a default or translated XY plane, on the supported +X-normal YZ plane, or on the exact -Y-normal Front XZ plane. An exact -Z-normal XY plane supports only a literal rectangle.');
   const axes = faceEndAxes(sketch.plane)!;
   const { axes: [u, v, w], sign } = axes, origin = sketch.plane?.origin ?? [0, 0, 0];
+  if (axes === DOWN_XY) {
+    const problem = downwardTargetProblem(doc.nodes, node.target, doc.parameters);
+    if (problem) throw invalid(problem);
+  }
   // Bounds use the actual native profile fields, never the editor's optional outline snapshot.
   const min = sketch.profile === 'rectangle' ? sketch.min : sketch.profile === 'circle' ? sketch.center.map(c => c - sketch.radius) : [Math.min(...sketch.points.map(p => p[0])), Math.min(...sketch.points.map(p => p[1]))];
   const max = sketch.profile === 'rectangle' ? sketch.max : sketch.profile === 'circle' ? sketch.center.map(c => c + sketch.radius) : [Math.max(...sketch.points.map(p => p[0])), Math.max(...sketch.points.map(p => p[1]))];
-  const u0 = origin[u] + min[0], v0 = origin[v] + min[1];
-  const u1 = origin[u] + max[0], v1 = origin[v] + max[1];
+  const u0 = origin[u] + min[0], v0 = origin[v] + (axes === DOWN_XY ? -max[1] : min[1]);
+  const u1 = origin[u] + max[0], v1 = origin[v] + (axes === DOWN_XY ? -min[1] : max[1]);
   if (![u0, v0, u1, v1].every(finiteCoordinate)) throw invalid('the projected source is outside the native coordinate range.');
   if (u0 >= u1 || v0 >= v1) throw invalid('the source rectangle needs a positive width and height.');
   const target = doc.nodes[node.target.body.node];
@@ -405,6 +435,7 @@ export function faceEndExtrudeHeight(doc: StudioDoc, node: FaceEndExtrudeNode, p
   const disk = circularProfileTarget(doc, node, sketch, brep, faces[0], axes);
   const radial = disk ?? annularProfileTarget(doc, node, sketch, brep, faces[0], axes, [u0, v0], [u1, v1]);
   const box = radial ?? targetPolygon(brep, faces[0], axes);
+  if (axes === DOWN_XY && !box.rectangle) throw invalid('the downward rectangle needs a native rectangular target face.');
   if (!(sketch.profile === 'circle' && radial)) {
     if (u0 < box.min[0] || v0 < box.min[1] || u1 > box.max[0] || v1 > box.max[1]) throw invalid('the target face must contain the entire projected profile.');
     if (!box.rectangle) {

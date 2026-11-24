@@ -1,13 +1,13 @@
 # CAD roadmap — current status and execution order
 
-Updated 2026-11-24 · Priority authority: D520 · Latest delivery: D1895 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
+Updated 2026-11-24 · Priority authority: D520 · Latest delivery: D1896 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
 
 This is the only current status index. Detailed tracks define acceptance; the 34 stable row pages retain scope and issue navigation. Immutable decision notes retain results. Do not append chronological status paragraphs here. [D520 decision](notes/cad-roadmap-replan-2026-11-04/README.md) supersedes D445 execution order and historical next-item text, while retaining its safeguards and bounded proofs.
 
 ## Now and next
 
-- **Current position:** [D1895](notes/native-crossing-lifetime-closeout-2026-11-24/README.md), P1 rows 09 and 15. Complete the original native straight edge–plane Crossing lifecycle in Studio through New, source rebuild and rapid input for [#228](https://github.com/barocss/cad/issues/228).
-- **Next MAIN:** D1896, P1 rows [08](roadmap-rows/08.md) and [16](roadmap-rows/16.md), [#222](https://github.com/barocss/cad/issues/222). Extrude from an exact downward XY rectangular sketch to the original top face, with signed footprint validation, native re-edit and fresh Open.
+- **Current position:** [D1896](notes/downward-rectangle-extrude-to-face-2026-11-24/README.md), P1 rows 08 and 16. Extrude the original downward XY rectangle to a forward rectangular solid's original top face. Studio verifies native depth, target edits, refusal and fresh Open.
+- **Next MAIN:** D1897, P4 rows [15](roadmap-rows/15.md) and [21](roadmap-rows/21.md), [#44](https://github.com/barocss/cad/issues/44). Extract the Studio model evaluation owner from App and verify the same parameter refusal, retry and Worker cancellation paths in desktop Studio.
 - **Separate follow-ups:** Continue Studio App extraction in cohesive parts with affected desktop checks. [#608 Rendering](https://github.com/barocss/cad/issues/608) stays on HOLD. API inventory drift remains open. The issue tracker records [#126](https://github.com/barocss/cad/issues/126), [#613](https://github.com/barocss/cad/issues/613), [#152](https://github.com/barocss/cad/issues/152) and [#22](https://github.com/barocss/cad/issues/22) as closed.
 - **Active repository:** [barocss/cad](https://github.com/barocss/cad), based on `origin/main`. Fetch before work and preserve unexpected changes. The [migration record](../../../docs/migration/README.md) maps the former `local/cad-dev` history and issue numbers.
 - **Evidence correction:** D482 records2167 PASS/0 FAIL/2 existing SKIP in a later full-kernel run than D433. Neither result is a new full-suite PASS at this audit HEAD. [D482 record](notes/vertical-contact-refusal-2026-11-04/README.md).
