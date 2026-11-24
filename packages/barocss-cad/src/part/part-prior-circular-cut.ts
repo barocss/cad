@@ -12,7 +12,7 @@ export type PriorCircularCut = {
 };
 type Circle = { center: readonly [number, number]; radius: number; tag: string };
 type Pattern = 'linear' | 'rectangular' | 'fill' | 'path';
-const requirement = (pattern: Pattern) => `${pattern} feature pattern source needs one original circular through cut followed by one original rectangular through cut on upright rectangular stock and ${pattern === 'linear' ? 'one XY line' : pattern === 'fill' ? 'selected XY placements' : pattern === 'path' ? 'an open XY path of exact straight spans or one canonical quarter arc' : 'an XY grid'}`;
+const requirement = (pattern: Pattern) => `${pattern} feature pattern source needs one original circular through cut followed by one original rectangular through cut on upright rectangular stock and ${pattern === 'linear' ? 'one XY line' : pattern === 'fill' ? 'selected XY placements' : pattern === 'path' ? 'an open XY path of exact straight spans, one polynomial quadratic or one canonical quarter arc' : 'an XY grid'}`;
 
 function profile(part: Part) {
   if (part.solid.kind !== 'upright' || part.solid.solid.slabs.length !== 1) return;

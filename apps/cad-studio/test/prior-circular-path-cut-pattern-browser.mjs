@@ -5,13 +5,29 @@ import { choosePriorCutSource, equivalent } from './prior-cut-pattern-browser-fi
 
 const baseline = process.argv.includes('--baseline');
 const quarter = process.argv.includes('--quarter');
+const quadratic = process.argv.includes('--quadratic');
+assert.ok(!quarter || !quadratic);
 const count = quarter ? 4 : 3;
-const spacing = quarter ? 8 : 16;
-const revisedSpacing = quarter ? 9 : 14;
+const spacing = quadratic ? 10 : quarter ? 8 : 16;
+const revisedSpacing = quadratic ? 12 : quarter ? 9 : 14;
 const centersOnQuarter = pitch => Array.from({ length: count }, (_, i) => {
   const a = i * pitch / 20;
   return [10 + 20 * Math.sin(a), 10 + 20 * (1 - Math.cos(a))];
 });
+// Integrate the speed of [40t − 20t², 20t²] and invert length independently.
+const primitive = x => 5 * Math.SQRT2 * (x * Math.hypot(1, x) + Math.asinh(x));
+const centersOnQuadratic = pitch => Array.from({ length: count }, (_, i) => {
+  if (i === 0) return [10, 10];
+  let lower = 0, upper = 1;
+  for (let step = 0; step < 53; step++) {
+    const t = (lower + upper) / 2;
+    if (primitive(2 * t - 1) - primitive(-1) < pitch * i) lower = t;
+    else upper = t;
+  }
+  const t = (lower + upper) / 2;
+  return [10 + 40 * t - 20 * t ** 2, 10 + 20 * t ** 2];
+});
+const placementTolerance = quadratic ? 1e-7 : 1e-8;
 const pins = ['apps/cad-studio/test/prior-circular-path-cut-pattern-browser.mjs', 'apps/cad-studio/test/prior-cut-pattern-browser-fixture.mjs',
   'apps/cad-studio/src/app/cutPatternSource.ts', 'packages/barocss-cad-model/src/engine/doc.ts',
   'packages/barocss-cad-model/src/engine/curveFeaturePattern.ts',
@@ -19,7 +35,8 @@ const pins = ['apps/cad-studio/test/prior-circular-path-cut-pattern-browser.mjs'
   'packages/barocss-cad/src/part/part-transform.ts', 'packages/barocss-cad/src/part/part-prior-circular-cut.ts',
   'packages/barocss-cad/src/part/part-prior-rectangular-cut.ts'];
 const f = await createFlow({
-  name: 'prior-circular-path-cut-pattern', output: process.argv[2], envFrozen: quarter ? 'D1931_SOURCE_FROZEN' : 'D1911_SOURCE_FROZEN',
+  name: 'prior-circular-path-cut-pattern', output: process.argv[2],
+  envFrozen: quadratic ? 'D1950_SOURCE_FROZEN' : quarter ? 'D1931_SOURCE_FROZEN' : 'D1911_SOURCE_FROZEN',
   qualification: 'Repeat only the first original circular through-Subtract across one later rectangular through-Subtract.',
   limits: ['One upright rectangular stock, two original full-height cuts and fixed-orientation copies on a linked, level XY path.'],
   initialFiles: pins, requiredFrozen: pins,
@@ -89,7 +106,7 @@ async function inspect(label, doc, centers, placed = false) {
   assert.equal(caps.length, 2);
   assert.equal(cylinders.length, 2 * centers.length);
   for (const [x, y] of centers) {
-    const walls = cylinders.filter(wall => Math.hypot(wall.c[0] - x, wall.c[1] - y) < 1e-8);
+    const walls = cylinders.filter(wall => Math.hypot(wall.c[0] - x, wall.c[1] - y) < placementTolerance);
     assert.equal(walls.length, 2);
     const position = centers.findIndex(center => center[0] === x && center[1] === y);
     if (placed && position) for (const wall of walls) assert.ok(wall.name.includes(`@${position}`));
@@ -111,7 +128,7 @@ async function inspect(label, doc, centers, placed = false) {
     }
     const circles = cap.openings.filter(opening => opening !== rectangle);
     for (const [x, y] of centers) {
-      const rings = circles.filter(ring => ring.points.every(point => Math.abs(Math.hypot(point[0] - x, point[1] - y) - 2) < 1e-8));
+      const rings = circles.filter(ring => ring.points.every(point => Math.abs(Math.hypot(point[0] - x, point[1] - y) - 2) < placementTolerance));
       assert.equal(rings.length, 1);
       assert.deepEqual(rings[0].degree, [2, 2]);
     }
@@ -155,7 +172,8 @@ async function createPath() {
   } else {
     await button('Line').click();
     await f.page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
-    for (const point of [[6, 5, 0], [6, 21, 0], [30, 21, 0]]) {
+    const points = quadratic ? [[0, 0, 0], [20, 20, 0]] : [[6, 5, 0], [6, 21, 0], [30, 21, 0]];
+    for (const point of points) {
       const pixel = await f.page.evaluate(world => window.__studioScreenOf(world), point);
       assert.ok(pixel, 'Path point is in the sketch viewport');
       await f.page.mouse.click(pixel[0], pixel[1]);
@@ -165,7 +183,20 @@ async function createPath() {
   await button('Make curves', f.sketchPanel()).click();
   await f.page.waitForFunction(() => window.__studioDoc.direct?.objects.length === 1);
   await f.ready();
-  return (await f.snapshot('00-path-made-in-studio')).doc;
+  let { doc } = await f.snapshot('00-path-made-in-studio');
+  if (!quadratic) return doc;
+  f.phase = 'Author the exact middle pole in Direct geometry';
+  for (const [axis, value] of [['X', 20], ['Y', 0]]) {
+    await f.page.locator('.ol.direct').filter({ hasText: doc.direct.objects[0].name }).click();
+    const direct = f.page.getByRole('complementary', { name: 'Direct geometry' });
+    await field(direct, 'Control point').selectOption('1');
+    const input = field(direct, axis);
+    await input.fill(String(value));
+    await input.press('Enter');
+    await f.changed(doc);
+    doc = await f.doc();
+  }
+  return (await f.snapshot('00a-quadratic-path-authored')).doc;
 }
 async function refused(doc, history, label, reason) {
   await status('refused');
@@ -187,7 +218,10 @@ await f.run(async () => {
   assert.deepEqual(doc.nodes, stock.nodes);
   const objectId = doc.direct.objects[0].id;
   const path = await f.inspect('authored-level-path', { direct: doc.direct, checkPath: objectId });
-  if (quarter) {
+  if (quadratic) {
+    assert.deepEqual([path.degree, path.knots, path.weights], [2, [0, 0, 0, 1, 1, 1], [1, 1, 1]]);
+    assert.deepEqual(path.controlPoints, [[0, 0, 0], [20, 0, 0], [20, 20, 0]]);
+  } else if (quarter) {
     assert.deepEqual([path.degree, path.knots, path.weights], [2, [0, 0, 0, 1, 1, 1], [1, Math.SQRT1_2, 1]]);
     assert.deepEqual(path.controlPoints, [[6, 4, 0], [26, 4, 0], [26, 24, 0]]);
   } else {
@@ -203,7 +237,7 @@ await f.run(async () => {
   await field(panel(), 'Spacing').fill(String(spacing));
   const history = await stackState();
   if (baseline) {
-    await refused(doc, history, '01-circular-path-refused', quarter ? /exact straight spans/ : undefined);
+    await refused(doc, history, '01-circular-path-refused', quarter || quadratic ? /exact straight spans/ : undefined);
     return;
   }
   await status('preview');
@@ -220,15 +254,16 @@ await f.run(async () => {
   assert.deepEqual(applied.direct, doc.direct);
   assert.deepEqual([pattern.kind, pattern.parent, pattern.source, pattern.path, pattern.spacing, pattern.count],
     ['curve-feature-pattern', ref(7), ref(4), { objectId }, spacing, count]);
-  const accepted = await inspect('path-native', applied, quarter ? centersOnQuarter(spacing) : [[10, 10], [10, 26], [26, 26]], true);
+  const originalCenters = quadratic ? centersOnQuadratic(spacing) : quarter ? centersOnQuarter(spacing) : [[10, 10], [10, 26], [26, 26]];
+  const accepted = await inspect('path-native', applied, originalCenters, true);
   assert.deepEqual(accepted.filter(wall => original.some(old => old.name === wall.name)), original);
   await f.openFeatureEditor(8, 'Path source spacing');
   await f.editor().getByText('Subtract 1 (n4)', { exact: true }).waitFor();
   await field(f.editor(), 'Spacing').fill(String(revisedSpacing));
   const edited = (await f.applyEditor(applied, '05-path-spacing-edited')).doc;
   assert.deepEqual(edited.nodes.at(-1), { ...pattern, spacing: revisedSpacing });
-  const centers = quarter ? centersOnQuarter(revisedSpacing) : [[10, 10], [10, 24], [22, 26]];
-  await inspect('path-14-native', edited, centers, true);
+  const centers = quadratic ? centersOnQuadratic(revisedSpacing) : quarter ? centersOnQuarter(revisedSpacing) : [[10, 10], [10, 24], [22, 26]];
+  await inspect('path-edited-native', edited, centers, true);
   await f.undo(); await f.same(applied);
   await f.redo(); await f.same(edited);
   const saved = await f.save('circular-path-cut-pattern');

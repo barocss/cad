@@ -10,7 +10,7 @@ const near = (a, b, tolerance = 1e-7) => assert.ok(Number.isFinite(a) && Math.ab
 const path = (degree = 2, z = 0) => degree === 1
   ? { degree: 1, knots: [0, 0, 1, 2, 2], controlPoints: [[6, 5, z], [6, 21, z], [30, 21, z]], weights: [1, 1, 1] }
   : { degree: 2, knots: [0, 0, 0, 1, 1, 2, 2, 2], controlPoints: [[6, 5, z], [6, 13, z], [6, 21, z], [18, 21, z], [30, 21, z]], weights: [1, 1, 1, 1, 1] };
-const curved = () => ({ degree: 2, knots: [0, 0, 0, 1, 1, 1], controlPoints: [[6, 5, 0], [26, 15, 0], [46, 5, 0]], weights: [1, 1, 1] });
+const quadratic = () => ({ degree: 2, knots: [0, 0, 0, 1, 1, 1], controlPoints: [[0, 0, 0], [20, 0, 0], [20, 20, 0]], weights: [1, 1, 1] });
 const quarter = () => ({ degree: 2, knots: [0, 0, 0, 1, 1, 1], controlPoints: [[6, 4, 0], [26, 4, 0], [26, 24, 0]], weights: [1, Math.SQRT1_2, 1] });
 const document = (rail = path()) => ({ format: 'barocss-cad-part', version: 1, units: 'mm', parameters: { cx: 10, cy: 10, r: 2, pitch: 16, right: 28 }, features: [
   { id: 'stockSketch', kind: 'sketch', profile: 'rectangle', min: [0, 0], max: [60, 40] },
@@ -131,6 +131,38 @@ test('a canonical quarter arc places the earlier circular cut by arc length thro
   assert.equal(saveCadPart(initial), accepted);
 });
 
+test('a single polynomial quadratic places the earlier circular cut on the exact length schedule', () => {
+  // The primitive integrates 40 sqrt((1-t)²+t²) after the change of variable x=2t-1.
+  const primitive = x => 5 * Math.SQRT2 * (x * Math.hypot(1, x) + Math.asinh(x));
+  const offsets = pitch => [[0, 0], ...[pitch, 2 * pitch].map(distance => {
+    let lo = 0, hi = 1;
+    for (let step = 0; step < 53; step++) {
+      const t = (lo + hi) / 2;
+      if (primitive(2 * t - 1) - primitive(-1) < distance) lo = t;
+      else hi = t;
+    }
+    const t = (lo + hi) / 2;
+    return [40 * t - 20 * t ** 2, 20 * t ** 2];
+  })];
+  const input = document(quadratic());
+  input.parameters.pitch = 10;
+  const initial = evaluateCadPart(input), output = verify(initial, offsets(10)), accepted = saveCadPart(initial);
+  const unpatterned = structuredClone(input); unpatterned.features.pop();
+  assert.deepEqual(laterWalls(output.brep), laterWalls(evaluateCadPart(unpatterned).outputs[0].brep));
+  const edited = reevaluate(initial, { parameters: { pitch: 12 } });
+  assert.deepEqual(verify(loadCadPart(saveCadPart(edited)), offsets(12)).brep, verify(edited, offsets(12)).brep);
+  assert.throws(() => reevaluate(initial, { parameters: { pitch: 4 } }),
+    e => e instanceof CadPartError && e.feature === 'repeat' && e.code === 'GEOMETRY' && /disjoint/.test(e.message));
+  assert.throws(() => reevaluate(initial, { parameters: { pitch: 21 } }),
+    e => e instanceof CadPartError && e.feature === 'repeat' && e.code === 'PARAMETER' && /path length/.test(e.message));
+  const newerCollision = structuredClone(input);
+  newerCollision.features.find(feature => feature.id === 'laterSketch').min = [18, 10];
+  newerCollision.features.find(feature => feature.id === 'laterSketch').max = [21, 13];
+  assert.throws(() => evaluateCadPart(newerCollision),
+    e => e instanceof CadPartError && e.feature === 'repeat' && e.code === 'GEOMETRY' && /newer cut/.test(e.message));
+  assert.equal(saveCadPart(initial), accepted);
+});
+
 test('contact and overlap with any actual cavity refuse without changing the accepted source or path', () => {
   const initial = evaluateCadPart(document()), saved = saveCadPart(initial);
   for (const pitch of [3, 4]) assert.throws(() => reevaluate(initial, { parameters: { pitch } }),
@@ -148,8 +180,8 @@ test('count one keeps both original cavities and still rejects unsupported curve
   const output = verify(evaluateCadPart(single), [[0, 0]]); assert.ok(!output.brep.faces.some(face => face.name?.includes('@')));
   const quarterOne = document(quarter()); quarterOne.features.at(-1).count = 1;
   assert.deepEqual(verify(evaluateCadPart(quarterOne), [[0, 0]]).brep, output.brep);
-  const bad = document(curved()); bad.features.at(-1).count = 1;
-  assert.throws(() => evaluateCadPart(bad), e => e instanceof CadPartError && e.feature === 'repeat' && e.code === 'CAPABILITY');
+  const polynomialOne = document(quadratic()); polynomialOne.features.at(-1).count = 1;
+  assert.deepEqual(verify(evaluateCadPart(polynomialOne), [[0, 0]]).brep, output.brep);
   const nonlevel = structuredClone(single); nonlevel.features.at(-1).path.controlPoints[1][2] = 1e-12;
   assert.throws(() => evaluateCadPart(nonlevel), e => e instanceof CadPartError && e.feature === 'repeat' && e.code === 'CAPABILITY');
   for (const id of ['circleTool', 'laterTool']) {
@@ -166,7 +198,10 @@ test('other curved circular-source Paths and old reference/value guards stay ref
     assert.throws(() => evaluateCadPart(doc), e => e instanceof CadPartError && e.feature === 'repeat' && codes.includes(e.code));
     assert.deepEqual(doc, before);
   };
-  refused(doc => { doc.features.at(-1).path = curved(); });
+  refused(doc => {
+    const collinear = quadratic(); collinear.controlPoints[2] = [30, 0, 0];
+    doc.features.at(-1).path = collinear;
+  });
   refused(doc => {
     const otherRational = quarter(); otherRational.weights[1] = 0.75;
     doc.features.at(-1).path = otherRational;
