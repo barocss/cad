@@ -17,7 +17,9 @@ const output=evaluateCadPart(toPartDocument(doc)).outputs.find(body=>body.id===d
 assert.ok(output);
 const ts=[0,.25,.5,.75,1];
 const uprights=brep.edges.filter(({curve})=>curve.degree>1);
-assert.equal(uprights.length,4);
+const loft = doc.nodes.at(-1);
+const spans = loft.kind === 'loft' && Array.isArray(loft.guides) ? loft.sections.length - 1 : 1;
+assert.equal(uprights.length, 4 * spans);
 const faces=brep.faces.filter(face=>face.name.includes('.side'));
 const sample=(domain, t)=>domain[0]+(domain[1]-domain[0])*t;
 const edges=uprights.map(({id,curve})=>({
@@ -71,5 +73,31 @@ export async function verifyTwoGuideLoft(f, doc, a, b, label) {
     }
   }
   f.report.observations.push({ label, expectedVolume: volume, workerVolume: worker.volume, ...actual });
+  return actual;
+}
+
+
+export async function verifyThreeSectionTwoGuideLoft(flow, doc, label) {
+  const loft = doc.nodes.at(-1);
+  assert.deepEqual(loft.sections.map(section => section.z), [0, 10, 20]);
+  const actual = await flow.inspect(label, doc);
+  assert.ok(actual.report.valid, actual.report.issues.join('\n'));
+  assert.deepEqual(actual.report.counts, { bodies: 1, shells: 1, faces: 10, loops: 10, coedges: 40, edges: 20, vertices: 12 });
+  assert.equal(actual.report.topology[0].genus, 0);
+  const [worker] = (await flow.bodies()).bodies;
+  assert.equal(worker.key, actual.key);
+  const volume = 16808 / 7;
+  near(actual.mass.volume, volume);
+  near(worker.volume, volume);
+  near(actual.mass.centroid[2], 10);
+  for (const [x, mid] of [[0, 0], [10, 14]]) {
+    for (const upper of [false, true]) {
+      const row = upper ? [[mid, 0, 10], [mid, 0, 15], [x, 0, 20]] : [[x, 0, 0], [mid, 0, 5], [mid, 0, 10]];
+      const rail = actual.edges.find(edge => JSON.stringify(edge.controls) === JSON.stringify(row));
+      assert.ok(rail, JSON.stringify(row));
+      assert.equal(rail.uses, 2);
+    }
+  }
+  flow.report.observations.push({ label, expectedVolume: volume, workerVolume: worker.volume, nativeVolume: actual.mass.volume });
   return actual;
 }
