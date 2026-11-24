@@ -9,10 +9,12 @@ const cases = {
   '--interruption-only': { decision: 'D596', qualification: 'Interrupted first native autosave close' },
   '--with-write-denial': { decision: 'D768', qualification: 'B08-05 native autosave interruption, denial and later Restore' },
   '--with-read-recovery': { decision: 'D769', qualification: 'B08-06 malformed and unreadable recovery followed by a successful write' },
+  '--with-transient-abort': { decision: 'D1965', qualification: 'Retry an interrupted current browser-project recovery once' },
 };
 assert.ok(Object.hasOwn(cases, mode));
 const { decision, qualification } = cases[mode];
 const writeDenial = mode === '--with-write-denial', readRecovery = mode === '--with-read-recovery';
+const transientAbort = mode === '--with-transient-abort', baseline = process.argv.includes('--baseline');
 const project = decision + ' autosave recovery';
 const file = 'D596-plate.bcad';
 const original = {
@@ -37,6 +39,8 @@ const f = await createFlow({
     openReady: window.__d596.openReady,
     rejectedWrites: window.__d596.rejected,
     abortedWrites: window.__d596.aborted,
+    recoveryAttempts: window.__d596.attempts,
+    transientAborts: window.__d596.transientAborts,
     rejectedReads: window.__d596.rejectedReads,
     dirty: !!document.querySelector('[aria-label="Unsaved changes"]'),
   }),
@@ -65,7 +69,8 @@ function installScheduler({ project, file }) {
   };
   const target = 'projects/' + project + '/.barocss/autosave/' + file;
   const state = { armed: false, held: 0, committed: 0, openReady: 0, denyWrite: false, rejected: 0, aborted: 0,
-    denyRead: false, rejectedReads: 0 };
+    denyRead: false, rejectedReads: 0, attempts: 0, transientRemaining: 0, transientAborts: 0,
+    holdTransient: false, releaseTransient: null, holdRetryAfter: null, releaseRetryWrite: null, cancelledRetryWrites: 0 };
   const nativeGetFile = FileSystemFileHandle.prototype.getFile;
   FileSystemFileHandle.prototype.getFile = async function (...args) {
     if (files.get(this) === target && state.denyRead) {
@@ -83,8 +88,14 @@ function installScheduler({ project, file }) {
   };
   const stream = FileSystemWritableFileStream.prototype;
   const nativeWrite = stream.write, nativeClose = stream.close, nativeAbort = stream.abort;
-  const rejected = new WeakSet();
+  const rejected = new WeakSet(), stagedRetry = new WeakSet();
   stream.write = async function (...args) {
+    if (streams.get(this) === target && state.holdRetryAfter === state.transientAborts) {
+      state.holdRetryAfter = null;
+      stagedRetry.add(this);
+      await new Promise(resolve => { state.releaseRetryWrite = resolve; });
+      state.releaseRetryWrite = null;
+    }
     if (streams.get(this) === target && state.denyWrite) {
       state.denyWrite = false;
       state.rejected++;
@@ -96,10 +107,22 @@ function installScheduler({ project, file }) {
   stream.abort = async function (...args) {
     const result = await nativeAbort.apply(this, args);
     if (rejected.has(this)) state.aborted++;
+    if (stagedRetry.has(this)) state.cancelledRetryWrites++;
     return result;
   };
   stream.close = async function (...args) {
     if (streams.get(this) !== target) return nativeClose.apply(this, args);
+    state.attempts++;
+    if (state.transientRemaining > 0) {
+      state.transientRemaining--;
+      if (state.holdTransient) {
+        state.holdTransient = false;
+        await new Promise(resolve => { state.releaseTransient = resolve; });
+        state.releaseTransient = null;
+      }
+      state.transientAborts++;
+      throw new DOMException('Injected transient autosave close interruption', 'AbortError');
+    }
     if (state.armed) {
       state.armed = false;
       state.held++;
@@ -167,6 +190,115 @@ async function requireNoOffer(label) {
   assert.ok(!state.notices.some(notice => /recovery copy could not be read/i.test(notice)), JSON.stringify(state.notices));
 }
 
+async function verifyTransientAbort(initial) {
+  f.phase = 'One native close abort after an accepted checkpoint';
+  const first = await f.setParameter('H', 11, '10-first-recovery-checkpoint');
+  await f.page.waitForFunction(() => window.__d596.committed === 1);
+  const firstFiles = await projectFiles();
+  assert.deepEqual(JSON.parse(firstFiles.recovery), first.doc);
+  assert.equal(firstFiles.saved, initial.saved);
+  await f.page.evaluate(() => { window.__d596.transientRemaining = 1; });
+  const latest = await f.setParameter('H', 14, '11-edit-before-transient-abort');
+  await f.page.waitForFunction(() => window.__d596.transientAborts === 1);
+  if (baseline) {
+    await f.waitToast(/automatic recovery is unavailable/i);
+    assert.deepEqual(await projectFiles(), firstFiles);
+    const state = await f.snapshot('12-prior-no-retry');
+    assert.equal(state.recoveryAttempts, 2);
+    assert.equal(state.doc.parameters.H, 14);
+    return;
+  }
+  await f.page.waitForFunction(() => window.__d596.committed === 2);
+  const recovered = await projectFiles();
+  assert.deepEqual(JSON.parse(recovered.recovery), latest.doc);
+  assert.equal(recovered.saved, initial.saved);
+  const retried = await f.snapshot('12-current-recovery-retried');
+  assert.equal(retried.recoveryAttempts, 3);
+  assert.ok(!retried.notices.some(notice => /automatic recovery is unavailable/i.test(notice)));
+  assert.equal(retried.dirty, true);
+  assert.ok(Math.abs(retried.bodies.bodies[0].volume - 2800) < 1e-7);
+
+  f.phase = 'A newer edit revokes the older retry';
+  const holdNext = () => f.page.evaluate(() => {
+    window.__d596.transientRemaining = 1;
+    window.__d596.holdTransient = true;
+  });
+  const release = () => f.page.evaluate(() => window.__d596.releaseTransient());
+  await holdNext();
+  await f.setParameter('H', 15, '13-older-edit-in-flight');
+  await f.page.waitForFunction(() => window.__d596.releaseTransient !== null);
+  const next = await f.setParameter('H', 16, '14-newer-edit-supersedes');
+  await release();
+  await f.page.waitForFunction(() => window.__d596.committed === 3);
+  const latestFiles = await projectFiles();
+  assert.deepEqual(JSON.parse(latestFiles.recovery), next.doc);
+  assert.equal(latestFiles.saved, initial.saved);
+  const nextState = await f.snapshot('15-newer-recovery-wins');
+  assert.equal(nextState.recoveryAttempts, 5);
+  assert.equal(nextState.transientAborts, 2);
+
+  f.phase = 'A primary Save revokes the older retry';
+  await holdNext();
+  const final = await f.setParameter('H', 17, '16-edit-before-explicit-save');
+  await f.page.waitForFunction(() => window.__d596.releaseTransient !== null);
+  await button('Save').click();
+  await f.page.getByLabel('Unsaved changes', { exact: true }).waitFor({ state: 'hidden' });
+  await release();
+  await f.page.waitForFunction(() => window.__d596.transientAborts === 3);
+  await f.page.waitForTimeout(900);
+  const finalFiles = await projectFiles();
+  assert.deepEqual(JSON.parse(finalFiles.saved), final.doc);
+  assert.equal(finalFiles.recovery, latestFiles.recovery);
+  const finalState = await f.snapshot('17-save-revoked-retry');
+  assert.equal(finalState.recoveryAttempts, 6);
+  assert.ok(!finalState.notices.some(notice => /automatic recovery is unavailable/i.test(notice)));
+
+  f.phase = 'A second transient abort warns without a third attempt';
+  await f.page.evaluate(() => { window.__d596.transientRemaining = 2; });
+  await f.setParameter('H', 18, '18-edit-before-two-aborts');
+  await f.waitToast(/automatic recovery is unavailable/i);
+  const exhausted = await f.snapshot('19-retry-exhausted');
+  assert.equal(exhausted.recoveryAttempts, 8);
+  assert.equal(exhausted.transientAborts, 5);
+  assert.deepEqual(await projectFiles(), finalFiles);
+
+  f.phase = 'A Save before native close cancels a retry that already reached the stream';
+  await f.dismissToasts();
+  await f.page.evaluate(() => {
+    window.__d596.transientRemaining = 1;
+    window.__d596.holdRetryAfter = window.__d596.transientAborts + 1;
+  });
+  const newest = await f.setParameter('H', 19, '20-edit-before-queued-retry');
+  await f.page.waitForFunction(() => window.__d596.releaseRetryWrite !== null);
+  await button('Save').click();
+  await f.page.getByLabel('Unsaved changes', { exact: true }).waitFor({ state: 'hidden' });
+  await f.page.evaluate(() => window.__d596.releaseRetryWrite());
+  await f.page.waitForFunction(() => window.__d596.cancelledRetryWrites === 1);
+  const savedLatest = await projectFiles();
+  assert.deepEqual(JSON.parse(savedLatest.saved), newest.doc);
+  assert.equal(savedLatest.recovery, latestFiles.recovery);
+  const state = await f.snapshot('21-save-cancelled-staged-retry');
+  assert.equal(state.recoveryAttempts, 9);
+  assert.ok(!state.notices.some(notice => /automatic recovery is unavailable/i.test(notice)));
+
+  f.phase = 'Reopen the primary and restore the retried recovery';
+  await f.page.evaluate(() => { window.__d596.transientRemaining = 1; });
+  const recoverable = await f.setParameter('H', 20, '22-last-edit-before-reopen');
+  await f.page.waitForFunction(() => window.__d596.committed === 4);
+  const ready = await projectFiles();
+  assert.deepEqual(JSON.parse(ready.recovery), recoverable.doc);
+  assert.equal(ready.saved, savedLatest.saved);
+  await reopen(newest.doc);
+  await offer().waitFor();
+  assert.deepEqual(await projectFiles(), ready);
+  await f.snapshot('23-retried-recovery-offered');
+  await offer().getByRole('button', { name: 'Restore autosaved work', exact: true }).click();
+  await f.same(recoverable.doc);
+  const restored = await f.snapshot('24-retried-recovery-restored');
+  assert.ok(Math.abs(restored.bodies.bodies[0].volume - 4000) < 1e-7);
+  assert.equal((await projectFiles()).saved, savedLatest.saved);
+}
+
 await f.run(async () => {
   const origin = new URL(f.server.resolvedUrls.local[0]).origin;
   const newContext = f.browser.newContext.bind(f.browser);
@@ -191,6 +323,7 @@ await f.run(async () => {
   assert.deepEqual(JSON.parse(initial.saved), original);
   assert.equal(initial.recovery, null);
   f.report.firstSavedSHA256 = sha256(initial.saved);
+  if (transientAbort) return verifyTransientAbort(initial);
 
   await f.page.evaluate(() => { window.__d596.armed = true; });
   await f.setParameter('H', 11, '01-first-unsaved-edit');

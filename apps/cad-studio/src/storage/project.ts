@@ -70,9 +70,9 @@ export async function readVersions(store: ProjectStore, part: string): Promise<{
 }
 
 /** The work since the last save, kept in the project. */
-export async function writeAutosave(store: ProjectStore, part: string, doc: StudioDoc) {
+export async function writeAutosave(store: ProjectStore, part: string, doc: StudioDoc, isCurrent?: () => boolean) {
   const bytes = encodeStudioFile(doc);
-  return { ...await store.write(autosavePath(part), bytes), bytes };
+  return { ...await store.write(autosavePath(part), bytes, isCurrent ? { isCurrent } : undefined), bytes };
 }
 /** A checkpoint this tab completed before Save. Never remove or rewrite its recovery bytes. */
 export async function rememberSavedCheckpoint(store: ProjectStore, part: string, saved: StoreFile, checkpoint: StoreFile): Promise<void> {

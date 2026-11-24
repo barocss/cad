@@ -95,7 +95,11 @@ export function handleStore(root: DirHandle, kind: 'folder' | 'browser', scope?:
     },
     async write(path, bytes, o = {}) {
       const parts = checkPath(path);
+      const requireCurrent = () => {
+        if (o.isCurrent && !o.isCurrent()) throw new DOMException('The recovery write was superseded.', 'AbortError');
+      };
       return mutate(path, async () => {
+        requireCurrent();
         await checkTag(path, o.expect);
         const dir = (await folderOf(root, parts, true))!;
         const name = parts[parts.length - 1];
@@ -106,7 +110,11 @@ export function handleStore(root: DirHandle, kind: 'folder' | 'browser', scope?:
         try {
           if (!h.createWritable) throw refusal('STORAGE_UNAVAILABLE', 'this browser cannot write files here: export the project instead');
           const w = await h.createWritable();
-          try { await w.write(bytes); await w.close(); } catch (e) { await w.abort?.().catch(() => {}); throw e; }
+          try {
+            await w.write(bytes);
+            requireCurrent();
+            await w.close();
+          } catch (e) { await w.abort?.().catch(() => {}); throw e; }
         } catch (e) {
           if (placeholder?.size === 0) {
             try {

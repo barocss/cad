@@ -288,7 +288,7 @@ export function useProject(cb: ProjectCallbacks) {
         }
       },
       /** The work kept in the project a moment after a change (no-op until the document has a path there). */
-      async autosave(doc: StudioDoc) {
+      async autosave(doc: StudioDoc, currentSource?: () => boolean) {
         const { store, part } = live.current; if (!store || !part) return;
         const owner = versionOwner();
         let state = autosaves.current;
@@ -296,10 +296,19 @@ export function useProject(cb: ProjectCallbacks) {
         if (!state || !currentVersion(state.owner)) {
           state = { owner, next: 0, settled: 0, warned: false }; autosaves.current = state;
         }
-        const order = ++state.next;
+        const order = ++state.next, saveOwner = saves.current, saveOrder = saveOwner.next;
+        const retryCurrent = () => autosaves.current === state && order === state.next && currentOpen(owner)
+          && saves.current === saveOwner && saveOwner.next === saveOrder && currentSource?.() === true;
         try {
-          const written = await writeAutosave(store, part, doc);
-          if (autosaves.current !== state || !currentVersion(owner) || order < state.settled) return;
+          const written = await writeAutosave(store, part, doc).catch(error => {
+            if (store.kind !== 'browser' || !currentSource || !(error instanceof DOMException) || error.name !== 'AbortError') throw error;
+            if (!retryCurrent()) return undefined;
+            return writeAutosave(store, part, doc, retryCurrent).catch(retryError => {
+              if (retryCurrent()) throw retryError;
+              return undefined;
+            });
+          });
+          if (!written || autosaves.current !== state || !currentVersion(owner) || order < state.settled) return;
           state.settled = order; state.warned = false; state.checkpoint = written;
           const boundary = state.boundary;
           if (boundary && order <= boundary.through) {

@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1965: [Retry a transient browser-project autosave abort](notes/browser-autosave-transient-retry-2026-11-25/README.md), #170 DOC-05. Verify the native checkpoint, stale request revocation and actual project Restore.
 - D1964: [End a downward rectangular Extrude at the original upper disk](notes/downward-rectangle-to-original-disk-2026-11-25/README.md), #222. Verify reflected corners, strict radial contact, live edits and desktop fresh Open.
 - D1963: [Expose the original annular inlet plane to local Agent proposals](notes/agent-perpendicular-annular-inlet-plane-2026-11-25/README.md), #324. Verify the named source and donor, stale refusal, explicit Studio acceptance and native Open.
 - D1962: [Expire a Parameters refusal after a valid edit](notes/parameter-refusal-notice-lifetime-2026-11-25/README.md), #44. Verify refusal visibility, successful retry, Undo/Redo and native project reopen.

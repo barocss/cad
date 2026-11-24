@@ -561,7 +561,11 @@ export function App() {
   useEffect(() => { void project.loadRecent(); }, []);
   useEffect(() => {
     if (!dirty || inPlace) return;
-    if (project.view.part) { const t = setTimeout(() => void project.autosave(doc), 800); return () => clearTimeout(t); }
+    if (project.view.part) {
+      const current = () => docNow.current === doc && dirtyNow.current && !inPlaceNow.current;
+      const t = setTimeout(() => { if (current()) void project.autosave(doc, current); }, 800);
+      return () => clearTimeout(t);
+    }
     // (A mesh's blobs to IndexedDB beside it: the localStorage copy names them, M1.)
     // (O9, REVIEW-A1: the blobs stored before the copy that names them, keepRecovery; none written once overtaken or saved.)
     let live = true;

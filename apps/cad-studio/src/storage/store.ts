@@ -20,9 +20,10 @@ export interface ProjectStore {
   read(path: string): Promise<StoreFile | null>;
   /**
    * Writes a file (its folders made). `expect`: the tag the caller read there, or null for "no file yet"; anything else
-   * there is refused, STORAGE_CHANGED. Absent: written whatever is there.
+   * there is refused, STORAGE_CHANGED. Absent: write whatever is there.
+   * A browser-project retry may supply a currentness check before writing and before handing bytes to native close.
    */
-  write(path: string, bytes: Uint8Array, o?: { expect?: string | null }): Promise<{ tag: string }>;
+  write(path: string, bytes: Uint8Array, o?: { expect?: string | null; isCurrent?(): boolean }): Promise<{ tag: string }>;
   /** Removes a file. If supplied, expect must match its current tag. */
   remove(path: string, o?: { expect?: string }): Promise<void>;
 }
