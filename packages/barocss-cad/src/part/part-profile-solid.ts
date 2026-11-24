@@ -89,8 +89,7 @@ export function profileSolidOperation(f: CadPartFeature & Record<string, unknown
         if (Object.hasOwn(f, 'guide')) fail('INPUT', 'loft: two guides cannot be combined with the single guide');
         if (f.smooth !== undefined && f.smooth !== false) fail('INPUT', 'loft: two guides require ruled sections');
         const count = (list as unknown[]).length;
-        if (count !== 2 && (count !== 3 || framedSections))
-          fail('INPUT', 'loft: two guides require two sections or three horizontal height sections');
+        if (count !== 2 && count !== 3) fail('INPUT', 'loft: two guides require two or three sections');
       }
       if (twoGuides && !framedSections) {
         const sections = (list as unknown[]).map((sec, i) => {
@@ -124,7 +123,7 @@ export function profileSolidOperation(f: CadPartFeature & Record<string, unknown
         const framed = (list as unknown[]).map((sec, i) => {
           if (!isRecord(sec) || sec.frame === undefined || sec.z !== undefined) return fail('INPUT', `sections[${i}] need an explicit frame without z`);
           if (twoGuides && (Object.hasOwn(sec, 'z') || Object.hasOwn(sec, 'profile')))
-            return fail('INPUT', 'loft: two guides need two framed sketches without z heights');
+            return fail('INPUT', 'loft: two guides need framed sketches without z heights');
           if (Object.hasOwn(sec, 'profile')) {
             if (Object.hasOwn(sec, 'sketch') || !isRecord(sec.profile) || sec.profile.kind !== 'ellipse') return fail('INPUT', `sections[${i}] must provide an ellipse profile or a sketch, never both`);
             return { profile: sec.profile as unknown as Exclude<LoftSectionInput['profile'], readonly ProfileSegmentInput[]>, frame: sec.frame as unknown as LoftSectionFrame, tags: undefined };

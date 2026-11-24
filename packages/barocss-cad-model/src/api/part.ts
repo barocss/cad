@@ -339,8 +339,8 @@ export class StudioPart extends Part<StudioDoc> {
    * A loft through closed sketches, choosing its new body. Section frames and guide controls are copied snapshots
    * in world mm; later edits to the source curve or caller's arrays do not drive this feature. A Bézier guide requires
    * explicit frames; a `nurbs` guide (any polynomial B-spline through a vertex of each section) takes sections by z.
-   * A pair of quadratic Bézier `guides` takes two supported rectangular sections. Three horizontal rectangles also
-   * work when the middle rectangle and both guide contacts meet exactly at the middle station.
+   * A pair of quadratic Bézier `guides` takes two supported rectangular sections. Three rectangles also work with
+   * an exact halfway section and matching rail contacts. Use horizontal z heights or one exact rigid frame orientation.
    * Only a successfully evaluated document is returned; a refusal leaves this part and the inputs unchanged.
    */
   loft(sections: readonly StudioLoftSection[], options: StudioLoftOptions = {}): this {

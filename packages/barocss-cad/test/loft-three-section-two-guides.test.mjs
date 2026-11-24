@@ -59,3 +59,39 @@ test('three-section two-guide Loft refuses a nonmidpoint station, an off-rail re
   assert.throws(() => build({ sections: [sections[0], rectangle(15, 12, 10), sections[2]] }), /middle|endpoints/);
   assert.throws(() => build({ smooth: true }), /ruled/);
 });
+
+test('three tilted sections retain the native topology, split guides and rigid mass', () => {
+  const world = ([x, y, z]) => [20 + x, 0.6 * y + 0.8 * z - 10, -0.8 * y + 0.6 * z + 7];
+  const framed = sections.map(({ profile, z }) => ({
+    profile, frame: { origin: world([0, 0, z]), xAxis: [1, 0, 0], yAxis: [0, 0.6, -0.8] },
+  }));
+  const worldGuides = guides.map(guide => ({ ...guide, controlPoints: guide.controlPoints.map(world) }));
+  const { brep, mass } = build({ sections: framed, guides: worldGuides });
+  const local = build().brep;
+  const report = checkBrep(brep, { strict: true, pcurveSamples: 13 });
+  assert.ok(report.valid, report.issues.join('\n'));
+  assert.deepEqual(report.counts, { bodies: 1, shells: 1, faces: 10, loops: 10, coedges: 40, edges: 20, vertices: 12 });
+  assert.equal(report.topology[0].genus, 0);
+  close(report.maximumPcurveGap, 0);
+  assert.deepEqual(brep.faces.map(({ id, name }) => [id, name]), local.faces.map(({ id, name }) => [id, name]));
+  assert.deepEqual(brep.edges.map(({ id, name }) => [id, name]), local.edges.map(({ id, name }) => [id, name]));
+  assert.ok(brep.coedges.every(use => use.pcurve));
+  assert.deepEqual(brep.coedges.map(use => use.pcurve), local.coedges.map(use => use.pcurve));
+  for (const controls of [
+    [[0, 0, 0], [0, 0, 5], [0, 0, 10]], [[0, 0, 10], [0, 0, 15], [0, 0, 20]],
+    [[10, 0, 0], [14, 0, 5], [14, 0, 10]], [[14, 0, 10], [14, 0, 15], [10, 0, 20]],
+  ]) {
+    const poles = JSON.stringify(controls.map(world));
+    assert.ok(brep.edges.some(edge => edge.curve.degree === 2 && JSON.stringify(edge.curve.controlPoints) === poles), poles);
+  }
+  for (const props of [mass(1), brepMassProperties(brep, 1)]) {
+    close(props.volume, 16808 / 7);
+    const center = world([95490 / 14707, 12603474 / 2573725, 10]);
+    props.centroid.forEach((value, i) => close(value, center[i]));
+  }
+  for (const [index, origin] of [[1, world([1, 0, 10])], [2, world([1, 0, 20])], [1, world([0, 0, 9])]]) {
+    const invalid = framed.map((section, i) => i === index ? { ...section, frame: { ...section.frame, origin } } : section);
+    assert.throws(() => build({ sections: invalid, guides: worldGuides }), /exact pure-normal middle and upper offsets/);
+  }
+  assert.throws(() => build({ sections: [framed[0], sections[1], framed[2]], guides: worldGuides }), /finite frames/);
+});

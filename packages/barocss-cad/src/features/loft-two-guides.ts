@@ -39,27 +39,36 @@ export function twoGuideLoftSolid(input: LoftInput): { brep: Brep; mass: (densit
   if (!Array.isArray(input.guides) || input.guides.length !== 2) return fail('require exactly two quadratic Béziers');
   if (Object.hasOwn(input, 'guide')) return fail('cannot be combined with the single guide');
   if (input.smooth !== undefined && input.smooth !== false) return fail('require ruled sections');
-  if (Array.isArray(input.sections) && input.sections.length === 3)
-    return threeSectionTwoGuideLoft(input, buildTwoGuideLoft, guideControls, fail);
-  if (!Array.isArray(input.sections) || input.sections.length !== 2) return fail('require two sections or three horizontal height sections');
-  if (!input.sections.some(section => section && Object.hasOwn(section, 'frame'))) return buildTwoGuideLoft(input, input.guides);
+  if (!Array.isArray(input.sections) || (input.sections.length !== 2 && input.sections.length !== 3))
+    return fail('require two or three sections');
+  const three = input.sections.length === 3;
+  if (!input.sections.some(section => section && Object.hasOwn(section, 'frame')))
+    return three ? threeSectionTwoGuideLoft(input, buildTwoGuideLoft, guideControls, fail) : buildTwoGuideLoft(input, input.guides);
 
   const frames = Array.from(input.sections, section => {
     const frame = section?.frame;
     if (!frame || Object.hasOwn(section, 'z') || !pointInRange(frame.origin) || !pointInRange(frame.xAxis) || !pointInRange(frame.yAxis))
-      return fail('require finite frames on both sections and no z heights');
+      return fail(three ? 'require finite frames on all three sections and no z heights' : 'require finite frames on both sections and no z heights');
     return { origin: frame.origin, u: frame.xAxis, v: frame.yAxis };
   });
   const common = admitLoftCommonFrame(frames, fail);
-  const upper = frames[1], height = loftFrameLocal(common, upper.origin)[2];
-  if (!(height >= ExtrudedProfileLimits.minimumLengthMM)) return fail('require two separated heights in increasing order');
-  // Project the in-plane shift at the upper station to avoid a residual from the normal part.
+  const upper = frames[three ? 2 : 1], height = loftFrameLocal(common, upper.origin)[2];
+  if (three ? !(height / 2 >= ExtrudedProfileLimits.minimumLengthMM) : !(height >= ExtrudedProfileLimits.minimumLengthMM))
+    return fail(three ? 'require three separated heights in increasing order' : 'require two separated heights in increasing order');
+  // Three sections retain only the exact pure-normal midpoint and endpoint. Do not
+  // treat a floating transverse projection of a normal displacement as a real shift.
+  if (three && (!loftFramePoint(common, [0, 0, height / 2]).every((p, i) => p === frames[1].origin[i])
+    || !loftFramePoint(common, [0, 0, height]).every((p, i) => p === upper.origin[i])))
+    return fail('three framed sections need exact pure-normal middle and upper offsets');
+  // The existing pair still admits an exactly reconstructed in-plane upper shift.
   const normalOrigin = loftFramePoint(common, [0, 0, height]);
-  const [dx, dy] = loftFrameLocal({ ...common, origin: normalOrigin }, upper.origin);
+  const [dx, dy] = three ? [0, 0] : loftFrameLocal({ ...common, origin: normalOrigin }, upper.origin);
   if (!loftFramePoint(common, [dx, dy, height]).every((p, i) => p === upper.origin[i]))
     return fail('need to reconstruct the upper frame origin exactly');
   const sections = input.sections.map((section, i): LoftSectionInput => {
-    if (!Array.isArray(section.profile)) return fail('require a four-line rectangle on both framed sections');
+    if (!Array.isArray(section.profile))
+      return fail(three ? 'require a four-line rectangle on all three framed sections' : 'require a four-line rectangle on both framed sections');
+    if (three) return { profile: section.profile, z: i * (height / 2) };
     if (i === 0) return { profile: section.profile, z: 0 };
     if (dx === 0 && dy === 0) return { profile: section.profile, z: height };
 
@@ -88,9 +97,11 @@ export function twoGuideLoftSolid(input: LoftInput): { brep: Brep; mass: (densit
     const [start, middle, end] = guideControls(guide, index);
     return { kind: 'quadratic-bezier', controlPoints: [local(start, 0), local(middle, height / 2), local(end, height)] };
   };
-  const local = buildTwoGuideLoft({ ...input, sections }, [localGuide(input.guides[0], 1), localGuide(input.guides[1], 2)]);
+  const guides: NonNullable<LoftInput['guides']> = [localGuide(input.guides[0], 1), localGuide(input.guides[1], 2)];
+  const local = three ? threeSectionTwoGuideLoft({ ...input, sections, guides }, buildTwoGuideLoft, guideControls, fail)
+    : buildTwoGuideLoft({ ...input, sections }, guides);
   const world = placeLoftInFrame(local, common, fail);
-  registerTwoGuideLoftDisplay(world.brep);
+  if (!three) registerTwoGuideLoftDisplay(world.brep);
   return world;
 }
 

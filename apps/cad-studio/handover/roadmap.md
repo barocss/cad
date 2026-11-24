@@ -1,13 +1,13 @@
 # CAD roadmap — current status and execution order
 
-Updated 2026-11-25 · Priority authority: D520 · Latest delivery: D1947 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
+Updated 2026-11-25 · Priority authority: D520 · Latest delivery: D1948 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
 
 This is the only current status index. Detailed tracks define acceptance; the 34 stable row pages retain scope and issue navigation. Immutable decision notes retain results. Do not append chronological status paragraphs here. [D520 decision](notes/cad-roadmap-replan-2026-11-04/README.md) supersedes D445 execution order and historical next-item text, while retaining its safeguards and bounded proofs.
 
 ## Now and next
 
-- **Current position:** [D1947](notes/agent-three-section-loft-approval-2026-11-25/README.md), P1 rows 7, 8 and 12. The local Agent discovers, proposes and explains refusal for the exact three-section two-guide Loft. Studio validates explicit approval and native Open.
-- **Next MAIN:** D1948, P5 rows 7, 8, 24 and 30. Extend the three-section two-guide Loft to a shared tilted frame with exact normal offsets for [#174](https://github.com/barocss/cad/issues/174). Verify the world rails, strict native middle ring and desktop Open.
+- **Current position:** [D1948](notes/tilted-three-section-two-guide-loft-2026-11-25/README.md), P5 rows 7, 8, 24 and 30. The exact two-guide Loft accepts three rectangular sections in a shared tilted frame. Studio verifies both rails, the native middle ring, History refusal and fresh Open.
+- **Next MAIN:** D1949, P5 rows 7, 8 and 12. Replace a tilted three-section Loft middle source in History with a rectangle at the same exact frame for [#174](https://github.com/barocss/cad/issues/174). Preserve ownership, rails and native Save/Open.
 - **Separate follow-ups:** Continue Studio App extraction in cohesive parts with affected desktop checks. [#608 Rendering](https://github.com/barocss/cad/issues/608) stays on HOLD. API inventory drift remains open. The issue tracker records [#126](https://github.com/barocss/cad/issues/126), [#613](https://github.com/barocss/cad/issues/613), [#152](https://github.com/barocss/cad/issues/152) and [#22](https://github.com/barocss/cad/issues/22) as closed.
 - **Active repository:** [barocss/cad](https://github.com/barocss/cad), based on `origin/main`. Fetch before work and preserve unexpected changes. The [migration record](../../../docs/migration/README.md) maps the former `local/cad-dev` history and issue numbers.
 - **Evidence correction:** D482 records2167 PASS/0 FAIL/2 existing SKIP in a later full-kernel run than D433. Neither result is a new full-suite PASS at this audit HEAD. [D482 record](notes/vertical-contact-refusal-2026-11-04/README.md).

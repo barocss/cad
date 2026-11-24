@@ -314,3 +314,26 @@ test('public loft: exact two guides through three sections preserve geometry and
   assert.throws(() => accepted.loft([sections[0], rectangle(14, 12, 9), sections[2]], options), /half|middle|midpoint/);
   assert.deepEqual(accepted.doc, before);
 });
+
+test('public loft: exact two guides can span three tilted frames through native reopen', async () => {
+  const world = ([x, y, z]: Point): Point => [20 + x, 0.6 * y + 0.8 * z - 10, -0.8 * y + 0.6 * z + 7];
+  const rectangle = (w: number, d: number, z: number) => ({
+    sketch: sketch().rectangle({ w, d, x: 0, y: 0 }),
+    frame: { origin: world([0, 0, z]), xAxis: [1, 0, 0] as Point, yAxis: [0, 0.6, -0.8] as Point },
+  });
+  const sections = [rectangle(10, 6, 0), rectangle(14, 12, 10), rectangle(10, 6, 20)];
+  const rail = (x: number, middle: number) => ({
+    kind: 'quadratic-bezier' as const, controlPoints: [world([x, 0, 0]), world([middle, 0, 10]), world([x, 0, 20])] as QuadraticControls,
+  });
+  const options: StudioLoftOptions = { guides: [rail(0, 0), rail(10, 18)] };
+  const base = part('tilted three-section loft'), accepted = base.loft(sections, options);
+  const doc = accepted.doc, loft = doc.nodes.at(-1);
+  assert.ok(loft?.kind === 'loft');
+  assert.deepEqual(loft.sections, sections.map(({ frame }, sketch) => ({ sketch, frame })));
+  assert.deepEqual(loft.guides, options.guides);
+  assert.equal(checkNode(loft, doc.nodes, doc.parameters), null);
+  await reopened(accepted, 16808 / 7, world([95490 / 14707, 12603474 / 2573725, 10]));
+  assert.throws(() => base.loft([sections[0], { sketch: sections[1].sketch, z: 10 }, sections[2]], options),
+    /use either heights or explicit frames/);
+  assert.deepEqual(accepted.doc, doc);
+});

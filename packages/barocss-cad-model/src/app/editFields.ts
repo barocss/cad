@@ -514,8 +514,9 @@ function editFieldsRaw(nodes: Nodes, i: number, bearingAssembly?: BearingAssembl
         if (!Object.hasOwn(sec, 'frame')) number('z' + k, `Section ${k + 1} · height`, 'mm', n => num((n as typeof node).sections[k].z), (n, v) => ({ ...(n as typeof node), sections: (n as typeof node).sections.map((x, j) => j === k && !Object.hasOwn(x, 'frame') && x.frame === undefined ? { ...x, z: v } : x) }));
       });
       if (node.guides) {
-        const frame = node.sections[0].frame, upper = node.sections[1]?.frame;
-        const middleOrigin = frame && upper && add(frame.origin, scale(sub(upper.origin, frame.origin), 0.5));
+        const frame = node.sections[0].frame, second = node.sections[1]?.frame;
+        const middleOrigin = frame && second && (node.sections.length === 3 ? second.origin
+          : add(frame.origin, scale(sub(second.origin, frame.origin), 0.5)));
         for (const slot of [0, 1] as const) for (const axis of [0, 1] as const) {
           const direction = frame && (axis === 0 ? frame.xAxis : frame.yAxis);
           const coordinate = (point: readonly number[]) => middleOrigin && direction ? dot(sub(point, middleOrigin), direction) : point[axis];

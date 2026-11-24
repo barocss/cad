@@ -114,13 +114,14 @@ export function twoGuideLoftSections(nodes: readonly ModelNode[], picked: readon
   const planes = sketches.map(planeOf);
   const plane = xyPlane(), sections: { node: SketchNode; z: number; source: number }[] = [];
   if (!planes.every(p => p.normal.every((normal, axis) => normal === plane.normal[axis]))) {
-    if (picked.length === 3) return { error: 'For a two-guide loft through three sections, use sketch planes that face +Z.' };
-    const [first, second] = planes;
-    if (!first.normal.every((normal, axis) => normal === second.normal[axis] && first.xAxis[axis] === second.xAxis[axis]))
-      return { error: 'For a two-guide loft, use two sketch planes with the same normal and X axis.' };
-    const height = dot(sub(second.origin, first.origin), first.normal);
-    if (height === 0) return { error: 'For a two-guide loft, put each sketch on a different offset plane.' };
-    return framedLoftSections(nodes, height > 0 ? picked : [picked[1], picked[0]], params);
+    const first = planes[0];
+    if (!planes.every(section => first.normal.every((normal, axis) => normal === section.normal[axis] && first.xAxis[axis] === section.xAxis[axis])))
+      return { error: 'For a two-guide loft, use sketch planes with the same normal and X axis.' };
+    const ordered = picked.map((source, i) => ({ source, height: dot(sub(planes[i].origin, first.origin), first.normal) }))
+      .sort((a, b) => a.height - b.height);
+    if (ordered.some((section, i) => i > 0 && section.height === ordered[i - 1].height))
+      return { error: 'For a two-guide loft, put each sketch on a different offset plane.' };
+    return copyFramedLoftSections(nodes, ordered.map(section => section.source), params);
   }
   for (const [i, source] of picked.entries()) {
     const sketch = sketches[i];
@@ -157,10 +158,16 @@ export function loftSections(nodes: readonly ModelNode[], picked: readonly numbe
   return { plane: base, sections: out };
 }
 
-/** Guided loft sections: keep the picked order and authored sketches in their own world-mm frames (parameter-bound sizes as the numbers they have now, a snapshot; a missing parameter is refused). */
-export function framedLoftSections(nodes: readonly ModelNode[], picked: readonly number[], params: Params = {}): { sections: { node: SketchNode; frame: LoftSectionFrame; source: number }[] } | { error: string } {
+/** The single Bézier guide keeps the two picked sections in authored order. */
+export function framedLoftSections(nodes: readonly ModelNode[], picked: readonly number[], params: Params = {}) {
   if (picked.length !== 2) return { error: 'A guided loft needs exactly two finished sketches.' };
-  if (new Set(picked).size !== picked.length) return { error: 'Pick two different sketches for the guided loft.' };
+  return copyFramedLoftSections(nodes, picked, params);
+}
+
+/** Keep the supplied order and snapshot each sketch in its own world-mm frame. */
+function copyFramedLoftSections(nodes: readonly ModelNode[], picked: readonly number[], params: Params):
+  { sections: { node: SketchNode; frame: LoftSectionFrame; source: number }[] } | { error: string } {
+  if (new Set(picked).size !== picked.length) return { error: 'Pick different sketches for the guided loft.' };
   const sections: { node: SketchNode; frame: LoftSectionFrame; source: number }[] = [];
   for (const source of picked) {
     const node = nodes[source];

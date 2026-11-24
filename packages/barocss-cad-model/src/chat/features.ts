@@ -200,9 +200,11 @@ export function checkNode(node: unknown, nodes: readonly ModelNode[], parameters
     if (node.guides === undefined) return 'loft.guides: give two quadratic Bézier guides or omit the field';
     if (Object.hasOwn(node, 'guide')) return 'loft.guides: use either guide or guides';
     if (node.smooth === true) return 'loft.guides: use ruled sections';
-    if (!Array.isArray(node.sections) || (node.sections.length !== 2 && node.sections.length !== 3)
-      || node.sections.some(s => Object.keys(s).some(k => k !== 'sketch' && k !== 'z')))
-      return 'loft.sections: two guides need two or three {sketch, z} sections';
+    if (!Array.isArray(node.sections) || (node.sections.length !== 2 && node.sections.length !== 3))
+      return 'loft.sections: two guides need two or three sections';
+    const position = Object.hasOwn(node.sections[0], 'frame') ? 'frame' : 'z';
+    if (node.sections.some(section => !Object.hasOwn(section, position) || Object.keys(section).some(key => key !== 'sketch' && key !== position)))
+      return 'loft.sections: use either heights or explicit frames for every section';
   }
   if ((kind === 'fillet' || kind === 'chamfer') && (node.edges as string[]).some(e => ellipseSideEdge(nodes, e))) return `${kind}.edges: ${ELLIPSE_SIDE_EDGE_REFUSAL}`;
   if (kind === 'align') return alignRecipeProblem(node, nodes.length, nodes);
