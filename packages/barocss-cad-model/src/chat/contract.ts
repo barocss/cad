@@ -22,6 +22,15 @@ const num: JsonSchema = { type: 'number' }, str: JsonSchema = { type: 'string' }
  * selection: neither changes the document.)
  */
 const clearanceSchema = (coordinate: 'fraction' | 'time'): JsonSchema => ({ type: ['object', 'null'], properties: { value: num, [coordinate]: num, links: { type: 'array', items: str } }, required: ['value', coordinate, 'links'], additionalProperties: false });
+const heldFinishRecovery = {
+  ...o({ feature: str, body: str, revision: str, mode: { type: 'string', enum: ['studio_history_review'] }, page: num, pages: num,
+    slots: { type: 'array', items: o({ slot: num, authored_edge: str, signature_matches: { type: 'array', items: str, description: 'Tentative matches; each slot still needs an explicit choice.' } },
+      ['slot', 'authored_edge', 'signature_matches']) },
+    pick_edges: { type: 'array', items: o({ name: str, from: { type: 'array', items: num }, to: { type: 'array', items: num } }, ['name', 'from', 'to']),
+      description: 'Eligible viewport picks on this body page, with endpoints in mm. Review and apply in Studio History.' },
+  }, ['feature', 'body', 'revision', 'mode', 'page', 'pages', 'slots', 'pick_edges']),
+  description: 'Read-only recovery information for three held straight Constant Fillet slots.',
+};
 const versionPin = o({ id: str, snapshot: str, revision: str, evidenceRevision: str }, ['id', 'snapshot', 'revision', 'evidenceRevision']);
 const directCandidatePin = o({ proposal: str, proposalRevision: str, baseDirectRevision: str, directRevision: str },
   ['proposal', 'proposalRevision', 'baseDirectRevision']);
@@ -92,7 +101,7 @@ const READ: Record<string, JsonSchema | null> = {
   output_cam_package: o({ revision: str, files: arr }, ['revision', 'files']),
   output_print_layers: o({ revision: str, files: arr }, ['revision', 'files']),
   output_bundle: o({ revision: str, files: arr }, ['revision', 'files']),
-  get_part_summary: o({ feature_count: num, facts: obj, parameters: obj, features: arr, bodies: arr, direct_curves: arr, direct_surfaces: arr, direct_revision: str, note: str, followed_changed: arr, variability: obj }, ['feature_count', 'facts', 'parameters', 'features', 'bodies']),
+  get_part_summary: o({ feature_count: num, facts: obj, parameters: obj, features: arr, bodies: arr, held_finish_recovery: heldFinishRecovery, direct_curves: arr, direct_surfaces: arr, direct_revision: str, note: str, followed_changed: arr, variability: obj }, ['feature_count', 'facts', 'parameters', 'features', 'bodies']),
   get_image_layers: null,
   measure: o({ label: str, area: num, length: num, radius: num, distance: num, from: arr, to: arr, angle: num, normalDistance: num, resolved: arr }),
   mass_properties: o({ bodies: arr, note: str }, ['bodies']),

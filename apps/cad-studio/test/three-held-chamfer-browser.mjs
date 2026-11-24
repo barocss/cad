@@ -1,11 +1,25 @@
 import assert from 'node:assert/strict';
 import { createFlow } from './flow-helper.mjs';
+import { readHeldFilletSummary } from './held-finish-recovery-mcp.mjs';
 
 const baseline = process.argv.includes('--baseline');
 const fillet = process.argv.includes('--fillet');
+const mcp = process.argv.includes('--mcp');
+assert.ok(!mcp || (fillet && !baseline));
 const finish = fillet ? 'Fillet' : 'Chamfer';
 const featureName = fillet ? 'fillets' : 'chamfers';
 const pins = [
+  ...(mcp ? [
+    'apps/cad-studio/test/held-finish-recovery-mcp.mjs',
+    'apps/cad-studio/test/mcp-browser-session.mjs',
+    'apps/cad-studio/scripts/cad-mcp.mjs',
+    'apps/cad-studio/server/cadMcp.ts',
+    'packages/barocss-cad-model/src/chat/part/query.ts',
+    'packages/barocss-cad-model/src/chat/part/heldFinishRecovery.ts',
+    'packages/barocss-cad-model/src/chat/contract.ts',
+    'packages/barocss-cad-model/src/chat/toolDefinitions.ts',
+    'packages/barocss-cad-model/src/engine/heldFinishGroup.ts',
+  ] : []),
   'apps/cad-studio/test/three-held-chamfer-browser.mjs',
   'apps/cad-studio/test/flow-helper.mjs',
   'apps/cad-studio/src/App.tsx',
@@ -33,7 +47,7 @@ const model = (points, edges) => ({
 });
 const f = await createFlow({
   name: fillet ? 'three-held-fillet' : 'three-held-chamfer', output: process.argv[2],
-  envFrozen: fillet ? 'D1870_SOURCE_FROZEN' : 'D1834_SOURCE_FROZEN',
+  envFrozen: mcp ? 'D1871_SOURCE_FROZEN' : fillet ? 'D1870_SOURCE_FROZEN' : 'D1834_SOURCE_FROZEN',
   qualification: `Recover three distinct terminal ${finish} straight-edge references together through History.`,
   limits: ['The signed fixture is opened through Studio. Viewport creation of the fixture is NOT_RUN.',
     'Three held references, one constant positive size and one exact native source.'],
@@ -160,6 +174,33 @@ await f.run(async () => {
   assert.equal(before.doc.nodes[2].suppressed, true);
   assert.equal(before.doc.nodes[2].rematched, undefined);
   near(before.bodies.bodies[0].volume, 525);
+  let heldRevision;
+  if (mcp) {
+    const savedHeld = await f.save('held-source-for-local-agent');
+    f.phase = 'Read the same held model through the local MCP host';
+    const { summary, revision } = await readHeldFilletSummary(f, savedHeld.file, 'held-source');
+    heldRevision = revision;
+    const recovery = summary.held_finish_recovery;
+    assert.ok(recovery);
+    assert.deepEqual([recovery.feature, recovery.body, recovery.revision, recovery.mode, recovery.page, recovery.pages],
+      ['n2', 'b2', revision, 'studio_history_review', 1, 1]);
+    assert.deepEqual(recovery.slots.map(slot => slot.authored_edge), oldNames);
+    assert.deepEqual(recovery.slots.map(slot => slot.slot), [1, 2, 3]);
+    assert.equal(recovery.pick_edges.length, 18);
+    assert.equal(recovery.pick_edges.some(edge => edge.name === newNames[2]), true);
+    const positions = [[5, 5], [20, 0], [0, 20]];
+    newNames.forEach((name, i) => {
+      const edge = recovery.pick_edges.find(edge => edge.name === name);
+      assert.ok(edge);
+      assert.deepEqual([edge.from, edge.to].sort(), [[...positions[i], 0], [...positions[i], 3]]);
+    });
+    assert.ok(recovery.slots.some(slot => slot.signature_matches.length > 1));
+    assert.equal(summary.bodies[0].volume, 525);
+    await f.same(before.doc);
+    assert.deepEqual((await f.snapshot('02b-studio-unchanged-after-agent-read')).history, before.history);
+    f.report.observations.push({ sameHeldRevision: revision, orderedSlots: 3, currentNativePicks: 18,
+      signatureMatchCounts: recovery.slots.map(slot => slot.signature_matches.length), documentBytesAfterRead: 'SAME' });
+  }
   await direction('Back right');
   await f.openFeatureEditor(2, `three unresolved ${finish} edges`);
   const editor = f.editor();
@@ -227,6 +268,14 @@ await f.run(async () => {
   await f.freshOpen(saved.file, accepted.doc, '09-fresh-open');
   assert.equal(await references().count(), 0);
   qualifyTarget(await f.inspect('10-reopened-native', await f.doc()));
+  if (mcp) {
+    f.phase = 'Confirm local reads retire the recovery view at the repaired revision';
+    const repaired = await readHeldFilletSummary(f, saved.file, 'repaired-source');
+    assert.notEqual(repaired.revision, heldRevision);
+    assert.equal(repaired.summary.held_finish_recovery, undefined);
+    await f.same(accepted.doc);
+    f.report.observations.push({ repairedRevision: repaired.revision, retiredRecoveryView: 'PASS' });
+  }
   f.report.observations.push({ stagedDistinctPicks: 'PASS', duplicateRefusal: 'PASS', cancelUnchanged: 'PASS',
     exactNativeGeometry: 'PASS', undoRedoSaveOpen: 'PASS', sameVolumeWrongThirdRejectedByOracle: 'PASS' });
 });

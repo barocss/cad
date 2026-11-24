@@ -1,23 +1,15 @@
 import { withFilletStations } from '../app/filletEndpoints';
+import { point, distinct, nativeLine, positiveSize, isHeldConstantFinishGroup, heldFinishGroupProblems,
+  validFinishGroupEdge, type HeldFinish, type Parameters } from '@barocss/cad-model/engine/heldFinishGroup';
+export { heldFinishGroupProblems, validFinishGroupEdge } from '@barocss/cad-model/engine/heldFinishGroup';
+export type { HeldFinish } from '@barocss/cad-model/engine/heldFinishGroup';
 import type { Dim, ModelNode, StudioDoc } from '@barocss/cad-model/engine/doc';
 import type { DisplayEdge, Vec3 } from '@barocss/cad-model/engine/mesh';
 import type { BodyResult } from '@barocss/cad-model/engine/evaluate';
 import { signaturesOf } from '@barocss/cad-model/engine/rematch';
 import { sameDatumTargetSourceSig, toSig, type Problem, type Sig } from '@barocss/cad-model/engine/references';
-export type HeldFinish = Extract<ModelNode,{kind:'fillet'|'chamfer'}>;
 export type ReplacementEndpoints = {start:Vec3;end:Vec3;stations?:{label:string;at:Vec3;fraction:number}[]};
 type Candidate = {name:string;endpoints?:ReplacementEndpoints} | {error:string};
-const point=(p:readonly number[])=>p.length===3&&p.every(Number.isFinite);
-const distinct=(a:readonly number[],b:readonly number[])=>a.some((v,i)=>v!==b[i]);
-type Parameters = Readonly<Record<string, number>>;
-const nativeLine = (edge: DisplayEdge) => (edge.nativeLine || edge.nativeFinishLine) &&
-  edge.straight && point(edge.a) && point(edge.b) && distinct(edge.a, edge.b);
-function positiveSize(dim: Dim, parameters: Parameters): boolean {
- const value = typeof dim === 'number' ? dim
-  : dim && typeof dim === 'object' && !Array.isArray(dim) && Object.keys(dim).length === 1
-    && Object.hasOwn(dim,'parameter') && typeof dim.parameter === 'string' && Object.hasOwn(parameters, dim.parameter) ? parameters[dim.parameter] : NaN;
- return typeof value === 'number' && Number.isFinite(value) && value > 0;
-}
 /** Replacement review only; preserve authored parameter names and show their current value. */
 export function heldFinishRadiusText(dim: Dim, parameters: Parameters): string {
  if(typeof dim==='number')return String(dim);
@@ -34,37 +26,6 @@ export function heldFinishReplaceable(node: ModelNode | undefined, parameters: P
       && (i===1||p.fraction-controls[i-1].fraction!>1e-9)))
   && distinct(controls[0].at,controls[last].at);
 }
-function isHeldConstantFinishGroup(node: ModelNode | undefined): node is HeldFinish {
- return !!node && (node.kind === 'fillet' || node.kind === 'chamfer') && !!node.held &&
-  node.suppressed === true && !node.rematched &&
-  (node.edges.length === 2 || node.edges.length === 3) &&
-  new Set(node.edges).size === node.edges.length &&
-  (node.kind === 'chamfer' || (!node.radii && node.section === undefined));
-}
-
-/** Match all current problems to the authored slot order of this terminal finish. */
-export function heldFinishGroupProblems(doc: StudioDoc, index: number, problems: readonly Problem[]): Problem[] | undefined {
- const node = doc.nodes[index];
- if (!isHeldConstantFinishGroup(node) || index !== doc.nodes.length - 1 ||
-     !positiveSize(node.kind === 'fillet' ? node.radius : node.distance, doc.parameters) ||
-     !node.edges.every(name => node.sigs?.[name]?.k === 'line' && node.sigs[name].n === undefined)) return;
- const here = problems.filter(problem => problem.node === index);
- if (here.length !== node.edges.length || new Set(here.map(problem => problem.index)).size !== here.length) return;
- const ordered: Problem[] = [];
- for (const name of node.edges) {
-  const problem = here.find(problem => problem.name === name);
-  if (!problem) return;
-  ordered.push(problem);
- }
- return ordered;
-}
-
-export function validFinishGroupEdge(edge: DisplayEdge | undefined, edges: readonly DisplayEdge[]): edge is DisplayEdge {
- return !!edge && !!edge.nativeJoint && !!nativeLine(edge) && edge.names.length === 1 &&
-  !!edge.names[0] && !edge.names[0].includes('+') && edges.includes(edge) &&
-  edges.filter(member => member.names.includes(edge.names[0]) || member.nativeJoint?.edgeId === edge.nativeJoint!.edgeId).length === 1;
-}
-
 /** Each signature comes from the owned live mesh. Remove historical aliases before writing any pick. */
 export function replaceHeldFinishGroup(doc: StudioDoc, index: number, problems: readonly Problem[],
  body: BodyResult, picks: readonly (DisplayEdge | undefined)[]): StudioDoc | null {

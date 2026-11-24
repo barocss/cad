@@ -19,26 +19,30 @@ import { isObj } from '../../util/guards';
 import { variabilityView } from '../variability';
 import { featureId } from '../../engine/ids';
 import { directInspectionRevision, visibleDirectGeometry } from '../sweepSource';
+import { heldFinishRecovery } from './heldFinishRecovery';
 
 /** D155: a fit's limits as a result shows them (each row's deviations, sizes, table and row, estimate and source). */
 export const fitView = (l: FitLimits) => ({ kind: l.kind, clearanceMin: l.clearanceMin, clearanceMax: l.clearanceMax, estimate: l.estimate,
   hole: { class: l.hole.class, nominal: l.hole.nominal, upper: l.hole.upper, lower: l.hole.lower, min: l.hole.min, max: l.hole.max, table: l.hole.table, row: l.hole.row, estimate: l.hole.estimate, ...(l.hole.source ? { source: l.hole.source } : {}) },
   shaft: { class: l.shaft.class, nominal: l.shaft.nominal, upper: l.shaft.upper, lower: l.shaft.lower, min: l.shaft.min, max: l.shaft.max, table: l.shaft.table, row: l.shaft.row, estimate: l.shaft.estimate, ...(l.shaft.source ? { source: l.shaft.source } : {}) } });
 
-async function getPartSummaryTool(state: ChatState, args: Record<string, unknown>, _evaluate: Evaluate, { responseFormat }: CallOptions): Promise<ToolOutcome> {
+async function getPartSummaryTool(state: ChatState, args: Record<string, unknown>, evaluate: Evaluate, { responseFormat }: CallOptions): Promise<ToolOutcome> {
   // Big parts (lofted figures) have hundreds of faces: list them for one body at a time, the rest by count.
   const only = typeof args.body === 'string' ? args.body : null;
   if (only && !state.bodies.some(b => b.key === only)) return fail(state, `No body "${only}"; bodies: ${state.bodies.map(b => b.key).join(', ') || 'none'}.`);
+  const pageSize = 60;
   const many = state.bodies.reduce((n, b) => n + b.mesh.faces.length + b.mesh.edges.length, 0) > 160, page = Math.max(1, Math.floor(Number(args.page) || 1));
-  const list = describeBodies(state.doc, state.bodies, false).map((b, i) => responseFormat !== 'concise' && (only === b.key || (!only && (!many || responseFormat === 'detailed'))) ? describeBodies(state.doc, [state.bodies[i]], true, 60, page)[0] : b);
+  const list = describeBodies(state.doc, state.bodies, false).map((b, i) => responseFormat !== 'concise' && (only === b.key || (!only && (!many || responseFormat === 'detailed'))) ? describeBodies(state.doc, [state.bodies[i]], true, pageSize, page)[0] : b);
   const stale = followedStale(state.doc);
   const { curves, surfaces } = await visibleDirectGeometry(state.doc.direct);
+  const recovery = responseFormat !== 'concise' && await heldFinishRecovery(state, evaluate, only, page, pageSize);
   const body = { feature_count: state.doc.nodes.length, facts: factsOf(state.doc, state.bodies), parameters: state.doc.parameters,
     features: features(state.doc).map(f => ({
       index: f.index, label: f.label,
       ...(f.node.kind === 'sketch' ? { id: featureId(state.doc.nodes, f.index) } : {}),
       ...(responseFormat === 'concise' ? {} : { node: f.node.kind === 'sketch' ? { kind: 'sketch', profile: f.node.profile } : f.node }),
     })),
+    ...(recovery ? { held_finish_recovery: recovery } : {}),
     ...(curves.length ? { direct_curves: curves } : {}),
     ...(surfaces.length ? { direct_surfaces: surfaces } : {}),
     ...(!state.partOf && (curves.length || surfaces.length) ? { direct_revision: directInspectionRevision(state.doc) } : {}),
