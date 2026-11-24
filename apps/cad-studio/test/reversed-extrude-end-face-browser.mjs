@@ -5,7 +5,10 @@ import { join } from 'node:path';
 import { createFlow, sha256 } from './flow-helper.mjs';
 
 const baseline = process.argv.includes('--baseline');
-const circle = process.argv.includes('--circle');
+const disk = process.argv.includes('--disk');
+const circle = disk || process.argv.includes('--circle');
+const sourceCenter = disk ? [11, 10] : [5, 4];
+const sourceRadius = disk ? 8 : 2;
 const pins = [
   'apps/cad-studio/test/reversed-extrude-end-face-browser.mjs',
   'packages/barocss-cad-model/src/app/profileCommands.ts',
@@ -13,10 +16,10 @@ const pins = [
   'packages/barocss-cad-model/src/engine/part.ts',
 ];
 const f = await createFlow({
-  name: 'reversed-extrude-end-face', output: process.argv[2], envFrozen: circle ? 'D1932_SOURCE_FROZEN' : 'D1896_SOURCE_FROZEN',
+  name: 'reversed-extrude-end-face', output: process.argv[2], envFrozen: disk ? 'D1958_SOURCE_FROZEN' : circle ? 'D1932_SOURCE_FROZEN' : 'D1896_SOURCE_FROZEN',
   initialFiles: pins, requiredFrozen: pins,
   qualification: `Extrude a ${circle ? 'circular' : 'rectangular'} profile from an exact -Z sketch plane to the original top face.`,
-  limits: ['One top-level upright rectangular target Extrude and one literal source in desktop Studio.'],
+  limits: ['One top-level upright rectangular or circular target Extrude and one literal source in desktop Studio.'],
   inspectorSource: `
 import { readFileSync } from 'node:fs';
 import { toPartDocument } from '@barocss/cad-model/engine/part';
@@ -43,26 +46,27 @@ console.log(JSON.stringify({
 const seed = {
   format: 'barocss-cad-model', schema: 3, units: 'mm', parameters: {},
   nodes: [
-    { id: 'n0', kind: 'sketch', profile: 'rectangle', min: circle ? [0, 0] : [-5, -5], max: circle ? [10, 10] : [15, 15] },
+    disk ? { id: 'n0', kind: 'sketch', profile: 'circle', center: [10, 10], radius: 10 }
+      : { id: 'n0', kind: 'sketch', profile: 'rectangle', min: circle ? [0, 0] : [-5, -5], max: circle ? [10, 10] : [15, 15] },
     { id: 'n1', kind: 'extrude', sketch: 0, height: 5 },
-    { id: 'n2', kind: 'sketch', ...(circle ? { profile: 'circle', center: [5, -4], radius: 2 } : { profile: 'rectangle', min: [2, -6], max: [8, -2] }),
-      plane: { origin: [0, 0, 20], normal: [0, 0, -1], xAxis: [1, 0, 0] } },
+    { id: 'n2', kind: 'sketch', ...(circle ? { profile: 'circle', center: disk ? [10, -8] : [5, -4], radius: sourceRadius } : { profile: 'rectangle', min: [2, -6], max: [8, -2] }),
+      plane: { origin: disk ? [1, 2, 20] : [0, 0, 20], normal: [0, 0, -1], xAxis: [1, 0, 0] } },
   ],
   outputs: { b1: { node: 1, side: 'solid' } }, nextId: 3,
 };
-const fileName = circle ? 'reversed-circle-extrude-end-face.bcad' : 'reversed-extrude-end-face.bcad';
+const fileName = disk ? 'downward-circle-to-original-disk.bcad' : circle ? 'reversed-circle-extrude-end-face.bcad' : 'reversed-extrude-end-face.bcad';
 const feature = { id: 'n3', kind: 'face-end-extrude', sketch: 2,
   target: { body: { node: 1, side: 'solid' }, feature: 'n1', face: 'n1.top' } };
-const bound = (height, radius = 2) => ({
+const bound = (height, radius = sourceRadius) => ({
   ...seed, nodes: [seed.nodes[0], { ...seed.nodes[1], height },
-    circle ? { ...seed.nodes[2], radius, ...(radius !== 2 ? { sideTags: { outer: ['e1'] } } : {}) } : seed.nodes[2], feature],
+    circle ? { ...seed.nodes[2], radius, ...(radius !== sourceRadius ? { sideTags: { outer: ['e1'] } } : {}) } : seed.nodes[2], feature],
   outputs: { ...seed.outputs, b3: { node: 3, side: 'solid' } }, nextId: 4,
 });
 const button = (name, scope = f.page) => scope.getByRole('button', { name, exact: true });
 const field = (label, scope) => scope.getByLabel(label, { exact: true });
 const equal = (a, b) => Math.abs(a - b) <= 1e-8;
 
-async function verify(label, height, radius = 2) {
+async function verify(label, height, radius = sourceRadius) {
   const doc = bound(height, radius), travel = 20 - height;
   await f.page.waitForFunction(height => window.__studioDoc?.nodes?.length === 4 && window.__studioDoc.nodes[1].height === height, height);
   await f.ready();
@@ -75,19 +79,27 @@ async function verify(label, height, radius = 2) {
     assert.equal(solid.strict.valid, true, solid.strict.issues.join('\n'));
     assert.equal(solid.bodyCount, 1);
   }
-  assert.equal(stock.corners.length, 8);
-  assert.ok(equal(stock.mass.volume, (circle ? 100 : 400) * height));
+  if (disk) {
+    assert.equal(stock.cylinders.length, 2);
+    for (const support of stock.cylinders) {
+      assert.ok(equal(support.r, 10) && equal(support.c[0], 10) && equal(support.c[1], 10));
+    }
+    assert.ok(equal(stock.mass.volume, 100 * Math.PI * height));
+  } else {
+    assert.equal(stock.corners.length, 8);
+    assert.ok(equal(stock.mass.volume, (circle ? 100 : 400) * height));
+  }
   assert.ok(equal(added.mass.volume, (circle ? radius ** 2 * Math.PI : 24) * travel));
-  [5, 4, (20 + height) / 2].forEach((value, i) => assert.ok(equal(added.mass.centroid[i], value)));
+  [...sourceCenter, (20 + height) / 2].forEach((value, i) => assert.ok(equal(added.mass.centroid[i], value)));
   if (circle) {
     assert.equal(added.cylinders.length, 2);
     for (const support of added.cylinders) {
-      [5, 4].forEach((value, i) => assert.ok(equal(support.c[i], value)));
+      sourceCenter.forEach((value, i) => assert.ok(equal(support.c[i], value)));
       assert.ok(equal(support.r, radius) && equal(Math.abs(support.a[2]), 1));
       assert.equal(support.out, 1);
     }
     for (const point of added.corners) {
-      assert.ok(equal(Math.hypot(point[0] - 5, point[1] - 4), radius));
+      assert.ok(equal(Math.hypot(point[0] - sourceCenter[0], point[1] - sourceCenter[1]), radius));
       assert.ok(equal(point[2], height) || equal(point[2], 20));
     }
   } else {
@@ -151,16 +163,16 @@ async function editCircleDiameter(height) {
   await button('Edit sketch', f.editor()).click();
   await f.sketchPanel().waitFor();
   const diameter = f.sketchPanel().locator('input#sk-diameter');
-  await diameter.fill('8');
+  await diameter.fill(disk ? '18' : '8');
   await diameter.press('Tab');
   await f.page.locator('.topbar button.finish').click();
-  await f.waitToast(/strictly contain the entire projected circle/);
+  await f.waitToast(disk ? /contain the entire projected profile/ : /strictly contain the entire projected circle/);
   await f.same(original);
   await f.snapshot('06-circle-contact-refused');
-  await diameter.fill('5');
+  await diameter.fill(disk ? '15' : '5');
   await diameter.press('Tab');
-  await f.finishSketch('07-reopened-circle-diameter-five');
-  await verify('reopened-radius-edit', height, 2.5);
+  await f.finishSketch('07-reopened-circle-diameter-edited');
+  await verify('reopened-radius-edit', height, disk ? 7.5 : 2.5);
 }
 
 await f.run(async () => {
@@ -182,7 +194,7 @@ await f.run(async () => {
   await f.closeEditor();
   await f.openExtrudeHud();
   const hud = f.hud(), depth = field('Depth', hud);
-  if (baseline) {
+  if (baseline && !disk) {
     assert.equal(await depth.count(), 0);
     assert.equal(await field('Distance', hud).inputValue(), '8');
     await f.snapshot('00-reversed-source-fixed-distance-only');
@@ -201,9 +213,20 @@ await f.run(async () => {
   const pick = await f.page.evaluate(point => {
     const xy = window.__studioScreenOf(point);
     return xy && document.elementFromPoint(...xy)?.closest('.vp-canvas') ? xy : null;
-  }, circle ? [8, 8, 5] : [12, 12, 5]);
+  }, disk ? [2, 10, 5] : circle ? [8, 8, 5] : [12, 12, 5]);
   assert.ok(pick);
   await f.page.mouse.click(...pick);
+  if (baseline) {
+    const refusal = hud.locator('.hud-error');
+    await refusal.waitFor();
+    const details = refusal.locator('details:not([open]) > summary');
+    if (await details.count()) await details.click();
+    assert.match(await refusal.innerText(), /original upper cap.*forward upright rectangular extrusion/i);
+    await f.snapshot('00-previous-downward-circle-to-disk-refused');
+    await button('Cancel', hud).click();
+    await f.same(seed);
+    return;
+  }
   await hud.getByText('n1.top', { exact: true }).waitFor();
   await f.page.waitForFunction(() => document.querySelector('.hud .status')?.textContent === 'preview');
   await f.snapshot('01-picked-top-face-preview');

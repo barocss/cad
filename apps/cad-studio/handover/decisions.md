@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1958: [End a downward circular Extrude at the original upper disk](notes/downward-circle-to-original-disk-2026-11-25/README.md), #222. Verify radial clearance, History editing and desktop fresh Open.
 - D1957: [Open the bottom of a box with five independent walls](notes/per-face-bottom-box-shell-2026-11-25/README.md), #13. Verify the native opening and supports, desktop editing and local Agent approval.
 - D1956: [Shift the middle and end frames of a tilted three-section Loft](notes/shifted-tilted-three-section-loft-2026-11-25/README.md), #174. Verify exact station reconstruction, the shared ring and desktop fresh Open.
 - D1955: [Propose a per-face box Shell through local MCP](notes/agent-per-face-box-shell-2026-11-25/README.md), #324. Verify revision-bound discovery and refusal, explicit Studio approval and native Open.

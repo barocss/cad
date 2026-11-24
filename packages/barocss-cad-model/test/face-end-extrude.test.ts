@@ -137,6 +137,62 @@ const replaceNode = (doc: StudioDoc, index: number, next: ModelNode): StudioDoc 
   ...doc, nodes: doc.nodes.map((node, i) => i === index ? next : node),
 });
 
+function downwardCircleToDisk(height = 5, localX = 10): StudioDoc {
+  const doc = replaceNode(downwardDocument(height), 0, {
+    id: 'n0', kind: 'sketch', profile: 'circle', center: [10, 10], radius: 10,
+  });
+  return replaceNode(doc, 2, {
+    id: 'n2', kind: 'sketch', profile: 'circle', center: [localX, -8], radius: 8,
+    plane: { origin: [1, 2, 20], normal: [0, 0, -1], xAxis: [1, 0, 0] },
+  });
+}
+
+test('a translated downward circle reaches an original upper disk with a radially contained footprint', () => {
+  // World centre (11,10), radius 8: the disk fits in R10, although its bounding corners do not.
+  assert.ok(Math.hypot(9, 8) > 10);
+  for (const height of [5, 8]) {
+    const doc = downwardCircleToDisk(height), travel = 20 - height;
+    const opened = readStudioDoc(JSON.stringify(doc));
+    assert.ok('doc' in opened); assert.deepEqual(opened.doc, doc);
+    const part = toPartDocument(opened.doc), { outputs } = evaluateCadPart(part);
+    assert.equal(currentFaceEndDistance(doc, 3), travel);
+    assert.deepEqual(part.features[3], { id: 'n3', kind: 'extrude', sketch: 'n2', height: travel });
+    assert.deepEqual(outputs.map(output => output.id), ['n1', 'n3']);
+    assert.ok(outputs.every(output => checkOutput(output).valid));
+    const [stock, source] = outputs, mass = massPropertiesOf(source);
+    assert.deepEqual(stock.brep, evaluateCadPart(toPartDocument(prefixDoc(doc, 3))).outputs[0].brep);
+    assert.ok(Math.abs(massPropertiesOf(stock).volume - 100 * Math.PI * height) < 1e-8);
+    assert.ok(Math.abs(mass.volume - 64 * Math.PI * travel) < 1e-8);
+    mass.centroid.forEach((value, i) => assert.ok(Math.abs(value - [11, 10, (20 + height) / 2][i]) < 1e-8));
+    for (const [output, name, z, direction] of [
+      [stock, 'n1.top', height, 1], [source, 'n3.top', height, -1], [source, 'n3.bottom', 20, 1],
+    ] as const) {
+      const support = faceGeometry(output.brep.faces.find(face => face.name === name)!);
+      assert.ok(support.kind === 'plane');
+      assert.equal(support.o[2], z);
+      assert.deepEqual(support.n.map(value => value || 0), [0, 0, direction]);
+    }
+  }
+});
+
+test('a downward circle refuses disk contact, reversed travel and changes in original target scope', () => {
+  assert.equal(currentFaceEndDistance(downwardCircleToDisk(5, 11 - 1e-6), 3), 15);
+  for (const x of [11, 11 + 1e-6])
+    assert.throws(() => toPartDocument(downwardCircleToDisk(5, x)), /entire projected profile/);
+  for (const height of [-5, 0])
+    assert.throws(() => toPartDocument(downwardCircleToDisk(height)), /stay forward.*authored end cap/);
+  for (const height of [20, 21])
+    assert.throws(() => toPartDocument(downwardCircleToDisk(height)), /positive extrusion direction/);
+  const doc = downwardCircleToDisk(), [disk, stock, sketch, end] = doc.nodes;
+  assert.ok(disk.kind === 'sketch' && disk.profile === 'circle' && stock.kind === 'extrude'
+    && sketch.kind === 'sketch' && end.kind === 'face-end-extrude');
+  for (const changed of [
+    { ...stock, draft: 1 }, { ...stock, held: 'stale' }, { ...stock, kind: 'translate', parent: end.target.body, offset: [0, 0, 0] },
+  ] as ModelNode[]) assert.throws(() => toPartDocument(replaceNode(doc, 1, changed)), /original upper cap/);
+  assert.throws(() => toPartDocument(replaceNode(doc, 3, { ...end, target: { ...end.target, face: 'n1.bottom' } })), /original upper cap/);
+  assert.throws(() => toPartDocument(replaceNode(doc, 0, { ...disk, plane: sketch.plane })), /original upper cap/);
+});
+
 function circleSourceTarget(center: [number, number] = [5, 5], radius = 9, from = 20): StudioDoc {
   return replaceNode(circularTarget(from), 2, { id: 'n2', kind: 'sketch', profile: 'circle', center, radius });
 }

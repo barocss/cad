@@ -63,7 +63,7 @@ function recipeProblem(node: Record<string, unknown>, index: number, nodes: read
   }
   const sketch = nodes[node.sketch as number];
   if (node.suppressed !== true && record(sketch) && faceEndAxes(sketch.plane as DocPlane | undefined) === DOWN_XY) {
-    const problem = downwardTargetProblem(nodes, target as unknown as FaceEndExtrudeNode['target'], parameters);
+    const problem = downwardTargetProblem(nodes, target as unknown as FaceEndExtrudeNode['target'], parameters, sketch.profile === 'circle');
     if (problem) return problem;
   }
   const annular = annularSource(nodes, body.node);
@@ -200,16 +200,19 @@ function literalCircle(sketch: Extract<SketchNode, { profile: 'circle' }>): sket
   return center.every(c => typeof c === 'number' && finiteCoordinate(c - radius) && finiteCoordinate(c + radius));
 }
 
-/** Only a current original lower disk of an intact upright circular Extrude reaches this branch. */
+/** The original outward disk of an intact upright circular Extrude. */
 function circularProfileTarget(doc: StudioDoc, node: FaceEndExtrudeNode, sketch: LiteralRectangle | LiteralPolygon | LiteralCircle,
   brep: Brep, face: BrepFace, axes: EndFrame): RadialTarget | undefined {
   const target = doc.nodes[node.target.body.node];
-  if ((sketch.profile !== 'rectangle' && sketch.profile !== 'circle') || axes !== XY || target?.kind !== 'extrude' || target.held || target.cutDepth !== undefined
-    || target.draft || face.name !== `${node.target.feature}.bottom`) return;
+  const downward = axes === DOWN_XY && sketch.profile === 'circle';
+  if (!downward && (axes !== XY || (sketch.profile !== 'rectangle' && sketch.profile !== 'circle'))) return;
+  const cap = downward ? 'top' : 'bottom';
+  if (target?.kind !== 'extrude' || target.held || target.cutDepth !== undefined
+    || target.draft || face.name !== `${node.target.feature}.${cap}`) return;
   const circle = doc.nodes[target.sketch];
   if (circle?.kind !== 'sketch' || circle.profile !== 'circle' || circle.suppressed || circle.held || circle.plane || !literalCircle(circle)) return;
   const frame = circularCapReplacementFrame(brep, face.name);
-  if (!frame || frame.normal[0] !== 0 || frame.normal[1] !== 0 || frame.normal[2] !== -1) return;
+  if (!frame || frame.normal[0] !== 0 || frame.normal[1] !== 0 || frame.normal[2] !== -axes.sign) return;
   // The kernel verifies the complete rational disk, its two outward half cylinders and exact trims.
   // Bound the disk from the same native supports, rather than from the authored circle radius.
   const cylinders = brep.faces.map(candidate => faceGeometry(candidate)).filter(support => support.kind === 'cylinder');
@@ -246,8 +249,9 @@ function probeCircleSource(doc: StudioDoc, node: FaceEndExtrudeNode, prefix: rea
 }
 
 function circleFitsRadialTarget(doc: StudioDoc, node: FaceEndExtrudeNode, prefix: readonly CadPartFeature[],
-  target: RadialTarget, height: number): boolean {
-  const source = probeCircleSource(doc, node, prefix, height, 'probe.bottom');
+  target: RadialTarget, height: number, downward: boolean): boolean {
+  const source = probeCircleSource(doc, node, prefix, height, downward ? 'probe.top' : 'probe.bottom');
+  if (downward && !withinTolerance(source.frame.anchor[2], target.level)) return false;
   const roundoff = Math.max(target.roundoff, source.roundoff);
   return source.cylinders.every(support => {
     if (support.out !== 1 || support.a[0] !== 0 || support.a[1] !== 0 || support.a[2] !== 1
@@ -414,20 +418,22 @@ export function isFaceEndExtrudeSketch(sketch: ModelNode | undefined): sketch is
     && Array.isArray(sketch.max) && sketch.max.length === 2 && sketch.max.every(finiteCoordinate);
 }
 
-/** A reversed XY profile keeps the original upper end of one forward upright rectangular extrusion. */
-function downwardTargetProblem(nodes: readonly unknown[], target: FaceEndExtrudeNode['target'], parameters: unknown): string | null {
+/** A reversed XY profile keeps the original upper end of one supported forward upright extrusion. */
+function downwardTargetProblem(nodes: readonly unknown[], target: FaceEndExtrudeNode['target'], parameters: unknown, circleSource: boolean): string | null {
   const stock = nodes[target.body.node];
-  const unsupported = 'the downward profile needs the original upper cap of a forward upright rectangular extrusion with zero draft.';
+  const profile = circleSource ? 'rectangular or circular' : 'rectangular';
+  const unsupported = `the downward profile needs the original upper cap of a forward upright ${profile} extrusion with zero draft.`;
   if (!record(stock) || stock.kind !== 'extrude' || stock.suppressed || stock.held !== undefined
     || !previous(stock.sketch, target.body.node) || stock.cutDepth !== undefined || (stock.draft ?? 0) !== 0
     || target.face !== `${target.feature}.top`) return unsupported;
   if (!(targetDimension(stock.height, parameters) > 0))
     return 'the target extrusion must stay forward to preserve its authored end cap.';
   const sketch = nodes[stock.sketch];
-  if (!record(sketch) || sketch.kind !== 'sketch' || sketch.profile !== 'rectangle' || sketch.held !== undefined
+  if (!record(sketch) || sketch.kind !== 'sketch' || sketch.held !== undefined
     || sketch.pocketFloor !== undefined || faceEndAxes(sketch.plane as DocPlane | undefined) !== XY
     || !isFaceEndExtrudeSketch(sketch as unknown as ModelNode)) return unsupported;
-  return null;
+  return sketch.profile === 'rectangle' || (circleSource && sketch.profile === 'circle' && sketch.plane === undefined)
+    ? null : unsupported;
 }
 
 /** Resolve from the live preceding native results. A consumed target has no eligible output. */
@@ -437,7 +443,7 @@ export function faceEndExtrudeHeight(doc: StudioDoc, node: FaceEndExtrudeNode, p
   const axes = faceEndAxes(sketch.plane)!;
   const { axes: [u, v, w], sign } = axes, origin = sketch.plane?.origin ?? [0, 0, 0];
   if (axes === DOWN_XY) {
-    const problem = downwardTargetProblem(doc.nodes, node.target, doc.parameters);
+    const problem = downwardTargetProblem(doc.nodes, node.target, doc.parameters, sketch.profile === 'circle');
     if (problem) throw invalid(problem);
   }
   // Bounds use the actual native profile fields, never the editor's optional outline snapshot.
@@ -459,7 +465,7 @@ export function faceEndExtrudeHeight(doc: StudioDoc, node: FaceEndExtrudeNode, p
   const disk = circularProfileTarget(doc, node, sketch, brep, faces[0], axes);
   const radial = disk ?? annularProfileTarget(doc, node, sketch, brep, faces[0], axes, [u0, v0], [u1, v1]);
   const box = radial ?? targetPolygon(brep, faces[0], axes);
-  if (axes === DOWN_XY && !box.rectangle) throw invalid('the downward profile needs a native rectangular target face.');
+  if (axes === DOWN_XY && !box.rectangle && !disk) throw invalid('the downward profile needs a native rectangular face or an original upper circular disk.');
   if (!(sketch.profile === 'circle' && radial)) {
     if (u0 < box.min[0] || v0 < box.min[1] || u1 > box.max[0] || v1 > box.max[1]) throw invalid('the target face must contain the entire projected profile.');
     if (!box.rectangle) {
@@ -472,9 +478,9 @@ export function faceEndExtrudeHeight(doc: StudioDoc, node: FaceEndExtrudeNode, p
   const height = sign * (box.level - origin[w]);
   if (height <= CadNumericPolicy.linearTolerance || height > CadPartLimits.length) throw invalid('the target must be ahead of the source in the positive extrusion direction.');
   if (!withinTolerance(origin[w] + sign * height, box.level)) throw invalid('the reconstructed end is outside the native linear tolerance.');
-  if (axes === DOWN_XY && sketch.profile === 'circle' && !downwardCircleFits(doc, node, sketch, prefix, box, height))
+  if (axes === DOWN_XY && sketch.profile === 'circle' && !radial && !downwardCircleFits(doc, node, sketch, prefix, box, height))
     throw invalid('the target face must strictly contain the entire projected circle.');
-  if (sketch.profile === 'circle' && radial && !circleFitsRadialTarget(doc, node, prefix, radial, height))
+  if (sketch.profile === 'circle' && radial && !circleFitsRadialTarget(doc, node, prefix, radial, height, axes === DOWN_XY))
     throw invalid(radial.bore === undefined ? 'the target face must contain the entire projected profile.'
       : 'the target face must contain the entire projected profile clear of its bore.');
   return height;
