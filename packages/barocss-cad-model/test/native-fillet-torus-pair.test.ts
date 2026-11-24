@@ -122,8 +122,10 @@ test('Model carries paired curved-target proof only with exact authored ownershi
 });
 
 
-test('two native half patches certify one complete closed top blend only when the actual trims fill both charts', () => {
-  const rims = ['n1.side0#1|n1.top', 'n1.side0#2|n1.top'];
+for (const cap of ['top', 'bottom'] as const) test(`two native half patches certify the complete ${cap} rim only when the actual trims fill both charts`, () => {
+  const top = ['n1.side0#1|n1.top', 'n1.side0#2|n1.top'];
+  const bottom = ['n1.bottom|n1.side0#1', 'n1.bottom|n1.side0#2'];
+  const rims = cap === 'top' ? top : bottom;
   for (const radius of [.6, 1.5]) for (const edges of [rims, [...rims].reverse()]) {
     const doc: CadPartDocument = { format: 'barocss-cad-part', version: 1, units: 'mm', parameters: {}, features: [
       { id: 'n0', kind: 'sketch', profile: 'circle', center: [0, 0], radius: 8 },
@@ -135,7 +137,8 @@ test('two native half patches certify one complete closed top blend only when th
     assert.ok(verified);
     assert.deepEqual([...verified.targets].sort(), rims);
     assert.deepEqual(verified.faces.map(member => member.face).sort(), ['n2.face#1', 'n2.face#2']);
-    close(verified.majorRadius, 8 - radius); close(verified.radius, radius); close(verified.centre[2], 10 - radius);
+    close(verified.majorRadius, 8 - radius); close(verified.radius, radius); close(verified.centre[2], cap === 'top' ? 10 - radius : radius);
+    close(verified.height, 10);
     assert.equal(nativeFilletTorusOf(output), undefined);
     assert.equal(nativeFilletTorusPairOf(output), undefined);
     const reject = (edit: (copy: Mutable<CadPartOutput>) => void) => {
@@ -144,7 +147,14 @@ test('two native half patches certify one complete closed top blend only when th
       assert.equal(nativeClosedFilletTorusOf(copy), undefined);
     };
     reject(copy => { copy.filletTargets = [rims[0], rims[0]]; });
+    reject(copy => { copy.filletTargets = [top[0], bottom[1]]; });
+    reject(copy => { copy.filletTargets = cap === 'top' ? bottom : top; });
     reject(copy => { copy.brep.faces.find(face => face.name === 'n1.top')!.name = 'borrowed.top'; });
+    reject(copy => {
+      const opposite = copy.brep.faces.find(face => face.name === (cap === 'top' ? 'n1.bottom' : 'n1.top'))!.surface;
+      assert.equal(opposite.kind, 'surface');
+      if (opposite.kind === 'surface') for (const row of opposite.controlPoints) for (const point of row) point[2] += .01;
+    });
     reject(copy => {
       const trim = copy.brep.edges.find(edge => edge.name?.startsWith('n2.face#1|n2.face#2'))!;
       // Change only an interior seam pole, leaving the endpoints and display-face names in place.

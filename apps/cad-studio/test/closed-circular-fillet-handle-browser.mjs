@@ -5,6 +5,9 @@ import { holdOriginalFilletRefs } from './hold-original-fillet-refs.mjs';
 const baseline = process.argv.includes('--baseline');
 const historyBaseline = process.argv.includes('--history-baseline');
 const history = historyBaseline || process.argv.includes('--history');
+const lower = process.argv.includes('--lower');
+const capView = lower ? 'Bottom' : 'Top';
+const capZ = lower ? 0 : 10, capSign = lower ? -1 : 1;
 const pins = [
   'apps/cad-studio/test/closed-circular-fillet-handle-browser.mjs',
   'apps/cad-studio/src/viewport/useCommandGizmos.ts',
@@ -18,11 +21,11 @@ if (history) pins.push('apps/cad-studio/test/hold-original-fillet-refs.mjs',
   'apps/cad-studio/src/state/historyFilletRadiusReceipt.ts', 'apps/cad-studio/src/app/useHistoryFilletRadius.ts',
   'packages/barocss-cad-model/src/engine/nativeFilletTorus.ts', 'packages/barocss-cad-model/src/engine/evaluate.ts');
 const f = await createFlow({
-  name: 'closed-circular-fillet-handle', output: process.argv[2], envFrozen: history ? 'D1865_SOURCE_FROZEN' : 'D1864_SOURCE_FROZEN',
+  name: 'closed-circular-fillet-handle', output: process.argv[2], envFrozen: lower ? 'D1878_SOURCE_FROZEN' : history ? 'D1865_SOURCE_FROZEN' : 'D1864_SOURCE_FROZEN',
   initialFiles: pins, requiredFrozen: pins,
   qualification: history ? 'Edit the existing complete circular rim Fillet from its authenticated original seam in History.'
     : 'Create a Constant Fillet by dragging from the stable native seam of one complete circular rim.',
-  limits: ['One upright radius-8 cylinder, one top rim selection, Constant Fillet and actual desktop Studio.'],
+  limits: [`One upright radius-8 cylinder, one ${capView.toLowerCase()} rim selection, Constant Fillet and actual desktop Studio.`],
   inspectorSource: `
 import { readFileSync } from 'node:fs';
 import { brepMassProperties, checkBrep, surfaceDomain, surfaceEvaluator } from '@barocss/cad';
@@ -37,7 +40,7 @@ const faces = brep.faces.filter(face => face.name?.startsWith('n2.face#')).map(f
   return { name: face.name, samples };
 });
 console.log(JSON.stringify({ key, digest: digestOf(brep), valid: checkBrep(brep, { strict: true }), volume: brepMassProperties(brep, 1).volume,
-  edges: brep.edges.filter(edge => edge.name?.includes('.top')).map(edge => ({ name: edge.name, id: edge.id, vertices: edge.vertices })),
+  edges: brep.edges.filter(edge => edge.name?.includes(${JSON.stringify(lower ? '.bottom' : '.top')})).map(edge => ({ name: edge.name, id: edge.id, vertices: edge.vertices })),
   faces }));
 `,
 });
@@ -47,31 +50,34 @@ const source = {
     { id: 'n1', kind: 'extrude', sketch: 0, height: 10 }],
   outputs: { b1: { node: 1, side: 'solid' } }, nextId: 2,
 };
-const targets = ['n1.side0#1|n1.top', 'n1.side0#2|n1.top'];
+const targets = lower ? ['n1.bottom|n1.side0#1', 'n1.bottom|n1.side0#2'] : ['n1.side0#1|n1.top', 'n1.side0#2|n1.top'];
 const button = (name, scope = f.page) => scope.getByRole('button', { name, exact: true });
 const hud = () => f.page.getByRole('dialog', { name: 'Fillet', exact: true });
 const input = () => hud().getByLabel('Radius', { exact: true });
 const handle = () => f.page.locator('g.gizmo-handle[data-handle="radius"] circle');
-const anchor = radius => [8 + radius * Math.SQRT1_2, 0, 10 + radius * Math.SQRT1_2];
+const anchor = radius => [8 + radius * Math.SQRT1_2, 0, capZ + capSign * radius * Math.SQRT1_2];
 const screen = point => f.page.evaluate(world => window.__studioScreenOf(world), point);
 const preview = () => hud().locator('.status').filter({ hasText: /^preview$/ }).waitFor();
 const near = (actual, expected, tolerance) => assert.ok(Math.abs(actual - expected) < tolerance, `${actual} vs ${expected}`);
 
 async function frame(view) {
-  await button(view, f.page.locator('.views')).click();
+  if (view === 'Bottom') {
+    await button('View cube directions').click();
+    await f.page.getByRole('menuitem', { name: view, exact: true }).click();
+  } else await button(view, f.page.locator('.views')).click();
   if (await button('Ortho').getAttribute('aria-pressed') !== 'true') await button('Ortho').click();
   await f.page.getByTitle('Frame all (F)', { exact: true }).click();
   await f.page.evaluate(() => new Promise(done => requestAnimationFrame(() => requestAnimationFrame(done))));
 }
 
 async function start() {
-  await frame('Top');
+  await frame(capView);
   const canvas = await f.page.locator('.vp-canvas').boundingBox();
   await f.page.mouse.click(canvas.x + 8, canvas.y + 8);
   const filter = button('Selection filter');
   for (let i = 0; i < 6 && !(await filter.innerText()).includes('Edges'); i++) await filter.click();
   assert.match(await filter.innerText(), /Edges/);
-  await f.worldClick([8 * Math.SQRT1_2, 8 * Math.SQRT1_2, 10]);
+  await f.worldClick([8 * Math.SQRT1_2, 8 * Math.SQRT1_2, capZ]);
   await f.page.waitForFunction(() => window.__studioSelection?.selection?.edges?.length === 1);
   await f.command('Fillet');
   await input().fill('0.6');
@@ -91,7 +97,7 @@ async function measure(label, radius, grip = handle()) {
 async function orbitEndOn() {
   for (let i = 0; i < 3; i++) {
     const { yaw, pitch } = await f.page.evaluate(() => window.__studioCamera());
-    const dx = yaw / .008, dy = (Math.PI / 4 - pitch) / .008;
+    const dx = yaw / .008, dy = (capSign * Math.PI / 4 - pitch) / .008;
     if (Math.hypot(dx, dy) < .05) break;
     const rect = await f.page.locator('.vp-canvas').boundingBox();
     const x = rect.x + rect.width * .55, y = rect.y + rect.height * .55;
@@ -120,8 +126,16 @@ async function verify(label, doc, radius) {
   const expected = 640 * Math.PI - 2 * Math.PI * (8 * (1 - Math.PI / 4) * radius ** 2 - (5 / 6 - Math.PI / 4) * radius ** 3);
   near(native.volume, expected, 2e-6);
   near((await f.bodies()).bodies[0].volume, expected, 2e-6);
-  for (const { samples } of native.faces) for (const [x, y, z] of samples)
-    near(Math.hypot(Math.hypot(x, y) - (8 - radius), z - (10 - radius)), radius, 2e-6);
+  for (const { samples } of native.faces) {
+    const capDistances = samples.map(([, , z]) => capSign * (capZ - z));
+    const radial = samples.map(([x, y]) => Math.hypot(x, y));
+    near(Math.min(...capDistances), 0, 2e-6);
+    near(Math.max(...capDistances), radius, 2e-6);
+    near(Math.min(...radial), 8 - radius, 2e-6);
+    near(Math.max(...radial), 8, 2e-6);
+    for (const [x, y, z] of samples)
+      near(Math.hypot(Math.hypot(x, y) - (8 - radius), z - (capZ - capSign * radius)), radius, 2e-6);
+  }
   f.report.observations.push({ label, radius, volume: native.volume, referenceVolume: expected, digest: native.digest });
   return native.digest;
 }
@@ -130,7 +144,7 @@ const historyGroup = () => f.page.locator('g.gizmo-handle[data-handle="r"]');
 
 async function exerciseHistory(initial) {
   const group = historyGroup(), grip = group.locator('circle');
-  await frame('Top');
+  await frame(capView);
   await f.page.evaluate(() => window.__filletHistoryRefs.arm());
   await f.openFeatureEditor(2);
   const reply = await (await f.page.waitForFunction(() => window.__filletHistoryRefs.read())).jsonValue();
@@ -146,7 +160,7 @@ async function exerciseHistory(initial) {
   await f.page.mouse.up();
   assert.equal(await f.page.locator('.gizmo-readout').count(), 0);
   await f.same(initial);
-  const aligned = await measure('history-top-exact', .6, grip);
+  const aligned = await measure('history-cap-exact', .6, grip);
   assert.ok(aligned.errorPx < .75, JSON.stringify(aligned));
   await f.snapshot('history-exact-seam');
 
@@ -225,7 +239,7 @@ await f.run(async () => {
     await f.freshOpen(saved.file, saved.doc, 'history-original-reopened');
     await verify('history-original-native', saved.doc, .6);
     if (!historyBaseline) return exerciseHistory(saved.doc);
-    await frame('Top');
+    await frame(capView);
     await f.openFeatureEditor(2);
     const group = f.page.locator('g.gizmo-handle[data-handle="r"]');
     const box = await group.locator('circle').boundingBox(), expected = await screen(anchor(.6));

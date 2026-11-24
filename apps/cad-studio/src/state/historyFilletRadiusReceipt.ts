@@ -53,12 +53,18 @@ function historyCircularRims(doc: StudioDoc, fillet: Fillet) {
 }
 
 function historyClosedCircularRim(doc: StudioDoc, fillet: Fillet) {
-  const sketch = doc.nodes[0];
+  const [sketch, stock] = doc.nodes;
   if (fillet.edges.length !== 2 || sketch.kind !== 'sketch' || sketch.profile !== 'circle' ||
     !Object.keys(sketch).every(key => ['id', 'kind', 'profile', 'center', 'radius'].includes(key)) ||
-    !numericPoint(sketch.center) || typeof sketch.radius !== 'number' || !Number.isFinite(sketch.radius) || sketch.radius <= 0) return;
-  const id = featureId(doc.nodes, 1), targets = [`${id}.side0#1|${id}.top`, `${id}.side0#2|${id}.top`] as const;
-  if (targets.every(edge => fillet.edges.includes(edge) && fillet.sigs?.[edge]?.k === 'curve' && fillet.sigs[edge].n === 2)) return targets;
+    !numericPoint(sketch.center) || typeof sketch.radius !== 'number' || !Number.isFinite(sketch.radius) || sketch.radius <= 0 ||
+    stock.kind !== 'extrude' || typeof stock.height !== 'number') return;
+  const id = featureId(doc.nodes, 1);
+  for (const capSign of [1, -1] as const) {
+    const targets = capSign === 1 ? [`${id}.side0#1|${id}.top`, `${id}.side0#2|${id}.top`] as const
+      : [`${id}.bottom|${id}.side0#1`, `${id}.bottom|${id}.side0#2`] as const;
+    if (targets.every(edge => fillet.edges.includes(edge) && fillet.sigs?.[edge]?.k === 'curve' && fillet.sigs[edge].n === 2))
+      return { targets, capSign, height: stock.height };
+  }
 }
 
 export function ordinaryHistoryFillet(doc: StudioDoc,index: number|null,bodies?:readonly BodyResult[]): Fillet | null {
@@ -198,7 +204,8 @@ function pairedCircularHistoryFrame(rims: readonly [string, string], fillet: Fil
     return topMatches[0].frame;
 }
 
-function closedCircularHistoryFrame(targets: readonly [string, string], fillet: Fillet, stock: BodyResult, finished: BodyResult,
+function closedCircularHistoryFrame({ targets, capSign, height }: NonNullable<ReturnType<typeof historyClosedCircularRim>>,
+  fillet: Fillet, stock: BodyResult, finished: BodyResult,
   face: HistoryFilletReceipt['face'], radius: number): HistoryFilletReceipt['frame'] {
   const accepted = finished.nativeClosedFilletTorus;
   // The two owner-certified native halves directly adjoin one another under the same display name.
@@ -217,10 +224,12 @@ function closedCircularHistoryFrame(targets: readonly [string, string], fillet: 
     const native = toSig(sig);
     if (stored.s !== native.s || !sameVec(stored.p, native.p)) return;
   }
-  const tolerance = Math.max(1e-8, circle.radius * 1e-9), outward: Vec3 = [0, 0, 1];
+  const tolerance = Math.max(1e-8, circle.radius * 1e-9), outward: Vec3 = [0, 0, capSign];
   const expectedCentre = sub(circle.centre, scale(outward, radius));
-  if (![...accepted.centre, ...accepted.axis, accepted.majorRadius, accepted.radius, ...rim.midpoint, ...rim.direction].every(Number.isFinite)
+  if (![...accepted.centre, ...accepted.axis, accepted.majorRadius, accepted.radius, accepted.height, ...rim.midpoint, ...rim.direction].every(Number.isFinite)
     || len(cross(accepted.axis, outward)) > 1e-9 || Math.abs(len(accepted.axis) - 1) > 1e-9
+    || Math.abs(rim.direction[2] - capSign * Math.SQRT1_2) > 1e-9
+    || Math.abs(accepted.height - height) > tolerance
     || len(sub(accepted.centre, expectedCentre)) > tolerance || Math.abs(accepted.radius - radius) > tolerance
     || Math.abs(accepted.majorRadius - (circle.radius - radius)) > tolerance) return;
   return { at: add(rim.midpoint, scale(rim.direction, radius)), dir: rim.direction };

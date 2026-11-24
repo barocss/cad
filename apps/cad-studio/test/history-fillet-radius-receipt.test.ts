@@ -14,11 +14,11 @@ const rectangle: SketchNode = {kind:'sketch',profile:'rectangle',min:[0,0],max:[
 const quarterSector: SketchNode = {kind:'sketch',profile:'loop',segments:[
   {kind:'line',start:[0,0]},{kind:'arc',start:[8,0],center:[0,0],direction:'ccw'},{kind:'line',start:[0,8]},
 ]};
-function evaluatedFixture(sketch: SketchNode, edges: string | string[], radius: number) {
- const base=withNode(withNode(emptyDoc(),sketch),{kind:'extrude',sketch:0,height:10});
+function evaluatedFixture(sketch: SketchNode, edges: string | string[], radius: number, height = 10) {
+ const base=withNode(withNode(emptyDoc(),sketch),{kind:'extrude',sketch:0,height});
  const initial=evaluateDoc(base,1);assert.ok(initial.ok);
  const picked=[edges].flat().map(name=>{
-  const edge=initial.bodies[0].mesh.edges.find(e=>e.names[0]===name);assert.ok(edge);
+  const edge=initial.bodies[0].mesh.edges.find(e=>e.names.includes(name));assert.ok(edge);
   return {body:0,edge:edge.index};
  });
  const root={doc:base,bodies:initial.bodies,selection:{faces:[],edges:picked,bodies:[]}};
@@ -301,16 +301,17 @@ test('paired History rejects the wrong target, cylinder, unmerged source or stor
 });
 
 
-test('closed circular History binds both shared source names to one exact native rim', () => {
+for (const capSign of [1, -1] as const) test(`closed circular History binds both shared names to the ${capSign === 1 ? 'upper' : 'lower'} native rim`, () => {
   const disc: SketchNode = { kind: 'sketch', profile: 'circle', center: [0, 0], radius: 8 };
-  const x = fixture(disc, 'n1.side0#2|n1.top', .6);
+  const picked = capSign === 1 ? 'n1.side0#2|n1.top' : 'n1.bottom|n1.side0#1';
+  const x = fixture(disc, picked, .6);
   const node = x.doc.nodes[2], stock = x.reply.bodies[0], finished = x.accepted.bodies[0];
   assert.ok(node.kind === 'fillet' && node.sigs && finished.nativeClosedFilletTorus);
   const torus = finished.nativeClosedFilletTorus, frame = x.evidence.frame;
   assert.ok(frame);
-  const expected = [8 + .6 * Math.SQRT1_2, 0, 10 + .6 * Math.SQRT1_2];
+  const expected = [8 + .6 * Math.SQRT1_2, 0, (capSign === 1 ? 10 : 0) + capSign * .6 * Math.SQRT1_2];
   assert.ok(Math.hypot(...frame.at.map((value, axis) => value - expected[axis])) < 1e-12);
-  assert.ok(Math.hypot(...frame.dir.map((value, axis) => value - [Math.SQRT1_2, 0, Math.SQRT1_2][axis])) < 1e-12);
+  assert.ok(Math.hypot(...frame.dir.map((value, axis) => value - [Math.SQRT1_2, 0, capSign * Math.SQRT1_2][axis])) < 1e-12);
   assert.equal(torus.faces.length, 2);
   assert.ok(torus.faces.some(member => member.faceId === x.evidence.face.id));
   assert.deepEqual([...torus.targets].sort(), [...node.edges].sort());
@@ -325,12 +326,21 @@ test('closed circular History binds both shared source names to one exact native
   assert.equal(ordinaryHistoryFillet(forged, 2, x.accepted.bodies), null);
   const wrongTorus = { ...finished, nativeClosedFilletTorus: { ...torus, majorRadius: torus.majorRadius + 1 } };
   assert.equal(historyFilletReceipt(x.doc, x.doc, 2, [wrongTorus], x.reply, 3, x.current), null);
+  const taller = evaluatedFixture(disc, picked, .6, 12);
+  const tallerTorus = taller.accepted.bodies[0].nativeClosedFilletTorus;
+  assert.ok(tallerTorus && Math.abs(tallerTorus.height - 12) < 1e-9);
+  assert.equal(historyFilletReceipt(x.doc, x.doc, 2, taller.accepted.bodies, x.reply, 3, x.current), null);
   const wrongFace = { ...finished, mesh: { ...finished.mesh,
     faces: finished.mesh.faces.map(face => face === x.evidence.face ? { ...face, id: 'borrowed-display-face' } : face) } };
   assert.equal(historyFilletReceipt(x.doc, x.doc, 2, [wrongFace], x.reply, 3, x.current), null);
   const sourceLost = { ...x.reply, bodies: [{ ...stock, mesh: { ...stock.mesh,
     edges: stock.mesh.edges.map(edge => ({ ...edge, nativeFilletRim: undefined })) } }] };
   assert.equal(historyFilletReceipt(x.doc, x.doc, 2, x.accepted.bodies, sourceLost, 3, x.current), null);
+  const reversedCap = { ...x.reply, bodies: [{ ...stock, mesh: { ...stock.mesh,
+    edges: stock.mesh.edges.map(edge => edge.nativeFilletRim ? { ...edge, nativeFilletRim: {
+      ...edge.nativeFilletRim, direction: [Math.SQRT1_2, 0, -capSign * Math.SQRT1_2] as [number, number, number],
+    } } : edge) } }] };
+  assert.equal(historyFilletReceipt(x.doc, x.doc, 2, x.accepted.bodies, reversedCap, 3, x.current), null);
   x.revoke();
   assert.equal(historyFilletReceipt(x.doc, x.doc, 2, x.accepted.bodies, x.reply, 3, x.current), null);
   assert.equal(ownedHistoryFilletHandle(x.evidence, x.cmd, x.ctx, x.handle, null), undefined);

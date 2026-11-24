@@ -1,13 +1,13 @@
 # CAD roadmap — current status and execution order
 
-Updated 2026-11-24 · Priority authority: D520 · Latest delivery: D1877 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
+Updated 2026-11-24 · Priority authority: D520 · Latest delivery: D1878 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
 
 This is the only current status index. Detailed tracks define acceptance; the 34 stable row pages retain scope and issue navigation. Immutable decision notes retain results. Do not append chronological status paragraphs here. [D520 decision](notes/cad-roadmap-replan-2026-11-04/README.md) supersedes D445 execution order and historical next-item text, while retaining its safeguards and bounded proofs.
 
 ## Now and next
 
-- **Current position:** [D1877](notes/gpu-tests-cad-export-resolution-2026-11-24/README.md), P0 rows 06, 20 and 32. The full GPU test entry passes 365/365. Actual Studio verifies the five modes, isolation, clearance and fallback on one assembly.
-- **Next MAIN:** D1878, P1/P5 rows [08](roadmap-rows/08.md) and [20](roadmap-rows/20.md), [#214](https://github.com/barocss/cad/issues/214). Inspect the original lower complete circular rim as a terminal Constant Fillet History case. Check its native chart and pointer ownership before changing the existing handle.
+- **Current position:** [D1878](notes/lower-closed-circular-fillet-history-2026-11-24/README.md), P1/P5 rows 08 and 20. History can drag the lower closed-rim Constant Fillet from its native seam. Actual Studio confirms radius parity and native reopen. GitHub closed [#197](https://github.com/barocss/cad/issues/197) after the exact GPU CI and eight actual scenes.
+- **Next MAIN:** D1879, P0/P2 rows [13](roadmap-rows/13.md) and [30](roadmap-rows/30.md), [#277](https://github.com/barocss/cad/issues/277). Verify that pure planar and pure tessellated STEP with an active degree declaration preserve their existing geometry and length handling. Review the remaining issue acceptance against D1867 and the new desktop proof.
 - **Separate follow-ups:** Continue Studio App extraction in cohesive parts with affected desktop checks. [#608 Rendering](https://github.com/barocss/cad/issues/608) stays on HOLD. API inventory drift remains open. The issue tracker records [#126](https://github.com/barocss/cad/issues/126), [#613](https://github.com/barocss/cad/issues/613), [#152](https://github.com/barocss/cad/issues/152) and [#22](https://github.com/barocss/cad/issues/22) as closed.
 - **Active repository:** [barocss/cad](https://github.com/barocss/cad), based on `origin/main`. Fetch before work and preserve unexpected changes. The [migration record](../../../docs/migration/README.md) maps the former `local/cad-dev` history and issue numbers.
 - **Evidence correction:** D482 records2167 PASS/0 FAIL/2 existing SKIP in a later full-kernel run than D433. Neither result is a new full-suite PASS at this audit HEAD. [D482 record](notes/vertical-contact-refusal-2026-11-04/README.md).
