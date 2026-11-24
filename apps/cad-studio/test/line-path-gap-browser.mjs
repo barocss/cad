@@ -5,17 +5,19 @@ import { join } from 'node:path';
 import { createFlow, sha256 } from './flow-helper.mjs';
 
 const output = process.argv[2], baseline = process.env.D803_BASELINE === '1';
+const contract = process.argv.includes('--contract');
 const multi = process.argv.includes('--multi-arc-polyline');
 const curved = multi || process.argv.includes('--curved-polyline');
 const polyline = curved || process.argv.includes('--polyline');
-const label = multi ? 'D1618' : curved ? 'D1607' : polyline ? 'D1602' : 'D803';
+const label = contract ? 'D1890' : multi ? 'D1618' : curved ? 'D1607' : polyline ? 'D1602' : 'D803';
 const geometryOnly = polyline || process.argv.includes('--geometry-only');
 const pins = ['apps/cad-studio/test/line-path-gap-browser.mjs', 'apps/cad-studio/src/sketch/usePathGap.ts',
   'apps/cad-studio/src/sketch/pathGap.ts',
   'apps/cad-studio/src/viewport/viewportPointerInput.ts', 'packages/barocss-cad-model/src/sketch/trim.ts'];
 const f = await createFlow({
   name: 'line-path-gap', output, envFrozen: label + '_SOURCE_FROZEN', initialFiles: pins, requiredFrozen: pins,
-  qualification: polyline ? 'Cut 4 mm along a middle construction span and retain the adjoining spans and IDs.'
+  qualification: contract ? 'Verify the remaining straight Gap refusal and draft ownership contract in desktop Studio.'
+    : polyline ? 'Cut 4 mm along a middle construction span and retain the adjoining spans and IDs.'
     : 'Cut 4 mm along a slanted construction segment and retain both identified ends.',
   limits: [multi ? 'Three semicircles in an open construction polyline and one separate closed rectangle in XY.'
     : curved ? 'One quarter arc between two straight spans in a construction polyline and one separate closed rectangle in XY.'
@@ -80,7 +82,116 @@ async function openProject() {
   await versions().getByLabel('Project', { exact: true }).waitFor();
 }
 
+async function verifyCloseoutContract() {
+  const variants = [
+    ['constrained', [{ ...line, lengths: { 0: 30 } }]],
+    ['overlap', [line, { ...line, ids: ['e7', 'e8'], points: [[21.6, 21.2], [45.6, 39.2]] }]],
+    ['current', [line]],
+  ];
+  const geometry = () => f.page.locator('.vp-overlay .sk-shape[points]').evaluateAll(nodes => nodes.map(node =>
+    [node.classList.contains('construction') ? 'construction' : 'material', node.getAttribute('points')]).sort());
+  const history = () => Promise.all(['Undo', 'Redo'].map(name => button(f.page, name).isEnabled()));
+  const checkMarks = async () => {
+    const pixel = await hover(pick);
+    await preview().waitFor();
+    const actual = await f.page.locator('.vp-overlay .sk-path-gap-end').evaluateAll(nodes => nodes.map(node => {
+      const point = new DOMPoint(node.cx.baseVal.value, node.cy.baseVal.value).matrixTransform(node.getScreenCTM());
+      return [point.x, point.y];
+    }));
+    const expected = await Promise.all(cutPoints.map(point => f.screenOf(point)));
+    assert.equal(actual.length, 2);
+    assert.ok(expected.every(point => actual.some(value => distance(point, value) < 1)));
+    return pixel;
+  };
+  for (const [kind, construction] of variants) {
+    f.phase = `Open the ${kind} construction sources in the actual sketch editor`;
+    await f.newPage();
+    const doc = { ...initial, nodes: [{ ...stock, construction }] };
+    await f.openFile({ name: `gap-${kind}.bcad`, mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(doc)) }, 1);
+    await f.same(doc);
+    await edit();
+    const original = await geometry(), originalHistory = await history();
+    assert.equal(original.filter(([cls]) => cls.includes('construction')).length, construction.length);
+    if (kind !== 'current') {
+      assert.equal(await gap().count(), 0);
+      await hover(pick);
+      assert.equal(await preview().count(), 0);
+      assert.deepEqual(await geometry(), original);
+      assert.deepEqual(await history(), originalHistory);
+      await f.same(doc);
+      await f.snapshot(`${kind}-gap-refused`);
+      continue;
+    }
+
+    f.phase = 'Switch tools with a gap preview open';
+    await gap().click();
+    await checkMarks();
+    await f.snapshot('original-measured-preview');
+    await f.tool('Select', 's');
+    await preview().waitFor({ state: 'hidden' });
+    await length().waitFor({ state: 'hidden' });
+    await f.worldClick([48, 35]);
+    assert.deepEqual(await geometry(), original);
+    assert.deepEqual(await history(), originalHistory);
+    await f.same(doc);
+    await f.snapshot('tool-change-retired-preview');
+
+    f.phase = 'Hide the source during a new preview and reject the old canvas point';
+    await f.tool('Trim', 't');
+    await gap().click();
+    await checkMarks();
+    await button(f.page, 'Hide construction').click();
+    await preview().waitFor({ state: 'hidden' });
+    await length().waitFor({ state: 'hidden' });
+    assert.equal(await gap().count(), 0);
+    await f.worldClick(pick);
+    await f.dismissToasts();
+    await button(f.page, 'Show construction').click();
+    await gap().waitFor();
+    assert.equal(await length().count(), 0);
+    assert.deepEqual(await geometry(), original);
+    assert.deepEqual(await history(), originalHistory);
+    await f.same(doc);
+    await f.snapshot('source-change-retired-preview');
+
+    f.phase = 'Add an ordinary crossing to the same draft and compare measured cut endpoints';
+    await f.tool('Line', 'l');
+    await f.worldClick([32, 24]);
+    await f.worldClick([32, 34]);
+    await f.tool('Trim', 't');
+    const withCrossing = await geometry();
+    assert.equal(withCrossing.length, original.length + 1);
+    await gap().click();
+    const pixel = await checkMarks();
+    await f.snapshot('measured-preview-with-crossing');
+    await f.page.mouse.click(...pixel);
+    await length().waitFor({ state: 'hidden' });
+    const cut = await geometry();
+    assert.equal(cut.length, withCrossing.length + 1);
+    const retainedEnds = await f.page.locator('.vp-overlay polyline.sk-shape.construction.open').evaluateAll(nodes => nodes.flatMap(node =>
+      [node.points.getItem(0), node.points.getItem(node.points.length - 1)].map(point => {
+        const screen = new DOMPoint(point.x, point.y).matrixTransform(node.getScreenCTM());
+        return [screen.x, screen.y];
+      })));
+    assert.equal(retainedEnds.length, 4);
+    const cutEndPixels = await Promise.all(cutPoints.map(point => f.screenOf(point)));
+    assert.ok(cutEndPixels.every(point => retainedEnds.some(value => distance(point, value) < 1)));
+    assert.deepEqual(cut.filter(([cls]) => !cls.includes('construction')),
+      withCrossing.filter(([cls]) => !cls.includes('construction')));
+    await f.same(doc);
+    await f.snapshot('crossing-kept-after-gap');
+    await button(f.page, 'Undo').click();
+    assert.deepEqual(await geometry(), withCrossing);
+    await f.same(doc);
+    await button(f.page, 'Redo').click();
+    assert.deepEqual(await geometry(), cut);
+    await f.same(doc);
+    await f.snapshot('crossing-kept-after-redo');
+  }
+}
+
 await f.run(async () => {
+  if (contract) return verifyCloseoutContract();
   if (polyline) {
     const newContext = f.browser.newContext.bind(f.browser);
     f.browser.newContext = async options => {

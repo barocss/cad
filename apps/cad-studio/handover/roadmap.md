@@ -1,13 +1,13 @@
 # CAD roadmap — current status and execution order
 
-Updated 2026-11-24 · Priority authority: D520 · Latest delivery: D1889 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
+Updated 2026-11-24 · Priority authority: D520 · Latest delivery: D1890 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
 
 This is the only current status index. Detailed tracks define acceptance; the 34 stable row pages retain scope and issue navigation. Immutable decision notes retain results. Do not append chronological status paragraphs here. [D520 decision](notes/cad-roadmap-replan-2026-11-04/README.md) supersedes D445 execution order and historical next-item text, while retaining its safeguards and bounded proofs.
 
 ## Now and next
 
-- **Current position:** [D1889](notes/ordinary-polyline-path-gap-2026-11-24/README.md), P1 rows 09 and 16. Studio cuts one measured gap in an ordinary straight sketch polyline, keeps both original neighboring spans, and reopens the two exact direct curves.
-- **Next MAIN:** D1890, P1 rows [09](roadmap-rows/09.md) and [16](roadmap-rows/16.md), [#226](https://github.com/barocss/cad/issues/226). Complete the original single line, arc and circle closure matrix. Check constrained and overlapping inputs, changed sketch draft ownership and a measured cut with a neighboring crossing in actual Studio.
+- **Current position:** [D1890](notes/path-gap-original-contract-closeout-2026-11-24/README.md), P1 rows 09 and 16. Actual Studio verifies constrained and overlapping input refusal, current gap preview ownership and constant requested length next to another crossing.
+- **Next MAIN:** D1891, P5 rows [07](roadmap-rows/07.md) and [31](roadmap-rows/31.md), [#17](https://github.com/barocss/cad/issues/17). Add an independent inward tilted outlet Replace face after exactly one original inlet replacement on the same five-span paired Sweep. Keep the first live reference, both passages and all joins through donor editing and reopen.
 - **Separate follow-ups:** Continue Studio App extraction in cohesive parts with affected desktop checks. [#608 Rendering](https://github.com/barocss/cad/issues/608) stays on HOLD. API inventory drift remains open. The issue tracker records [#126](https://github.com/barocss/cad/issues/126), [#613](https://github.com/barocss/cad/issues/613), [#152](https://github.com/barocss/cad/issues/152) and [#22](https://github.com/barocss/cad/issues/22) as closed.
 - **Active repository:** [barocss/cad](https://github.com/barocss/cad), based on `origin/main`. Fetch before work and preserve unexpected changes. The [migration record](../../../docs/migration/README.md) maps the former `local/cad-dev` history and issue numbers.
 - **Evidence correction:** D482 records2167 PASS/0 FAIL/2 existing SKIP in a later full-kernel run than D433. Neither result is a new full-suite PASS at this audit HEAD. [D482 record](notes/vertical-contact-refusal-2026-11-04/README.md).

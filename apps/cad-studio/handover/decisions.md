@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1890: [Complete the original measured sketch gap closeout](notes/path-gap-original-contract-closeout-2026-11-24/README.md), #226. Verify the four remaining actual scope and draft ownership cases.
 - D1889: [Cut a measured gap in an ordinary straight sketch polyline](notes/ordinary-polyline-path-gap-2026-11-24/README.md), #226. Keep both original neighboring spans, material role, draft Undo and exact native curve reopen.
 - D1888: [Extract the Studio command Apply lifecycle](notes/studio-command-apply-2026-11-24/README.md), #44. Compare ten actual Text relief and Extrude Join desktop states before and after.
 - D1887: [Exclude hidden construction from click and drag Trim](notes/hidden-construction-trim-2026-11-24/README.md), #233. Qualify geometry, material repair and actual tab and pointer capture interruption.
