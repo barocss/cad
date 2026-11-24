@@ -558,7 +558,7 @@ function finishEdges(body: Brep, names: readonly string[], size: number, kind: E
   }
   if (halfRing && rings.length === halfRing.rims.length && rings.every(ring => ring.convex) && !convexTools.length && !cornerTools.length
     && !concaveTools.length && !concaveCorners.length) return retainHalfRingFilletCharts(out, halfRing);
-  return rings.length ? retainSweepCircularJoinBindings(body, out) : out;
+  return retainSweepCircularJoinBindings(body, out);
   } finally { if (usedCylinder) used.cylinder = true; }
 }
 
@@ -1276,6 +1276,48 @@ function coaxialTool(body: Brep, e: Brep['edges'][number], uses: Use[], P: Point
   return { brep: byTag(tool, id), convex: fs.convex };
 }
 
+/** The original straight inlet of the bounded four-piece annular Exact Sweep, read from native loops and carriers. */
+function perpendicularSweepInletWall(body: Brep, edge: Edge, uses: Use[], closed: boolean, scaleMM: number) {
+  if (!closed || body.source.family !== 'sweep-curve' || body.faces.length !== 18 || body.loops.length !== 20
+    || body.coedges.length !== 72 || body.edges.length !== 36 || body.vertices.length !== 20
+    || body.bodies.length !== 1 || body.shells.length !== 1 || !body.shells[0].closed) return;
+  const cap = uses.find(use => use.geometry.kind === 'plane'), wall = uses.find(use => use.geometry.kind === 'cylinder');
+  if (!cap || cap.face.name !== `${body.source.id}.start` || cap.face.loops.length !== 2 || wall?.geometry.kind !== 'cylinder'
+    || wall.geometry.out !== -1 || cap.geometry.kind !== 'plane' || cap.face.surface.kind !== 'surface') return;
+  const cylinder = wall.geometry, plane = cap.geometry, roundoff = 512 * Number.EPSILON * Math.max(1, scaleMM);
+  if (len(cross(plane.n, cylinder.a)) * cylinder.r > roundoff) return;
+  const loops = cap.face.loops.map(id => body.loops.find(loop => loop.id === id));
+  const inner = loops.find(loop => loop?.kind === 'inner'), outer = loops.find(loop => loop?.kind === 'outer');
+  if (!inner || !outer || inner.coedges.length !== 2 || outer.coedges.length !== 2
+    || !inner.coedges.some(id => body.coedges.find(use => use.id === id)?.edge === edge.id)) return;
+  const circle = circleOf(edge.curve);
+  if (!circle || Math.abs(circle.r - cylinder.r) > roundoff
+    || len(cross(sub(circle.c, cylinder.c), cylinder.a)) > roundoff
+    || cap.face.surface.controlPoints.flat().some(point => Math.abs(dot(sub(point, circle.c), plane.n)) > roundoff)) return;
+  const ring = (loop: NonNullable<typeof inner>, expectedOut: 1 | -1) => {
+    const halves = loop.coedges.map(id => {
+      const use = body.coedges.find(use => use.id === id), edge = use && body.edges.find(edge => edge.id === use.edge);
+      if (!use || !edge || edge.curve.degree !== 2 || edge.curve.controlPoints.length !== 5) return;
+      const arc = circleOf(edge.curve), peers = body.coedges.filter(peer => peer.edge === edge.id && peer.id !== use.id);
+      const peer = peers.length === 1 && body.faces.find(face => face.loops.includes(peers[0].loop));
+      if (!arc || !peer || use.twin !== peers[0].id || peers[0].twin !== use.id || use.sense === peers[0].sense) return;
+      const support = faceGeometry(peer, scaleMM);
+      if (support.kind !== 'cylinder' || support.out !== expectedOut || Math.abs(support.r - arc.r) > roundoff
+        || len(cross(support.a, cylinder.a)) * arc.r > roundoff || len(cross(sub(support.c, circle.c), cylinder.a)) > roundoff
+        || len(sub(arc.c, circle.c)) > roundoff || Math.abs(arc.spans.reduce((sum, span) => sum + span.phi, 0) - Math.PI) > 512 * Number.EPSILON) return;
+      const [a, b] = curveDomain(edge.curve), start = evaluateCurve(edge.curve, a), end = evaluateCurve(edge.curve, b);
+      if (len(sub(add(start, end), scale(circle.c, 2))) > roundoff) return;
+      return { radius: arc.r, middle: evaluateCurve(edge.curve, (a + b) / 2) };
+    });
+    if (!halves[0] || !halves[1] || Math.abs(halves[0].radius - halves[1].radius) > roundoff
+      || len(sub(add(halves[0].middle, halves[1].middle), scale(circle.c, 2))) > roundoff) return;
+    return halves[0].radius;
+  };
+  const bore = ring(inner, -1), outside = ring(outer, 1);
+  if (bore === undefined || outside === undefined || Math.abs(bore - cylinder.r) > roundoff || !(outside > bore)) return;
+  return { width: outside - bore, margin: Math.max(10 * linearToleranceMM(scaleMM), 2 * roundoff) };
+}
+
 function arcTool(body: Brep, e: Brep['edges'][number], uses: Use[], P: Point, Q: Point, reach: number[], size: number, kind: EdgeFinishKind, id: string, tol: number, scaleMM: number): { brep: Brep; convex: boolean } {
   const wall = uses.find(u => u.geometry.kind === 'cylinder')!;
   const cyl = wall.geometry as Extract<FaceGeometry, { kind: 'cylinder' }>;
@@ -1291,6 +1333,9 @@ function arcTool(body: Brep, e: Brep['edges'][number], uses: Use[], P: Point, Q:
   const sides = intoFaces(e, uses, P, travel), R = len(sub(sub(P, centre), scale(axis, dot(sub(P, centre), axis))));
   const to2 = (w: Point): XY => [dot(w, er0), dot(w, axis)];
   const t = finishSize(sides, size, kind);
+  const inlet = kind === 'fillet' && perpendicularSweepInletWall(body, e, uses, closed, scaleMM);
+  if (inlet && !(t < inlet.width - inlet.margin))
+    refuseFillet('RADIUS_EXCEEDS_FACE', `edge ${e.name}: the inlet bore fillet must stay strictly inside the ${+inlet.width.toPrecision(9)} mm annular cap wall`);
   // Grown outside the corner, but never across the axis.
   let g = Math.max(t, size) * 0.5;
   const w1 = to2(sides[0].w), w2 = to2(sides[1].w);

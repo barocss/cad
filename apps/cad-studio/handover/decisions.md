@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D1917: [Preserve a perpendicular Exact Sweep through inlet Fillet](notes/perpendicular-sweep-inlet-fillet-2026-11-24/README.md), #10. Retain all twelve original join bindings and refuse a radius that consumes the original inlet cap.
+
 - D1916: [Add both straight ends to a perpendicular Exact Sweep](notes/perpendicular-quarter-arc-both-ends-sweep-2026-11-24/README.md), #10. Verify all three circular joins, bore editing, native Open and matching Agent approval.
 
 - D1915: [Qualify section hatch text clearance through edits](notes/section-hatch-clearance-lifecycle-2026-11-24/README.md), #247. Verify half-scale Studio and SVG text, unchanged material DXF, and hatch restoration after unresolved or removed ownership.

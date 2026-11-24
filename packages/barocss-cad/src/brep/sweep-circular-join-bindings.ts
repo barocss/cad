@@ -1,5 +1,5 @@
 import { curveDomain, surfaceDomain } from '../core/math.js';
-import { len, sub } from '../core/vec3.js';
+import { add, cross, dot, len, scale, sub } from '../core/vec3.js';
 import { revolutionOf } from '../nurbs/surfaces/surface-revolution.js';
 import { geometryScaleMM } from '../numeric-policy.js';
 import type { Curve, Point, Surface } from '../types.js';
@@ -69,13 +69,24 @@ function joinOwners(body: Brep, edge: string, scaleMM: number) {
     const face = faces[0], surface = face.surface as Surface;
     const geometry = faceGeometry(face, scaleMM), revolution = geometry.kind === 'other' ? revolutionOf(surface, scaleMM) : undefined;
     const kind = geometry.kind === 'cylinder' ? 'cylinder' : revolution?.profile.kind === 'arc' ? 'torus' : undefined;
-    return kind ? { use, face, surface, kind } : undefined;
+    const torus = revolution?.profile.kind === 'arc' ? {
+      center: add(revolution.c, scale(revolution.a, revolution.profile.c[1])), axis: revolution.a,
+      major: revolution.profile.c[0], minor: revolution.profile.r,
+    } : undefined;
+    return kind ? { use, face, surface, kind, torus } : undefined;
   });
   const [first, second] = owners;
-  if (first && second && first.face.id !== second.face.id && first.kind !== second.kind) return [first, second];
+  if (!first || !second || first.face.id === second.face.id) return;
+  if (first.kind !== second.kind) return [first, second];
+  // Two perpendicular quarter carriers have no cylinder owner to distinguish the two uses.
+  // Keep only regular tori with perpendicular native axes; signed use and carrier identity
+  // below must independently identify each inherited owner after reconstruction.
+  const a = first.torus, b = second.torus, roundoff = 512 * Number.EPSILON * scaleMM;
+  if (a && b && a.major > a.minor && b.major > b.minor && a.minor > 0 && b.minor > 0
+    && Math.abs(dot(a.axis, b.axis)) * Math.max(a.major, b.major) <= roundoff) return [first, second];
 }
 
-/** Retain only inherited whole circular cylinder/bend joints after a fitted finish rebuilds the body. */
+/** Retain only inherited whole circular cylinder/bend or perpendicular bend/bend joints after a finish rebuild. */
 export function retainSweepCircularJoinBindings(source: Brep, result: Brep): Brep {
   if (source.source.family !== 'sweep-curve') return result;
   const scaleMM = Math.max(1, geometryScaleMM(source.vertices.map(vertex => vertex.point)),
@@ -100,8 +111,15 @@ export function retainSweepCircularJoinBindings(source: Brep, result: Brep): Bre
     const owners = joinOwners(result, edge.id, scaleMM);
     if (!owners) continue;
     const bindings = owners.map(owner => {
-      const old = original.owners.find(candidate => candidate.kind === owner.kind)!;
-      if ((old.use.sense === owner.use.sense) !== (direction === 1)) return;
+      const candidates = original.owners.filter(candidate => candidate.kind === owner.kind
+        && (candidate.use.sense === owner.use.sense) === (direction === 1));
+      if (candidates.length !== 1) return;
+      const old = candidates[0];
+      if (original.owners.every(candidate => candidate.kind === 'torus')) {
+        const a = old.torus, b = owner.torus;
+        if (!a || !b || len(sub(a.center, b.center)) > roundoff || Math.abs(a.major - b.major) > roundoff
+          || Math.abs(a.minor - b.minor) > roundoff || len(cross(a.axis, b.axis)) * Math.max(a.major, b.major) > roundoff) return;
+      }
       const binding = circularBinding(edge.curve, owner.surface, roundoff);
       return binding && (!owner.use.pcurve || boundAs(owner.use.pcurve, binding)) ? binding : undefined;
     });
