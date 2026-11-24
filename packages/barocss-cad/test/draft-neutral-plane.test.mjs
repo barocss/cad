@@ -251,8 +251,14 @@ function threeSideBox(angle, pull = 'z') {
 }
 test('three box sides retain both shared native corners and agree with independent signed-pull mass', () => {
   const H = 40, W = 40, D = 30;
-  for (const [angle, pull] of [[10, 'z'], [-12, 'z'], [10, '-z']]) {
-    const input = threeSideBox(angle, pull), before = structuredClone(input);
+  for (const [angle, pull, neutral] of [
+    [10, 'z', 0], [-12, 'z', 0], [10, '-z', 0],
+    [10, 'z', 4], [-12, 'z', 4], [10, '-z', 4], [-12, '-z', 4],
+  ]) {
+    const sign = pull === 'z' ? 1 : -1, start = sign > 0 ? 0 : H;
+    const input = threeSideBox(angle, pull);
+    input.features.at(-1).neutral = start + sign * neutral;
+    const before = structuredClone(input);
     const removeDraft = { ...input, features: input.features.slice(0, -1) };
     const source = evaluateCadPart(removeDraft), old = source.outputs[0].brep;
     const [out] = evaluateCadPart(input).outputs, brep = out.brep;
@@ -267,22 +273,26 @@ test('three box sides retain both shared native corners and agree with independe
     assert.deepEqual(evaluateCadPart(reversed).outputs[0].brep, brep);
     assert.deepEqual(reevaluate(source, { document: input }).outputs[0].brep, brep);
 
-    const slope = Math.tan(angle * Math.PI / 180), sign = pull === 'z' ? 1 : -1, start = sign > 0 ? 0 : H;
-    const volume = W * D * H - (2 * W + D) * slope * H ** 2 / 2 + 2 * slope ** 2 * H ** 3 / 3;
-    const t = (W * D * H ** 2 / 2 - (2 * W + D) * slope * H ** 3 / 3 + slope ** 2 * H ** 4 / 2) / volume;
+    const slope = Math.tan(angle * Math.PI / 180);
+    const integral = degree => ((H - neutral) ** (degree + 1) - (-neutral) ** (degree + 1)) / (degree + 1);
+    const volume = W * D * H - (2 * W + D) * slope * integral(1) + 2 * slope ** 2 * integral(2);
+    const centre = (W * D * integral(1) - (2 * W + D) * slope * integral(2) + 2 * slope ** 2 * integral(3)) / volume;
     const mass = massPropertiesOf(out);
     close(mass.volume, volume, 1e-7, 'three-side draft volume');
-    [(W - slope * t) / 2, D / 2, start + sign * t].forEach((value, i) => close(mass.centroid[i], value, coordinateLimit, 'three-side centroid'));
+    [(W - slope * centre) / 2, D / 2, start + sign * (neutral + centre)].forEach((value, i) =>
+      close(mass.centroid[i], value, coordinateLimit, 'three-side centroid'));
     for (const [name, normal] of [[right, [1, 0, sign * slope]], [front, [0, -1, sign * slope]], [back, [0, 1, sign * slope]]]) {
       const plane = faceGeometry(brep.faces.find(f => f.name === name));
       assert.equal(plane.kind, 'plane');
       plane.n.forEach((value, i) => close(value, normal[i] / Math.hypot(...normal), coordinateLimit, 'turned normal'));
     }
-    for (const [face, y0, y1] of [[front, 0, slope * H], [back, D, D - slope * H]]) {
+    for (const [face, yAt] of [[front, t => slope * t], [back, t => D - slope * t]]) {
       const key = [right, face].sort().join('|');
       const edge = brep.edges.find(e => e.name === key);
       assert.ok(edge && edge.curve.degree === 1 && edge.curve.controlPoints.length === 2);
-      for (const point of [[W, y0, start], [W - slope * H, y1, start + sign * H]]) {
+      for (const station of [0, H]) {
+        const offset = station - neutral;
+        const point = [W - slope * offset, yAt(offset), start + sign * station];
         assert.ok(edge.curve.controlPoints.some(value => samePoint(value, point)));
         for (const name of [right, face]) {
           const plane = faceGeometry(brep.faces.find(f => f.name === name));
@@ -290,10 +300,16 @@ test('three box sides retain both shared native corners and agree with independe
           close(point.reduce((d, x, i) => d + (x - plane.o[i]) * plane.n[i], 0), 0, coordinateLimit, 'shared endpoint on native support');
         }
       }
+      const neutralPoint = [W, yAt(0), start + sign * neutral];
+      for (const name of [right, face]) {
+        const plane = faceGeometry(brep.faces.find(f => f.name === name));
+        close(neutralPoint.reduce((distance, value, axis) => distance + (value - plane.o[axis]) * plane.n[axis], 0),
+          0, coordinateLimit, 'neutral corner on both supports');
+      }
     }
   }
 });
-test('three box sides refuse a collapsed depth and an off-start neutral plane', () => {
+test('three box sides refuse a collapsed depth or an out-of-range neutral plane', () => {
   const exactLimit = Math.atan(15 / 40) * 180 / Math.PI;
   assert.doesNotThrow(() => evaluateCadPart(threeSideBox(exactLimit - 0.01)));
   for (const angle of [exactLimit, exactLimit + 0.01]) {
@@ -301,8 +317,20 @@ test('three box sides refuse a collapsed depth and an off-start neutral plane', 
     assert.throws(() => evaluateCadPart(input), e => e.code === 'GEOMETRY' && /closes a box wall/.test(e.message));
     assert.deepEqual(input, retained);
   }
-  for (const neutral of [-1, 1]) {
+  for (const neutral of [-1, 40, 41]) {
     const input = threeSideBox(10); input.features.at(-1).neutral = neutral;
     assert.throws(() => evaluateCadPart(input), e => ['CAPABILITY', 'SELECTION'].includes(e.code));
+  }
+});
+
+test('opposing drafted walls keep a positive depth at both sides of an interior neutral', () => {
+  const limit = Math.atan(15 / 36) * 180 / Math.PI;
+  for (const [neutral, sign] of [[4, 1], [36, -1]]) {
+    for (const delta of [-0.01, 0, 0.01]) {
+      const input = threeSideBox(sign * (limit + delta));
+      input.features.at(-1).neutral = neutral;
+      if (delta < 0) assert.doesNotThrow(() => evaluateCadPart(input));
+      else assert.throws(() => evaluateCadPart(input), e => e.code === 'GEOMETRY' && /closes a box wall/.test(e.message));
+    }
   }
 });

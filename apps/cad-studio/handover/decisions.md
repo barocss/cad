@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D1969: [Draft three original box sides around an interior neutral plane](notes/three-side-box-draft-interior-neutral-2026-11-25/README.md), #14. Verify opposing-wall end gaps, two neutral intersections, signed native edits and actual Studio fresh Open.
 - D1968: [Draft two adjacent box sides around an interior neutral plane](notes/adjacent-box-draft-interior-neutral-2026-11-25/README.md), #14. Verify the original edge, both end sections, signed edits and desktop fresh Open.
 - D1967: [End a downward circular Extrude at the original upper annulus](notes/downward-circle-to-upper-annulus-2026-11-25/README.md), #222. Verify exact bore and rim clearance, the current Hole and retained cap identities, and desktop fresh Open.
 - D1966: [Retire an obsolete Sketch Finish refusal](notes/sketch-finish-notice-lifetime-2026-11-25/README.md), #44. Verify the current error, Keep and Discard, corrected Finish and exact native parity.

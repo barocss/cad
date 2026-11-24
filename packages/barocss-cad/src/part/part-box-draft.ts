@@ -37,7 +37,7 @@ export function draftBoxCorner(brep: Brep, names: readonly string[], neutral: nu
   if (sides.some(side => side.axis === 2) || new Set(sides.map(side => side.axis)).size !== 2) return undefined;
   const [start, end] = box.ranges[2];
   if (neutral < start) fail('CAPABILITY', 'Draft on adjacent box sides needs the neutral plane at the start of the pull');
-  if (neutral >= end || (neutral !== start && names.length === 3)) return undefined;
+  if (neutral >= end) return undefined;
 
   const slope = Math.tan(angle);
   const capRanges = (station: number) => {

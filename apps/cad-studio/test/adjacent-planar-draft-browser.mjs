@@ -4,7 +4,6 @@ import { createFlow } from './flow-helper.mjs';
 const width = 40, depth = 30, height = 40;
 const three = process.argv.includes('--three');
 const interior = process.argv.includes('--interior');
-assert.ok(!interior || !three, 'The fixed interior neutral is for two sides');
 const neutral = interior ? 4 : 0;
 const baseline = process.argv.includes('--baseline');
 const pins = [
@@ -18,7 +17,7 @@ const pins = [
   'packages/barocss-cad/src/part/part-box-shell.ts',
 ];
 const f = await createFlow({
-  name: 'adjacent-planar-draft', output: process.argv[2], envFrozen: interior ? 'D1968_SOURCE_FROZEN' : three ? 'D1934_SOURCE_FROZEN' : 'D1252_SOURCE_FROZEN',
+  name: 'adjacent-planar-draft', output: process.argv[2], envFrozen: interior && three ? 'D1969_SOURCE_FROZEN' : interior ? 'D1968_SOURCE_FROZEN' : three ? 'D1934_SOURCE_FROZEN' : 'D1252_SOURCE_FROZEN',
   initialFiles: pins, requiredFrozen: pins,
   qualification: `Author Draft on ${three ? 'three' : 'two'} rectangular stock sides, edit the angle, reject collapse, and reopen.`,
   limits: [`One rectangular solid, +Z pull, selected planar sides and the ${interior ? 'fixed interior' : 'body-end'} neutral plane.`],
@@ -120,7 +119,7 @@ async function inspect(label, doc, angle, source) {
         const start = edge.endpoints.find(point => near(point[2], 0));
         const end = edge.endpoints.find(point => near(point[2], height));
         const cross = start.map((value, axis) => value + (end[axis] - value) * neutral / height);
-        assert.ok(samePoint(cross, [width, 0, neutral]));
+        assert.ok(samePoint(cross, [width, yAt(neutral), neutral]));
       }
       shared.push(edge.endpoints);
     }
