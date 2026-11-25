@@ -44,14 +44,14 @@ function markSvg(m: Mark): string {
 export const marksSvg = (marks: readonly Mark[]) => marks.map(markSvg).join('');
 
 /** Sheet groups keep target identity separate from dimension/datum identity when selected or picked. */
-export type SheetAnnotationSelection = { kind: 'dimension' | 'note' | 'arc-centerline' | 'center-mark-group' | 'bisector-centerline' | 'virtual-sharp' | 'center-of-mass'; id: string };
+export type SheetAnnotationSelection = { kind: 'dimension' | 'note' | 'arc-centerline' | 'center-mark-group' | 'bisector-centerline' | 'virtual-sharp' | 'center-of-mass' | 'ordinate-group'; id: string };
 export function sheetGroupsSvg(sheet: Sheet, selected?: string | SheetAnnotationSelection | null, selectedTarget?: string | null,
   selectedFrame?: string | null, selectedDimensions: readonly string[] = []): string {
   return sheet.groups.map(g => {
-    const roleClass = g.centerOfMass ? 'center-of-mass' : g.virtualSharp ? 'virtual-sharp' : g.bisectorCenterline ? 'bisector-centerline' : g.centerMarkGroup ? 'center-mark-group' : g.arcCenterline ? 'arc-centerline' : g.role;
+    const roleClass = g.ordinateGroup ? 'ordinate-group' : g.centerOfMass ? 'center-of-mass' : g.virtualSharp ? 'virtual-sharp' : g.bisectorCenterline ? 'bisector-centerline' : g.centerMarkGroup ? 'center-mark-group' : g.arcCenterline ? 'arc-centerline' : g.role;
     const active = g.standaloneFrame ? selectedFrame : g.datumTarget ? selectedTarget
       : typeof selected === 'string' ? selected : selected?.kind === roleClass ? selected.id : null;
-    const identity = g.standaloneFrame ? 'data-standalone-frame' : g.datumTarget ? 'data-datum-target' : g.centerOfMass ? 'data-center-of-mass' : g.virtualSharp ? 'data-virtual-sharp' : g.bisectorCenterline ? 'data-bisector-centerline' : g.centerMarkGroup ? 'data-center-mark-group' : g.arcCenterline ? 'data-arc-centerline' : 'data-dim';
+    const identity = g.standaloneFrame ? 'data-standalone-frame' : g.datumTarget ? 'data-datum-target' : g.ordinateGroup ? 'data-ordinate-group' : g.centerOfMass ? 'data-center-of-mass' : g.virtualSharp ? 'data-virtual-sharp' : g.bisectorCenterline ? 'data-bisector-centerline' : g.centerMarkGroup ? 'data-center-mark-group' : g.arcCenterline ? 'data-arc-centerline' : 'data-dim';
     const grouped = g.role === 'dimension' && g.id !== undefined && selectedDimensions.includes(g.id);
     return `<g class="${esc(roleClass)}${grouped || (active && g.id === active) ? ' sel' : ''}"${g.view ? ` data-view="${esc(g.view)}"` : ''}${g.id ? ` ${identity}="${esc(g.id)}"` : ''}>${g.marks.map(markSvg).join('')}</g>`;
   }).join('\n');

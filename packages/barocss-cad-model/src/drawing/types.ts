@@ -298,6 +298,27 @@ export interface DrawingCenterOfMass {
   diameter?: number;
 }
 
+export type OrdinateAxis = 'horizontal' | 'vertical';
+
+/** One source-bound member of a common-origin ordinate dimension group. */
+export interface DrawingOrdinateMember {
+  id: string;
+  point: DimPoint;
+  /** Optional presentation-only jog offset in sheet mm (0.5..40 magnitude). */
+  jog?: number;
+}
+
+/** A source-bound ordinate dimension group sharing one datum origin and measurement axis. */
+export interface DrawingOrdinateGroup {
+  id: string;
+  view: SectionViewId;
+  axis: OrdinateAxis;
+  origin: DimPoint;
+  /** Group baseline coordinate in view mm (V for horizontal, U for vertical). */
+  lineCoord: number;
+  members: DrawingOrdinateMember[];
+}
+
 /** The revision after `rev`: A → B … Z → AA, 01 → 02, 1 → 2; none → A. */
 export function nextRevision(rev: string | undefined): string {
   if (!rev || rev === '-') return 'A';
@@ -393,6 +414,8 @@ export interface DrawingSettings {
   virtualSharps?: DrawingVirtualSharp[];
   /** Source-bound center-of-mass symbols on orthographic views. */
   centerOfMass?: DrawingCenterOfMass[];
+  /** Source-bound common-origin ordinate dimension groups on orthographic views. */
+  ordinateGroups?: DrawingOrdinateGroup[];
   /** Never stored: set on the settings of one sheet of a drawing with sheets (sheets.ts `forSheet`), which then lay out and build as a drawing of that sheet alone. */
   sheetContext?: SheetContext;
 }
@@ -551,6 +574,7 @@ export function readDrawing(raw: unknown): DrawingSettings {
     ...(readBisectorCenterlines(r.bisectorCenterlines).length ? { bisectorCenterlines: readBisectorCenterlines(r.bisectorCenterlines) } : {}),
     ...(readVirtualSharps(r.virtualSharps).length ? { virtualSharps: readVirtualSharps(r.virtualSharps) } : {}),
     ...(readCenterOfMass(r.centerOfMass).length ? { centerOfMass: readCenterOfMass(r.centerOfMass) } : {}),
+    ...(readOrdinateGroups(r.ordinateGroups).length ? { ordinateGroups: readOrdinateGroups(r.ordinateGroups) } : {}),
     ...(Array.isArray(r.notes) && r.notes.some(isNote) ? { notes: r.notes.filter(isNote).map(n => ({ id: n.id, text: n.text, at: [n.at[0], n.at[1]] as XY, ...(n.leader && VIEW_IDS.includes(n.leader.view) && isXY(n.leader.at) ? { leader: { view: n.leader.view, at: [n.leader.at[0], n.leader.at[1]] as XY, ...(Object.hasOwn(n.leader, 'target') ? { target: readNoteTarget(n.leader.target) } : {}) } } : {}), ...(typeof n.sheet === 'string' && /^[A-Za-z0-9_-]{1,16}$/.test(n.sheet) ? { sheet: n.sheet } : {}) })) } : {}),
     ...(readTables(r.tables).length ? { tables: readTables(r.tables) } : {}),
   };
@@ -669,6 +693,61 @@ function readCenterOfMass(raw: unknown): DrawingCenterOfMass[] {
       ...(x.hidden === true ? { hidden: true as const } : {}),
       ...(diameter !== undefined && Math.abs(diameter - 4) > 1e-6 ? { diameter } : {}),
     });
+  }
+  return out;
+}
+function copyDimPoint(p: DimPoint): DimPoint {
+  return {
+    edge: p.edge,
+    at: p.at,
+    near: [p.near[0], p.near[1], p.near[2]],
+    ...(p.sig ? { sig: { ...p.sig, p: [...p.sig.p] as Vec3, ...(p.sig.d ? { d: [...p.sig.d] as Vec3 } : {}) } } : {}),
+    ...(typeof p.was === 'string' ? { was: p.was } : {}),
+    ...(p.ring ? { ring: p.ring.map(copyEdgeRef) } : {}),
+    ...(p.second ? { second: copyEdgeRef(p.second) } : {}),
+    ...(typeof p.virtualSharpId === 'string' ? { virtualSharpId: p.virtualSharpId } : {}),
+    ...(typeof p.bodyKey === 'string' ? { bodyKey: p.bodyKey } : {}),
+    ...(typeof p.comId === 'string' ? { comId: p.comId } : {}),
+  };
+}
+function dimPointOk(raw: unknown): raw is DimPoint {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return false;
+  const p = raw as Partial<DimPoint>;
+  if (!isVec3(p.near)) return false;
+  if (p.at === 'com') return typeof p.edge === 'string' && typeof p.bodyKey === 'string' && !!p.bodyKey.trim();
+  if (p.at === 'pcd') return typeof p.edge === 'string' && ringOk(p.ring);
+  if (p.at === 'virtual-sharp') {
+    const second = p.second;
+    return edgeRefOk(p) && edgeRefOk(second);
+  }
+  if (p.at === 'end' || p.at === 'center') return typeof p.edge === 'string' && !!p.edge;
+  return false;
+}
+function readOrdinateGroups(raw: unknown): DrawingOrdinateGroup[] {
+  if (!Array.isArray(raw)) return [];
+  const seen = new Set<string>(), out: DrawingOrdinateGroup[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) continue;
+    const x = item as Partial<DrawingOrdinateGroup>;
+    if (typeof x.id !== 'string' || !x.id.trim() || seen.has(x.id)) continue;
+    if (!x.view || !SECTION_VIEWS.includes(x.view)) continue;
+    if (x.axis !== 'horizontal' && x.axis !== 'vertical') continue;
+    if (typeof x.lineCoord !== 'number' || !Number.isFinite(x.lineCoord)) continue;
+    if (!dimPointOk(x.origin)) continue;
+    if (!Array.isArray(x.members)) continue;
+    const mSeen = new Set<string>(), members: DrawingOrdinateMember[] = [];
+    for (const rawM of x.members) {
+      if (!rawM || typeof rawM !== 'object' || Array.isArray(rawM)) continue;
+      const m = rawM as Partial<DrawingOrdinateMember>;
+      if (typeof m.id !== 'string' || !m.id.trim() || mSeen.has(m.id)) continue;
+      if (!dimPointOk(m.point)) continue;
+      mSeen.add(m.id);
+      const jog = typeof m.jog === 'number' && Number.isFinite(m.jog) && Math.abs(m.jog) >= 0.5 && Math.abs(m.jog) <= 40
+        ? Math.round(m.jog * 1000) / 1000 : undefined;
+      members.push({ id: m.id, point: copyDimPoint(m.point), ...(jog !== undefined ? { jog } : {}) });
+    }
+    seen.add(x.id);
+    out.push({ id: x.id, view: x.view, axis: x.axis, origin: copyDimPoint(x.origin), lineCoord: x.lineCoord, members });
   }
   return out;
 }

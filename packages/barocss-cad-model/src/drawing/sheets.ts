@@ -170,7 +170,7 @@ export function forSheet(s: DrawingSettings, k: number): DrawingSettings {
   delete out.scale; if (k === 0 ? s.scale !== undefined : s.sheets[k - 1].scale !== undefined) out.scale = k === 0 ? s.scale! : s.sheets[k - 1].scale!;
   const keep = [...drawnDetails, ...circleOnly];
   if (keep.length) out.details = details.filter(d => keep.includes(d)); else delete out.details;
-  const list = <T,>(key: 'notes' | 'datums' | 'datumTargets' | 'frames' | 'arcCenterlines' | 'centerMarkGroups' | 'bisectorCenterlines' | 'virtualSharps' | 'centerOfMass', pick: (x: T) => boolean) => { const v = ((s[key] ?? []) as T[]).filter(pick); if (v.length) (out as unknown as Record<string, unknown>)[key] = v; else delete out[key]; };
+  const list = <T,>(key: 'notes' | 'datums' | 'datumTargets' | 'frames' | 'arcCenterlines' | 'centerMarkGroups' | 'bisectorCenterlines' | 'virtualSharps' | 'centerOfMass' | 'ordinateGroups', pick: (x: T) => boolean) => { const v = ((s[key] ?? []) as T[]).filter(pick); if (v.length) (out as unknown as Record<string, unknown>)[key] = v; else delete out[key]; };
   const noteHere = (x: DrawingNote) => x.leader ? here(x.leader.view) : noteSheet(s, x) === k;
   list<DrawingNote>('notes', noteHere);
   list<{ view: string }>('datums', x => here(x.view));
@@ -181,6 +181,7 @@ export function forSheet(s: DrawingSettings, k: number): DrawingSettings {
   list<{ view: string }>('bisectorCenterlines', x => here(x.view));
   list<{ view: string }>('virtualSharps', x => here(x.view));
   list<{ view: string }>('centerOfMass', x => here(x.view));
+  list<{ view: string }>('ordinateGroups', x => here(x.view));
   if (s.room) { const room: NonNullable<DrawingSettings['room']> = {}; for (const v of viewsHere) if (s.room[v]) room[v] = s.room[v]; if (Object.keys(room).length) out.room = room; else delete out.room; }
   if (k > 0) delete out.titleBlock;
   const index: DrawingTable[] = k === 0 ? [{ id: SHEET_INDEX, title: 'SHEET INDEX', columns: [{ key: 'sheet', label: 'SHEET' }, { key: 'name', label: 'NAME' }, { key: 'size', label: 'SIZE' }], rows: Array.from({ length: n }, (_, j) => [String(j + 1), sheetName(s, j), sheetSize(s, j)]), whole: true }] : [];
@@ -285,6 +286,7 @@ export function mergeSheet(whole: DrawingSettings, k: number, next: DrawingSetti
   set('bisectorCenterlines', splice(whole.bisectorCenterlines ?? [], next.bisectorCenterlines ?? [], x => here(x.view), x => x.id));
   set('virtualSharps', splice(whole.virtualSharps ?? [], next.virtualSharps ?? [], x => here(x.view), x => x.id));
   set('centerOfMass', splice(whole.centerOfMass ?? [], next.centerOfMass ?? [], x => here(x.view), x => x.id));
+  set('ordinateGroups', splice(whole.ordinateGroups ?? [], next.ordinateGroups ?? [], x => here(x.view), x => x.id));
   const sections = splice<DrawingSection>(sectionsOf(whole), nextSections, inSheet, x => x.id);
   set('details', splice<DrawingDetail>(whole.details ?? [], nextDetails, detailHere, d => d.id));
   // Only the first sheet carries the tables (less the index made for it), the title block's fields and the notes without a leader.

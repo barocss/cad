@@ -116,6 +116,7 @@ function writable(d: StudioDoc): StudioDoc {
   if (d.drawing?.bisectorCenterlines) out.drawing = { ...(out.drawing ?? d.drawing), bisectorCenterlines: d.drawing.bisectorCenterlines.map(cl => ({ ...cl, first: { ...cl.first }, second: { ...cl.second } })) };
   if (d.drawing?.virtualSharps) out.drawing = { ...(out.drawing ?? d.drawing), virtualSharps: d.drawing.virtualSharps.map(vs => ({ ...vs, first: { ...vs.first }, second: { ...vs.second } })) };
   if (d.drawing?.centerOfMass) out.drawing = { ...(out.drawing ?? d.drawing), centerOfMass: d.drawing.centerOfMass.map(cm => ({ ...cm })) };
+  if (d.drawing?.ordinateGroups) out.drawing = { ...(out.drawing ?? d.drawing), ordinateGroups: d.drawing.ordinateGroups.map(og => ({ ...og, origin: writableDimPoint(og.origin), members: og.members.map(m => ({ ...m, point: writableDimPoint(m.point) })) })) };
   if (d.bodies) { const bodies: NonNullable<StudioDoc['bodies']> = {}; for (const [k, look] of Object.entries(d.bodies)) bodies[k] = { ...look }; out.bodies = bodies; }
   return out;
 }
@@ -196,6 +197,20 @@ export function referencesOf(source: StudioDoc, readOnly = false): { doc: Studio
       refs.push(pointed(`virtual-sharp ${vs.id}`, true, side, () => side.edge, edge => { side.edge = edge; }));
     }
   }
+  const pushPointRefs = (where: string, p: Pointed & { edge: string; at?: string; ring?: (Pointed & { edge: string })[]; second?: Pointed & { edge: string } }) => {
+    if (p.at === 'com') return;
+    if (p.at === 'pcd' && p.ring) for (const m of p.ring) refs.push(pointed(where, true, m, () => m.edge, e => { m.edge = e; }));
+    else if (p.at === 'virtual-sharp' && p.second) {
+      refs.push(pointed(where, true, p, () => p.edge, e => { p.edge = e; }));
+      refs.push(pointed(where, true, p.second, () => p.second!.edge, e => { p.second!.edge = e; }));
+    } else refs.push(pointed(where, true, p, () => p.edge, e => { p.edge = e; }));
+  };
+  for (const og of doc.drawing?.ordinateGroups ?? []) {
+    pushPointRefs(`ordinate-group ${og.id} origin`, og.origin as unknown as Pointed & { edge: string; at?: string; ring?: (Pointed & { edge: string })[]; second?: Pointed & { edge: string } });
+    for (const m of og.members) {
+      pushPointRefs(`ordinate-group ${og.id}.${m.id}`, m.point as unknown as Pointed & { edge: string; at?: string; ring?: (Pointed & { edge: string })[]; second?: Pointed & { edge: string } });
+    }
+  }
   const scope = doc.drawing?.scope;
   if (scope?.kind === 'part' && scope.body) {
     const key = checkDrawingBodyOwner(doc, scope.body).length ? null : scope.body.key;
@@ -241,6 +256,11 @@ function unsigned(doc: StudioDoc): boolean {
   for (const cmg of doc.drawing?.centerMarkGroups ?? []) if (cmg.members.some(m => !m.sig)) return true;
   for (const cl of doc.drawing?.bisectorCenterlines ?? []) if (!cl.first.sig || !cl.second.sig) return true;
   for (const vs of doc.drawing?.virtualSharps ?? []) if (!vs.first.sig || !vs.second.sig) return true;
+  const unsignedDimPoint = (p: { sig?: unknown; at?: string; ring?: { sig?: unknown }[]; second?: { sig?: unknown } }) => p.at === 'com' ? false : p.at === 'pcd' ? (p.ring ?? []).some(m => !m.sig) : p.at === 'virtual-sharp' && p.second ? !p.sig || !p.second.sig : !p.sig;
+  for (const og of doc.drawing?.ordinateGroups ?? []) {
+    if (unsignedDimPoint(og.origin)) return true;
+    if (og.members.some(m => unsignedDimPoint(m.point))) return true;
+  }
   for (const look of Object.values(doc.bodies ?? {})) if (look.faces && Object.keys(look.faces).some(f => !look.faceSigs?.[f])) return true;
   return false;
 }

@@ -50,7 +50,7 @@ import { SECTION_VIEWS, VIEW_IDS, baseViewOf, detailLetter, isDetailRef, isViewI
 
 export const DRAWING_ISSUES_VERSION = 'cad-studio-drawing-issues-v1';
 
-export type DrawingIssueCode = 'SHEET_SET' | 'UNIT_PRECISION' | 'FORESHORTEN_INVALID' | 'LINEAR_ARROWS_CROWDED' | 'CROSSING_BREAK_CONFLICT' | 'CROSSING_BREAK_INACTIVE' | 'EXTENSION_JOG_INVALID' | 'DIM_ON_HIDDEN' | 'ARC_CENTERLINE_LOST' | 'CENTER_MARK_GROUP_LOST' | 'BISECTOR_CENTERLINE_LOST' | 'VIRTUAL_SHARP_LOST' | 'CENTER_OF_MASS_LOST' | 'DATUM_LOST' | 'FRAME_LOST' | 'FRAME_VIEW_MISSING' | 'DATUM_UNDEFINED' | 'FRAME_RULE' | 'DATUM_TWICE' | 'VIEW_NEEDED' | 'DIMENSION_LOST' | 'TEXT_OVERLAP' | 'TEXT_OVER_LINES' | 'OFF_SHEET' | 'VIEWS_DONT_FIT' | 'DUPLICATE' | 'REMATCHED' | 'HOLE_SIZE_MISSING' | 'HOLE_NOT_LOCATED' | 'STEP_NOT_LOCATED' | 'OVERALL_MISSING' | 'TABLE_SOURCE' | 'WELD_NOT_SHOWN' | 'BALLOON_NOT_CLEAR' | 'BALLOON_NO_EDGE' | 'FIT_ROW_MISSING' | 'FOLLOWED_CHANGED' | 'DETAIL_PARENT_MISSING' | 'DETAIL_EMPTY' | 'DETAIL_NO_ROOM' | 'BREAK_NO_VIEW' | 'SECTION_NO_ROOM' | 'SECTION_NO_VIEW' | 'DATUM_TARGET_OUTSIDE' | DatumTargetFailureCode | NoteTargetFailureCode;
+export type DrawingIssueCode = 'SHEET_SET' | 'UNIT_PRECISION' | 'FORESHORTEN_INVALID' | 'LINEAR_ARROWS_CROWDED' | 'CROSSING_BREAK_CONFLICT' | 'CROSSING_BREAK_INACTIVE' | 'EXTENSION_JOG_INVALID' | 'DIM_ON_HIDDEN' | 'ARC_CENTERLINE_LOST' | 'CENTER_MARK_GROUP_LOST' | 'BISECTOR_CENTERLINE_LOST' | 'VIRTUAL_SHARP_LOST' | 'CENTER_OF_MASS_LOST' | 'ORDINATE_ORIGIN_LOST' | 'ORDINATE_MEMBER_LOST' | 'DATUM_LOST' | 'FRAME_LOST' | 'FRAME_VIEW_MISSING' | 'DATUM_UNDEFINED' | 'FRAME_RULE' | 'DATUM_TWICE' | 'VIEW_NEEDED' | 'DIMENSION_LOST' | 'TEXT_OVERLAP' | 'TEXT_OVER_LINES' | 'OFF_SHEET' | 'VIEWS_DONT_FIT' | 'DUPLICATE' | 'REMATCHED' | 'HOLE_SIZE_MISSING' | 'HOLE_NOT_LOCATED' | 'STEP_NOT_LOCATED' | 'OVERALL_MISSING' | 'TABLE_SOURCE' | 'WELD_NOT_SHOWN' | 'BALLOON_NOT_CLEAR' | 'BALLOON_NO_EDGE' | 'FIT_ROW_MISSING' | 'FOLLOWED_CHANGED' | 'DETAIL_PARENT_MISSING' | 'DETAIL_EMPTY' | 'DETAIL_NO_ROOM' | 'BREAK_NO_VIEW' | 'SECTION_NO_ROOM' | 'SECTION_NO_VIEW' | 'DATUM_TARGET_OUTSIDE' | DatumTargetFailureCode | NoteTargetFailureCode;
 export type DrawingFix =
   | { kind: 'remove'; dim: string }
   | { kind: 'remove-arc-centerline'; id: string }
@@ -58,6 +58,8 @@ export type DrawingFix =
   | { kind: 'remove-bisector-centerline'; id: string }
   | { kind: 'remove-virtual-sharp'; id: string }
   | { kind: 'remove-center-of-mass'; id: string }
+  | { kind: 'remove-ordinate-group'; id: string }
+  | { kind: 'remove-ordinate-member'; groupId: string; memberId: string }
   | { kind: 'move'; dim: string; place: XY }
   | { kind: 'move-note'; note: string; at: XY }
   /** A table's top-left corner to `at` (O49). */
@@ -565,6 +567,22 @@ export function drawingIssues(ctx: IssueContext): DrawingIssue[] {
   for (const cm of sheet.centerOfMass ?? []) {
     if (!cm.ok) {
       out.push({ code: 'CENTER_OF_MASS_LOST', severity: 'error', message: `Center of mass ${cm.item.id} in ${viewName(cm.item.view)} is lost: ${cm.reason}`, view: cm.item.view, fix: { kind: 'remove-center-of-mass', id: cm.item.id } });
+    }
+  }
+  for (const og of sheet.ordinateGroups ?? []) {
+    if (!og.ok) {
+      out.push({ code: 'ORDINATE_ORIGIN_LOST', severity: 'error', message: `Ordinate group ${og.group.id} in ${viewName(og.group.view)} is lost: ${og.reason}`, view: og.group.view, fix: { kind: 'remove-ordinate-group', id: og.group.id } });
+      continue;
+    }
+    if (og.group.origin.was !== undefined) {
+      out.push({ code: 'REMATCHED', severity: 'warning', message: `Ordinate group ${og.group.id} in ${viewName(og.group.view)}: its origin reference was matched again after an edit. Check it.`, view: og.group.view });
+    }
+    for (const m of og.members) {
+      if (!m.ok) {
+        out.push({ code: 'ORDINATE_MEMBER_LOST', severity: 'error', message: `Ordinate ${og.group.id}.${m.member.id} in ${viewName(og.group.view)} is lost: ${m.reason}`, view: og.group.view, fix: { kind: 'remove-ordinate-member', groupId: og.group.id, memberId: m.member.id } });
+      } else if (m.member.point.was !== undefined) {
+        out.push({ code: 'REMATCHED', severity: 'warning', message: `Ordinate ${og.group.id}.${m.member.id} in ${viewName(og.group.view)}: its reference was matched again after an edit. Check it.`, view: og.group.view });
+      }
     }
   }
   for (const r of sheet.dimensions) {
@@ -1118,6 +1136,11 @@ export function applyFix(ctx: IssueContext, fix: DrawingFix): DrawingSettings {
     case 'remove-bisector-centerline': { const kept = (s.bisectorCenterlines ?? []).filter(cl => cl.id !== fix.id), rest = { ...s }; delete rest.bisectorCenterlines; return kept.length ? { ...rest, bisectorCenterlines: kept } : rest; }
     case 'remove-virtual-sharp': { const kept = (s.virtualSharps ?? []).filter(vs => vs.id !== fix.id), rest = { ...s }; delete rest.virtualSharps; return kept.length ? { ...rest, virtualSharps: kept } : rest; }
     case 'remove-center-of-mass': { const kept = (s.centerOfMass ?? []).filter(cm => cm.id !== fix.id), rest = { ...s }; delete rest.centerOfMass; return kept.length ? { ...rest, centerOfMass: kept } : rest; }
+    case 'remove-ordinate-group': { const kept = (s.ordinateGroups ?? []).filter(og => og.id !== fix.id), rest = { ...s }; delete rest.ordinateGroups; return kept.length ? { ...rest, ordinateGroups: kept } : rest; }
+    case 'remove-ordinate-member': {
+      const next = (s.ordinateGroups ?? []).map(og => og.id === fix.groupId ? { ...og, members: og.members.filter(m => m.id !== fix.memberId) } : og);
+      return next.length ? { ...s, ordinateGroups: next } : s;
+    }
     case 'remove-detail': { const kept = (s.details ?? []).filter(d => d.id !== fix.detail), rest: DrawingSettings = { ...s, dimensions: s.dimensions.filter(d => d.view !== `detail:${fix.detail}`) }; delete rest.details; return kept.length ? { ...rest, details: kept } : rest; }
     case 'remove-break': { const kept = (s.breaks ?? []).filter((_, k) => k !== fix.index), rest = { ...s }; delete rest.breaks; return kept.length ? { ...rest, breaks: kept } : rest; }
     case 'remove-datum': return { ...s, datums: (s.datums ?? []).filter(d => d.id !== fix.datum) };

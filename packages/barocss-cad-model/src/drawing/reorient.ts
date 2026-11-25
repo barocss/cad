@@ -12,6 +12,8 @@ import { resolveCenterMarkGroup } from './centerMarkGroup';
 import { resolveBisectorCenterline } from './bisectorCenterline';
 import { resolveVirtualSharp } from './virtualSharp';
 import { resolveCenterOfMass, type DrawingBodyMassSource } from './centerOfMass';
+import { resolveOrdinateGroup } from './ordinate';
+import { presetFor } from './standard';
 import { baseViewOf, detailLetter, isDetailRef, isSectionRef, isViewId, sectionLetter, sectionsOf, withSections, type DimView, type SectionRef, type DrawingSection, type DrawingSettings, type DrawingViews, type ViewId, type XY } from './types';
 import { sectionDepth, type Orientation } from './views';
 
@@ -137,6 +139,15 @@ export function reorient(from: DrawingViews, to: DrawingViews, settings: Drawing
     const mapped = map.get(cm.view)?.view ?? cm.view;
     return { ...cm, view: mapped as typeof cm.view };
   });
+  if (settings.ordinateGroups) turned.ordinateGroups = settings.ordinateGroups.map(og => {
+    const m = map.get(og.view);
+    if (!m) return og;
+    const sample: XY = og.axis === 'horizontal' ? [0, og.lineCoord] : [og.lineCoord, 0];
+    const mappedSample = m.point(sample);
+    const axis = m.swaps ? (og.axis === 'horizontal' ? 'vertical' : 'horizontal') : og.axis;
+    const lineCoord = axis === 'horizontal' ? mappedSample[1] : mappedSample[0];
+    return { ...og, view: m.view as typeof og.view, axis, lineCoord };
+  });
   if (settings.datumTargets) turned.datumTargets = settings.datumTargets.map((d): typeof d => {
     const [view, place] = mapPlace(d.view, d.place), m = map.get(d.view);
     // A line's ends and an area's centre are view points: they turn as the symbol's place does; a rectangle's width and height swap with the axes.
@@ -201,6 +212,24 @@ export function reorient(from: DrawingViews, to: DrawingViews, settings: Drawing
     const after = resolveCenterOfMass(to[mapped.view], mapped.bodyKey, mapped.view, comSources, mapped.diameter);
     if (!after.ok || Math.hypot(after.geometry.centroid3[0] - before.geometry.centroid3[0], after.geometry.centroid3[1] - before.geometry.centroid3[1], after.geometry.centroid3[2] - before.geometry.centroid3[2]) > 1e-5) {
       failed.push({ dim: cm.id, was: `(${before.geometry.centroid3.join(',')})`, now: after.ok ? `(${after.geometry.centroid3.join(',')})` : `lost: ${after.reason}` });
+    }
+  });
+  const ordPreset = presetFor(settings);
+  (settings.ordinateGroups ?? []).forEach((og, k) => {
+    const before = resolveOrdinateGroup(from[og.view], og, og.view, ordPreset, comSources);
+    if (!before.ok) return;
+    const mapped = turned.ordinateGroups![k];
+    const after = resolveOrdinateGroup(to[mapped.view], mapped, mapped.view, ordPreset, comSources);
+    if (!after.ok) {
+      failed.push({ dim: og.id, was: `${og.members.length} members`, now: `lost: ${after.reason}` });
+      return;
+    }
+    for (let j = 0; j < before.members.length; j++) {
+      const bm = before.members[j], am = after.members[j];
+      if (!bm.ok) continue;
+      if (!am?.ok || Math.abs(Math.abs(am.value) - Math.abs(bm.value)) > 1e-6 * Math.max(1, Math.abs(bm.value))) {
+        failed.push({ dim: `${og.id}.${bm.member.id}`, was: String(bm.value), now: am?.ok ? String(am.value) : `lost: ${am?.reason ?? 'missing'}` });
+      }
     }
   });
   if (failed.length) return { ok: false, code: 'ORIENTATION_REMAP_FAILED', message: `${failed.length} dimension${failed.length > 1 ? 's' : ''} would not read the same from the new front: nothing was turned.`, failed };
