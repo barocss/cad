@@ -1,12 +1,12 @@
 # CAD roadmap — current status and execution order
 
-Updated 2026-11-25 · Priority authority: D520 · Latest delivery: D1992 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
+Updated 2026-11-25 · Priority authority: D520 · Latest delivery: D1993 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
 
 This is the only current status index. Detailed tracks define acceptance; the 34 stable row pages retain scope and issue navigation. Immutable decision notes retain results. Do not append chronological status paragraphs here. [D520 decision](notes/cad-roadmap-replan-2026-11-04/README.md) supersedes D445 execution order and historical next-item text, while retaining its safeguards and bounded proofs.
 
 ## Now and next
 
-- **Current position:** [D1992](notes/dependent-shell-chamfer-reverify-2026-11-25/README.md), P1 rows 15 and 16. Confirming any held parent feature (including `Shell`) validates the rebuilt part and refreshes remaining downstream held `References` candidates against the restored geometry. [#20](https://github.com/barocss/cad/issues/20) remains open.
+- **Current position:** [D1993](notes/prior-circular-cut-chain-2026-11-25/README.md), P1 rows 3 and 8. An earlier original circular through-Subtract can repeat across a direct Difference chain of one or more original rectangular through-Subtracts for Linear, Rectangular, Fill and Path patterns with per-stage and per-copy clearance proofs. [#25](https://github.com/barocss/cad/issues/25) remains open.
 - **Next MAIN:** Select the oldest uncovered, actionable P1 acceptance against the current source and existing issue evidence. Keep arbitrary curved targets and implicit joins outside the verified end-face contract.
 - **Separate follow-ups:** Continue Studio App extraction in cohesive parts with affected desktop checks. [#608 Rendering](https://github.com/barocss/cad/issues/608) stays on HOLD. API inventory drift remains open. The issue tracker records [#126](https://github.com/barocss/cad/issues/126), [#613](https://github.com/barocss/cad/issues/613), [#152](https://github.com/barocss/cad/issues/152) and [#22](https://github.com/barocss/cad/issues/22) as closed.
 - **Active repository:** [barocss/cad](https://github.com/barocss/cad), based on `origin/main`. Fetch before work and preserve unexpected changes. The [migration record](../../../docs/migration/README.md) maps the former `local/cad-dev` history and issue numbers.

@@ -135,7 +135,7 @@ test('partial, transformed, holed, longer and unsupported source families remain
   });
   refused(doc => { doc.features.splice(4, 0, { id: 'movedTool', kind: 'translate', target: 'circleTool', offset: [0, 0, 0] }); doc.features.find(f => f.id === 'first').tool = 'movedTool'; });
   refused(doc => { doc.features.splice(-1, 0,
-    { id: 'extraSketch', kind: 'sketch', profile: 'rectangle', min: [40, 20], max: [44, 24] },
+    { id: 'extraSketch', kind: 'sketch', profile: 'circle', center: [42, 22], radius: 2 },
     { id: 'extraTool', kind: 'extrude', sketch: 'extraSketch', height: 10 },
     { id: 'third', kind: 'difference', target: 'second', tool: 'extraTool' }); doc.features.at(-1).target = 'third'; });
   refused(doc => {

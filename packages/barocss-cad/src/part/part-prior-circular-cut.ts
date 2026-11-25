@@ -8,11 +8,11 @@ import { priorCutRectangle } from './part-prior-rectangular-cut.js';
 export type PriorCircularCut = {
   stock: Part;
   first: { result: Part; cutter: Part };
-  later: { result: Part; cutter: Part };
+  later: readonly { result: Part; cutter: Part }[];
 };
 type Circle = { center: readonly [number, number]; radius: number; tag: string };
 type Pattern = 'linear' | 'rectangular' | 'fill' | 'path';
-const requirement = (pattern: Pattern) => `${pattern} feature pattern source needs one original circular through cut followed by one original rectangular through cut on upright rectangular stock and ${pattern === 'linear' ? 'one XY line' : pattern === 'fill' ? 'selected XY placements' : pattern === 'path' ? 'an open XY path of exact straight spans, one polynomial quadratic or one canonical quarter arc' : 'an XY grid'}`;
+const requirement = (pattern: Pattern) => `${pattern} feature pattern source needs one original circular through cut followed by original rectangular through cuts on upright rectangular stock and ${pattern === 'linear' ? 'one XY line' : pattern === 'fill' ? 'selected XY placements' : pattern === 'path' ? 'an open XY path of exact straight spans, one polynomial quadratic or one canonical quarter arc' : 'an XY grid'}`;
 
 function profile(part: Part) {
   if (part.solid.kind !== 'upright' || part.solid.solid.slabs.length !== 1) return;
@@ -45,31 +45,47 @@ const sameRectangle = (a: readonly CurveSegment2[], b: readonly CurveSegment2[])
       && ((pointEqual(line.a, other.a) && pointEqual(line.b, other.b)) || (pointEqual(line.a, other.b) && pointEqual(line.b, other.a)))));
 };
 
-/** Certify both original native cavities, then each explicit XY placement in its producer's order. */
+/** Certify each original native cavity along the Difference chain, then each explicit XY placement in order. */
 export function certifyPriorCircularPlacements(prior: PriorCircularCut, offsets: readonly Point[], fail: Tools['fail'], pattern: Pattern): void {
   const label = `${pattern} feature pattern source`;
-  const stock = profile(prior.stock), first = profile(prior.first.cutter), later = profile(prior.later.cutter);
-  const firstResult = profile(prior.first.result), laterResult = profile(prior.later.result);
-  const box = stock && priorCutRectangle(stock.outer), source = first && circle(first.outer), rectangle = later && priorCutRectangle(later.outer);
-  if (!stock || stock.holes.length || !box || !first || first.holes.length || !source
-    || !later || later.holes.length || !rectangle || !firstResult || !laterResult
-    || first.z0 > stock.z0 || first.z1 < stock.z1 || later.z0 > stock.z0 || later.z1 < stock.z1)
+  const stock = profile(prior.stock), first = profile(prior.first.cutter), firstResult = profile(prior.first.result);
+  const box = stock && priorCutRectangle(stock.outer), source = first && circle(first.outer);
+  if (!stock || stock.holes.length || !box || !first || first.holes.length || !source || !firstResult || !prior.later.length
+    || first.z0 > stock.z0 || first.z1 < stock.z1)
     return fail('CAPABILITY', requirement(pattern));
   const margin = 10 * CadNumericPolicy.linearTolerance;
   const insideCircle = (c: Circle) => c.center.every((v, i) => v - c.radius - box.min[i] > margin && box.max[i] - v - c.radius > margin);
-  const insideRectangle = rectangle.min.every((v, i) => v - box.min[i] > margin && box.max[i] - rectangle.max[i] > margin);
-  const separateRectangle = (c: Circle) => Math.hypot(...c.center.map((v, i) => v - Math.max(rectangle.min[i], Math.min(rectangle.max[i], v)))) > c.radius + margin;
-  if (!insideCircle(source) || !insideRectangle)
-    return fail('GEOMETRY', `${label} needs strictly interior original through cuts`);
-  if (!separateRectangle(source)) return fail('GEOMETRY', `${label} needs disjoint original through cuts`);
-  for (const [i, result] of [firstResult, laterResult].entries()) {
+  const insideRectangle = (rect: { min: [number, number]; max: [number, number] }) =>
+    rect.min.every((v, i) => v - box.min[i] > margin && box.max[i] - rect.max[i] > margin);
+  const separateCircleRect = (c: Circle, rect: { min: [number, number]; max: [number, number] }) =>
+    Math.hypot(...c.center.map((v, i) => v - Math.max(rect.min[i], Math.min(rect.max[i], v)))) > c.radius + margin;
+  const separateRectangles = (a: { min: [number, number]; max: [number, number] }, b: { min: [number, number]; max: [number, number] }) =>
+    [0, 1].some(axis => b.min[axis] - a.max[axis] > margin || a.min[axis] - b.max[axis] > margin);
+  if (!insideCircle(source)) return fail('GEOMETRY', `${label} needs strictly interior original through cuts`);
+  const firstCircles = firstResult.holes.map(circle).filter((c): c is Circle => !!c);
+  if (firstResult.z0 !== stock.z0 || firstResult.z1 !== stock.z1 || !sameRectangle(firstResult.outer, stock.outer)
+    || firstResult.holes.length !== 1 || firstCircles.length !== 1 || !sameCircle(firstCircles[0], source))
+    return fail('CAPABILITY', `${label} must retain its separate original full-height circular and rectangular cavities at each cut`);
+
+  const laterRects: { box: { min: [number, number]; max: [number, number] }; ring: readonly CurveSegment2[] }[] = [];
+  for (const stage of prior.later) {
+    const cutter = profile(stage.cutter), result = profile(stage.result);
+    const rectangle = cutter && priorCutRectangle(cutter.outer);
+    if (!cutter || cutter.holes.length || !rectangle || !result || cutter.z0 > stock.z0 || cutter.z1 < stock.z1)
+      return fail('CAPABILITY', requirement(pattern));
+    if (!insideRectangle(rectangle)) return fail('GEOMETRY', `${label} needs strictly interior original through cuts`);
+    if (!separateCircleRect(source, rectangle) || laterRects.some(prev => !separateRectangles(rectangle, prev.box)))
+      return fail('GEOMETRY', `${label} needs disjoint original through cuts`);
+    laterRects.push({ box: rectangle, ring: cutter.outer });
     const circles = result.holes.map(circle).filter((c): c is Circle => !!c);
     const rectangles = result.holes.filter(hole => priorCutRectangle(hole));
     if (result.z0 !== stock.z0 || result.z1 !== stock.z1 || !sameRectangle(result.outer, stock.outer)
-      || result.holes.length !== i + 1 || circles.length !== 1 || !sameCircle(circles[0], source)
-      || rectangles.length !== i || (i === 1 && !sameRectangle(rectangles[0], later.outer)))
+      || result.holes.length !== 1 + laterRects.length || circles.length !== 1 || !sameCircle(circles[0], source)
+      || rectangles.length !== laterRects.length
+      || !laterRects.every(entry => rectangles.some(hole => sameRectangle(hole, entry.ring))))
       return fail('CAPABILITY', `${label} must retain its separate original full-height circular and rectangular cavities at each cut`);
   }
+
   const placed: Circle[] = [source];
   for (const offset of offsets) {
     if (offset.length !== 3 || offset[2] !== 0 || !offset.every(Number.isFinite))
@@ -78,8 +94,9 @@ export function certifyPriorCircularPlacements(prior: PriorCircularCut, offsets:
     const copy = { ...source, center };
     if (!center.every(Number.isFinite) || !insideCircle(copy))
       return fail('GEOMETRY', `${label} cells must stay strictly inside the original stock`);
-    if (!separateRectangle(copy) || placed.some(previous => Math.hypot(center[0] - previous.center[0], center[1] - previous.center[1]) <= source.radius + previous.radius + margin))
-      return fail('GEOMETRY', `${label} cells must stay disjoint from the newer cut and every other cell`);
+    if (!laterRects.every(entry => separateCircleRect(copy, entry.box))
+      || placed.some(previous => Math.hypot(center[0] - previous.center[0], center[1] - previous.center[1]) <= source.radius + previous.radius + margin))
+      return fail('GEOMETRY', `${label} cells must stay disjoint from the newer ${laterRects.length === 1 ? 'cut' : 'cuts'} and every other cell`);
     placed.push(copy);
   }
 }
