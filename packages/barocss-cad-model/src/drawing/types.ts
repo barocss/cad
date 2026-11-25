@@ -593,12 +593,37 @@ function readRoom(raw: unknown): ViewRoom | null {
 }
 /** A pitch circle's members: three or more holes, each by an edge name and a point. */
 const ringOk = (ring: unknown): boolean => Array.isArray(ring) && ring.length >= 3 && ring.length <= 360 && ring.every(m => m && typeof m.edge === 'string' && Array.isArray(m.near) && m.near.length === 3);
-const edgeRefOk = (ref: unknown): ref is EdgeRef => !!ref && typeof ref === 'object' && !Array.isArray(ref) && typeof (ref as EdgeRef).edge === 'string' && !!(ref as EdgeRef).edge && isVec3((ref as EdgeRef).near);
+/** Strict validation for a persisted geometry signature (`Sig`). */
+export function sigOk(raw: unknown): raw is Sig {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return false;
+  const s = raw as Partial<Sig>;
+  if (typeof s.k !== 'string' || !s.k.trim()) return false;
+  if (!isVec3(s.p)) return false;
+  if (s.d !== undefined && !isVec3(s.d)) return false;
+  if (!finiteNum(s.s)) return false;
+  if (s.r !== undefined && !finiteNum(s.r)) return false;
+  if (s.n !== undefined && !finiteNum(s.n)) return false;
+  return true;
+}
+function copySig(sig: Sig): Sig {
+  return {
+    k: sig.k,
+    p: [sig.p[0], sig.p[1], sig.p[2]],
+    ...(sig.d !== undefined ? { d: [sig.d[0], sig.d[1], sig.d[2]] as Vec3 } : {}),
+    s: sig.s,
+    ...(sig.r !== undefined ? { r: sig.r } : {}),
+    ...(sig.n !== undefined ? { n: sig.n } : {}),
+  };
+}
+const edgeRefOk = (ref: unknown): ref is EdgeRef => !!ref && typeof ref === 'object' && !Array.isArray(ref)
+  && typeof (ref as EdgeRef).edge === 'string' && !!(ref as EdgeRef).edge
+  && isVec3((ref as EdgeRef).near)
+  && ((ref as EdgeRef).sig === undefined || sigOk((ref as EdgeRef).sig));
 function copyEdgeRef(ref: EdgeRef): EdgeRef {
   return {
     edge: ref.edge,
     near: [ref.near[0], ref.near[1], ref.near[2]],
-    ...(ref.sig ? { sig: { ...ref.sig, p: [...ref.sig.p] as Vec3, ...(ref.sig.d ? { d: [...ref.sig.d] as Vec3 } : {}) } } : {}),
+    ...(ref.sig !== undefined && sigOk(ref.sig) ? { sig: copySig(ref.sig) } : {}),
     ...(typeof ref.was === 'string' ? { was: ref.was } : {}),
   };
 }
@@ -701,7 +726,7 @@ function copyDimPoint(p: DimPoint): DimPoint {
     edge: p.edge,
     at: p.at,
     near: [p.near[0], p.near[1], p.near[2]],
-    ...(p.sig ? { sig: { ...p.sig, p: [...p.sig.p] as Vec3, ...(p.sig.d ? { d: [...p.sig.d] as Vec3 } : {}) } } : {}),
+    ...(p.sig !== undefined && sigOk(p.sig) ? { sig: copySig(p.sig) } : {}),
     ...(typeof p.was === 'string' ? { was: p.was } : {}),
     ...(p.ring ? { ring: p.ring.map(copyEdgeRef) } : {}),
     ...(p.second ? { second: copyEdgeRef(p.second) } : {}),
@@ -714,8 +739,9 @@ function dimPointOk(raw: unknown): raw is DimPoint {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return false;
   const p = raw as Partial<DimPoint>;
   if (!isVec3(p.near)) return false;
+  if (p.sig !== undefined && !sigOk(p.sig)) return false;
   if (p.at === 'com') return typeof p.edge === 'string' && typeof p.bodyKey === 'string' && !!p.bodyKey.trim();
-  if (p.at === 'pcd') return typeof p.edge === 'string' && ringOk(p.ring);
+  if (p.at === 'pcd') return typeof p.edge === 'string' && ringOk(p.ring) && (p.ring ?? []).every(m => edgeRefOk(m));
   if (p.at === 'virtual-sharp') {
     const second = p.second;
     return edgeRefOk(p) && edgeRefOk(second);
