@@ -8,15 +8,33 @@ import { Icon } from '../atoms';
 import { Button } from '@/components/ui/button';
 
 type Sheet = ReturnType<typeof useDrawingSheet>;
-export function DimensionsList({ sheet, views, layout, scope, settings, occurrenceReasons, onReattach, selected, onSelect, remove, autoDimension, extensionReady = false, onExtension, onExtensionPreview }: {
-  sheet: Sheet['sheet']; views: Sheet['views']; layout: Sheet['layout']; scope: Sheet['scope']; settings: DrawingSettings; selected: string | null;
+
+export interface DimensionsListProps {
+  sheet: Sheet['sheet'];
+  views: Sheet['views'];
+  layout: Sheet['layout'];
+  scope: Sheet['scope'];
+  settings: DrawingSettings;
+  selected: string | null;
   extensionReady?: boolean;
   onExtension?(id: string, side: 'a' | 'b' | undefined): void;
   onExtensionPreview?(side: 'a' | 'b' | null): void;
+  foreshortenMovingId?: string | null;
+  onForeshorten?(id: string): void;
+  onForeshortenMove?(id: string): void;
+  onForeshortenRemove?(id: string): void;
   occurrenceReasons: ReadonlyMap<string, string>;
   onReattach(id: string): void;
-  onSelect(id: string): void; remove(id: string): void; autoDimension(): Promise<void>;
-}) {
+  onSelect(id: string): void;
+  remove(id: string): void;
+  autoDimension(): Promise<void>;
+}
+
+export function DimensionsList({
+  sheet, views, layout, scope, settings, occurrenceReasons, onReattach, selected, onSelect, remove, autoDimension,
+  extensionReady = false, onExtension, onExtensionPreview,
+  foreshortenMovingId = null, onForeshorten, onForeshortenMove, onForeshortenRemove,
+}: DimensionsListProps) {
   const unavailableReason = useId();
   const assembly = scope.kind === 'assembly';
   const lost = sheet?.dimensions.filter(r => !r.ok) ?? [];
@@ -48,6 +66,15 @@ export function DimensionsList({ sheet, views, layout, scope, settings, occurren
                 onMouseEnter={() => onExtensionPreview?.(side ?? null)} onMouseLeave={() => onExtensionPreview?.(null)}
                 onFocus={() => onExtensionPreview?.(side ?? null)} onBlur={() => onExtensionPreview?.(null)}>{side ? `Hide ${side.toUpperCase()}` : 'Both'}</Button>)}
               {!r.ok && <span role="status" className="small">The reference is unresolved. The saved extension setting is retained.</span>}
+            </div>}
+            {selected === r.dim.id && r.dim.kind === 'radius' && !r.dim.auto && ['front', 'top', 'right'].includes(r.dim.view) && scope.kind === 'part' && onForeshorten && <div role="group" aria-label={`Foreshorten controls ${r.dim.id}`} style={{ flexBasis: '100%', order: 2, display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+              {!r.dim.foreshorten ? (
+                <Button variant="ghost" size="xs" aria-label={`Foreshorten radius ${r.dim.id}`} disabled={!r.ok || !extensionReady} onClick={() => onForeshorten(r.dim.id)}>Foreshorten</Button>
+              ) : <>
+                <Button variant="ghost" size="xs" aria-label={`Move foreshorten origin ${r.dim.id}`} aria-pressed={foreshortenMovingId === r.dim.id} disabled={!r.ok || !extensionReady} onClick={() => onForeshortenMove?.(r.dim.id)}>Move origin</Button>
+                <Button variant="ghost" size="xs" aria-label={`Remove foreshorten ${r.dim.id}`} disabled={!r.ok || !extensionReady} onClick={() => onForeshortenRemove?.(r.dim.id)}>Remove foreshorten</Button>
+              </>}
+              {!r.ok && r.dim.foreshorten && <span role="status" className="small">The reference is unresolved. The saved foreshorten setting is retained.</span>}
             </div>}
             {!r.ok && r.dim.kind === 'diameter' && ((r.dim.view !== 'iso' && isViewId(r.dim.view) && occurrenceReasons.has(r.dim.id))
               || (scope.kind === 'part' && isDetailRef(r.dim.view) && sheet?.details?.some(d => `detail:${d.id}` === r.dim.view)))

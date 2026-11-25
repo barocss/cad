@@ -14,6 +14,7 @@ import type { Bom } from '../bom/core';
 import type { WeldJoint } from '../frames/welds';
 import type { BrepProjection, ProjectedCurve } from '@barocss/cad';
 import { closestDetailRim, fmtMM, resolveDimension, resolveLine, valueText, type Resolved } from './dimensions';
+import { foreshortenGeometry } from './foreshorten';
 import { centreMarks } from './centres';
 import type { DrawingCallout } from './callout';
 import { threadMarks } from './threads';
@@ -1111,6 +1112,30 @@ export function dimensionMarks(v: ViewPlacement, r: Extract<Resolved, { ok: true
   }
   const C = toSheet(v, r.center), R = r.radius * v.scale, toPlace = sub(place, C), dist = Math.hypot(toPlace[0], toPlace[1]);
   const detailRim = r.detailArcs && closestDetailRim(r.detailArcs, r.dim.place);
+  if (r.kind === 'radius' && r.dim.kind === 'radius' && r.dim.foreshorten && r.radiusRim && !detailRim && !v.breaks?.length) {
+    const originSheet = toSheet(v, r.dim.foreshorten.origin);
+    const fg = foreshortenGeometry(C, R, place, originSheet, p.arrowLength, toSheet(v, r.radiusRim));
+    if (fg.ok) {
+      const { rim: fsRim, radialDir, polyline, outside, labelSegment } = fg.geometry;
+      marks.push({ kind: 'polyline', points: [...polyline], pen: 'thin', role: outside ? 'leader' : 'dimension' });
+      marks.push(arrow(fsRim, radialDir, p));
+      if (outside) {
+        const right = radialDir[0] >= 0, shoulder = add(place, [right ? 1 : -1, 0], 3);
+        marks.push({ kind: 'line', a: fsRim, b: place, pen: 'thin', role: 'leader' });
+        marks.push({ kind: 'line', a: place, b: shoulder, pen: 'thin', role: 'leader' });
+        marks.push(...valueMarks(add(shoulder, [right ? 1 : -1, 0], 0.8), 0, right ? 'start' : 'end', r.text, r.dim.tol, '', p, r.alt, r.value));
+      } else {
+        const segMid: XY = [(labelSegment[0][0] + labelSegment[1][0]) / 2, (labelSegment[0][1] + labelSegment[1][1]) / 2];
+        const segLen = Math.hypot(labelSegment[1][0] - labelSegment[0][0], labelSegment[1][1] - labelSegment[0][1]);
+        const text = p.dimensionText === 'unidirectional'
+          ? unidirectional(segMid, radialDir, r.text, r.alt, r.value, r.dim.tol, [-segLen / 2 + 1, segLen / 2 - p.arrowLength], p)
+          : null;
+        if (text) marks.push(...text.marks);
+        else marks.push(...clearOfLine(valueMarks(add(segMid, textUp(radialDir), 1.2), readAngle(radialDir), 'middle', r.text, r.dim.tol, '', p, r.alt, r.value), segMid, radialDir, [-segLen / 2 + 1, segLen / 2 - p.arrowLength], r.alt !== undefined));
+      }
+      return marks;
+    }
+  }
   const e = dist > 1e-9 ? unit(toPlace) : [1, 0] as XY, rim = detailRim ? toSheet(v, detailRim) : add(C, e, R);
   if (dist > R + 1 || detailRim) {
     // A leader from the rim out to the text, with a short shoulder.

@@ -42,12 +42,14 @@ import { detailScale } from './detail';
 import { viewBreaksOf } from './breaks';
 import { ambiguousFrameDimensions, ambiguousFrameMessage, frameNotes, frameRules } from './controls';
 import { UNPRINTABLE_FIT_LIMITS, deviationPair, frameValue, presetFor, type DrawingUnits, type FrameRounding } from './standard';
+import { foreshortenGeometry } from './foreshorten';
+import { toSheet } from './views';
 import { fmtMM, resolvePoint, type Resolved } from './dimensions';
 import { SECTION_VIEWS, VIEW_IDS, baseViewOf, detailLetter, isDetailRef, isViewId, isSectionRef, nextSectionId, reservedSectionLetters, sectionLetter, sectionsOf, withSections, type DimPoint, type SectionViewId, type DimView, type DrawingDimension, type DrawingSettings, type DrawingViews, type ViewId, type XY } from './types';
 
 export const DRAWING_ISSUES_VERSION = 'cad-studio-drawing-issues-v1';
 
-export type DrawingIssueCode = 'SHEET_SET' | 'UNIT_PRECISION' | 'DIM_ON_HIDDEN' | 'DATUM_LOST' | 'FRAME_LOST' | 'FRAME_VIEW_MISSING' | 'DATUM_UNDEFINED' | 'FRAME_RULE' | 'DATUM_TWICE' | 'VIEW_NEEDED' | 'DIMENSION_LOST' | 'TEXT_OVERLAP' | 'TEXT_OVER_LINES' | 'OFF_SHEET' | 'VIEWS_DONT_FIT' | 'DUPLICATE' | 'REMATCHED' | 'HOLE_SIZE_MISSING' | 'HOLE_NOT_LOCATED' | 'STEP_NOT_LOCATED' | 'OVERALL_MISSING' | 'TABLE_SOURCE' | 'WELD_NOT_SHOWN' | 'BALLOON_NOT_CLEAR' | 'BALLOON_NO_EDGE' | 'FIT_ROW_MISSING' | 'FOLLOWED_CHANGED' | 'DETAIL_PARENT_MISSING' | 'DETAIL_EMPTY' | 'DETAIL_NO_ROOM' | 'BREAK_NO_VIEW' | 'SECTION_NO_ROOM' | 'SECTION_NO_VIEW' | 'DATUM_TARGET_OUTSIDE' | DatumTargetFailureCode | NoteTargetFailureCode;
+export type DrawingIssueCode = 'SHEET_SET' | 'UNIT_PRECISION' | 'FORESHORTEN_INVALID' | 'DIM_ON_HIDDEN' | 'DATUM_LOST' | 'FRAME_LOST' | 'FRAME_VIEW_MISSING' | 'DATUM_UNDEFINED' | 'FRAME_RULE' | 'DATUM_TWICE' | 'VIEW_NEEDED' | 'DIMENSION_LOST' | 'TEXT_OVERLAP' | 'TEXT_OVER_LINES' | 'OFF_SHEET' | 'VIEWS_DONT_FIT' | 'DUPLICATE' | 'REMATCHED' | 'HOLE_SIZE_MISSING' | 'HOLE_NOT_LOCATED' | 'STEP_NOT_LOCATED' | 'OVERALL_MISSING' | 'TABLE_SOURCE' | 'WELD_NOT_SHOWN' | 'BALLOON_NOT_CLEAR' | 'BALLOON_NO_EDGE' | 'FIT_ROW_MISSING' | 'FOLLOWED_CHANGED' | 'DETAIL_PARENT_MISSING' | 'DETAIL_EMPTY' | 'DETAIL_NO_ROOM' | 'BREAK_NO_VIEW' | 'SECTION_NO_ROOM' | 'SECTION_NO_VIEW' | 'DATUM_TARGET_OUTSIDE' | DatumTargetFailureCode | NoteTargetFailureCode;
 export type DrawingFix =
   | { kind: 'remove'; dim: string }
   | { kind: 'move'; dim: string; place: XY }
@@ -438,6 +440,19 @@ export function drawingIssues(ctx: IssueContext): DrawingIssue[] {
     }
     if (r.fractionFallback === 'below-grid' && preset.inchFraction !== undefined) {
       out.push({ code: 'UNIT_PRECISION', severity: 'warning', message: `Dimension ${r.dim.id}: its length is smaller than half of 1/${preset.inchFraction} inch, so it stays decimal instead of rounding to 0. Use a finer inch fraction denominator or decimal inches.`, dims: [r.dim.id], view: r.dim.view });
+    }
+    if (r.kind === 'radius' && r.dim.kind === 'radius' && r.dim.foreshorten) {
+      const origin = r.dim.foreshorten.origin;
+      const vp = placementOf(layout, sheet, r.dim.view);
+      if (vp && !vp.hidden) {
+        const why = vp.breaks?.length
+          ? 'Foreshortened radius is not supported on a broken view.'
+          : !r.radiusRim ? 'No drawable arc of the referenced radius remains in this view.' : (() => {
+              const fg = foreshortenGeometry(toSheet(vp, r.center), r.radius * vp.scale, toSheet(vp, r.dim.place), toSheet(vp, origin), preset.arrowLength, toSheet(vp, r.radiusRim));
+              return fg.ok ? null : fg.reason;
+            })();
+        if (why) out.push({ code: 'FORESHORTEN_INVALID', severity: 'warning', message: `Dimension ${r.dim.id}: ${why} Move its foreshorten origin or remove foreshorten.`, dims: [r.dim.id], view: r.dim.view });
+      }
     }
   }
   if (preset.units === 'inch') for (const f of settings.frames ?? []) {

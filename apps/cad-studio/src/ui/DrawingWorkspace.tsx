@@ -30,6 +30,7 @@ import type { ProjectedEdge } from '@barocss/cad';
 import type { EngineClient } from '../engine/client';
 import type { StudioDoc } from '@barocss/cad-model/engine/doc';
 import type { FriendlyError } from '@barocss/cad-model/engine/errors';
+import { defaultForeshortenOrigin, foreshortenGeometry, foreshortenOk, foreshortenSupported } from '@barocss/cad-model/drawing/foreshorten';
 import { presetFor } from '@barocss/cad-model/drawing/standard';
 import { buildSheet, curveMark, dimensionMarks, placementOf, projectionOf, sheetSections, withShownText } from '@barocss/cad-model/drawing/sheet';
 import { marksSvg, sheetGroupsSvg, sheetSvg, type SheetAnnotationSelection } from '@barocss/cad-model/io/svg';
@@ -240,6 +241,7 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
     setTolDraft({});
     setTool('select');
   };
+  const [radiusMove, setRadiusMove] = useState<{ owner: object; dim: DrawingDimension; preview?: XY } | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   useLayoutEffect(() => {
     if (pending?.kind !== 'diameter' || !pending.source) return;
@@ -508,7 +510,7 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
     if (why) { setMessage(why.message); return false; }
     onChange({ ...settings, datumTargets }); setPending(null); setTargetChoices([]); return true;
   };
-  const cancel = () => { clearDimensionGroup(); setNoteAttach(null); setReattach(null); setRimChoice(null); setPending(null); setTargetChoices([]); setReselectTarget(null); setMessage(null); };
+  const cancel = () => { setRadiusMove(null); clearDimensionGroup(); setNoteAttach(null); setReattach(null); setRimChoice(null); setPending(null); setTargetChoices([]); setReselectTarget(null); setMessage(null); };
   const startNoteAttach = (note: DrawingNote) => {
     cancel();
     if (noteDraft !== null && noteDraft.trimEnd() !== note.text) { setMessage('Finish the note text edit, then select Attach to endpoint again.'); return; }
@@ -852,6 +854,13 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
 
   const onPointerDown = (e: React.PointerEvent) => {
     if (e.button !== 0) return;
+    if (radiusMove) {
+      e.preventDefault();
+      if (!currentRadiusMove) { setRadiusMove(null); return; }
+      const point = radiusPoint(e.clientX, e.clientY);
+      if (point && editRadius(currentRadiusMove.dim.id, 'move', point)) setRadiusMove(null);
+      return;
+    }
     if (noteAttach) {
       e.preventDefault();
       if (tool !== 'select' || selected?.kind !== 'note' || selected.id !== noteAttach.note.id || noteAttach.owner !== liveProjectionAction.current || !noteAttachReady) { setNoteAttach(null); setMessage('The drawing changed. Select Attach to endpoint again.'); return; }
@@ -965,6 +974,11 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
     const h = hoverAt(e.clientX, e.clientY) ?? placingAt(e.clientX, e.clientY); if (h) click(h);
   };
   const onPointerMove = (e: React.PointerEvent) => {
+    if (currentRadiusMove) {
+      const preview = radiusPoint(e.clientX, e.clientY);
+      setRadiusMove({ ...currentRadiusMove, preview: preview && checkRadiusOrigin(preview)?.ok ? preview : undefined });
+      return;
+    }
     if (drag && 'dimensionGroup' in drag) {
       if (e.pointerId !== drag.pointer || drag.dimensionGroup !== activeDimensionGroup) return;
       const q = sheetPoint(e.clientX, e.clientY);
@@ -1074,7 +1088,7 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
     if (selected?.kind === kind && selected.id === id) setSelected(null);
     if (kind === 'note') setNoteDraft(null);
   };
-  const canDeleteSelection = drawingCanDeleteSelection({ tool, pending: !!pending || !!noteAttach, drag: !!drag, reattach: !!reattach, rimChoice: !!currentRimChoice, targetChoices: targetChoices.length, reselectTarget: !!reselectTarget, hasSelection: !!(selected || selectedTarget || selectedFrame) });
+  const canDeleteSelection = drawingCanDeleteSelection({ tool, pending: !!pending || !!noteAttach || !!radiusMove, drag: !!drag, reattach: !!reattach, rimChoice: !!currentRimChoice, targetChoices: targetChoices.length, reselectTarget: !!reselectTarget, hasSelection: !!(selected || selectedTarget || selectedFrame) });
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (shortcutHelp || e.defaultPrevented || e.isComposing || e.target instanceof HTMLInputElement
@@ -1086,7 +1100,8 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
         setDrag(null);
         setDimensionGroup(null);
         onClearReferencePreview();
-        if (reattach) cancelReattachment();
+        if (radiusMove) { setRadiusMove(null); setMessage(null); }
+        else if (reattach) cancelReattachment();
         else if (noteAttach || pending || currentRimChoice || targetChoices.length || reselectTarget) cancel();
         else { setSelected(null); setSelectedTarget(null); setSelectedFrame(null); setTool('select'); setMessage(null); }
         return;
@@ -1383,7 +1398,7 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
   }, [drag, views, layout, sheet, sheetMarkup, settings, title, selected, selectedTarget, weldJoints, bom, svgSectionTextClearance,
     activeDimensionGroup, selectedDimensionIds]);
 
-  const hint = message ?? (currentReattachment ? `Select a rim in the ${viewLabel(currentReattachment.original.view)} · Esc cancels` : null) ?? (pending ? (pending.kind === 'standalone-frame' ? `Click the sheet to place the frame. View: ${viewLabel(pending.view)}. Esc cancels.` : pending.kind === 'datum-target' ? 'Click where the target symbol goes · Esc cancels' : pending.kind === 'datum-line' ? 'Now the other end of the target line · Esc cancels' : pending.kind === 'note' ? 'Click where the note’s text goes · Esc cancels' : pending.kind === 'detail-center' ? `Select the centre of Detail ${pending.moving.detail.id} on the ${viewLabel(pending.view)} · Esc cancels` : pending.kind === 'detail' ? 'Now how far the detail’s circle reaches · Esc cancels' : pending.kind === 'angle' ? (pending.b ? (pending.mode ? 'Click to place the reflex angle · Esc cancels' : 'Choose the side of the corner to measure, then click to place the angle · Esc cancels') : 'Now the second edge · Esc cancels') : pending.kind === 'linear' && !pending.b ? 'Now the second point · Esc cancels' : pending.kind === 'diameter' && pending.owner ? `${pending.owner} · Click where the dimension goes · Esc cancels` : 'Click where the dimension goes · Esc cancels') : tool === 'select' ? null : tool === 'datum-target' ? (targetDraft.kind === 'point' ? 'Click a straight edge endpoint · Esc cancels' : targetDraft.kind === 'line' ? 'Click the first end of the target line · Esc cancels' : 'Click the centre of the target area · Esc cancels') : TOOLS.find(t => t.tool === tool)!.hint);
+  const hint = message ?? (radiusMove ? "Click the sheet to move the shortened leader origin. Esc cancels." : null) ?? (currentReattachment ? `Select a rim in the ${viewLabel(currentReattachment.original.view)} · Esc cancels` : null) ?? (pending ? (pending.kind === 'standalone-frame' ? `Click the sheet to place the frame. View: ${viewLabel(pending.view)}. Esc cancels.` : pending.kind === 'datum-target' ? 'Click where the target symbol goes · Esc cancels' : pending.kind === 'datum-line' ? 'Now the other end of the target line · Esc cancels' : pending.kind === 'note' ? 'Click where the note’s text goes · Esc cancels' : pending.kind === 'detail-center' ? `Select the centre of Detail ${pending.moving.detail.id} on the ${viewLabel(pending.view)} · Esc cancels` : pending.kind === 'detail' ? 'Now how far the detail’s circle reaches · Esc cancels' : pending.kind === 'angle' ? (pending.b ? (pending.mode ? 'Click to place the reflex angle · Esc cancels' : 'Choose the side of the corner to measure, then click to place the angle · Esc cancels') : 'Now the second edge · Esc cancels') : pending.kind === 'linear' && !pending.b ? 'Now the second point · Esc cancels' : pending.kind === 'diameter' && pending.owner ? `${pending.owner} · Click where the dimension goes · Esc cancels` : 'Click where the dimension goes · Esc cancels') : tool === 'select' ? null : tool === 'datum-target' ? (targetDraft.kind === 'point' ? 'Click a straight edge endpoint · Esc cancels' : targetDraft.kind === 'line' ? 'Click the first end of the target line · Esc cancels' : 'Click the centre of the target area · Esc cancels') : TOOLS.find(t => t.tool === tool)!.hint);
   const selDim = selected?.kind === 'dimension' ? settings.dimensions.find(d => d.id === selected.id) : undefined;
   const extensionReady = !busy && projectionCurrent && sourceCurrent !== false;
   const extensionOwner = useMemo(() => ({}), [projectionActionOwner, selected, sheet, extensionReady]);
@@ -1391,6 +1406,53 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
   const [extensionPreview, setExtensionPreview] = useState<{ owner: object; side: 'a' | 'b' } | null>(null);
   const extensionResolved = sheet?.dimensions.find(r => r.dim === selDim);
   const supportedExtension = selDim?.kind === 'linear' && !selDim.auto && ['front', 'top', 'right'].includes(selDim.view) && scope.kind === 'part';
+  const radiusReady = extensionReady && !!selDim && foreshortenSupported(selDim, scope.kind)
+    && extensionResolved?.ok && extensionResolved.kind === 'radius';
+  const radiusPlacement = radiusReady && selDim ? placementAt(selDim.view) : undefined;
+  const currentRadiusMove = radiusMove?.owner === extensionOwner && radiusMove.dim === selDim
+    && radiusReady && radiusPlacement && !radiusPlacement.hidden && !radiusPlacement.breaks?.length && tool === 'select' ? radiusMove : null;
+  const radiusPoint = (x: number, y: number) => {
+    const q = sheetPoint(x, y);
+    if (!radiusPlacement || !layout || !q || q[0] < 0 || q[1] < 0 || q[0] > layout.size[0] || q[1] > layout.size[1]) return;
+    const point = fromSheet(radiusPlacement, q).map(n => Math.round(n * 1000) / 1000) as XY;
+    return point;
+  };
+  const checkRadiusOrigin = (origin: XY) => {
+    const r = extensionResolved, v = radiusPlacement;
+    if (!r?.ok || r.kind !== 'radius' || !r.radiusRim || !v || v.hidden || v.breaks?.length || !foreshortenOk({ origin })) return;
+    return foreshortenGeometry(toSheet(v, r.center), r.radius * v.scale, toSheet(v, r.dim.place),
+      toSheet(v, origin), presetFor(settings).arrowLength, toSheet(v, r.radiusRim));
+  };
+  const editRadius = (id: string, action: 'add' | 'move' | 'remove', origin?: XY) => {
+    const r = extensionResolved, v = radiusPlacement;
+    if (liveExtensionOwner.current !== extensionOwner || !radiusReady || !r?.ok || r.kind !== 'radius'
+      || r.dim.kind !== 'radius' || r.dim.id !== id || settings.dimensions.filter(d => d.id === id).length !== 1) return false;
+    const { foreshorten, ...ordinary } = r.dim;
+    if (action === 'remove') {
+      if (!foreshorten) return false;
+      commitDims(settings.dimensions.map(d => d === r.dim ? ordinary : d));
+    } else {
+      if (!v || v.hidden || v.breaks?.length || !r.radiusRim) { setMessage('Show an unbroken view with a visible source arc.'); return false; }
+      if (action === 'add') {
+        if (foreshorten) return false;
+        const initial = defaultForeshortenOrigin(r.center, r.radius, r.radiusRim, v.scale, presetFor(settings).arrowLength);
+        if (!initial.ok) { setMessage(initial.reason); return false; }
+        origin = initial.origin;
+      } else if (!foreshorten || !currentRadiusMove) return false;
+      if (!origin) return false;
+      const checked = checkRadiusOrigin(origin);
+      if (!checked?.ok) { setMessage(checked?.reason ?? 'Choose a valid origin for this radius.'); return false; }
+      if (origin[0] !== foreshorten?.origin[0] || origin[1] !== foreshorten?.origin[1])
+        commitDims(settings.dimensions.map(d => d === r.dim ? { ...r.dim, foreshorten: { origin } } : d));
+    }
+    setMessage(null);
+    return true;
+  };
+  useEffect(() => {
+    if (radiusMove && !currentRadiusMove) { setRadiusMove(null); setMessage(null); }
+  }, [radiusMove, currentRadiusMove]);
+  const radiusPreview = currentRadiusMove?.preview && extensionResolved?.ok && extensionResolved.kind === 'radius' && radiusPlacement
+    ? checkRadiusOrigin(currentRadiusMove.preview) : null;
   const extensionMarkers = supportedExtension && extensionReady && layout && extensionResolved?.ok && extensionResolved.kind === 'linear'
     ? (['a', 'b'] as const).map(side => ({ side, point: toSheet(layout.views[selDim.view as 'front' | 'top' | 'right'], extensionResolved[side]) })) : [];
   const changeExtension = (id: string, side: 'a' | 'b' | undefined) => {
@@ -1436,11 +1498,12 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
         <div className="dw-paper">
           {layout && <svg ref={svg} tabIndex={-1} viewBox={viewBox.join(' ')} className={drag && 'pan' in drag ? 'dw-pan' : ''} aria-label="Drawing sheet" data-scale={layout.scale}
             onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp}
-            onPointerCancel={cancelDimensionGroupDrag} onLostPointerCapture={cancelDimensionGroupDrag}
+            onPointerCancel={() => { cancelDimensionGroupDrag(); setRadiusMove(null); setMessage(null); }} onLostPointerCapture={cancelDimensionGroupDrag}
             onBlur={cancelDimensionGroupDrag} onPointerLeave={() => setHover(null)} onWheel={onWheel}>
             <rect className="dw-sheet" x={0} y={0} width={W} height={H} fill="#fff" />
             <g fill="none" stroke="#000" strokeLinecap="round" strokeLinejoin="round" fontFamily="Helvetica, Arial, sans-serif" dangerouslySetInnerHTML={{ __html: shownMarkup }} />
             <g dangerouslySetInnerHTML={{ __html: overlay }} />
+            {radiusPreview?.ok && <g className="dw-hover" pointerEvents="none" aria-label="Foreshortened radius origin preview" dangerouslySetInnerHTML={{ __html: marksSvg([{ kind: 'polyline', points: [...radiusPreview.geometry.polyline], pen: 'thin' }]) }} />}
             {!!extensionMarkers.length && <g pointerEvents="none" aria-label="Dimension endpoint roles" fill="#075985" stroke="#fff" strokeWidth="0.25">
               {extensionMarkers.map(({ side, point }) => <g key={side} aria-label={`Extension endpoint ${side.toUpperCase()}`}>
                 <circle cx={point[0]} cy={point[1]} r={extensionPreview?.owner === extensionOwner && extensionPreview.side === side ? 1.8 : 1.1} />
@@ -1527,7 +1590,10 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
 
         <TolerancingList suggestions={suggestions} settings={settings} views={views} onChange={onChange} acceptEvery={acceptEvery} />
 
-        <DimensionsList extensionReady={extensionReady} onExtension={changeExtension} onExtensionPreview={previewExtension} sheet={sheet} views={views} layout={layout} scope={scope} settings={settings} occurrenceReasons={lossByDimension} onReattach={startReattachment} selected={selDim?.id ?? null} onSelect={id => { selectAnnotationRow('dimension', id); setNoteDraft(null); }} remove={id => removeAnnotation({ kind: 'dimension', id })} autoDimension={autoDimension} />
+        <DimensionsList foreshortenMovingId={currentRadiusMove?.dim.id} onForeshorten={id => { editRadius(id, 'add'); }}
+          onForeshortenMove={id => { if (radiusReady && selDim?.id === id && radiusPlacement && !radiusPlacement.hidden && !radiusPlacement.breaks?.length) {
+            cancel(); setDrag(null); setTool('select'); setRadiusMove({ owner: extensionOwner, dim: selDim }); svg.current?.focus();
+          } }} onForeshortenRemove={id => { setRadiusMove(null); editRadius(id, 'remove'); }} extensionReady={extensionReady} onExtension={changeExtension} onExtensionPreview={previewExtension} sheet={sheet} views={views} layout={layout} scope={scope} settings={settings} occurrenceReasons={lossByDimension} onReattach={startReattachment} selected={selDim?.id ?? null} onSelect={id => { selectAnnotationRow('dimension', id); setNoteDraft(null); }} remove={id => removeAnnotation({ kind: 'dimension', id })} autoDimension={autoDimension} />
 
         <ToleranceEditor selDim={selDim} settings={settings} tolDraft={tolDraft} setTolDraft={setTolDraft} commitDims={commitDims} setMessage={setMessage} />
 

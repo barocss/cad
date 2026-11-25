@@ -1,5 +1,6 @@
 import { checkSavedNoteTargets } from '../drawing/savedNoteTargets';
 import { checkSavedExtension } from '../drawing/savedExtension';
+import { checkSavedForeshorten } from '../drawing/savedForeshorten';
 import { checkSavedReflexAngle } from '../drawing/savedReflexAngle';
 import { assertSavedDrawingBody } from '../drawing/savedDrawingBody';
 // Current Drawing data admission only. No document-schema promotion or historical migration.
@@ -21,7 +22,7 @@ export function assertSavedDrawingDocument(input: unknown): void {
     seen.add(doc);
     assertSavedDrawingBody(doc);
     const issue = checkSavedDrawingFrames(doc.drawing)[0] ?? checkSavedSectionHatch(doc.drawing)[0] ?? checkSavedExtension(doc.drawing)[0]
-      ?? checkSavedReflexAngle(doc.drawing)[0] ?? checkSavedNoteTargets(doc.drawing)[0];
+      ?? checkSavedForeshorten(doc.drawing)[0] ?? checkSavedReflexAngle(doc.drawing)[0] ?? checkSavedNoteTargets(doc.drawing)[0];
     if (issue) throw refused(issue);
     if (own(doc, 'instances') && doc.instances !== undefined) {
       if (!Array.isArray(doc.instances)) throw refusal('DRAWING_OPTIONS', 'Saved document instances must be an array.');

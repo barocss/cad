@@ -110,7 +110,7 @@ const cross3 = (a: readonly number[], b: readonly number[]): Vec3 => [a[1] * b[2
 /** `alt` (11 ③b): on a dual drawing, the same text in the other unit; the sheet sets it, resolving never does. */
 export type Resolved = (
   | { ok: true; kind: 'linear'; dim: Extract<DrawingDimension, { kind: 'linear' }>; a: XY; b: XY; value: number; text: string; alt?: string }
-  | { ok: true; kind: 'diameter' | 'radius'; dim: Extract<DrawingDimension, { kind: 'diameter' | 'radius' }>; center: XY; radius: number; value: number; text: string; alt?: string; detailArcs?: readonly CircularArc[] }
+  | { ok: true; kind: 'diameter' | 'radius'; dim: Extract<DrawingDimension, { kind: 'diameter' | 'radius' }>; center: XY; radius: number; value: number; text: string; alt?: string; detailArcs?: readonly CircularArc[]; radiusRim?: XY }
   /** `vertex`: where the two lines meet; `from`/`to`: the sector's bounding directions (counter-clockwise from → to); `ends`: each edge's far end from the vertex. */
   | { ok: true; kind: 'angle'; dim: Extract<DrawingDimension, { kind: 'angle' }>; vertex: XY; from: XY; to: XY; ends: [XY, XY]; value: number; text: string; alt?: string }
   /** A pitch circle (R14.5): `center` in the view, `center3` in the model, `radius` (mm), `members` in the view; `value` its diameter. */
@@ -247,7 +247,9 @@ export function resolveDimension(views: Partial<Record<DimView, BrepProjection>>
     }
     if (!detailArcs.length) return { ok: false, dim, reason: noDrawableDetailArc };
   }
-  return { ok: true, kind: dim.kind, dim, center, radius: r, value, text: valueText({ kind: dim.kind, value }, fmtMM), ...(detailArcs ? { detailArcs } : {}) };
+  const radiusRim = dim.kind === 'radius' ? closestDetailRim(best.pieces.flatMap(({ curve, visible }) =>
+    curve.kind === 'arc' && (visible || showHidden) ? [curve] : []), dim.place) : undefined;
+  return { ok: true, kind: dim.kind, dim, center, radius: r, value, ...(radiusRim ? { radiusRim } : {}), text: valueText({ kind: dim.kind, value }, fmtMM), ...(detailArcs ? { detailArcs } : {}) };
 }
 
 /**

@@ -105,6 +105,10 @@ export function reorient(from: DrawingViews, to: DrawingViews, settings: Drawing
     }
     const [view, place] = mapPlace(d.view as ViewId, d.place);
     if (d.kind === 'linear' && d.orient !== 'aligned' && map.get(d.view as ViewId)?.swaps) return { ...d, view, place, orient: d.orient === 'horizontal' ? 'vertical' : 'horizontal' };
+    if (d.kind === 'radius' && d.foreshorten) {
+      const [, origin] = mapPlace(d.view as ViewId, d.foreshorten.origin);
+      return { ...d, view, place, foreshorten: { origin } };
+    }
     return { ...d, view, place };
   });
   if (settings.notes) turned.notes = settings.notes.map(n => n.leader ? { ...n, leader: (([view, at]) => ({ ...n.leader!, view, at }))(mapPlace(n.leader.view, n.leader.at)) } : n);
