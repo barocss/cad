@@ -28,9 +28,9 @@ export function heldFinishReplaceable(node: ModelNode | undefined, parameters: P
 }
 /** Each signature comes from the owned live mesh. Remove historical aliases before writing any pick. */
 export function replaceHeldFinishGroup(doc: StudioDoc, index: number, problems: readonly Problem[],
- body: BodyResult, picks: readonly (DisplayEdge | undefined)[]): StudioDoc | null {
+ body: BodyResult, picks: readonly (DisplayEdge | undefined)[], allowDownstream = false): StudioDoc | null {
  const original = doc.nodes[index];
- if (!isHeldConstantFinishGroup(original) || !heldFinishGroupProblems(doc, index, problems) ||
+ if (!isHeldConstantFinishGroup(original) || !heldFinishGroupProblems(doc, index, problems, allowDownstream) ||
      picks.length !== original.edges.length || new Set(picks).size !== picks.length) return null;
  const signatures = signaturesOf(body).edges;
  const names: string[] = [];

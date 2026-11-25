@@ -23,17 +23,17 @@ export function isHeldConstantFinishGroup(node: ModelNode | undefined): node is 
   (node.kind === 'chamfer' || (!node.radii && node.section === undefined));
 }
 
-/** Group replacement applies to terminal finishes with original, unmerged line signatures. */
-export function isHeldConstantLineFinish(doc: StudioDoc, index: number, node = doc.nodes[index]): node is HeldFinish {
- return isHeldConstantFinishGroup(node) && index === doc.nodes.length - 1 &&
+/** Group replacement applies to terminal finishes (or verified downstream pairs) with original, unmerged line signatures. */
+export function isHeldConstantLineFinish(doc: StudioDoc, index: number, node = doc.nodes[index], allowDownstream = false): node is HeldFinish {
+ return isHeldConstantFinishGroup(node) && (allowDownstream ? index === doc.nodes.length - 2 : index === doc.nodes.length - 1) &&
   positiveSize(node.kind === 'fillet' ? node.radius : node.distance, doc.parameters) &&
   node.edges.every(name => node.sigs?.[name]?.k === 'line' && node.sigs[name].n === undefined);
 }
 
-/** Match all current problems to the authored slot order of this terminal finish. */
-export function heldFinishGroupProblems(doc: StudioDoc, index: number, problems: readonly Problem[]): Problem[] | undefined {
+/** Match all current problems to the authored slot order of this held finish. */
+export function heldFinishGroupProblems(doc: StudioDoc, index: number, problems: readonly Problem[], allowDownstream = false): Problem[] | undefined {
  const node = doc.nodes[index];
- if (!isHeldConstantLineFinish(doc, index, node)) return;
+ if (!isHeldConstantLineFinish(doc, index, node, allowDownstream)) return;
  const here = problems.filter(problem => problem.node === index);
  if (here.length !== node.edges.length || new Set(here.map(problem => problem.index)).size !== here.length) return;
  const ordered: Problem[] = [];

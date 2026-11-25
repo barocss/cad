@@ -12,7 +12,7 @@ import type { FriendlyError } from '@barocss/cad-model/engine/errors';
 
 type Finish = Extract<ModelNode, { kind: 'fillet' | 'chamfer' }>;
 type Hit = { edge: { body: number; edge: number } | null; edgeMesh?: BodyResult['mesh']; instance?: string };
-type GroupDraft = { slot: number | null; edges: (DisplayEdge | undefined)[]; ownsSource(): boolean };
+type GroupDraft = { slot: number | null; edges: (DisplayEdge | undefined)[]; sourceEdges?: (DisplayEdge | undefined)[]; ownsSource(): boolean };
 type Draft = { doc: StudioDoc; index: number; name: string | null; endpoints?: ReplacementEndpoints;
   edge?: DisplayEdge; sourceEdge?: DisplayEdge; parent?: BodyResult; pending?: boolean; group?: GroupDraft };
 export type HeldFinishGroupReview = { references: string[]; picks: (string | undefined)[]; slot: number | null };
@@ -49,7 +49,7 @@ export function useHeldFinishEdge({ doc, index, problems, bodies, enabled, ownsS
   const strictSource = finish && ((finish.edges.length > 1 && !downstreamFillet) || (finish.kind === 'fillet' && finish.radii));
   const body = strictSource && sources.length !== 1 ? undefined : sources[0] ?? downstream?.body;
   const problem = enabled && body && index !== null ? heldFinishProblem(doc, index, problems, body, !!downstreamFillet) : undefined;
-  const group = enabled && body && index !== null ? heldFinishGroupProblems(doc, index, problems) : undefined;
+  const group = enabled && body && index !== null ? heldFinishGroupProblems(doc, index, problems, !!downstreamFillet) : undefined;
   const [firstProblem, secondProblem, thirdProblem] = group ?? [];
   const heldName = finish?.edges.length === 2 ? problem?.name : undefined;
   const [draft, setDraft] = useState<Draft | null>(null);
@@ -75,7 +75,8 @@ export function useHeldFinishEdge({ doc, index, problems, bodies, enabled, ownsS
   const cancel = () => { ticket.current = null; setDraft(null); clearFailure(); };
   const start = async () => {
     if (!enabled || !body || index === null || (!problem && !group)) return;
-    const opened = { doc, index, name: null, group: group ? { slot: 0, edges: group.map(() => undefined), ownsSource } : undefined };
+    const opened = { doc, index, name: null, group: group ? { slot: 0, edges: group.map(() => undefined),
+      ...(downstreamFillet ? { sourceEdges: group.map(() => undefined) } : {}), ownsSource } : undefined };
     if (!downstream) { setDraft(opened); return; }
     if (!ownsSource()) return;
     const request = {};
@@ -90,7 +91,7 @@ export function useHeldFinishEdge({ doc, index, problems, bodies, enabled, ownsS
     ticket.current = null;
     if (parent?.ref?.node === downstream.parent.node && parent.ref.side === downstream.parent.side &&
         parent.topology?.kind === 'solid' && parent.topology.bodyCount === 1 &&
-        (!downstreamFillet || heldFinishProblem(doc, index, problems, parent, true)?.name === problem?.name)) {
+        (!downstreamFillet || !!group || heldFinishProblem(doc, index, problems, parent, true)?.name === problem?.name)) {
       setDraft({ ...opened, parent });
     } else {
       setDraft(null);
@@ -110,6 +111,20 @@ export function useHeldFinishEdge({ doc, index, problems, bodies, enabled, ownsS
     if (current.group) {
       const { slot, edges } = current.group;
       if (slot === null) return true;
+      if (downstreamFillet) {
+        const original = current.parent && parentPairedFilletEdge(downstreamFillet, current.parent, edge);
+        const sourceEdges = current.group.sourceEdges ?? edges;
+        if (!original || sourceEdges.some((picked, i) => i !== slot && picked === original)) {
+          reportFailure({ title: 'Edge not selected', hint: 'Select a different original straight edge clear of the Through Hole.', detail: '' });
+          return true;
+        }
+        const picks = edges.map((picked, i) => i === slot ? edge : picked);
+        const sourcePicks = sourceEdges.map((picked, i) => i === slot ? original : picked);
+        const nextSlot = sourcePicks.indexOf(undefined);
+        if (edges[slot] !== edge) clearFailure();
+        setDraft({ ...current, group: { ...current.group, edges: picks, sourceEdges: sourcePicks, slot: nextSlot === -1 ? null : nextSlot } });
+        return true;
+      }
       if (!validFinishGroupEdge(edge, body.mesh.edges) || edges.some((picked, i) => i !== slot && picked === edge)) {
         reportFailure({ title: 'Edge not selected', hint: 'Select a different unmerged straight edge on the body of this feature.', detail: '' });
         return true;
@@ -158,7 +173,8 @@ export function useHeldFinishEdge({ doc, index, problems, bodies, enabled, ownsS
     if (!resolved) return;
     const stillOwnsSource = current.group?.ownsSource ?? ownsSource;
     if (!stillOwnsSource()) return;
-    const next = current.group ? replaceHeldFinishGroup(doc, current.index, resolved, body, current.group.edges)
+    const next = current.group
+      ? replaceHeldFinishGroup(doc, current.index, resolved, current.parent ?? body, current.group.sourceEdges ?? current.group.edges, !!downstreamFillet)
       : replaceSingle(current, current.parent ?? body, finish);
     if (!next) return;
     const request = {};

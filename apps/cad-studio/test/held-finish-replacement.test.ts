@@ -333,4 +333,32 @@ test('bound radius admission requires an exact reference and an own finite posit
   }
   assert.deepEqual(next.nodes[3], doc.nodes[3]);
   assert.equal(heldFinishReplacement(doc, 2, pickedOrigin, parent.mesh.edges, toSig(parentSigs.get(targetName)!), retired), null);
+
+  const bothRetired = withNode(withNode(stock, {
+   kind: 'fillet', parent: { node: 1, side: 'solid' }, edges: ['retired1', 'retired2'], radius: 2,
+   held: 'Missing Fillet edges', suppressed: true,
+   sigs: {
+    retired1: { k: 'line', p: [-4, -4, 5], d: [0.6, 0.8, 0], s: 10 },
+    retired2: { k: 'line', p: [64, 44, 5], d: [-0.6, 0.8, 0], s: 10 },
+   },
+  }), { ...hole, center: [30, 20] });
+  const bothProblems = [
+   { index: 0, where: 'feature 2', node: 2, name: 'retired1', candidates: [] },
+   { index: 1, where: 'feature 2', node: 2, name: 'retired2', candidates: [] },
+  ];
+  assert.equal(heldFinishGroupProblems(bothRetired, 2, bothProblems), undefined);
+  assert.deepEqual(heldFinishGroupProblems(bothRetired, 2, bothProblems, true), bothProblems);
+  assert.equal(replaceHeldFinishGroup(bothRetired, 2, bothProblems, parent, [pickedOrigin, pickedOrigin], true), null);
+  assert.equal(replaceHeldFinishGroup(bothRetired, 2, bothProblems, parent, [pickedOrigin, retainedOrigin]), null);
+  const groupNext = replaceHeldFinishGroup(bothRetired, 2, bothProblems, parent, [pickedOrigin, retainedOrigin], true);
+  assert.ok(groupNext);
+  const groupRepaired = groupNext.nodes[2];
+  assert.equal(groupRepaired.kind, 'fillet');
+  if (groupRepaired.kind === 'fillet') {
+   assert.deepEqual(groupRepaired.edges, [targetName, keep]);
+   assert.deepEqual(groupRepaired.sigs, { [targetName]: toSig(parentSigs.get(targetName)!), [keep]: savedKeep });
+   assert.equal(groupRepaired.held, undefined);
+   assert.equal(groupRepaired.suppressed, undefined);
+  }
+  assert.deepEqual(groupNext.nodes[3], bothRetired.nodes[3]);
  });
