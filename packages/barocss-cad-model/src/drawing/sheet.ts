@@ -30,6 +30,7 @@ import { clipProjectionToDisk, clipRingsToDisk, detailScale, type DetailParent, 
 import { clipProjectionOutside, clipRingsOutside } from './breaks';
 import { applyLinearCrossingBreaks, type CrossingBreakEvaluation } from './crossingBreak';
 import { extensionJogGeometry } from './extensionJog';
+import { resolveArcCenterline, type ResolvedArcCenterline } from './arcCenterline';
 import type { SectionCircleHatch } from './sectionCircleHatch';
 
 /** visible 0.5, hidden 0.35 dashed, thin 0.25 (dimensions, title block rules), centre 0.25 chain, phantom 0.25 two-dot chain (datum target lines and areas), frame 0.7. */
@@ -109,12 +110,12 @@ export function sectionExtents(settings: DrawingSettings, sections?: readonly Sh
   return out;
 }
 /** `detail` (DR-1): a detail's circle and letter on its parent (`view` the parent), or the detail itself (`view` its own `detail:B`). */
-export interface MarkGroup { role: 'frame' | 'title' | 'view' | 'label' | 'dimension' | 'section' | 'note' | 'datum' | 'control' | 'table' | 'weld' | 'balloon' | 'detail'; id?: string; view?: DimView; /** A point target, kept distinct from a datum feature even when their ids coincide. */ datumTarget?: true; /** A frame with its own view/place rather than a dimension attachment. */ standaloneFrame?: true; marks: Mark[] }
+export interface MarkGroup { role: 'frame' | 'title' | 'view' | 'label' | 'dimension' | 'section' | 'note' | 'datum' | 'control' | 'table' | 'weld' | 'balloon' | 'detail'; id?: string; view?: DimView; /** A point target, kept distinct from a datum feature even when their ids coincide. */ datumTarget?: true; /** A frame with its own view/place rather than a dimension attachment. */ standaloneFrame?: true; /** Source-bound curved centerline between concentric partial arcs. */ arcCenterline?: true; marks: Mark[] }
 export interface SheetSectionPlaced { id: string; view: SectionViewId; placement: SectionPlacement; projection: BrepProjection; form?: 'removed' | 'revolved'; on?: ViewId }
 /** DR-1: a detail as the sheet drew it: its parent, scale, placement (its circle's square) and clipped projection; where its dimensions are drawn. */
 export interface SheetDetail { id: string; view: DetailParent; scale: number; placement: ViewPlacement; projection: BrepProjection }
 /** `tables`: each table placed (its box), or why its source gave nothing (drawn with the reason). */
-export interface Sheet { /** Transient source preset for export style defaults; not an authored drawing setting. */ standard?: DrawingStandard; size: [number, number]; groups: MarkGroup[]; dimensions: Resolved[]; /** Optional crossing-break evaluations for authored manual linear dimension breaks. */ crossingBreaks?: readonly CrossingBreakEvaluation[]; /** 11 ③b: the units the sheet prints in, when not plain mm (DXF dimension text follows them). */ units?: { units: DrawingUnits; dual: boolean; precision: UnitPrecision; inchFraction?: InchFractionDenominator }; tables?: { id: string; box: [number, number, number, number]; error?: string; /** FRa (O115): a table in blocks, this one's place: [k, of n]. */ part?: [number, number] }[]; /** FRd2 (O119): the weld symbols placed (each joint's view, arrow tip, seam edge) and the joints seen in no view. */ welds?: { placed: readonly WeldPlaced[]; unshown: readonly string[] }; /** O147 B2: the item balloons placed, the item numbers with no clear room, and those with no visible edge. */ balloons?: { placed: readonly BalloonPlaced[]; unclear: readonly number[]; noEdge: readonly number[] }; /** O148 X2: each section as placed (moved under its view's name) with its projection: where its dimensions are drawn. DR-4: `form` a removed or revolved one's, `on` the view a revolved one is drawn on. */ sections?: SheetSectionPlaced[]; /** DR-4: the removed sections with no free room, the revolved ones with no view to be drawn on. */ sectionsMissing?: { id: string; why: 'room' | 'view' }[]; /** DR-1: each detail drawn; `unplaced`: the details whose parent is not on the sheet, and those with no room. */ details?: SheetDetail[]; detailsMissing?: { id: string; why: 'parent' | 'room' | 'empty' }[] }
+export interface Sheet { /** Transient source preset for export style defaults; not an authored drawing setting. */ standard?: DrawingStandard; size: [number, number]; groups: MarkGroup[]; dimensions: Resolved[]; /** Resolved source-bound curved centerlines between concentric partial arcs. */ arcCenterlines?: readonly ResolvedArcCenterline[]; /** Optional crossing-break evaluations for authored manual linear dimension breaks. */ crossingBreaks?: readonly CrossingBreakEvaluation[]; /** 11 ③b: the units the sheet prints in, when not plain mm (DXF dimension text follows them). */ units?: { units: DrawingUnits; dual: boolean; precision: UnitPrecision; inchFraction?: InchFractionDenominator }; tables?: { id: string; box: [number, number, number, number]; error?: string; /** FRa (O115): a table in blocks, this one's place: [k, of n]. */ part?: [number, number] }[]; /** FRd2 (O119): the weld symbols placed (each joint's view, arrow tip, seam edge) and the joints seen in no view. */ welds?: { placed: readonly WeldPlaced[]; unshown: readonly string[] }; /** O147 B2: the item balloons placed, the item numbers with no clear room, and those with no visible edge. */ balloons?: { placed: readonly BalloonPlaced[]; unclear: readonly number[]; noEdge: readonly number[] }; /** O148 X2: each section as placed (moved under its view's name) with its projection: where its dimensions are drawn. DR-4: `form` a removed or revolved one's, `on` the view a revolved one is drawn on. */ sections?: SheetSectionPlaced[]; /** DR-4: the removed sections with no free room, the revolved ones with no view to be drawn on. */ sectionsMissing?: { id: string; why: 'room' | 'view' }[]; /** DR-1: each detail drawn; `unplaced`: the details whose parent is not on the sheet, and those with no room. */ details?: SheetDetail[]; detailsMissing?: { id: string; why: 'parent' | 'room' | 'empty' }[] }
 
 /** The plain sheet's lettering height; a drawing standard sets another (`p.text`, standard.ts). */
 export const TEXT = 3.5;
@@ -146,6 +147,29 @@ export function buildSheet(views: DrawingViews, layout: SheetLayout, settings: D
     if (id !== 'iso' && meta.threads) marks.push(...threadMarks(v, pr, meta.threads, showHidden));
     if (v.breaks) marks.push(...breakLines(v));
     groups.push({ role: 'view', view: id, marks });
+  }
+  const arcCenterlines: ResolvedArcCenterline[] = (settings.arcCenterlines ?? []).map((item): ResolvedArcCenterline => {
+    const v = layout.views[item.view];
+    if (v.hidden) return { ok: false, item, reason: `Its view (${item.view}) is not shown.` };
+    if (v.breaks?.length) return { ok: false, item, reason: 'Curved centerlines are not supported on a broken view.' };
+    const resolved = resolveArcCenterline(views[item.view], item.first, item.second, item.view);
+    return resolved.ok ? { ok: true, item, geometry: resolved.geometry } : { ok: false, item, reason: resolved.reason };
+  });
+  if (settings.centers !== false) {
+    for (const r of arcCenterlines) {
+      if (!r.ok) continue;
+      const v = layout.views[r.item.view];
+      const g = r.geometry;
+      const C = toSheet(v, g.center);
+      const R = g.midRadius * v.scale;
+      groups.push({
+        role: 'view',
+        arcCenterline: true,
+        id: r.item.id,
+        view: r.item.view,
+        marks: [{ kind: 'arc', center: C, u: [R, 0], v: [0, -R], t0: g.startAngle, t1: g.startAngle + g.sweep, pen: 'center' }],
+      });
+    }
   }
   // (A dimension in a view not shown (R14.3) is kept, unresolved, so the issue list names it. O148 X2: one on a section is
   // resolved once the sections are placed, below.)
@@ -311,7 +335,7 @@ export function buildSheet(views: DrawingViews, layout: SheetLayout, settings: D
       if (boxes.length) group.marks = group.marks.map(m => m === hatchMark ? { ...hatchMark, svgTextExclusions: boxes } : m);
     }
   }
-  return { size: [W, H], groups, dimensions, ...(crossingBreaks.length ? { crossingBreaks } : {}), ...(settings.standard ? { standard: settings.standard } : {}), ...(hasUnitSettings(p) ? { units: { units: p.units, dual: p.dual, precision: p.precision, ...(p.inchFraction !== undefined ? { inchFraction: p.inchFraction } : {}) } } : {}), ...(tables.placed.length ? { tables: tables.placed } : {}), ...(welds ? { welds: { placed: welds.placed, unshown: welds.unshown } } : {}), ...(balloons ? { balloons: { placed: balloons.placed, unclear: balloons.unclear, noEdge: balloons.noEdge } } : {}), ...(onSheet.length ? { sections: onSheet } : {}), ...(drawn.details.length ? { details: drawn.details.map(x => x.detail) } : {}), ...(drawn.missing.length ? { detailsMissing: drawn.missing } : {}), ...(apart.missing.length ? { sectionsMissing: apart.missing } : {}) };
+  return { size: [W, H], groups, dimensions, ...(arcCenterlines.length ? { arcCenterlines } : {}), ...(crossingBreaks.length ? { crossingBreaks } : {}), ...(settings.standard ? { standard: settings.standard } : {}), ...(hasUnitSettings(p) ? { units: { units: p.units, dual: p.dual, precision: p.precision, ...(p.inchFraction !== undefined ? { inchFraction: p.inchFraction } : {}) } } : {}), ...(tables.placed.length ? { tables: tables.placed } : {}), ...(welds ? { welds: { placed: welds.placed, unshown: welds.unshown } } : {}), ...(balloons ? { balloons: { placed: balloons.placed, unclear: balloons.unclear, noEdge: balloons.noEdge } } : {}), ...(onSheet.length ? { sections: onSheet } : {}), ...(drawn.details.length ? { details: drawn.details.map(x => x.detail) } : {}), ...(drawn.missing.length ? { detailsMissing: drawn.missing } : {}), ...(apart.missing.length ? { sectionsMissing: apart.missing } : {}) };
 }
 
 // D416: one local label fallback after all obstacles/attachments exist. Conservative annotation bounds, not glyph ink.

@@ -44,15 +44,16 @@ function markSvg(m: Mark): string {
 export const marksSvg = (marks: readonly Mark[]) => marks.map(markSvg).join('');
 
 /** Sheet groups keep target identity separate from dimension/datum identity when selected or picked. */
-export type SheetAnnotationSelection = { kind: 'dimension' | 'note'; id: string };
+export type SheetAnnotationSelection = { kind: 'dimension' | 'note' | 'arc-centerline'; id: string };
 export function sheetGroupsSvg(sheet: Sheet, selected?: string | SheetAnnotationSelection | null, selectedTarget?: string | null,
   selectedFrame?: string | null, selectedDimensions: readonly string[] = []): string {
   return sheet.groups.map(g => {
+    const roleClass = g.arcCenterline ? 'arc-centerline' : g.role;
     const active = g.standaloneFrame ? selectedFrame : g.datumTarget ? selectedTarget
-      : typeof selected === 'string' ? selected : selected?.kind === g.role ? selected.id : null;
-    const identity = g.standaloneFrame ? 'data-standalone-frame' : g.datumTarget ? 'data-datum-target' : 'data-dim';
+      : typeof selected === 'string' ? selected : selected?.kind === roleClass ? selected.id : null;
+    const identity = g.standaloneFrame ? 'data-standalone-frame' : g.datumTarget ? 'data-datum-target' : g.arcCenterline ? 'data-arc-centerline' : 'data-dim';
     const grouped = g.role === 'dimension' && g.id !== undefined && selectedDimensions.includes(g.id);
-    return `<g class="${esc(g.role)}${grouped || (active && g.id === active) ? ' sel' : ''}"${g.view ? ` data-view="${esc(g.view)}"` : ''}${g.id ? ` ${identity}="${esc(g.id)}"` : ''}>${g.marks.map(markSvg).join('')}</g>`;
+    return `<g class="${esc(roleClass)}${grouped || (active && g.id === active) ? ' sel' : ''}"${g.view ? ` data-view="${esc(g.view)}"` : ''}${g.id ? ` ${identity}="${esc(g.id)}"` : ''}>${g.marks.map(markSvg).join('')}</g>`;
   }).join('\n');
 }
 

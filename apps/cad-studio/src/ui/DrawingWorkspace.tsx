@@ -52,11 +52,12 @@ import { writeDxf, type DxfVersion } from '@barocss/cad';
 
 import { VIEWS, fromSheet, scaleLabel, toSheet, type Orientation } from '@barocss/cad-model/drawing/views';
 import { angleBetween, edgeAt, inView, resolveLine, newDimensionId, orientFor, resolveDimension, roundIn, snapPoints, type SnapPoint } from '@barocss/cad-model/drawing/dimensions';
-import { pickArcLengthEdge } from '@barocss/cad-model/drawing/arcLength';
+import { pickArcLengthEdge, resolveArcLengthEdge } from '@barocss/cad-model/drawing/arcLength';
 import { pickChamferLineEdge, resolveChamferEdges } from '@barocss/cad-model/drawing/chamferDim';
 import { pickRadialThicknessCircle, resolveRadialThicknessEdges } from '@barocss/cad-model/drawing/radialThickness';
 import { pickCylinderSilhouette } from '@barocss/cad-model/drawing/cylinderDiameter';
 import { pickCircleSeparationEdge, resolveCircleSeparationEdges } from '@barocss/cad-model/drawing/circleSeparation';
+import { newArcCenterlineId, pickArcCenterlineEdge, resolveArcCenterline } from '@barocss/cad-model/drawing/arcCenterline';
 import { DETAIL_PARENTS, type DetailParent, type DrawingDetail } from '@barocss/cad-model/drawing/detail';
 import { DetailsList } from './drawing/DetailsList';
 import { clipProjectionOutside } from '@barocss/cad-model/drawing/breaks';
@@ -65,7 +66,7 @@ import { drawingOccurrencePath } from '@barocss/cad-model/drawing/dimensionRefer
 import { diameterRims } from './drawing/diameterRims';
 import { Button } from '@/components/ui/button';
 import { BreaksList } from './drawing/BreaksList';
-import { VIEW_IDS, annotatedDetailLetters, detailLetter, isDetailRef, isSectionRef, isViewId, nextSectionId, reservedDetailLetters, sameSection, sectionLetter, sectionsOf, withSections, readLinearArrowPlacement, type CircleSeparationMode, type CylinderFaceRef, type LinearArrowSide, type DimView, type DimPoint, type DrawingNote, type EdgeRef, type DrawingDimension, type DrawingSettings, type DrawingViews, type Vec3, type ViewId, type XY } from '@barocss/cad-model/drawing/types';
+import { VIEW_IDS, annotatedDetailLetters, detailLetter, isDetailRef, isSectionRef, isViewId, nextSectionId, reservedDetailLetters, sameSection, sectionLetter, sectionsOf, withSections, readLinearArrowPlacement, type CircleSeparationMode, type CylinderFaceRef, type DrawingArcCenterline, type LinearArrowSide, type DimView, type DimPoint, type DrawingNote, type EdgeRef, type DrawingDimension, type DrawingSettings, type DrawingViews, type SectionViewId, type Vec3, type ViewId, type XY } from '@barocss/cad-model/drawing/types';
 import { downloadBytes } from './files';
 import { ShortcutHelp } from './ShortcutHelp';
 import { today, useDrawingSheet } from './useDrawingSheet';
@@ -92,7 +93,7 @@ import { ExportActions } from './drawing/ExportActions';
 import { dimensionPairLabelsMoved, dimensionPairPaperDelta, drawingDimensionPair, moveDrawingDimensionPair, type DrawingDimensionPair } from '../app/drawingDimensionGroup';
 import '../drawing/drawing.css';
 
-type Tool = 'select' | 'linear' | 'diameter' | 'radius' | 'arc-length' | 'chamfer' | 'radial-thickness' | 'cylinder-diameter' | 'circle-separation' | 'angle' | 'reflex-angle' | 'note' | 'detail' | 'datum-target';
+type Tool = 'select' | 'linear' | 'diameter' | 'radius' | 'arc-length' | 'chamfer' | 'radial-thickness' | 'cylinder-diameter' | 'circle-separation' | 'arc-centerline' | 'angle' | 'reflex-angle' | 'note' | 'detail' | 'datum-target';
 type DimensionGroup = { owner: object; pair: DrawingDimensionPair };
 type DimensionGroupDrag = { dimensionGroup: DimensionGroup; pointer: number; start: XY; scale: number; paperDelta: number };
 const TOOLS: { tool: Tool; label: string; icon: string; key: string; hint: string }[] = [
@@ -105,6 +106,7 @@ const TOOLS: { tool: Tool; label: string; icon: string; key: string; hint: strin
   { tool: 'radial-thickness', label: 'Wall thickness', icon: 'radio_button_checked', key: 'W', hint: 'Click two concentric full circles, then where the radial thickness goes' },
   { tool: 'cylinder-diameter', label: 'Side diameter', icon: 'swap_horiz', key: 'Y', hint: 'Click a visible cylinder side silhouette, then where its diameter goes' },
   { tool: 'circle-separation', label: 'Circle gap', icon: 'adjust', key: 'K', hint: 'Click two disjoint full circles, choose Min or Max, then click where the gap goes' },
+  { tool: 'arc-centerline', label: 'Curved centerline', icon: 'conversion_path', key: 'M', hint: 'Click two concentric partial circular arcs to add a curved centerline' },
   { tool: 'angle', label: 'Angle', icon: 'architecture', key: 'A', hint: 'Click two straight edges, then the side of their corner the angle goes on' },
   { tool: 'reflex-angle', label: 'Reflex angle', icon: 'restart_alt', key: 'G', hint: 'Pick two straight edges that share a corner in the Top view' },
   { tool: 'note', label: 'Note', icon: 'sticky_note_2', key: 'N', hint: 'Click on the paper for a note, or on a view for a leader and then where its text goes' },
@@ -131,6 +133,7 @@ type Pending =
   | { kind: 'radial-thickness'; view: DimView; first?: EdgeRef; second?: EdgeRef; reselect?: Extract<DrawingDimension, { kind: 'radial-thickness' }>; source: { projection: DrawingViews; settings: DrawingSettings } }
   | { kind: 'cylinder-diameter'; view: DimView; cylinder?: CylinderFaceRef; reselect?: Extract<DrawingDimension, { kind: 'cylinder-diameter' }>; source: { projection: DrawingViews; settings: DrawingSettings } }
   | { kind: 'circle-separation'; view: DimView; first?: EdgeRef; second?: EdgeRef; mode: CircleSeparationMode; reselect?: Extract<DrawingDimension, { kind: 'circle-separation' }>; source: { projection: DrawingViews; settings: DrawingSettings } }
+  | { kind: 'arc-centerline'; view: SectionViewId; first: EdgeRef; source: { projection: DrawingViews; settings: DrawingSettings } }
   | { kind: 'angle'; view: DimView; a: EdgeRef; b?: EdgeRef; mode?: 'reflex'; owner?: object }
   | { kind: 'note'; leader: { view: ViewId; at: XY } }
   /** DR-1: a detail's circle, its centre picked on its parent. */
@@ -471,7 +474,7 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
       const rims = diameterRims(projection, at, 6 * mmPerPx() / v.scale, tol, visibleRimOnly, scope.kind === 'assembly');
       return { q, view, at, snap: null, edge: rims[0] ?? null, visibleRimOnly, rims };
     }
-    if (tool === 'arc-length' || tool === 'chamfer' || tool === 'radial-thickness' || tool === 'cylinder-diameter' || tool === 'circle-separation') return { q, view, at, snap: null, edge: edgeAt(pr, at, 6 * mmPerPx() / v.scale, true) };
+    if (tool === 'arc-length' || tool === 'chamfer' || tool === 'radial-thickness' || tool === 'cylinder-diameter' || tool === 'circle-separation' || tool === 'arc-centerline') return { q, view, at, snap: null, edge: edgeAt(pr, at, 6 * mmPerPx() / v.scale, true) };
     if (tool === 'reflex-angle') return { q, view, at, snap: null, edge: view === 'top' && !v.breaks?.length
       ? edgeAt(pr, at, 6 * mmPerPx() / v.scale, true) : null };
     const breaks = tool === 'linear' || tool === 'angle' || tool === 'radius' ? v.breaks : undefined;
@@ -481,7 +484,7 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
   /** Placing a dimension (its points picked): where it goes, read in its own view wherever the pointer is on the sheet —
    *  beyond the views' reach too (hoverAt finds a view only within 30 mm), so a click out on the paper places it. */
   const placingAt = (clientX: number, clientY: number): Hover | null => {
-    if (!pending || pending.kind === 'note' || pending.kind === 'detail-center' || ((pending.kind === 'linear' || pending.kind === 'angle') && !pending.b) || (pending.kind === 'chamfer' && !pending.adjacent) || ((pending.kind === 'radial-thickness' || pending.kind === 'circle-separation') && !pending.second) || (pending.kind === 'cylinder-diameter' && !pending.cylinder)) return null;
+    if (!pending || pending.kind === 'note' || pending.kind === 'detail-center' || pending.kind === 'arc-centerline' || ((pending.kind === 'linear' || pending.kind === 'angle') && !pending.b) || (pending.kind === 'chamfer' && !pending.adjacent) || ((pending.kind === 'radial-thickness' || pending.kind === 'circle-separation') && !pending.second) || (pending.kind === 'cylinder-diameter' && !pending.cylinder)) return null;
     const q = sheetPoint(clientX, clientY), v = q && placementAt(pending.view);
     return q && v ? { q, view: pending.view, at: fromSheet(v, q), snap: null, edge: null } : null;
   };
@@ -784,7 +787,7 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
     // Where a dimension goes is read in its own view, wherever the pointer is.
     if (pending?.kind === 'note') { addNote(h.q, pending.leader); return; }
     if (tool === 'detail') { pickDetail(h); return; }
-    const placing = pending && ((pending.kind !== 'linear' && pending.kind !== 'angle' && pending.kind !== 'chamfer' && pending.kind !== 'radial-thickness' && pending.kind !== 'cylinder-diameter' && pending.kind !== 'circle-separation') || (pending.kind === 'chamfer' ? !!pending.adjacent : pending.kind === 'radial-thickness' || pending.kind === 'circle-separation' ? !!pending.second : pending.kind === 'cylinder-diameter' ? !!pending.cylinder : !!pending.b));
+    const placing = pending && pending.kind !== 'arc-centerline' && ((pending.kind !== 'linear' && pending.kind !== 'angle' && pending.kind !== 'chamfer' && pending.kind !== 'radial-thickness' && pending.kind !== 'cylinder-diameter' && pending.kind !== 'circle-separation') || (pending.kind === 'chamfer' ? !!pending.adjacent : pending.kind === 'radial-thickness' || pending.kind === 'circle-separation' ? !!pending.second : pending.kind === 'cylinder-diameter' ? !!pending.cylinder : !!pending.b));
     const into = placing ? placementAt(pending.view) : null, place = placing && into ? fromSheet(into, h.q) : h.at;
     if (h.view === 'iso' && !placing) { setMessage('Dimensions go on the front, top and right views.'); return; }
     const pr = projectionAt(placing ? pending.view : h.view); if (!pr) return;
@@ -1141,6 +1144,43 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
       setPending({ ...pending, second: picked.ref, mode: circleGapMode });
       return;
     }
+    if (tool === 'arc-centerline') {
+      if (scope.kind !== 'part') { setMessage('Curved centerlines use a part drawing.'); return; }
+      if (pending?.kind === 'arc-centerline' && (pending.source.projection !== views || pending.source.settings !== settings || busy)) {
+        cancel(); setMessage('The drawing changed. Select both concentric partial arcs again.'); return;
+      }
+      if (placementAt(h.view)?.breaks?.length) {
+        setMessage('Curved centerlines are not supported on a broken view.'); return;
+      }
+      if (!isViewId(h.view) || h.view === 'iso') {
+        setMessage('Curved centerlines are supported only on ordinary front, top, and right views.'); return;
+      }
+      if (pending?.kind === 'arc-centerline' && pending.view !== h.view) {
+        setMessage(`Select the second concentric partial arc in the ${viewLabel(pending.view)}.`); return;
+      }
+      if (!h.edge) {
+        setMessage(pending?.kind === 'arc-centerline' ? 'Click the second concentric partial circular arc.' : 'Click the first partial circular arc.');
+        return;
+      }
+      const picked = pickArcCenterlineEdge(pr, h.edge, h.view);
+      if (!picked.ok) { setMessage(picked.reason); return; }
+      if (!pending || pending.kind !== 'arc-centerline') {
+        setPending({ kind: 'arc-centerline', view: h.view as SectionViewId, first: picked.ref, source: { projection: views, settings } });
+        return;
+      }
+      const verified = resolveArcCenterline(pr, pending.first, picked.ref, h.view);
+      if (!verified.ok) { setMessage(verified.reason); return; }
+      const item: DrawingArcCenterline = {
+        id: newArcCenterlineId(wholeSettings.arcCenterlines),
+        view: pending.view,
+        first: pending.first,
+        second: picked.ref,
+      };
+      onChange({ ...settings, arcCenterlines: [...(settings.arcCenterlines ?? []), item] });
+      setPending(null);
+      setSelected({ kind: 'arc-centerline', id: item.id });
+      return;
+    }
   };
 
   /** DR-1: the detail tool — its centre on a view or a section, then a point its circle reaches; the next free letter, its scale and place automatic. */
@@ -1304,8 +1344,10 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
         setSelected(null); setDrag({ removed: rem.id, at, grab: [qd[0] - at[0], qd[1] - at[1]] }); (e.currentTarget as Element).setPointerCapture(e.pointerId); return;
       }
       const id = target?.getAttribute('data-dim') ?? null;
+      const acId = (e.target as Element).closest?.('g.arc-centerline[data-arc-centerline]')?.getAttribute('data-arc-centerline') ?? null;
       const d = target?.matches('g.dimension') ? settings.dimensions.find(x => x.id === id) : undefined;
       const n = target?.matches('g.note') ? settings.notes?.find(x => x.id === id) : undefined;
+      const ac = !d && !n && acId ? settings.arcCenterlines?.find(x => x.id === acId) : undefined;
       if (d && e.shiftKey) {
         if (activeDimensionGroup) {
           const pair = activeDimensionGroup.pair;
@@ -1334,11 +1376,12 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
         return;
       }
       clearDimensionGroup();
-      setSelected(d ? { kind: 'dimension', id: d.id } : n ? { kind: 'note', id: n.id } : null);
+      setSelected(d ? { kind: 'dimension', id: d.id } : n ? { kind: 'note', id: n.id } : ac ? { kind: 'arc-centerline', id: ac.id } : null);
       setNoteDraft(null); setTolDraft({});
       if (n) setNoteDraft(n.text);
       if (d) setDrag({ id: d.id, place: d.place });
       else if (n && qd) setDrag({ note: n.id, at: n.at, grab: [qd[0] - n.at[0], qd[1] - n.at[1]] });
+      else if (ac) return;
       else setDrag({ pan: [e.clientX, e.clientY], box: [...viewBox] as [number, number, number, number] });
       (e.currentTarget as Element).setPointerCapture(e.pointerId);
       return;
@@ -1455,7 +1498,14 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
   };
 
   const removeAnnotation = ({ kind, id }: SheetAnnotationSelection) => {
-    if (kind === 'note') {
+    if (kind === 'arc-centerline') {
+      if (settings.arcCenterlines?.filter(ac => ac.id === id).length !== 1) return;
+      const kept = settings.arcCenterlines.filter(ac => ac.id !== id);
+      const next = { ...settings };
+      if (kept.length) next.arcCenterlines = kept;
+      else delete next.arcCenterlines;
+      if (!onChange(next)) return;
+    } else if (kind === 'note') {
       if (settings.notes?.filter(note => note.id === id).length !== 1) return;
       const notes = settings.notes.filter(note => note.id !== id);
       const next = { ...settings };
@@ -1696,6 +1746,26 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
     const parts: string[] = [];
     const P = (x: DimView) => placementOf(layout, sheet ?? undefined, x)!, R = (x: DimView) => projectionOf(views, sheet ?? undefined, x)!;
     const v = hover ? P(hover.view) : null;
+    const draftArc = pending?.kind === 'arc-centerline' && pending.source.projection === views
+      && pending.source.settings === settings && !busy ? pending : null;
+    const inspectedArc = selected?.kind === 'arc-centerline' ? sheet?.arcCenterlines?.find(r => r.ok && r.item.id === selected.id)?.item : undefined;
+    const arcSources = draftArc ?? inspectedArc;
+    if (arcSources && sourceCurrent && scope.kind === 'part') {
+      const { view } = arcSources;
+      const placement = layout.views[view];
+      if (!placement.hidden && !placement.breaks?.length) {
+        const refs = [arcSources.first, ...('second' in arcSources ? [arcSources.second] : [])];
+        for (const ref of refs) {
+          const source = resolveArcLengthEdge(views[view], ref, view, false);
+          if (!source.ok) continue;
+          const g = source.geometry, radius = g.radius * placement.scale;
+          parts.push(`<g class="dw-hover" data-arc-centerline-source pointer-events="none">${marksSvg([{
+            kind: 'arc', center: toSheet(placement, g.center), u: [radius, 0], v: [0, -radius],
+            t0: g.startAngle, t1: g.startAngle + g.sweep, pen: 'visible',
+          }])}</g>`);
+        }
+      }
+    }
     if (inspectedTarget && targetChoices.includes(inspectedTarget)) {
       const pr = views[inspectedTarget.view], resolved = resolveDatumTarget(pr, inspectedTarget);
       const edge = resolved.ok ? pr.edges.find(e => e.name === inspectedTarget.point?.edge) : undefined;
@@ -1737,7 +1807,7 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
       if (hover) parts.push(`<circle class="dw-pick" cx="${hover.q[0]}" cy="${hover.q[1]}" r="0.9"/>`);
       return parts.join('');
     }
-    const placing = pending && hover && pending.kind !== 'note' && ((pending.kind !== 'linear' && pending.kind !== 'angle' && pending.kind !== 'chamfer' && pending.kind !== 'radial-thickness' && pending.kind !== 'cylinder-diameter' && pending.kind !== 'circle-separation') || (pending.kind === 'chamfer' ? !!pending.adjacent : pending.kind === 'radial-thickness' || pending.kind === 'circle-separation' ? !!pending.second : pending.kind === 'cylinder-diameter' ? !!pending.cylinder : !!pending.b));
+    const placing = pending && hover && pending.kind !== 'note' && pending.kind !== 'arc-centerline' && ((pending.kind !== 'linear' && pending.kind !== 'angle' && pending.kind !== 'chamfer' && pending.kind !== 'radial-thickness' && pending.kind !== 'cylinder-diameter' && pending.kind !== 'circle-separation') || (pending.kind === 'chamfer' ? !!pending.adjacent : pending.kind === 'radial-thickness' || pending.kind === 'circle-separation' ? !!pending.second : pending.kind === 'cylinder-diameter' ? !!pending.cylinder : !!pending.b));
     if (pending?.kind === 'angle' && pending.mode && pending.owner !== projectionActionOwner) return '';
     if (pending?.kind === 'angle') for (const ref of [pending.a, ...(pending.b ? [pending.b] : [])]) {
       const l = resolveLine(R(pending.view), ref);
@@ -1777,15 +1847,16 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
           : tool === 'radial-thickness' ? !v.breaks?.length && pickRadialThicknessCircle(R(hover.view), hover.edge, hover.view).ok
           : tool === 'cylinder-diameter' ? !v.breaks?.length && pickCylinderSilhouette(R(hover.view), hover.edge, hover.view).ok
           : tool === 'circle-separation' ? !v.breaks?.length && pickCircleSeparationEdge(R(hover.view), hover.edge, hover.view).ok
+          : tool === 'arc-centerline' ? !v.breaks?.length && pickArcCenterlineEdge(R(hover.view), hover.edge, hover.view).ok
           : tool === 'linear' || tool === 'angle' ? hover.edge.kind !== 'circle' && hover.edge.kind !== 'curve'
           : !!hover.edge.circle && roundIn(R(hover.view), hover.edge);
-        const pieces = tool === 'reflex-angle' || tool === 'arc-length' || tool === 'chamfer' || tool === 'radial-thickness' || tool === 'cylinder-diameter' || tool === 'circle-separation' || hover.visibleRimOnly || (tool === 'diameter' && isDetailRef(hover.view) && !showDetailHidden(settings, hover.view))
+        const pieces = tool === 'reflex-angle' || tool === 'arc-length' || tool === 'chamfer' || tool === 'radial-thickness' || tool === 'cylinder-diameter' || tool === 'circle-separation' || tool === 'arc-centerline' || hover.visibleRimOnly || (tool === 'diameter' && isDetailRef(hover.view) && !showDetailHidden(settings, hover.view))
           ? hover.edge.pieces.filter(piece => piece.visible) : hover.edge.pieces;
         if (ok) parts.push(`<g class="dw-hover">${marksSvg(pieces.map(p => curveMark(v, p.curve, 'visible')))}</g>`);
       }
     }
     return parts.join('');
-  }, [layout, views, bodies, hover, pending, tool, circleGapMode, settings, inspectedTarget, targetChoices, projectionActionOwner]);
+  }, [layout, views, bodies, hover, pending, tool, circleGapMode, settings, inspectedTarget, targetChoices, projectionActionOwner, selected, sheet, busy, sourceCurrent, scope.kind]);
 
   // The dimension being dragged is drawn where it goes.
   const shownMarkup = useMemo(() => {
@@ -1804,7 +1875,7 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
   }, [drag, views, layout, sheet, sheetMarkup, settings, title, selected, selectedTarget, weldJoints, bom, svgSectionTextClearance,
     activeDimensionGroup, selectedDimensionIds]);
 
-  const hint = message ?? (radiusMove ? "Click the sheet to move the shortened leader origin. Esc cancels." : null) ?? (currentReattachment ? `Select a rim in the ${viewLabel(currentReattachment.original.view)} · Esc cancels` : null) ?? (pending ? (pending.kind === 'standalone-frame' ? `Click the sheet to place the frame. View: ${viewLabel(pending.view)}. Esc cancels.` : pending.kind === 'datum-target' ? 'Click where the target symbol goes · Esc cancels' : pending.kind === 'datum-line' ? 'Now the other end of the target line · Esc cancels' : pending.kind === 'note' ? 'Click where the note’s text goes · Esc cancels' : pending.kind === 'detail-center' ? `Select the centre of Detail ${pending.moving.detail.id} on the ${viewLabel(pending.view)} · Esc cancels` : pending.kind === 'detail' ? 'Now how far the detail’s circle reaches · Esc cancels' : pending.kind === 'radial-thickness' ? (!pending.first ? 'Select the first concentric full circle · Esc cancels' : !pending.second ? 'Now select the second concentric full circle · Esc cancels' : 'Click where the radial thickness goes · Esc cancels') : pending.kind === 'cylinder-diameter' ? (!pending.cylinder ? 'Select a visible cylinder side silhouette · Esc cancels' : 'Click where the side diameter goes · Esc cancels') : pending.kind === 'circle-separation' ? (!pending.first ? 'Select the first disjoint full circle · Esc cancels' : !pending.second ? 'Now select the second disjoint full circle · Esc cancels' : `Click where the ${circleGapMode} circle gap goes · Esc cancels`) : pending.kind === 'chamfer' ? (!pending.chamfer ? 'Select the 45° chamfer bevel edge · Esc cancels' : !pending.adjacent ? 'Now click an adjacent straight wall sharing a corner with the bevel · Esc cancels' : 'Click where the chamfer callout goes · Esc cancels') : pending.kind === 'angle' ? (pending.b ? (pending.mode ? 'Click to place the reflex angle · Esc cancels' : 'Choose the side of the corner to measure, then click to place the angle · Esc cancels') : 'Now the second edge · Esc cancels') : pending.kind === 'linear' && !pending.b ? 'Now the second point · Esc cancels' : pending.kind === 'diameter' && pending.owner ? `${pending.owner} · Click where the dimension goes · Esc cancels` : 'Click where the dimension goes · Esc cancels') : tool === 'select' ? null : tool === 'datum-target' ? (targetDraft.kind === 'point' ? 'Click a straight edge endpoint · Esc cancels' : targetDraft.kind === 'line' ? 'Click the first end of the target line · Esc cancels' : 'Click the centre of the target area · Esc cancels') : TOOLS.find(t => t.tool === tool)!.hint);
+  const hint = message ?? (radiusMove ? "Click the sheet to move the shortened leader origin. Esc cancels." : null) ?? (currentReattachment ? `Select a rim in the ${viewLabel(currentReattachment.original.view)} · Esc cancels` : null) ?? (pending ? (pending.kind === 'standalone-frame' ? `Click the sheet to place the frame. View: ${viewLabel(pending.view)}. Esc cancels.` : pending.kind === 'datum-target' ? 'Click where the target symbol goes · Esc cancels' : pending.kind === 'datum-line' ? 'Now the other end of the target line · Esc cancels' : pending.kind === 'note' ? 'Click where the note’s text goes · Esc cancels' : pending.kind === 'detail-center' ? `Select the centre of Detail ${pending.moving.detail.id} on the ${viewLabel(pending.view)} · Esc cancels` : pending.kind === 'detail' ? 'Now how far the detail’s circle reaches · Esc cancels' : pending.kind === 'radial-thickness' ? (!pending.first ? 'Select the first concentric full circle · Esc cancels' : !pending.second ? 'Now select the second concentric full circle · Esc cancels' : 'Click where the radial thickness goes · Esc cancels') : pending.kind === 'cylinder-diameter' ? (!pending.cylinder ? 'Select a visible cylinder side silhouette · Esc cancels' : 'Click where the side diameter goes · Esc cancels') : pending.kind === 'circle-separation' ? (!pending.first ? 'Select the first disjoint full circle · Esc cancels' : !pending.second ? 'Now select the second disjoint full circle · Esc cancels' : `Click where the ${circleGapMode} circle gap goes · Esc cancels`) : pending.kind === 'arc-centerline' ? 'Now click the second concentric partial circular arc · Esc cancels' : pending.kind === 'chamfer' ? (!pending.chamfer ? 'Select the 45° chamfer bevel edge · Esc cancels' : !pending.adjacent ? 'Now click an adjacent straight wall sharing a corner with the bevel · Esc cancels' : 'Click where the chamfer callout goes · Esc cancels') : pending.kind === 'angle' ? (pending.b ? (pending.mode ? 'Click to place the reflex angle · Esc cancels' : 'Choose the side of the corner to measure, then click to place the angle · Esc cancels') : 'Now the second edge · Esc cancels') : pending.kind === 'linear' && !pending.b ? 'Now the second point · Esc cancels' : pending.kind === 'diameter' && pending.owner ? `${pending.owner} · Click where the dimension goes · Esc cancels` : 'Click where the dimension goes · Esc cancels') : tool === 'select' ? null : tool === 'datum-target' ? (targetDraft.kind === 'point' ? 'Click a straight edge endpoint · Esc cancels' : targetDraft.kind === 'line' ? 'Click the first end of the target line · Esc cancels' : 'Click the centre of the target area · Esc cancels') : TOOLS.find(t => t.tool === tool)!.hint);
   const selDim = selected?.kind === 'dimension' ? settings.dimensions.find(d => d.id === selected.id) : undefined;
   const extensionReady = !busy && projectionCurrent && sourceCurrent !== false;
   const extensionOwner = useMemo(() => ({}), [projectionActionOwner, selected, sheet, extensionReady]);
@@ -2090,6 +2161,19 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
         <DetailsList crop={crop} settings={settings} sheet={sheet} layout={layout} onChange={onChange} onRemove={removeDetail} />
 
         <BreaksList settings={settings} views={views} onChange={onChange} onRefused={why => onToast({ title: 'Break unchanged', hint: why, detail: '' })} />
+
+        {(settings.arcCenterlines?.length ?? 0) > 0 && <div role="group" aria-label="Curved centerlines">
+          <div className="card-title" style={{ marginTop: 8 }}>CURVED CENTERLINES <span className="muted">{settings.arcCenterlines!.length}</span></div>
+          <div className="dw-dims">
+            {(sheet?.arcCenterlines ?? []).map(r => <div key={r.item.id} className={'dw-dim' + (selected?.kind === 'arc-centerline' && selected.id === r.item.id ? ' sel' : '') + (r.ok ? '' : ' lost')} title={r.ok ? undefined : r.reason}>
+              <button type="button" className="dw-annotation-select" aria-pressed={selected?.kind === 'arc-centerline' && selected.id === r.item.id}
+                onClick={() => { cancel(); setTool('select'); setSelected({ kind: 'arc-centerline', id: r.item.id }); setSelectedTarget(null); setSelectedFrame(null); }}>
+                <b>{r.ok ? `R${Math.round(r.geometry.midRadius * 100) / 100}` : 'lost'}</b><span>{r.item.id} · {r.item.view}</span>
+              </button>
+              <Button variant="ghost" size="xs" aria-label={`Remove curved centerline ${r.item.id}`} onClick={e => { e.stopPropagation(); removeAnnotation({ kind: 'arc-centerline', id: r.item.id }); }}><Icon name="close" small /></Button>
+            </div>)}
+          </div>
+        </div>}
 
         <DatumsEditor settings={settings} allDatums={wholeSettings.datums ?? []} availableViews={(['front', 'top', 'right'] as const).filter(id => { const placement = placementAt(id); return !!placement && !placement.hidden; })} views={views} scale={layout?.scale ?? 1} onChange={onChange} onRefused={setMessage} />
 

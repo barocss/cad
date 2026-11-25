@@ -113,6 +113,10 @@ export function reorient(from: DrawingViews, to: DrawingViews, settings: Drawing
   });
   if (settings.notes) turned.notes = settings.notes.map(n => n.leader ? { ...n, leader: (([view, at]) => ({ ...n.leader!, view, at }))(mapPlace(n.leader.view, n.leader.at)) } : n);
   if (settings.datums) turned.datums = settings.datums.map(d => { const [view, place] = mapPlace(d.view, d.place); return { ...d, view, place }; });
+  if (settings.arcCenterlines) turned.arcCenterlines = settings.arcCenterlines.map(ac => {
+    const mapped = map.get(ac.view)?.view ?? ac.view;
+    return { ...ac, view: mapped as typeof ac.view };
+  });
   if (settings.datumTargets) turned.datumTargets = settings.datumTargets.map((d): typeof d => {
     const [view, place] = mapPlace(d.view, d.place), m = map.get(d.view);
     // A line's ends and an area's centre are view points: they turn as the symbol's place does; a rectangle's width and height swap with the axes.

@@ -141,7 +141,7 @@ export function sheetDxfDocument(sheet: Sheet, layout: SheetLayout, version: Dxf
     }
     const first = entities.length;
     for (const m of g.marks) markEntities(m, H, entities, solidFills);
-    if (g.datumTarget) for (let k = first; k < entities.length; k++) entities[k] = inTurn(entities[k]);
+    if (g.datumTarget || g.arcCenterline) for (let k = first; k < entities.length; k++) entities[k] = inTurn(entities[k]);
   }
   const phantom = [...title, ...entities].some(e => 'layer' in e && e.layer === 'PHANTOM');
   return { units: 'mm', ...(sheet.standard === 'asme' ? { dimensionStyle: { textHeight: 3, textPlacement: 'center' as const, textOrientation: 'horizontal' as const } } : {}), linetypes: phantom ? [...DXF_LINETYPES, PHANTOM_LINETYPE] : DXF_LINETYPES, layers: phantom ? [...DXF_LAYERS, PHANTOM_LAYER] : DXF_LAYERS, styles: STYLES, blocks: [{ name: 'TITLE_BLOCK', base: [0, 0], entities: title }], entities: [{ type: 'insert', block: 'TITLE_BLOCK', at: [0, 0] }, ...entities] };

@@ -252,6 +252,14 @@ export interface DrawingTable { id: string; title?: string; columns?: TableColum
 /** A straight edge by its persistent name, `near` a model point on it (names can repeat). */
 export interface EdgeRef { edge: string; near: Vec3; sig?: Sig; was?: string }
 
+/** A source-bound curved centerline between two distinct concentric partial circular arcs. */
+export interface DrawingArcCenterline {
+  id: string;
+  view: SectionViewId;
+  first: EdgeRef;
+  second: EdgeRef;
+}
+
 /** The revision after `rev`: A → B … Z → AA, 01 → 02, 1 → 2; none → A. */
 export function nextRevision(rev: string | undefined): string {
   if (!rev || rev === '-') return 'A';
@@ -337,6 +345,8 @@ export interface DrawingSettings {
   datums?: DrawingDatum[];
   datumTargets?: DrawingDatumTarget[];
   frames?: DrawingFrame[];
+  /** Source-bound curved centerlines between concentric partial arcs. */
+  arcCenterlines?: DrawingArcCenterline[];
   /** Never stored: set on the settings of one sheet of a drawing with sheets (sheets.ts `forSheet`), which then lay out and build as a drawing of that sheet alone. */
   sheetContext?: SheetContext;
 }
@@ -490,6 +500,7 @@ export function readDrawing(raw: unknown): DrawingSettings {
     ...(readDatums(r.datums).length ? { datums: readDatums(r.datums) } : {}),
     ...(readDatumTargets(r.datumTargets).length ? { datumTargets: readDatumTargets(r.datumTargets) } : {}),
     ...(readFrames(r.frames).length ? { frames: readFrames(r.frames) } : {}),
+    ...(readArcCenterlines(r.arcCenterlines).length ? { arcCenterlines: readArcCenterlines(r.arcCenterlines) } : {}),
     ...(Array.isArray(r.notes) && r.notes.some(isNote) ? { notes: r.notes.filter(isNote).map(n => ({ id: n.id, text: n.text, at: [n.at[0], n.at[1]] as XY, ...(n.leader && VIEW_IDS.includes(n.leader.view) && isXY(n.leader.at) ? { leader: { view: n.leader.view, at: [n.leader.at[0], n.leader.at[1]] as XY, ...(Object.hasOwn(n.leader, 'target') ? { target: readNoteTarget(n.leader.target) } : {}) } } : {}), ...(typeof n.sheet === 'string' && /^[A-Za-z0-9_-]{1,16}$/.test(n.sheet) ? { sheet: n.sheet } : {}) })) } : {}),
     ...(readTables(r.tables).length ? { tables: readTables(r.tables) } : {}),
   };
@@ -509,6 +520,28 @@ function readRoom(raw: unknown): ViewRoom | null {
 /** A pitch circle's members: three or more holes, each by an edge name and a point. */
 const ringOk = (ring: unknown): boolean => Array.isArray(ring) && ring.length >= 3 && ring.length <= 360 && ring.every(m => m && typeof m.edge === 'string' && Array.isArray(m.near) && m.near.length === 3);
 const edgeRefOk = (ref: unknown): ref is EdgeRef => !!ref && typeof ref === 'object' && !Array.isArray(ref) && typeof (ref as EdgeRef).edge === 'string' && !!(ref as EdgeRef).edge && isVec3((ref as EdgeRef).near);
+function copyEdgeRef(ref: EdgeRef): EdgeRef {
+  return {
+    edge: ref.edge,
+    near: [ref.near[0], ref.near[1], ref.near[2]],
+    ...(ref.sig ? { sig: { ...ref.sig, p: [...ref.sig.p] as Vec3, ...(ref.sig.d ? { d: [...ref.sig.d] as Vec3 } : {}) } } : {}),
+    ...(typeof ref.was === 'string' ? { was: ref.was } : {}),
+  };
+}
+function readArcCenterlines(raw: unknown): DrawingArcCenterline[] {
+  if (!Array.isArray(raw)) return [];
+  const seen = new Set<string>(), out: DrawingArcCenterline[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) continue;
+    const x = item as Partial<DrawingArcCenterline>;
+    if (typeof x.id !== 'string' || !x.id.trim() || seen.has(x.id)) continue;
+    if (!x.view || !SECTION_VIEWS.includes(x.view)) continue;
+    if (!edgeRefOk(x.first) || !edgeRefOk(x.second)) continue;
+    seen.add(x.id);
+    out.push({ id: x.id, view: x.view, first: copyEdgeRef(x.first), second: copyEdgeRef(x.second) });
+  }
+  return out;
+}
 const cylinderFaceRefOk = (ref: unknown): ref is CylinderFaceRef => !!ref && typeof ref === 'object' && !Array.isArray(ref) && typeof (ref as CylinderFaceRef).face === 'string' && !!(ref as CylinderFaceRef).face && isVec3((ref as CylinderFaceRef).near);
 const isXY = (p: unknown): p is XY => Array.isArray(p) && p.length === 2 && p.every(x => typeof x === 'number' && Number.isFinite(x));
 const CORNERS: readonly TableCorner[] = ['top-left', 'top-right', 'bottom-left', 'bottom-right'];

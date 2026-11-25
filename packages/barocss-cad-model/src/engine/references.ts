@@ -111,6 +111,7 @@ function writable(d: StudioDoc): StudioDoc {
     const t = n.leader?.target;
     return !t ? n : { ...n, leader: { ...n.leader!, at: [...n.leader!.at], target: { ...t, near: [...t.near], sig: t.sig ? { ...t.sig, p: [...t.sig.p], ...(t.sig.d ? { d: [...t.sig.d] as Vec3 } : {}) } : t.sig } } };
   }) };
+  if (d.drawing?.arcCenterlines) out.drawing = { ...(out.drawing ?? d.drawing), arcCenterlines: d.drawing.arcCenterlines.map(ac => ({ ...ac, first: { ...ac.first }, second: { ...ac.second } })) };
   if (d.bodies) { const bodies: NonNullable<StudioDoc['bodies']> = {}; for (const [k, look] of Object.entries(d.bodies)) bodies[k] = { ...look }; out.bodies = bodies; }
   return out;
 }
@@ -167,6 +168,11 @@ export function referencesOf(source: StudioDoc, readOnly = false): { doc: Studio
     const target = note.leader?.target;
     if (target) refs.push({ ...pointed(`note ${note.id}`, true, target, () => target.edge, edge => { target.edge = edge; }), noteTarget: true, targetEndpoint: target.endpoint });
   }
+  for (const ac of doc.drawing?.arcCenterlines ?? []) {
+    for (const side of [ac.first, ac.second] as (Pointed & { edge: string })[]) {
+      refs.push(pointed(`arc-centerline ${ac.id}`, true, side, () => side.edge, edge => { side.edge = edge; }));
+    }
+  }
   const scope = doc.drawing?.scope;
   if (scope?.kind === 'part' && scope.body) {
     const key = checkDrawingBodyOwner(doc, scope.body).length ? null : scope.body.key;
@@ -208,6 +214,7 @@ function unsigned(doc: StudioDoc): boolean {
     if (d.kind === 'pcd' ? d.ring.some(m => !m.sig) : d.kind === 'arc-length' ? !d.arc.sig : d.kind === 'chamfer' ? !d.chamfer.sig || !d.adjacent.sig : d.kind === 'radial-thickness' || d.kind === 'circle-separation' ? !d.first.sig || !d.second.sig : d.kind === 'cylinder-diameter' ? !d.cylinder.sig : 'a' in d ? (d.kind === 'linear' ? unsignedPoint(d.a) || unsignedPoint(d.b) : !d.a.sig || !d.b.sig) : !d.sig) return true;
   }
   for (const target of doc.drawing?.datumTargets ?? []) if (target.point && target.point.endpoint !== undefined && !target.point.sig && target.point.was === undefined) return true;
+  for (const ac of doc.drawing?.arcCenterlines ?? []) if (!ac.first.sig || !ac.second.sig) return true;
   for (const look of Object.values(doc.bodies ?? {})) if (look.faces && Object.keys(look.faces).some(f => !look.faceSigs?.[f])) return true;
   return false;
 }
