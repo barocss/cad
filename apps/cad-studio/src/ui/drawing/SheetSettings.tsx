@@ -7,6 +7,7 @@ import { changeDrawingScope } from '@barocss/cad-model/drawing/scope';
 import { sectionMiddle } from '@barocss/cad-model/drawing/sheet';
 import { ORIENTATIONS, VIEWS, scaleLabel, type Orientation } from '@barocss/cad-model/drawing/views';
 import { SECTION_VIEWS, VIEW_IDS, nextRevision, nextSectionId, reservedSectionLetters, sameSection, withSections, type DrawingSettings, type SectionViewId } from '@barocss/cad-model/drawing/types';
+import { INCH_FRACTION_DENOMINATORS, type InchFractionDenominator } from '@barocss/cad-model/drawing/standard';
 import type { useDrawingSheet } from '../useDrawingSheet';
 import { Icon } from '../atoms';
 import { CONTROL, FIELD, SIDE_NAMES, TICK, withTable } from './sheetShared';
@@ -70,6 +71,15 @@ export function SheetSettings({ sheet: { bodyScope, scopeRead, scope, views, lay
               if (raw === '') delete next[unit]; else if (Number.isInteger(n) && n >= 0 && n <= 6) next[unit] = n; else return;
               onChange(next.mm === undefined && next.inch === undefined ? rest : { ...rest, precision: next });
             }} /></label>)}
+          <label className={FIELD}><span>Inch format</span><NativeSelect className={CONTROL} aria-label="Inch format" title="Format plain inch dimensions as reduced fractions; tolerances, fits and hole callouts stay decimal" value={settings.inchFraction !== undefined ? String(settings.inchFraction) : ''} onChange={e => {
+            const raw = e.target.value, { inchFraction: _f, ...rest } = settings; void _f;
+            const denom = Number(raw) as InchFractionDenominator;
+            onChange(raw === '' ? rest : { ...rest, inchFraction: denom });
+          }}>
+            <option value="">Decimal</option>
+            {INCH_FRACTION_DENOMINATORS.map(d => <option key={d} value={String(d)}>1/{d}&quot;</option>)}
+          </NativeSelect></label>
+          {settings.inchFraction !== undefined && <div className="empty" aria-label="Inch format scope">Plain inch lengths only (1/{settings.inchFraction}&quot; grid); tolerances, fits &amp; hole callouts stay decimal.</div>}
         </details>
         <label className={FIELD}><span>Hidden lines</span><input type="checkbox" className={TICK} aria-label="Hidden lines" checked={settings.hidden} onChange={e => onChange({ ...settings, hidden: e.target.checked })} /></label>
         <label className={FIELD}><span>Section A–A</span><input type="checkbox" className={TICK} aria-label="Section A–A" disabled={heldA} title={heldA ? 'Section A is still named by a saved annotation, detail or sheet. Undo its removal or remove the old references first.' : undefined} checked={!!sectionA} onChange={e => {

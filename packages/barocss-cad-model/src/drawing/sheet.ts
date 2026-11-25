@@ -19,7 +19,7 @@ import type { DrawingCallout } from './callout';
 import { threadMarks } from './threads';
 import type { FaceThread } from '../app/threads';
 import { fitText, textCorners, textWidth } from './text';
-import { MAX_PRECISION, PLAIN, UNPRINTABLE_TOLERANCE, deviationPair, formatLength, frameValue, hasUnitSettings, lengthFormats, presetFor, unitsLabel, withDigits, type DeviationPair, type DrawingStandard, type DrawingUnits, type FrameRounding, type LengthFormat, type StandardPreset, type UnitPrecision } from './standard';
+import { MAX_PRECISION, PLAIN, UNPRINTABLE_TOLERANCE, deviationPair, formatFractionalInch, formatLength, frameValue, hasUnitSettings, lengthFormats, presetFor, unitsLabel, withDigits, type DeviationPair, type DrawingStandard, type DrawingUnits, type FrameRounding, type InchFractionDenominator, type LengthFormat, type StandardPreset, type UnitPrecision } from './standard';
 import { VIEWS, scaleLabel, sectionDepth, sectionFrame, toSheet, type Orientation, type SectionExtent, type SectionPlacement, type SheetLayout, type ViewPlacement, TITLE_BLOCK } from './views';
 import type { DrawingDatum, DrawingFrame, DrawingNote, DrawingSection, DrawingSettings, DrawingTable, DrawingViews, SectionViewId, Tolerance, ViewId, XY } from './types';
 import { tableLayout, tableSize, type TableContent, type TableLayout } from './table';
@@ -107,7 +107,7 @@ export interface SheetSectionPlaced { id: string; view: SectionViewId; placement
 /** DR-1: a detail as the sheet drew it: its parent, scale, placement (its circle's square) and clipped projection; where its dimensions are drawn. */
 export interface SheetDetail { id: string; view: DetailParent; scale: number; placement: ViewPlacement; projection: BrepProjection }
 /** `tables`: each table placed (its box), or why its source gave nothing (drawn with the reason). */
-export interface Sheet { /** Transient source preset for export style defaults; not an authored drawing setting. */ standard?: DrawingStandard; size: [number, number]; groups: MarkGroup[]; dimensions: Resolved[]; /** 11 ③b: the units the sheet prints in, when not plain mm (DXF dimension text follows them). */ units?: { units: DrawingUnits; dual: boolean; precision: UnitPrecision }; tables?: { id: string; box: [number, number, number, number]; error?: string; /** FRa (O115): a table in blocks, this one's place: [k, of n]. */ part?: [number, number] }[]; /** FRd2 (O119): the weld symbols placed (each joint's view, arrow tip, seam edge) and the joints seen in no view. */ welds?: { placed: readonly WeldPlaced[]; unshown: readonly string[] }; /** O147 B2: the item balloons placed, the item numbers with no clear room, and those with no visible edge. */ balloons?: { placed: readonly BalloonPlaced[]; unclear: readonly number[]; noEdge: readonly number[] }; /** O148 X2: each section as placed (moved under its view's name) with its projection: where its dimensions are drawn. DR-4: `form` a removed or revolved one's, `on` the view a revolved one is drawn on. */ sections?: SheetSectionPlaced[]; /** DR-4: the removed sections with no free room, the revolved ones with no view to be drawn on. */ sectionsMissing?: { id: string; why: 'room' | 'view' }[]; /** DR-1: each detail drawn; `unplaced`: the details whose parent is not on the sheet, and those with no room. */ details?: SheetDetail[]; detailsMissing?: { id: string; why: 'parent' | 'room' | 'empty' }[] }
+export interface Sheet { /** Transient source preset for export style defaults; not an authored drawing setting. */ standard?: DrawingStandard; size: [number, number]; groups: MarkGroup[]; dimensions: Resolved[]; /** 11 ③b: the units the sheet prints in, when not plain mm (DXF dimension text follows them). */ units?: { units: DrawingUnits; dual: boolean; precision: UnitPrecision; inchFraction?: InchFractionDenominator }; tables?: { id: string; box: [number, number, number, number]; error?: string; /** FRa (O115): a table in blocks, this one's place: [k, of n]. */ part?: [number, number] }[]; /** FRd2 (O119): the weld symbols placed (each joint's view, arrow tip, seam edge) and the joints seen in no view. */ welds?: { placed: readonly WeldPlaced[]; unshown: readonly string[] }; /** O147 B2: the item balloons placed, the item numbers with no clear room, and those with no visible edge. */ balloons?: { placed: readonly BalloonPlaced[]; unclear: readonly number[]; noEdge: readonly number[] }; /** O148 X2: each section as placed (moved under its view's name) with its projection: where its dimensions are drawn. DR-4: `form` a removed or revolved one's, `on` the view a revolved one is drawn on. */ sections?: SheetSectionPlaced[]; /** DR-4: the removed sections with no free room, the revolved ones with no view to be drawn on. */ sectionsMissing?: { id: string; why: 'room' | 'view' }[]; /** DR-1: each detail drawn; `unplaced`: the details whose parent is not on the sheet, and those with no room. */ details?: SheetDetail[]; detailsMissing?: { id: string; why: 'parent' | 'room' | 'empty' }[] }
 
 /** The plain sheet's lettering height; a drawing standard sets another (`p.text`, standard.ts). */
 export const TEXT = 3.5;
@@ -288,7 +288,7 @@ export function buildSheet(views: DrawingViews, layout: SheetLayout, settings: D
       if (boxes.length) group.marks = group.marks.map(m => m === hatchMark ? { ...hatchMark, svgTextExclusions: boxes } : m);
     }
   }
-  return { size: [W, H], groups, dimensions, ...(settings.standard ? { standard: settings.standard } : {}), ...(hasUnitSettings(p) ? { units: { units: p.units, dual: p.dual, precision: p.precision } } : {}), ...(tables.placed.length ? { tables: tables.placed } : {}), ...(welds ? { welds: { placed: welds.placed, unshown: welds.unshown } } : {}), ...(balloons ? { balloons: { placed: balloons.placed, unclear: balloons.unclear, noEdge: balloons.noEdge } } : {}), ...(onSheet.length ? { sections: onSheet } : {}), ...(drawn.details.length ? { details: drawn.details.map(x => x.detail) } : {}), ...(drawn.missing.length ? { detailsMissing: drawn.missing } : {}), ...(apart.missing.length ? { sectionsMissing: apart.missing } : {}) };
+  return { size: [W, H], groups, dimensions, ...(settings.standard ? { standard: settings.standard } : {}), ...(hasUnitSettings(p) ? { units: { units: p.units, dual: p.dual, precision: p.precision, ...(p.inchFraction !== undefined ? { inchFraction: p.inchFraction } : {}) } } : {}), ...(tables.placed.length ? { tables: tables.placed } : {}), ...(welds ? { welds: { placed: welds.placed, unshown: welds.unshown } } : {}), ...(balloons ? { balloons: { placed: balloons.placed, unclear: balloons.unclear, noEdge: balloons.noEdge } } : {}), ...(onSheet.length ? { sections: onSheet } : {}), ...(drawn.details.length ? { details: drawn.details.map(x => x.detail) } : {}), ...(drawn.missing.length ? { detailsMissing: drawn.missing } : {}), ...(apart.missing.length ? { sectionsMissing: apart.missing } : {}) };
 }
 
 // D416: one local label fallback after all obstacles/attachments exist. Conservative annotation bounds, not glyph ink.
@@ -868,20 +868,35 @@ export function withShownText(r: Extract<Resolved, { ok: true }>, callout: ((edg
   // (A dimension with a tolerance prints at the tolerance's decimals: the dimension gains zeros, ASME Y14.5 §1.6.2.)
   const tol = r.kind !== 'angle' && r.dim.tol && r.dim.tol.kind !== 'fit' ? r.dim.tol : null;
   const shownPrecision: UnitPrecision = {};
+  let fractionFallback: 'below-grid' | undefined;
   const textIn = (u: DrawingUnits): string => {
     const initial = tol ? deviationsOf(tol, '', p, u, r.value).digits : undefined;
     let digits = initial;
     // Built-in fit requests are monotone and bounded by the validated 0..6 places. Rerender both consumers after a raise.
     for (let pass = 0; pass <= MAX_PRECISION; pass++) {
       const q = digits === undefined ? p : withDigits(p, u, digits), f = lengthFormats(q), state = { digits: Math.max(digits ?? 0, tol ? deviationsOf(tol, '', q, u, r.value).digits : 0) };
-      const format = u === p.units ? f.primary : f.secondary!, text = dimensionText(r, callout, tol ? trackFormatPrecision(format, state) : format);
+      const format = u === p.units ? f.primary : f.secondary!;
+      // Fractional inch applies only to plain untoleranced, non-basic, non-callout length dimensions; model mm is never altered.
+      const canFraction = u === 'inch' && p.inchFraction !== undefined && r.kind !== 'angle' && !r.dim.tol && !r.dim.basic;
+      const calloutText = canFraction && r.kind === 'diameter' && callout ? callout(r.dim.edge, 2 * r.radius, format) : null;
+      const activeFormat: LengthFormat = canFraction && calloutText === null
+        ? Object.assign((mm: number, places?: 2 | 3 | 4) => {
+            const res = formatFractionalInch(mm, p.inchFraction!);
+            if (res.ok) return res.text;
+            if (res.reason === 'below-grid') fractionFallback = 'below-grid';
+            return format(mm, places);
+          }, { unit: format.unit, pairs: format.pairs, at: format.at })
+        : format;
+      const text = calloutText !== null
+        ? (r.dim.count ? `${r.dim.count}× ${calloutText.replace(/^\d+× /, '')}` : calloutText)
+        : dimensionText(r, canFraction ? undefined : callout, tol ? trackFormatPrecision(activeFormat, state) : activeFormat);
       if (!tol || state.digits <= (digits ?? 0)) { if (digits !== initial) shownPrecision[u] = digits; return text; }
       digits = state.digits;
     }
     throw new RangeError('Drawing callout precision did not settle.');
   };
   const text = textIn(p.units), alt = p.dual && r.kind !== 'angle' ? textIn(otherUnit(p)) : undefined;
-  return { ...r, text, ...(alt === undefined ? {} : { alt }), ...(Object.keys(shownPrecision).length ? { shownPrecision } : r.shownPrecision ? { shownPrecision: undefined } : {}) };
+  return { ...r, text, ...(alt === undefined ? {} : { alt }), ...(Object.keys(shownPrecision).length ? { shownPrecision } : r.shownPrecision ? { shownPrecision: undefined } : {}), ...(fractionFallback ? { fractionFallback } : r.fractionFallback ? { fractionFallback: undefined } : {}) };
 }
 function trackFormatPrecision(f: LengthFormat, state: { digits: number }): LengthFormat {
   return Object.assign((mm: number, places?: 2 | 3 | 4) => f(mm, places), { unit: f.unit, pairs: f.pairs, ...(f.at ? { at: (digits: number): LengthFormat => { state.digits = Math.max(state.digits, digits); return trackFormatPrecision(f.at!(digits), state); } } : {}) });

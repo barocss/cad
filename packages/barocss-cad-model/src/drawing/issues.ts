@@ -315,7 +315,7 @@ function boxedRightRulerClear(ctx: IssueContext, id: string): boolean {
 }
 function verifiedAutoLinearMove(ctx: IssueContext, id: string | undefined, view: DimView | undefined): { fix?: DrawingFix } {
   // Sourced tables can evaluate geometry through meta.tableContent; they are outside this sheet-only fallback.
-  if (!ctx.rebuild || !id || !view || ctx.settings.tables?.length || ctx.settings.standard !== undefined || ctx.settings.units !== undefined || ctx.settings.dual !== undefined || ctx.settings.precision !== undefined) return {};
+  if (!ctx.rebuild || !id || !view || ctx.settings.tables?.length || ctx.settings.standard !== undefined || ctx.settings.units !== undefined || ctx.settings.dual !== undefined || ctx.settings.precision !== undefined || ctx.settings.inchFraction !== undefined) return {};
   let r: Extract<Resolved, { ok: true; kind: 'linear' }> | undefined;
   for (const resolved of ctx.sheet.dimensions) if (resolved.ok && resolved.kind === 'linear' && resolved.dim.id === id && resolved.dim.view === view) { r = resolved; break; }
   if (!r || r.dim.auto !== true || r.dim.tol !== undefined || r.dim.count !== undefined || r.alt !== undefined || r.shownPrecision !== undefined || (view !== 'front' && view !== 'top' && view !== 'right')) return {};
@@ -435,6 +435,9 @@ export function drawingIssues(ctx: IssueContext): DrawingIssue[] {
       if (!pair?.tight && !omittedFit) continue;
       const digits = pair?.digits ?? Math.max(u === 'inch' ? 5 : 4, preset.precision[u] ?? 0), omitted = omittedFit || pair?.printable === false;
       out.push({ code: 'UNIT_PRECISION', severity: 'warning', message: `Dimension ${r.dim.id}: its tolerance is too fine to print in ${u === 'inch' ? 'inches' : 'mm'} even at ${digits} decimals. ${omitted ? 'Its limits are omitted because no numeric interval can be printed inside the true zone.' : 'Its printed limits remain inside the true zone but do not preserve enough of its width or a nonzero deviation.'} Use more decimal places or another drawing unit.`, dims: [r.dim.id], view: r.dim.view });
+    }
+    if (r.fractionFallback === 'below-grid' && preset.inchFraction !== undefined) {
+      out.push({ code: 'UNIT_PRECISION', severity: 'warning', message: `Dimension ${r.dim.id}: its length is smaller than half of 1/${preset.inchFraction} inch, so it stays decimal instead of rounding to 0. Use a finer inch fraction denominator or decimal inches.`, dims: [r.dim.id], view: r.dim.view });
     }
   }
   if (preset.units === 'inch') for (const f of settings.frames ?? []) {

@@ -114,7 +114,7 @@ export type Resolved = (
   /** `vertex`: where the two lines meet; `from`/`to`: the sector's bounding directions (counter-clockwise from → to); `ends`: each edge's far end from the vertex. */
   | { ok: true; kind: 'angle'; dim: Extract<DrawingDimension, { kind: 'angle' }>; vertex: XY; from: XY; to: XY; ends: [XY, XY]; value: number; text: string; alt?: string }
   /** A pitch circle (R14.5): `center` in the view, `center3` in the model, `radius` (mm), `members` in the view; `value` its diameter. */
-  | { ok: true; kind: 'pcd'; dim: Extract<DrawingDimension, { kind: 'pcd' }>; center: XY; center3: Vec3; radius: number; members: XY[]; even: boolean; value: number; text: string; alt?: string }) & { /** Transient common nominal precision selected by the sheet when an explicit tolerance and fit share it. Never authored or saved. */ shownPrecision?: UnitPrecision }
+  | { ok: true; kind: 'pcd'; dim: Extract<DrawingDimension, { kind: 'pcd' }>; center: XY; center3: Vec3; radius: number; members: XY[]; even: boolean; value: number; text: string; alt?: string }) & { /** Transient common nominal precision selected by the sheet when an explicit tolerance and fit share it. Never authored or saved. */ shownPrecision?: UnitPrecision; /** Transient fractional-inch fallback marker when a nonzero plain inch value is smaller than half the fraction grid. Never authored or saved. */ fractionFallback?: 'below-grid' }
   | { ok: false; dim: DrawingDimension; reason: string };
 
 /** A value to 0.01 mm, leading zero kept and trailing zeros trimmed: the metric rule of both standards (standard.ts `formatNumber` takes another). */

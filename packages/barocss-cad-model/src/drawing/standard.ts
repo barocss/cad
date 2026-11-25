@@ -13,6 +13,11 @@ export const DRAWING_UNITS: readonly DrawingUnits[] = ['mm', 'inch'];
 /** Decimal places per unit: an absent unit keeps its default (mm: as before, trimmed; inch: 3). */
 export interface UnitPrecision { mm?: number; inch?: number }
 export const MAX_PRECISION = 6;
+/** Optional fractional-inch denominator for plain untoleranced length dimensions; model stays in mm. */
+export const INCH_FRACTION_DENOMINATORS = [2, 4, 8, 16, 32, 64] as const;
+export type InchFractionDenominator = (typeof INCH_FRACTION_DENOMINATORS)[number];
+export const inchFractionOk = (x: unknown): x is InchFractionDenominator =>
+  typeof x === 'number' && Number.isInteger(x) && (INCH_FRACTION_DENOMINATORS as readonly number[]).includes(x);
 export const DRAWING_STANDARDS: readonly DrawingStandard[] = ['iso', 'asme'];
 
 export interface StandardPreset {
@@ -24,8 +29,8 @@ export interface StandardPreset {
   dimensionText: 'aligned' | 'unidirectional';
   /** Numbers: keep the leading zero (0.5) or drop it (.5); trim trailing zeros or keep them to the precision. Inch rows plug in here (11 ③b). */
   number: { leadingZero: boolean; trailingZeros: 'trim' | 'keep' };
-  /** Length units (11 ③b), from the drawing: the primary unit, whether the other is shown after it in square brackets, and decimal places per unit. */
-  units: DrawingUnits; dual: boolean; precision: UnitPrecision;
+  /** Length units (11 ③b), from the drawing: the primary unit, whether the other is shown after it in square brackets, decimal places per unit, and optional fractional inch denominator for plain inch lengths. */
+  units: DrawingUnits; dual: boolean; precision: UnitPrecision; inchFraction?: InchFractionDenominator;
   /** Set only by `withDigits` on plain mm: explicit decimals with their trailing zeros trimmed (a nominal printed to its tolerance's decimals). */
   trimZeros?: boolean;
   /** The title block's projection symbol is drawn to the standard's proportions (0: the sheet's own, smaller symbol). */
@@ -65,12 +70,56 @@ export const INCH_DECIMALS = 3;
 const MM_PER_INCH = 25.4;
 
 /** The settings a preset takes its units from. */
-export interface UnitSettings { standard?: DrawingStandard; units?: DrawingUnits; dual?: boolean; precision?: UnitPrecision }
+export interface UnitSettings { standard?: DrawingStandard; units?: DrawingUnits; dual?: boolean; precision?: UnitPrecision; inchFraction?: InchFractionDenominator }
 /** The preset a drawing draws with: its standard's, with its units. With no units setting this is the standard's own preset, unchanged. */
 export function presetFor(s: UnitSettings): StandardPreset {
   const base = presetOf(s.standard);
-  if (s.units === undefined && !s.dual && !s.precision) return base;
-  return { ...base, units: s.units ?? 'mm', dual: s.dual === true, precision: s.precision ?? {} };
+  const fraction = inchFractionOk(s.inchFraction) ? s.inchFraction : undefined;
+  if (s.units === undefined && !s.dual && !s.precision && fraction === undefined) return base;
+  return { ...base, units: s.units ?? 'mm', dual: s.dual === true, precision: s.precision ?? {}, ...(fraction !== undefined ? { inchFraction: fraction } : {}) };
+}
+
+export type FractionalInchResult =
+  | { ok: true; text: string }
+  | { ok: false; reason: 'below-grid' | 'invalid' };
+
+function gcdBigInt(a: bigint, b: bigint): bigint {
+  let x = a < 0n ? -a : a, y = b < 0n ? -b : b;
+  while (y !== 0n) { const t = x % y; x = y; y = t; }
+  return x;
+}
+
+/**
+ * Formats a model mm length as an exact half-up reduced inch fraction on a 1/denominator grid.
+ * Uses exact BigInt rational arithmetic from the canonical decimal spelling of `mm`:
+ *   inches * denominator = (|mm| * 5 * denominator) / 127.
+ * Nonzero values that would round to 0 return `{ ok: false, reason: 'below-grid' }` so callers
+ * never print `0` for a nonzero length and can fall back to decimal inch with a precision warning.
+ */
+export function formatFractionalInch(mm: number, denominator: InchFractionDenominator): FractionalInchResult {
+  if (typeof mm !== 'number' || !Number.isFinite(mm) || Math.abs(mm) > 1e15 || !inchFractionOk(denominator)) {
+    return { ok: false, reason: 'invalid' };
+  }
+  if (mm === 0) return { ok: true, text: '0' };
+  if (Math.abs(mm) < MM_PER_INCH / (4 * denominator)) return { ok: false, reason: 'below-grid' };
+  const dv = decimalValue(mm);
+  if (dv.integer === 0n) return { ok: true, text: '0' };
+  const neg = dv.integer < 0n;
+  const absInt = neg ? -dv.integer : dv.integer;
+  const D = BigInt(denominator);
+  const num = absInt * 5n * D;
+  const den = 127n * 10n ** BigInt(dv.places);
+  const q = num / den;
+  const r = num % den;
+  const ticks = 2n * r >= den ? q + 1n : q;
+  if (ticks === 0n) return { ok: false, reason: 'below-grid' };
+  const whole = ticks / D;
+  const rem = ticks % D;
+  const sign = neg ? '-' : '';
+  if (rem === 0n) return { ok: true, text: `${sign}${whole}` };
+  const g = gcdBigInt(rem, D);
+  const frac = `${rem / g}/${D / g}`;
+  return { ok: true, text: whole === 0n ? `${sign}${frac}` : `${sign}${whole} ${frac}` };
 }
 
 /**
@@ -190,5 +239,5 @@ export function lengthFormats(p: StandardPreset): { primary: LengthFormat; secon
 }
 /** The title block's UNITS cell: mm, inch, or mm [inch] / inch [mm]. */
 export const unitsLabel = (p: StandardPreset): string => p.dual ? (p.units === 'mm' ? 'mm [inch]' : 'inch [mm]') : p.units;
-/** Whether the drawing prints anything but plain trimmed mm (units, dual or a precision). */
-export const hasUnitSettings = (p: StandardPreset): boolean => p.units !== 'mm' || p.dual || p.precision.mm !== undefined || p.precision.inch !== undefined;
+/** Whether the drawing prints anything but plain trimmed mm (units, dual, precision, or fractional inch). */
+export const hasUnitSettings = (p: StandardPreset): boolean => p.units !== 'mm' || p.dual || p.precision.mm !== undefined || p.precision.inch !== undefined || p.inchFraction !== undefined;

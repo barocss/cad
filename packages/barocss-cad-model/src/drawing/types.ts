@@ -9,7 +9,7 @@ import type { Sig } from '../engine/references';
 import { isVec3 } from '../util/guards';
 import { readDetails, type DrawingDetail } from './detail';
 import { readBreaks, type DrawingBreak } from './breaks';
-import { MAX_PRECISION, type DrawingStandard, type DrawingUnits, type UnitPrecision } from './standard';
+import { MAX_PRECISION, inchFractionOk, type DrawingStandard, type DrawingUnits, type InchFractionDenominator, type UnitPrecision } from './standard';
 import { readDatums, type DrawingFace, type DrawingFaceRef } from './datums';
 export type { DrawingFaceRef } from './datums';
 import { readDatumTargets, type DrawingDatumTarget } from './datumTargets';
@@ -131,6 +131,8 @@ export interface DrawingSettings {
   dual?: boolean;
   /** Decimal places per unit, 0 to 6. Absent: mm as before (trimmed), inch 3. */
   precision?: UnitPrecision;
+  /** Optional fractional-inch denominator (2|4|8|16|32|64) for plain untoleranced inch length dimensions. */
+  inchFraction?: InchFractionDenominator;
   /** Hidden edges dashed in the orthographic views (the isometric view shows visible edges only). */
   hidden: boolean;
   /** false: no centre marks and centrelines (shown by default). */
@@ -300,6 +302,7 @@ export function readDrawing(raw: unknown): DrawingSettings {
     ...(r.units === 'inch' ? { units: 'inch' as const } : {}),
     ...(r.dual === true ? { dual: true } : {}),
     ...(readPrecision(r.precision) ? { precision: readPrecision(r.precision)! } : {}),
+    ...(inchFractionOk(r.inchFraction) ? { inchFraction: r.inchFraction } : {}),
     hidden: r.hidden !== false,
     ...(r.centers === false ? { centers: false } : {}),
     ...(r.tangent === true ? { tangent: true } : {}),
