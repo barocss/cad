@@ -492,3 +492,17 @@ export function rulesWithoutCircle(rules: readonly SketchRule[], j: number): Ske
   }
   return out;
 }
+
+export {
+  addReferenceDimension,
+  convertDrivingToReference,
+  convertReferenceToDriving,
+  isConvertibleToReference,
+  isValidReferenceDimension,
+  removeReferenceDimension,
+  resolveReferenceDimension,
+  type ReferenceDimensionKind,
+  type ReferenceEditResult,
+  type ResolvedReferenceDimension,
+  type SketchReferenceDimension,
+} from './referenceDimensions';

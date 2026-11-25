@@ -4,6 +4,7 @@ import type { PocketFloorBinding } from '../engine/pocketFloor';
 import type { PlanarFaceOutlineInsetAssociation, SketchBand } from '../engine/doc';
 import type { PlaneKind, SketchPlane } from './plane';
 import type { SketchRule } from './terms';
+import type { SketchReferenceDimension } from './referenceDimensions';
 import type { SketchPick } from './rules';
 import type { SplineDef } from './spline';
 import type { EllipseDef } from './ellipse';
@@ -22,6 +23,8 @@ export type SketchShape = (
       equalRadii?: [number, number][]; concentric?: [number, number][];
       /** Horizontal / vertical edges (kept from closing on), explicit constraints and point distances (sketch/rules.ts). */
       hv?: { h: number[]; v: number[] }; rules?: SketchRule[];
+      /** Read-only persistent reference dimensions bound by stable side IDs (never emit solver equations). */
+      references?: SketchReferenceDimension[];
       /** Drawn with the Rectangle tool: saved as a rectangle again while it still is one (see sketch/loops.ts). */
       fromRectangle?: true;
       /** Drawn with the Spline tool: closing infers only tangency at its joints, never equal radii or shared centres between its arcs. */

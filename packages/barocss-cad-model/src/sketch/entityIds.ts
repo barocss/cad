@@ -71,6 +71,7 @@ export function carryPolygon(old: Polygon, next: Polygon, from: readonly number[
   set('equalRadii', pairs(old.equalRadii)); set('concentric', pairs(old.concentric));
   if (old.hv) set('hv', { h: old.hv.h.map(seg).filter(j => j >= 0), v: old.hv.v.map(seg).filter(j => j >= 0) });
   set('rules', rules);
+  if (old.references?.length) out.references = old.references.map(r => ({ ...r }));
   if (old.circles) { out.circles = old.circles.map(c => ({ c: [c.c[0], c.c[1]], r: c.r })); if (old.circleIds) out.circleIds = [...old.circleIds]; }
   if (old.fromRectangle && n1 === 4) out.fromRectangle = true; else delete out.fromRectangle;
   // (A point inserted or removed makes a spline or ellipse an ordinary outline.)

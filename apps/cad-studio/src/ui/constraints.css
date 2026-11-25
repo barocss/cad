@@ -32,7 +32,14 @@
   color: var(--text); font: 500 15px/1 var(--sans); cursor: pointer;
 }
 .dim-reset-position:hover, .dim-reset-position:focus-visible { border-color: var(--accent); color: var(--accent); }
-.vp-overlay .dim.ref .dim-chip { stroke-dasharray: 3 2; opacity: 0.85; }
+.vp-overlay .dim.ref .dim-chip { fill: #1d2026; stroke: #9aa3b2; stroke-dasharray: 3 2; opacity: 0.92; }
+.vp-overlay .dim.ref .dim-text { fill: #c6cdd9; font-style: italic; }
+.vp-overlay .dim-line.ref { stroke: #9aa3b2; stroke-dasharray: 4 3; opacity: 0.85; }
+.vp-overlay .dim-ext.ref { stroke: #9aa3b2; opacity: 0.5; }
+:root[data-theme='light'] .vp-overlay .dim.ref .dim-chip { fill: #f2f4f8; stroke: #647082; }
+:root[data-theme='light'] .vp-overlay .dim.ref .dim-text { fill: #445064; }
+.cons-row .ref-btn { height: 20px; padding: 0 5px; border: 1px solid #4a4d53; border-radius: 4px; background: transparent; color: var(--muted); cursor: pointer; font: 500 10px var(--mono); line-height: 1; }
+.cons-row .ref-btn:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
 .vp-overlay .cons-glyph .cons-text { font-size: 11px; }
 .vp-overlay .cons-leader { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 3 2; pointer-events: none; }
 .dim-edit::-webkit-inner-spin-button, .dim-edit::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }

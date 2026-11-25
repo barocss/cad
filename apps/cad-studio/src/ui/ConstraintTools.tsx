@@ -3,8 +3,9 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { StudioDoc } from '@barocss/cad-model/engine/doc';
 import {
-  applyConstraint, circleDimensionKeys, circlePairKeys, constraintOptions, dimensionKey, edgeCircleGapKey, isSettled, pointDimensionKeys,
-  type ConstraintKind, type Polygon, type SketchPick,
+  addReferenceDimension, applyConstraint, circleDimensionKeys, circlePairKeys, constraintOptions, convertReferenceToDriving,
+  dimensionKey, edgeCircleGapKey, isSettled, pointDimensionKeys, removeReferenceDimension, resolveReferenceDimension,
+  type ConstraintKind, type Polygon, type ReferenceDimensionKind, type SketchPick,
 } from '@barocss/cad-model/sketch/rules';
 import { settleShape } from '@barocss/cad-model/sketch/settle';
 import type { SketchState } from '@barocss/cad-model/sketch/types';
@@ -65,10 +66,24 @@ export function ConstraintTools({ shape: s, owner, conflictIds, documentScope, i
   const point = picked.find(p => p.kind === 'point'), edge = picked.find(p => p.kind === 'edge'), circle = picked.find(p => p.kind === 'circle');
   const corners = sketchCornerTargets(s, picked);
   const savedCorners = selectedSavedCorners(owner, s, documentScope, picked);
-  const twoPoints = picked.length === 2 && picked.every(p => p.kind === 'point') ? pointDimensionKeys(picked[0].i, picked[1].i)
+  const twoOutlinePoints = picked.length === 2 && picked.every(p => p.kind === 'point');
+  const twoPoints = twoOutlinePoints ? pointDimensionKeys(picked[0].i, picked[1].i)
     : picked.length === 2 && point && circle ? circleDimensionKeys(point.i, circle.i)
       : picked.length === 2 && picked.every(p => p.kind === 'circle') ? circlePairKeys(picked[0].i, picked[1].i) : null;
   const edgeCircleGap = picked.length === 2 && edge && circle && !circle.done ? edgeCircleGapKey(s, edge.i, circle.i) : null;
+  const addRef = (kind: ReferenceDimensionKind) => {
+    if (!twoOutlinePoints) return;
+    const r = addReferenceDimension(s, picked[0].i, picked[1].i, kind);
+    if (!r.ok) { setRefused(r.reason); return; }
+    onShape(r.shape);
+    onPicked([]);
+  };
+  const makeRefDriving = (refId: string) => {
+    const r = convertReferenceToDriving(s, refId);
+    if (!r.ok) { setRefused(r.reason); return; }
+    onShape(r.shape);
+  };
+  const resolvedRefs = (s.references ?? []).map(ref => resolveReferenceDimension(s, ref));
   const apply = (kind: ConstraintKind) => {
     const current = inspection.get();
     const r = current?.owner === owner && current.target === 'comparison' && current.kind === kind
@@ -100,6 +115,11 @@ export function ConstraintTools({ shape: s, owner, conflictIds, documentScope, i
       <button type="button" aria-label="Horizontal distance" title="Distance along the sketch X axis" onClick={() => onEditDim(twoPoints.dx)}><b>↔</b><span>Horizontal</span></button>
       <button type="button" aria-label="Vertical distance" title="Distance along the sketch Y axis" onClick={() => onEditDim(twoPoints.dy)}><b>↕</b><span>Vertical</span></button>
     </div>}
+    {twoOutlinePoints && <div className="cons-tools cons-dims" role="group" aria-label="Reference dimensions between the points">
+      <button type="button" aria-label="Add reference distance" title="Read-only aligned measurement (adds no constraint)" onClick={() => addRef('distance')}><b>(⤢)</b><span>Ref dist</span></button>
+      <button type="button" aria-label="Add horizontal reference distance" title="Read-only X measurement (adds no constraint)" onClick={() => addRef('dx')}><b>(↔)</b><span>Ref horiz</span></button>
+      <button type="button" aria-label="Add vertical reference distance" title="Read-only Y measurement (adds no constraint)" onClick={() => addRef('dy')}><b>(↕)</b><span>Ref vert</span></button>
+    </div>}
     {edgeCircleGap && <div className="cons-tools cons-dims" role="group" aria-label="Edge to circle dimensions">
       {dim && <button type="button" aria-label="Centre distance from edge" title="Distance from the edge to the circle centre" onClick={() => onEditDim(dim)}><b>↔</b><span>Centre</span></button>}
       <button type="button" aria-label="Edge to circle gap" title="Clearance gap from the edge to the circle circumference" onClick={() => onEditDim(edgeCircleGap)}><b>⇤</b><span>Gap</span></button>
@@ -109,6 +129,37 @@ export function ConstraintTools({ shape: s, owner, conflictIds, documentScope, i
       inspection={inspection} onApply={shape => { onShape(shape); if (!savedCorners) onPicked([]); }} />}
     {refused && <div className="sk-status open" role="alert"><i />{refused}</div>}
     <ConstraintList shape={s} owner={owner} conflictIds={conflictIds} documentScope={documentScope} inspection={inspection}
-      inspectedId={inspectedId} picked={picked} onShape={onShape} onEditDim={onEditDim} />
+      inspectedId={inspectedId} picked={picked} onShape={onShape} onEditDim={onEditDim} onRefuse={setRefused} />
+    {resolvedRefs.length > 0 && <>
+      <div className="card-title" style={{ marginTop: 10 }}>REFERENCE DIMENSIONS · {resolvedRefs.length}</div>
+      <div role="list" aria-label="Reference dimensions">
+        {resolvedRefs.map(item => (
+          <div key={item.ref.id} className="cons-row" role="listitem" data-reference-id={item.ref.id}>
+            <div className="kv">
+              <span>{item.label}</span>
+              <b>{item.ok ? `(${Math.round(item.value * 1e4) / 1e4}) REF` : 'Unresolved'}</b>
+            </div>
+            {item.ok && (
+              <button
+                type="button"
+                data-sketch-action
+                className="ref-btn"
+                aria-label={`Make ${item.label} driving`}
+                title="Convert this reference measurement into a driving constraint"
+                onClick={() => makeRefDriving(item.ref.id)}
+              >Drive</button>
+            )}
+            <button
+              type="button"
+              data-sketch-action
+              className="x"
+              aria-label={`Remove ${item.label}`}
+              title="Remove this reference dimension"
+              onClick={() => onShape(removeReferenceDimension(s, item.ref.id))}
+            >×</button>
+          </div>
+        ))}
+      </div>
+    </>}
   </>;
 }

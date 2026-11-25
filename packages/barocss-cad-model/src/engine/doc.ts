@@ -1098,6 +1098,8 @@ export type LoopSegment = { kind: 'line'; start: [Dim, Dim] } | { kind: 'arc'; s
 export interface SketchOutline {
   points: [number, number][]; bulges?: number[]; lengths?: Record<number, number>; radii?: Record<number, number>; tangents?: number[];
   equalRadii?: [number, number][]; concentric?: [number, number][]; hv?: { h: number[]; v: number[] }; rules?: SketchRule[];
+  /** Read-only persistent reference dimensions bound by stable side IDs (never emit solver equations). */
+  references?: SketchReferenceDimension[];
   /** Circles dimensioned from the outline (they are also the profile's holes or regions). */
   circles?: { c: [number, number]; r: number }[];
   /** A spline outline's fit points and handle directions (degrees; null = automatic), kept while the points still are what it makes. */
@@ -1519,6 +1521,7 @@ export function holeCentres(center: readonly number[], p?: HolePattern): [number
 
 import type { RenderSettings } from './render';
 import type { SketchRule } from '../sketch/terms';
+import type { SketchReferenceDimension } from '../sketch/referenceDimensions';
 import type { DirectGeometry } from './direct';
 import type { DrawingSettings } from '../drawing/types';
 import { type Mate } from '../assembly/mates';

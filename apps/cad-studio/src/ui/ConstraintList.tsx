@@ -1,6 +1,6 @@
 import { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { NativeSelect } from '@/components/ui/native-select';
-import { removeConstraint, type ConstraintEntry, type Polygon, type SketchPick } from '@barocss/cad-model/sketch/rules';
+import { convertDrivingToReference, isConvertibleToReference, removeConstraint, type ConstraintEntry, type Polygon, type SketchPick } from '@barocss/cad-model/sketch/rules';
 import type { SketchState } from '@barocss/cad-model/sketch/types';
 import { clearConstraintInspection, inspectConstraint, keepsDimensionDraft, type ConstraintInspection, type ConstraintInspectionStore } from '../sketch/constraintInspection';
 import { activeCircleDistanceRow, constraintInvolves, constraintListRows, filterConstraintList } from '../sketch/constraintList';
@@ -27,7 +27,7 @@ function conflictActionLabel(row: ConstraintEntry): string {
   return `Find conflicting ${row.label.toLowerCase()} between ${pair}`;
 }
 
-export function ConstraintList({ shape, owner, conflictIds, documentScope, inspection, inspectedId, picked, onShape, onEditDim }: {
+export function ConstraintList({ shape, owner, conflictIds, documentScope, inspection, inspectedId, picked, onShape, onEditDim, onRefuse }: {
   shape: Polygon;
   owner: SketchState;
   conflictIds?: readonly string[];
@@ -37,6 +37,7 @@ export function ConstraintList({ shape, owner, conflictIds, documentScope, inspe
   picked: readonly SketchPick[];
   onShape(shape: Polygon): void;
   onEditDim(key: string | null): void;
+  onRefuse?(reason: string): void;
 }) {
   const kindControl = useRef<HTMLSelectElement>(null);
   const listControl = useRef<HTMLDivElement>(null);
@@ -114,6 +115,17 @@ export function ConstraintList({ shape, owner, conflictIds, documentScope, inspe
             if (event.target === event.currentTarget) event.preventDefault();
           }}>
           <div className="kv">{row.label}<b>{row.detail}</b></div>
+          {isConvertibleToReference(shape, row.id) && (
+            <button type="button" data-sketch-action className="ref-btn"
+              aria-label={`Convert ${row.label} ${row.detail} to reference`}
+              title="Convert this driving dimension into a read-only reference measurement"
+              onClick={event => {
+                if (event.detail === 0) kindControl.current?.focus();
+                const res = convertDrivingToReference(shape, row.id);
+                if (!res.ok) { onRefuse?.(res.reason); return; }
+                onShape(res.shape);
+              }}>REF</button>
+          )}
           <button type="button" data-sketch-action className={'x' + (row.removable ? '' : ' off')} disabled={!row.removable}
             aria-label={`Remove ${row.label} ${row.detail}`} title={row.removable ? 'Remove this constraint' : undefined}
             onClick={event => {

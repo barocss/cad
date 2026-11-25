@@ -4,7 +4,7 @@
 import type { MouseEvent, PointerEvent, ReactNode } from 'react';
 import type { SketchShape } from '../viewport/Viewport';
 import { arcOf, type P2 } from '@barocss/cad-model/sketch/profile';
-import { dimensionLabel, dimensionValue, drivingDimensionValue, edgeCircleGapEndpoints, edgeCircleGapGeometry, samePick, type Polygon, type SketchPick } from '@barocss/cad-model/sketch/rules';
+import { dimensionLabel, dimensionValue, drivingDimensionValue, edgeCircleGapEndpoints, edgeCircleGapGeometry, resolveReferenceDimension, samePick, type Polygon, type SketchPick } from '@barocss/cad-model/sketch/rules';
 import type { Project } from '@barocss/cad-model/sketch/select';
 import { InlineSketchDimension, type DimensionAxis } from './InlineSketchDimension';
 import { constraintMarkSize, placeConstraintMarksDetailed, type ScreenBox } from './sketchConstraintMarkLayout';
@@ -187,6 +187,37 @@ export function sketchMarks({ shape: s, project, outlinePath, view, dimensionAre
     const a = s.points[r.a], b = s.points[r.b], m = r.kind === 'dx' ? 0 : 1, o = 1 - m, far = Math.max(a[o], b[o]);
     const at = (p: readonly number[]) => P(m === 0 ? [p[0], far] : [far, p[1]]);
     linear(pts[r.a], pts[r.b], r.value, `${r.kind}${r.a}_${r.b}`, [at(a), at(b)]);
+  });
+
+  // Persistent read-only reference dimensions: never open inline driving editor on click/double-click.
+  (s.references ?? []).forEach(ref => {
+    const resolved = resolveReferenceDimension(s, ref);
+    if (!resolved.ok || !pts[resolved.a] || !pts[resolved.b]) return;
+    const pa = s.points[resolved.a], pb = s.points[resolved.b];
+    const sa = pts[resolved.a], sb = pts[resolved.b];
+    let ends: [XY, XY] = [sa, sb];
+    if (ref.kind !== 'distance') {
+      const m = ref.kind === 'dx' ? 0 : 1, o = 1 - m, far = Math.max(pa[o], pb[o]);
+      const at = (p: readonly number[]) => P(m === 0 ? [p[0], far] : [far, p[1]]);
+      ends = [at(pa), at(pb)];
+    }
+    const o = outward(ends[0], ends[1]);
+    const a2 = add(ends[0], o, 38), b2 = add(ends[1], o, 38);
+    const midPt: XY = [(a2[0] + b2[0]) / 2, (a2[1] + b2[1]) / 2];
+    const text = `(${fmt(resolved.value)})`;
+    const w = Math.max(44, text.length * 7.4 + 14);
+    const box = { x: midPt[0] - w / 2, y: midPt[1] - 11, width: w, height: 22 };
+    dimensionBoxes.push(box);
+    svg.push(
+      <line key={'rx1' + ref.id} x1={sa[0] + o[0] * 4} y1={sa[1] + o[1] * 4} x2={a2[0] + o[0] * 5} y2={a2[1] + o[1] * 5} className="dim-ext ref" />,
+      <line key={'rx2' + ref.id} x1={sb[0] + o[0] * 4} y1={sb[1] + o[1] * 4} x2={b2[0] + o[0] * 5} y2={b2[1] + o[1] * 5} className="dim-ext ref" />,
+      <line key={'rl' + ref.id} data-dim-line={ref.id} data-dim-kind="ref" x1={a2[0]} y1={a2[1]} x2={b2[0]} y2={b2[1]} className="dim-line ref" />,
+      <g key={'dr' + ref.id} className="dim ref" data-dim-ref={ref.id} data-dim-kind="ref" pointerEvents="none">
+        <title>{`${resolved.label} · read-only reference (does not constrain sketch)`}</title>
+        <rect {...box} rx={4} className="dim-chip" />
+        <text x={midPt[0]} y={midPt[1] + 4} textAnchor="middle" className="dim-text">{text}</text>
+      </g>,
+    );
   });
 
   /** Where an angle between straight edges a and b is drawn: an arc at their shared point, else midway between them. */

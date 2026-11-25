@@ -53,23 +53,24 @@ export function rectangleNode(s: Extract<SketchShape, { kind: 'polygon' }>): Ske
     : eq(p[0][0], p[1][0]) && eq(p[1][1], p[2][1]) && eq(p[2][0], p[3][0]) && eq(p[3][1], p[0][1]);
   if (!aligned) return null;
   const xs = p.map(q => q[0]), ys = p.map(q => q[1]);
-  // Keep only authored driving dimensions; an ordinary rectangle must not acquire locks.
-  const outline = Object.keys(s.lengths ?? {}).length ? outlineOf(s) : null;
+  // Keep only authored driving dimensions or explicit persistent references; an ordinary rectangle must not acquire locks.
+  const outline = Object.keys(s.lengths ?? {}).length || (s.references?.length ?? 0) > 0 ? outlineOf(s) : null;
   return { kind: 'sketch', profile: 'rectangle', min: [Math.min(...xs), Math.min(...ys)], max: [Math.max(...xs), Math.max(...ys)], ...(outline ? { outline } : {}) };
 }
 
 /** The outline recipe kept by the sketch node. Spline and ellipse definitions must still match the shape. */
 export function outlineOf(s: Extract<SketchShape, { kind: 'polygon' }>): SketchOutline | null {
-  const { points, bulges, lengths, radii, tangents, equalRadii, concentric, hv, rules, circles } = s;
+  const { points, bulges, lengths, radii, tangents, equalRadii, concentric, hv, rules, references, circles } = s;
   const has = (v: unknown) => Array.isArray(v) ? v.length > 0 : !!v && Object.keys(v).length > 0;
   const spline = s.spline && splineMatches(s) ? s.spline : undefined, ellipse = s.ellipse && ellipseMatches(s) ? s.ellipse : undefined;
   // An empty H/V recipe prevents legacy coordinate-based inference when the outline reopens.
-  if (!spline && !ellipse && ![lengths, radii, tangents, equalRadii, concentric, rules, circles].some(has) && hv === undefined) return null;
+  if (!spline && !ellipse && ![lengths, radii, tangents, equalRadii, concentric, rules, references, circles].some(has) && hv === undefined) return null;
   const out: SketchOutline = { points: points.map(p => [p[0], p[1]] as [number, number]) };
   if (bulges?.some(Boolean)) out.bulges = [...bulges];
   if (has(lengths)) out.lengths = { ...lengths }; if (has(radii)) out.radii = { ...radii }; if (has(tangents)) out.tangents = [...tangents!];
   if (has(equalRadii)) out.equalRadii = equalRadii!.map(p => [...p] as [number, number]); if (has(concentric)) out.concentric = concentric!.map(p => [...p] as [number, number]);
   if (hv) out.hv = { h: [...hv.h], v: [...hv.v] }; if (has(rules)) out.rules = rules!.map(r => ({ ...r }));
+  if (has(references)) out.references = references!.map(r => ({ ...r }));
   if (has(circles)) out.circles = circles!.map(c => ({ c: [c.c[0], c.c[1]], r: c.r }));
   if (spline) out.spline = { fit: spline.fit.map(p => [p[0], p[1]] as [number, number]), closed: spline.closed, ...(spline.handles ? { handles: [...spline.handles] } : {}) };
   if (ellipse) out.ellipse = { center: [ellipse.center[0], ellipse.center[1]], rx: ellipse.rx, ry: ellipse.ry, angle: ellipse.angle };
