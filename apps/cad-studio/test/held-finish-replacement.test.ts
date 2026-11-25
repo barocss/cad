@@ -5,7 +5,7 @@ import { evaluatePart } from '@barocss/cad-model/engine/evaluate';
 import type { DisplayEdge } from '@barocss/cad-model/engine/mesh';
 import { toSig } from '@barocss/cad-model/engine/references';
 import { signaturesOf } from '@barocss/cad-model/engine/rematch';
-import { heldFinishGroupProblems, heldFinishRadiusText, heldFinishCandidate, heldFinishProblem, heldFinishReplaceable,
+import { heldFinishGroupProblems, heldFinishPassthroughBody, heldFinishRadiusText, heldFinishCandidate, heldFinishProblem, heldFinishReplaceable,
  heldFinishReplacement, replaceHeldFinishGroup, type HeldFinish } from '../src/state/heldFinishReplacement';
 import { heldChamferThroughHole, heldPairedFilletThroughHole, parentChamferEdge, parentPairedFilletEdge } from '@barocss/cad-model/engine/heldChamferThroughHole';
 const finish:Extract<HeldFinish,{kind:'fillet'}>={id:'repair',kind:'fillet',parent:{node:1,side:'solid'},edges:['missing'],radius:1,held:'missing edge',suppressed:true,radii:[{at:[0,0,0],radius:1,atEnd:true},{at:[10,0,0],radius:3,atEnd:true}]};
@@ -361,4 +361,37 @@ test('bound radius admission requires an exact reference and an own finite posit
    assert.equal(groupRepaired.suppressed, undefined);
   }
   assert.deepEqual(groupNext.nodes[3], bothRetired.nodes[3]);
+ });
+
+ test('held single-edge finish exposes passthrough body only when every downstream body feature is a held finish', () => {
+  const stock = rectanglePart(60, 40, 10);
+  const n2 = {
+   kind: 'chamfer' as const, parent: { node: 1, side: 'solid' as const }, edges: ['retired-n2'], distance: 4,
+   held: 'Missing edge', suppressed: true as const,
+   sigs: { 'retired-n2': { k: 'line' as const, p: [0, 0, 5] as [number, number, number], d: [0, 0, 1] as [number, number, number], s: 10 } },
+  };
+  const n3 = {
+   kind: 'chamfer' as const, parent: { node: 2, side: 'solid' as const }, edges: ['retired-n3'], distance: 1,
+   held: 'Missing bevel edge', suppressed: true as const,
+   sigs: { 'retired-n3': { k: 'line' as const, p: [4, 0, 5] as [number, number, number], d: [0, 0, 1] as [number, number, number], s: 10 } },
+  };
+  const chained = withNode(withNode(stock, n2), n3);
+  const evaluated = evaluatePart(chained, 1);
+  assert.ok(evaluated.ok);
+  assert.equal(evaluated.bodies.length, 1);
+  assert.equal(evaluated.bodies[0].key, 'b3');
+  assert.equal(heldFinishPassthroughBody(chained, 2, evaluated.bodies), evaluated.bodies[0]);
+  // Terminal held finish uses direct key match, not passthrough fallback.
+  assert.equal(heldFinishPassthroughBody(chained, 3, evaluated.bodies), undefined);
+  // Manually suppressed (non-held) downstream finish is refused.
+  const manuallySuppressed = withNode(withNode(stock, n2), { ...n3, held: undefined });
+  assert.equal(heldFinishPassthroughBody(manuallySuppressed, 2, evaluated.bodies), undefined);
+  // Active downstream hole is refused (handled by heldChamferThroughHole instead).
+  const activeHole = withNode(withNode(stock, n2), { kind: 'hole' as const, parent: { node: 2, side: 'solid' as const }, face: 'n1.top', center: [30, 20], radius: 2 });
+  const holeEval = evaluatePart(activeHole, 2);
+  assert.ok(holeEval.ok);
+  assert.equal(heldFinishPassthroughBody(activeHole, 2, holeEval.bodies), undefined);
+  // Variable-radius fillet is refused.
+  const varying = withNode(withNode(stock, { ...finish, parent: { node: 1, side: 'solid' as const } }), n3);
+  assert.equal(heldFinishPassthroughBody(varying, 2, evaluated.bodies), undefined);
  });

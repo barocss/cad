@@ -239,6 +239,7 @@ import { isBodyEyeVisibilityOnly } from './state/bodyVisibilityReferenceProblems
 import { heldDraftFacePreviewClear, heldDraftFaceWorkCurrent } from './state/heldDraftFaceSession';
 import { useHeldDraftFace } from './state/useHeldDraftFace';
 import { useHeldFinishEdge } from './state/useHeldFinishEdge';
+import { refreshDownstreamProblems } from './state/referenceDecisions';
 import { resolveShopRows } from '@barocss/cad-model/engine/shopRows';
 import { openAccepted, type InPlaceSession } from './app/editInPlace';
 import { editInPlaceActions } from './app/editInPlaceActions';
@@ -1342,9 +1343,11 @@ export function App() {
     ownsSource: () => finishEdgeOpen === openIntent.current && ownsEvaluatedSource() && shownDocNow.current === doc
       && editNodeNow.current === editNode && bodiesRef.current === bodies && referenceProblems.current.get(doc) === refProblems,
     evaluate: (next, marker) => engine.part(prefixDoc(next, marker ?? next.nodes.length), revision.current++, 'refs'),
-    accept: (next, resolved) => {
+    refreshProblems: (next, releasedNode, remaining, nextBodies) =>
+      refreshDownstreamProblems(next, releasedNode, remaining, nextBodies, partDoc => engine.part(partDoc, revision.current++, 'refs')),
+    accept: (next, resolved, nextProblems) => {
       if (!commit(next, false, false, true)) return false;
-      referenceProblems.current.set(next, refProblems.filter(value => !resolved.includes(value)));
+      referenceProblems.current.set(next, nextProblems ? [...nextProblems] : refProblems.filter(value => !resolved.includes(value)));
       return true;
     },
     notice: setToast,

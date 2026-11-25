@@ -6,6 +6,7 @@ export type { HeldFinish } from '@barocss/cad-model/engine/heldFinishGroup';
 import type { Dim, ModelNode, StudioDoc } from '@barocss/cad-model/engine/doc';
 import type { DisplayEdge, Vec3 } from '@barocss/cad-model/engine/mesh';
 import type { BodyResult } from '@barocss/cad-model/engine/evaluate';
+import { bodyKeyFor } from '@barocss/cad-model/engine/ids';
 import { signaturesOf } from '@barocss/cad-model/engine/rematch';
 import { sameDatumTargetSourceSig, toSig, type Problem, type Sig } from '@barocss/cad-model/engine/references';
 export type ReplacementEndpoints = {start:Vec3;end:Vec3;stations?:{label:string;at:Vec3;fraction:number}[]};
@@ -46,6 +47,28 @@ export function replaceHeldFinishGroup(doc: StudioDoc, index: number, problems: 
  const next = { ...original, edges: names, sigs };
  delete next.held; delete next.suppressed;
  return { ...doc, nodes: doc.nodes.map((node, i) => i === index ? next : node) };
+}
+
+/**
+ * Return the unchanged solid passthrough body when a held constant single-edge finish is followed
+ * solely by held/suppressed downstream finishes along its body chain.
+ */
+export function heldFinishPassthroughBody(doc: StudioDoc, index: number, bodies: readonly BodyResult[]): BodyResult | undefined {
+ const finish = doc.nodes[index];
+ if (!heldFinishReplaceable(finish, doc.parameters) || !finish.suppressed || (finish.kind === 'fillet' && finish.radii)) return;
+ if (bodies.some(body => body.key === bodyKeyFor(doc.nodes, index, 'solid'))) return;
+ const matches = bodies.filter(body => {
+  if (body.ref?.side !== 'solid' || body.ref.node <= index || body.topology?.kind !== 'solid' || body.topology.bodyCount !== 1) return false;
+  let cursor = body.ref.node;
+  while (cursor > index) {
+   const step = doc.nodes[cursor];
+   if (!step?.held || !step.suppressed || (step.kind !== 'fillet' && step.kind !== 'chamfer') ||
+       step.parent.side !== 'solid' || step.parent.node >= cursor) return false;
+   cursor = step.parent.node;
+  }
+  return cursor === index;
+ });
+ return matches.length === 1 ? matches[0] : undefined;
 }
 
 /** Direct replacement releases a pair only when its other authored line still has its original identity. */

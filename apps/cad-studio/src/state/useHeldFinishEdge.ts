@@ -1,4 +1,4 @@
-import { heldFinishGroupProblems, heldFinishProblem, heldFinishCandidate, heldFinishReplacement,
+import { heldFinishGroupProblems, heldFinishPassthroughBody, heldFinishProblem, heldFinishCandidate, heldFinishReplacement,
   replaceHeldFinishGroup, validFinishGroupEdge, type ReplacementEndpoints } from './heldFinishReplacement';
 import { heldChamferThroughHole, heldPairedFilletThroughHole, parentChamferEdge, parentPairedFilletEdge } from '@barocss/cad-model/engine/heldChamferThroughHole';
 import { useCallback, useLayoutEffect, useRef, useState } from 'react';
@@ -33,12 +33,13 @@ interface Options {
   enabled: boolean;
   ownsSource(): boolean;
   evaluate(doc: StudioDoc, marker?: number): Promise<EvalResult>;
-  accept(doc: StudioDoc, resolved: readonly Problem[]): boolean;
+  refreshProblems?(doc: StudioDoc, releasedNode: number, remaining: readonly Problem[], bodies: readonly BodyResult[]): Promise<Problem[]>;
+  accept(doc: StudioDoc, resolved: readonly Problem[], nextProblems?: readonly Problem[]): boolean;
   notice(value: FriendlyError): void;
   retireNotice(value: FriendlyError): void;
 }
 
-export function useHeldFinishEdge({ doc, index, problems, bodies, enabled, ownsSource, evaluate, accept, notice, retireNotice }: Options) {
+export function useHeldFinishEdge({ doc, index, problems, bodies, enabled, ownsSource, evaluate, refreshProblems, accept, notice, retireNotice }: Options) {
   const node = index === null ? undefined : doc.nodes[index];
   const finish: Finish | null = node?.held && (node.kind === 'fillet' || node.kind === 'chamfer') ? node : null;
   // A terminal held feature exposes its source as a passthrough body.
@@ -46,8 +47,9 @@ export function useHeldFinishEdge({ doc, index, problems, bodies, enabled, ownsS
   const downstreamChamfer = enabled && index !== null && !sources.length ? heldChamferThroughHole(doc, index, bodies) : undefined;
   const downstreamFillet = enabled && index !== null && !sources.length && !downstreamChamfer ? heldPairedFilletThroughHole(doc, index, bodies) : undefined;
   const downstream = downstreamChamfer ?? downstreamFillet;
+  const passthrough = enabled && index !== null && !sources.length && !downstream ? heldFinishPassthroughBody(doc, index, bodies) : undefined;
   const strictSource = finish && ((finish.edges.length > 1 && !downstreamFillet) || (finish.kind === 'fillet' && finish.radii));
-  const body = strictSource && sources.length !== 1 ? undefined : sources[0] ?? downstream?.body;
+  const body = strictSource && sources.length !== 1 ? undefined : sources[0] ?? downstream?.body ?? passthrough;
   const problem = enabled && body && index !== null ? heldFinishProblem(doc, index, problems, body, !!downstreamFillet) : undefined;
   const group = enabled && body && index !== null ? heldFinishGroupProblems(doc, index, problems, !!downstreamFillet) : undefined;
   const [firstProblem, secondProblem, thirdProblem] = group ?? [];
@@ -149,7 +151,7 @@ export function useHeldFinishEdge({ doc, index, problems, bodies, enabled, ownsS
         : downstreamChamfer ? 'Select an original straight top edge clear of the Through Hole.'
         : downstreamFillet ? 'Select a different original straight edge clear of the Through Hole.'
         : candidate && 'error' in candidate ? candidate.error : 'Select one edge on the body of this feature.';
-      if (downstream) reportFailure({ title: 'Edge not selected', hint, detail: '' });
+      if (downstream || passthrough) reportFailure({ title: 'Edge not selected', hint, detail: '' });
       else notice({ title: 'Edge not selected', hint, detail: '' });
     }
     return true;
@@ -183,7 +185,14 @@ export function useHeldFinishEdge({ doc, index, problems, bodies, enabled, ownsS
     try {
       const result = await evaluate(next);
       if (ticket.current !== request || !stillOwnsSource()) return;
-      if (result.ok) { if (accept(next, resolved)) cancel(); }
+      if (result.ok) {
+        const remaining = problems.filter(value => !resolved.includes(value));
+        const nextProblems = refreshProblems
+          ? await refreshProblems(next, current.index, remaining, result.bodies)
+          : remaining;
+        if (ticket.current !== request || !stillOwnsSource()) return;
+        if (accept(next, resolved, nextProblems)) cancel();
+      }
       else reportFailure({ ...result.error, title: 'Edge replacement not applied' });
     } catch (error) {
       if (ticket.current === request && stillOwnsSource()) reportFailure({ title: 'Edge replacement not applied', hint: 'The feature is unchanged.', detail: String(error) });
@@ -194,7 +203,7 @@ export function useHeldFinishEdge({ doc, index, problems, bodies, enabled, ownsS
       }
     }
   };
-  const picks: readonly (DisplayEdge | undefined)[] = current?.group?.edges ?? ((heldName || downstream) && current?.edge ? [current.edge] : []);
+  const picks: readonly (DisplayEdge | undefined)[] = current?.group?.edges ?? ((heldName || downstream || passthrough) && current?.edge ? [current.edge] : []);
   const highlighted = picks.flatMap(edge => edge ? [edge] : []);
   const previewEdges = body && highlighted.length ? { mesh: body.mesh, edges: highlighted } : undefined;
   const groupReview: HeldFinishGroupReview | undefined = group && current?.group && {
