@@ -8,6 +8,7 @@
 //   is kept (its position turned with it), its dimensions turned as that view's are; across it the change is refused
 //   (SECTION_ACROSS) — turn the section off first.
 import { resolveDimension, type Resolved } from './dimensions';
+import { resolveCenterMarkGroup } from './centerMarkGroup';
 import { baseViewOf, detailLetter, isDetailRef, isSectionRef, isViewId, sectionLetter, sectionsOf, withSections, type DimView, type SectionRef, type DrawingSection, type DrawingSettings, type DrawingViews, type ViewId, type XY } from './types';
 import { sectionDepth, type Orientation } from './views';
 
@@ -117,6 +118,10 @@ export function reorient(from: DrawingViews, to: DrawingViews, settings: Drawing
     const mapped = map.get(ac.view)?.view ?? ac.view;
     return { ...ac, view: mapped as typeof ac.view };
   });
+  if (settings.centerMarkGroups) turned.centerMarkGroups = settings.centerMarkGroups.map(cmg => {
+    const mapped = map.get(cmg.view)?.view ?? cmg.view;
+    return { ...cmg, view: mapped as typeof cmg.view };
+  });
   if (settings.datumTargets) turned.datumTargets = settings.datumTargets.map((d): typeof d => {
     const [view, place] = mapPlace(d.view, d.place), m = map.get(d.view);
     // A line's ends and an area's centre are view points: they turn as the symbol's place does; a rectangle's width and height swap with the axes.
@@ -146,6 +151,15 @@ export function reorient(from: DrawingViews, to: DrawingViews, settings: Drawing
     const before = resolveDimension(parentWas ? { [d.view]: from[parentWas] } : from, d), after = resolveDimension(parentNow ? { [d.view]: to[parentNow] } : to, turned.dimensions[k]);
     if (!before.ok) return;
     if (!after.ok || after.kind !== before.kind || Math.abs(after.value - before.value) > 1e-9 * Math.max(1, Math.abs(before.value))) failed.push({ dim: d.id, was: readOf(before), now: readOf(after) });
+  });
+  (settings.centerMarkGroups ?? []).forEach((cmg, k) => {
+    const before = resolveCenterMarkGroup(from[cmg.view], cmg.members, cmg.view);
+    if (!before.ok) return;
+    const mapped = turned.centerMarkGroups![k];
+    const after = resolveCenterMarkGroup(to[mapped.view], mapped.members, mapped.view);
+    if (!after.ok || after.geometry.members.length !== before.geometry.members.length || Math.abs(after.geometry.radius - before.geometry.radius) > 1e-6) {
+      failed.push({ dim: cmg.id, was: `${before.geometry.members.length} holes (R${before.geometry.radius})`, now: after.ok ? `${after.geometry.members.length} holes (R${after.geometry.radius})` : `lost: ${after.reason}` });
+    }
   });
   if (failed.length) return { ok: false, code: 'ORIENTATION_REMAP_FAILED', message: `${failed.length} dimension${failed.length > 1 ? 's' : ''} would not read the same from the new front: nothing was turned.`, failed };
   return { ok: true, settings: turned, moved };

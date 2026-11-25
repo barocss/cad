@@ -260,6 +260,15 @@ export interface DrawingArcCenterline {
   second: EdgeRef;
 }
 
+/** A source-bound linear center mark group connecting 3 to 32 collinear equal-radius circular holes. */
+export interface DrawingCenterMarkGroup {
+  id: string;
+  kind: 'linear';
+  view: SectionViewId;
+  members: CentreRef[];
+  connectingLines: boolean;
+}
+
 /** The revision after `rev`: A → B … Z → AA, 01 → 02, 1 → 2; none → A. */
 export function nextRevision(rev: string | undefined): string {
   if (!rev || rev === '-') return 'A';
@@ -347,6 +356,8 @@ export interface DrawingSettings {
   frames?: DrawingFrame[];
   /** Source-bound curved centerlines between concentric partial arcs. */
   arcCenterlines?: DrawingArcCenterline[];
+  /** Source-bound linear hole-row center mark groups with toggleable connecting lines. */
+  centerMarkGroups?: DrawingCenterMarkGroup[];
   /** Never stored: set on the settings of one sheet of a drawing with sheets (sheets.ts `forSheet`), which then lay out and build as a drawing of that sheet alone. */
   sheetContext?: SheetContext;
 }
@@ -501,6 +512,7 @@ export function readDrawing(raw: unknown): DrawingSettings {
     ...(readDatumTargets(r.datumTargets).length ? { datumTargets: readDatumTargets(r.datumTargets) } : {}),
     ...(readFrames(r.frames).length ? { frames: readFrames(r.frames) } : {}),
     ...(readArcCenterlines(r.arcCenterlines).length ? { arcCenterlines: readArcCenterlines(r.arcCenterlines) } : {}),
+    ...(readCenterMarkGroups(r.centerMarkGroups).length ? { centerMarkGroups: readCenterMarkGroups(r.centerMarkGroups) } : {}),
     ...(Array.isArray(r.notes) && r.notes.some(isNote) ? { notes: r.notes.filter(isNote).map(n => ({ id: n.id, text: n.text, at: [n.at[0], n.at[1]] as XY, ...(n.leader && VIEW_IDS.includes(n.leader.view) && isXY(n.leader.at) ? { leader: { view: n.leader.view, at: [n.leader.at[0], n.leader.at[1]] as XY, ...(Object.hasOwn(n.leader, 'target') ? { target: readNoteTarget(n.leader.target) } : {}) } } : {}), ...(typeof n.sheet === 'string' && /^[A-Za-z0-9_-]{1,16}$/.test(n.sheet) ? { sheet: n.sheet } : {}) })) } : {}),
     ...(readTables(r.tables).length ? { tables: readTables(r.tables) } : {}),
   };
@@ -539,6 +551,31 @@ function readArcCenterlines(raw: unknown): DrawingArcCenterline[] {
     if (!edgeRefOk(x.first) || !edgeRefOk(x.second)) continue;
     seen.add(x.id);
     out.push({ id: x.id, view: x.view, first: copyEdgeRef(x.first), second: copyEdgeRef(x.second) });
+  }
+  return out;
+}
+function readCenterMarkGroups(raw: unknown): DrawingCenterMarkGroup[] {
+  if (!Array.isArray(raw)) return [];
+  const seen = new Set<string>(), out: DrawingCenterMarkGroup[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) continue;
+    const x = item as Partial<DrawingCenterMarkGroup>;
+    if (typeof x.id !== 'string' || !x.id.trim() || seen.has(x.id)) continue;
+    if (x.kind !== 'linear') continue;
+    if (!x.view || !SECTION_VIEWS.includes(x.view)) continue;
+    if (typeof x.connectingLines !== 'boolean') continue;
+    if (!Array.isArray(x.members) || x.members.length < 3 || x.members.length > 32) continue;
+    if (!x.members.every(edgeRefOk)) continue;
+    const memberKeys = new Set<string>();
+    let hasDuplicate = false;
+    for (const m of x.members) {
+      const key = `${m.edge}|${m.near[0]}|${m.near[1]}|${m.near[2]}`;
+      if (memberKeys.has(key)) { hasDuplicate = true; break; }
+      memberKeys.add(key);
+    }
+    if (hasDuplicate) continue;
+    seen.add(x.id);
+    out.push({ id: x.id, kind: 'linear', view: x.view, members: x.members.map(copyEdgeRef), connectingLines: x.connectingLines });
   }
   return out;
 }

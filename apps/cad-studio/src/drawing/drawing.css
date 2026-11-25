@@ -38,6 +38,8 @@
 .dimension.sel path[fill='#000'], .dimension.sel text { fill: #c27a00; }
 .arc-centerline { cursor: pointer; }
 .arc-centerline.sel path { stroke: #c27a00; }
+.center-mark-group { cursor: pointer; }
+.center-mark-group.sel line { stroke: #c27a00; }
 .dw-pan { cursor: grabbing; }
 .dw-note-text { max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .dw-note-edit { width: 100%; margin-top: 4px; padding: 6px; border-radius: 4px; border: 1px solid #4a4d53; background: var(--bg); color: var(--text); font: 500 12px var(--mono); resize: vertical; }

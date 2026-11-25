@@ -112,6 +112,7 @@ function writable(d: StudioDoc): StudioDoc {
     return !t ? n : { ...n, leader: { ...n.leader!, at: [...n.leader!.at], target: { ...t, near: [...t.near], sig: t.sig ? { ...t.sig, p: [...t.sig.p], ...(t.sig.d ? { d: [...t.sig.d] as Vec3 } : {}) } : t.sig } } };
   }) };
   if (d.drawing?.arcCenterlines) out.drawing = { ...(out.drawing ?? d.drawing), arcCenterlines: d.drawing.arcCenterlines.map(ac => ({ ...ac, first: { ...ac.first }, second: { ...ac.second } })) };
+  if (d.drawing?.centerMarkGroups) out.drawing = { ...(out.drawing ?? d.drawing), centerMarkGroups: d.drawing.centerMarkGroups.map(g => ({ ...g, members: g.members.map(m => ({ ...m })) })) };
   if (d.bodies) { const bodies: NonNullable<StudioDoc['bodies']> = {}; for (const [k, look] of Object.entries(d.bodies)) bodies[k] = { ...look }; out.bodies = bodies; }
   return out;
 }
@@ -173,6 +174,11 @@ export function referencesOf(source: StudioDoc, readOnly = false): { doc: Studio
       refs.push(pointed(`arc-centerline ${ac.id}`, true, side, () => side.edge, edge => { side.edge = edge; }));
     }
   }
+  for (const cmg of doc.drawing?.centerMarkGroups ?? []) {
+    for (const member of cmg.members as (Pointed & { edge: string })[]) {
+      refs.push(pointed(`center-mark-group ${cmg.id}`, true, member, () => member.edge, edge => { member.edge = edge; }));
+    }
+  }
   const scope = doc.drawing?.scope;
   if (scope?.kind === 'part' && scope.body) {
     const key = checkDrawingBodyOwner(doc, scope.body).length ? null : scope.body.key;
@@ -215,6 +221,7 @@ function unsigned(doc: StudioDoc): boolean {
   }
   for (const target of doc.drawing?.datumTargets ?? []) if (target.point && target.point.endpoint !== undefined && !target.point.sig && target.point.was === undefined) return true;
   for (const ac of doc.drawing?.arcCenterlines ?? []) if (!ac.first.sig || !ac.second.sig) return true;
+  for (const cmg of doc.drawing?.centerMarkGroups ?? []) if (cmg.members.some(m => !m.sig)) return true;
   for (const look of Object.values(doc.bodies ?? {})) if (look.faces && Object.keys(look.faces).some(f => !look.faceSigs?.[f])) return true;
   return false;
 }
