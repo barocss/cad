@@ -7,6 +7,7 @@ const baseline = process.argv.includes('--baseline');
 const pins = [
   'apps/cad-studio/test/drawing-foreshortened-radius-browser.mjs',
   'apps/cad-studio/src/ui/DrawingWorkspace.tsx',
+  'apps/cad-studio/src/ui/drawing/ExportActions.tsx',
   'apps/cad-studio/src/ui/drawing/DimensionsList.tsx',
   'packages/barocss-cad-model/src/drawing/types.ts',
   'packages/barocss-cad-model/src/drawing/dimensions.ts',
@@ -24,7 +25,7 @@ const ARC_Y = 500 * Math.sin(THETA);
 
 const f = await createFlow({
   name: 'drawing-foreshortened-radius', output: process.argv[2], envFrozen: 'D1997_SOURCE_FROZEN',
-  qualification: 'Foreshortened radial dimension preserves exact native R500 radius and true radial rim attachment while keeping the jogged leader inside the sheet across Add, Move origin, Cancel, Remove, Undo/Redo, SVG/DXF and fresh Open.',
+  qualification: 'Foreshortened radial dimension preserves exact native R500 radius and true radial rim attachment while keeping the jogged leader inside the sheet across Add, Move origin, Cancel, Remove, Undo/Redo, SVG/DXF, fresh Open, and replacement with a same-ID dimension in another document.',
   initialFiles: pins, requiredFrozen: pins,
   snapshotExtra: () => ({ drawing: window.__studioDrawing?.() ?? null }),
   inspectorSource: `
@@ -110,6 +111,51 @@ async function sheetClientPoint(sheetX, sheetY) {
   }, [sheetX, sheetY]);
 }
 
+/** Parse the actual downloaded ASCII DXF, independent of the exporter data structures. */
+function checkDxfRadius(bytes) {
+  const lines = bytes.trimEnd().split(/\r?\n/);
+  const records = [];
+  for (let i = 0; i < lines.length; i += 2) {
+    const code = Number(lines[i]), value = lines[i + 1]?.trim();
+    if (code === 0) records.push({ type: value, fields: [] });
+    else if (records.length) records.at(-1).fields.push([code, value]);
+  }
+  const field = (record, code) => record.fields.find(([k]) => k === code)?.[1];
+  const dimensions = records.filter(record => record.type === 'DIMENSION');
+  assert.equal(dimensions.length, 1);
+  const [radial] = dimensions;
+  assert.equal(Number(field(radial, 70)) & 7, 4, 'Native DIMENSION type is radial');
+  assert.equal(field(radial, 1), 'R500');
+  const number = (record, code) => {
+    const text = field(record, code);
+    assert.ok(text?.length, `DXF group ${code} missing`);
+    const value = Number(text);
+    assert.ok(Number.isFinite(value));
+    return value;
+  };
+  const center = [number(radial, 10), number(radial, 20)];
+  const rim = [number(radial, 15), number(radial, 25)];
+  near(number(radial, 42), 500);
+  near(Math.hypot(rim[0] - center[0], rim[1] - center[1]), 500);
+  const blockStart = records.findIndex(record => record.type === 'BLOCK' && field(record, 2) === field(radial, 2));
+  assert.ok(blockStart >= 0, 'Radial DIMENSION points to a display block');
+  const blockEnd = records.findIndex((record, i) => i > blockStart && record.type === 'ENDBLK');
+  assert.ok(blockEnd > blockStart);
+  const jog = records.slice(blockStart + 1, blockEnd).find(record => record.type === 'LWPOLYLINE');
+  assert.ok(jog, 'The referenced block contains the actual jog');
+  const vertices = number(jog, 90);
+  assert.ok(vertices >= 4);
+  const xs = jog.fields.filter(([k]) => k === 10).map(([, x]) => Number(x));
+  const ys = jog.fields.filter(([k]) => k === 20).map(([, y]) => Number(y));
+  assert.equal(xs.length, vertices);
+  assert.equal(ys.length, vertices);
+  near(xs.at(-1), rim[0]);
+  near(ys.at(-1), rim[1]);
+  near(Math.hypot(rim[0] - xs[0], rim[1] - ys[0]), 32, 1.5);
+  assert.ok(Math.max(...ys) - Math.min(...ys) > 3, 'Jog has a visible paper offset');
+  return { center, rim, vertices };
+}
+
 await f.run(async () => {
   const { doc: seed } = await f.inspect('prepare-r500-drawing', { prepare: true, doc: seedBase });
   await f.newPage();
@@ -182,16 +228,20 @@ await f.run(async () => {
   near(movedDim.value, 500, 1e-6);
 
   f.phase = 'export actual SVG and DXF and independently verify jogged polyline and true R500';
+  const dxfNotice = f.page.getByRole('note', { name: 'DXF radius display compatibility' });
+  await dxfNotice.waitFor();
+  assert.match(await dxfNotice.innerText(), /display block.*redraws.*ordinary radius.*Use SVG/);
   const svg = await downloadExport('Export SVG', 'foreshortened-r500.svg');
   assert.ok(svg.includes('>R500</text>'), 'SVG missing R500');
   assert.ok(svg.includes('<polyline points='), 'SVG missing jogged polyline');
   const dxf = await downloadExport('Export DXF', 'foreshortened-r500.dxf');
   assert.ok(dxf.includes('R500'), 'DXF missing R500');
-  assert.ok(dxf.includes('LWPOLYLINE'), 'DXF block missing jogged LWPOLYLINE');
+  f.report.observations.push({ label: 'independent-ascii-dxf', ...checkDxfRadius(dxf) });
 
   f.phase = 'verify Remove foreshorten, Undo back to moved, Redo, and Save -> fresh Open';
   await button('Remove foreshorten big-r').click();
   await f.page.waitForFunction(() => !window.__studioDoc?.drawing?.dimensions?.[0]?.foreshorten);
+  await dxfNotice.waitFor({ state: 'hidden' });
   const removedDoc = (await f.snapshot('03-removed-foreshorten')).doc;
   await f.undo();
   await f.same(movedDoc);
@@ -210,4 +260,31 @@ await f.run(async () => {
   assert.equal(reopenedDim.text, 'R500');
   near(reopenedDim.value, 500, 1e-6);
   await f.snapshot('04-fresh-open');
+
+  f.phase = 'late origin move cannot affect another open document with the same dimension ID';
+  await f.page.locator('.dw-dim button.dw-annotation-select').first().click();
+  await button('Move foreshorten origin big-r').click();
+  const nextBox = await f.page.evaluate(() => window.__studioDrawing().boxes.top);
+  const [mx, my] = await sheetClientPoint(nextBox[0] + 13, (nextBox[1] + nextBox[3]) / 2);
+  await f.page.mouse.move(mx, my);
+  const preview = f.page.getByLabel('Foreshortened radius origin preview', { exact: true });
+  await preview.waitFor();
+  await f.same(movedDoc);
+  await f.snapshot('05-origin-preview-uncommitted');
+  // Keep the pointer gesture alive over an invalid origin so the draft can't apply before New Open.
+  const [badX, badY] = await sheetClientPoint(nextBox[2] + 2, (nextBox[1] + nextBox[3]) / 2);
+  await f.page.mouse.move(badX, badY);
+  await f.page.mouse.down();
+  await f.same(movedDoc);
+  const other = structuredClone(movedDoc);
+  other.drawing.dimensions[0].foreshorten.origin = [475, 0];
+  await f.page.getByLabel('Model file', { exact: true }).setInputFiles({
+    name: 'another-arc-same-dimension-id.bcad', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(other)),
+  });
+  await f.same(other);
+  await openDrawing();
+  await preview.waitFor({ state: 'hidden' });
+  await f.page.mouse.up();
+  await f.same(other);
+  await f.snapshot('06-other-document-origin-unchanged');
 });

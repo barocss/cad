@@ -17,3 +17,11 @@ pnpm --filter @barocss/cad-model type-check
 pnpm --filter @barocss/cad-studio-app type-check
 D1997_SOURCE_FROZEN=1 node apps/cad-studio/test/drawing-foreshortened-radius-browser.mjs "$(mktemp -d /tmp/cad-d1997-replay.XXXXXX)"
 ```
+
+## D1998 follow-up: document ownership and DXF display contract
+
+- **Actual Chrome PASS:** A live Move origin preview is visible with unchanged native document. A pointer held at an invalid origin cannot commit before a second, same-ID R500 document opens. Opening the other document removes the pending preview and preserves its separate [475, 0] origin after the late mouse-up. The full driver replays add/move/cancel/remove/export/Undo/Redo/fresh Open.
+- **Actual downloaded DXF:** An independent ASCII group-code parser follows the radial DIMENSION to anonymous block *D1. Group 42 measures 500 mm; the separate center and rim are independently 500 mm apart. The block has six LWPOLYLINE vertices, ends at the native rim, and has a roughly 32 mm projected start-to-rim distance. The jog is block graphics, not a native radial DIMENSION geometry field. The Studio Export panel now explains that another CAD may redraw an ordinary radius and recommends SVG when the drawn appearance matters. The note clears when the shortened display is removed.
+- **Limits:** Receiver-specific redraw and dedicated live source-edge replacement are still not qualified. No external CAD runtime was used.
+
+[Move preview, original document unchanged](studio/05-origin-preview-uncommitted.png) · [Other same-ID document after late mouse-up](studio/06-other-document-origin-unchanged.png)
