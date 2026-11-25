@@ -70,6 +70,7 @@ function rule(x: unknown, n: number, bulges: number[], circles: number, points: 
     case 'cconc': fields = ['kind', 'a', 'b']; valid = pair(c); break;
     case 'ctan': fields = ['kind', 'edge', 'circle']; valid = l(x.edge) && c(x.circle); break;
     case 'symmetric': fields = ['kind', 'a', 'b', 'line']; valid = pair(p) && l(x.line); break;
+    case 'adia': fields = ['kind', 'point', 'axis', 'side', 'value']; valid = p(x.point) && (x.axis === 'x' || x.axis === 'y') && (x.side === -1 || x.side === 1) && num(x.value) && x.value >= .002; break;
     default: input(false, `unsupported outline rule ${x.kind}`);
   }
   keys(x, fields, fields, 'outline rule'); input(valid, 'outline rule has invalid numeric values or references');
@@ -178,6 +179,12 @@ function sourceConstraints(seed: NumericDrivenSketchSeed): void {
       case 'symmetric': {
         const a = p[r.a], z = p[r.b], start = p[r.line], v = line(r.line), size = length(r.line), middle = [(a[0] + z[0]) / 2, (a[1] + z[1]) / 2], d = delta(start, middle);
         linear((v[0] * d[1] - v[1] * d[0]) / size, 0, 'symmetry midpoint'); angular(gap(v, delta(a, z)), Math.PI / 2, 'symmetry perpendicular'); break;
+      }
+      case 'adia': {
+        const radial = r.axis === 'y' ? 0 : 1, coord = p[r.point][radial];
+        input(coord * r.side > 0, 'axis diameter must remain on its authored side');
+        linear(Math.abs(coord) * 2, r.value, 'axis diameter');
+        break;
       }
     }
   }

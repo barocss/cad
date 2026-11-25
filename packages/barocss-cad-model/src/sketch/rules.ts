@@ -10,7 +10,15 @@ import { fixedTriangleLengthSeed } from './fixedTriangleLength';
 import { matchesPinnedRound, planPinnedLineArcRadiusEdit } from './internal/pinnedLineArcRound';
 import { endpointPerpendicular } from './endpointPerpendicular';
 import { EDGE_CIRCLE_GAP_MIN_MM, edgeCircleGapEndpoints, edgeCircleGapGeometry, edgeCircleGapProblem, type EdgeCircleGapEndpoints, type EdgeCircleGapGeometry } from './edgeCircleGap';
-export { edgeCircleGapEndpoints, edgeCircleGapGeometry, type EdgeCircleGapEndpoints, type EdgeCircleGapGeometry };
+import {
+  AXIS_DIAMETER_MIN_MM, axisDiameterEndpoints, axisDiameterGeometry, axisDiameterKey, axisDiameterProblem, parseAxisDiameterKey,
+  type AxisDiameterEndpoints, type AxisDiameterGeometry, type ParsedAxisDiameterKey,
+} from './axisDiameter';
+export {
+  edgeCircleGapEndpoints, edgeCircleGapGeometry, type EdgeCircleGapEndpoints, type EdgeCircleGapGeometry,
+  AXIS_DIAMETER_MIN_MM, axisDiameterEndpoints, axisDiameterGeometry, axisDiameterKey, parseAxisDiameterKey,
+  type AxisDiameterEndpoints, type AxisDiameterGeometry, type ParsedAxisDiameterKey,
+};
 
 export type Polygon = Extract<SketchShape, { kind: 'polygon' }>;
 /**
@@ -82,9 +90,13 @@ function checkedEdit(candidate: Polygon, prev: Polygon | null, what: string, r: 
     if (was === 'inside' && now === 'outside') return { ok: false, reason: `${what} would move circle ${j + 1} off the outline` };
   }
   for (const rule of shape.rules ?? []) {
-    if (rule.kind !== 'cgap') continue;
-    const problem = edgeCircleGapProblem(shape, rule);
-    if (problem) return { ok: false, reason: `${what}: ${problem}` };
+    if (rule.kind === 'cgap') {
+      const problem = edgeCircleGapProblem(shape, rule);
+      if (problem) return { ok: false, reason: `${what}: ${problem}` };
+    } else if (rule.kind === 'adia') {
+      const problem = axisDiameterProblem(shape, rule);
+      if (problem) return { ok: false, reason: `${what}: ${problem}` };
+    }
   }
   solved.set(shape, r);
   return { ok: true, shape, report: r };
@@ -243,6 +255,8 @@ export function applyConstraint(s: Polygon, picks: readonly SketchPick[], kind: 
 
 /** A dimension's current value in the drawing (len<i>, rad<i>, dist / dx / dy <a>_<b>). */
 export function dimensionValue(s: Polygon, key: string): number | null {
+  const ad = parseAxisDiameterKey(key);
+  if (ad) return axisDiameterGeometry(s, ad.point, ad.axis)?.diameter ?? null;
   const l = parseLinkKey(key);
   if (l) {
     if (l.kind === 'cedge') { const c = s.circles?.[l.j], p = s.points[l.edge]; if (!c || !p || !edgeCircleKey(s, l.edge, l.j)) return null; const m = edgeAxis(s, l.edge); return Math.abs(c.c[m] - p[m]); }
@@ -273,6 +287,8 @@ export function drivingDimensionValue(s: Polygon, key: string): number | undefin
     const rule = s.rules?.find(matches);
     return rule && 'value' in rule ? rule.value : undefined;
   };
+  const ad = parseAxisDiameterKey(key);
+  if (ad) return authored(r => r.kind === 'adia' && r.point === ad.point && r.axis === ad.axis);
   const l = parseLinkKey(key);
   if (l) {
     if (l.kind === 'cedge') return authored(r => r.kind === 'cedge' && r.edge === l.edge && r.circle === l.j);
@@ -335,6 +351,8 @@ function parseKey(key: string): { kind: 'len' | 'rad'; i: number } | { kind: Poi
   const d = /^(dist|dx|dy)(\d+)_(\d+)$/.exec(key); return d ? { kind: d[1] as PointDim, a: Number(d[2]), b: Number(d[3]) } : null;
 }
 export function dimensionLabel(s: Polygon, key: string): string {
+  const ad = parseAxisDiameterKey(key);
+  if (ad) return `Diameter of point ${ad.point + 1} about ${ad.axis.toUpperCase()} axis`;
   const l = parseLinkKey(key);
   if (l) return l.kind === 'cedge' ? `Distance edge ${l.edge + 1} – circle ${l.j + 1}` : l.kind === 'cgap' ? `Gap edge ${l.edge + 1} – circle ${l.j + 1}` : `${pairName[l.kind]} circle ${l.a + 1} – circle ${l.b + 1}`;
   const c = parseCircleKey(key);
@@ -355,6 +373,17 @@ export function commitInlineDimension(s: Polygon, key: string, value: number): E
 }
 
 function editDimension(s: Polygon, key: string, value: number, recoverTriangle: boolean): EditResult {
+  const ad = parseAxisDiameterKey(key);
+  if (ad) {
+    if (!Number.isFinite(value) || value < AXIS_DIAMETER_MIN_MM) return { ok: false, reason: 'An axis diameter must be at least 0.002 mm' };
+    const geom = axisDiameterGeometry(s, ad.point, ad.axis);
+    if (!geom) return { ok: false, reason: `Point ${ad.point + 1} lies on the ${ad.axis.toUpperCase()} revolution axis — select a point off the axis` };
+    const what = `${dimensionLabel(s, key)} = Ø${round(value)}`, base = { ...s, hv: hvOf(s) };
+    const existing = (s.rules ?? []).find(r => r.kind === 'adia' && r.point === ad.point && r.axis === ad.axis);
+    const side = existing && existing.kind === 'adia' ? existing.side : geom.side;
+    const rules = (s.rules ?? []).filter(r => !(r.kind === 'adia' && r.point === ad.point && r.axis === ad.axis));
+    return checkEdit({ ...base, rules: [...rules, { kind: 'adia', point: ad.point, axis: ad.axis, side, value }] }, s, what);
+  }
   const l = parseLinkKey(key);
   if (l) {
     if (l.kind === 'cgap') {
@@ -449,6 +478,7 @@ export function constraintEntries(s: Polygon): ConstraintEntry[] {
     else if (r.kind === 'symmetric') add(id, 'Symmetric', `point ${r.a + 1} · point ${r.b + 1} about edge ${r.line + 1}`, [P(r.a), P(r.b), E(r.line)]);
     else if (r.kind === 'cconc') add(id, 'Concentric', `circle ${r.a + 1} · circle ${r.b + 1}`, [C(r.a), C(r.b)]);
     else if (r.kind === 'angle') add(id, 'Angle', `edge ${r.a + 1} ∠ edge ${r.b + 1} = ${round(r.value)}°`, [E(r.a), E(r.b)]);
+    else if (r.kind === 'adia') add(id, 'Axis diameter', `point ${r.point + 1} about ${r.axis.toUpperCase()} = Ø${round(r.value)}`, [P(r.point)]);
     else if (r.kind === 'distance' || r.kind === 'dx' || r.kind === 'dy') add(id, pointDimName[r.kind === 'distance' ? 'dist' : r.kind], `point ${r.a + 1} – point ${r.b + 1} = ${round(r.value)}`, [P(r.a), P(r.b)]);
   });
   s.bulges?.forEach((b, i) => { if (b) add('arc:' + i, 'Arc', `edge ${i + 1} ${b > 0 ? 'ccw' : 'cw'}`, [E(i)], false); });

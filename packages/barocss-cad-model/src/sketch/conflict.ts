@@ -114,8 +114,10 @@ export function rectilinearConflict(points: P2[], c: OutlineConstraints, bulges:
   for (const [i, v] of lengths) if (!canonicalIndex(i) || !finite(v) || !(isH.has(+i) !== isV.has(+i))) return out;
   const rules = c.rules ?? [];
   for (const r of rules) {
-    if (r.kind !== 'fix' && r.kind !== 'dx' && r.kind !== 'dy') return out;
-    if (r.kind === 'fix' ? !Number.isInteger(r.point) || !finite(r.at[0], r.at[1]) : !Number.isInteger(r.a) || !Number.isInteger(r.b) || !finite(r.value)) return out;
+    if (r.kind !== 'fix' && r.kind !== 'dx' && r.kind !== 'dy' && r.kind !== 'adia') return out;
+    if (r.kind === 'fix' ? !Number.isInteger(r.point) || !finite(r.at[0], r.at[1])
+      : r.kind === 'adia' ? !Number.isInteger(r.point) || (r.axis !== 'x' && r.axis !== 'y') || (r.side !== -1 && r.side !== 1) || !finite(r.value)
+        : !Number.isInteger(r.a) || !Number.isInteger(r.b) || !finite(r.value)) return out;
   }
   const ground = n, axes: Axis[] = [{ fixed: [], abs: [] }, { fixed: [], abs: [] }];
   for (let k = 0; k < 2; k++) axes[k].fixed.push(around(ground, 0, points[0][k]));
@@ -125,6 +127,7 @@ export function rectilinearConflict(points: P2[], c: OutlineConstraints, bulges:
   for (const [i, v] of lengths) axes[isH.has(+i) ? 0 : 1].abs.push(absAround(+i, (+i + 1) % n, v));
   for (const r of rules) {
     if (r.kind === 'fix') { if (r.point >= 0 && r.point < n) for (let k = 0; k < 2; k++) axes[k].fixed.push(around(ground, r.point, r.at[k])); }
+    else if (r.kind === 'adia') { if (r.point >= 0 && r.point < n) axes[r.axis === 'y' ? 0 : 1].fixed.push(around(ground, r.point, r.side * (r.value / 2))); }
     else if ((r.kind === 'dx' || r.kind === 'dy') && r.a >= 0 && r.b >= 0 && r.a < n && r.b < n && r.a !== r.b) axes[r.kind === 'dx' ? 0 : 1].abs.push(absAround(r.a, r.b, r.value));
   }
   const run: Search = { checks: 0, budget: false };

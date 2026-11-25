@@ -3,7 +3,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { StudioDoc } from '@barocss/cad-model/engine/doc';
 import {
-  addReferenceDimension, applyConstraint, circleDimensionKeys, circlePairKeys, constraintOptions, convertReferenceToDriving,
+  addReferenceDimension, applyConstraint, axisDiameterGeometry, axisDiameterKey, circleDimensionKeys, circlePairKeys, constraintOptions, convertReferenceToDriving,
   dimensionKey, edgeCircleGapKey, isSettled, pointDimensionKeys, removeReferenceDimension, resolveReferenceDimension,
   type ConstraintKind, type Polygon, type ReferenceDimensionKind, type SketchPick,
 } from '@barocss/cad-model/sketch/rules';
@@ -71,6 +71,9 @@ export function ConstraintTools({ shape: s, owner, conflictIds, documentScope, i
     : picked.length === 2 && point && circle ? circleDimensionKeys(point.i, circle.i)
       : picked.length === 2 && picked.every(p => p.kind === 'circle') ? circlePairKeys(picked[0].i, picked[1].i) : null;
   const edgeCircleGap = picked.length === 2 && edge && circle && !circle.done ? edgeCircleGapKey(s, edge.i, circle.i) : null;
+  const singlePoint = picked.length === 1 && picked[0].kind === 'point' ? picked[0].i : null;
+  const axisDiaY = singlePoint !== null && axisDiameterGeometry(s, singlePoint, 'y') ? axisDiameterKey(singlePoint, 'y') : null;
+  const axisDiaX = singlePoint !== null && axisDiameterGeometry(s, singlePoint, 'x') ? axisDiameterKey(singlePoint, 'x') : null;
   const addRef = (kind: ReferenceDimensionKind) => {
     if (!twoOutlinePoints) return;
     const r = addReferenceDimension(s, picked[0].i, picked[1].i, kind);
@@ -123,6 +126,10 @@ export function ConstraintTools({ shape: s, owner, conflictIds, documentScope, i
     {edgeCircleGap && <div className="cons-tools cons-dims" role="group" aria-label="Edge to circle dimensions">
       {dim && <button type="button" aria-label="Centre distance from edge" title="Distance from the edge to the circle centre" onClick={() => onEditDim(dim)}><b>↔</b><span>Centre</span></button>}
       <button type="button" aria-label="Edge to circle gap" title="Clearance gap from the edge to the circle circumference" onClick={() => onEditDim(edgeCircleGap)}><b>⇤</b><span>Gap</span></button>
+    </div>}
+    {(axisDiaY || axisDiaX) && <div className="cons-tools cons-dims" role="group" aria-label="Axis diameter dimensions">
+      {axisDiaY && <button type="button" aria-label="Diameter about Y axis" title="Revolve diameter about the sketch Y axis (radius = Ø/2)" onClick={() => onEditDim(axisDiaY)}><b>Ø</b><span>About Y</span></button>}
+      {axisDiaX && <button type="button" aria-label="Diameter about X axis" title="Revolve diameter about the sketch X axis (radius = Ø/2)" onClick={() => onEditDim(axisDiaX)}><b>Ø</b><span>About X</span></button>}
     </div>}
     {(!!corners.length || savedCorners) && <SketchCornerTools owner={owner} source={s} doc={documentScope}
       corners={corners} resize={savedCorners}

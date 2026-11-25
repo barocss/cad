@@ -49,6 +49,7 @@ function supportedRule(rule: SketchRule, count: number, arcs: readonly number[] 
       return rule.axis === 1 ? horizontal && !vertical : vertical && !horizontal;
     }
     case 'symmetric': return valid(rule.a) && valid(rule.b) && rule.a !== rule.b && line(rule.line);
+    case 'adia': return valid(rule.point) && (rule.axis === 'x' || rule.axis === 'y') && (rule.side === -1 || rule.side === 1) && Number.isFinite(rule.value) && rule.value >= 0.002;
     default: return false;
   }
 }

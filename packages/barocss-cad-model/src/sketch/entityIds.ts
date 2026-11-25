@@ -82,7 +82,7 @@ export function carryPolygon(old: Polygon, next: Polygon, from: readonly number[
 function ruleFields(r: SketchRule): [string, 'pt' | 'seg'][] {
   switch (r.kind) {
     case 'parallel': case 'perpendicular': case 'equal': case 'angle': return [['a', 'seg'], ['b', 'seg']];
-    case 'fix': return [['point', 'pt']];
+    case 'fix': case 'adia': return [['point', 'pt']];
     case 'coincident': return [['point', 'pt'], ['arc', 'seg']];
     case 'distance': case 'dx': case 'dy': return [['a', 'pt'], ['b', 'pt']];
     case 'cdist': case 'cdx': case 'cdy': return [['a', 'pt']];

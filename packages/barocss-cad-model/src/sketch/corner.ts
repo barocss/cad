@@ -209,7 +209,7 @@ function replaceCorner(s: Polygon, i: number, A: P2, B: P2, bulge: number, chamf
   if (s.references?.length) out.references = s.references.map(r => ({ ...r }));
   if (s.rules) out.rules = s.rules.flatMap((rule): SketchRule[] => {
     switch (rule.kind) {
-      case 'fix': return pt(rule.point) < 0 ? [] : [{ ...rule, point: pt(rule.point) }];
+      case 'fix': case 'adia': return pt(rule.point) < 0 ? [] : [{ ...rule, point: pt(rule.point) }];
       case 'distance': case 'dx': case 'dy': return pt(rule.a) < 0 || pt(rule.b) < 0 ? [] : [{ ...rule, a: pt(rule.a), b: pt(rule.b) }];
       case 'coincident': return pt(rule.point) < 0 ? [] : [{ ...rule, point: pt(rule.point), arc: seg(rule.arc) }];
       case 'equal': {

@@ -4,7 +4,11 @@
 import type { MouseEvent, PointerEvent, ReactNode } from 'react';
 import type { SketchShape } from '../viewport/Viewport';
 import { arcOf, type P2 } from '@barocss/cad-model/sketch/profile';
-import { dimensionLabel, dimensionValue, drivingDimensionValue, edgeCircleGapEndpoints, edgeCircleGapGeometry, resolveReferenceDimension, samePick, type Polygon, type SketchPick } from '@barocss/cad-model/sketch/rules';
+import {
+  axisDiameterEndpoints, axisDiameterGeometry, axisDiameterKey, dimensionLabel, dimensionValue, drivingDimensionValue,
+  edgeCircleGapEndpoints, edgeCircleGapGeometry, parseAxisDiameterKey, resolveReferenceDimension, samePick,
+  type Polygon, type SketchPick,
+} from '@barocss/cad-model/sketch/rules';
 import type { Project } from '@barocss/cad-model/sketch/select';
 import { InlineSketchDimension, type DimensionAxis } from './InlineSketchDimension';
 import { constraintMarkSize, placeConstraintMarksDetailed, type ScreenBox } from './sketchConstraintMarkLayout';
@@ -165,6 +169,24 @@ export function sketchMarks({ shape: s, project, outlinePath, view, dimensionAre
       arrow(f, [-u[0], -u[1]], 'ca1' + key); arrow(q, u, 'ca2' + key);
       chip([(f[0] + q[0]) / 2 + u[1] * 22, (f[1] + q[1]) / 2 - u[0] * 22], fmt(r.value), key, true); return;
     }
+    if (r.kind === 'adia') {
+      const ends = axisDiameterEndpoints(s.points as P2[], r.point, r.axis); if (!ends) return;
+      const pt = P(ends.target), mir = P(ends.mirror), foot = P(ends.foot), u = unit(mir, pt), key = axisDiameterKey(r.point, r.axis);
+      const cx = pts.reduce((sum, q) => sum + q[0], 0) / n, cy = pts.reduce((sum, q) => sum + q[1], 0) / n;
+      const n0: XY = [-u[1], u[0]];
+      const sign = (foot[0] - cx) * n0[0] + (foot[1] - cy) * n0[1] >= 0 ? 1 : -1;
+      const perp: XY = [n0[0] * sign, n0[1] * sign];
+      const pt2 = add(pt, perp, 28), mir2 = add(mir, perp, 28), foot2 = add(foot, perp, 28);
+      svg.push(
+        <line key={'adx1' + key} x1={pt[0] + perp[0] * 4} y1={pt[1] + perp[1] * 4} x2={pt2[0] + perp[0] * 5} y2={pt2[1] + perp[1] * 5} className="dim-ext" />,
+        <line key={'adx2' + key} x1={mir[0] + perp[0] * 4} y1={mir[1] + perp[1] * 4} x2={mir2[0] + perp[0] * 5} y2={mir2[1] + perp[1] * 5} className="dim-ext" strokeDasharray="4 3" />,
+        <line key={'adm' + key} x1={mir2[0]} y1={mir2[1]} x2={foot2[0]} y2={foot2[1]} className="dim-line" strokeDasharray="4 3" />,
+        <line key={'adl' + key} data-dim-line={key} data-dim-kind="adia" x1={foot2[0]} y1={foot2[1]} x2={pt2[0]} y2={pt2[1]} className="dim-line" />,
+        <line key={'adt' + key} x1={foot2[0] - perp[0] * 6} y1={foot2[1] - perp[1] * 6} x2={foot2[0] + perp[0] * 6} y2={foot2[1] + perp[1] * 6} className="dim-ext" />,
+      );
+      arrow(mir2, [-u[0], -u[1]], 'ada1' + key); arrow(pt2, u, 'ada2' + key);
+      chip(foot2, 'Ø' + fmt(r.value), key, true); return;
+    }
     if (r.kind === 'ccdist' || r.kind === 'ccdx' || r.kind === 'ccdy') {
       const a = s.circles?.[r.a]?.c, b = s.circles?.[r.b]?.c; if (!a || !b) return;
       const key = `${r.kind}${r.a}_${r.b}`;
@@ -283,9 +305,18 @@ export function sketchMarks({ shape: s, project, outlinePath, view, dimensionAre
     const v = authored ?? dimensionValue(s, editDim);
     const d = /^(?:dist|dx|dy)(\d+)_(\d+)$/.exec(editDim), g = /^ang(\d+)_(\d+)$/.exec(editDim), cd = /^(?:cdist|cdx|cdy)(\d+)_(\d+)$/.exec(editDim);
     const cc = /^(?:ccdist|ccdx|ccdy)(\d+)_(\d+)$/.exec(editDim), ce = /^cedge(\d+)_(\d+)$/.exec(editDim), cg = /^cgap(\d+)_(\d+)$/.exec(editDim);
+    const ad = parseAxisDiameterKey(editDim);
     const centreOf = (j: number) => s.circles?.[j] ? P(s.circles[j].c) : null;
     const halfway = (a: XY | null, b: XY | null) => a && b ? [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2] as XY : null;
-    const at = anchors.get(editDim) ?? (cc ? halfway(centreOf(+cc[1]), centreOf(+cc[2])) : cg ? (() => { const g = edgeCircleGapGeometry(s, +cg[1], +cg[2]);
+    const at = anchors.get(editDim) ?? (ad ? (() => {
+      const g = axisDiameterGeometry(s, ad.point, ad.axis);
+      if (!g) return null;
+      const pt = P(g.target), mir = P(g.mirror), foot = P(g.foot), u = unit(mir, pt);
+      const cx = pts.reduce((sum, q) => sum + q[0], 0) / n, cy = pts.reduce((sum, q) => sum + q[1], 0) / n;
+      const n0: XY = [-u[1], u[0]];
+      const sign = (foot[0] - cx) * n0[0] + (foot[1] - cy) * n0[1] >= 0 ? 1 : -1;
+      return add(foot, [n0[0] * sign, n0[1] * sign], 28);
+    })() : cc ? halfway(centreOf(+cc[1]), centreOf(+cc[2])) : cg ? (() => { const g = edgeCircleGapGeometry(s, +cg[1], +cg[2]);
       return g ? halfway(P(g.foot), P(g.nearest)) : null; })() : ce ? (() => { const c = s.circles?.[+ce[2]]; const e = +ce[1];
       return c && s.points[e] ? halfway(P(footOf(e, s.hv?.h.includes(e) ? 1 : 0, c.c)), P(c.c)) : null; })() : cd ? (() => { const a = pts[+cd[1]], b = centreOf(+cd[2]); return a && b ? [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2] as XY : null; })() : g ? angleMark(+g[1], +g[2]).at : d ? (() => { const a = pts[+d[1]], b = pts[+d[2]]; return a && b ? [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2] as XY : null; })()
       : (() => { const i = Number(editDim.slice(3)); return i < n ? add(mid(i), outward(pts[i], pts[(i + 1) % n]), 26) : null; })());

@@ -10,6 +10,18 @@ export type KernelConstraint = Doc['constraints'][number];
 export type KernelSegment = Doc['segments'][number];
 export type KernelPoint = Doc['points'][number];
 
+/** Sketch local revolution axis for axis-based diameter dimensions: 'y' constrains |x| = D/2, 'x' constrains |y| = D/2. */
+export type SketchRevolutionAxis = 'x' | 'y';
+
+/** A driving diameter D from a sketch revolution axis (x = 0 for 'y', y = 0 for 'x') to an outline point, preserving side. */
+export interface AxisDiameterRule {
+  kind: 'adia';
+  point: number;
+  axis: SketchRevolutionAxis;
+  side: -1 | 1;
+  value: number;
+}
+
 /** A driving positive clearance gap G from a horizontal (axis 1: Y) or vertical (axis 0: X) straight edge to an attached circle's nearest circumference (center distance = G + r). */
 export interface EdgeCircleGapRule {
   kind: 'cgap';
@@ -48,7 +60,9 @@ export type SketchRule =
   /** A straight edge tangent to one of the outline's circles (touching it on the side it was drawn). */
   | { kind: 'ctan'; edge: number; circle: number }
   /** Two points mirror images of each other across a straight edge's line. */
-  | { kind: 'symmetric'; a: number; b: number; line: number };
+  | { kind: 'symmetric'; a: number; b: number; line: number }
+  /** A driving revolve diameter about the sketch local X or Y axis to an outline point. */
+  | AxisDiameterRule;
 
 const angle = (v: P2) => Math.atan2(v[1], v[0]);
 const wrap = (a: number) => { const w = Math.atan2(Math.sin(a), Math.cos(a)); return w === -Math.PI ? Math.PI : w; };
@@ -161,6 +175,24 @@ export function ruleTerms(rules: readonly SketchRule[], points: readonly P2[], b
     else if (r.kind === 'angle' && line(r.a) && line(r.b)) {
       const e = edgeAngle(points, r.a, r.b);
       constraints.push({ id, kind: 'signed-angle', segmentA: 's' + r.a, segmentB: 's' + r.b, angle: wrap(e.sign * r.value * Math.PI / 180 + e.flip * Math.PI) });
+    }
+    else if (r.kind === 'adia' && point(r.point)
+      && (r.axis === 'x' || r.axis === 'y') && (r.side === -1 || r.side === 1)
+      && Number.isFinite(r.value) && r.value >= 0.002) {
+      // Exact signed radial lock: fix one helper at (side * D/2, across) and tie the point to it along the free axis.
+      const m = r.axis === 'y' ? 0 : 1, o = 1 - m;
+      const target = r.side * (r.value / 2);
+      const coords = points.map(pt => pt[o]);
+      const minAcross = Math.min(...coords), maxAcross = Math.max(...coords);
+      const offset = Math.max(1000, (maxAcross - minAcross) * 4);
+      const across = maxAcross + offset <= 5e5 ? maxAcross + offset : minAcross - offset;
+      const anchorPos: P2 = m === 0 ? [target, across] : [across, target];
+      helpers.push({ id: 'ap' + k, position: anchorPos });
+      segments.push({ id: 'as' + k, startPointId: 'ap' + k, endPointId: 'p' + r.point });
+      constraints.push(
+        { id: id + 'f', kind: 'fixed', pointId: 'ap' + k, target: anchorPos },
+        { id, kind: m === 0 ? 'vertical' : 'horizontal', segmentId: 'as' + k },
+      );
     }
   });
   return { points: helpers, segments, constraints };
