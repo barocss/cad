@@ -439,6 +439,26 @@ test('circles are placed from horizontal / vertical edges and from each other', 
   assert.ok(labels.includes('Distance edge 1 – circle 1') && labels.includes('Vertical distance circle 1 – circle 2'), labels.join(', '));
 });
 
+test('edge-to-circle circumference gap (cgap) keeps gap constant across diameter edits and stays distinct from cedge', async () => {
+  const { edgeCircleGapKey, dimensionLabel, drivingDimensionValue } = await import('@barocss/cad-model/sketch/rules');
+  const { outlineFields } = await import('@barocss/cad-model/sketch/outlineFields');
+  const { profileOf } = await import('@barocss/cad-model/sketch/loops');
+  let s: Polygon = { ...close([[0, 0], [40, 0], [40, 30], [0, 30]]), circles: [{ c: [10, 15], r: 4 }] };
+  s = (commitDimension(s, 'len0', 40) as { shape: Polygon }).shape;
+  s = (commitDimension(s, 'len1', 30) as { shape: Polygon }).shape;
+  s = (commitDimension(s, 'cedge0_0', 15) as { shape: Polygon }).shape;
+  assert.equal(edgeCircleGapKey(s, 3, 0), 'cgap3_0');
+  assert.equal(dimensionLabel(s, 'cgap3_0'), 'Gap edge 4 – circle 1');
+  let r = commitDimension(s, 'cgap3_0', 8); assert.ok(r.ok, !r.ok ? r.reason : ''); s = r.shape;
+  assert.deepEqual(s.circles![0].c, [12, 15]);
+  r = commitDimension(s, 'cdia0', 10); assert.ok(r.ok, !r.ok ? r.reason : ''); s = r.shape;
+  assert.deepEqual(s.circles![0].c, [13, 15]);
+  assert.equal(drivingDimensionValue(s, 'cgap3_0'), 8);
+  const pr = profileOf([s]); assert.ok('node' in pr);
+  const labels = outlineFields([pr.node], 0, '').map(f => f.label);
+  assert.ok(labels.includes('Gap edge 4 – circle 1') && labels.includes('Distance edge 1 – circle 1'), labels.join(', '));
+});
+
 test('a dimension may not push an attached circle across the outline or off it; Finish refuses a crossing one', async () => {
   const { profileOf } = await import('@barocss/cad-model/sketch/loops');
   const plate = { ...close([[0, 0], [60, 0], [60, 25], [0, 25]]), circles: [{ c: [30, 12] as P2, r: 4 }] };

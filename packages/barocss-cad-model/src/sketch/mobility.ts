@@ -38,6 +38,16 @@ function supportedRule(rule: SketchRule, count: number, arcs: readonly number[] 
       const hv = hvOf(shape), horizontal = hv.h.includes(rule.edge), vertical = hv.v.includes(rule.edge);
       return rule.axis === 1 ? horizontal && !vertical : vertical && !horizontal;
     }
+    case 'cgap': {
+      if (!shape || circleCount !== 1 || rule.circle !== 0 || !line(rule.edge)
+        || (rule.axis !== 0 && rule.axis !== 1) || (rule.side !== -1 && rule.side !== 1)
+        || !Number.isFinite(rule.value) || rule.value < 0.001) return false;
+      const a = shape.points[rule.edge], b = shape.points[(rule.edge + 1) % count];
+      if (!Array.isArray(a) || a.length !== 2 || !Array.isArray(b) || b.length !== 2
+        || ![...a, ...b].every(Number.isFinite) || a[0] === b[0] && a[1] === b[1]) return false;
+      const hv = hvOf(shape), horizontal = hv.h.includes(rule.edge), vertical = hv.v.includes(rule.edge);
+      return rule.axis === 1 ? horizontal && !vertical : vertical && !horizontal;
+    }
     case 'symmetric': return valid(rule.a) && valid(rule.b) && rule.a !== rule.b && line(rule.line);
     default: return false;
   }

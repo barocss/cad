@@ -10,6 +10,16 @@ export type KernelConstraint = Doc['constraints'][number];
 export type KernelSegment = Doc['segments'][number];
 export type KernelPoint = Doc['points'][number];
 
+/** A driving positive clearance gap G from a horizontal (axis 1: Y) or vertical (axis 0: X) straight edge to an attached circle's nearest circumference (center distance = G + r). */
+export interface EdgeCircleGapRule {
+  kind: 'cgap';
+  edge: number;
+  circle: number;
+  axis: 0 | 1;
+  side: -1 | 1;
+  value: number;
+}
+
 export type SketchRule =
   /** Two straight edges at 0° / 180° (parallel) or ±90° (perpendicular), whichever is nearest the drawing. */
   | { kind: 'parallel'; a: number; b: number }
@@ -29,6 +39,8 @@ export type SketchRule =
   | { kind: 'cdist' | 'cdx' | 'cdy'; a: number; circle: number; value: number }
   /** A driving distance from a horizontal (axis 1: measured along Y) or vertical (axis 0: along X) straight edge to a circle's centre. */
   | { kind: 'cedge'; edge: number; circle: number; axis: 0 | 1; value: number }
+  /** A driving positive clearance gap from a horizontal/vertical straight edge to a circle's nearest circumference. */
+  | EdgeCircleGapRule
   /** A driving distance (straight, along X, along Y) between the centres of two of the outline's circles. */
   | { kind: 'ccdist' | 'ccdx' | 'ccdy'; a: number; b: number; value: number }
   /** Two of the outline's circles about one centre (their radii free). */
@@ -110,6 +122,10 @@ export function ruleTerms(rules: readonly SketchRule[], points: readonly P2[], b
       distance(k, 'p' + r.a, points[r.a], centre(r.circle), circles[r.circle], r.kind === 'cdist' ? null : r.kind === 'cdx' ? 0 : 1, r.value);
     else if (r.kind === 'cedge' && line(r.edge) && r.circle >= 0 && r.circle < circles.length)
       distance(k, 'p' + r.edge, points[r.edge], centre(r.circle), circles[r.circle], r.axis, r.value);
+    else if (r.kind === 'cgap' && line(r.edge) && r.circle >= 0 && r.circle < circles.length
+      && (r.axis === 0 || r.axis === 1) && (r.side === -1 || r.side === 1)
+      && Number.isFinite(r.value) && r.value > 0 && Number.isFinite(radii[r.circle]) && radii[r.circle] > 0)
+      distance(k, 'p' + r.edge, points[r.edge], centre(r.circle), circles[r.circle], r.axis, r.value + radii[r.circle]);
     else if ((r.kind === 'ccdist' || r.kind === 'ccdx' || r.kind === 'ccdy') && r.a !== r.b && r.a >= 0 && r.b >= 0 && r.a < circles.length && r.b < circles.length)
       distance(k, centre(r.a), circles[r.a], centre(r.b), circles[r.b], r.kind === 'ccdist' ? null : r.kind === 'ccdx' ? 0 : 1, r.value);
     else if (r.kind === 'symmetric' && point(r.a) && point(r.b) && r.a !== r.b && line(r.line)) {

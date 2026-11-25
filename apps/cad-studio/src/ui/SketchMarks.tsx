@@ -4,7 +4,7 @@
 import type { MouseEvent, PointerEvent, ReactNode } from 'react';
 import type { SketchShape } from '../viewport/Viewport';
 import { arcOf, type P2 } from '@barocss/cad-model/sketch/profile';
-import { dimensionLabel, dimensionValue, drivingDimensionValue, samePick, type Polygon, type SketchPick } from '@barocss/cad-model/sketch/rules';
+import { dimensionLabel, dimensionValue, drivingDimensionValue, edgeCircleGapEndpoints, edgeCircleGapGeometry, samePick, type Polygon, type SketchPick } from '@barocss/cad-model/sketch/rules';
 import type { Project } from '@barocss/cad-model/sketch/select';
 import { InlineSketchDimension, type DimensionAxis } from './InlineSketchDimension';
 import { constraintMarkSize, placeConstraintMarksDetailed, type ScreenBox } from './sketchConstraintMarkLayout';
@@ -157,6 +157,14 @@ export function sketchMarks({ shape: s, project, outlinePath, view, dimensionAre
       arrow(f, [-u[0], -u[1]], 'ca1' + key); arrow(q, u, 'ca2' + key);
       chip([(f[0] + q[0]) / 2 + u[1] * 22, (f[1] + q[1]) / 2 - u[0] * 22], fmt(r.value), key, true); return;
     }
+    if (r.kind === 'cgap') {
+      const c = s.circles?.[r.circle]; if (!c || !s.points[r.edge]) return;
+      const ends = edgeCircleGapEndpoints(s.points as P2[], r.edge, r.axis, r.side, c); if (!ends) return;
+      const f = P(ends.foot), q = P(ends.nearest), u = unit(f, q), key = `cgap${r.edge}_${r.circle}`;
+      svg.push(<line key={'cl' + key} data-dim-line={key} data-dim-kind="cgap" x1={f[0]} y1={f[1]} x2={q[0]} y2={q[1]} className="dim-line" />);
+      arrow(f, [-u[0], -u[1]], 'ca1' + key); arrow(q, u, 'ca2' + key);
+      chip([(f[0] + q[0]) / 2 + u[1] * 22, (f[1] + q[1]) / 2 - u[0] * 22], fmt(r.value), key, true); return;
+    }
     if (r.kind === 'ccdist' || r.kind === 'ccdx' || r.kind === 'ccdy') {
       const a = s.circles?.[r.a]?.c, b = s.circles?.[r.b]?.c; if (!a || !b) return;
       const key = `${r.kind}${r.a}_${r.b}`;
@@ -243,10 +251,11 @@ export function sketchMarks({ shape: s, project, outlinePath, view, dimensionAre
     const authored = drivingDimensionValue(s, editDim);
     const v = authored ?? dimensionValue(s, editDim);
     const d = /^(?:dist|dx|dy)(\d+)_(\d+)$/.exec(editDim), g = /^ang(\d+)_(\d+)$/.exec(editDim), cd = /^(?:cdist|cdx|cdy)(\d+)_(\d+)$/.exec(editDim);
-    const cc = /^(?:ccdist|ccdx|ccdy)(\d+)_(\d+)$/.exec(editDim), ce = /^cedge(\d+)_(\d+)$/.exec(editDim);
+    const cc = /^(?:ccdist|ccdx|ccdy)(\d+)_(\d+)$/.exec(editDim), ce = /^cedge(\d+)_(\d+)$/.exec(editDim), cg = /^cgap(\d+)_(\d+)$/.exec(editDim);
     const centreOf = (j: number) => s.circles?.[j] ? P(s.circles[j].c) : null;
     const halfway = (a: XY | null, b: XY | null) => a && b ? [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2] as XY : null;
-    const at = anchors.get(editDim) ?? (cc ? halfway(centreOf(+cc[1]), centreOf(+cc[2])) : ce ? (() => { const c = s.circles?.[+ce[2]]; const e = +ce[1];
+    const at = anchors.get(editDim) ?? (cc ? halfway(centreOf(+cc[1]), centreOf(+cc[2])) : cg ? (() => { const g = edgeCircleGapGeometry(s, +cg[1], +cg[2]);
+      return g ? halfway(P(g.foot), P(g.nearest)) : null; })() : ce ? (() => { const c = s.circles?.[+ce[2]]; const e = +ce[1];
       return c && s.points[e] ? halfway(P(footOf(e, s.hv?.h.includes(e) ? 1 : 0, c.c)), P(c.c)) : null; })() : cd ? (() => { const a = pts[+cd[1]], b = centreOf(+cd[2]); return a && b ? [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2] as XY : null; })() : g ? angleMark(+g[1], +g[2]).at : d ? (() => { const a = pts[+d[1]], b = pts[+d[2]]; return a && b ? [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2] as XY : null; })()
       : (() => { const i = Number(editDim.slice(3)); return i < n ? add(mid(i), outward(pts[i], pts[(i + 1) % n]), 26) : null; })());
     if (v !== null && at && dimensionArea) {

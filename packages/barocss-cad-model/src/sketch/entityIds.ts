@@ -85,7 +85,7 @@ function ruleFields(r: SketchRule): [string, 'pt' | 'seg'][] {
     case 'coincident': return [['point', 'pt'], ['arc', 'seg']];
     case 'distance': case 'dx': case 'dy': return [['a', 'pt'], ['b', 'pt']];
     case 'cdist': case 'cdx': case 'cdy': return [['a', 'pt']];
-    case 'cedge': case 'ctan': return [['edge', 'seg']];
+    case 'cedge': case 'cgap': case 'ctan': return [['edge', 'seg']];
     case 'symmetric': return [['a', 'pt'], ['b', 'pt'], ['line', 'seg']];
     default: return [];
   }

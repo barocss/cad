@@ -9,6 +9,8 @@ import { circleRelation } from './loops';
 import { fixedTriangleLengthSeed } from './fixedTriangleLength';
 import { matchesPinnedRound, planPinnedLineArcRadiusEdit } from './internal/pinnedLineArcRound';
 import { endpointPerpendicular } from './endpointPerpendicular';
+import { EDGE_CIRCLE_GAP_MIN_MM, edgeCircleGapEndpoints, edgeCircleGapGeometry, edgeCircleGapProblem, type EdgeCircleGapEndpoints, type EdgeCircleGapGeometry } from './edgeCircleGap';
+export { edgeCircleGapEndpoints, edgeCircleGapGeometry, type EdgeCircleGapEndpoints, type EdgeCircleGapGeometry };
 
 export type Polygon = Extract<SketchShape, { kind: 'polygon' }>;
 /**
@@ -78,6 +80,11 @@ function checkedEdit(candidate: Polygon, prev: Polygon | null, what: string, r: 
     const was = circleRelation(prev, before), now = circleRelation(shape, c);
     if (now === 'crossing' && was !== 'crossing') return { ok: false, reason: `${what} would put circle ${j + 1} across the edge of the outline` };
     if (was === 'inside' && now === 'outside') return { ok: false, reason: `${what} would move circle ${j + 1} off the outline` };
+  }
+  for (const rule of shape.rules ?? []) {
+    if (rule.kind !== 'cgap') continue;
+    const problem = edgeCircleGapProblem(shape, rule);
+    if (problem) return { ok: false, reason: `${what}: ${problem}` };
   }
   solved.set(shape, r);
   return { ok: true, shape, report: r };
@@ -239,6 +246,7 @@ export function dimensionValue(s: Polygon, key: string): number | null {
   const l = parseLinkKey(key);
   if (l) {
     if (l.kind === 'cedge') { const c = s.circles?.[l.j], p = s.points[l.edge]; if (!c || !p || !edgeCircleKey(s, l.edge, l.j)) return null; const m = edgeAxis(s, l.edge); return Math.abs(c.c[m] - p[m]); }
+    if (l.kind === 'cgap') return edgeCircleGapGeometry(s, l.edge, l.j)?.gap ?? null;
     const a = s.circles?.[l.a]?.c, b = s.circles?.[l.b]?.c; if (!a || !b || l.a === l.b) return null;
     return l.kind === 'ccdist' ? Math.hypot(b[0] - a[0], b[1] - a[1]) : Math.abs(b[l.kind === 'ccdx' ? 0 : 1] - a[l.kind === 'ccdx' ? 0 : 1]);
   }
@@ -268,6 +276,7 @@ export function drivingDimensionValue(s: Polygon, key: string): number | undefin
   const l = parseLinkKey(key);
   if (l) {
     if (l.kind === 'cedge') return authored(r => r.kind === 'cedge' && r.edge === l.edge && r.circle === l.j);
+    if (l.kind === 'cgap') return authored(r => r.kind === 'cgap' && r.edge === l.edge && r.circle === l.j);
     return authored(r => r.kind === l.kind && r.a === l.a && r.b === l.b);
   }
   const c = parseCircleKey(key);
@@ -287,10 +296,16 @@ export function drivingDimensionValue(s: Polygon, key: string): number | undefin
 
 /** Whether a dimension is driving (locked). */
 export const isDriving = (s: Polygon, key: string): boolean => drivingDimensionValue(s, key) !== undefined;
-type LinkDim = { kind: 'cedge'; edge: number; j: number } | { kind: 'ccdist' | 'ccdx' | 'ccdy'; a: number; b: number };
-/** Edge-to-circle (cedge<edge>_<circle>) and circle-to-circle (ccdist / ccdx / ccdy <lo>_<hi>) dimension keys. */
+type LinkDim =
+  | { kind: 'cedge'; edge: number; j: number }
+  | { kind: 'cgap'; edge: number; j: number }
+  | { kind: 'ccdist' | 'ccdx' | 'ccdy'; a: number; b: number };
+/** Edge-to-circle (cedge<edge>_<circle>, cgap<edge>_<circle>) and circle-to-circle (ccdist / ccdx / ccdy <lo>_<hi>) dimension keys. */
 function parseLinkKey(key: string): LinkDim | null {
-  const e = /^cedge(\d+)_(\d+)$/.exec(key); if (e) return { kind: 'cedge', edge: Number(e[1]), j: Number(e[2]) };
+  const e = /^(cedge|cgap)(\d+)_(\d+)$/.exec(key);
+  if (e) return e[1] === 'cgap'
+    ? { kind: 'cgap', edge: Number(e[2]), j: Number(e[3]) }
+    : { kind: 'cedge', edge: Number(e[2]), j: Number(e[3]) };
   const c = /^(ccdist|ccdx|ccdy)(\d+)_(\d+)$/.exec(key); return c ? { kind: c[1] as 'ccdist' | 'ccdx' | 'ccdy', a: Number(c[2]), b: Number(c[3]) } : null;
 }
 /** The straight, horizontal and vertical dimension keys between the outline's circles a and b. */
@@ -298,6 +313,10 @@ export const circlePairKeys = (a: number, b: number) => { const [lo, hi] = a < b
 /** An edge's distance key to circle j, when the edge is kept horizontal or vertical (null otherwise). */
 export function edgeCircleKey(s: Polygon, edge: number, j: number): string | null {
   const hv = hvOf(s); return isLine(s, edge) && (hv.h.includes(edge) || hv.v.includes(edge)) ? `cedge${edge}_${j}` : null;
+}
+/** An edge's circumference gap key to circle j, when the edge is H/V straight, the perpendicular foot lies strictly inside it, and the circle clears the edge (null otherwise). */
+export function edgeCircleGapKey(s: Polygon, edge: number, j: number): string | null {
+  return edgeCircleGapGeometry(s, edge, j) ? `cgap${edge}_${j}` : null;
 }
 const edgeAxis = (s: Polygon, edge: number): 0 | 1 => hvOf(s).h.includes(edge) ? 1 : 0;
 const pairName = { ccdist: 'Distance', ccdx: 'Horizontal distance', ccdy: 'Vertical distance' } as const;
@@ -317,7 +336,7 @@ function parseKey(key: string): { kind: 'len' | 'rad'; i: number } | { kind: Poi
 }
 export function dimensionLabel(s: Polygon, key: string): string {
   const l = parseLinkKey(key);
-  if (l) return l.kind === 'cedge' ? `Distance edge ${l.edge + 1} – circle ${l.j + 1}` : `${pairName[l.kind]} circle ${l.a + 1} – circle ${l.b + 1}`;
+  if (l) return l.kind === 'cedge' ? `Distance edge ${l.edge + 1} – circle ${l.j + 1}` : l.kind === 'cgap' ? `Gap edge ${l.edge + 1} – circle ${l.j + 1}` : `${pairName[l.kind]} circle ${l.a + 1} – circle ${l.b + 1}`;
   const c = parseCircleKey(key);
   if (c) return c.kind === 'cdia' ? `Diameter of circle ${c.j + 1}` : `${circleDimName[c.kind]} point ${c.a + 1} – circle ${c.j + 1}`;
   const d = parseKey(key); if (!d) return key;
@@ -338,10 +357,26 @@ export function commitInlineDimension(s: Polygon, key: string, value: number): E
 function editDimension(s: Polygon, key: string, value: number, recoverTriangle: boolean): EditResult {
   const l = parseLinkKey(key);
   if (l) {
+    if (l.kind === 'cgap') {
+      if (!Number.isFinite(value) || value < EDGE_CIRCLE_GAP_MIN_MM) return { ok: false, reason: 'A circumference gap must be greater than 0' };
+      const geom = edgeCircleGapGeometry(s, l.edge, l.j);
+      if (!geom) return { ok: false, reason: 'Measure a circumference gap from a horizontal or vertical edge whose perpendicular foot lies strictly inside the edge, to a circle clear of the edge' };
+      if ((s.rules ?? []).some(r => r.kind === 'cedge' && r.edge === l.edge && r.circle === l.j)) {
+        return { ok: false, reason: `Edge ${l.edge + 1} – circle ${l.j + 1} already has a centre distance constraint — remove it before adding a circumference gap` };
+      }
+      const what = `${dimensionLabel(s, key)} = ${round(value)}`, base = { ...s, hv: hvOf(s) };
+      const existing = (s.rules ?? []).find(r => r.kind === 'cgap' && r.edge === l.edge && r.circle === l.j);
+      const side = existing && existing.kind === 'cgap' ? existing.side : geom.side;
+      const rules = (s.rules ?? []).filter(r => !(r.kind === 'cgap' && r.edge === l.edge && r.circle === l.j));
+      return checkEdit({ ...base, rules: [...rules, { kind: 'cgap', edge: l.edge, circle: l.j, axis: geom.axis, side, value }] }, s, what);
+    }
     if (dimensionValue(s, key) === null) return { ok: false, reason: l.kind === 'cedge' ? 'Measure a circle from a horizontal or vertical edge (or from a point)' : 'Unknown dimension' };
     if (!Number.isFinite(value) || value < 0.001) return { ok: false, reason: 'A dimension must be greater than 0' };
     const what = `${dimensionLabel(s, key)} = ${round(value)}`, base = { ...s, hv: hvOf(s) };
     if (l.kind === 'cedge') {
+      if ((s.rules ?? []).some(r => r.kind === 'cgap' && r.edge === l.edge && r.circle === l.j)) {
+        return { ok: false, reason: `Edge ${l.edge + 1} – circle ${l.j + 1} already has a circumference gap constraint — remove it before adding a centre distance` };
+      }
       const rules = (s.rules ?? []).filter(r => !(r.kind === 'cedge' && r.edge === l.edge && r.circle === l.j));
       return checkEdit({ ...base, rules: [...rules, { kind: 'cedge', edge: l.edge, circle: l.j, axis: edgeAxis(s, l.edge), value }] }, s, what);
     }
@@ -407,6 +442,7 @@ export function constraintEntries(s: Polygon): ConstraintEntry[] {
     else if (r.kind === 'fix') add(id, 'Fixed', `point ${r.point + 1}`, [P(r.point)]);
     else if (r.kind === 'coincident') add(id, 'Coincident', `point ${r.point + 1} · arc ${r.arc + 1} centre`, [P(r.point), E(r.arc)]);
     else if (r.kind === 'cedge') add(id, 'Distance', `edge ${r.edge + 1} – circle ${r.circle + 1} = ${round(r.value)}`, [E(r.edge), C(r.circle)]);
+    else if (r.kind === 'cgap') add(id, 'Gap', `edge ${r.edge + 1} – circle ${r.circle + 1} = ${round(r.value)}`, [E(r.edge), C(r.circle)]);
     else if (r.kind === 'ccdist' || r.kind === 'ccdx' || r.kind === 'ccdy') add(id, pairName[r.kind], `circle ${r.a + 1} – circle ${r.b + 1} = ${round(r.value)}`, [C(r.a), C(r.b)]);
     else if (r.kind === 'cdist' || r.kind === 'cdx' || r.kind === 'cdy') add(id, circleDimName[r.kind], `point ${r.a + 1} – circle ${r.circle + 1} = ${round(r.value)}`, [P(r.a), C(r.circle)]);
     else if (r.kind === 'ctan') add(id, 'Tangent', `edge ${r.edge + 1} · circle ${r.circle + 1}`, [E(r.edge), C(r.circle)]);
@@ -437,8 +473,8 @@ export function removeConstraint(s: Polygon, id: string): Polygon {
   }
 }
 
-/** One rule's circle indices as [field, index] pairs (every kind that names an outline circle by index: cdist/cdx/cdy/cedge/ctan `circle`; ccdist/ccdx/ccdy/cconc `a` and `b`). */
-const CIRCLE_FIELDS: Partial<Record<SketchRule['kind'], readonly string[]>> = { cdist: ['circle'], cdx: ['circle'], cdy: ['circle'], cedge: ['circle'], ctan: ['circle'], ccdist: ['a', 'b'], ccdx: ['a', 'b'], ccdy: ['a', 'b'], cconc: ['a', 'b'] };
+/** One rule's circle indices as [field, index] pairs (every kind that names an outline circle by index: cdist/cdx/cdy/cedge/cgap/ctan `circle`; ccdist/ccdx/ccdy/cconc `a` and `b`). */
+const CIRCLE_FIELDS: Partial<Record<SketchRule['kind'], readonly string[]>> = { cdist: ['circle'], cdx: ['circle'], cdy: ['circle'], cedge: ['circle'], cgap: ['circle'], ctan: ['circle'], ccdist: ['a', 'b'], ccdx: ['a', 'b'], ccdy: ['a', 'b'], cconc: ['a', 'b'] };
 const renumberCircle = (r: SketchRule, fields: readonly string[]): SketchRule => {
   const out: Record<string, unknown> = { ...r };
   for (const f of fields) { out[f] = (out[f] as number) - 1; }

@@ -3,7 +3,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { StudioDoc } from '@barocss/cad-model/engine/doc';
 import {
-  applyConstraint, circleDimensionKeys, circlePairKeys, constraintOptions, dimensionKey, isSettled, pointDimensionKeys,
+  applyConstraint, circleDimensionKeys, circlePairKeys, constraintOptions, dimensionKey, edgeCircleGapKey, isSettled, pointDimensionKeys,
   type ConstraintKind, type Polygon, type SketchPick,
 } from '@barocss/cad-model/sketch/rules';
 import { settleShape } from '@barocss/cad-model/sketch/settle';
@@ -62,12 +62,13 @@ export function ConstraintTools({ shape: s, owner, conflictIds, documentScope, i
     const current = inspection.get();
     if (current?.owner === owner && current.target === 'comparison' && current.kind === kind && current.input === input) inspection.set(null);
   };
-  const point = picked.find(p => p.kind === 'point'), circle = picked.find(p => p.kind === 'circle');
+  const point = picked.find(p => p.kind === 'point'), edge = picked.find(p => p.kind === 'edge'), circle = picked.find(p => p.kind === 'circle');
   const corners = sketchCornerTargets(s, picked);
   const savedCorners = selectedSavedCorners(owner, s, documentScope, picked);
   const twoPoints = picked.length === 2 && picked.every(p => p.kind === 'point') ? pointDimensionKeys(picked[0].i, picked[1].i)
     : picked.length === 2 && point && circle ? circleDimensionKeys(point.i, circle.i)
       : picked.length === 2 && picked.every(p => p.kind === 'circle') ? circlePairKeys(picked[0].i, picked[1].i) : null;
+  const edgeCircleGap = picked.length === 2 && edge && circle && !circle.done ? edgeCircleGapKey(s, edge.i, circle.i) : null;
   const apply = (kind: ConstraintKind) => {
     const current = inspection.get();
     const r = current?.owner === owner && current.target === 'comparison' && current.kind === kind
@@ -98,6 +99,10 @@ export function ConstraintTools({ shape: s, owner, conflictIds, documentScope, i
       {!duplicatePointDistance(picked, dim) && <button type="button" aria-label="Distance between the points" title="Straight distance" onClick={() => onEditDim(circle ? twoPoints.dist : dim ?? twoPoints.dist)}><b>⤢</b><span>Distance</span></button>}
       <button type="button" aria-label="Horizontal distance" title="Distance along the sketch X axis" onClick={() => onEditDim(twoPoints.dx)}><b>↔</b><span>Horizontal</span></button>
       <button type="button" aria-label="Vertical distance" title="Distance along the sketch Y axis" onClick={() => onEditDim(twoPoints.dy)}><b>↕</b><span>Vertical</span></button>
+    </div>}
+    {edgeCircleGap && <div className="cons-tools cons-dims" role="group" aria-label="Edge to circle dimensions">
+      {dim && <button type="button" aria-label="Centre distance from edge" title="Distance from the edge to the circle centre" onClick={() => onEditDim(dim)}><b>↔</b><span>Centre</span></button>}
+      <button type="button" aria-label="Edge to circle gap" title="Clearance gap from the edge to the circle circumference" onClick={() => onEditDim(edgeCircleGap)}><b>⇤</b><span>Gap</span></button>
     </div>}
     {(!!corners.length || savedCorners) && <SketchCornerTools owner={owner} source={s} doc={documentScope}
       corners={corners} resize={savedCorners}

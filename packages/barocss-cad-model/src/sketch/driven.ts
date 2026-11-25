@@ -65,6 +65,7 @@ function rule(x: unknown, n: number, bulges: number[], circles: number, points: 
     case 'angle': fields = ['kind', 'a', 'b', 'value']; valid = pair(l) && num(x.value) && x.value > 0 && x.value < 180; break;
     case 'cdist': case 'cdx': case 'cdy': fields = ['kind', 'a', 'circle', 'value']; valid = p(x.a) && c(x.circle) && num(x.value) && x.value >= .001; break;
     case 'cedge': fields = ['kind', 'edge', 'circle', 'axis', 'value']; valid = l(x.edge) && c(x.circle) && (x.axis === 0 || x.axis === 1) && num(x.value) && x.value >= .001; break;
+    case 'cgap': fields = ['kind', 'edge', 'circle', 'axis', 'side', 'value']; valid = l(x.edge) && c(x.circle) && (x.axis === 0 || x.axis === 1) && (x.side === -1 || x.side === 1) && num(x.value) && x.value >= .001; break;
     case 'ccdist': case 'ccdx': case 'ccdy': fields = ['kind', 'a', 'b', 'value']; valid = pair(c) && num(x.value) && x.value >= .001; break;
     case 'cconc': fields = ['kind', 'a', 'b']; valid = pair(c); break;
     case 'ctan': fields = ['kind', 'edge', 'circle']; valid = l(x.edge) && c(x.circle); break;
@@ -161,6 +162,16 @@ function sourceConstraints(seed: NumericDrivenSketchSeed): void {
       case 'angle': angular(edgeAngle(p, r.a, r.b).degrees * Math.PI / 180, r.value * Math.PI / 180, 'angle rule'); break;
       case 'cdist': case 'cdx': case 'cdy': linear(measured(p[r.a], c(r.circle).c, r.kind), r.value, r.kind); break;
       case 'cedge': input((r.axis === 1 ? o.hv?.h : o.hv?.v)?.includes(r.edge), 'circle/edge distance needs its horizontal or vertical source edge'); linear(Math.abs(c(r.circle).c[r.axis] - p[r.edge][r.axis]), r.value, 'circle/edge distance'); break;
+      case 'cgap': {
+        input((r.axis === 1 ? o.hv?.h : o.hv?.v)?.includes(r.edge), 'circle/edge gap needs its horizontal or vertical source edge');
+        const circle = c(r.circle), a = p[r.edge], z = p[(r.edge + 1) % n], oAxis = 1 - r.axis;
+        const lo = Math.min(a[oAxis], z[oAxis]), hi = Math.max(a[oAxis], z[oAxis]);
+        input(circle.c[oAxis] > lo + 1e-6 && circle.c[oAxis] < hi - 1e-6, 'circle/edge gap foot must lie strictly inside its source edge');
+        const signed = circle.c[r.axis] - a[r.axis];
+        input(signed * r.side > 0, 'circle/edge gap must remain on its authored side');
+        linear(Math.abs(signed) - circle.r, r.value, 'circle/edge gap');
+        break;
+      }
       case 'ccdist': case 'ccdx': case 'ccdy': linear(measured(c(r.a).c, c(r.b).c, r.kind), r.value, r.kind); break;
       case 'cconc': linear(distance(c(r.a).c, c(r.b).c), 0, 'circle concentricity'); break;
       case 'ctan': { const v = line(r.edge), d = delta(p[r.edge], c(r.circle).c); linear(Math.abs(v[0] * d[1] - v[1] * d[0]) / length(r.edge), c(r.circle).r, 'line/circle tangent'); break; }
