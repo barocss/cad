@@ -6,7 +6,7 @@ import { evaluationKey } from '@barocss/cad-model/engine/evalMemo';
 import { signaturesOf } from '@barocss/cad-model/engine/rematch';
 import { captureSignatures, confirmReference, toSig, verifyReferences } from '@barocss/cad-model/engine/references';
 import { candidateReferenceProblem, refreshCandidateReferences } from '../src/state/candidateReferences';
-import { refreshDownstreamProblems } from '../src/state/referenceDecisions';
+import { createReferenceDecisions, refreshDownstreamProblems } from '../src/state/referenceDecisions';
 
 function evaluated(doc: StudioDoc) {
   const result = evaluateDoc(doc, 1); if (!result.ok) throw new Error(result.error.hint); return result;
@@ -98,4 +98,61 @@ test('releasing a held parent Chamfer refreshes downstream bevel-edge candidates
   assert.deepEqual(sameRefreshed.map(p => [p.node, p.name, p.candidates]), [
     [3, 'n1.top|n2.face', ['n1.top|n2.face']],
   ]);
+});
+
+test('settleRef validates a released held Shell and refreshes downstream held Chamfer candidates', async () => {
+  const readPart = async (doc: StudioDoc) => evaluateDoc(doc, 1);
+  const stock = rectanglePart(80, 40, 12);
+  const [sketch, extrude] = stock.nodes;
+  assert.ok(sketch.kind === 'sketch' && sketch.profile === 'rectangle');
+  const base: StudioDoc = { ...stock, nodes: [{ ...sketch, min: [-20, -20], max: [60, 20],
+    sideTags: { outer: ['e1', 'e2', 'e3', 'e4'] } }, extrude] };
+  const withShell = captureSignatures(withNode(base, { kind: 'shell', parent: { node: 1, side: 'solid' }, open: ['n1.side[e1]'], thickness: 2 }), evaluated(base).bodies);
+  const withChamfer = captureSignatures(withNode(withShell, { kind: 'chamfer', parent: { node: 2, side: 'solid' }, edges: ['n1.side[e1]#3|n2.ceiling'], distance: 0.5 }), evaluated(withShell).bodies);
+  const edited: StudioDoc = {
+    ...structuredClone(withChamfer),
+    nodes: [
+      { id: 'n0', kind: 'sketch', profile: 'polygon',
+        points: [[-20, -20], [10, -20], [10, 10], [30, 10], [30, -20], [60, -20], [60, 20], [-20, 20]],
+        sideTags: { outer: ['s1', 's2', 's3', 's4', 's5', 'e2', 'e3', 'e4'] } },
+      ...structuredClone(withChamfer).nodes.slice(1),
+    ],
+  };
+
+  const opened = await verifyReferences(edited, [], readPart);
+  assert.equal(opened.problems.length, 2);
+  assert.equal(opened.problems[0].node, 2);
+  assert.equal(opened.problems[1].node, 3);
+  assert.equal(opened.problems[1].candidates[0], 'n1.side[s1]|n1.top');
+
+  let committed: StudioDoc | null = null;
+  let remembered: readonly { node: number | null; candidates: string[] }[] = [];
+  const notices: unknown[] = [];
+  const docRef = { current: opened.doc };
+  const { settleRef } = createReferenceDecisions({
+    model: { doc: opened.doc, bodies: evaluated(opened.doc).bodies, problems: opened.problems },
+    owner: { document: docRef, open: { current: { token: 1 } as never }, dispatch: { current: {} }, canSettle: () => true },
+    focus: { request: { current: 0 }, receipt: { current: null } },
+    readPart,
+    changes: {
+      pushUndo() {},
+      setDoc(next) { committed = next; docRef.current = next; return true; },
+      remember(_next, nextProblems) { remembered = nextProblems; },
+      setChoices() {},
+      setDirty() {},
+      notice(n) { notices.push(n); },
+    },
+  });
+
+  // Invalid face selection on held Shell is refused without committing.
+  assert.equal(await settleRef(opened.problems[0].index, 'n1.side[missing]'), false);
+  assert.equal(committed, null);
+  assert.equal(notices.length, 1);
+
+  // Valid candidate releases Shell and refreshes downstream Chamfer candidate 1 to the live shell rim edge.
+  assert.equal(await settleRef(opened.problems[0].index, 'n1.side[s1]'), true);
+  assert.ok(committed);
+  assert.equal(remembered.length, 1);
+  assert.equal(remembered[0].node, 3);
+  assert.equal(remembered[0].candidates[0], 'n1.side[s1]#3|n2.ceiling');
 });

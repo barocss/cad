@@ -68,18 +68,19 @@ export function createReferenceDecisions({ model, owner, focus, readPart, change
     const current = () => owner.open.current === open && owner.canSettle();
     const problem = problems.find(value => value.index === index);
     const held = problem?.node == null ? undefined : doc.nodes[problem.node];
-    const heldFinish = held?.held && (held.kind === 'fillet' || held.kind === 'chamfer') ? held : undefined;
+    const heldNode = held?.held ? held : undefined;
+    const heldFinish = heldNode && (heldNode.kind === 'fillet' || heldNode.kind === 'chamfer') ? heldNode : undefined;
     if (heldFinish && to !== undefined && to !== problem?.name && heldFinish.edges.includes(to)) {
       changes.notice({ title: 'Reference not applied', hint: 'This feature already uses that edge.', detail: to });
       return false;
     }
 
     const remaining = problems.filter(value => value.index !== index);
-    const pending = heldFinish && problem ? remaining.find(value => value.node === problem.node) : undefined;
+    const pending = heldNode && problem ? remaining.find(value => value.node === problem.node) : undefined;
     const next = await confirmReference(doc, index, bodies, readPart, to, undefined, pending);
     if (!current() || next === doc) return false;
     let nextProblems = remaining;
-    if (heldFinish && !pending) {
+    if (heldNode && !pending) {
       const result = await readPart(prefixDoc(next, next.nodes.length));
       if (!current()) return false;
       if (!result.ok) { changes.notice({ ...result.error, title: 'Reference not applied' }); return false; }
