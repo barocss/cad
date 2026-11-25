@@ -198,3 +198,55 @@ test('summary diagnoses a held paired Constant Fillet (one or both slots) before
   ]);
   assert.equal(twoRecovery.pick_edges.length, 12);
 });
+
+test('summary diagnoses an earlier held single-edge finish before a downstream held finish and retires once repaired', async () => {
+  const stock = rectanglePart(80, 40, 10);
+  const [sketch, extrude] = stock.nodes;
+  assert.ok(sketch.kind === 'sketch' && sketch.profile === 'rectangle');
+  const base: StudioDoc = { ...stock, nodes: [{ ...sketch, min: [-20, -20], max: [60, 20],
+    sideTags: { outer: ['e1', 'e2', 'e3', 'e4'] } }, extrude] };
+  const r1 = await evaluate(base);
+  assert.ok(r1.ok);
+  const withN2 = withNode(base, { kind: 'chamfer', parent, edges: ['n1.side[e1]|n1.side[e4]'], distance: 4 });
+  const sigN2 = signaturesOf(r1.bodies[0]).edges.get('n1.side[e1]|n1.side[e4]')!;
+  const signedN2: StudioDoc = { ...withN2, nodes: [...withN2.nodes.slice(0, 2), { ...withN2.nodes[2], sigs: { 'n1.side[e1]|n1.side[e4]': toSig(sigN2) } }] };
+  const r2 = await evaluate(signedN2);
+  assert.ok(r2.ok);
+  const sigN3 = signaturesOf(r2.bodies[0]).edges.get('n1.side[e1]|n2.face')!;
+  const signedN3 = withNode(signedN2, { kind: 'chamfer', parent: { node: 2, side: 'solid' }, edges: ['n1.side[e1]|n2.face'], distance: 1,
+    sigs: { 'n1.side[e1]|n2.face': toSig(sigN3) } });
+
+  const retired = structuredClone(signedN3);
+  assert.ok(retired.nodes[0].kind === 'sketch' && retired.nodes[0].profile === 'rectangle');
+  retired.nodes[0].min[1] = -18;
+  retired.nodes[0].sideTags!.outer[0] = 'e5';
+  const verified = await verifyReferences(retired, [], evaluate);
+  assert.equal(verified.problems.length, 2);
+  const evalHeld = await evaluate(verified.doc);
+  assert.ok(evalHeld.ok);
+
+  const state: ChatState = { doc: verified.doc, bodies: evalHeld.bodies };
+  const before = structuredClone(state);
+  const recovery = await summary(state, { body: 'b3', response_format: 'detailed' });
+  assert.deepEqual([recovery.feature, recovery.body, recovery.source_body, recovery.downstream_feature,
+    recovery.revision, recovery.mode, recovery.page, recovery.pages],
+    ['n2', 'b3', 'b1', 'n3', revisionOf(verified.doc), 'studio_history_review', 1, 1]);
+  assert.deepEqual(recovery.slots, [{ slot: 1, authored_edge: 'n1.side[e1]|n1.side[e4]', signature_matches: ['n1.side[e4]|n1.side[e5]'] }]);
+  assert.equal(recovery.pick_edges.length, 12);
+  assert.equal(await summary(state, { response_format: 'concise' }), undefined);
+  assert.deepEqual(state, before);
+
+  // Manually suppressed (non-held) downstream finish stays excluded.
+  const manualN3: StudioDoc = { ...verified.doc, nodes: [...verified.doc.nodes.slice(0, 3), { ...verified.doc.nodes[3], held: undefined }] };
+  assert.equal(await summary({ doc: manualN3, bodies: evalHeld.bodies }), undefined);
+
+  // Once n2 is repaired, chained diagnosis retires cleanly.
+  const repaired = structuredClone(verified.doc);
+  const n2 = repaired.nodes[2];
+  assert.ok(n2.kind === 'chamfer');
+  repaired.nodes[2] = { ...n2, edges: ['n1.side[e4]|n1.side[e5]'], held: undefined, suppressed: undefined,
+    sigs: { 'n1.side[e4]|n1.side[e5]': toSig(signaturesOf(evalHeld.bodies[0]).edges.get('n1.side[e4]|n1.side[e5]')!) } };
+  const evalRepaired = await evaluate(repaired);
+  assert.ok(evalRepaired.ok);
+  assert.equal(await summary({ doc: repaired, bodies: evalRepaired.bodies }), undefined);
+});

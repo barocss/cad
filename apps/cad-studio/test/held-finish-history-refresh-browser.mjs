@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import { createFlow } from './flow-helper.mjs';
+import { readHeldFinishSummary } from './held-finish-recovery-mcp.mjs';
 
 const baseline = process.argv.includes('--baseline');
+const mcp = process.argv.includes('--mcp');
 const n2Old = 'n1.side[e1]|n1.side[e4]', n2New = 'n1.side[e4]|n1.side[e5]';
 const n3Old = 'n1.side[e1]|n2.face', n3New = 'n1.side[e5]|n2.face';
 const ref = node => ({ node, side: 'solid' });
@@ -22,6 +24,11 @@ const files = [
   'apps/cad-studio/src/state/useHeldFinishEdge.ts',
   'apps/cad-studio/src/state/heldFinishReplacement.ts',
   'apps/cad-studio/src/state/referenceDecisions.ts',
+  ...(mcp ? [
+    'apps/cad-studio/test/held-finish-recovery-mcp.mjs',
+    'apps/cad-studio/test/mcp-browser-session.mjs',
+    'packages/barocss-cad-model/src/chat/part/heldFinishRecovery.ts',
+  ] : []),
 ];
 const f = await createFlow({
   name: 'held-finish-history-refresh', output: process.argv[2], envFrozen: 'D1991_SOURCE_FROZEN',
@@ -113,13 +120,39 @@ await f.run(async () => {
   assert.equal(opened.doc.nodes[3].suppressed, true);
 
   const repick = button('Replace edge', f.editor());
-  if (baseline) {
+  if (baseline && !mcp) {
     assert.equal(await repick.count(), 0, 'Previous Studio exposes no History Replace edge on held Chamfer before a downstream held Chamfer');
     f.report.observations.push({ label: 'previous-absence', replaceEdge: 0 });
     return;
   }
 
   const history = await stack();
+  let diagnosedPick, heldRevision;
+  if (mcp) {
+    f.phase = 'diagnose the held chained Chamfer on the saved Studio document through local MCP';
+    const savedHeld = await f.save('held-chained-chamfer-for-mcp');
+    const { summary, revision } = await readHeldFinishSummary(f, savedHeld.file, 'held-chained-chamfer', 'b3');
+    heldRevision = revision;
+    if (baseline) {
+      assert.equal(summary.held_finish_recovery, undefined, 'Previous local MCP omits held_finish_recovery for chained held finishes');
+      f.report.observations.push({ label: 'previous-mcp-absence', heldFinishRecovery: null });
+      return;
+    }
+    const recovery = summary.held_finish_recovery;
+    assert.ok(recovery);
+    assert.deepEqual([recovery.feature, recovery.body, recovery.source_body, recovery.downstream_feature, recovery.revision,
+      recovery.mode, recovery.page, recovery.pages], ['n2', 'b3', 'b1', 'n3', revision, 'studio_history_review', 1, 1]);
+    assert.deepEqual(recovery.slots, [{ slot: 1, authored_edge: n2Old, signature_matches: [n2New] }]);
+    assert.equal(recovery.pick_edges.length, 12);
+    diagnosedPick = recovery.pick_edges.find(edge => edge.name === n2New);
+    assert.ok(diagnosedPick);
+    assert.deepEqual([diagnosedPick.from, diagnosedPick.to].sort(), [[-20, -18, 0], [-20, -18, 10]]);
+    await f.same(opened.doc);
+    assert.deepEqual(await stack(), history);
+    await f.snapshot('01b-unchanged-after-mcp-read');
+    f.report.observations.push({ label: 'local-mcp-read', revision, pickCount: recovery.pick_edges.length });
+  }
+  const pickPoint = diagnosedPick ? diagnosedPick.from.map((v, axis) => (v + diagnosedPick.to[axis]) / 2) : [-20, -18, 5];
   const apply = () => button('Apply edge replacement', f.editor());
 
   f.phase = 'refuse face click and cancel History replacement without mutating document or history';
@@ -135,7 +168,7 @@ await f.run(async () => {
 
   f.phase = 'preview replacement edge n1.side[e4]|n1.side[e5] in viewport and cancel cleanly';
   await direction('Front left');
-  await pick([-20, -18, 5]);
+  await pick(pickPoint);
   await f.editor().getByText(n2New, { exact: true }).waitFor();
   assert.equal(await apply().isEnabled(), true);
   await f.same(opened.doc);
@@ -148,7 +181,7 @@ await f.run(async () => {
   f.phase = 'apply History edge replacement on n2 and verify downstream n3 candidate refreshes';
   await repick.click();
   await f.editor().getByText('Select an edge on the feature body.', { exact: true }).waitFor();
-  await pick([-20, -18, 5]);
+  await pick(pickPoint);
   await f.editor().getByText(n2New, { exact: true }).waitFor();
   await apply().click();
   await f.changed(opened.doc);
@@ -220,4 +253,11 @@ await f.run(async () => {
   assert.equal(reopened.doc.nodes[2].held, undefined);
   assert.equal(reopened.doc.nodes[3].held, undefined);
   await native('fresh-open', reopened.doc, 38, true, true);
+  if (mcp) {
+    f.phase = 'verify local MCP retires held_finish_recovery on the repaired saved document';
+    const { summary, revision } = await readHeldFinishSummary(f, saved.file, 'repaired-chained-chamfer', 'b3');
+    assert.equal(summary.held_finish_recovery, undefined);
+    assert.notEqual(revision, heldRevision);
+    f.report.observations.push({ label: 'local-mcp-repaired', revision, heldFinishRecovery: null });
+  }
 });

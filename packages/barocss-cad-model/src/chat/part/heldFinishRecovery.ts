@@ -3,7 +3,7 @@ import { prefixDoc } from '../../engine/doc';
 import { rememberedEvaluate } from '../../engine/evalMemo';
 import { heldChamferThroughHole, heldPairedFilletThroughHole, parentChamferEdge, parentPairedFilletEdge } from '../../engine/heldChamferThroughHole';
 import type { DisplayEdge } from '../../engine/mesh';
-import { heldFinishGroupProblems, isHeldConstantLineFinish, nativeLine, validFinishGroupEdge } from '../../engine/heldFinishGroup';
+import { heldFinishGroupProblems, isHeldConstantLineFinish, nativeLine, positiveSize, validFinishGroupEdge } from '../../engine/heldFinishGroup';
 import { bodyKeyFor, featureId } from '../../engine/ids';
 import { sameDatumTargetSourceSig, toSig, verifyReferences } from '../../engine/references';
 import { signaturesOf } from '../../engine/rematch';
@@ -19,7 +19,8 @@ export async function heldFinishRecovery(state: ChatState, evaluate: Evaluate, o
     return (await heldChamferRecovery(state, evaluate, only, page, pageSize))
       ?? heldPairedFilletRecovery(state, evaluate, only, page, pageSize);
   }
-  return terminalFilletRecovery(state, evaluate, only, page, pageSize);
+  return (await terminalFilletRecovery(state, evaluate, only, page, pageSize))
+    ?? heldChainedFinishRecovery(state, evaluate, only, page, pageSize);
 }
 
 async function terminalFilletRecovery({ doc, bodies }: ChatState, evaluate: Evaluate, only: string | null, page: number, pageSize: number) {
@@ -130,6 +131,56 @@ async function heldPairedFilletRecovery({ doc, bodies }: ChatState, evaluate: Ev
     slots: slots.map(({ slot, authored_edge, candidates }) => ({
       slot, authored_edge, signature_matches: candidates.filter(candidate => names.has(candidate)),
     })),
+    pick_edges: edges.slice(start, start + pageSize).filter(edge => eligible.has(edge)).map(edgePick),
+  };
+}
+
+async function heldChainedFinishRecovery({ doc, bodies }: ChatState, evaluate: Evaluate, only: string | null, page: number, pageSize: number) {
+  if (bodies.length !== 1) return;
+  const [body] = bodies;
+  if (!body.ref || body.ref.side !== 'solid' || body.topology?.kind !== 'solid' || body.topology.bodyCount !== 1
+      || (only && only !== body.key) || doc.bodies?.[lookKey(doc.nodes, body)]?.hidden) return;
+
+  const chain: number[] = [];
+  let cursor = body.ref.node;
+  while (cursor >= 0) {
+    const step = doc.nodes[cursor];
+    if (!step?.held || !step.suppressed || (step.kind !== 'fillet' && step.kind !== 'chamfer')
+        || step.parent.side !== 'solid' || step.parent.node >= cursor) break;
+    chain.push(cursor);
+    cursor = step.parent.node;
+  }
+  if (chain.length < 2) return;
+  const index = chain.at(-1)!, downstreamIndex = chain[chain.length - 2]!;
+  const node = doc.nodes[index];
+  if (!node || (node.kind !== 'chamfer' && (node.kind !== 'fillet' || node.radii || node.section !== undefined))
+      || node.edges.length !== 1 || node.rematched
+      || !positiveSize(node.kind === 'fillet' ? node.radius : node.distance, doc.parameters)) return;
+  const [name] = node.edges;
+  if (node.sigs?.[name]?.n !== undefined) return;
+
+  const { problems, changes } = await verifyReferences(doc, bodies, evaluate);
+  const here = problems.filter(problem => problem.node === index);
+  if (changes.length || here.length !== 1 || here[0].name !== name
+      || !problems.some(problem => problem.node !== null && problem.node > index)) return;
+
+  const stock = await rememberedEvaluate(evaluate)(prefixDoc(doc, index));
+  if (!stock?.ok || stock.bodies.length !== 1) return;
+  const [parent] = stock.bodies;
+  if (parent.ref?.node !== node.parent.node || parent.ref.side !== node.parent.side
+      || parent.key !== bodyKeyFor(doc.nodes, node.parent.node, 'solid')
+      || parent.topology?.kind !== 'solid' || parent.topology.bodyCount !== 1) return;
+
+  const edges = body.mesh.edges;
+  const eligible = new Set(edges.filter(edge => validFinishGroupEdge(edge, edges)));
+  if (!eligible.size) return;
+  const names = new Set([...eligible].map(edge => edge.names[0]));
+  const start = (page - 1) * pageSize;
+  return {
+    feature: featureId(doc.nodes, index), body: body.key, revision: revisionOf(doc),
+    source_body: parent.key, downstream_feature: featureId(doc.nodes, downstreamIndex),
+    mode: 'studio_history_review', page, pages: Math.max(1, Math.ceil(edges.length / pageSize)),
+    slots: [{ slot: 1, authored_edge: name, signature_matches: here[0].candidates.filter(candidate => names.has(candidate)) }],
     pick_edges: edges.slice(start, start + pageSize).filter(edge => eligible.has(edge)).map(edgePick),
   };
 }
