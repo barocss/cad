@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { createFlow } from './flow-helper.mjs';
 
 const baseline = process.argv.includes('--baseline');
+const shellPreview = process.argv.includes('--shell-preview');
 const n2Old = 'n1.side[e1]', n2New = 'n1.side[s1]';
 const n3Old = 'n1.side[e1]#3|n2.ceiling', n3New = 'n1.side[s1]#3|n2.ceiling';
 const ref = node => ({ node, side: 'solid' });
@@ -24,6 +25,7 @@ const uBlockSketch = {
 const files = [
   'apps/cad-studio/test/dependent-shell-chamfer-reverify-browser.mjs',
   'apps/cad-studio/src/state/referenceDecisions.ts',
+  ...(shellPreview ? ['apps/cad-studio/src/App.tsx', 'apps/cad-studio/src/app/useStudioReferenceReview.ts', 'apps/cad-studio/src/ui/ReferenceDecisions.tsx'] : []),
 ];
 const f = await createFlow({
   name: 'dependent-shell-chamfer-reverify', output: process.argv[2], envFrozen: 'D1992_SOURCE_FROZEN',
@@ -47,6 +49,12 @@ if (input.prepare) {
   if (!r2.ok) throw new Error(JSON.stringify(r2));
   doc = captureSignatures(doc, r2.bodies);
   console.log(JSON.stringify({ doc, native: inspect(doc) }));
+} else if (input.previewFace) {
+  const ev = evaluateDoc(input.doc, 1);
+  if (!ev.ok || ev.bodies.length !== 1) throw Error('Expected one current source body');
+  const faces=ev.bodies[0].mesh.faces.filter(face=>face.name===input.previewFace);
+  if (faces.length!==1 || faces[0].kind!=='plane') throw Error('Expected one native planar candidate');
+  console.log(JSON.stringify({key:ev.bodies[0].key,index:faces[0].index,name:faces[0].name,area:faces[0].area}));
 } else console.log(JSON.stringify(inspect(input)));
 `,
 });
@@ -93,6 +101,24 @@ await f.run(async () => {
   assert.equal(bothHeld.doc.nodes[2].suppressed, true);
   assert.equal(bothHeld.doc.nodes[3].suppressed, true);
   await native('both-held', bothHeld.doc, 'held');
+
+  if (shellPreview) {
+    f.phase = 'preview the exact owned Shell opening in the visible model without committing';
+    const stack = await history();
+    await refs().getByRole('button', { name: /^Preview candidate 1 for Shell 2 mm \(n2\) in model/ }).click();
+    await f.same(bothHeld.doc);
+    assert.deepEqual(await history(), stack);
+    const selected = await f.snapshot('01b-shell-opening-face-preview');
+    assert.equal(selected.notices.length, 0);
+    const expected = await f.inspect('preview-owner-native-face', { doc: selected.doc, previewFace: n2New });
+    assert.equal(expected.key, 'b3');
+    assert.equal(expected.area, 360);
+    assert.deepEqual(selected.selection?.selection?.faces, [{ body: 0, face: expected.index }]);
+    f.report.observations.push({ label: 'shell-opening-preview', ...expected });
+    assert.equal(selected.selection?.selection?.edges?.length ?? 0, 0);
+    assert.equal(selected.doc.nodes[2].suppressed, true);
+    assert.equal(selected.doc.nodes[3].suppressed, true);
+  }
 
   f.phase = 'confirm held Shell (n2) candidate 1 (n1.side[s1])';
   await refs().getByRole('button', { name: /^Use candidate 1 for Shell 2 mm \(n2\)/ }).click();

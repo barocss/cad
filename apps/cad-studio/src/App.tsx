@@ -1615,14 +1615,19 @@ export function App() {
   const { referenceBrowser, refMarks, refChoices, referenceLabels, previewReference, settleRef, showRefChoices,
     referencePreview, clearReferencePreview, clearReferenceChoices, receiveReferenceLabels } = useStudioReferenceReview({
     source: { doc, evaluated, bodies, problems: refProblems, ready: fresh && !busy, drawing,
-      edgeBlocked: () => !!(section || previewBodies || sketch || mateFaces) },
+      edgeBlocked: () => !!(section || previewBodies || sketch || mateFaces),
+      faceReady: () => ownsEvaluatedSource() && shownDocNow.current === doc && bodiesRef.current === bodies && marker === null
+        && !active && !sketch && !section && !previewBodies && !mateFaces && !ghost && !workingComparison && !bodyDrag && !instDrag
+        && !assembly.draft && !cageEd.session && !skel.session && !inPlace && !measure && !workerFailure
+        && !routePanelOpen && !routePreviewBodies && !candidateReview?.shown && !inspection.visibleKeys && !pmiEnabled
+        && previewMode === 'none' },
     owner: { document: docNow, open: openIntent, dispatch: saveDocumentToken,
       canSettle: () => ownsEvaluatedSource() && canChangeDocument() },
     confirmation: { pushUndo, setDoc, remember: (next, problems) => referenceProblems.current.set(next, problems), setDirty },
     navigation: {
       switchDrawing: ready => workspaceModeExit.switchWhenReady(ready, { readFeature: commandDraft }),
       showDrawing: () => { showWorkspace('Drawing'); setBrowserOpen(true); },
-      showModel: edges => { setDrawing(false); setRendering(false); setMeasure(null); setInstanceSel([]); setDirectSel([]); setSelection({ faces: [], edges, bodies: [] }); },
+      showModel: (edges, faces = []) => { setDrawing(false); setRendering(false); setMeasure(null); setInstanceSel([]); setDirectSel([]); setSelection({ faces, edges, bodies: [] }); },
     },
     readPart: source => engine.part(source, revision.current++, 'refs'), onNotice: setToast,
   });

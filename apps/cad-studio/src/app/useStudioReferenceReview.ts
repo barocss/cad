@@ -20,6 +20,7 @@ interface ReferenceReviewOptions {
     ready: boolean;
     drawing: boolean;
     edgeBlocked(): boolean;
+    faceReady(): boolean;
   };
   owner: {
     document: RefObject<StudioDoc>;
@@ -36,7 +37,7 @@ interface ReferenceReviewOptions {
   navigation: {
     switchDrawing(ready: () => void): void;
     showDrawing(): void;
-    showModel(edges: Selection['edges']): void;
+    showModel(edges: Selection['edges'], faces?: Selection['faces']): void;
   };
   readPart(doc: StudioDoc): Promise<EvalResult>;
   onNotice(notice: StudioNotice): void;
@@ -44,7 +45,7 @@ interface ReferenceReviewOptions {
 
 /** Keep reference choices, previews, labels and focus bound to their accepted document. */
 export function useStudioReferenceReview({ source, owner, confirmation, navigation, readPart, onNotice }: ReferenceReviewOptions) {
-  const { doc, evaluated, bodies, problems, ready, drawing, edgeBlocked } = source;
+  const { doc, evaluated, bodies, problems, ready, drawing, edgeBlocked, faceReady } = source;
   const openIntent = owner.open;
   const referenceBrowser = useRef<HTMLElement>(null);
   const referenceFocus = useRef<ReferenceFocusReceipt<StudioDoc, OpenScope> | null>(null);
@@ -75,7 +76,7 @@ export function useStudioReferenceReview({ source, owner, confirmation, navigati
   const referenceLabels = referenceLabelCache?.owner === referenceLabelOwner ? referenceLabelCache.labels : [];
   const refMarks = useMemo(() => markedReferences(doc), [doc]);
   const previewReference = createReferencePreview({
-    model: { doc, bodies, ready, edgeBlocked },
+    model: { doc, bodies, ready, edgeBlocked, faceReady },
     owner: { document: owner.document, switchDrawing: navigation.switchDrawing },
     changes: { setPreview: setReferencePreview, notice: onNotice,
       showDrawing: navigation.showDrawing, showModel: navigation.showModel },

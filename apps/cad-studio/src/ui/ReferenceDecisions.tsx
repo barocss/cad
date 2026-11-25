@@ -59,7 +59,7 @@ export function ReferenceDecisions({ doc, referenceLabels, refMarks, refProblems
     })}
     {refProblems.map(p => {
       const caption = referenceCaption(p.where, p.node), affected = affectedDimensions(p.name);
-      const drawing = referenceDimension(p.where);
+      const drawing = referenceDimension(p.where), shell = p.node !== null && doc.nodes[p.node]?.kind === 'shell';
       return <div key={'p' + p.index} role="group" aria-label={caption} style={referenceRowStyle}>
       <p style={{ margin: 0, whiteSpace: 'normal', overflowWrap: 'anywhere' }}>{caption}<br /><span className="muted">{affected > 0 && `${affected} affected dimension(s) · `}{p.candidates.length ? 'Choose a reference' : p.reason === 'ambiguous-fillet-endpoints' ? 'Fillet endpoints cannot be matched' : p.reason === 'ambiguous-split-cap' ? 'Reference ambiguous' : 'Reference missing'}{p.node !== null ? ' · Feature held' : ''}</span></p>
       <div style={referenceActionsStyle}>
@@ -69,7 +69,7 @@ export function ReferenceDecisions({ doc, referenceLabels, refMarks, refProblems
         <span>Candidate {i + 1} </span>
         <button className="ghost small" style={referenceButtonStyle} data-reference-next
           aria-label={p.node === null ? undefined : `Preview candidate ${i + 1} for ${caption} in model`}
-          onClick={() => previewReference(p.where, { edge: n, candidateNumber: i + 1, inModel: !drawing })}>Preview candidate {i + 1}</button>
+          onClick={() => previewReference(p.where, { edge: n, candidateNumber: i + 1, inModel: !drawing, ...(shell ? { shellCandidate: { problem: p, name: n } } : {}) })}>Preview candidate {i + 1}</button>
         {drawing && <button className="ghost small" style={referenceButtonStyle} onClick={() => previewReference(p.where, { edge: n, inModel: true })}>Preview in model</button>}
         <button className="ghost small" style={referenceButtonStyle}
           aria-label={p.node === null ? undefined : `Use candidate ${i + 1} for ${caption}`}
