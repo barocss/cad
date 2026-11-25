@@ -12,6 +12,7 @@ import type { DrawingDetail } from './detail';
 import { reflexAngle } from './reflexAngle';
 import { resolveArcLengthEdge } from './arcLength';
 import { resolveChamferEdges } from './chamferDim';
+import { resolveRadialThicknessEdges } from './radialThickness';
 
 const sub3 = (a: readonly number[], b: readonly number[]): Vec3 => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
 const dist3 = (a: readonly number[], b: readonly number[]) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
@@ -135,12 +136,28 @@ export interface ResolvedChamfer {
   alt?: string;
 }
 
+export interface ResolvedRadialThickness {
+  ok: true;
+  kind: 'radial-thickness';
+  dim: Extract<DrawingDimension, { kind: 'radial-thickness' }>;
+  center: XY;
+  innerRadius: number;
+  outerRadius: number;
+  dir: XY;
+  innerPoint: XY;
+  outerPoint: XY;
+  value: number;
+  text: string;
+  alt?: string;
+}
+
 /** `alt` (11 ③b): on a dual drawing, the same text in the other unit; the sheet sets it, resolving never does. */
 export type Resolved = (
   | { ok: true; kind: 'linear'; dim: Extract<DrawingDimension, { kind: 'linear' }>; a: XY; b: XY; value: number; text: string; alt?: string }
   | { ok: true; kind: 'diameter' | 'radius'; dim: Extract<DrawingDimension, { kind: 'diameter' | 'radius' }>; center: XY; radius: number; value: number; text: string; alt?: string; detailArcs?: readonly CircularArc[]; radiusRim?: XY }
   | ResolvedArcLength
   | ResolvedChamfer
+  | ResolvedRadialThickness
   /** `vertex`: where the two lines meet; `from`/`to`: the sector's bounding directions (counter-clockwise from → to); `ends`: each edge's far end from the vertex. */
   | { ok: true; kind: 'angle'; dim: Extract<DrawingDimension, { kind: 'angle' }>; vertex: XY; from: XY; to: XY; ends: [XY, XY]; value: number; text: string; alt?: string }
   /** A pitch circle (R14.5): `center` in the view, `center3` in the model, `radius` (mm), `members` in the view; `value` its diameter. */
@@ -159,6 +176,7 @@ export function valueText(r: { kind: Extract<Resolved, { ok: true }>['kind']; va
     case 'diameter': return `Ø${f(r.value)}`;
     case 'arc-length': return `ARC ${f(r.value)}`;
     case 'chamfer': return `${f(r.value)} × 45°`;
+    case 'radial-thickness': return f(r.value);
     default: return `R${f(r.value)}`;
   }
 }
@@ -258,6 +276,24 @@ export function resolveDimension(views: Partial<Record<DimView, BrepProjection>>
     const value = linearValue(pr, a, b, dim.orient);
     if (value < 1e-9) return { ok: false, dim, reason: 'Its two points now coincide in this view.' };
     return { ok: true, kind: 'linear', dim, a: inView(pr, a), b: inView(pr, b), value, text: valueText({ kind: 'linear', value }, fmtMM) };
+  }
+  if (dim.kind === 'radial-thickness') {
+    const resolved = resolveRadialThicknessEdges(pr, dim.first, dim.second, dim.view, dim.place);
+    if (!resolved.ok) return { ok: false, dim, reason: resolved.reason };
+    const g = resolved.geometry;
+    return {
+      ok: true,
+      kind: 'radial-thickness',
+      dim,
+      center: g.center,
+      innerRadius: g.innerRadius,
+      outerRadius: g.outerRadius,
+      dir: g.dir,
+      innerPoint: g.innerPoint,
+      outerPoint: g.outerPoint,
+      value: g.thickness,
+      text: valueText({ kind: 'radial-thickness', value: g.thickness }, fmtMM),
+    };
   }
   if (dim.kind === 'chamfer') {
     if (dim.tol || dim.basic || dim.count !== undefined || dim.auto) {

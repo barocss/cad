@@ -99,6 +99,7 @@ function writable(d: StudioDoc): StudioDoc {
       if (dimension.kind === 'angle') return { ...dimension, a: { ...dimension.a }, b: { ...dimension.b } };
       if (dimension.kind === 'arc-length') return { ...dimension, arc: { ...dimension.arc } };
       if (dimension.kind === 'chamfer') return { ...dimension, chamfer: { ...dimension.chamfer }, adjacent: { ...dimension.adjacent } };
+      if (dimension.kind === 'radial-thickness') return { ...dimension, first: { ...dimension.first }, second: { ...dimension.second } };
       return { ...dimension };
     }),
   };
@@ -145,6 +146,7 @@ export function referencesOf(source: StudioDoc, readOnly = false): { doc: Studio
     if (d.kind === 'diameter' || d.kind === 'radius') { const x: Pointed & { edge: string } = d; refs.push(pointed(`dimension ${d.id}`, true, x, () => x.edge, e => { x.edge = e; })); }
     else if (d.kind === 'arc-length') { const x: Pointed & { edge: string } = d.arc; refs.push(pointed(`dimension ${d.id}`, true, x, () => x.edge, e => { x.edge = e; })); }
     else if (d.kind === 'chamfer') for (const x of [d.chamfer, d.adjacent] as (Pointed & { edge: string })[]) refs.push(pointed(`dimension ${d.id}`, true, x, () => x.edge, e => { x.edge = e; }));
+    else if (d.kind === 'radial-thickness') for (const x of [d.first, d.second] as (Pointed & { edge: string })[]) refs.push(pointed(`dimension ${d.id}`, true, x, () => x.edge, e => { x.edge = e; }));
     // (A pitch circle, or a point at its centre: each member hole's edge, R14.5.)
     else if (d.kind === 'pcd') for (const m of d.ring as (Pointed & { edge: string })[]) refs.push(pointed(`dimension ${d.id}`, true, m, () => m.edge, e => { m.edge = e; }));
     else if ('a' in d) for (const p of [d.a, d.b] as unknown as (Pointed & { edge: string; at?: string; ring?: (Pointed & { edge: string })[] })[]) {
@@ -199,7 +201,7 @@ function unsigned(doc: StudioDoc): boolean {
   for (const m of doc.mates ?? []) for (const side of [m.a, m.b]) if (side.face && !frameFace(side.face) && !side.sig) return true;
   for (const d of doc.drawing?.dimensions ?? []) {
     const unsignedPoint = (p: { sig?: unknown; at?: string; ring?: { sig?: unknown }[] }) => p.at === 'pcd' ? (p.ring ?? []).some(m => !m.sig) : !p.sig;
-    if (d.kind === 'pcd' ? d.ring.some(m => !m.sig) : d.kind === 'arc-length' ? !d.arc.sig : d.kind === 'chamfer' ? !d.chamfer.sig || !d.adjacent.sig : 'a' in d ? (d.kind === 'linear' ? unsignedPoint(d.a) || unsignedPoint(d.b) : !d.a.sig || !d.b.sig) : !d.sig) return true;
+    if (d.kind === 'pcd' ? d.ring.some(m => !m.sig) : d.kind === 'arc-length' ? !d.arc.sig : d.kind === 'chamfer' ? !d.chamfer.sig || !d.adjacent.sig : d.kind === 'radial-thickness' ? !d.first.sig || !d.second.sig : 'a' in d ? (d.kind === 'linear' ? unsignedPoint(d.a) || unsignedPoint(d.b) : !d.a.sig || !d.b.sig) : !d.sig) return true;
   }
   for (const target of doc.drawing?.datumTargets ?? []) if (target.point && target.point.endpoint !== undefined && !target.point.sig && target.point.was === undefined) return true;
   for (const look of Object.values(doc.bodies ?? {})) if (look.faces && Object.keys(look.faces).some(f => !look.faceSigs?.[f])) return true;

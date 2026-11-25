@@ -743,7 +743,7 @@ function ids(ps: Placed[]): { dims?: string[]; notes?: string[]; tables?: string
 }
 function rematched(d: DrawingDimension): boolean {
   const point = (p: DimPoint) => p.was !== undefined || (p.ring ?? []).some(m => m.was !== undefined);
-  return d.kind === 'linear' ? point(d.a) || point(d.b) : d.kind === 'angle' ? d.a.was !== undefined || d.b.was !== undefined : d.kind === 'arc-length' ? d.arc.was !== undefined : d.kind === 'chamfer' ? d.chamfer.was !== undefined || d.adjacent.was !== undefined : d.kind === 'pcd' ? d.ring.some(m => m.was !== undefined) : d.was !== undefined;
+  return d.kind === 'linear' ? point(d.a) || point(d.b) : d.kind === 'angle' ? d.a.was !== undefined || d.b.was !== undefined : d.kind === 'arc-length' ? d.arc.was !== undefined : d.kind === 'chamfer' ? d.chamfer.was !== undefined || d.adjacent.was !== undefined : d.kind === 'radial-thickness' ? d.first.was !== undefined || d.second.was !== undefined : d.kind === 'pcd' ? d.ring.some(m => m.was !== undefined) : d.was !== undefined;
 }
 function pickMover(a: Placed, b: Placed, settings: DrawingSettings): Placed {
   // (FRd2: a weld symbol is placed by the sheet, with no move of its own — the other one moves.)
@@ -911,6 +911,7 @@ export function duplicates(ctx: IssueContext): DrawingIssue[] {
     } else if (r.kind === 'diameter' || r.kind === 'radius') key = `C|${r.dim.view}|${round(r.center[0])}|${round(r.center[1])}|${round(r.radius)}`;
     else if (r.kind === 'arc-length') key = `AL|${r.dim.view}|${round(r.center[0])}|${round(r.center[1])}|${round(r.radius)}|${round(r.startAngle)}|${round(r.sweep)}`;
     else if (r.kind === 'chamfer') key = `CH|${r.dim.view}|${round(r.midpoint[0])}|${round(r.midpoint[1])}|${round(r.value)}`;
+    else if (r.kind === 'radial-thickness') key = `RT|${r.dim.view}|${round(r.center[0])}|${round(r.center[1])}|${round(r.innerRadius)}|${round(r.outerRadius)}`;
     else continue;
     const bucket = seen.get(key) ?? [];
     let had: Extract<Resolved, { ok: true }> | undefined;
@@ -1079,6 +1080,7 @@ function accepted(d: DrawingDimension): DrawingDimension {
   if (d.kind === 'angle') { const { was: _a, ...a } = d.a, { was: _b, ...b } = d.b; void _a; void _b; return { ...d, a, b }; }
   if (d.kind === 'arc-length') { const { was: _a, ...arc } = d.arc; void _a; return { ...d, arc }; }
   if (d.kind === 'chamfer') { const { was: _c, ...chamfer } = d.chamfer, { was: _a, ...adjacent } = d.adjacent; void _c; void _a; return { ...d, chamfer, adjacent }; }
+  if (d.kind === 'radial-thickness') { const { was: _f, ...first } = d.first, { was: _s, ...second } = d.second; void _f; void _s; return { ...d, first, second }; }
   const { was: _w, ...rest } = d; void _w; return rest as DrawingDimension;
 }
 

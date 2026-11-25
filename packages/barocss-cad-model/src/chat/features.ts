@@ -540,6 +540,10 @@ function renameDimension(d: DrawingDimension, rename: (name: string) => string |
     const c = rename(d.chamfer.edge), a = rename(d.adjacent.edge);
     return c === null || a === null ? null : { ...d, chamfer: { ...d.chamfer, edge: c }, adjacent: { ...d.adjacent, edge: a } };
   }
+  if (d.kind === 'radial-thickness') {
+    const f = rename(d.first.edge), s = rename(d.second.edge);
+    return f === null || s === null ? null : { ...d, first: { ...d.first, edge: f }, second: { ...d.second, edge: s } };
+  }
   const point = (p: DimPoint): DimPoint | null => { if (p.at === 'pcd') { const r = ring(p.ring ?? []); return r ? { ...p, edge: r[0].edge, ring: r } : null; } const e = rename(p.edge); return e === null ? null : { ...p, edge: e }; };
   const a = d.kind === 'linear' ? point(d.a) : (() => { const e = rename(d.a.edge); return e === null ? null : { ...d.a, edge: e }; })();
   const b = d.kind === 'linear' ? point(d.b) : (() => { const e = rename(d.b.edge); return e === null ? null : { ...d.b, edge: e }; })();
