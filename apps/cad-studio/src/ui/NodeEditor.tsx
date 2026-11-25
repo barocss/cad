@@ -1,5 +1,6 @@
 import type { HeldFinishEdgeEditor } from '../state/useHeldFinishEdge';
 import type { HeldDraftFaceEditor } from '../state/heldDraftFaceSession';
+import type { HeldShellFaceEditor } from '../state/useHeldShellFace';
 import { blindDrillPointHeight } from '@barocss/cad';
 import { oppositeFlangeOwnRadiusField } from '../state/oppositeFlangeRadiusHistory';
 import type { useOppositeFlangeRadiusPreview } from '../app/useOppositeFlangeRadiusPreview';
@@ -43,7 +44,7 @@ function invalidInteger(value: number, range: { min: number; max: number }): boo
   return !Number.isInteger(value) || value < range.min || value > range.max;
 }
 
-export function NodeEditor({ onFilletStations, filletEndpoints, nodes, index, onApply, onClose, onEditSketch, onRelinkInset, insetRelinkProblem, onDetachInset, insetSourceWidth, onDelete, readFaceEndDistance, onPickEndFace, onReplaceAxis, onEditOffset, onEditDraft, onEditSharedHoleLayout, savedFeatureEdit, savedPathEdit, savedReliefShapeEdit, savedPartialRadiusSourceEdit, readAlignTargets, alignPreview, oppositeRadiusPreview, edgeReplacement, draftFaceReplacement, parameters, onRefuse, bearingAssembly, doc, onDraft, pending = false, pendingLabel = 'Checking the current bearing and housing…' }: { onFilletStations?(draft: FilletStationDraft): () => void; filletEndpoints?: FilletEndpoints | null; nodes: ModelNode[]; index: number; onApply(nodes: ModelNode[], ownsDraft: () => boolean, sourceWidth?: number): void | Promise<FeatureFailure | undefined>; onClose(): void; onEditSketch?(): void; onRelinkInset?: { start(opener: HTMLButtonElement): void; cancel(): void; reviewing: boolean }; insetRelinkProblem?: string; onDetachInset?(): void; insetSourceWidth?: number; onDelete?(opener: HTMLElement): void; readFaceEndDistance?(): Promise<FaceEndDistanceReply>; onPickEndFace?(): void; onReplaceAxis?(): void; onEditOffset?(): void; onEditDraft?(): void; onEditSharedHoleLayout?(): void; savedFeatureEdit?: { label: string; start(): void }; savedPathEdit?: { label: string; start(): void }; savedReliefShapeEdit?: { label: string; start(): void }; savedPartialRadiusSourceEdit?: { label: string; start(): void }; readAlignTargets?(): Promise<AlignTargetOption[]>; alignPreview?: ReturnType<typeof useAlignHistoryPreview>; oppositeRadiusPreview?: ReturnType<typeof useOppositeFlangeRadiusPreview>; edgeReplacement?: HeldFinishEdgeEditor; draftFaceReplacement?: HeldDraftFaceEditor; parameters: Record<string, number>; onRefuse(message: string): void; bearingAssembly?: BearingAssemblyInput; doc?: StudioDoc; onDraft?(owner: object | null): void; pending?: boolean; pendingLabel?: string }) {
+export function NodeEditor({ onFilletStations, filletEndpoints, nodes, index, onApply, onClose, onEditSketch, onRelinkInset, insetRelinkProblem, onDetachInset, insetSourceWidth, onDelete, readFaceEndDistance, onPickEndFace, onReplaceAxis, onEditOffset, onEditDraft, onEditSharedHoleLayout, savedFeatureEdit, savedPathEdit, savedReliefShapeEdit, savedPartialRadiusSourceEdit, readAlignTargets, alignPreview, oppositeRadiusPreview, edgeReplacement, draftFaceReplacement, shellFaceReplacement, parameters, onRefuse, bearingAssembly, doc, onDraft, pending = false, pendingLabel = 'Checking the current bearing and housing…' }: { onFilletStations?(draft: FilletStationDraft): () => void; filletEndpoints?: FilletEndpoints | null; nodes: ModelNode[]; index: number; onApply(nodes: ModelNode[], ownsDraft: () => boolean, sourceWidth?: number): void | Promise<FeatureFailure | undefined>; onClose(): void; onEditSketch?(): void; onRelinkInset?: { start(opener: HTMLButtonElement): void; cancel(): void; reviewing: boolean }; insetRelinkProblem?: string; onDetachInset?(): void; insetSourceWidth?: number; onDelete?(opener: HTMLElement): void; readFaceEndDistance?(): Promise<FaceEndDistanceReply>; onPickEndFace?(): void; onReplaceAxis?(): void; onEditOffset?(): void; onEditDraft?(): void; onEditSharedHoleLayout?(): void; savedFeatureEdit?: { label: string; start(): void }; savedPathEdit?: { label: string; start(): void }; savedReliefShapeEdit?: { label: string; start(): void }; savedPartialRadiusSourceEdit?: { label: string; start(): void }; readAlignTargets?(): Promise<AlignTargetOption[]>; alignPreview?: ReturnType<typeof useAlignHistoryPreview>; oppositeRadiusPreview?: ReturnType<typeof useOppositeFlangeRadiusPreview>; edgeReplacement?: HeldFinishEdgeEditor; draftFaceReplacement?: HeldDraftFaceEditor; shellFaceReplacement?: HeldShellFaceEditor; parameters: Record<string, number>; onRefuse(message: string): void; bearingAssembly?: BearingAssemblyInput; doc?: StudioDoc; onDraft?(owner: object | null): void; pending?: boolean; pendingLabel?: string }) {
   // The draft is the whole node list: a sketch dimension changes the sketch the feature is made from.
   const [draft, setDraft] = useState<ModelNode[]>(nodes);
   const [stationDraftOrigin, setStationDraftOrigin] = useState({nodes,index});
@@ -58,7 +59,7 @@ export function NodeEditor({ onFilletStations, filletEndpoints, nodes, index, on
   const countersinkErrorId = useId();
   const opposedLengthErrorId = useId();
   const [readingEnd, setReadingEnd] = useState(false);
-  const ordinaryLocked = pending || !!edgeReplacement?.draft || !!draftFaceReplacement?.view;
+  const ordinaryLocked = pending || !!edgeReplacement?.draft || !!draftFaceReplacement?.view || !!shellFaceReplacement?.draft;
   const request = useRef<object | null>(null);
   const applyButton = useRef<HTMLButtonElement>(null), resetButton = useRef<HTMLButtonElement>(null);
   const failureArea = useRef<HTMLDivElement>(null);
@@ -258,6 +259,8 @@ export function NodeEditor({ onFilletStations, filletEndpoints, nodes, index, on
       }
       else if (event.key === 'Escape' && draftFaceReplacement?.view) {
         event.preventDefault(); event.stopPropagation(); draftFaceReplacement.cancel();
+      } else if (event.key === 'Escape' && shellFaceReplacement?.draft) {
+        event.preventDefault(); event.stopPropagation(); shellFaceReplacement.cancel();
       } else if (event.key === 'Escape') close();
       else if (event.key === 'Delete' && onDelete && !ordinaryLocked && event.target instanceof HTMLElement
         && !(event.target instanceof HTMLInputElement || event.target instanceof HTMLSelectElement)) {
@@ -353,6 +356,22 @@ export function NodeEditor({ onFilletStations, filletEndpoints, nodes, index, on
         </div>
       </> : <button type="button" className="ghost" disabled={ordinaryLocked || changed || hasInvalidNumber || Object.keys(typed).length > 0 || !sameDraftScope}
         onClick={() => { retireEvaluation(); draftFaceReplacement.start(); }}>Replace face</button>)}
+      {shellFaceReplacement && (shellFaceReplacement.draft ? <>
+        <div role="status" className="small break-all">
+          {shellFaceReplacement.draft.error
+            ?? (shellFaceReplacement.draft.name
+              ? `Selected opening face: ${shellFaceReplacement.draft.name}`
+              : 'Select the verified planar candidate opening face on this feature’s body.')}
+        </div>
+        <div className="row-actions">
+          <button type="button" className="primary" aria-label="Apply face replacement"
+            disabled={changed || shellFaceReplacement.draft.pending || !shellFaceReplacement.draft.name}
+            onClick={shellFaceReplacement.apply}>Apply face</button>
+          <button type="button" className="ghost" aria-label="Cancel face replacement"
+            onClick={shellFaceReplacement.cancel}>Cancel</button>
+        </div>
+      </> : <button type="button" className="ghost" disabled={ordinaryLocked || changed || hasInvalidNumber || !sameDraftScope}
+        onClick={() => { retireEvaluation(); shellFaceReplacement.start(); }}>Replace face</button>)}
       {edgeReplacement && (edgeReplacement.draft ? <>
         {edgeReplacement.group ? <div role="group" aria-label={node?.kind === 'chamfer' ? 'Chamfer edge replacements' : 'Fillet edge replacements'}>
           {edgeReplacement.group.references.map((name, slot) => <div className="row-actions" key={name}>

@@ -238,6 +238,7 @@ import { DraftsPanel } from './ui/DraftsPanel';
 import { isBodyEyeVisibilityOnly } from './state/bodyVisibilityReferenceProblems';
 import { heldDraftFacePreviewClear, heldDraftFaceWorkCurrent } from './state/heldDraftFaceSession';
 import { useHeldDraftFace } from './state/useHeldDraftFace';
+import { useHeldShellFace } from './state/useHeldShellFace';
 import { useHeldFinishEdge } from './state/useHeldFinishEdge';
 import { refreshDownstreamProblems } from './state/referenceDecisions';
 import { resolveShopRows } from '@barocss/cad-model/engine/shopRows';
@@ -1353,6 +1354,28 @@ export function App() {
     notice: setToast,
     retireNotice: clearOwnedNotice,
   });
+  const shellFaceEditor = useHeldShellFace({
+    doc, index: editNode, problems: refProblems, bodies,
+    enabled: fresh && !busy && !workerFailure && marker === null && !shownVariant.current && !inPlace && !active && !section &&
+      !sketch && !rendering && !drawing && !measure && !directSel.length && !instanceSel.length &&
+      !previewBodies && !assembly.draft && !cageEd.session && !skel.session && !bodyDrag && !instDrag && !exploded &&
+      !routePanelOpen && !routePreviewBodies && !parameterEdit && previewMode === 'none',
+    ownsSource: () => finishEdgeOpen === openIntent.current && ownsEvaluatedSource() && shownDocNow.current === doc
+      && editNodeNow.current === editNode && bodiesRef.current === bodies && referenceProblems.current.get(doc) === refProblems
+      && !shownVariant.current && !inPlaceNow.current && !activeStore.get() && !sectionRef.current
+      && !nodeEditorDraft.current && !parameterEditNow.current && !project.opening(),
+    evaluate: next => engine.part(prefixDoc(next, next.nodes.length), revision.current++, 'refs'),
+    refreshProblems: (next, releasedNode, remaining, nextBodies) =>
+      refreshDownstreamProblems(next, releasedNode, remaining, nextBodies, partDoc => engine.part(partDoc, revision.current++, 'refs')),
+    accept: (next, _resolved, nextProblems) => {
+      void _resolved;
+      if (!commit(next, false, false, true)) return false;
+      referenceProblems.current.set(next, [...nextProblems]);
+      return true;
+    },
+    notice: setToast,
+    retireNotice: clearOwnedNotice,
+  });
   const replacementEndpointLocations = finishEdgeEditor.current?.endpoints;
   const displayedFilletEndpoints = replacementEndpointLocations ?? filletEndpointLocations;
   const measureInstances = useRef<ReadonlyMap<string, PlacedMeasureSource>>(new Map());
@@ -1687,6 +1710,7 @@ export function App() {
       dismissInspection: () => !help && !palette && !stepAsk && !workspaceModeExit.pending
         && (cancelNativeReview(true) || clearConstraintInspection(constraintInspection, sketch)),
       heldDraftFace: heldDraftFace.view ? heldDraftFace.cancel : undefined,
+      heldShellFace: shellFaceEditor.current ? shellFaceEditor.cancel : undefined,
       finishEdge: finishEdgeEditor.current ? finishEdgeEditor.cancel : undefined,
       stepExport: stepAsk ? clearStepAsk : undefined,
     },
@@ -1831,7 +1855,7 @@ export function App() {
       exactView: sectionExactShown && shownBodies === sectionBodies, showSelection: !!(section && sectionBodies && !sketch && !previewBodies),
       sourceEdges: liveMeasurement.picks ?? selection.edges },
     highlights: { replacement: finishEdgeEditor.previewEdges, hideSource: !!(routePreviewBodies || routePanelOpen || shownPreviewBodies || sketch),
-      mateFaces: mateFaces ? assembly.highlight.faces : null, source: liveMeasurement.selection ?? selection },
+      mateFaces: mateFaces ? assembly.highlight.faces : null, source: shellFaceEditor.previewSelection ?? liveMeasurement.selection ?? selection },
   });
   commandPickScope.current = viewportSelection.commandScope;
   // (The locked references and the keep-outs, A6.3: drawn ghosted after the part's bodies, never picked.)
@@ -1978,6 +2002,7 @@ export function App() {
     },
     actions: picking, historyPreview: !!historyPreviewBodies,
     draftFace: !heldDraftFace.view ? null : heldDraftFace.view.kind === 'ready' ? { kind: 'ready' } : { kind: 'picking', pick: heldDraftFace.pick },
+    shellFace: shellFaceEditor.current ? shellFaceEditor.pick : undefined,
     finishEdge: finishEdgePick, proposedInstances: placedProposal,
     filter: pickFilter, command: { active: !!active, edgeFillet: active?.fillet?.type === 'edge' },
     bandRailsAvailable: !section && !measure && !assembly.draft, meshBoxCrossing,
@@ -2241,12 +2266,15 @@ export function App() {
           editor={{ onFilletStations: publishFilletStations, filletEndpoints: replacementEndpointLocations ?? historyEndpointLocations,
             alignPreview: historyAlign, oppositeRadiusPreview, readAlignTargets: readAlignHistoryTargets,
             draftFaceReplacement: heldDraftFace.available ? heldDraftFace : undefined,
+            shellFaceReplacement: shellFaceEditor.available ? { start: shellFaceEditor.start, cancel: shellFaceEditor.cancel,
+              apply: shellFaceEditor.apply, draft: shellFaceEditor.current } : undefined,
             edgeReplacement: finishEdgeEditor.available ? { start: finishEdgeEditor.start, cancel: finishEdgeEditor.cancel,
               apply: finishEdgeEditor.apply, draft: finishEdgeEditor.current, grouped: finishEdgeEditor.grouped,
               group: finishEdgeEditor.groupReview, selectSlot: finishEdgeEditor.selectSlot } : undefined,
             onDraft: reportNodeEditorDraft, pending: parameterEdit?.kind === 'direct',
             onDelete: opener => deleteNode(editNode, opener), onClose: () => closeHistoryEditor(() => {
               heldDraftFace.cancel();
+              shellFaceEditor.cancel();
               finishEdgeEditor.cancel();
               discardDirectCandidateRef.current();
             }),

@@ -42,6 +42,7 @@ interface KeyboardBindings {
     openHelp: () => void;
     dismissInspection: () => boolean;
     heldDraftFace?: () => void;
+    heldShellFace?: () => void;
     finishEdge?: () => void;
     stepExport?: () => void;
   };
@@ -106,7 +107,7 @@ function dispatchKey(event: KeyboardEvent, bindings: KeyboardBindings): void {
   if ((key === 'Enter' || key === ' ') && control) return;
   if (key === 'Tab' && (control || typing || (target instanceof HTMLElement && target.tabIndex >= 0))) return;
   if (key === 'Escape') {
-    const dismiss = dialog.heldDraftFace ?? dialog.finishEdge ?? dialog.stepExport;
+    const dismiss = dialog.heldDraftFace ?? dialog.heldShellFace ?? dialog.finishEdge ?? dialog.stepExport;
     if (dismiss) { event.preventDefault(); dismiss(); return; }
   }
   if (bindings.cageKey?.(event)) return;

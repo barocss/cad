@@ -20,6 +20,7 @@ interface SceneSelectionInputs {
   actions: ScenePickingActions;
   historyPreview: boolean;
   draftFace: { kind: 'ready' } | { kind: 'picking'; pick: PickAction } | null;
+  shellFace?: PickAction;
   finishEdge: PickAction | undefined;
   proposedInstances: ReadonlyMap<string, unknown> | undefined;
   filter: PickFilter;
@@ -33,7 +34,7 @@ const ignoreBodyActions = { onPickBody: ignore, onPickChain: ignore, onBoxSelect
 
 /** Route picks to the editor that owns the displayed geometry. */
 export function sceneSelection({
-  display, actions, historyPreview, draftFace, finishEdge, proposedInstances, filter, command, bandRailsAvailable, meshBoxCrossing,
+  display, actions, historyPreview, draftFace, shellFace, finishEdge, proposedInstances, filter, command, bandRailsAvailable, meshBoxCrossing,
 }: SceneSelectionInputs): SceneSelection {
   const draftPick = draftFace?.kind === 'picking' ? draftFace.pick : undefined;
   let routed = actions;
@@ -42,6 +43,8 @@ export function sceneSelection({
       ...(draftFace?.kind === 'ready' ? { onPickProfile: ignore } : {}) };
   } else if (draftPick) {
     routed = { ...actions, ...ignoreBodyActions, onPick: draftPick, onPickProfile: ignore };
+  } else if (shellFace) {
+    routed = { ...actions, ...ignoreBodyActions, onPick: shellFace, onPickProfile: ignore };
   } else if (finishEdge) {
     routed = { ...actions, ...ignoreBodyActions, onPick: finishEdge };
   } else if (proposedInstances) {
@@ -52,8 +55,8 @@ export function sceneSelection({
   return {
     ...display,
     actions: routed,
-    pickFilter: draftPick ? 'face' : finishEdge || (command.edgeFillet && filter === 'edge') ? 'edge' : command.active ? 'all' : filter,
-    bandRailPicking: bandRailsAvailable && !command.active && !finishEdge && !draftFace,
+    pickFilter: draftPick || shellFace ? 'face' : finishEdge || (command.edgeFillet && filter === 'edge') ? 'edge' : command.active ? 'all' : filter,
+    bandRailPicking: bandRailsAvailable && !command.active && !finishEdge && !draftFace && !shellFace,
     meshBoxCrossing,
   };
 }

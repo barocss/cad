@@ -39,7 +39,7 @@ interface Props {
   inset: { roundedPending: boolean; detach: ApplyOptions['changes']['applyRoundedInsetEdit'];
     problem?: string; relink: Editor['onRelinkInset'] };
   editor: Pick<Editor, 'onFilletStations' | 'filletEndpoints' | 'alignPreview' | 'oppositeRadiusPreview' | 'readAlignTargets' |
-    'edgeReplacement' | 'draftFaceReplacement' | 'onDraft' | 'pending' | 'onDelete' | 'onClose'>;
+    'edgeReplacement' | 'draftFaceReplacement' | 'shellFaceReplacement' | 'onDraft' | 'pending' | 'onDelete' | 'onClose'>;
   worker: { engine: Pick<EngineClient, 'faceEndDistance' | 'evaluate' | 'part'>; nextRevision(): number };
   changes: Omit<ApplyOptions['changes'], 'applyRoundedInsetEdit'>;
   onNotice: Dispatch<SetStateAction<StudioNotice | null>>;

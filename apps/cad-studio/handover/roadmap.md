@@ -1,12 +1,12 @@
 # CAD roadmap — current status and execution order
 
-Updated 2026-11-25 · Priority authority: D520 · Latest delivery: D2000 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
+Updated 2026-11-25 · Priority authority: D520 · Latest delivery: D2001 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
 
 This is the only current status index. Detailed tracks define acceptance; the 34 stable row pages retain scope and issue navigation. Immutable decision notes retain results. Do not append chronological status paragraphs here. [D520 decision](notes/cad-roadmap-replan-2026-11-04/README.md) supersedes D445 execution order and historical next-item text, while retaining its safeguards and bounded proofs.
 
 ## Now and next
 
-- **Current position:** [D2000](notes/held-shell-candidate-preview-2026-11-25/README.md), P1 reference recovery. Preview the candidate opening face of a held single-opening Shell on its current visible source without applying it or releasing a downstream held finish ([#20](https://github.com/barocss/cad/issues/20) remains open). The P2 [D1999](notes/drawing-linear-arrows-2026-11-25/README.md), [D1998](notes/drawing-foreshortened-radius-2026-11-25/README.md) and [D1996](notes/drawing-fractional-inch-2026-11-25/README.md) results remain closed.
+- **Current position:** [D2001](notes/held-shell-face-pick-2026-11-25/README.md), P1 reference recovery. Direct 3D viewport planar face pick with explicit confirmation (`Replace face` → 3D click → `Apply face`) restores a held single-opening Shell on the U-block fixture, refuses non-candidate faces, preserves document/history on Cancel, and refreshes downstream held Chamfer candidates without auto-applying Chamfer ([#20](https://github.com/barocss/cad/issues/20) remains open). The P2 [D1999](notes/drawing-linear-arrows-2026-11-25/README.md), [D1998](notes/drawing-foreshortened-radius-2026-11-25/README.md) and [D1996](notes/drawing-fractional-inch-2026-11-25/README.md) results remain closed.
 - **Next MAIN:** Select the oldest uncovered, actionable P1 acceptance against the current source and existing issue evidence. Keep arbitrary curved targets and implicit joins outside the verified end-face contract.
 - **Separate follow-ups:** Continue Studio App extraction in cohesive parts with affected desktop checks. [#608 Rendering](https://github.com/barocss/cad/issues/608) stays on HOLD. API inventory drift remains open. The issue tracker records [#126](https://github.com/barocss/cad/issues/126), [#613](https://github.com/barocss/cad/issues/613), [#152](https://github.com/barocss/cad/issues/152) and [#22](https://github.com/barocss/cad/issues/22) as closed.
 - **Active repository:** [barocss/cad](https://github.com/barocss/cad), based on `origin/main`. Fetch before work and preserve unexpected changes. The [migration record](../../../docs/migration/README.md) maps the former `local/cad-dev` history and issue numbers.
