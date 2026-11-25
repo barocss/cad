@@ -4,8 +4,9 @@ import { rectanglePart, withNode, prefixDoc, type StudioDoc } from '@barocss/cad
 import { evaluateDoc } from '@barocss/cad-model/engine/evaluate';
 import { evaluationKey } from '@barocss/cad-model/engine/evalMemo';
 import { signaturesOf } from '@barocss/cad-model/engine/rematch';
-import { toSig } from '@barocss/cad-model/engine/references';
+import { captureSignatures, confirmReference, toSig, verifyReferences } from '@barocss/cad-model/engine/references';
 import { candidateReferenceProblem, refreshCandidateReferences } from '../src/state/candidateReferences';
+import { refreshDownstreamProblems } from '../src/state/referenceDecisions';
 
 function evaluated(doc: StudioDoc) {
   const result = evaluateDoc(doc, 1); if (!result.ok) throw new Error(result.error.hint); return result;
@@ -55,4 +56,46 @@ test('a successful parent evaluation missing the exact referenced name is refuse
   await assert.rejects(refreshCandidateReferences({ candidate: f.candidate, key: evaluationKey(f.candidate), result: f.result,
     accepted: () => null, isCurrent: () => true,
     evaluateParent: async () => ({ ...f.parent, bodies: [] }) }), /needs an explicit choice/);
+});
+
+test('releasing a held parent Chamfer refreshes downstream bevel-edge candidates without mutating the document', async () => {
+  const readPart = async (doc: StudioDoc) => evaluateDoc(doc, 1);
+  const stock = rectanglePart(80, 40, 10);
+  const [sketch, extrude] = stock.nodes;
+  assert.ok(sketch.kind === 'sketch' && sketch.profile === 'rectangle');
+  const base: StudioDoc = { ...stock, nodes: [{ ...sketch, min: [-20, -20], max: [60, 20],
+    sideTags: { outer: ['e1', 'e2', 'e3', 'e4'] } }, extrude] };
+  const withN2 = captureSignatures(withNode(base, { kind: 'chamfer', parent: { node: 1, side: 'solid' }, edges: ['n1.side[e1]|n1.side[e4]'], distance: 4 }), evaluated(base).bodies);
+  const withN3 = captureSignatures(withNode(withN2, { kind: 'chamfer', parent: { node: 2, side: 'solid' }, edges: ['n1.side[e1]|n2.face'], distance: 1 }), evaluated(withN2).bodies);
+  const retired = structuredClone(withN3);
+  assert.ok(retired.nodes[0].kind === 'sketch' && retired.nodes[0].profile === 'rectangle');
+  retired.nodes[0].min[1] = -18;
+  retired.nodes[0].sideTags!.outer[0] = 'e5';
+
+  const opened = await verifyReferences(retired, [], readPart);
+  assert.deepEqual(opened.problems.map(p => [p.node, p.name, p.candidates]), [
+    [2, 'n1.side[e1]|n1.side[e4]', ['n1.side[e4]|n1.side[e5]']],
+    [3, 'n1.side[e1]|n2.face', ['n1.side[e4]|n1.side[e5]']],
+  ]);
+  const afterN2 = await confirmReference(opened.doc, opened.problems[0].index, evaluated(opened.doc).bodies, readPart, 'n1.side[e4]|n1.side[e5]');
+  const snapshot = structuredClone(afterN2);
+  const refreshed = await refreshDownstreamProblems(afterN2, 2, [opened.problems[1]], evaluated(afterN2).bodies, readPart);
+  assert.deepEqual(afterN2, snapshot);
+  assert.deepEqual(refreshed.map(p => [p.node, p.name, p.candidates]), [
+    [3, 'n1.side[e1]|n2.face', ['n1.side[e5]|n2.face']],
+  ]);
+
+  // Same-name dependent edge (n1.top|n2.face) reappears as an explicit candidate once n2 is restored.
+  const sameName = captureSignatures(withNode(withN2, { kind: 'chamfer', parent: { node: 2, side: 'solid' }, edges: ['n1.top|n2.face'], distance: 1 }), evaluated(withN2).bodies);
+  const sameRetired = structuredClone(sameName);
+  assert.ok(sameRetired.nodes[0].kind === 'sketch' && sameRetired.nodes[0].profile === 'rectangle');
+  sameRetired.nodes[0].min[1] = -18;
+  sameRetired.nodes[0].sideTags!.outer[0] = 'e5';
+  const sameOpened = await verifyReferences(sameRetired, [], readPart);
+  assert.deepEqual(sameOpened.problems[1].candidates, []);
+  const sameAfterN2 = await confirmReference(sameOpened.doc, sameOpened.problems[0].index, evaluated(sameOpened.doc).bodies, readPart, 'n1.side[e4]|n1.side[e5]');
+  const sameRefreshed = await refreshDownstreamProblems(sameAfterN2, 2, [sameOpened.problems[1]], evaluated(sameAfterN2).bodies, readPart);
+  assert.deepEqual(sameRefreshed.map(p => [p.node, p.name, p.candidates]), [
+    [3, 'n1.top|n2.face', ['n1.top|n2.face']],
+  ]);
 });

@@ -2,7 +2,7 @@ import type { RefObject } from 'react';
 import type { Selection } from '@barocss/cad-model/app/commands';
 import { prefixDoc, type StudioDoc } from '@barocss/cad-model/engine/doc';
 import type { BodyResult, EvalResult } from '@barocss/cad-model/engine/evaluate';
-import { candidatesFor, confirmReference, type Problem } from '@barocss/cad-model/engine/references';
+import { candidatesFor, confirmReference, verifyReferences, type Problem } from '@barocss/cad-model/engine/references';
 import type { StudioNotice } from '../app/studioNotice';
 import type { DrawingReferencePreview } from '../ui/DrawingWorkspace';
 import type { ReferenceFocusReceipt } from '../ui/referenceFocus';
@@ -37,6 +37,27 @@ interface ReferenceDecisionOptions {
   };
 }
 
+/** Refresh downstream held feature candidates after releasing an earlier held feature, without mutating `doc`. */
+export async function refreshDownstreamProblems(
+  doc: StudioDoc,
+  releasedNode: number,
+  remaining: readonly Problem[],
+  bodies: readonly BodyResult[],
+  readPart: (doc: StudioDoc) => Promise<EvalResult>,
+): Promise<Problem[]> {
+  if (!remaining.some(value => value.node !== null && value.node > releasedNode)) return [...remaining];
+  const verified = await verifyReferences(doc, bodies, readPart);
+  return remaining.map(value => {
+    if (value.node === null || value.node <= releasedNode) return value;
+    const fresh = verified.problems.find(item => item.index === value.index);
+    if (fresh) return fresh;
+    if (!verified.changes.some(change => change.where === value.where && change.was === value.name)) {
+      return { ...value, candidates: [value.name], reason: undefined };
+    }
+    return value;
+  });
+}
+
 export function createReferenceDecisions({ model, owner, focus, readPart, changes }: ReferenceDecisionOptions) {
   const { doc, bodies, problems } = model;
 
@@ -57,17 +78,22 @@ export function createReferenceDecisions({ model, owner, focus, readPart, change
     const pending = heldFinish && problem ? remaining.find(value => value.node === problem.node) : undefined;
     const next = await confirmReference(doc, index, bodies, readPart, to, undefined, pending);
     if (!current() || next === doc) return false;
+    let nextProblems = remaining;
     if (heldFinish && !pending) {
       const result = await readPart(prefixDoc(next, next.nodes.length));
       if (!current()) return false;
       if (!result.ok) { changes.notice({ ...result.error, title: 'Reference not applied' }); return false; }
+      if (problem?.node != null) {
+        nextProblems = await refreshDownstreamProblems(next, problem.node, remaining, result.bodies, readPart);
+        if (!current()) return false;
+      }
     }
 
     changes.pushUndo();
     if (!changes.setDoc(next)) return false;
     if (keyboardButton && focusRequest === focus.request.current)
       focus.receipt.current = { doc: next, scope: owner.open.current, button: keyboardButton };
-    changes.remember(next, remaining);
+    changes.remember(next, nextProblems);
     changes.setChoices(null);
     changes.setDirty(true);
     return true;
