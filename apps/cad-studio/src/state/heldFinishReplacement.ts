@@ -49,14 +49,15 @@ export function replaceHeldFinishGroup(doc: StudioDoc, index: number, problems: 
 }
 
 /** Direct replacement releases a pair only when its other authored line still has its original identity. */
-export function heldFinishProblem(doc: StudioDoc, index: number, problems: readonly Problem[], body: BodyResult): Problem | undefined {
+export function heldFinishProblem(doc: StudioDoc, index: number, problems: readonly Problem[], body: BodyResult, allowDownstream = false): Problem | undefined {
  const node = doc.nodes[index];
  if (heldFinishReplaceable(node, doc.parameters)) {
   if (node.kind === 'fillet' && node.radii && index !== doc.nodes.length - 1) return;
   return problems.find(problem => problem.node === index && problem.name === node.edges[0]);
  }
  if (!isHeldConstantFinishGroup(node) || node.kind !== 'fillet' || node.edges.length !== 2 ||
-     index !== doc.nodes.length - 1 || !positiveSize(node.radius, doc.parameters)) return;
+     (allowDownstream ? index !== doc.nodes.length - 2 : index !== doc.nodes.length - 1) ||
+     !positiveSize(node.radius, doc.parameters)) return;
  const failures = problems.filter(problem => problem.node === index);
  if (failures.length !== 1) return;
  const [problem] = failures;
@@ -89,11 +90,12 @@ export function heldFinishCandidate(finish: HeldFinish, edge: DisplayEdge | unde
  return {name:edge.names[0],endpoints};
 }
 /** Explicit new Start/End assignment; radius values and parameter references are retained verbatim; shaped laws are not offered. */
-export function heldFinishReplacement(doc:StudioDoc,index:number,edge:DisplayEdge,edges:readonly DisplayEdge[],signature:Sig, heldName?: string): StudioDoc | null {
+export function heldFinishReplacement(doc:StudioDoc,index:number,edge:DisplayEdge,edges:readonly DisplayEdge[],signature:Sig, heldName?: string, allowDownstream = false): StudioDoc | null {
  const original=doc.nodes[index];
  if (heldName !== undefined) {
   if (!isHeldConstantFinishGroup(original) || original.kind !== 'fillet' || original.edges.length !== 2 ||
-      index !== doc.nodes.length - 1 || !original.edges.includes(heldName) ||
+      (allowDownstream ? index !== doc.nodes.length - 2 : index !== doc.nodes.length - 1) ||
+      !original.edges.includes(heldName) ||
       !positiveSize(original.radius, doc.parameters) || signature.k !== 'line' || signature.n !== undefined) return null;
  } else if (!heldFinishReplaceable(original,doc.parameters)||(original.kind==='fillet'&&original.radii&&index!==doc.nodes.length-1)) return null;
  const candidate=heldFinishCandidate(original,edge,edges,doc.parameters,heldName);if('error'in candidate)return null;

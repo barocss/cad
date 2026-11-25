@@ -1,6 +1,6 @@
 import { heldFinishGroupProblems, heldFinishProblem, heldFinishCandidate, heldFinishReplacement,
   replaceHeldFinishGroup, validFinishGroupEdge, type ReplacementEndpoints } from './heldFinishReplacement';
-import { heldChamferThroughHole, parentChamferEdge } from '@barocss/cad-model/engine/heldChamferThroughHole';
+import { heldChamferThroughHole, heldPairedFilletThroughHole, parentChamferEdge, parentPairedFilletEdge } from '@barocss/cad-model/engine/heldChamferThroughHole';
 import { useCallback, useLayoutEffect, useRef, useState } from 'react';
 import type { DisplayEdge } from '@barocss/cad-model/engine/mesh';
 import type { ModelNode, StudioDoc } from '@barocss/cad-model/engine/doc';
@@ -14,7 +14,7 @@ type Finish = Extract<ModelNode, { kind: 'fillet' | 'chamfer' }>;
 type Hit = { edge: { body: number; edge: number } | null; edgeMesh?: BodyResult['mesh']; instance?: string };
 type GroupDraft = { slot: number | null; edges: (DisplayEdge | undefined)[]; ownsSource(): boolean };
 type Draft = { doc: StudioDoc; index: number; name: string | null; endpoints?: ReplacementEndpoints;
-  edge?: DisplayEdge; parent?: BodyResult; pending?: boolean; group?: GroupDraft };
+  edge?: DisplayEdge; sourceEdge?: DisplayEdge; parent?: BodyResult; pending?: boolean; group?: GroupDraft };
 export type HeldFinishGroupReview = { references: string[]; picks: (string | undefined)[]; slot: number | null };
 export interface HeldFinishEdgeEditor {
   start(): void;
@@ -43,10 +43,12 @@ export function useHeldFinishEdge({ doc, index, problems, bodies, enabled, ownsS
   const finish: Finish | null = node?.held && (node.kind === 'fillet' || node.kind === 'chamfer') ? node : null;
   // A terminal held feature exposes its source as a passthrough body.
   const sources = finish && index !== null ? bodies.filter(b => b.key === bodyKeyFor(doc.nodes, index, 'solid')) : [];
-  const downstream = enabled && index !== null && !sources.length ? heldChamferThroughHole(doc, index, bodies) : undefined;
-  const strictSource = finish && (finish.edges.length > 1 || (finish.kind === 'fillet' && finish.radii));
+  const downstreamChamfer = enabled && index !== null && !sources.length ? heldChamferThroughHole(doc, index, bodies) : undefined;
+  const downstreamFillet = enabled && index !== null && !sources.length && !downstreamChamfer ? heldPairedFilletThroughHole(doc, index, bodies) : undefined;
+  const downstream = downstreamChamfer ?? downstreamFillet;
+  const strictSource = finish && ((finish.edges.length > 1 && !downstreamFillet) || (finish.kind === 'fillet' && finish.radii));
   const body = strictSource && sources.length !== 1 ? undefined : sources[0] ?? downstream?.body;
-  const problem = enabled && body && index !== null ? heldFinishProblem(doc, index, problems, body) : undefined;
+  const problem = enabled && body && index !== null ? heldFinishProblem(doc, index, problems, body, !!downstreamFillet) : undefined;
   const group = enabled && body && index !== null ? heldFinishGroupProblems(doc, index, problems) : undefined;
   const [firstProblem, secondProblem, thirdProblem] = group ?? [];
   const heldName = finish?.edges.length === 2 ? problem?.name : undefined;
@@ -87,11 +89,13 @@ export function useHeldFinishEdge({ doc, index, problems, bodies, enabled, ownsS
     if (ticket.current !== request || !ownsSource()) return;
     ticket.current = null;
     if (parent?.ref?.node === downstream.parent.node && parent.ref.side === downstream.parent.side &&
-        parent.topology?.kind === 'solid' && parent.topology.bodyCount === 1) {
+        parent.topology?.kind === 'solid' && parent.topology.bodyCount === 1 &&
+        (!downstreamFillet || heldFinishProblem(doc, index, problems, parent, true)?.name === problem?.name)) {
       setDraft({ ...opened, parent });
     } else {
       setDraft(null);
-      reportFailure({ title: 'Edge replacement unavailable', hint: 'The original Chamfer body could not be read.', detail: '' });
+      reportFailure({ title: 'Edge replacement unavailable',
+        hint: downstreamFillet ? 'The original Fillet body could not be read.' : 'The original Chamfer body could not be read.', detail: '' });
     }
   };
   const selectSlot = (slot: number) => {
@@ -117,15 +121,18 @@ export function useHeldFinishEdge({ doc, index, problems, bodies, enabled, ownsS
       return true;
     }
     const source = current.parent ?? body;
-    const original = downstream ? current.parent && parentChamferEdge(downstream, current.parent, edge) : edge;
-    const candidate = finish && heldFinishCandidate(finish,original,source.mesh.edges,doc.parameters,heldName);
+    const original = downstreamChamfer ? current.parent && parentChamferEdge(downstreamChamfer, current.parent, edge)
+      : downstreamFillet ? current.parent && parentPairedFilletEdge(downstreamFillet, current.parent, edge) : edge;
+    const candidate = finish && heldFinishCandidate(finish, original, source.mesh.edges, doc.parameters, heldName);
     if(candidate && !('error' in candidate)) {
       if (current.edge !== edge) clearFailure();
-      setDraft({...current,...candidate,edge});
+      setDraft({...current,...candidate,edge,sourceEdge:original});
     }
     else {
-      setDraft({...current,name:null,endpoints:undefined,edge:undefined});
-      const hint = downstream ? 'Select an original straight top edge clear of the Through Hole.'
+      setDraft({...current,name:null,endpoints:undefined,edge:undefined,sourceEdge:undefined});
+      const hint = candidate && 'error' in candidate && original ? candidate.error
+        : downstreamChamfer ? 'Select an original straight top edge clear of the Through Hole.'
+        : downstreamFillet ? 'Select a different original straight edge clear of the Through Hole.'
         : candidate && 'error' in candidate ? candidate.error : 'Select one edge on the body of this feature.';
       if (downstream) reportFailure({ title: 'Edge not selected', hint, detail: '' });
       else notice({ title: 'Edge not selected', hint, detail: '' });
@@ -142,8 +149,8 @@ export function useHeldFinishEdge({ doc, index, problems, bodies, enabled, ownsS
     if (!candidates.length || (varying && (candidates.length !== 1 || selected.edge !== candidates[0] || !selected.endpoints
       || !selected.endpoints.start.every((value, i) => value === candidates[0].a[i])
       || !selected.endpoints.end.every((value, i) => value === candidates[0].b[i])))) return null;
-    if (heldName !== undefined && (candidates.length !== 1 || selected.edge !== candidates[0])) return null;
-    return heldFinishReplacement(doc, selected.index, candidates[0], source.mesh.edges, toSig(signature), heldName);
+    if (heldName !== undefined && (candidates.length !== 1 || (selected.sourceEdge ?? selected.edge) !== candidates[0])) return null;
+    return heldFinishReplacement(doc, selected.index, candidates[0], source.mesh.edges, toSig(signature), heldName, !!downstreamFillet);
   };
   const apply = async () => {
     if (!current || current.pending || !body || !finish || !ownsSource()) return;

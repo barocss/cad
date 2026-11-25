@@ -7,7 +7,7 @@ import { toSig } from '@barocss/cad-model/engine/references';
 import { signaturesOf } from '@barocss/cad-model/engine/rematch';
 import { heldFinishGroupProblems, heldFinishRadiusText, heldFinishCandidate, heldFinishProblem, heldFinishReplaceable,
  heldFinishReplacement, replaceHeldFinishGroup, type HeldFinish } from '../src/state/heldFinishReplacement';
-import { heldChamferThroughHole, parentChamferEdge } from '@barocss/cad-model/engine/heldChamferThroughHole';
+import { heldChamferThroughHole, heldPairedFilletThroughHole, parentChamferEdge, parentPairedFilletEdge } from '@barocss/cad-model/engine/heldChamferThroughHole';
 const finish:Extract<HeldFinish,{kind:'fillet'}>={id:'repair',kind:'fillet',parent:{node:1,side:'solid'},edges:['missing'],radius:1,held:'missing edge',suppressed:true,radii:[{at:[0,0,0],radius:1,atEnd:true},{at:[10,0,0],radius:3,atEnd:true}]};
 const edge:DisplayEdge={index:0,faces:[0,1],a:[0,20,10],b:[30,20,10],straight:true,axis:'x',names:['new-edge'],nativeLine:true};
 const sig={k:'curve' as const,p:[15,20,10] as [number,number,number],s:30};
@@ -262,4 +262,75 @@ test('bound radius admission requires an exact reference and an own finite posit
   assert.equal(heldFinishRadiusText({parameter:'StartR'},{StartR:1}),'StartR (1)');
   assert.equal(heldFinishRadiusText({parameter:'StartR'},{StartR:2}),'StartR (2)');
   for(const parameters of [{},{StartR:NaN},{StartR:0}] as Record<string,number>[])assert.equal(heldFinishRadiusText({parameter:'StartR'},parameters),'StartR (unavailable)');
+ });
+
+ test('a through Hole leaves a complete original straight edge available for a held paired Constant Fillet', () => {
+  const stock = rectanglePart(60, 40, 10);
+  const before = evaluatePart(stock, 1);
+  assert.ok(before.ok);
+  const [parent] = before.bodies;
+  const parentSigs = signaturesOf(parent).edges;
+  const verticalEdges = parent.mesh.edges.filter(item => item.nativeLine && item.a[2] !== item.b[2]);
+  const [pickedOrigin, retainedOrigin] = verticalEdges;
+  assert.ok(pickedOrigin && retainedOrigin);
+  const keep = retainedOrigin.names[0], targetName = pickedOrigin.names[0], retired = 'retired-edge';
+  const savedKeep = toSig(parentSigs.get(keep)!);
+  const fillet = withNode(stock, {
+   kind: 'fillet', parent: { node: 1, side: 'solid' }, edges: [retired, keep], radius: 2,
+   held: 'Missing Fillet edge', suppressed: true,
+   sigs: { [retired]: { k: 'line', p: [-4, -4, 5], d: [0.6, 0.8, 0], s: 10 }, [keep]: savedKeep },
+  });
+  const hole = { kind: 'hole', parent: { node: 2, side: 'solid' }, face: 'n1.top', center: [30, 20], radius: 2 } as const;
+  const through = (center: [number, number]) => withNode(fillet, { ...hole, center });
+  const doc = through([30, 20]);
+  const held = evaluatePart(doc, 2);
+  assert.ok(held.ok);
+  const [visible] = held.bodies;
+  const scope = heldPairedFilletThroughHole(doc, 2, held.bodies);
+  assert.ok(scope);
+  const problem = { index: 0, where: 'feature 2', node: 2, name: retired, candidates: [] };
+  assert.equal(heldFinishProblem(doc, 2, [problem], visible), undefined);
+  assert.equal(heldFinishProblem(doc, 2, [problem], visible, true), problem);
+
+  const visibleEdge = visible.mesh.edges.find(item => item.names[0] === targetName);
+  assert.ok(visibleEdge);
+  assert.equal(parentPairedFilletEdge(scope, parent, visibleEdge), pickedOrigin);
+  assert.equal(parentPairedFilletEdge(scope, parent, visible.mesh.edges.find(item => item.nativeCircle)), undefined);
+
+  const using = (changed: DisplayEdge, extra: DisplayEdge[] = []) => {
+   const edges = visible.mesh.edges.map(item => item === visibleEdge ? changed : item).concat(extra);
+   return { ...scope, body: { ...visible, mesh: { ...visible.mesh, edges } } };
+  };
+  const reversed = { ...visibleEdge, a: visibleEdge.b, b: visibleEdge.a };
+  assert.equal(parentPairedFilletEdge(using(reversed), parent, reversed), pickedOrigin);
+  const shortened: DisplayEdge = { ...visibleEdge, a: [visibleEdge.a[0], visibleEdge.a[1], visibleEdge.a[2] + 1e-8] };
+  assert.equal(parentPairedFilletEdge(using(shortened), parent, shortened), undefined);
+  assert.equal(parentPairedFilletEdge(using(visibleEdge, [{ ...visibleEdge }]), parent, visibleEdge), undefined);
+
+  const closeCenter: [number, number] = [
+   pickedOrigin.a[0] === 0 ? 3 : 57,
+   pickedOrigin.a[1] === 0 ? 3 : 37,
+  ];
+  const closeDoc = through(closeCenter), closeResult = evaluatePart(closeDoc, 3);
+  assert.ok(closeResult.ok);
+  const closeScope = heldPairedFilletThroughHole(closeDoc, 2, closeResult.bodies);
+  assert.ok(closeScope);
+  const closeEdge = closeScope.body.mesh.edges.find(item => item.names[0] === targetName);
+  assert.ok(closeEdge?.nativeLine);
+  assert.equal(parentPairedFilletEdge(closeScope, parent, closeEdge), undefined);
+  assert.equal(heldPairedFilletThroughHole(withNode(fillet, { ...hole, center: [30, 20], depth: 2 }), 2, held.bodies), undefined);
+
+  const next = heldFinishReplacement(doc, 2, pickedOrigin, parent.mesh.edges, toSig(parentSigs.get(targetName)!), retired, true);
+  assert.ok(next);
+  const repaired = next.nodes[2];
+  assert.equal(repaired.kind, 'fillet');
+  if (repaired.kind === 'fillet') {
+   assert.deepEqual(repaired.edges, [targetName, keep]);
+   assert.equal(repaired.sigs?.[keep], savedKeep);
+   assert.deepEqual(repaired.sigs?.[targetName], toSig(parentSigs.get(targetName)!));
+   assert.equal(repaired.held, undefined);
+   assert.equal(repaired.suppressed, undefined);
+  }
+  assert.deepEqual(next.nodes[3], doc.nodes[3]);
+  assert.equal(heldFinishReplacement(doc, 2, pickedOrigin, parent.mesh.edges, toSig(parentSigs.get(targetName)!), retired), null);
  });

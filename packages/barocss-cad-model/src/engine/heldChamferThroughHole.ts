@@ -1,7 +1,7 @@
 import { CadNumericPolicy } from '@barocss/cad';
 import type { StudioDoc } from './doc';
 import type { BodyResult } from './evaluate';
-import { validFinishGroupEdge } from './heldFinishGroup';
+import { isHeldConstantFinishGroup, validFinishGroupEdge } from './heldFinishGroup';
 import { bodyKeyFor, featureId } from './ids';
 import type { DisplayEdge, Vec3 } from './mesh';
 
@@ -52,4 +52,63 @@ export function parentChamferEdge(scope: NonNullable<ReturnType<typeof heldChamf
   if (axis === undefined || !side || Math.abs(scope.center[axis] - side.at) <=
       scope.radius + scope.distance + 10 * CadNumericPolicy.linearTolerance) return;
   return original;
+}
+
+/** Held two-edge constant Fillet on an original rectangular Extrude before one independent top Through Hole. */
+export function heldPairedFilletThroughHole(doc: StudioDoc, index: number, bodies: readonly BodyResult[]) {
+  const finish = doc.nodes[index], hole = doc.nodes[index + 1], [body] = bodies;
+  if (index !== doc.nodes.length - 2 || !isHeldConstantFinishGroup(finish) || finish.kind !== 'fillet' ||
+      finish.edges.length !== 2 || finish.parent.side !== 'solid' ||
+      typeof finish.radius !== 'number' || !Number.isFinite(finish.radius) || finish.radius <= 0 ||
+      !finish.edges.every(name => finish.sigs?.[name]?.k === 'line' && finish.sigs[name].n === undefined) ||
+      hole?.kind !== 'hole' || hole.suppressed || hole.held || hole.parent.node !== index || hole.parent.side !== 'solid' ||
+      (hole.axis ?? 'z') !== 'z' || (hole.side ?? 'max') !== 'max' || hole.depth !== undefined ||
+      hole.pattern || hole.thread || hole.countersink !== undefined || hole.csk !== undefined ||
+      hole.center.some(value => typeof value !== 'number' || !Number.isFinite(value)) ||
+      typeof hole.radius !== 'number' || !Number.isFinite(hole.radius) || hole.radius <= 0 ||
+      bodies.length !== 1 || body.key !== bodyKeyFor(doc.nodes, index + 1, 'solid') ||
+      body.ref?.node !== index + 1 || body.ref.side !== 'solid' ||
+      body.topology?.kind !== 'solid' || body.topology.bodyCount !== 1) return;
+  const parent = doc.nodes[finish.parent.node];
+  const sketch = parent?.kind === 'extrude' ? doc.nodes[parent.sketch] : undefined;
+  const id = featureId(doc.nodes, finish.parent.node);
+  if (parent?.kind !== 'extrude' || parent.suppressed || (parent.draft ?? 0) !== 0 ||
+      sketch?.kind !== 'sketch' || sketch.profile !== 'rectangle' || sketch.suppressed ||
+      sketch.holes?.length || sketch.regions?.length || hole.face !== id + '.top') return;
+  return { body, parent: finish.parent, face: hole.face, center: hole.center as [number, number],
+    radius: hole.radius, filletRadius: finish.radius };
+}
+
+/** Match a complete original straight line on the Hole body to the earlier Fillet parent, requiring Hole clearance. */
+export function parentPairedFilletEdge(scope: NonNullable<ReturnType<typeof heldPairedFilletThroughHole>>,
+  parent: BodyResult, picked: DisplayEdge | undefined): DisplayEdge | undefined {
+  const visible = scope.body.mesh;
+  if (!picked?.nativeLine || !validFinishGroupEdge(picked, visible.edges)) return;
+  const original = parent.mesh.edges.find(edge => edge.names[0] === picked.names[0]);
+  if (!original?.nativeLine || !validFinishGroupEdge(original, parent.mesh.edges) ||
+      !((samePoint(picked.a, original.a) && samePoint(picked.b, original.b)) ||
+        (samePoint(picked.a, original.b) && samePoint(picked.b, original.a)))) return;
+  const faces = original.faces.map(index => parent.mesh.faces[index]);
+  const current = picked.faces.map(index => visible.faces[index]);
+  if (faces.length !== 2 || faces.some(face => {
+    if (!face?.nativePlaneName || !face.nativeAxisPlane) return true;
+    const other = current.find(item => item?.nativePlaneName === face.nativePlaneName);
+    return face.nativeAxisPlane.axis !== other?.nativeAxisPlane?.axis ||
+      face.nativeAxisPlane.at !== other.nativeAxisPlane.at;
+  })) return;
+  const planes = faces.map(face => face.nativeAxisPlane!);
+  const clearance = scope.radius + scope.filletRadius + 10 * CadNumericPolicy.linearTolerance;
+  const xPlane = planes.find(plane => plane.axis === 'x');
+  const yPlane = planes.find(plane => plane.axis === 'y');
+  const zPlane = planes.find(plane => plane.axis === 'z');
+  if (xPlane && yPlane) {
+    if (Math.abs(scope.center[0] - xPlane.at) <= clearance && Math.abs(scope.center[1] - yPlane.at) <= clearance) return;
+    return original;
+  }
+  if (zPlane && (xPlane || yPlane)) {
+    const side = xPlane ?? yPlane!;
+    const axis = side.axis === 'x' ? 0 : 1;
+    if (Math.abs(scope.center[axis] - side.at) <= clearance) return;
+    return original;
+  }
 }
