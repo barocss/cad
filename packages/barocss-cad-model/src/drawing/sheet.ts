@@ -28,6 +28,7 @@ import type { TableCell } from './types';
 import { VIEW_IDS, detailLetter, isDetailRef, isSectionRef, isViewId, sameSection, sectionHatchVisibilitySupported, sectionLetter, sectionsOf, type DetailRef, type DimView, type SectionRef } from './types';
 import { clipProjectionToDisk, clipRingsToDisk, detailScale, type DetailParent, type DrawingDetail } from './detail';
 import { clipProjectionOutside, clipRingsOutside } from './breaks';
+import { applyLinearCrossingBreaks, type CrossingBreakEvaluation } from './crossingBreak';
 import type { SectionCircleHatch } from './sectionCircleHatch';
 
 /** visible 0.5, hidden 0.35 dashed, thin 0.25 (dimensions, title block rules), centre 0.25 chain, phantom 0.25 two-dot chain (datum target lines and areas), frame 0.7. */
@@ -39,8 +40,12 @@ export const PENS: Record<Pen, { width: number; dash?: number[] }> = {
 export type LineRole = 'dimension' | 'extension' | 'leader' | 'frame' | 'weld';
 /** G24: an arrowhead (or a dot, a datum's triangle) as a head, sheet mm: its tip, its direction (unit), length and width. */
 export interface Head { style: 'filled' | 'open' | 'dot' | 'tick'; tip: XY; dir: XY; length: number; width: number }
+export interface CrossingBreakSplitInfo {
+  readonly origin: readonly [XY, XY];
+  readonly part: 0 | 1;
+}
 export type Mark =
-  | { kind: 'line'; a: XY; b: XY; pen: Pen; role?: LineRole }
+  | { kind: 'line'; a: XY; b: XY; pen: Pen; role?: LineRole; /** Transient 2D sheet crossing-break split metadata; 3D PMI reconstructs the unbroken line. */ crossingBreak?: CrossingBreakSplitInfo }
   /** `center + u·cos t + v·sin t`, t from t0 to t1 (sheet mm). */
   | { kind: 'arc'; center: XY; u: XY; v: XY; t0: number; t1: number; pen: Pen; role?: LineRole }
   | { kind: 'polyline'; points: XY[]; pen: Pen; role?: LineRole }
@@ -108,7 +113,7 @@ export interface SheetSectionPlaced { id: string; view: SectionViewId; placement
 /** DR-1: a detail as the sheet drew it: its parent, scale, placement (its circle's square) and clipped projection; where its dimensions are drawn. */
 export interface SheetDetail { id: string; view: DetailParent; scale: number; placement: ViewPlacement; projection: BrepProjection }
 /** `tables`: each table placed (its box), or why its source gave nothing (drawn with the reason). */
-export interface Sheet { /** Transient source preset for export style defaults; not an authored drawing setting. */ standard?: DrawingStandard; size: [number, number]; groups: MarkGroup[]; dimensions: Resolved[]; /** 11 ③b: the units the sheet prints in, when not plain mm (DXF dimension text follows them). */ units?: { units: DrawingUnits; dual: boolean; precision: UnitPrecision; inchFraction?: InchFractionDenominator }; tables?: { id: string; box: [number, number, number, number]; error?: string; /** FRa (O115): a table in blocks, this one's place: [k, of n]. */ part?: [number, number] }[]; /** FRd2 (O119): the weld symbols placed (each joint's view, arrow tip, seam edge) and the joints seen in no view. */ welds?: { placed: readonly WeldPlaced[]; unshown: readonly string[] }; /** O147 B2: the item balloons placed, the item numbers with no clear room, and those with no visible edge. */ balloons?: { placed: readonly BalloonPlaced[]; unclear: readonly number[]; noEdge: readonly number[] }; /** O148 X2: each section as placed (moved under its view's name) with its projection: where its dimensions are drawn. DR-4: `form` a removed or revolved one's, `on` the view a revolved one is drawn on. */ sections?: SheetSectionPlaced[]; /** DR-4: the removed sections with no free room, the revolved ones with no view to be drawn on. */ sectionsMissing?: { id: string; why: 'room' | 'view' }[]; /** DR-1: each detail drawn; `unplaced`: the details whose parent is not on the sheet, and those with no room. */ details?: SheetDetail[]; detailsMissing?: { id: string; why: 'parent' | 'room' | 'empty' }[] }
+export interface Sheet { /** Transient source preset for export style defaults; not an authored drawing setting. */ standard?: DrawingStandard; size: [number, number]; groups: MarkGroup[]; dimensions: Resolved[]; /** Optional crossing-break evaluations for authored manual linear dimension breaks. */ crossingBreaks?: readonly CrossingBreakEvaluation[]; /** 11 ③b: the units the sheet prints in, when not plain mm (DXF dimension text follows them). */ units?: { units: DrawingUnits; dual: boolean; precision: UnitPrecision; inchFraction?: InchFractionDenominator }; tables?: { id: string; box: [number, number, number, number]; error?: string; /** FRa (O115): a table in blocks, this one's place: [k, of n]. */ part?: [number, number] }[]; /** FRd2 (O119): the weld symbols placed (each joint's view, arrow tip, seam edge) and the joints seen in no view. */ welds?: { placed: readonly WeldPlaced[]; unshown: readonly string[] }; /** O147 B2: the item balloons placed, the item numbers with no clear room, and those with no visible edge. */ balloons?: { placed: readonly BalloonPlaced[]; unclear: readonly number[]; noEdge: readonly number[] }; /** O148 X2: each section as placed (moved under its view's name) with its projection: where its dimensions are drawn. DR-4: `form` a removed or revolved one's, `on` the view a revolved one is drawn on. */ sections?: SheetSectionPlaced[]; /** DR-4: the removed sections with no free room, the revolved ones with no view to be drawn on. */ sectionsMissing?: { id: string; why: 'room' | 'view' }[]; /** DR-1: each detail drawn; `unplaced`: the details whose parent is not on the sheet, and those with no room. */ details?: SheetDetail[]; detailsMissing?: { id: string; why: 'parent' | 'room' | 'empty' }[] }
 
 /** The plain sheet's lettering height; a drawing standard sets another (`p.text`, standard.ts). */
 export const TEXT = 3.5;
@@ -261,6 +266,7 @@ export function buildSheet(views: DrawingViews, layout: SheetLayout, settings: D
   const tables = tableGroups(layout, settings, groups, currentTableContent, detailBoxes);
   groups.push(...tables.groups);
   placeShortLinearText(groups, dimensions, settings, layout, placedViews, p);
+  const crossingBreaks = applyLinearCrossingBreaks(groups, dimensions, settings, layout);
   // Derived after final text placement. PDF/DXF retain their original material rings.
   const clearanceScope = () => {
     try { const scope = drawingScopeOf(settings); return scope.kind === 'part' && scope.part === undefined && scope.body === undefined && !settings.balloons; }
@@ -289,7 +295,7 @@ export function buildSheet(views: DrawingViews, layout: SheetLayout, settings: D
       if (boxes.length) group.marks = group.marks.map(m => m === hatchMark ? { ...hatchMark, svgTextExclusions: boxes } : m);
     }
   }
-  return { size: [W, H], groups, dimensions, ...(settings.standard ? { standard: settings.standard } : {}), ...(hasUnitSettings(p) ? { units: { units: p.units, dual: p.dual, precision: p.precision, ...(p.inchFraction !== undefined ? { inchFraction: p.inchFraction } : {}) } } : {}), ...(tables.placed.length ? { tables: tables.placed } : {}), ...(welds ? { welds: { placed: welds.placed, unshown: welds.unshown } } : {}), ...(balloons ? { balloons: { placed: balloons.placed, unclear: balloons.unclear, noEdge: balloons.noEdge } } : {}), ...(onSheet.length ? { sections: onSheet } : {}), ...(drawn.details.length ? { details: drawn.details.map(x => x.detail) } : {}), ...(drawn.missing.length ? { detailsMissing: drawn.missing } : {}), ...(apart.missing.length ? { sectionsMissing: apart.missing } : {}) };
+  return { size: [W, H], groups, dimensions, ...(crossingBreaks.length ? { crossingBreaks } : {}), ...(settings.standard ? { standard: settings.standard } : {}), ...(hasUnitSettings(p) ? { units: { units: p.units, dual: p.dual, precision: p.precision, ...(p.inchFraction !== undefined ? { inchFraction: p.inchFraction } : {}) } } : {}), ...(tables.placed.length ? { tables: tables.placed } : {}), ...(welds ? { welds: { placed: welds.placed, unshown: welds.unshown } } : {}), ...(balloons ? { balloons: { placed: balloons.placed, unclear: balloons.unclear, noEdge: balloons.noEdge } } : {}), ...(onSheet.length ? { sections: onSheet } : {}), ...(drawn.details.length ? { details: drawn.details.map(x => x.detail) } : {}), ...(drawn.missing.length ? { detailsMissing: drawn.missing } : {}), ...(apart.missing.length ? { sectionsMissing: apart.missing } : {}) };
 }
 
 // D416: one local label fallback after all obstacles/attachments exist. Conservative annotation bounds, not glyph ink.

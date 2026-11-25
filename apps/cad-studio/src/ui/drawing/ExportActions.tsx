@@ -21,6 +21,7 @@ export function ExportActions({ canExportDimensionCsv, exportDimensionCsv, sheet
   const hasShortenedRadius = sheet?.dimensions.some(r => r.ok && r.dim.kind === 'radius' && r.dim.foreshorten
     && sheet.groups.some(group => group.id === r.dim.id && group.marks.some(mark => mark.kind === 'polyline')));
   const hasManualArrows = sheet?.dimensions.some(r => r.ok && r.dim.kind === 'linear' && r.dim.arrowPlacement);
+  const hasCrossingBreak = sheet?.crossingBreaks?.some(cb => cb.status === 'applied');
   const confirmPanel = useRef<HTMLDivElement>(null);
   const pendingFormat = confirmation?.format;
   useEffect(() => {
@@ -43,6 +44,7 @@ export function ExportActions({ canExportDimensionCsv, exportDimensionCsv, sheet
         {sheet?.groups.some(group => group.marks.some(mark => mark.kind === 'hatch' && !!mark.svgTextExclusions?.length)) && <div className="empty" role="note">Screen/SVG only: dimension-text hatch clearance. PDF and DXF retain the original hatching; section DXF retains the original cut geometry.</div>}
         {hasShortenedRadius && <div className="empty" role="note" aria-label="DXF radius display compatibility">DXF stores the shortened leader in the dimension’s display block. If another CAD redraws the dimension, it may show an ordinary radius. Use SVG for the drawn appearance.</div>}
         {hasManualArrows && <div className="empty" role="note" aria-label="DXF arrow display compatibility">DXF stores manual arrow placement in the dimension’s display block. Another CAD may use automatic placement when it redraws the dimension. Use SVG for the drawn appearance.</div>}
+        {hasCrossingBreak && <div className="empty" role="note" aria-label="DXF crossing break compatibility">DXF stores crossing breaks in the dimension’s display block while preserving the measured linear geometry. Another CAD may redraw an unbroken line. Use SVG for the drawn appearance.</div>}
         {confirmation && <div ref={confirmPanel} tabIndex={-1} className="dw-export-confirm" role="group" aria-label="Confirm drawing export">
           <ul>{confirmation.messages.map((message, i) => <li key={i}>{message}</li>)}</ul>
           <div className="dw-actions">

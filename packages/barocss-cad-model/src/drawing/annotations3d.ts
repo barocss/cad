@@ -137,7 +137,13 @@ function itemOf(i: AnnotationInputs, g: MarkGroup, view: DimView, v: ViewPlaceme
   const lines: Line3[] = [], arcs: Arc3[] = [], arrows: Head3[] = [], texts: Text3[] = [], role = ROLE_OF[g.role];
   const at = (q: XY) => lift(plane, fromSheet(v, q));
   for (const m of g.marks) {
-    if (m.kind === 'line') lines.push({ a: at(m.a), b: at(m.b), role: m.role ?? role });
+    if (m.kind === 'line') {
+      if (m.crossingBreak) {
+        if (m.crossingBreak.part === 0) lines.push({ a: at(m.crossingBreak.origin[0]), b: at(m.crossingBreak.origin[1]), role: m.role ?? role });
+      } else {
+        lines.push({ a: at(m.a), b: at(m.b), role: m.role ?? role });
+      }
+    }
     else if (m.kind === 'polyline') for (let k = 1; k < m.points.length; k++) lines.push({ a: at(m.points[k - 1]), b: at(m.points[k]), role: m.role ?? role });
     else if (m.kind === 'arc') arcs.push({ center: at(m.center), u: dirOf(plane, [m.u[0] / v.scale, m.u[1] / v.scale]), v: dirOf(plane, [m.v[0] / v.scale, m.v[1] / v.scale]), t0: m.t0, t1: m.t1, role: m.role ?? role });
     else if (m.kind === 'hatch') for (const l of hatch(m.rings, m.spacing, m.angle)) lines.push({ a: at(l.a), b: at(l.b), role });

@@ -72,6 +72,47 @@ export type Tolerance = { kind: 'symmetric'; value: number } | { kind: 'deviatio
 export type LinearArrowSide = 'inside' | 'outside';
 export type LinearArrowPlacement = Partial<Record<'a' | 'b', LinearArrowSide>>;
 
+export const DEFAULT_CROSSING_BREAK_GAP = 2;
+export const MIN_CROSSING_BREAK_GAP = 1;
+export const MAX_CROSSING_BREAK_GAP = 10;
+
+export interface LinearCrossingBreakTarget {
+  readonly id: string;
+  readonly orient: 'horizontal' | 'vertical' | 'aligned';
+  readonly aEdge: string;
+  readonly bEdge: string;
+}
+
+export interface LinearCrossingBreak {
+  readonly over: string;
+  readonly gap: number;
+  readonly target: LinearCrossingBreakTarget;
+}
+
+export function crossingBreakGapOk(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value)
+    && value >= MIN_CROSSING_BREAK_GAP && value <= MAX_CROSSING_BREAK_GAP;
+}
+
+/** Persist only verified target identity and bounded sheet-mm gap; rejects NaN, non-positive gaps, and incomplete targets. */
+export function readLinearCrossingBreak(raw: unknown): LinearCrossingBreak | undefined {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
+  const r = raw as Record<string, unknown>;
+  if (typeof r.over !== 'string' || !r.over) return undefined;
+  const gap = r.gap === undefined ? DEFAULT_CROSSING_BREAK_GAP : r.gap;
+  if (!crossingBreakGapOk(gap)) return undefined;
+  const target = r.target as Record<string, unknown> | undefined;
+  if (!target || typeof target !== 'object' || Array.isArray(target)) return undefined;
+  if (target.id !== r.over) return undefined;
+  if (target.orient !== 'horizontal' && target.orient !== 'vertical' && target.orient !== 'aligned') return undefined;
+  if (typeof target.aEdge !== 'string' || !target.aEdge || typeof target.bEdge !== 'string' || !target.bEdge) return undefined;
+  return {
+    over: r.over,
+    gap: Math.round(gap * 1000) / 1000,
+    target: { id: target.id, orient: target.orient, aEdge: target.aEdge, bEdge: target.bEdge },
+  };
+}
+
 /** Persist only explicit, valid A/B overrides; a missing endpoint follows Auto. */
 export function readLinearArrowPlacement(raw: unknown): LinearArrowPlacement | undefined {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
@@ -81,7 +122,7 @@ export function readLinearArrowPlacement(raw: unknown): LinearArrowPlacement | u
 }
 
 export type DrawingDimension = ({ tol?: Tolerance; count?: number; auto?: true; basic?: true }) & (
-  | { id: string; view: DimView; kind: 'linear'; a: DimPoint; b: DimPoint; orient: 'horizontal' | 'vertical' | 'aligned'; place: XY; /** Hide only this reference role’s extension line; omitted means both visible. */ hideExtension?: 'a' | 'b'; arrowPlacement?: LinearArrowPlacement }
+  | { id: string; view: DimView; kind: 'linear'; a: DimPoint; b: DimPoint; orient: 'horizontal' | 'vertical' | 'aligned'; place: XY; /** Hide only this reference role’s extension line; omitted means both visible. */ hideExtension?: 'a' | 'b'; arrowPlacement?: LinearArrowPlacement; /** Optional sheet-mm break on this linear dimension line where it crosses one verified sibling linear dimension line. */ crossingBreak?: LinearCrossingBreak }
   | { id: string; view: DimView; kind: 'diameter'; edge: string; near: Vec3; place: XY; sig?: Sig; was?: string }
   | { id: string; view: DimView; kind: 'radius'; edge: string; near: Vec3; place: XY; sig?: Sig; was?: string; /** Optional foreshortened display origin in view model coordinates (mm); true radius and center remain native. */ foreshorten?: ForeshortenedRadius }
   /** A pitch circle (R14.5, O6): the circle through the centres of three or more holes, its diameter as `Ø40 PCD`. */
@@ -332,11 +373,12 @@ export function readDrawing(raw: unknown): DrawingSettings {
     ...(typeof r.revision === 'string' && r.revision ? { revision: r.revision.slice(0, 6) } : {}),
     ...(typeof r.revisedModel === 'string' ? { revisedModel: r.revisedModel } : {}),
     dimensions: Array.isArray(r.dimensions) ? r.dimensions.filter(x => x && typeof x.id === 'string' && isDimView(x.view) && (x.kind !== 'pcd' || ringOk(x.ring)) && (x.kind !== 'linear' || ((x.a?.at !== 'pcd' || ringOk(x.a.ring)) && (x.b?.at !== 'pcd' || ringOk(x.b.ring))))).map(x => {
-      const { tol, count, auto, basic, foreshorten, arrowPlacement, ...rest } = x as DrawingDimension & { foreshorten?: unknown; arrowPlacement?: unknown }; const t = readTolerance(tol);
+      const { tol, count, auto, basic, foreshorten, arrowPlacement, crossingBreak, ...rest } = x as DrawingDimension & { foreshorten?: unknown; arrowPlacement?: unknown; crossingBreak?: unknown }; const t = readTolerance(tol);
       const arrows = x.kind === 'linear' && auto !== true && isOrthographicView(x.view) ? readLinearArrowPlacement(arrowPlacement) : undefined;
+      const cBreak = x.kind === 'linear' && auto !== true && isOrthographicView(x.view) ? readLinearCrossingBreak(crossingBreak) : undefined;
       const fs = x.kind === 'radius' && auto !== true && isOrthographicView(x.view) && foreshortenOk(foreshorten)
         ? { origin: [foreshorten.origin[0], foreshorten.origin[1]] as XY } : null;
-      return { ...rest, ...(t ? { tol: t } : {}), ...(Number.isInteger(count) && count! >= 2 && count! <= 999 ? { count } : {}), ...(auto === true ? { auto: true } : {}), ...(basic === true ? { basic: true } : {}), ...(fs ? { foreshorten: fs } : {}), ...(arrows ? { arrowPlacement: arrows } : {}) } as DrawingDimension;
+      return { ...rest, ...(t ? { tol: t } : {}), ...(Number.isInteger(count) && count! >= 2 && count! <= 999 ? { count } : {}), ...(auto === true ? { auto: true } : {}), ...(basic === true ? { basic: true } : {}), ...(fs ? { foreshorten: fs } : {}), ...(arrows ? { arrowPlacement: arrows } : {}), ...(cBreak ? { crossingBreak: cBreak } : {}) } as DrawingDimension;
     }) : [],
     ...(Array.isArray(r.views) && r.views.includes('front') && r.views.includes('top') ? { views: VIEW_IDS.filter(v => r.views!.includes(v)) } : {}),
     ...(readRoom(r.room) ? { room: readRoom(r.room)! } : {}),

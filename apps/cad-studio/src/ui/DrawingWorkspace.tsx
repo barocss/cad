@@ -31,6 +31,7 @@ import type { EngineClient } from '../engine/client';
 import type { StudioDoc } from '@barocss/cad-model/engine/doc';
 import type { FriendlyError } from '@barocss/cad-model/engine/errors';
 import { defaultForeshortenOrigin, foreshortenGeometry, foreshortenOk, foreshortenSupported } from '@barocss/cad-model/drawing/foreshorten';
+import { DEFAULT_CROSSING_BREAK_GAP, crossingBreakGapOk, eligibleCrossingBreaks, readLinearCrossingBreak } from '@barocss/cad-model/drawing/crossingBreak';
 import { presetFor } from '@barocss/cad-model/drawing/standard';
 import { buildSheet, curveMark, dimensionMarks, placementOf, projectionOf, sheetSections, withShownText } from '@barocss/cad-model/drawing/sheet';
 import { marksSvg, sheetGroupsSvg, sheetSvg, type SheetAnnotationSelection } from '@barocss/cad-model/io/svg';
@@ -1476,6 +1477,45 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
     const next = arrows ? { ...ordinary, arrowPlacement: arrows } : ordinary;
     if (commitDims(settings.dimensions.map(d => d === selDim ? next : d))) setMessage(null);
   };
+  const crossingBreakCandidates = useMemo(() => (
+    arrowReady && selDim?.kind === 'linear' && sheet && layout
+      ? eligibleCrossingBreaks(sheet.groups, sheet.dimensions, settings, layout, selDim.id, selDim.crossingBreak?.gap ?? DEFAULT_CROSSING_BREAK_GAP)
+      : []
+  ), [arrowReady, selDim, sheet, layout, settings]);
+  const changeCrossingBreak = (id: string, overId: string | null, gap?: number) => {
+    if (liveExtensionOwner.current !== extensionOwner || !arrowReady || selDim?.kind !== 'linear' || selDim.id !== id
+      || !sheet || !layout || wholeSettings.dimensions.filter(d => d.id === id).length !== 1) return;
+    if (overId === null) {
+      if (!selDim.crossingBreak) return;
+      const { crossingBreak: _old, ...ordinary } = selDim; void _old;
+      if (commitDims(settings.dimensions.map(d => d === selDim ? ordinary : d))) setMessage(null);
+      return;
+    }
+    if (!extensionResolved?.ok || extensionResolved.kind !== 'linear') return;
+    const nextGap = gap ?? selDim.crossingBreak?.gap ?? DEFAULT_CROSSING_BREAK_GAP;
+    if (!crossingBreakGapOk(nextGap)) {
+      setMessage('Crossing break gap must be between 1 and 10 mm on paper.');
+      return;
+    }
+    const candidates = eligibleCrossingBreaks(sheet.groups, sheet.dimensions, settings, layout, id, nextGap);
+    const candidate = candidates.find(c => c.id === overId);
+    if (!candidate) {
+      setMessage(`Dimension ${id} does not have a single clear interior crossing with ${overId} at a ${nextGap} mm gap.`);
+      return;
+    }
+    if (candidate.conflict) {
+      setMessage(`Dimension ${candidate.id} already breaks over ${id}. Clear that break first.`);
+      return;
+    }
+    const nextBreak = readLinearCrossingBreak({ over: candidate.id, gap: nextGap, target: candidate.target });
+    if (!nextBreak) return;
+    if (selDim.crossingBreak?.over === nextBreak.over && selDim.crossingBreak.gap === nextBreak.gap
+      && selDim.crossingBreak.target.orient === nextBreak.target.orient
+      && selDim.crossingBreak.target.aEdge === nextBreak.target.aEdge
+      && selDim.crossingBreak.target.bEdge === nextBreak.target.bEdge) return;
+    const { crossingBreak: _old, ...ordinary } = selDim; void _old;
+    if (commitDims(settings.dimensions.map(d => d === selDim ? { ...ordinary, crossingBreak: nextBreak } : d))) setMessage(null);
+  };
   const previewExtension = (side: 'a' | 'b' | null) => {
     if (liveExtensionOwner.current !== extensionOwner) return;
     setExtensionPreview(side && extensionReady ? { owner: extensionOwner, side } : null);
@@ -1607,7 +1647,7 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
         <DimensionsList foreshortenMovingId={currentRadiusMove?.dim.id} onForeshorten={id => { editRadius(id, 'add'); }}
           onForeshortenMove={id => { if (radiusReady && selDim?.id === id && radiusPlacement && !radiusPlacement.hidden && !radiusPlacement.breaks?.length) {
             cancel(); setDrag(null); setTool('select'); setRadiusMove({ owner: extensionOwner, dim: selDim }); svg.current?.focus();
-          } }} onForeshortenRemove={id => { setRadiusMove(null); editRadius(id, 'remove'); }} extensionReady={extensionReady} arrowReady={arrowReady} onArrow={changeArrow} onExtension={changeExtension} onExtensionPreview={previewExtension} sheet={sheet} views={views} layout={layout} scope={scope} settings={settings} occurrenceReasons={lossByDimension} onReattach={startReattachment} selected={selDim?.id ?? null} onSelect={id => { selectAnnotationRow('dimension', id); setNoteDraft(null); }} remove={id => removeAnnotation({ kind: 'dimension', id })} autoDimension={autoDimension} />
+          } }} onForeshortenRemove={id => { setRadiusMove(null); editRadius(id, 'remove'); }} extensionReady={extensionReady} arrowReady={arrowReady} onArrow={changeArrow} crossingBreakReady={arrowReady} crossingBreakCandidates={crossingBreakCandidates} onCrossingBreak={changeCrossingBreak} onExtension={changeExtension} onExtensionPreview={previewExtension} sheet={sheet} views={views} layout={layout} scope={scope} settings={settings} occurrenceReasons={lossByDimension} onReattach={startReattachment} selected={selDim?.id ?? null} onSelect={id => { selectAnnotationRow('dimension', id); setNoteDraft(null); }} remove={id => removeAnnotation({ kind: 'dimension', id })} autoDimension={autoDimension} />
 
         <ToleranceEditor selDim={selDim} settings={settings} tolDraft={tolDraft} setTolDraft={setTolDraft} commitDims={commitDims} setMessage={setMessage} />
 

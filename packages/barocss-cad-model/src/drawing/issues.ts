@@ -49,7 +49,7 @@ import { SECTION_VIEWS, VIEW_IDS, baseViewOf, detailLetter, isDetailRef, isViewI
 
 export const DRAWING_ISSUES_VERSION = 'cad-studio-drawing-issues-v1';
 
-export type DrawingIssueCode = 'SHEET_SET' | 'UNIT_PRECISION' | 'FORESHORTEN_INVALID' | 'LINEAR_ARROWS_CROWDED' | 'DIM_ON_HIDDEN' | 'DATUM_LOST' | 'FRAME_LOST' | 'FRAME_VIEW_MISSING' | 'DATUM_UNDEFINED' | 'FRAME_RULE' | 'DATUM_TWICE' | 'VIEW_NEEDED' | 'DIMENSION_LOST' | 'TEXT_OVERLAP' | 'TEXT_OVER_LINES' | 'OFF_SHEET' | 'VIEWS_DONT_FIT' | 'DUPLICATE' | 'REMATCHED' | 'HOLE_SIZE_MISSING' | 'HOLE_NOT_LOCATED' | 'STEP_NOT_LOCATED' | 'OVERALL_MISSING' | 'TABLE_SOURCE' | 'WELD_NOT_SHOWN' | 'BALLOON_NOT_CLEAR' | 'BALLOON_NO_EDGE' | 'FIT_ROW_MISSING' | 'FOLLOWED_CHANGED' | 'DETAIL_PARENT_MISSING' | 'DETAIL_EMPTY' | 'DETAIL_NO_ROOM' | 'BREAK_NO_VIEW' | 'SECTION_NO_ROOM' | 'SECTION_NO_VIEW' | 'DATUM_TARGET_OUTSIDE' | DatumTargetFailureCode | NoteTargetFailureCode;
+export type DrawingIssueCode = 'SHEET_SET' | 'UNIT_PRECISION' | 'FORESHORTEN_INVALID' | 'LINEAR_ARROWS_CROWDED' | 'CROSSING_BREAK_CONFLICT' | 'CROSSING_BREAK_INACTIVE' | 'DIM_ON_HIDDEN' | 'DATUM_LOST' | 'FRAME_LOST' | 'FRAME_VIEW_MISSING' | 'DATUM_UNDEFINED' | 'FRAME_RULE' | 'DATUM_TWICE' | 'VIEW_NEEDED' | 'DIMENSION_LOST' | 'TEXT_OVERLAP' | 'TEXT_OVER_LINES' | 'OFF_SHEET' | 'VIEWS_DONT_FIT' | 'DUPLICATE' | 'REMATCHED' | 'HOLE_SIZE_MISSING' | 'HOLE_NOT_LOCATED' | 'STEP_NOT_LOCATED' | 'OVERALL_MISSING' | 'TABLE_SOURCE' | 'WELD_NOT_SHOWN' | 'BALLOON_NOT_CLEAR' | 'BALLOON_NO_EDGE' | 'FIT_ROW_MISSING' | 'FOLLOWED_CHANGED' | 'DETAIL_PARENT_MISSING' | 'DETAIL_EMPTY' | 'DETAIL_NO_ROOM' | 'BREAK_NO_VIEW' | 'SECTION_NO_ROOM' | 'SECTION_NO_VIEW' | 'DATUM_TARGET_OUTSIDE' | DatumTargetFailureCode | NoteTargetFailureCode;
 export type DrawingFix =
   | { kind: 'remove'; dim: string }
   | { kind: 'move'; dim: string; place: XY }
@@ -464,6 +464,18 @@ export function drawingIssues(ctx: IssueContext): DrawingIssue[] {
         if (why) out.push({ code: 'FORESHORTEN_INVALID', severity: 'warning', message: `Dimension ${r.dim.id}: ${why} Move its foreshorten origin or remove foreshorten.`, dims: [r.dim.id], view: r.dim.view });
       }
     }
+  }
+  for (const cb of sheet.crossingBreaks ?? []) {
+    if (cb.status === 'applied') continue;
+    const dim = settings.dimensions.find(d => d.id === cb.dimId);
+    const code = cb.status === 'conflict' ? 'CROSSING_BREAK_CONFLICT' : 'CROSSING_BREAK_INACTIVE';
+    out.push({
+      code,
+      severity: 'warning',
+      message: `Dimension ${cb.dimId}: ${cb.reason ?? 'Its crossing break is inactive.'}`,
+      dims: cb.status === 'conflict' ? [cb.dimId, cb.overId] : [cb.dimId],
+      ...(dim ? { view: dim.view } : {}),
+    });
   }
   if (preset.units === 'inch') for (const f of settings.frames ?? []) {
     const values: [number | undefined, FrameRounding][] = [[f.value, 'down'], [f.projected, 'up'], [f.unequal, 'nearest'], [f.composite?.value, 'down'], [f.stacked?.value, 'down']];

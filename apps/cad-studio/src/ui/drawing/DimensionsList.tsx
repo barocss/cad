@@ -3,6 +3,7 @@ import { useId } from 'react';
 import { dimensionLine } from '@barocss/cad-model/drawing/sheet';
 import { presetFor } from '@barocss/cad-model/drawing/standard';
 import { isDetailRef, isViewId, type LinearArrowSide, type DrawingSettings } from '@barocss/cad-model/drawing/types';
+import type { CrossingBreakCandidate } from '@barocss/cad-model/drawing/crossingBreak';
 import type { useDrawingSheet } from '../useDrawingSheet';
 import { Icon } from '../atoms';
 import { NativeSelect } from '@/components/ui/native-select';
@@ -20,6 +21,9 @@ export interface DimensionsListProps {
   extensionReady?: boolean;
   arrowReady?: boolean;
   onArrow?(id: string, side: 'a' | 'b', placement: LinearArrowSide | 'auto'): void;
+  crossingBreakReady?: boolean;
+  crossingBreakCandidates?: readonly CrossingBreakCandidate[];
+  onCrossingBreak?(id: string, overId: string | null, gap?: number): void;
   onExtension?(id: string, side: 'a' | 'b' | undefined): void;
   onExtensionPreview?(side: 'a' | 'b' | null): void;
   foreshortenMovingId?: string | null;
@@ -35,7 +39,8 @@ export interface DimensionsListProps {
 
 export function DimensionsList({
   sheet, views, layout, scope, settings, occurrenceReasons, onReattach, selected, onSelect, remove, autoDimension,
-  extensionReady = false, arrowReady = false, onArrow, onExtension, onExtensionPreview,
+  extensionReady = false, arrowReady = false, onArrow, crossingBreakReady = false, crossingBreakCandidates = [], onCrossingBreak,
+  onExtension, onExtensionPreview,
   foreshortenMovingId = null, onForeshorten, onForeshortenMove, onForeshortenRemove,
 }: DimensionsListProps) {
   const unavailableReason = useId();
@@ -84,6 +89,42 @@ export function DimensionsList({
               </label>)}
               {!r.ok && r.dim.arrowPlacement && <span role="status" className="small">The reference is unresolved. The saved arrow placement is retained.</span>}
             </div>}
+            {selected === r.dim.id && r.dim.kind === 'linear' && !r.dim.auto && ['front', 'top', 'right'].includes(r.dim.view) && !assembly && onCrossingBreak && (crossingBreakCandidates.length > 0 || !!r.dim.crossingBreak) && (() => {
+              const savedBreak = r.dim.crossingBreak;
+              const status = sheet?.crossingBreaks?.find(cb => cb.dimId === r.dim.id);
+              const candidateIds = new Set(crossingBreakCandidates.map(c => c.id));
+              const dimText = (id: string) => {
+                const found = sheet?.dimensions.find(x => x.dim.id === id);
+                return found?.ok ? `${id} (${dimensionLine(found, presetFor(settings))})` : id;
+              };
+              return <div role="group" aria-label={`Crossing break ${r.dim.id}`} style={{ flexBasis: '100%', order: 2, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6 }}>
+                <label className="small">
+                  Crossing break
+                  <NativeSelect aria-label="Crossing break target" value={savedBreak?.over ?? ''}
+                    disabled={!r.ok || !crossingBreakReady} onChange={e => {
+                      const next = e.currentTarget.value;
+                      onCrossingBreak(r.dim.id, next || null);
+                    }}>
+                    <option value="">None</option>
+                    {crossingBreakCandidates.map(c => <option key={c.id} value={c.id}>{dimText(c.id)}{c.conflict ? ' (breaks over this)' : ''}</option>)}
+                    {savedBreak && !candidateIds.has(savedBreak.over) && <option value={savedBreak.over}>{savedBreak.over} (inactive)</option>}
+                  </NativeSelect>
+                </label>
+                {savedBreak && <label className="small">
+                  Gap
+                  <NativeSelect aria-label="Crossing break gap" value={String(savedBreak.gap)}
+                    disabled={!r.ok || !crossingBreakReady} onChange={e => {
+                      const parsed = Number(e.currentTarget.value);
+                      if (Number.isFinite(parsed)) onCrossingBreak(r.dim.id, savedBreak.over, parsed);
+                    }}>
+                    {[2, 3, 4, 5].map(mm => <option key={mm} value={String(mm)}>{mm} mm</option>)}
+                    {![2, 3, 4, 5].includes(savedBreak.gap) && <option value={String(savedBreak.gap)}>{savedBreak.gap} mm</option>}
+                  </NativeSelect>
+                </label>}
+                {savedBreak && <Button variant="ghost" size="xs" aria-label={`Remove crossing break ${r.dim.id}`} disabled={!crossingBreakReady} onClick={() => onCrossingBreak(r.dim.id, null)}>Clear</Button>}
+                {status && status.status !== 'applied' && status.reason && <span role="status" className="small" style={{ flexBasis: '100%' }}>{status.reason}</span>}
+              </div>;
+            })()}
             {selected === r.dim.id && r.dim.kind === 'radius' && !r.dim.auto && ['front', 'top', 'right'].includes(r.dim.view) && scope.kind === 'part' && onForeshorten && <div role="group" aria-label={`Foreshorten controls ${r.dim.id}`} style={{ flexBasis: '100%', order: 2, display: 'flex', flexWrap: 'wrap', gap: 4 }}>
               {!r.dim.foreshorten ? (
                 <Button variant="ghost" size="xs" aria-label={`Foreshorten radius ${r.dim.id}`} disabled={!r.ok || !extensionReady} onClick={() => onForeshorten(r.dim.id)}>Foreshorten</Button>
