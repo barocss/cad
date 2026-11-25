@@ -23,6 +23,9 @@ function referenceKey(point: DimPoint): string {
   if (point.at === 'pcd') {
     return JSON.stringify([point.at, point.ring?.map(({ edge, near }) => [edge, near])]);
   }
+  if (point.at === 'virtual-sharp' && point.second) {
+    return JSON.stringify([point.at, [[point.edge, point.near], [point.second.edge, point.second.near]].sort()]);
+  }
   return JSON.stringify([point.at, point.edge, point.near]);
 }
 

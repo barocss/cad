@@ -60,6 +60,7 @@ import { pickCircleSeparationEdge, resolveCircleSeparationEdges } from '@barocss
 import { newArcCenterlineId, pickArcCenterlineEdge, resolveArcCenterline } from '@barocss/cad-model/drawing/arcCenterline';
 import { MIN_CENTER_MARK_GROUP_MEMBERS, newCenterMarkGroupId, pickCenterMarkGroupCircle, resolveCenterMarkGroup, validateCenterMarkGroupCandidate } from '@barocss/cad-model/drawing/centerMarkGroup';
 import { BISECTOR_EXTENSION_MM, newBisectorCenterlineId, pickBisectorCenterlineEdge, resolveBisectorCenterline } from '@barocss/cad-model/drawing/bisectorCenterline';
+import { VIRTUAL_SHARP_OVERSHOOT_MM, newVirtualSharpId, pickVirtualSharpEdge, resolveVirtualSharp } from '@barocss/cad-model/drawing/virtualSharp';
 import { DETAIL_PARENTS, type DetailParent, type DrawingDetail } from '@barocss/cad-model/drawing/detail';
 import { DetailsList } from './drawing/DetailsList';
 import { clipProjectionOutside } from '@barocss/cad-model/drawing/breaks';
@@ -68,7 +69,7 @@ import { drawingOccurrencePath } from '@barocss/cad-model/drawing/dimensionRefer
 import { diameterRims } from './drawing/diameterRims';
 import { Button } from '@/components/ui/button';
 import { BreaksList } from './drawing/BreaksList';
-import { VIEW_IDS, annotatedDetailLetters, detailLetter, isDetailRef, isSectionRef, isViewId, nextSectionId, reservedDetailLetters, sameSection, sectionLetter, sectionsOf, withSections, readLinearArrowPlacement, type CentreRef, type CircleSeparationMode, type CylinderFaceRef, type DrawingArcCenterline, type DrawingBisectorCenterline, type DrawingCenterMarkGroup, type LinearArrowSide, type DimView, type DimPoint, type DrawingNote, type EdgeRef, type DrawingDimension, type DrawingSettings, type DrawingViews, type SectionViewId, type Vec3, type ViewId, type XY } from '@barocss/cad-model/drawing/types';
+import { VIEW_IDS, annotatedDetailLetters, detailLetter, isDetailRef, isSectionRef, isViewId, nextSectionId, reservedDetailLetters, sameSection, sectionLetter, sectionsOf, withSections, readLinearArrowPlacement, type CentreRef, type CircleSeparationMode, type CylinderFaceRef, type DrawingArcCenterline, type DrawingBisectorCenterline, type DrawingCenterMarkGroup, type DrawingVirtualSharp, type LinearArrowSide, type DimView, type DimPoint, type DrawingNote, type EdgeRef, type DrawingDimension, type DrawingSettings, type DrawingViews, type SectionViewId, type Vec3, type ViewId, type XY } from '@barocss/cad-model/drawing/types';
 import { downloadBytes } from './files';
 import { ShortcutHelp } from './ShortcutHelp';
 import { today, useDrawingSheet } from './useDrawingSheet';
@@ -95,7 +96,7 @@ import { ExportActions } from './drawing/ExportActions';
 import { dimensionPairLabelsMoved, dimensionPairPaperDelta, drawingDimensionPair, moveDrawingDimensionPair, type DrawingDimensionPair } from '../app/drawingDimensionGroup';
 import '../drawing/drawing.css';
 
-type Tool = 'select' | 'linear' | 'diameter' | 'radius' | 'arc-length' | 'chamfer' | 'radial-thickness' | 'cylinder-diameter' | 'circle-separation' | 'arc-centerline' | 'center-mark-group' | 'bisector-centerline' | 'angle' | 'reflex-angle' | 'note' | 'detail' | 'datum-target';
+type Tool = 'select' | 'linear' | 'diameter' | 'radius' | 'arc-length' | 'chamfer' | 'radial-thickness' | 'cylinder-diameter' | 'circle-separation' | 'arc-centerline' | 'center-mark-group' | 'bisector-centerline' | 'virtual-sharp' | 'angle' | 'reflex-angle' | 'note' | 'detail' | 'datum-target';
 type DimensionGroup = { owner: object; pair: DrawingDimensionPair };
 type DimensionGroupDrag = { dimensionGroup: DimensionGroup; pointer: number; start: XY; scale: number; paperDelta: number };
 const TOOLS: { tool: Tool; label: string; icon: string; key: string; hint: string }[] = [
@@ -111,6 +112,7 @@ const TOOLS: { tool: Tool; label: string; icon: string; key: string; hint: strin
   { tool: 'arc-centerline', label: 'Curved centerline', icon: 'conversion_path', key: 'M', hint: 'Click two concentric partial circular arcs to add a curved centerline' },
   { tool: 'center-mark-group', label: 'Hole row', icon: 'polyline', key: 'H', hint: 'Click 3 to 32 collinear equal-radius circular holes, then click Create row' },
   { tool: 'bisector-centerline', label: 'Centerline', icon: 'tune', key: 'B', hint: 'Click two parallel equal-span straight edges to add a centerline' },
+  { tool: 'virtual-sharp', label: 'Virtual sharp', icon: 'add', key: 'X', hint: 'Click two non-parallel straight edges to mark their theoretical intersection' },
   { tool: 'angle', label: 'Angle', icon: 'architecture', key: 'A', hint: 'Click two straight edges, then the side of their corner the angle goes on' },
   { tool: 'reflex-angle', label: 'Reflex angle', icon: 'restart_alt', key: 'G', hint: 'Pick two straight edges that share a corner in the Top view' },
   { tool: 'note', label: 'Note', icon: 'sticky_note_2', key: 'N', hint: 'Click on the paper for a note, or on a view for a leader and then where its text goes' },
@@ -140,6 +142,7 @@ type Pending =
   | { kind: 'arc-centerline'; view: SectionViewId; first: EdgeRef; source: { projection: DrawingViews; settings: DrawingSettings } }
   | { kind: 'center-mark-group'; view: SectionViewId; members: CentreRef[]; source: { projection: DrawingViews; settings: DrawingSettings } }
   | { kind: 'bisector-centerline'; view: SectionViewId; first: EdgeRef; source: { projection: DrawingViews; settings: DrawingSettings } }
+  | { kind: 'virtual-sharp'; view: SectionViewId; first: EdgeRef; source: { projection: DrawingViews; settings: DrawingSettings } }
   | { kind: 'angle'; view: DimView; a: EdgeRef; b?: EdgeRef; mode?: 'reflex'; owner?: object }
   | { kind: 'note'; leader: { view: ViewId; at: XY } }
   /** DR-1: a detail's circle, its centre picked on its parent. */
@@ -461,7 +464,28 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
     for (const x of sheet?.details ?? []) near(`detail:${x.id}`, x.placement.box);
     return best;
   }, [layout, sheet]);
-  const snaps = useMemo(() => views ? { ...Object.fromEntries(VIEW_IDS.map(id => [id, snapPoints(views[id])])), ...Object.fromEntries((sheet?.sections ?? []).map(x => [`section:${x.id}`, snapPoints(x.projection)])), ...Object.fromEntries((sheet?.details ?? []).map(x => [`detail:${x.id}`, snapPoints(x.projection)])) } as Partial<Record<DimView, SnapPoint[]>> : null, [views, sheet?.sections, sheet?.details]);
+  const snaps = useMemo(() => {
+    if (!views) return null;
+    const byView: Partial<Record<DimView, SnapPoint[]>> = {
+      ...Object.fromEntries(VIEW_IDS.map(id => [id, snapPoints(views[id])])),
+      ...Object.fromEntries((sheet?.sections ?? []).map(x => [`section:${x.id}`, snapPoints(x.projection)])),
+      ...Object.fromEntries((sheet?.details ?? []).map(x => [`detail:${x.id}`, snapPoints(x.projection)])),
+    };
+    for (const r of sheet?.virtualSharps ?? []) {
+      if (!r.ok) continue;
+      (byView[r.item.view] ??= []).push({
+        at: r.geometry.point,
+        ref: {
+          edge: r.item.first.edge,
+          at: 'virtual-sharp',
+          near: [...r.item.first.near] as Vec3,
+          second: { edge: r.item.second.edge, near: [...r.item.second.near] as Vec3 },
+          virtualSharpId: r.item.id,
+        },
+      });
+    }
+    return byView;
+  }, [views, sheet?.sections, sheet?.details, sheet?.virtualSharps]);
   const placementAt = (v: DimView) => layout ? placementOf(layout, sheet ?? undefined, v) : undefined;
   const projectionAt = (v: DimView) => views ? projectionOf(views, sheet ?? undefined, v) : undefined;
 
@@ -480,7 +504,7 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
       const rims = diameterRims(projection, at, 6 * mmPerPx() / v.scale, tol, visibleRimOnly, scope.kind === 'assembly');
       return { q, view, at, snap: null, edge: rims[0] ?? null, visibleRimOnly, rims };
     }
-    if (tool === 'arc-length' || tool === 'chamfer' || tool === 'radial-thickness' || tool === 'cylinder-diameter' || tool === 'circle-separation' || tool === 'arc-centerline' || tool === 'center-mark-group' || tool === 'bisector-centerline') return { q, view, at, snap: null, edge: edgeAt(pr, at, 6 * mmPerPx() / v.scale, true) };
+    if (tool === 'arc-length' || tool === 'chamfer' || tool === 'radial-thickness' || tool === 'cylinder-diameter' || tool === 'circle-separation' || tool === 'arc-centerline' || tool === 'center-mark-group' || tool === 'bisector-centerline' || tool === 'virtual-sharp') return { q, view, at, snap: null, edge: edgeAt(pr, at, 6 * mmPerPx() / v.scale, true) };
     if (tool === 'reflex-angle') return { q, view, at, snap: null, edge: view === 'top' && !v.breaks?.length
       ? edgeAt(pr, at, 6 * mmPerPx() / v.scale, true) : null };
     const breaks = tool === 'linear' || tool === 'angle' || tool === 'radius' ? v.breaks : undefined;
@@ -490,7 +514,7 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
   /** Placing a dimension (its points picked): where it goes, read in its own view wherever the pointer is on the sheet —
    *  beyond the views' reach too (hoverAt finds a view only within 30 mm), so a click out on the paper places it. */
   const placingAt = (clientX: number, clientY: number): Hover | null => {
-    if (!pending || pending.kind === 'note' || pending.kind === 'detail-center' || pending.kind === 'arc-centerline' || pending.kind === 'center-mark-group' || pending.kind === 'bisector-centerline' || ((pending.kind === 'linear' || pending.kind === 'angle') && !pending.b) || (pending.kind === 'chamfer' && !pending.adjacent) || ((pending.kind === 'radial-thickness' || pending.kind === 'circle-separation') && !pending.second) || (pending.kind === 'cylinder-diameter' && !pending.cylinder)) return null;
+    if (!pending || pending.kind === 'note' || pending.kind === 'detail-center' || pending.kind === 'arc-centerline' || pending.kind === 'center-mark-group' || pending.kind === 'bisector-centerline' || pending.kind === 'virtual-sharp' || ((pending.kind === 'linear' || pending.kind === 'angle') && !pending.b) || (pending.kind === 'chamfer' && !pending.adjacent) || ((pending.kind === 'radial-thickness' || pending.kind === 'circle-separation') && !pending.second) || (pending.kind === 'cylinder-diameter' && !pending.cylinder)) return null;
     const q = sheetPoint(clientX, clientY), v = q && placementAt(pending.view);
     return q && v ? { q, view: pending.view, at: fromSheet(v, q), snap: null, edge: null } : null;
   };
@@ -793,7 +817,7 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
     // Where a dimension goes is read in its own view, wherever the pointer is.
     if (pending?.kind === 'note') { addNote(h.q, pending.leader); return; }
     if (tool === 'detail') { pickDetail(h); return; }
-    const placing = pending && pending.kind !== 'arc-centerline' && pending.kind !== 'center-mark-group' && pending.kind !== 'bisector-centerline' && ((pending.kind !== 'linear' && pending.kind !== 'angle' && pending.kind !== 'chamfer' && pending.kind !== 'radial-thickness' && pending.kind !== 'cylinder-diameter' && pending.kind !== 'circle-separation') || (pending.kind === 'chamfer' ? !!pending.adjacent : pending.kind === 'radial-thickness' || pending.kind === 'circle-separation' ? !!pending.second : pending.kind === 'cylinder-diameter' ? !!pending.cylinder : !!pending.b));
+    const placing = pending && pending.kind !== 'arc-centerline' && pending.kind !== 'center-mark-group' && pending.kind !== 'bisector-centerline' && pending.kind !== 'virtual-sharp' && ((pending.kind !== 'linear' && pending.kind !== 'angle' && pending.kind !== 'chamfer' && pending.kind !== 'radial-thickness' && pending.kind !== 'cylinder-diameter' && pending.kind !== 'circle-separation') || (pending.kind === 'chamfer' ? !!pending.adjacent : pending.kind === 'radial-thickness' || pending.kind === 'circle-separation' ? !!pending.second : pending.kind === 'cylinder-diameter' ? !!pending.cylinder : !!pending.b));
     const into = placing ? placementAt(pending.view) : null, place = placing && into ? fromSheet(into, h.q) : h.at;
     if (h.view === 'iso' && !placing) { setMessage('Dimensions go on the front, top and right views.'); return; }
     const pr = projectionAt(placing ? pending.view : h.view); if (!pr) return;
@@ -1261,6 +1285,48 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
       setSelectedFrame(null);
       return;
     }
+    if (tool === 'virtual-sharp') {
+      if (scope.kind !== 'part') { setMessage('Virtual sharps use a part drawing.'); return; }
+      if (pending?.kind === 'virtual-sharp' && (pending.source.projection !== views || pending.source.settings !== settings || busy)) {
+        cancel(); setMessage('The drawing changed. Select both straight edges again.'); return;
+      }
+      if (placementAt(h.view)?.breaks?.length) {
+        setMessage('Virtual sharps are not supported on a broken view.'); return;
+      }
+      if (!isViewId(h.view) || h.view === 'iso') {
+        setMessage('Virtual sharps are supported only on ordinary front, top, and right views.'); return;
+      }
+      if (pending?.kind === 'virtual-sharp' && pending.view !== h.view) {
+        setMessage(`Select the second straight edge in the ${viewLabel(pending.view)}.`); return;
+      }
+      if (!h.edge) {
+        setMessage(pending?.kind === 'virtual-sharp' ? 'Click the second non-parallel straight edge.' : 'Click the first straight edge.');
+        return;
+      }
+      const picked = pickVirtualSharpEdge(pr, h.edge, h.view);
+      if (!picked.ok) { setMessage(picked.reason); return; }
+      if (!pending || pending.kind !== 'virtual-sharp') {
+        setPending({ kind: 'virtual-sharp', view: h.view as SectionViewId, first: picked.ref, source: { projection: views, settings } });
+        setMessage(null);
+        return;
+      }
+      const verified = resolveVirtualSharp(pr, pending.first, picked.ref, h.view);
+      if (!verified.ok) { setMessage(verified.reason); return; }
+      const item: DrawingVirtualSharp = {
+        id: newVirtualSharpId(wholeSettings.virtualSharps),
+        view: pending.view,
+        first: pending.first,
+        second: picked.ref,
+      };
+      if (!onChange({ ...settings, virtualSharps: [...(settings.virtualSharps ?? []), item] })) return;
+      setPending(null);
+      setMessage(null);
+      setTool('select');
+      setSelected({ kind: 'virtual-sharp', id: item.id });
+      setSelectedTarget(null);
+      setSelectedFrame(null);
+      return;
+    }
   };
 
   /** DR-1: the detail tool — its centre on a view or a section, then a point its circle reaches; the next free letter, its scale and place automatic. */
@@ -1427,11 +1493,13 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
       const acId = (e.target as Element).closest?.('g.arc-centerline[data-arc-centerline]')?.getAttribute('data-arc-centerline') ?? null;
       const cmgId = (e.target as Element).closest?.('g.center-mark-group[data-center-mark-group]')?.getAttribute('data-center-mark-group') ?? null;
       const clId = (e.target as Element).closest?.('g.bisector-centerline[data-bisector-centerline]')?.getAttribute('data-bisector-centerline') ?? null;
+      const vsId = (e.target as Element).closest?.('g.virtual-sharp[data-virtual-sharp]')?.getAttribute('data-virtual-sharp') ?? null;
       const d = target?.matches('g.dimension') ? settings.dimensions.find(x => x.id === id) : undefined;
       const n = target?.matches('g.note') ? settings.notes?.find(x => x.id === id) : undefined;
       const ac = !d && !n && acId ? settings.arcCenterlines?.find(x => x.id === acId) : undefined;
       const cmg = !d && !n && !ac && cmgId ? settings.centerMarkGroups?.find(x => x.id === cmgId) : undefined;
       const cl = !d && !n && !ac && !cmg && clId ? settings.bisectorCenterlines?.find(x => x.id === clId) : undefined;
+      const vs = !d && !n && !ac && !cmg && !cl && vsId ? settings.virtualSharps?.find(x => x.id === vsId) : undefined;
       if (d && e.shiftKey) {
         if (activeDimensionGroup) {
           const pair = activeDimensionGroup.pair;
@@ -1460,12 +1528,12 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
         return;
       }
       clearDimensionGroup();
-      setSelected(d ? { kind: 'dimension', id: d.id } : n ? { kind: 'note', id: n.id } : ac ? { kind: 'arc-centerline', id: ac.id } : cmg ? { kind: 'center-mark-group', id: cmg.id } : cl ? { kind: 'bisector-centerline', id: cl.id } : null);
+      setSelected(d ? { kind: 'dimension', id: d.id } : n ? { kind: 'note', id: n.id } : ac ? { kind: 'arc-centerline', id: ac.id } : cmg ? { kind: 'center-mark-group', id: cmg.id } : cl ? { kind: 'bisector-centerline', id: cl.id } : vs ? { kind: 'virtual-sharp', id: vs.id } : null);
       setNoteDraft(null); setTolDraft({});
       if (n) setNoteDraft(n.text);
       if (d) setDrag({ id: d.id, place: d.place });
       else if (n && qd) setDrag({ note: n.id, at: n.at, grab: [qd[0] - n.at[0], qd[1] - n.at[1]] });
-      else if (ac || cmg || cl) return;
+      else if (ac || cmg || cl || vs) return;
       else setDrag({ pan: [e.clientX, e.clientY], box: [...viewBox] as [number, number, number, number] });
       (e.currentTarget as Element).setPointerCapture(e.pointerId);
       return;
@@ -1617,7 +1685,14 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
   };
 
   const removeAnnotation = ({ kind, id }: SheetAnnotationSelection) => {
-    if (kind === 'bisector-centerline') {
+    if (kind === 'virtual-sharp') {
+      if (settings.virtualSharps?.filter(vs => vs.id === id).length !== 1) return;
+      const kept = settings.virtualSharps.filter(vs => vs.id !== id);
+      const next = { ...settings };
+      if (kept.length) next.virtualSharps = kept;
+      else delete next.virtualSharps;
+      if (!onChange(next)) return;
+    } else if (kind === 'bisector-centerline') {
       if (settings.bisectorCenterlines?.filter(cl => cl.id === id).length !== 1) return;
       const kept = settings.bisectorCenterlines.filter(cl => cl.id !== id);
       const next = { ...settings };
@@ -1721,6 +1796,7 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
       ...(sheet.balloons ? { balloons: { placed: sheet.balloons.placed.map(p => ({ no: p.no, item: p.item, view: p.view, edge: p.edge })), unclear: sheet.balloons.unclear, noEdge: sheet.balloons.noEdge } } : {}),
       ...(sheet.centerMarkGroups ? { centerMarkGroups: sheet.centerMarkGroups.map(r => r.ok ? { id: r.item.id, view: r.item.view, count: r.item.members.length, connectingLines: r.item.connectingLines, segments: r.geometry.segments } : { id: r.item.id, view: r.item.view, connectingLines: r.item.connectingLines, lost: r.reason }) } : {}),
       ...(sheet.bisectorCenterlines ? { bisectorCenterlines: sheet.bisectorCenterlines.map(r => r.ok ? { id: r.item.id, view: r.item.view, start: r.geometry.start, end: r.geometry.end, length: r.geometry.length, separation: r.geometry.separation } : { id: r.item.id, view: r.item.view, lost: r.reason }) } : {}),
+      ...(sheet.virtualSharps ? { virtualSharps: sheet.virtualSharps.map(r => r.ok ? { id: r.item.id, view: r.item.view, point: r.geometry.point, point3: r.geometry.point3, angleDeg: r.geometry.angleDeg } : { id: r.item.id, view: r.item.view, lost: r.reason }) } : {}),
       suggestions: suggestions.map(x => ({ id: x.id, kind: x.kind, estimate: x.estimate })) };
     // (G24: the drawing's annotations on the model, for the GPU lane's 3D display and the flow.)
     w.__studioAnnotations = () => sheet && layout && views ? modelAnnotations({ views, layout, settings, sheet, ...(weldJoints ? { welds: weldJoints } : {}) }) : null;
@@ -2020,7 +2096,48 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
         }
       }
     }
-    const placing = pending && hover && pending.kind !== 'note' && pending.kind !== 'arc-centerline' && pending.kind !== 'center-mark-group' && pending.kind !== 'bisector-centerline' && ((pending.kind !== 'linear' && pending.kind !== 'angle' && pending.kind !== 'chamfer' && pending.kind !== 'radial-thickness' && pending.kind !== 'cylinder-diameter' && pending.kind !== 'circle-separation') || (pending.kind === 'chamfer' ? !!pending.adjacent : pending.kind === 'radial-thickness' || pending.kind === 'circle-separation' ? !!pending.second : pending.kind === 'cylinder-diameter' ? !!pending.cylinder : !!pending.b));
+    const draftVs = pending?.kind === 'virtual-sharp' && pending.source.projection === views
+      && pending.source.settings === settings && !busy ? pending : null;
+    const inspectedVs = selected?.kind === 'virtual-sharp' ? sheet?.virtualSharps?.find(r => r.ok && r.item.id === selected.id) : undefined;
+    if (sourceCurrent && scope.kind === 'part' && (draftVs || inspectedVs)) {
+      const view = draftVs ? draftVs.view : inspectedVs!.item.view;
+      const placement = layout.views[view];
+      if (!placement.hidden && !placement.breaks?.length) {
+        const prView = views[view];
+        if (draftVs) {
+          const firstLine = resolveLine(prView, draftVs.first);
+          if (firstLine) {
+            parts.push(`<g class="dw-hover" data-virtual-sharp-source pointer-events="none">${marksSvg([{
+              kind: 'line', a: toSheet(placement, firstLine[0]), b: toSheet(placement, firstLine[1]), pen: 'visible',
+            }])}</g>`);
+          }
+          if (hover && hover.view === view && hover.edge) {
+            const secondPick = pickVirtualSharpEdge(prView, hover.edge, view);
+            if (secondPick.ok) {
+              const preview = resolveVirtualSharp(prView, draftVs.first, secondPick.ref, view);
+              if (preview.ok) {
+                const V = toSheet(placement, preview.geometry.point);
+                const lines = [preview.geometry.firstNearEnd, preview.geometry.secondNearEnd].flatMap(nearEnd => {
+                  const E = toSheet(placement, nearEnd);
+                  const dx = V[0] - E[0], dy = V[1] - E[1], len = Math.hypot(dx, dy);
+                  if (len <= 1e-9) return [];
+                  const ux = dx / len, uy = dy / len;
+                  return [{ kind: 'line' as const, a: E, b: [V[0] + ux * VIRTUAL_SHARP_OVERSHOOT_MM, V[1] + uy * VIRTUAL_SHARP_OVERSHOOT_MM] as XY, pen: 'thin' as const }];
+                });
+                parts.push(`<g class="dw-preview" data-virtual-sharp-preview pointer-events="none">${marksSvg(lines)}<circle class="dw-pick" cx="${V[0]}" cy="${V[1]}" r="0.9"/></g>`);
+              }
+            }
+          }
+        } else if (inspectedVs?.ok) {
+          for (const [a, b] of [inspectedVs.geometry.firstEnds, inspectedVs.geometry.secondEnds]) {
+            parts.push(`<g class="dw-hover" data-virtual-sharp-source pointer-events="none">${marksSvg([{
+              kind: 'line', a: toSheet(placement, a), b: toSheet(placement, b), pen: 'visible',
+            }])}</g>`);
+          }
+        }
+      }
+    }
+    const placing = pending && hover && pending.kind !== 'note' && pending.kind !== 'arc-centerline' && pending.kind !== 'center-mark-group' && pending.kind !== 'bisector-centerline' && pending.kind !== 'virtual-sharp' && ((pending.kind !== 'linear' && pending.kind !== 'angle' && pending.kind !== 'chamfer' && pending.kind !== 'radial-thickness' && pending.kind !== 'cylinder-diameter' && pending.kind !== 'circle-separation') || (pending.kind === 'chamfer' ? !!pending.adjacent : pending.kind === 'radial-thickness' || pending.kind === 'circle-separation' ? !!pending.second : pending.kind === 'cylinder-diameter' ? !!pending.cylinder : !!pending.b));
     if (pending?.kind === 'angle' && pending.mode && pending.owner !== projectionActionOwner) return '';
     if (pending?.kind === 'angle') for (const ref of [pending.a, ...(pending.b ? [pending.b] : [])]) {
       const l = resolveLine(R(pending.view), ref);
@@ -2077,9 +2194,17 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
               ? resolveBisectorCenterline(R(hover.view), pending.first, picked.ref, hover.view).ok
               : true;
           })()
+          : tool === 'virtual-sharp' ? !v.breaks?.length && (() => {
+            if (pending?.kind === 'virtual-sharp' && pending.view !== hover.view) return false;
+            const picked = pickVirtualSharpEdge(R(hover.view), hover.edge, hover.view);
+            if (!picked.ok) return false;
+            return pending?.kind === 'virtual-sharp'
+              ? resolveVirtualSharp(R(hover.view), pending.first, picked.ref, hover.view).ok
+              : true;
+          })()
           : tool === 'linear' || tool === 'angle' ? hover.edge.kind !== 'circle' && hover.edge.kind !== 'curve'
           : !!hover.edge.circle && roundIn(R(hover.view), hover.edge);
-        const pieces = tool === 'reflex-angle' || tool === 'arc-length' || tool === 'chamfer' || tool === 'radial-thickness' || tool === 'cylinder-diameter' || tool === 'circle-separation' || tool === 'arc-centerline' || tool === 'center-mark-group' || tool === 'bisector-centerline' || hover.visibleRimOnly || (tool === 'diameter' && isDetailRef(hover.view) && !showDetailHidden(settings, hover.view))
+        const pieces = tool === 'reflex-angle' || tool === 'arc-length' || tool === 'chamfer' || tool === 'radial-thickness' || tool === 'cylinder-diameter' || tool === 'circle-separation' || tool === 'arc-centerline' || tool === 'center-mark-group' || tool === 'bisector-centerline' || tool === 'virtual-sharp' || hover.visibleRimOnly || (tool === 'diameter' && isDetailRef(hover.view) && !showDetailHidden(settings, hover.view))
           ? hover.edge.pieces.filter(piece => piece.visible) : hover.edge.pieces;
         if (ok) parts.push(`<g class="dw-hover">${marksSvg(pieces.map(p => curveMark(v, p.curve, 'visible')))}</g>`);
       }
@@ -2104,7 +2229,7 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
   }, [drag, views, layout, sheet, sheetMarkup, settings, title, selected, selectedTarget, weldJoints, bom, svgSectionTextClearance,
     activeDimensionGroup, selectedDimensionIds]);
 
-  const hint = message ?? (radiusMove ? "Click the sheet to move the shortened leader origin. Esc cancels." : null) ?? (currentReattachment ? `Select a rim in the ${viewLabel(currentReattachment.original.view)} · Esc cancels` : null) ?? (pending ? (pending.kind === 'standalone-frame' ? `Click the sheet to place the frame. View: ${viewLabel(pending.view)}. Esc cancels.` : pending.kind === 'datum-target' ? 'Click where the target symbol goes · Esc cancels' : pending.kind === 'datum-line' ? 'Now the other end of the target line · Esc cancels' : pending.kind === 'note' ? 'Click where the note’s text goes · Esc cancels' : pending.kind === 'detail-center' ? `Select the centre of Detail ${pending.moving.detail.id} on the ${viewLabel(pending.view)} · Esc cancels` : pending.kind === 'detail' ? 'Now how far the detail’s circle reaches · Esc cancels' : pending.kind === 'radial-thickness' ? (!pending.first ? 'Select the first concentric full circle · Esc cancels' : !pending.second ? 'Now select the second concentric full circle · Esc cancels' : 'Click where the radial thickness goes · Esc cancels') : pending.kind === 'cylinder-diameter' ? (!pending.cylinder ? 'Select a visible cylinder side silhouette · Esc cancels' : 'Click where the side diameter goes · Esc cancels') : pending.kind === 'circle-separation' ? (!pending.first ? 'Select the first disjoint full circle · Esc cancels' : !pending.second ? 'Now select the second disjoint full circle · Esc cancels' : `Click where the ${circleGapMode} circle gap goes · Esc cancels`) : pending.kind === 'arc-centerline' ? 'Now click the second concentric partial circular arc · Esc cancels' : pending.kind === 'center-mark-group' ? `${pending.members.length} hole${pending.members.length === 1 ? '' : 's'} selected${pending.members.length < MIN_CENTER_MARK_GROUP_MEMBERS ? ` — pick at least ${MIN_CENTER_MARK_GROUP_MEMBERS - pending.members.length} more collinear hole${MIN_CENTER_MARK_GROUP_MEMBERS - pending.members.length === 1 ? '' : 's'}` : ' — click Create row or pick more collinear holes'} · Esc cancels` : pending.kind === 'bisector-centerline' ? 'Now click the second parallel equal-span straight edge · Esc cancels' : pending.kind === 'chamfer' ? (!pending.chamfer ? 'Select the 45° chamfer bevel edge · Esc cancels' : !pending.adjacent ? 'Now click an adjacent straight wall sharing a corner with the bevel · Esc cancels' : 'Click where the chamfer callout goes · Esc cancels') : pending.kind === 'angle' ? (pending.b ? (pending.mode ? 'Click to place the reflex angle · Esc cancels' : 'Choose the side of the corner to measure, then click to place the angle · Esc cancels') : 'Now the second edge · Esc cancels') : pending.kind === 'linear' && !pending.b ? 'Now the second point · Esc cancels' : pending.kind === 'diameter' && pending.owner ? `${pending.owner} · Click where the dimension goes · Esc cancels` : 'Click where the dimension goes · Esc cancels') : tool === 'select' ? null : tool === 'datum-target' ? (targetDraft.kind === 'point' ? 'Click a straight edge endpoint · Esc cancels' : targetDraft.kind === 'line' ? 'Click the first end of the target line · Esc cancels' : 'Click the centre of the target area · Esc cancels') : TOOLS.find(t => t.tool === tool)!.hint);
+  const hint = message ?? (radiusMove ? "Click the sheet to move the shortened leader origin. Esc cancels." : null) ?? (currentReattachment ? `Select a rim in the ${viewLabel(currentReattachment.original.view)} · Esc cancels` : null) ?? (pending ? (pending.kind === 'standalone-frame' ? `Click the sheet to place the frame. View: ${viewLabel(pending.view)}. Esc cancels.` : pending.kind === 'datum-target' ? 'Click where the target symbol goes · Esc cancels' : pending.kind === 'datum-line' ? 'Now the other end of the target line · Esc cancels' : pending.kind === 'note' ? 'Click where the note’s text goes · Esc cancels' : pending.kind === 'detail-center' ? `Select the centre of Detail ${pending.moving.detail.id} on the ${viewLabel(pending.view)} · Esc cancels` : pending.kind === 'detail' ? 'Now how far the detail’s circle reaches · Esc cancels' : pending.kind === 'radial-thickness' ? (!pending.first ? 'Select the first concentric full circle · Esc cancels' : !pending.second ? 'Now select the second concentric full circle · Esc cancels' : 'Click where the radial thickness goes · Esc cancels') : pending.kind === 'cylinder-diameter' ? (!pending.cylinder ? 'Select a visible cylinder side silhouette · Esc cancels' : 'Click where the side diameter goes · Esc cancels') : pending.kind === 'circle-separation' ? (!pending.first ? 'Select the first disjoint full circle · Esc cancels' : !pending.second ? 'Now select the second disjoint full circle · Esc cancels' : `Click where the ${circleGapMode} circle gap goes · Esc cancels`) : pending.kind === 'arc-centerline' ? 'Now click the second concentric partial circular arc · Esc cancels' : pending.kind === 'center-mark-group' ? `${pending.members.length} hole${pending.members.length === 1 ? '' : 's'} selected${pending.members.length < MIN_CENTER_MARK_GROUP_MEMBERS ? ` — pick at least ${MIN_CENTER_MARK_GROUP_MEMBERS - pending.members.length} more collinear hole${MIN_CENTER_MARK_GROUP_MEMBERS - pending.members.length === 1 ? '' : 's'}` : ' — click Create row or pick more collinear holes'} · Esc cancels` : pending.kind === 'bisector-centerline' ? 'Now click the second parallel equal-span straight edge · Esc cancels' : pending.kind === 'virtual-sharp' ? 'Now click the second non-parallel straight edge · Esc cancels' : pending.kind === 'chamfer' ? (!pending.chamfer ? 'Select the 45° chamfer bevel edge · Esc cancels' : !pending.adjacent ? 'Now click an adjacent straight wall sharing a corner with the bevel · Esc cancels' : 'Click where the chamfer callout goes · Esc cancels') : pending.kind === 'angle' ? (pending.b ? (pending.mode ? 'Click to place the reflex angle · Esc cancels' : 'Choose the side of the corner to measure, then click to place the angle · Esc cancels') : 'Now the second edge · Esc cancels') : pending.kind === 'linear' && !pending.b ? 'Now the second point · Esc cancels' : pending.kind === 'diameter' && pending.owner ? `${pending.owner} · Click where the dimension goes · Esc cancels` : 'Click where the dimension goes · Esc cancels') : tool === 'select' ? null : tool === 'datum-target' ? (targetDraft.kind === 'point' ? 'Click a straight edge endpoint · Esc cancels' : targetDraft.kind === 'line' ? 'Click the first end of the target line · Esc cancels' : 'Click the centre of the target area · Esc cancels') : TOOLS.find(t => t.tool === tool)!.hint);
   const selDim = selected?.kind === 'dimension' ? settings.dimensions.find(d => d.id === selected.id) : undefined;
   const extensionReady = !busy && projectionCurrent && sourceCurrent !== false;
   const extensionOwner = useMemo(() => ({}), [projectionActionOwner, selected, sheet, extensionReady]);
@@ -2432,6 +2557,19 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
                 <b>{r.ok ? `L${Math.round(r.geometry.length * 100) / 100}` : 'lost'}</b><span>{r.item.id} · {r.item.view}</span>
               </button>
               <Button variant="ghost" size="xs" aria-label={`Remove centerline ${r.item.id}`} onClick={e => { e.stopPropagation(); removeAnnotation({ kind: 'bisector-centerline', id: r.item.id }); }}><Icon name="close" small /></Button>
+            </div>)}
+          </div>
+        </div>}
+
+        {(settings.virtualSharps?.length ?? 0) > 0 && <div role="group" aria-label="Virtual sharps">
+          <div className="card-title" style={{ marginTop: 8 }}>VIRTUAL SHARPS <span className="muted">{settings.virtualSharps!.length}</span></div>
+          <div className="dw-dims">
+            {(sheet?.virtualSharps ?? []).map(r => <div key={r.item.id} className={'dw-dim' + (selected?.kind === 'virtual-sharp' && selected.id === r.item.id ? ' sel' : '') + (r.ok ? '' : ' lost')} title={r.ok ? undefined : r.reason}>
+              <button type="button" className="dw-annotation-select" aria-pressed={selected?.kind === 'virtual-sharp' && selected.id === r.item.id}
+                onClick={() => { cancel(); setTool('select'); setSelected({ kind: 'virtual-sharp', id: r.item.id }); setSelectedTarget(null); setSelectedFrame(null); }}>
+                <b>{r.ok ? `(${Math.round(r.geometry.point[0] * 100) / 100}, ${Math.round(r.geometry.point[1] * 100) / 100})` : 'lost'}</b><span>{r.item.id} · {r.item.view}</span>
+              </button>
+              <Button variant="ghost" size="xs" aria-label={`Remove virtual sharp ${r.item.id}`} onClick={e => { e.stopPropagation(); removeAnnotation({ kind: 'virtual-sharp', id: r.item.id }); }}><Icon name="close" small /></Button>
             </div>)}
           </div>
         </div>}

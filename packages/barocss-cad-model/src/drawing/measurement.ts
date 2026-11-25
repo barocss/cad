@@ -40,6 +40,13 @@ function coaxial(a: NonNullable<ProjectedEdge['circle']>, b: NonNullable<Project
  */
 export function samePointDependency(a: DimPoint, av: BrepProjection, b: DimPoint, bv: BrepProjection, axis: string, locationOwner?: LocationOwner, countedPattern = false): boolean {
   if (a.at !== b.at || a.at === 'end') return false;
+  if (a.at === 'virtual-sharp') {
+    if (!a.second || !b.second) return false;
+    const samePair = (a.edge === b.edge && a.second.edge === b.second.edge) || (a.edge === b.second.edge && a.second.edge === b.edge);
+    if (!samePair) return false;
+    const ap = resolvePoint(av, a), bp = resolvePoint(bv, b);
+    return !!ap && !!bp && Math.hypot(ap[0] - bp[0], ap[1] - bp[1], ap[2] - bp[2]) <= SAME;
+  }
   if (a.at === 'pcd') {
     const ar = a.ring ?? [], br = b.ring ?? [], used = new Set<number>();
     if (!ar.length || ar.length !== br.length) return false;

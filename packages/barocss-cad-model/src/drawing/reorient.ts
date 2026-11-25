@@ -10,6 +10,7 @@
 import { resolveDimension, type Resolved } from './dimensions';
 import { resolveCenterMarkGroup } from './centerMarkGroup';
 import { resolveBisectorCenterline } from './bisectorCenterline';
+import { resolveVirtualSharp } from './virtualSharp';
 import { baseViewOf, detailLetter, isDetailRef, isSectionRef, isViewId, sectionLetter, sectionsOf, withSections, type DimView, type SectionRef, type DrawingSection, type DrawingSettings, type DrawingViews, type ViewId, type XY } from './types';
 import { sectionDepth, type Orientation } from './views';
 
@@ -127,6 +128,10 @@ export function reorient(from: DrawingViews, to: DrawingViews, settings: Drawing
     const mapped = map.get(cl.view)?.view ?? cl.view;
     return { ...cl, view: mapped as typeof cl.view };
   });
+  if (settings.virtualSharps) turned.virtualSharps = settings.virtualSharps.map(vs => {
+    const mapped = map.get(vs.view)?.view ?? vs.view;
+    return { ...vs, view: mapped as typeof vs.view };
+  });
   if (settings.datumTargets) turned.datumTargets = settings.datumTargets.map((d): typeof d => {
     const [view, place] = mapPlace(d.view, d.place), m = map.get(d.view);
     // A line's ends and an area's centre are view points: they turn as the symbol's place does; a rectangle's width and height swap with the axes.
@@ -173,6 +178,15 @@ export function reorient(from: DrawingViews, to: DrawingViews, settings: Drawing
     const after = resolveBisectorCenterline(to[mapped.view], mapped.first, mapped.second, mapped.view);
     if (!after.ok || Math.abs(after.geometry.length - before.geometry.length) > 1e-6 || Math.abs(after.geometry.separation - before.geometry.separation) > 1e-6) {
       failed.push({ dim: cl.id, was: `L${before.geometry.length} / W${before.geometry.separation}`, now: after.ok ? `L${after.geometry.length} / W${after.geometry.separation}` : `lost: ${after.reason}` });
+    }
+  });
+  (settings.virtualSharps ?? []).forEach((vs, k) => {
+    const before = resolveVirtualSharp(from[vs.view], vs.first, vs.second, vs.view);
+    if (!before.ok) return;
+    const mapped = turned.virtualSharps![k];
+    const after = resolveVirtualSharp(to[mapped.view], mapped.first, mapped.second, mapped.view);
+    if (!after.ok || Math.hypot(after.geometry.point3[0] - before.geometry.point3[0], after.geometry.point3[1] - before.geometry.point3[1], after.geometry.point3[2] - before.geometry.point3[2]) > 1e-5) {
+      failed.push({ dim: vs.id, was: `(${before.geometry.point3.join(',')})`, now: after.ok ? `(${after.geometry.point3.join(',')})` : `lost: ${after.reason}` });
     }
   });
   if (failed.length) return { ok: false, code: 'ORIENTATION_REMAP_FAILED', message: `${failed.length} dimension${failed.length > 1 ? 's' : ''} would not read the same from the new front: nothing was turned.`, failed };

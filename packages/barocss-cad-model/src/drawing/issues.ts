@@ -50,12 +50,13 @@ import { SECTION_VIEWS, VIEW_IDS, baseViewOf, detailLetter, isDetailRef, isViewI
 
 export const DRAWING_ISSUES_VERSION = 'cad-studio-drawing-issues-v1';
 
-export type DrawingIssueCode = 'SHEET_SET' | 'UNIT_PRECISION' | 'FORESHORTEN_INVALID' | 'LINEAR_ARROWS_CROWDED' | 'CROSSING_BREAK_CONFLICT' | 'CROSSING_BREAK_INACTIVE' | 'EXTENSION_JOG_INVALID' | 'DIM_ON_HIDDEN' | 'ARC_CENTERLINE_LOST' | 'CENTER_MARK_GROUP_LOST' | 'BISECTOR_CENTERLINE_LOST' | 'DATUM_LOST' | 'FRAME_LOST' | 'FRAME_VIEW_MISSING' | 'DATUM_UNDEFINED' | 'FRAME_RULE' | 'DATUM_TWICE' | 'VIEW_NEEDED' | 'DIMENSION_LOST' | 'TEXT_OVERLAP' | 'TEXT_OVER_LINES' | 'OFF_SHEET' | 'VIEWS_DONT_FIT' | 'DUPLICATE' | 'REMATCHED' | 'HOLE_SIZE_MISSING' | 'HOLE_NOT_LOCATED' | 'STEP_NOT_LOCATED' | 'OVERALL_MISSING' | 'TABLE_SOURCE' | 'WELD_NOT_SHOWN' | 'BALLOON_NOT_CLEAR' | 'BALLOON_NO_EDGE' | 'FIT_ROW_MISSING' | 'FOLLOWED_CHANGED' | 'DETAIL_PARENT_MISSING' | 'DETAIL_EMPTY' | 'DETAIL_NO_ROOM' | 'BREAK_NO_VIEW' | 'SECTION_NO_ROOM' | 'SECTION_NO_VIEW' | 'DATUM_TARGET_OUTSIDE' | DatumTargetFailureCode | NoteTargetFailureCode;
+export type DrawingIssueCode = 'SHEET_SET' | 'UNIT_PRECISION' | 'FORESHORTEN_INVALID' | 'LINEAR_ARROWS_CROWDED' | 'CROSSING_BREAK_CONFLICT' | 'CROSSING_BREAK_INACTIVE' | 'EXTENSION_JOG_INVALID' | 'DIM_ON_HIDDEN' | 'ARC_CENTERLINE_LOST' | 'CENTER_MARK_GROUP_LOST' | 'BISECTOR_CENTERLINE_LOST' | 'VIRTUAL_SHARP_LOST' | 'DATUM_LOST' | 'FRAME_LOST' | 'FRAME_VIEW_MISSING' | 'DATUM_UNDEFINED' | 'FRAME_RULE' | 'DATUM_TWICE' | 'VIEW_NEEDED' | 'DIMENSION_LOST' | 'TEXT_OVERLAP' | 'TEXT_OVER_LINES' | 'OFF_SHEET' | 'VIEWS_DONT_FIT' | 'DUPLICATE' | 'REMATCHED' | 'HOLE_SIZE_MISSING' | 'HOLE_NOT_LOCATED' | 'STEP_NOT_LOCATED' | 'OVERALL_MISSING' | 'TABLE_SOURCE' | 'WELD_NOT_SHOWN' | 'BALLOON_NOT_CLEAR' | 'BALLOON_NO_EDGE' | 'FIT_ROW_MISSING' | 'FOLLOWED_CHANGED' | 'DETAIL_PARENT_MISSING' | 'DETAIL_EMPTY' | 'DETAIL_NO_ROOM' | 'BREAK_NO_VIEW' | 'SECTION_NO_ROOM' | 'SECTION_NO_VIEW' | 'DATUM_TARGET_OUTSIDE' | DatumTargetFailureCode | NoteTargetFailureCode;
 export type DrawingFix =
   | { kind: 'remove'; dim: string }
   | { kind: 'remove-arc-centerline'; id: string }
   | { kind: 'remove-center-mark-group'; id: string }
   | { kind: 'remove-bisector-centerline'; id: string }
+  | { kind: 'remove-virtual-sharp'; id: string }
   | { kind: 'move'; dim: string; place: XY }
   | { kind: 'move-note'; note: string; at: XY }
   /** A table's top-left corner to `at` (O49). */
@@ -553,6 +554,13 @@ export function drawingIssues(ctx: IssueContext): DrawingIssue[] {
       out.push({ code: 'REMATCHED', severity: 'warning', message: `Centerline ${cl.item.id} in ${viewName(cl.item.view)}: a straight edge it follows was matched again after an edit. Check it.`, view: cl.item.view });
     }
   }
+  for (const vs of sheet.virtualSharps ?? []) {
+    if (!vs.ok) {
+      out.push({ code: 'VIRTUAL_SHARP_LOST', severity: 'error', message: `Virtual sharp ${vs.item.id} in ${viewName(vs.item.view)} is lost: ${vs.reason}`, view: vs.item.view, fix: { kind: 'remove-virtual-sharp', id: vs.item.id } });
+    } else if (vs.item.first.was !== undefined || vs.item.second.was !== undefined) {
+      out.push({ code: 'REMATCHED', severity: 'warning', message: `Virtual sharp ${vs.item.id} in ${viewName(vs.item.view)}: a straight edge it follows was matched again after an edit. Check it.`, view: vs.item.view });
+    }
+  }
   for (const r of sheet.dimensions) {
     if (!r.ok) { out.push({ code: 'DIMENSION_LOST', severity: 'error', message: `A ${r.dim.kind} dimension in ${viewName(r.dim.view)} is lost: ${r.reason}${drawingFixControlLoss(settings, { kind: 'remove', dim: r.dim.id }).length ? ' Fix all retains this dimension and its authored controls for review.' : ''}`, dims: [r.dim.id], view: r.dim.view, fix: { kind: 'remove', dim: r.dim.id } }); continue; }
     // (O146: a linear dimension measuring to a hidden line — a keyseat under its hub, say — is said; a section through it
@@ -766,7 +774,7 @@ function ids(ps: Placed[]): { dims?: string[]; notes?: string[]; tables?: string
   return { ...(dims.length ? { dims } : {}), ...(notes.length ? { notes } : {}), ...(tables.length ? { tables } : {}), ...(welds.length ? { welds } : {}), ...(datumTargets.length ? { datumTargets } : {}), ...(frames.length ? { frames } : {}) };
 }
 function rematched(d: DrawingDimension): boolean {
-  const point = (p: DimPoint) => p.was !== undefined || (p.ring ?? []).some(m => m.was !== undefined);
+  const point = (p: DimPoint) => p.was !== undefined || p.second?.was !== undefined || (p.ring ?? []).some(m => m.was !== undefined);
   return d.kind === 'linear' ? point(d.a) || point(d.b) : d.kind === 'angle' ? d.a.was !== undefined || d.b.was !== undefined : d.kind === 'arc-length' ? d.arc.was !== undefined : d.kind === 'chamfer' ? d.chamfer.was !== undefined || d.adjacent.was !== undefined : d.kind === 'radial-thickness' || d.kind === 'circle-separation' ? d.first.was !== undefined || d.second.was !== undefined : d.kind === 'cylinder-diameter' ? d.cylinder.was !== undefined : d.kind === 'pcd' ? d.ring.some(m => m.was !== undefined) : d.was !== undefined;
 }
 function pickMover(a: Placed, b: Placed, settings: DrawingSettings): Placed {
@@ -1102,6 +1110,7 @@ export function applyFix(ctx: IssueContext, fix: DrawingFix): DrawingSettings {
     case 'remove-arc-centerline': { const kept = (s.arcCenterlines ?? []).filter(ac => ac.id !== fix.id), rest = { ...s }; delete rest.arcCenterlines; return kept.length ? { ...rest, arcCenterlines: kept } : rest; }
     case 'remove-center-mark-group': { const kept = (s.centerMarkGroups ?? []).filter(g => g.id !== fix.id), rest = { ...s }; delete rest.centerMarkGroups; return kept.length ? { ...rest, centerMarkGroups: kept } : rest; }
     case 'remove-bisector-centerline': { const kept = (s.bisectorCenterlines ?? []).filter(cl => cl.id !== fix.id), rest = { ...s }; delete rest.bisectorCenterlines; return kept.length ? { ...rest, bisectorCenterlines: kept } : rest; }
+    case 'remove-virtual-sharp': { const kept = (s.virtualSharps ?? []).filter(vs => vs.id !== fix.id), rest = { ...s }; delete rest.virtualSharps; return kept.length ? { ...rest, virtualSharps: kept } : rest; }
     case 'remove-detail': { const kept = (s.details ?? []).filter(d => d.id !== fix.detail), rest: DrawingSettings = { ...s, dimensions: s.dimensions.filter(d => d.view !== `detail:${fix.detail}`) }; delete rest.details; return kept.length ? { ...rest, details: kept } : rest; }
     case 'remove-break': { const kept = (s.breaks ?? []).filter((_, k) => k !== fix.index), rest = { ...s }; delete rest.breaks; return kept.length ? { ...rest, breaks: kept } : rest; }
     case 'remove-datum': return { ...s, datums: (s.datums ?? []).filter(d => d.id !== fix.datum) };
@@ -1124,7 +1133,7 @@ export function applyFix(ctx: IssueContext, fix: DrawingFix): DrawingSettings {
 }
 function accepted(d: DrawingDimension): DrawingDimension {
   const clean = <T extends { was?: string }>(x: T): T => { const { was: _w, ...rest } = x; void _w; return rest as T; };
-  const point = (p: DimPoint): DimPoint => ({ ...clean(p), ...(p.ring ? { ring: p.ring.map(clean) } : {}) });
+  const point = (p: DimPoint): DimPoint => ({ ...clean(p), ...(p.ring ? { ring: p.ring.map(clean) } : {}), ...(p.second ? { second: clean(p.second) } : {}) });
   if (d.kind === 'pcd') return { ...d, ring: d.ring.map(clean) };
   if (d.kind === 'linear') return { ...d, a: point(d.a), b: point(d.b) };
   if (d.kind === 'angle') { const { was: _a, ...a } = d.a, { was: _b, ...b } = d.b; void _a; void _b; return { ...d, a, b }; }

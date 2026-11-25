@@ -15,6 +15,7 @@ import { resolveChamferEdges } from './chamferDim';
 import { resolveRadialThicknessEdges } from './radialThickness';
 import { resolveCylinderDiameter } from './cylinderDiameter';
 import { resolveCircleSeparationEdges } from './circleSeparation';
+import { resolveVirtualSharpInProjection } from './virtualSharp';
 
 const sub3 = (a: readonly number[], b: readonly number[]): Vec3 => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
 const dist3 = (a: readonly number[], b: readonly number[]) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
@@ -78,6 +79,11 @@ export function arcPoints(c: Extract<ProjectedCurve, { kind: 'arc' }>, n: number
 /** A dimension point on the current model (null: its edge is gone). */
 export function resolvePoint(pr: BrepProjection, ref: DimPoint): Vec3 | null {
   if (ref.at === 'pcd') { const c = pitchCircle(pr, ref.ring ?? []); return c && c.center; }
+  if (ref.at === 'virtual-sharp') {
+    if (!ref.second) return null;
+    const vs = resolveVirtualSharpInProjection(pr, { edge: ref.edge, near: ref.near }, ref.second);
+    return vs.ok ? vs.geometry.point3 : null;
+  }
   const edges = pr.edges.filter(e => e.name === ref.edge);
   let best: Vec3 | null = null, bestD = Infinity;
   for (const e of edges) {

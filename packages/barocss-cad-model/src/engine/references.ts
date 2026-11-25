@@ -81,9 +81,9 @@ const bandGroups = (node: ModelNode) => node.kind === 'band-surface' ? [{ parent
 /** Where a reference's candidates are looked up: its feature and that feature's parent body (a band has two). */
 const parentKey = (node: number, parent: { node: number; side: string }) => `${node}|${parent.node}|${parent.side}`;
 function writableDimPoint(point: DimPoint): DimPoint {
-  return point.at === 'pcd' && point.ring
-    ? { ...point, ring: point.ring.map(member => ({ ...member })) }
-    : { ...point };
+  if (point.at === 'pcd' && point.ring) return { ...point, ring: point.ring.map(member => ({ ...member })) };
+  if (point.at === 'virtual-sharp' && point.second) return { ...point, second: { ...point.second } };
+  return { ...point };
 }
 /**
  * The document with a copy of every object the references' setters change — a referencing feature and its list,
@@ -114,6 +114,7 @@ function writable(d: StudioDoc): StudioDoc {
   if (d.drawing?.arcCenterlines) out.drawing = { ...(out.drawing ?? d.drawing), arcCenterlines: d.drawing.arcCenterlines.map(ac => ({ ...ac, first: { ...ac.first }, second: { ...ac.second } })) };
   if (d.drawing?.centerMarkGroups) out.drawing = { ...(out.drawing ?? d.drawing), centerMarkGroups: d.drawing.centerMarkGroups.map(g => ({ ...g, members: g.members.map(m => ({ ...m })) })) };
   if (d.drawing?.bisectorCenterlines) out.drawing = { ...(out.drawing ?? d.drawing), bisectorCenterlines: d.drawing.bisectorCenterlines.map(cl => ({ ...cl, first: { ...cl.first }, second: { ...cl.second } })) };
+  if (d.drawing?.virtualSharps) out.drawing = { ...(out.drawing ?? d.drawing), virtualSharps: d.drawing.virtualSharps.map(vs => ({ ...vs, first: { ...vs.first }, second: { ...vs.second } })) };
   if (d.bodies) { const bodies: NonNullable<StudioDoc['bodies']> = {}; for (const [k, look] of Object.entries(d.bodies)) bodies[k] = { ...look }; out.bodies = bodies; }
   return out;
 }
@@ -156,9 +157,12 @@ export function referencesOf(source: StudioDoc, readOnly = false): { doc: Studio
     else if (d.kind === 'cylinder-diameter') { const x: Pointed & { face: string } = d.cylinder; refs.push({ ...pointed(`dimension ${d.id}`, false, x, () => x.face, f => { x.face = f; }), nativeFace: true, cylinderFace: true }); }
     // (A pitch circle, or a point at its centre: each member hole's edge, R14.5.)
     else if (d.kind === 'pcd') for (const m of d.ring as (Pointed & { edge: string })[]) refs.push(pointed(`dimension ${d.id}`, true, m, () => m.edge, e => { m.edge = e; }));
-    else if ('a' in d) for (const p of [d.a, d.b] as unknown as (Pointed & { edge: string; at?: string; ring?: (Pointed & { edge: string })[] })[]) {
+    else if ('a' in d) for (const p of [d.a, d.b] as unknown as (Pointed & { edge: string; at?: string; ring?: (Pointed & { edge: string })[]; second?: Pointed & { edge: string } })[]) {
       if (p.at === 'pcd' && p.ring) for (const m of p.ring) refs.push(pointed(`dimension ${d.id}`, true, m, () => m.edge, e => { m.edge = e; }));
-      else refs.push(pointed(`dimension ${d.id}`, true, p, () => p.edge, e => { p.edge = e; }));
+      else if (p.at === 'virtual-sharp' && p.second) {
+        refs.push(pointed(`dimension ${d.id}`, true, p, () => p.edge, e => { p.edge = e; }));
+        refs.push(pointed(`dimension ${d.id}`, true, p.second, () => p.second!.edge, e => { p.second!.edge = e; }));
+      } else refs.push(pointed(`dimension ${d.id}`, true, p, () => p.edge, e => { p.edge = e; }));
     }
   }
   for (const target of doc.drawing?.datumTargets ?? []) {
@@ -183,6 +187,11 @@ export function referencesOf(source: StudioDoc, readOnly = false): { doc: Studio
   for (const cl of doc.drawing?.bisectorCenterlines ?? []) {
     for (const side of [cl.first, cl.second] as (Pointed & { edge: string })[]) {
       refs.push(pointed(`bisector-centerline ${cl.id}`, true, side, () => side.edge, edge => { side.edge = edge; }));
+    }
+  }
+  for (const vs of doc.drawing?.virtualSharps ?? []) {
+    for (const side of [vs.first, vs.second] as (Pointed & { edge: string })[]) {
+      refs.push(pointed(`virtual-sharp ${vs.id}`, true, side, () => side.edge, edge => { side.edge = edge; }));
     }
   }
   const scope = doc.drawing?.scope;
@@ -222,13 +231,14 @@ function unsigned(doc: StudioDoc): boolean {
   }
   for (const m of doc.mates ?? []) for (const side of [m.a, m.b]) if (side.face && !frameFace(side.face) && !side.sig) return true;
   for (const d of doc.drawing?.dimensions ?? []) {
-    const unsignedPoint = (p: { sig?: unknown; at?: string; ring?: { sig?: unknown }[] }) => p.at === 'pcd' ? (p.ring ?? []).some(m => !m.sig) : !p.sig;
+    const unsignedPoint = (p: { sig?: unknown; at?: string; ring?: { sig?: unknown }[]; second?: { sig?: unknown } }) => p.at === 'pcd' ? (p.ring ?? []).some(m => !m.sig) : p.at === 'virtual-sharp' && p.second ? !p.sig || !p.second.sig : !p.sig;
     if (d.kind === 'pcd' ? d.ring.some(m => !m.sig) : d.kind === 'arc-length' ? !d.arc.sig : d.kind === 'chamfer' ? !d.chamfer.sig || !d.adjacent.sig : d.kind === 'radial-thickness' || d.kind === 'circle-separation' ? !d.first.sig || !d.second.sig : d.kind === 'cylinder-diameter' ? !d.cylinder.sig : 'a' in d ? (d.kind === 'linear' ? unsignedPoint(d.a) || unsignedPoint(d.b) : !d.a.sig || !d.b.sig) : !d.sig) return true;
   }
   for (const target of doc.drawing?.datumTargets ?? []) if (target.point && target.point.endpoint !== undefined && !target.point.sig && target.point.was === undefined) return true;
   for (const ac of doc.drawing?.arcCenterlines ?? []) if (!ac.first.sig || !ac.second.sig) return true;
   for (const cmg of doc.drawing?.centerMarkGroups ?? []) if (cmg.members.some(m => !m.sig)) return true;
   for (const cl of doc.drawing?.bisectorCenterlines ?? []) if (!cl.first.sig || !cl.second.sig) return true;
+  for (const vs of doc.drawing?.virtualSharps ?? []) if (!vs.first.sig || !vs.second.sig) return true;
   for (const look of Object.values(doc.bodies ?? {})) if (look.faces && Object.keys(look.faces).some(f => !look.faceSigs?.[f])) return true;
   return false;
 }

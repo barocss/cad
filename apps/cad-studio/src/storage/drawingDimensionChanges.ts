@@ -44,11 +44,14 @@ function sectionOk(v: unknown): boolean {
 const signature = (v: unknown) => object(v) && keys(v, ['k','p','d','s','r','n']) && text(v.k) && vector(v.p,3) && finite(v.s)
   && (!own(v,'d') || vector(v.d,3)) && ['r','n'].every(k => !own(v,k) || finite(v[k]));
 function reference(v: unknown, point = false): boolean {
-  return object(v) && keys(v,point?['edge','near','sig','was','at','ring']:['edge','near','sig','was']) && text(v.edge) && vector(v.near,3)
+  return object(v) && keys(v,point?['edge','near','sig','was','at','ring','second','virtualSharpId']:['edge','near','sig','was']) && text(v.edge) && vector(v.near,3)
     && (!own(v,'sig') || signature(v.sig)) && (!own(v,'was') || typeof v.was === 'string')
-    && (!point || ['end','center','pcd'].includes(String(v.at)))
+    && (!point || ['end','center','pcd','virtual-sharp'].includes(String(v.at)))
     && (!own(v,'ring') || Array.isArray(v.ring) && v.ring.length >= 3 && v.ring.every(x=>reference(x)))
-    && (!point || v.at !== 'pcd' || own(v,'ring'));
+    && (!own(v,'second') || reference(v.second))
+    && (!own(v,'virtualSharpId') || text(v.virtualSharpId))
+    && (!point || v.at !== 'pcd' || own(v,'ring'))
+    && (!point || v.at !== 'virtual-sharp' || own(v,'second'));
 }
 function validDimension(v: unknown): v is Obj {
   if (!object(v) || !text(v.id) || !isDimView(v.view) || !vector(v.place,2)) return false;
