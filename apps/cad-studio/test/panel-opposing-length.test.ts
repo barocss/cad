@@ -39,6 +39,17 @@ test('panel refuses a proven opposite width conflict without mutating the source
   assert.deepEqual(source, original);
 });
 
+test('adding an implied straight edge length names the attempted dimension without recording it', () => {
+  const source: Polygon = { ...structuredClone(rectangle), lengths: { 0: 40 } };
+  const original = structuredClone(source), { actions, shapes, errors, conflicts } = harness(source);
+  assert.equal(actions.recoverPanelLength(source, 2, 40), true);
+  assert.equal(errors.length, 1);
+  assert.match(errors[0], /^Length of edge 3 = 40 is already implied/);
+  assert.deepEqual({ shapes, conflicts }, { shapes: [], conflicts: [] });
+  assert.deepEqual(source, original);
+  assert.equal(actions.recoverPanelLength(source, 1, 21), false, 'valid new lock keeps its existing History route');
+});
+
 test('panel routing requires the current document, rendered sketch generation and exact active outline', () => {
   const source = structuredClone(rectangle), owner = draft(source), doc = {};
   assert.equal(ownsPanelDrivingLength(doc, doc, owner, owner, 1, 1), true);

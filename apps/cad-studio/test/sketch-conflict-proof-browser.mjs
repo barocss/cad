@@ -5,7 +5,7 @@
 //   D350_SOURCE_FROZEN=1 PW_DIR=/Users/user/.cache/barocss-playwright/node_modules/playwright \
 //   CHROME='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' node test/sketch-conflict-proof-browser.mjs /absolute/artifacts
 // Actual Studio UI (Open, history, feature editor, Sketch panel "Edge N length" inputs, Escape, Finish, Undo/Redo, Save) mutates. Readonly hooks observe only.
-// Where the refusal text is read: App.tsx updateShape -> settleShape (sketch/settle.ts) -> setSketchError -> SketchPanel.tsx `{error && <div className="sk-status open" role="alert">}`.
+// Where the refusal text is read: studioSketchViewportActions.recoverPanelLength -> setSketchError / setConstraintConflict -> SketchPanel.tsx `{error && <div className="sk-status open" role="alert">}`.
 // Expected at a base without the D350 fix: FAILS at the first Conflict assertion (the nonconvergence text is shown; the state is snapshotted before asserting).
 import assert from 'node:assert/strict';
 import { build } from 'esbuild';
@@ -168,8 +168,7 @@ async function inspect(label, probes, volume) {
   assert.equal(read.ok, true, `product evaluation ok (${read.error})`); if (volume !== undefined) { assert.equal(read.bodyCount, 1); assert.ok(Math.abs(read.evalVolume - volume) <= 1e-6, `product evalVolume ${read.evalVolume} vs ${volume}`); }
   assert.deepEqual(await doc(), accepted); return { read, verified };
 }
-// The Model reason names the dimension ("Length of edge 3 = 50: ..."); the panel text has the label removed (settleShape strips "That: "). Equal after removing the label.
-const modelWithoutLabel = (reason, label) => reason.startsWith(label + ': ') ? reason.slice(label.length + 2) : reason.startsWith(label) ? 'That' + reason.slice(label.length) : reason;
+// Both the current Sketch alert and the Model refusal identify the attempted dimension.
 function checkRefusal(tag, observation, kind, modelProbe, label) {
   const text = observation.alert; assert.ok(text, `${tag}: a refusal is shown in the Sketch panel alert`);
   assert.deepEqual(observation.after.points, observation.before.points, `${tag}: sketch points unchanged`); assert.deepEqual(observation.after.edges, observation.before.edges, `${tag}: edge inputs unchanged`);
@@ -177,10 +176,10 @@ function checkRefusal(tag, observation, kind, modelProbe, label) {
   if (kind === 'conflict') { assert.ok(text.includes(CONFLICT), `${tag}: UI text proves a Conflict: ${text}`); assert.ok(modelProbe.reason.includes(CONFLICT), `${tag}: Model reason proves a Conflict: ${modelProbe.reason}`); }
   if (kind === 'implied') assert.ok(text.includes(IMPLIED) && modelProbe.reason.includes(IMPLIED), `${tag}: over-defining refusal: ${text} / ${modelProbe.reason}`);
   if (kind === 'nonconvergence') { assert.ok(text.includes(NONCONV) && !text.includes('Conflict'), `${tag}: nonconvergence without a Conflict claim: ${text}`); assert.ok(modelProbe.reason.includes(NONCONV) && !modelProbe.reason.includes('Conflict'), `${tag}: Model nonconvergence: ${modelProbe.reason}`); }
-  assert.equal(modelWithoutLabel(modelProbe.reason, label), text, `${tag}: Model reason equals the UI text apart from the label`);
+  assert.equal(text, modelProbe.reason, `${tag}: the alert retains the Model reason and attempted dimension`);
 }
 const initialFiles = ['apps/cad-studio/test/sketch-conflict-proof-browser.mjs', 'apps/cad-studio/test/fixtures/d350.bcad', 'apps/cad-studio/src/App.tsx', 'apps/cad-studio/src/ui/NodeEditor.tsx', 'apps/cad-studio/src/ui/SketchPanel.tsx', 'apps/cad-studio/src/ui/SketchMarks.tsx',
-  'apps/cad-studio/src/sketch/useSketchActions.ts', 'packages/barocss-cad-model/src/sketch/rules.ts', 'packages/barocss-cad-model/src/sketch/settle.ts', 'packages/barocss-cad-model/src/sketch/profile.ts', 'packages/barocss-cad-model/src/sketch/outlineFields.ts', 'packages/barocss-cad-model/src/sketch/reopen.ts'];
+  'apps/cad-studio/src/sketch/useSketchActions.ts', 'apps/cad-studio/src/viewport/studioSketchViewportActions.ts', 'packages/barocss-cad-model/src/sketch/rules.ts', 'packages/barocss-cad-model/src/sketch/settle.ts', 'packages/barocss-cad-model/src/sketch/profile.ts', 'packages/barocss-cad-model/src/sketch/outlineFields.ts', 'packages/barocss-cad-model/src/sketch/reopen.ts'];
 let frozenFiles = initialFiles;
 async function capsule(label, files) { const unique = [...new Set(files.map(file => relative(repo, resolve(repo, file))))].sort(); assert.ok(unique.length <= 4096); const hashes = {}; for (const file of unique) hashes[file] = hash(await readFile(resolve(repo, file))); await writeFile(join(output, `source-${label}.json`), JSON.stringify({ count: unique.length, hashes }, null, 2)); return hashes; }
 const RECT_60_40 = [[0, 0], [60, 0], [60, 40], [0, 40]];

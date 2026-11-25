@@ -3,7 +3,7 @@ import { toggleBandPick } from '@barocss/cad-model/sketch/band';
 import type { SketchNode } from '@barocss/cad-model/engine/doc';
 import { ellipseMatches } from '@barocss/cad-model/sketch/ellipse';
 import { isDefaultPlane } from '@barocss/cad-model/sketch/plane';
-import { commitDimension, commitInlineDimension, dimensionLabel, dimensionValue, drivingDimensionValue, isVerifiedFixedTriangleEdit, type Polygon } from '@barocss/cad-model/sketch/rules';
+import { commitDimension, commitInlineDimension, dimensionLabel, dimensionValue, drivingDimensionValue, isSettled, isVerifiedFixedTriangleEdit, type Polygon } from '@barocss/cad-model/sketch/rules';
 import { sketchClick } from '@barocss/cad-model/sketch/select';
 import type { SketchShape, SketchState } from '@barocss/cad-model/sketch/types';
 import { circleAxisPairConflict, circleDistanceConflict, edgeCircleDistanceConflict, fixedPointDistanceConflict, opposingLengthConflict } from '../sketch/constraintList';
@@ -92,11 +92,23 @@ export function studioSketchViewportActions({ liveShape, sketch, currentSketchSo
           return true;
         }
       }
-      if (edge !== 2) return false;
-      const opened = currentSketchSource();
-      if (!opened || !canRecoverLength(sketch, opened, source)) return false;
-      if (value !== source.lengths?.[edge]) applyDimension(opened, source, 'len2', value);
-      return true;
+      const opened = edge === 2 ? currentSketchSource() : undefined;
+      if (opened && canRecoverLength(sketch, opened, source)) {
+        if (value !== source.lengths?.[edge]) applyDimension(opened, source, key, value);
+        return true;
+      }
+      // Adding an edge lock through the generic shape update loses its diagnostic label.
+      // Keep the Model refusal for new locks on a plain outline, without changing
+      // the existing apply, history, or already-driving edge routes.
+      if (isSettled(source) && source.lengths?.[edge] === undefined && !source.bulges?.some(Boolean)
+        && !source.circles?.length && !source.spline && !source.ellipse && Number.isFinite(value) && value >= 0.001) {
+        const result = commitDimension(source, key, value);
+        if (!result.ok) {
+          setSketchError(result.reason);
+          return true;
+        }
+      }
+      return false;
     },
     onSketchShape: updateShape,
     onSketchTrim: trimSketch,
