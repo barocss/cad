@@ -148,6 +148,10 @@ export function reorient(from: DrawingViews, to: DrawingViews, settings: Drawing
     const lineCoord = axis === 'horizontal' ? mappedSample[1] : mappedSample[0];
     return { ...og, view: m.view as typeof og.view, axis, lineCoord };
   });
+  if (settings.holeTables) turned.holeTables = settings.holeTables.map(ht => {
+    const mapped = map.get(ht.view)?.view ?? ht.view;
+    return { ...ht, view: mapped as typeof ht.view };
+  });
   if (settings.datumTargets) turned.datumTargets = settings.datumTargets.map((d): typeof d => {
     const [view, place] = mapPlace(d.view, d.place), m = map.get(d.view);
     // A line's ends and an area's centre are view points: they turn as the symbol's place does; a rectangle's width and height swap with the axes.

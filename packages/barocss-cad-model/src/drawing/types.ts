@@ -319,6 +319,25 @@ export interface DrawingOrdinateGroup {
   members: DrawingOrdinateMember[];
 }
 
+/** One explicitly selected plain-through hole row in a source-bound Drawing Hole Table (D2021, #232). */
+export interface DrawingHoleTableMember {
+  id: string;
+  tag: string;
+  owner: string;
+  rim: EdgeRef;
+}
+
+/** A source-bound hole table on an orthographic view with explicit datum origin and 1..3 selected holes. */
+export interface DrawingHoleTable {
+  id: string;
+  title?: string;
+  view: SectionViewId;
+  origin: DimPoint;
+  members: DrawingHoleTableMember[];
+  at?: XY;
+  corner?: TableCorner;
+}
+
 /** The revision after `rev`: A → B … Z → AA, 01 → 02, 1 → 2; none → A. */
 export function nextRevision(rev: string | undefined): string {
   if (!rev || rev === '-') return 'A';
@@ -416,6 +435,8 @@ export interface DrawingSettings {
   centerOfMass?: DrawingCenterOfMass[];
   /** Source-bound common-origin ordinate dimension groups on orthographic views. */
   ordinateGroups?: DrawingOrdinateGroup[];
+  /** Source-bound hole tables on orthographic views (explicit origin + selected plain-through holes). */
+  holeTables?: DrawingHoleTable[];
   /** Never stored: set on the settings of one sheet of a drawing with sheets (sheets.ts `forSheet`), which then lay out and build as a drawing of that sheet alone. */
   sheetContext?: SheetContext;
 }
@@ -575,6 +596,7 @@ export function readDrawing(raw: unknown): DrawingSettings {
     ...(readVirtualSharps(r.virtualSharps).length ? { virtualSharps: readVirtualSharps(r.virtualSharps) } : {}),
     ...(readCenterOfMass(r.centerOfMass).length ? { centerOfMass: readCenterOfMass(r.centerOfMass) } : {}),
     ...(readOrdinateGroups(r.ordinateGroups).length ? { ordinateGroups: readOrdinateGroups(r.ordinateGroups) } : {}),
+    ...(readHoleTables(r.holeTables).length ? { holeTables: readHoleTables(r.holeTables) } : {}),
     ...(Array.isArray(r.notes) && r.notes.some(isNote) ? { notes: r.notes.filter(isNote).map(n => ({ id: n.id, text: n.text, at: [n.at[0], n.at[1]] as XY, ...(n.leader && VIEW_IDS.includes(n.leader.view) && isXY(n.leader.at) ? { leader: { view: n.leader.view, at: [n.leader.at[0], n.leader.at[1]] as XY, ...(Object.hasOwn(n.leader, 'target') ? { target: readNoteTarget(n.leader.target) } : {}) } } : {}), ...(typeof n.sheet === 'string' && /^[A-Za-z0-9_-]{1,16}$/.test(n.sheet) ? { sheet: n.sheet } : {}) })) } : {}),
     ...(readTables(r.tables).length ? { tables: readTables(r.tables) } : {}),
   };
@@ -774,6 +796,43 @@ function readOrdinateGroups(raw: unknown): DrawingOrdinateGroup[] {
     }
     seen.add(x.id);
     out.push({ id: x.id, view: x.view, axis: x.axis, origin: copyDimPoint(x.origin), lineCoord: x.lineCoord, members });
+  }
+  return out;
+}
+function readHoleTables(raw: unknown): DrawingHoleTable[] {
+  if (!Array.isArray(raw)) return [];
+  const seen = new Set<string>(), out: DrawingHoleTable[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) continue;
+    const x = item as Partial<DrawingHoleTable>;
+    if (typeof x.id !== 'string' || !x.id.trim() || seen.has(x.id)) continue;
+    if (!x.view || !SECTION_VIEWS.includes(x.view)) continue;
+    if (!dimPointOk(x.origin)) continue;
+    if (!Array.isArray(x.members) || x.members.length < 1 || x.members.length > 3) continue;
+    const mSeen = new Set<string>(), tagSeen = new Set<string>(), ownerSeen = new Set<string>(), members: DrawingHoleTableMember[] = [];
+    for (const rawM of x.members) {
+      if (!rawM || typeof rawM !== 'object' || Array.isArray(rawM)) continue;
+      const m = rawM as Partial<DrawingHoleTableMember>;
+      if (typeof m.id !== 'string' || !m.id.trim() || mSeen.has(m.id)) continue;
+      if (typeof m.tag !== 'string' || !m.tag.trim() || m.tag.trim().length > 16 || /[\r\n\t]/.test(m.tag)) continue;
+      const tag = m.tag.trim();
+      if (tagSeen.has(tag.toUpperCase())) continue;
+      if (typeof m.owner !== 'string' || !/^n\d+$/.test(m.owner) || ownerSeen.has(m.owner)) continue;
+      if (!edgeRefOk(m.rim)) continue;
+      mSeen.add(m.id); tagSeen.add(tag.toUpperCase()); ownerSeen.add(m.owner);
+      members.push({ id: m.id, tag, owner: m.owner, rim: copyEdgeRef(m.rim) });
+    }
+    if (!members.length) continue;
+    seen.add(x.id);
+    out.push({
+      id: x.id,
+      ...(typeof x.title === 'string' && x.title.trim() && x.title.length <= 120 ? { title: x.title } : {}),
+      view: x.view,
+      origin: copyDimPoint(x.origin),
+      members,
+      ...(x.at !== undefined && isXY(x.at) ? { at: [x.at[0], x.at[1]] as XY } : {}),
+      ...(x.corner !== undefined && CORNERS.includes(x.corner) ? { corner: x.corner } : {}),
+    });
   }
   return out;
 }

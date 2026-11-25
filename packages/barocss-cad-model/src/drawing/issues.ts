@@ -50,7 +50,7 @@ import { SECTION_VIEWS, VIEW_IDS, baseViewOf, detailLetter, isDetailRef, isViewI
 
 export const DRAWING_ISSUES_VERSION = 'cad-studio-drawing-issues-v1';
 
-export type DrawingIssueCode = 'SHEET_SET' | 'UNIT_PRECISION' | 'FORESHORTEN_INVALID' | 'LINEAR_ARROWS_CROWDED' | 'CROSSING_BREAK_CONFLICT' | 'CROSSING_BREAK_INACTIVE' | 'EXTENSION_JOG_INVALID' | 'DIM_ON_HIDDEN' | 'ARC_CENTERLINE_LOST' | 'CENTER_MARK_GROUP_LOST' | 'BISECTOR_CENTERLINE_LOST' | 'VIRTUAL_SHARP_LOST' | 'CENTER_OF_MASS_LOST' | 'ORDINATE_ORIGIN_LOST' | 'ORDINATE_MEMBER_LOST' | 'DATUM_LOST' | 'FRAME_LOST' | 'FRAME_VIEW_MISSING' | 'DATUM_UNDEFINED' | 'FRAME_RULE' | 'DATUM_TWICE' | 'VIEW_NEEDED' | 'DIMENSION_LOST' | 'TEXT_OVERLAP' | 'TEXT_OVER_LINES' | 'OFF_SHEET' | 'VIEWS_DONT_FIT' | 'DUPLICATE' | 'REMATCHED' | 'HOLE_SIZE_MISSING' | 'HOLE_NOT_LOCATED' | 'STEP_NOT_LOCATED' | 'OVERALL_MISSING' | 'TABLE_SOURCE' | 'WELD_NOT_SHOWN' | 'BALLOON_NOT_CLEAR' | 'BALLOON_NO_EDGE' | 'FIT_ROW_MISSING' | 'FOLLOWED_CHANGED' | 'DETAIL_PARENT_MISSING' | 'DETAIL_EMPTY' | 'DETAIL_NO_ROOM' | 'BREAK_NO_VIEW' | 'SECTION_NO_ROOM' | 'SECTION_NO_VIEW' | 'DATUM_TARGET_OUTSIDE' | DatumTargetFailureCode | NoteTargetFailureCode;
+export type DrawingIssueCode = 'SHEET_SET' | 'UNIT_PRECISION' | 'FORESHORTEN_INVALID' | 'LINEAR_ARROWS_CROWDED' | 'CROSSING_BREAK_CONFLICT' | 'CROSSING_BREAK_INACTIVE' | 'EXTENSION_JOG_INVALID' | 'DIM_ON_HIDDEN' | 'ARC_CENTERLINE_LOST' | 'CENTER_MARK_GROUP_LOST' | 'BISECTOR_CENTERLINE_LOST' | 'VIRTUAL_SHARP_LOST' | 'CENTER_OF_MASS_LOST' | 'ORDINATE_ORIGIN_LOST' | 'ORDINATE_MEMBER_LOST' | 'HOLE_TABLE_ORIGIN_LOST' | 'HOLE_TABLE_MEMBER_LOST' | 'DATUM_LOST' | 'FRAME_LOST' | 'FRAME_VIEW_MISSING' | 'DATUM_UNDEFINED' | 'FRAME_RULE' | 'DATUM_TWICE' | 'VIEW_NEEDED' | 'DIMENSION_LOST' | 'TEXT_OVERLAP' | 'TEXT_OVER_LINES' | 'OFF_SHEET' | 'VIEWS_DONT_FIT' | 'DUPLICATE' | 'REMATCHED' | 'HOLE_SIZE_MISSING' | 'HOLE_NOT_LOCATED' | 'STEP_NOT_LOCATED' | 'OVERALL_MISSING' | 'TABLE_SOURCE' | 'WELD_NOT_SHOWN' | 'BALLOON_NOT_CLEAR' | 'BALLOON_NO_EDGE' | 'FIT_ROW_MISSING' | 'FOLLOWED_CHANGED' | 'DETAIL_PARENT_MISSING' | 'DETAIL_EMPTY' | 'DETAIL_NO_ROOM' | 'BREAK_NO_VIEW' | 'SECTION_NO_ROOM' | 'SECTION_NO_VIEW' | 'DATUM_TARGET_OUTSIDE' | DatumTargetFailureCode | NoteTargetFailureCode;
 export type DrawingFix =
   | { kind: 'remove'; dim: string }
   | { kind: 'remove-arc-centerline'; id: string }
@@ -60,6 +60,8 @@ export type DrawingFix =
   | { kind: 'remove-center-of-mass'; id: string }
   | { kind: 'remove-ordinate-group'; id: string }
   | { kind: 'remove-ordinate-member'; groupId: string; memberId: string }
+  | { kind: 'remove-hole-table'; id: string }
+  | { kind: 'remove-hole-table-member'; tableId: string; memberId: string }
   | { kind: 'move'; dim: string; place: XY }
   | { kind: 'move-note'; note: string; at: XY }
   /** A table's top-left corner to `at` (O49). */
@@ -582,6 +584,22 @@ export function drawingIssues(ctx: IssueContext): DrawingIssue[] {
         out.push({ code: 'ORDINATE_MEMBER_LOST', severity: 'error', message: `Ordinate ${og.group.id}.${m.member.id} in ${viewName(og.group.view)} is lost: ${m.reason}`, view: og.group.view, fix: { kind: 'remove-ordinate-member', groupId: og.group.id, memberId: m.member.id } });
       } else if (m.member.point.was !== undefined) {
         out.push({ code: 'REMATCHED', severity: 'warning', message: `Ordinate ${og.group.id}.${m.member.id} in ${viewName(og.group.view)}: its reference was matched again after an edit. Check it.`, view: og.group.view });
+      }
+    }
+  }
+  for (const ht of sheet.holeTables ?? []) {
+    if (!ht.ok) {
+      out.push({ code: 'HOLE_TABLE_ORIGIN_LOST', severity: 'error', message: `Hole table ${ht.table.id} in ${viewName(ht.table.view)} is lost: ${ht.reason}`, view: ht.table.view, fix: { kind: 'remove-hole-table', id: ht.table.id } });
+      continue;
+    }
+    if (ht.table.origin.was !== undefined) {
+      out.push({ code: 'REMATCHED', severity: 'warning', message: `Hole table ${ht.table.id} in ${viewName(ht.table.view)}: its origin reference was matched again after an edit. Check it.`, view: ht.table.view });
+    }
+    for (const m of ht.members) {
+      if (!m.ok) {
+        out.push({ code: 'HOLE_TABLE_MEMBER_LOST', severity: 'error', message: `Hole table ${ht.table.id} tag ${m.member.tag} (${m.member.owner}) is unresolved: ${m.reason}`, view: ht.table.view, fix: { kind: 'remove-hole-table-member', tableId: ht.table.id, memberId: m.member.id } });
+      } else if (m.member.rim.was !== undefined) {
+        out.push({ code: 'REMATCHED', severity: 'warning', message: `Hole table ${ht.table.id} tag ${m.member.tag}: its rim reference was matched again after an edit. Check it.`, view: ht.table.view });
       }
     }
   }
@@ -1140,6 +1158,12 @@ export function applyFix(ctx: IssueContext, fix: DrawingFix): DrawingSettings {
     case 'remove-ordinate-member': {
       const next = (s.ordinateGroups ?? []).map(og => og.id === fix.groupId ? { ...og, members: og.members.filter(m => m.id !== fix.memberId) } : og);
       return next.length ? { ...s, ordinateGroups: next } : s;
+    }
+    case 'remove-hole-table': { const kept = (s.holeTables ?? []).filter(ht => ht.id !== fix.id), rest = { ...s }; delete rest.holeTables; return kept.length ? { ...rest, holeTables: kept } : rest; }
+    case 'remove-hole-table-member': {
+      const next = (s.holeTables ?? []).map(ht => ht.id === fix.tableId ? { ...ht, members: ht.members.filter(m => m.id !== fix.memberId) } : ht).filter(ht => ht.members.length > 0);
+      const rest = { ...s }; delete rest.holeTables;
+      return next.length ? { ...rest, holeTables: next } : rest;
     }
     case 'remove-detail': { const kept = (s.details ?? []).filter(d => d.id !== fix.detail), rest: DrawingSettings = { ...s, dimensions: s.dimensions.filter(d => d.view !== `detail:${fix.detail}`) }; delete rest.details; return kept.length ? { ...rest, details: kept } : rest; }
     case 'remove-break': { const kept = (s.breaks ?? []).filter((_, k) => k !== fix.index), rest = { ...s }; delete rest.breaks; return kept.length ? { ...rest, breaks: kept } : rest; }

@@ -187,6 +187,7 @@ export function forSheet(s: DrawingSettings, k: number): DrawingSettings {
   const index: DrawingTable[] = k === 0 ? [{ id: SHEET_INDEX, title: 'SHEET INDEX', columns: [{ key: 'sheet', label: 'SHEET' }, { key: 'name', label: 'NAME' }, { key: 'size', label: 'SIZE' }], rows: Array.from({ length: n }, (_, j) => [String(j + 1), sheetName(s, j), sheetSize(s, j)]), whole: true }] : [];
   const tables = k === 0 ? [...(s.tables ?? []), ...index] : [];
   if (tables.length) out.tables = tables; else delete out.tables;
+  if (k === 0 && s.holeTables?.length) out.holeTables = s.holeTables; else delete out.holeTables;
   const where: Record<string, number> = {}; for (const [ref, j] of at) where[ref] = j + 1;
   out.sheetContext = {
     n: k + 1, of: n, sheets: Array.from({ length: n }, (_, j) => ({ name: sheetName(s, j), size: sheetSize(s, j) })), where, allViews: shown,
@@ -290,7 +291,7 @@ export function mergeSheet(whole: DrawingSettings, k: number, next: DrawingSetti
   const sections = splice<DrawingSection>(sectionsOf(whole), nextSections, inSheet, x => x.id);
   set('details', splice<DrawingDetail>(whole.details ?? [], nextDetails, detailHere, d => d.id));
   // Only the first sheet carries the tables (less the index made for it), the title block's fields and the notes without a leader.
-  if (k === 0) set('tables', (next.tables ?? []).filter(t => t.id !== SHEET_INDEX)); else { set('tables', whole.tables); set('titleBlock', whole.titleBlock); }
+  if (k === 0) { set('tables', (next.tables ?? []).filter(t => t.id !== SHEET_INDEX)); set('holeTables', next.holeTables); } else { set('tables', whole.tables); set('holeTables', whole.holeTables); set('titleBlock', whole.titleBlock); }
   return withSections(out, sections);
 }
 

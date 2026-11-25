@@ -117,6 +117,7 @@ function writable(d: StudioDoc): StudioDoc {
   if (d.drawing?.virtualSharps) out.drawing = { ...(out.drawing ?? d.drawing), virtualSharps: d.drawing.virtualSharps.map(vs => ({ ...vs, first: { ...vs.first }, second: { ...vs.second } })) };
   if (d.drawing?.centerOfMass) out.drawing = { ...(out.drawing ?? d.drawing), centerOfMass: d.drawing.centerOfMass.map(cm => ({ ...cm })) };
   if (d.drawing?.ordinateGroups) out.drawing = { ...(out.drawing ?? d.drawing), ordinateGroups: d.drawing.ordinateGroups.map(og => ({ ...og, origin: writableDimPoint(og.origin), members: og.members.map(m => ({ ...m, point: writableDimPoint(m.point) })) })) };
+  if (d.drawing?.holeTables) out.drawing = { ...(out.drawing ?? d.drawing), holeTables: d.drawing.holeTables.map(ht => ({ ...ht, origin: writableDimPoint(ht.origin), members: ht.members.map(m => ({ ...m, rim: { ...m.rim } })) })) };
   if (d.bodies) { const bodies: NonNullable<StudioDoc['bodies']> = {}; for (const [k, look] of Object.entries(d.bodies)) bodies[k] = { ...look }; out.bodies = bodies; }
   return out;
 }
@@ -211,6 +212,12 @@ export function referencesOf(source: StudioDoc, readOnly = false): { doc: Studio
       pushPointRefs(`ordinate-group ${og.id}.${m.id}`, m.point as unknown as Pointed & { edge: string; at?: string; ring?: (Pointed & { edge: string })[]; second?: Pointed & { edge: string } });
     }
   }
+  for (const ht of doc.drawing?.holeTables ?? []) {
+    pushPointRefs(`hole-table ${ht.id} origin`, ht.origin as unknown as Pointed & { edge: string; at?: string; ring?: (Pointed & { edge: string })[]; second?: Pointed & { edge: string } });
+    for (const m of ht.members) {
+      refs.push(pointed(`hole-table ${ht.id}.${m.id}`, true, m.rim, () => m.rim.edge, e => { m.rim.edge = e; }));
+    }
+  }
   const scope = doc.drawing?.scope;
   if (scope?.kind === 'part' && scope.body) {
     const key = checkDrawingBodyOwner(doc, scope.body).length ? null : scope.body.key;
@@ -260,6 +267,10 @@ function unsigned(doc: StudioDoc): boolean {
   for (const og of doc.drawing?.ordinateGroups ?? []) {
     if (unsignedDimPoint(og.origin)) return true;
     if (og.members.some(m => unsignedDimPoint(m.point))) return true;
+  }
+  for (const ht of doc.drawing?.holeTables ?? []) {
+    if (unsignedDimPoint(ht.origin)) return true;
+    if (ht.members.some(m => !m.rim.sig)) return true;
   }
   for (const look of Object.values(doc.bodies ?? {})) if (look.faces && Object.keys(look.faces).some(f => !look.faceSigs?.[f])) return true;
   return false;

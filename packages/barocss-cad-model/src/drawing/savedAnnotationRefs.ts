@@ -73,5 +73,20 @@ export function checkSavedAnnotationRefs(raw: unknown): Problem[] {
       }
     }
   }
+  if (Array.isArray(raw.holeTables)) {
+    for (let i = 0; i < raw.holeTables.length; i++) {
+      const item = raw.holeTables[i];
+      if (!isRecord(item)) continue;
+      const originIssue = checkRef(item.origin, `holeTables[${i}].origin`);
+      if (originIssue) return [originIssue];
+      if (!Array.isArray(item.members)) continue;
+      for (let j = 0; j < item.members.length; j++) {
+        const m = item.members[j];
+        if (!isRecord(m)) continue;
+        const rimIssue = checkRef(m.rim, `holeTables[${i}].members[${j}].rim`);
+        if (rimIssue) return [rimIssue];
+      }
+    }
+  }
   return [];
 }
