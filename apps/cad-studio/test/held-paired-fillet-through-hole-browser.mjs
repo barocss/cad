@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import { createFlow } from './flow-helper.mjs';
+import { readHeldFinishSummary } from './held-finish-recovery-mcp.mjs';
 
 const baseline = process.argv.includes('--baseline');
+const mcp = process.argv.includes('--mcp');
 const target = 'n1.side[e1]|n1.side[e4]';
 const old = 'n1.side[retired]|n1.side[e4]';
 const stable = 'n1.side[e2]|n1.side[e3]';
@@ -23,6 +25,11 @@ const files = [
   'apps/cad-studio/src/state/useHeldFinishEdge.ts',
   'apps/cad-studio/src/state/heldFinishReplacement.ts',
   'packages/barocss-cad-model/src/engine/heldChamferThroughHole.ts',
+  ...(mcp ? [
+    'apps/cad-studio/test/held-finish-recovery-mcp.mjs',
+    'apps/cad-studio/test/mcp-browser-session.mjs',
+    'packages/barocss-cad-model/src/chat/part/heldFinishRecovery.ts',
+  ] : []),
 ];
 const f = await createFlow({
   name: 'held-paired-fillet-through-hole', output: process.argv[2], envFrozen: 'D1986_SOURCE_FROZEN',
@@ -140,6 +147,28 @@ await f.run(async () => {
   }
 
   const history = await stack();
+  let diagnosedPick, heldRevision;
+  if (mcp) {
+    f.phase = 'diagnose the held paired Fillet on the saved Studio document through local MCP';
+    const saved = await f.save('held-paired-fillet-for-mcp');
+    const { summary, revision } = await readHeldFinishSummary(f, saved.file, 'held-paired-fillet', 'b3');
+    heldRevision = revision;
+    const recovery = summary.held_finish_recovery;
+    assert.ok(recovery);
+    assert.deepEqual([recovery.feature, recovery.body, recovery.source_body, recovery.downstream_feature, recovery.revision,
+      recovery.mode, recovery.page, recovery.pages], ['n2', 'b3', 'b1', 'n3', revision, 'studio_history_review', 1, 1]);
+    assert.deepEqual(recovery.slots, [{ slot: 1, authored_edge: old, signature_matches: [] }]);
+    assert.equal(recovery.pick_edges.length, 11);
+    assert.equal(recovery.pick_edges.some(edge => edge.name === stable), false);
+    diagnosedPick = recovery.pick_edges.find(edge => edge.name === target);
+    assert.ok(diagnosedPick);
+    assert.deepEqual([diagnosedPick.from, diagnosedPick.to].sort(), [[-20, -20, 0], [-20, -20, 10]]);
+    await f.same(opened.doc);
+    assert.deepEqual(await stack(), history);
+    await f.snapshot('01b-unchanged-after-mcp-read');
+    f.report.observations.push({ label: 'local-mcp-read', revision, pickCount: recovery.pick_edges.length, documentBytesAfterRead: 'SAME' });
+  }
+  const pickPoint = diagnosedPick ? diagnosedPick.from.map((v, axis) => (v + diagnosedPick.to[axis]) / 2) : [-20, -20, 5];
   const apply = () => button('Apply edge replacement', f.editor());
 
   f.phase = 'refuse the circular Hole rim';
@@ -165,7 +194,7 @@ await f.run(async () => {
 
   f.phase = 'preview the valid original vertical corner edge and cancel without changing document or history';
   await direction('Front left');
-  await pick([-20, -20, 5]);
+  await pick(pickPoint);
   await f.editor().getByText(target, { exact: true }).waitFor();
   assert.equal(await apply().isEnabled(), true);
   await f.same(opened.doc);
@@ -178,7 +207,7 @@ await f.run(async () => {
   f.phase = 'apply one explicit History replacement and rebuild the downstream Hole';
   await repick.click();
   await f.editor().getByText('Select an edge on the feature body.', { exact: true }).waitFor();
-  await pick([-20, -20, 5]);
+  await pick(pickPoint);
   await f.editor().getByText(target, { exact: true }).waitFor();
   await apply().click();
   await f.page.waitForFunction(name => window.__studioDoc?.nodes[2]?.edges[0] === name, target);
@@ -201,4 +230,12 @@ await f.run(async () => {
   const reopened = await f.freshOpen(file, repaired.doc, '07-fresh-open-with-hole');
   assert.equal(await refs().count(), 0);
   await verify('reopened-native', reopened, true);
+  if (mcp) {
+    f.phase = 'verify resolved status retires held_finish_recovery through local MCP';
+    const result = await readHeldFinishSummary(f, file, 'repaired-paired-fillet', 'b3');
+    assert.equal(result.summary.held_finish_recovery, undefined);
+    assert.notEqual(result.revision, heldRevision);
+    await f.same(repaired.doc);
+    f.report.observations.push({ label: 'local-mcp-resolved', revision: result.revision, recovery: 'absent' });
+  }
 });

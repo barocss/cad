@@ -143,3 +143,58 @@ test('downstream Chamfer diagnosis requires live root and prefix ownership and a
     return result;
   }), undefined);
 });
+
+test('summary diagnoses a held paired Constant Fillet (one or both slots) before an independent Through Hole', async () => {
+  const stock = rectanglePart(60, 40, 10);
+  const stockEval = await evaluate(stock);
+  assert.ok(stockEval.ok);
+  const [stockBody] = stockEval.bodies;
+  const stockSigs = signaturesOf(stockBody).edges;
+  const vertical = stockBody.mesh.edges.filter(edge => edge.nativeLine && edge.a[2] !== edge.b[2]);
+  const [targetEdge, keepEdge] = vertical;
+  assert.ok(targetEdge && keepEdge);
+  const targetName = targetEdge.names[0], keepName = keepEdge.names[0];
+  const keepSig = toSig(stockSigs.get(keepName)!);
+  const hole = { kind: 'hole' as const, parent: { node: 2, side: 'solid' as const }, face: 'n1.top', center: [30, 20] as [number, number], radius: 2 };
+
+  const oneRetiredDoc = withNode(withNode(stock, {
+    kind: 'fillet', parent, edges: ['retired-slot', keepName], radius: 2, suppressed: true, held: 'Missing Fillet edge',
+    sigs: { 'retired-slot': { k: 'line', p: [-4, -4, 5], d: [0.6, 0.8, 0], s: 10 }, [keepName]: keepSig },
+  }), hole);
+  const oneEval = await evaluate(oneRetiredDoc);
+  assert.ok(oneEval.ok);
+  const oneState: ChatState = { doc: oneRetiredDoc, bodies: oneEval.bodies };
+  const oneBefore = structuredClone(oneState);
+  const oneRecovery = await summary(oneState, { body: 'b3', response_format: 'detailed' });
+  assert.deepEqual([oneRecovery.feature, oneRecovery.body, oneRecovery.source_body, oneRecovery.downstream_feature,
+    oneRecovery.revision, oneRecovery.mode, oneRecovery.page, oneRecovery.pages],
+    ['n2', 'b3', 'b1', 'n3', revisionOf(oneRetiredDoc), 'studio_history_review', 1, 1]);
+  assert.deepEqual(oneRecovery.slots, [{ slot: 1, authored_edge: 'retired-slot', signature_matches: [] }]);
+  assert.equal(oneRecovery.pick_edges.length, 11);
+  assert.equal(oneRecovery.pick_edges.some((edge: { name: string }) => edge.name === keepName), false);
+  assert.equal(oneRecovery.pick_edges.some((edge: { name: string }) => edge.name === targetName), true);
+  assert.equal(await summary(oneState, { response_format: 'concise' }), undefined);
+  assert.deepEqual(oneState, oneBefore);
+
+  const staleKeepDoc = withNode(withNode(stock, {
+    kind: 'fillet', parent, edges: ['retired-slot', keepName], radius: 2, suppressed: true, held: 'Missing Fillet edge',
+    sigs: { 'retired-slot': { k: 'line', p: [-4, -4, 5], d: [0.6, 0.8, 0], s: 10 }, [keepName]: { ...keepSig, s: 99 } },
+  }), hole);
+  assert.equal(await summary({ doc: staleKeepDoc, bodies: oneEval.bodies }), undefined);
+
+  const twoRetiredDoc = withNode(withNode(stock, {
+    kind: 'fillet', parent, edges: ['retired-a', 'retired-b'], radius: 2, suppressed: true, held: 'Missing Fillet edges',
+    sigs: {
+      'retired-a': { k: 'line', p: [-4, -4, 5], d: [0.6, 0.8, 0], s: 10 },
+      'retired-b': { k: 'line', p: [64, 44, 5], d: [-0.6, 0.8, 0], s: 10 },
+    },
+  }), hole);
+  const twoEval = await evaluate(twoRetiredDoc);
+  assert.ok(twoEval.ok);
+  const twoRecovery = await summary({ doc: twoRetiredDoc, bodies: twoEval.bodies }, { body: 'b3', response_format: 'detailed' });
+  assert.deepEqual(twoRecovery.slots, [
+    { slot: 1, authored_edge: 'retired-a', signature_matches: [] },
+    { slot: 2, authored_edge: 'retired-b', signature_matches: [] },
+  ]);
+  assert.equal(twoRecovery.pick_edges.length, 12);
+});
