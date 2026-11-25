@@ -53,6 +53,7 @@ import { writeDxf, type DxfVersion } from '@barocss/cad';
 import { VIEWS, fromSheet, scaleLabel, toSheet, type Orientation } from '@barocss/cad-model/drawing/views';
 import { angleBetween, edgeAt, inView, resolveLine, newDimensionId, orientFor, resolveDimension, roundIn, snapPoints, type SnapPoint } from '@barocss/cad-model/drawing/dimensions';
 import { pickArcLengthEdge } from '@barocss/cad-model/drawing/arcLength';
+import { pickChamferLineEdge, resolveChamferEdges } from '@barocss/cad-model/drawing/chamferDim';
 import { DETAIL_PARENTS, type DetailParent, type DrawingDetail } from '@barocss/cad-model/drawing/detail';
 import { DetailsList } from './drawing/DetailsList';
 import { clipProjectionOutside } from '@barocss/cad-model/drawing/breaks';
@@ -88,7 +89,7 @@ import { ExportActions } from './drawing/ExportActions';
 import { dimensionPairLabelsMoved, dimensionPairPaperDelta, drawingDimensionPair, moveDrawingDimensionPair, type DrawingDimensionPair } from '../app/drawingDimensionGroup';
 import '../drawing/drawing.css';
 
-type Tool = 'select' | 'linear' | 'diameter' | 'radius' | 'arc-length' | 'angle' | 'reflex-angle' | 'note' | 'detail' | 'datum-target';
+type Tool = 'select' | 'linear' | 'diameter' | 'radius' | 'arc-length' | 'chamfer' | 'angle' | 'reflex-angle' | 'note' | 'detail' | 'datum-target';
 type DimensionGroup = { owner: object; pair: DrawingDimensionPair };
 type DimensionGroupDrag = { dimensionGroup: DimensionGroup; pointer: number; start: XY; scale: number; paperDelta: number };
 const TOOLS: { tool: Tool; label: string; icon: string; key: string; hint: string }[] = [
@@ -97,6 +98,7 @@ const TOOLS: { tool: Tool; label: string; icon: string; key: string; hint: strin
   { tool: 'diameter', label: 'Diameter', icon: 'radio_button_unchecked', key: 'O', hint: 'Click a circle, then where its diameter goes' },
   { tool: 'radius', label: 'Radius', icon: 'line_end_circle', key: 'R', hint: 'Click a circle or an arc, then where its radius goes' },
   { tool: 'arc-length', label: 'Arc length', icon: 'rounded_corner', key: 'L', hint: 'Click a partial circular arc, then where its arc length goes' },
+  { tool: 'chamfer', label: '45° Chamfer', icon: 'slash', key: 'C', hint: 'Click a 45° chamfer bevel edge, then an adjacent straight wall, then where the callout goes' },
   { tool: 'angle', label: 'Angle', icon: 'architecture', key: 'A', hint: 'Click two straight edges, then the side of their corner the angle goes on' },
   { tool: 'reflex-angle', label: 'Reflex angle', icon: 'restart_alt', key: 'G', hint: 'Pick two straight edges that share a corner in the Top view' },
   { tool: 'note', label: 'Note', icon: 'sticky_note_2', key: 'N', hint: 'Click on the paper for a note, or on a view for a leader and then where its text goes' },
@@ -119,6 +121,7 @@ type Pending =
   | { kind: 'linear'; view: DimView; a: DimPoint; b?: DimPoint }
   | { kind: 'diameter' | 'radius'; view: DimView; edge: string; near: Vec3; source?: { projection: DrawingViews; settings: DrawingSettings }; owner?: string }
   | { kind: 'arc-length'; view: DimView; arc: EdgeRef; source: { projection: DrawingViews; settings: DrawingSettings } }
+  | { kind: 'chamfer'; view: DimView; chamfer?: EdgeRef; adjacent?: EdgeRef; reselect?: Extract<DrawingDimension, { kind: 'chamfer' }>; source: { projection: DrawingViews; settings: DrawingSettings } }
   | { kind: 'angle'; view: DimView; a: EdgeRef; b?: EdgeRef; mode?: 'reflex'; owner?: object }
   | { kind: 'note'; leader: { view: ViewId; at: XY } }
   /** DR-1: a detail's circle, its centre picked on its parent. */
@@ -458,7 +461,7 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
       const rims = diameterRims(projection, at, 6 * mmPerPx() / v.scale, tol, visibleRimOnly, scope.kind === 'assembly');
       return { q, view, at, snap: null, edge: rims[0] ?? null, visibleRimOnly, rims };
     }
-    if (tool === 'arc-length') return { q, view, at, snap: null, edge: edgeAt(pr, at, 6 * mmPerPx() / v.scale, true) };
+    if (tool === 'arc-length' || tool === 'chamfer') return { q, view, at, snap: null, edge: edgeAt(pr, at, 6 * mmPerPx() / v.scale, true) };
     if (tool === 'reflex-angle') return { q, view, at, snap: null, edge: view === 'top' && !v.breaks?.length
       ? edgeAt(pr, at, 6 * mmPerPx() / v.scale, true) : null };
     const breaks = tool === 'linear' || tool === 'angle' || tool === 'radius' ? v.breaks : undefined;
@@ -468,7 +471,7 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
   /** Placing a dimension (its points picked): where it goes, read in its own view wherever the pointer is on the sheet —
    *  beyond the views' reach too (hoverAt finds a view only within 30 mm), so a click out on the paper places it. */
   const placingAt = (clientX: number, clientY: number): Hover | null => {
-    if (!pending || pending.kind === 'note' || pending.kind === 'detail-center' || ((pending.kind === 'linear' || pending.kind === 'angle') && !pending.b)) return null;
+    if (!pending || pending.kind === 'note' || pending.kind === 'detail-center' || ((pending.kind === 'linear' || pending.kind === 'angle') && !pending.b) || (pending.kind === 'chamfer' && !pending.adjacent)) return null;
     const q = sheetPoint(clientX, clientY), v = q && placementAt(pending.view);
     return q && v ? { q, view: pending.view, at: fromSheet(v, q), snap: null, edge: null } : null;
   };
@@ -588,6 +591,23 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
     chooseTarget({ ...head, kind: 'area', area });
   };
 
+  const startChamferReselect = (id: string) => {
+    const originals = settings.dimensions.filter(dim => dim.id === id);
+    const original = originals[0];
+    if (!views || busy || scope.kind !== 'part' || originals.length !== 1
+      || wholeSettings.dimensions.filter(dim => dim.id === id).length !== 1
+      || original.kind !== 'chamfer' || !isViewId(original.view) || original.view === 'iso') return;
+    if (placementAt(original.view)?.breaks?.length) {
+      setMessage('Chamfer dimensions are not supported on a broken view.');
+      return;
+    }
+    cancel();
+    setTool('chamfer');
+    setSelected({ kind: 'dimension', id });
+    setPending({ kind: 'chamfer', view: original.view, reselect: original, source: { projection: views, settings } });
+    setMessage(`Select the 45° chamfer bevel edge in the ${viewLabel(original.view)} to reconnect ${id}. Esc cancels.`);
+  };
+
   const startReattachment = (id: string) => {
     const originals = settings.dimensions.filter(dim => dim.id === id);
     const original = originals[0];
@@ -689,7 +709,7 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
     // Where a dimension goes is read in its own view, wherever the pointer is.
     if (pending?.kind === 'note') { addNote(h.q, pending.leader); return; }
     if (tool === 'detail') { pickDetail(h); return; }
-    const placing = pending && ((pending.kind !== 'linear' && pending.kind !== 'angle') || pending.b);
+    const placing = pending && ((pending.kind !== 'linear' && pending.kind !== 'angle' && pending.kind !== 'chamfer') || (pending.kind === 'chamfer' ? !!pending.adjacent : !!pending.b));
     const into = placing ? placementAt(pending.view) : null, place = placing && into ? fromSheet(into, h.q) : h.at;
     if (h.view === 'iso' && !placing) { setMessage('Dimensions go on the front, top and right views.'); return; }
     const pr = projectionAt(placing ? pending.view : h.view); if (!pr) return;
@@ -808,6 +828,65 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
       const picked = pickArcLengthEdge(pr, h.edge, h.view, false);
       if (!picked.ok) { setMessage(picked.reason); return; }
       setPending({ kind: 'arc-length', view: h.view, arc: picked.ref, source: { projection: views, settings } });
+      return;
+    }
+    if (tool === 'chamfer') {
+      if (scope.kind !== 'part') { setMessage('45° chamfer dimensions use a part drawing.'); return; }
+      if (pending?.kind === 'chamfer') {
+        if (pending.source.projection !== views || pending.source.settings !== settings || busy) {
+          cancel(); setMessage('The drawing changed. Select the 45° chamfer edges again.'); return;
+        }
+        if (pending.adjacent && pending.chamfer) {
+          if (placementAt(pending.view)?.breaks?.length) {
+            cancel(); setMessage('45° chamfer dimensions are not supported on a broken view.'); return;
+          }
+          const dim: DrawingDimension = {
+            id: newDimensionId(wholeSettings.dimensions, wholeSettings.frames),
+            view: pending.view,
+            kind: 'chamfer',
+            chamfer: pending.chamfer,
+            adjacent: pending.adjacent,
+            place,
+          };
+          const resolved = resolveDimension(views, dim);
+          if (!resolved.ok) { setMessage(resolved.reason); return; }
+          commitDims([...settings.dimensions, dim]);
+          setPending(null); return;
+        }
+      }
+      if (placementAt(h.view)?.breaks?.length) {
+        setMessage('45° chamfer dimensions are not supported on a broken view.'); return;
+      }
+      if (!isViewId(h.view) || h.view === 'iso') {
+        setMessage('Chamfer dimensions are supported only on ordinary front, top, and right views.'); return;
+      }
+      if (pending?.kind === 'chamfer' && pending.view !== h.view) {
+        setMessage(`Select the edge in the ${viewLabel(pending.view)}.`); return;
+      }
+      if (!h.edge) {
+        setMessage(pending?.kind === 'chamfer' && pending.chamfer ? 'Click an adjacent straight wall sharing a corner with the bevel.' : 'Click a 45° chamfer bevel edge.');
+        return;
+      }
+      const picked = pickChamferLineEdge(pr, h.edge, h.view);
+      if (!picked.ok) { setMessage(picked.reason); return; }
+      if (!pending || pending.kind !== 'chamfer' || !pending.chamfer) {
+        setPending({ kind: 'chamfer', view: h.view, chamfer: picked.ref, ...(pending?.kind === 'chamfer' && pending.reselect ? { reselect: pending.reselect } : {}), source: { projection: views, settings } });
+        return;
+      }
+      const verified = resolveChamferEdges(pr, pending.chamfer, picked.ref, h.view);
+      if (!verified.ok) { setMessage(verified.reason); return; }
+      if (pending.reselect) {
+        const orig = pending.reselect;
+        const next: DrawingDimension = { id: orig.id, view: orig.view, kind: 'chamfer', chamfer: pending.chamfer, adjacent: picked.ref, place: orig.place };
+        const resolved = resolveDimension(views, next);
+        if (!resolved.ok) { setMessage(resolved.reason); return; }
+        commitDims(settings.dimensions.map(d => d === orig ? next : d));
+        setPending(null);
+        setTool('select');
+        setSelected({ kind: 'dimension', id: orig.id });
+        return;
+      }
+      setPending({ ...pending, adjacent: picked.ref });
       return;
     }
   };
@@ -1406,9 +1485,13 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
       if (hover) parts.push(`<circle class="dw-pick" cx="${hover.q[0]}" cy="${hover.q[1]}" r="0.9"/>`);
       return parts.join('');
     }
-    const placing = pending && hover && pending.kind !== 'note' && ((pending.kind !== 'linear' && pending.kind !== 'angle') || pending.b);
+    const placing = pending && hover && pending.kind !== 'note' && ((pending.kind !== 'linear' && pending.kind !== 'angle' && pending.kind !== 'chamfer') || (pending.kind === 'chamfer' ? !!pending.adjacent : !!pending.b));
     if (pending?.kind === 'angle' && pending.mode && pending.owner !== projectionActionOwner) return '';
     if (pending?.kind === 'angle') for (const ref of [pending.a, ...(pending.b ? [pending.b] : [])]) {
+      const l = resolveLine(R(pending.view), ref);
+      if (l) parts.push(`<g class="dw-hover">${marksSvg([{ kind: 'line', a: toSheet(P(pending.view), l[0]), b: toSheet(P(pending.view), l[1]), pen: 'visible' }])}</g>`);
+    }
+    if (pending?.kind === 'chamfer') for (const ref of [...(pending.chamfer ? [pending.chamfer] : []), ...(pending.adjacent ? [pending.adjacent] : [])]) {
       const l = resolveLine(R(pending.view), ref);
       if (l) parts.push(`<g class="dw-hover">${marksSvg([{ kind: 'line', a: toSheet(P(pending.view), l[0]), b: toSheet(P(pending.view), l[1]), pen: 'visible' }])}</g>`);
     }
@@ -1421,6 +1504,7 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
         ? { id: 'preview', view: pending.view, kind: 'linear', a: pending.a, b: pending.b!, orient: orientFor(pointIn(R(pending.view), pending.a), pointIn(R(pending.view), pending.b!), at), place: at }
         : pending.kind === 'angle' ? { id: 'preview', view: pending.view, kind: 'angle', a: pending.a, b: pending.b!, place: at, ...(pending.mode ? { mode: pending.mode } : {}) }
         : pending.kind === 'arc-length' ? { id: 'preview', view: pending.view, kind: 'arc-length', arc: pending.arc, place: at }
+        : pending.kind === 'chamfer' ? { id: 'preview', view: pending.view, kind: 'chamfer', chamfer: pending.chamfer!, adjacent: pending.adjacent!, place: at }
         : { id: 'preview', view: pending.view, kind: pending.kind, edge: pending.edge, near: pending.near, place: at };
       const r = resolveDimension({ ...views, [pending.view]: R(pending.view) }, d, detailFor(settings, pending.view), showDetailHidden(settings, pending.view));
       if (r.ok) { const preset = presetFor(settings); parts.push(`<g class="dw-preview">${marksSvg(dimensionMarks(P(pending.view), withShownText(r, undefined, preset) as typeof r, preset))}</g>`); }
@@ -1434,9 +1518,10 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
       else if (hover.edge && (tool !== 'linear' || !pending)) {
         const ok = tool === 'reflex-angle' ? hover.edge.kind === 'line'
           : tool === 'arc-length' ? !v.breaks?.length && pickArcLengthEdge(R(hover.view), hover.edge, hover.view, false).ok
+          : tool === 'chamfer' ? !v.breaks?.length && pickChamferLineEdge(R(hover.view), hover.edge, hover.view).ok
           : tool === 'linear' || tool === 'angle' ? hover.edge.kind !== 'circle' && hover.edge.kind !== 'curve'
           : !!hover.edge.circle && roundIn(R(hover.view), hover.edge);
-        const pieces = tool === 'reflex-angle' || tool === 'arc-length' || hover.visibleRimOnly || (tool === 'diameter' && isDetailRef(hover.view) && !showDetailHidden(settings, hover.view))
+        const pieces = tool === 'reflex-angle' || tool === 'arc-length' || tool === 'chamfer' || hover.visibleRimOnly || (tool === 'diameter' && isDetailRef(hover.view) && !showDetailHidden(settings, hover.view))
           ? hover.edge.pieces.filter(piece => piece.visible) : hover.edge.pieces;
         if (ok) parts.push(`<g class="dw-hover">${marksSvg(pieces.map(p => curveMark(v, p.curve, 'visible')))}</g>`);
       }
@@ -1461,7 +1546,7 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
   }, [drag, views, layout, sheet, sheetMarkup, settings, title, selected, selectedTarget, weldJoints, bom, svgSectionTextClearance,
     activeDimensionGroup, selectedDimensionIds]);
 
-  const hint = message ?? (radiusMove ? "Click the sheet to move the shortened leader origin. Esc cancels." : null) ?? (currentReattachment ? `Select a rim in the ${viewLabel(currentReattachment.original.view)} · Esc cancels` : null) ?? (pending ? (pending.kind === 'standalone-frame' ? `Click the sheet to place the frame. View: ${viewLabel(pending.view)}. Esc cancels.` : pending.kind === 'datum-target' ? 'Click where the target symbol goes · Esc cancels' : pending.kind === 'datum-line' ? 'Now the other end of the target line · Esc cancels' : pending.kind === 'note' ? 'Click where the note’s text goes · Esc cancels' : pending.kind === 'detail-center' ? `Select the centre of Detail ${pending.moving.detail.id} on the ${viewLabel(pending.view)} · Esc cancels` : pending.kind === 'detail' ? 'Now how far the detail’s circle reaches · Esc cancels' : pending.kind === 'angle' ? (pending.b ? (pending.mode ? 'Click to place the reflex angle · Esc cancels' : 'Choose the side of the corner to measure, then click to place the angle · Esc cancels') : 'Now the second edge · Esc cancels') : pending.kind === 'linear' && !pending.b ? 'Now the second point · Esc cancels' : pending.kind === 'diameter' && pending.owner ? `${pending.owner} · Click where the dimension goes · Esc cancels` : 'Click where the dimension goes · Esc cancels') : tool === 'select' ? null : tool === 'datum-target' ? (targetDraft.kind === 'point' ? 'Click a straight edge endpoint · Esc cancels' : targetDraft.kind === 'line' ? 'Click the first end of the target line · Esc cancels' : 'Click the centre of the target area · Esc cancels') : TOOLS.find(t => t.tool === tool)!.hint);
+  const hint = message ?? (radiusMove ? "Click the sheet to move the shortened leader origin. Esc cancels." : null) ?? (currentReattachment ? `Select a rim in the ${viewLabel(currentReattachment.original.view)} · Esc cancels` : null) ?? (pending ? (pending.kind === 'standalone-frame' ? `Click the sheet to place the frame. View: ${viewLabel(pending.view)}. Esc cancels.` : pending.kind === 'datum-target' ? 'Click where the target symbol goes · Esc cancels' : pending.kind === 'datum-line' ? 'Now the other end of the target line · Esc cancels' : pending.kind === 'note' ? 'Click where the note’s text goes · Esc cancels' : pending.kind === 'detail-center' ? `Select the centre of Detail ${pending.moving.detail.id} on the ${viewLabel(pending.view)} · Esc cancels` : pending.kind === 'detail' ? 'Now how far the detail’s circle reaches · Esc cancels' : pending.kind === 'chamfer' ? (!pending.chamfer ? 'Select the 45° chamfer bevel edge · Esc cancels' : !pending.adjacent ? 'Now click an adjacent straight wall sharing a corner with the bevel · Esc cancels' : 'Click where the chamfer callout goes · Esc cancels') : pending.kind === 'angle' ? (pending.b ? (pending.mode ? 'Click to place the reflex angle · Esc cancels' : 'Choose the side of the corner to measure, then click to place the angle · Esc cancels') : 'Now the second edge · Esc cancels') : pending.kind === 'linear' && !pending.b ? 'Now the second point · Esc cancels' : pending.kind === 'diameter' && pending.owner ? `${pending.owner} · Click where the dimension goes · Esc cancels` : 'Click where the dimension goes · Esc cancels') : tool === 'select' ? null : tool === 'datum-target' ? (targetDraft.kind === 'point' ? 'Click a straight edge endpoint · Esc cancels' : targetDraft.kind === 'line' ? 'Click the first end of the target line · Esc cancels' : 'Click the centre of the target area · Esc cancels') : TOOLS.find(t => t.tool === tool)!.hint);
   const selDim = selected?.kind === 'dimension' ? settings.dimensions.find(d => d.id === selected.id) : undefined;
   const extensionReady = !busy && projectionCurrent && sourceCurrent !== false;
   const extensionOwner = useMemo(() => ({}), [projectionActionOwner, selected, sheet, extensionReady]);
@@ -1778,7 +1863,7 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
         <DimensionsList foreshortenMovingId={currentRadiusMove?.dim.id} onForeshorten={id => { editRadius(id, 'add'); }}
           onForeshortenMove={id => { if (radiusReady && selDim?.id === id && radiusPlacement && !radiusPlacement.hidden && !radiusPlacement.breaks?.length) {
             cancel(); setDrag(null); setTool('select'); setRadiusMove({ owner: extensionOwner, dim: selDim }); svg.current?.focus();
-          } }} onForeshortenRemove={id => { setRadiusMove(null); editRadius(id, 'remove'); }} extensionReady={extensionReady} arrowReady={arrowReady} onArrow={changeArrow} crossingBreakReady={arrowReady} crossingBreakCandidates={crossingBreakCandidates} onCrossingBreak={changeCrossingBreak} extensionJogReady={arrowReady} onExtensionJog={changeExtensionJog} onExtension={changeExtension} onExtensionPreview={previewExtension} sheet={sheet} views={views} layout={layout} scope={scope} settings={settings} occurrenceReasons={lossByDimension} onReattach={startReattachment} selected={selDim?.id ?? null} onSelect={id => { selectAnnotationRow('dimension', id); setNoteDraft(null); }} remove={id => removeAnnotation({ kind: 'dimension', id })} autoDimension={autoDimension} />
+          } }} onForeshortenRemove={id => { setRadiusMove(null); editRadius(id, 'remove'); }} extensionReady={extensionReady} arrowReady={arrowReady} onArrow={changeArrow} crossingBreakReady={arrowReady} crossingBreakCandidates={crossingBreakCandidates} onCrossingBreak={changeCrossingBreak} extensionJogReady={arrowReady} onExtensionJog={changeExtensionJog} onExtension={changeExtension} onExtensionPreview={previewExtension} sheet={sheet} views={views} layout={layout} scope={scope} settings={settings} occurrenceReasons={lossByDimension} onReattach={startReattachment} onReselectChamfer={startChamferReselect} selected={selDim?.id ?? null} onSelect={id => { selectAnnotationRow('dimension', id); setNoteDraft(null); }} remove={id => removeAnnotation({ kind: 'dimension', id })} autoDimension={autoDimension} />
 
         <ToleranceEditor selDim={selDim} settings={settings} tolDraft={tolDraft} setTolDraft={setTolDraft} commitDims={commitDims} setMessage={setMessage} />
 

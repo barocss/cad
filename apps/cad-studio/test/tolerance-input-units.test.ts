@@ -11,6 +11,7 @@ function dimension(kind: DrawingDimension['kind'], tol: Tolerance): DrawingDimen
   if (kind === 'linear') return { ...common, kind, a: point, b: { ...point, near: [25.4, 0, 0] }, orient: 'horizontal' };
   if (kind === 'angle') return { ...common, kind, a: point, b: { ...point, edge: 'edge2' } };
   if (kind === 'arc-length') return { ...common, kind, arc: { edge: 'edge1', near: [0, 0, 0] } };
+  if (kind === 'chamfer') return { ...common, kind, chamfer: { edge: 'edge1', near: [0, 0, 0] }, adjacent: { edge: 'edge2', near: [1, 0, 0] } };
   if (kind === 'pcd') return { ...common, kind, ring: [point, { ...point, edge: 'edge2' }, { ...point, edge: 'edge3' }] };
   return { ...common, kind, edge: 'edge1', near: [0, 0, 0] };
 }

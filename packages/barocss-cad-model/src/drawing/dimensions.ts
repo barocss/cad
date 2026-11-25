@@ -11,6 +11,7 @@ import { formatNumber, type LengthFormat, type UnitPrecision } from './standard'
 import type { DrawingDetail } from './detail';
 import { reflexAngle } from './reflexAngle';
 import { resolveArcLengthEdge } from './arcLength';
+import { resolveChamferEdges } from './chamferDim';
 
 const sub3 = (a: readonly number[], b: readonly number[]): Vec3 => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
 const dist3 = (a: readonly number[], b: readonly number[]) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
@@ -123,11 +124,23 @@ export interface ResolvedArcLength {
   alt?: string;
 }
 
+export interface ResolvedChamfer {
+  ok: true;
+  kind: 'chamfer';
+  dim: Extract<DrawingDimension, { kind: 'chamfer' }>;
+  midpoint: XY;
+  angleDeg: number;
+  value: number;
+  text: string;
+  alt?: string;
+}
+
 /** `alt` (11 ③b): on a dual drawing, the same text in the other unit; the sheet sets it, resolving never does. */
 export type Resolved = (
   | { ok: true; kind: 'linear'; dim: Extract<DrawingDimension, { kind: 'linear' }>; a: XY; b: XY; value: number; text: string; alt?: string }
   | { ok: true; kind: 'diameter' | 'radius'; dim: Extract<DrawingDimension, { kind: 'diameter' | 'radius' }>; center: XY; radius: number; value: number; text: string; alt?: string; detailArcs?: readonly CircularArc[]; radiusRim?: XY }
   | ResolvedArcLength
+  | ResolvedChamfer
   /** `vertex`: where the two lines meet; `from`/`to`: the sector's bounding directions (counter-clockwise from → to); `ends`: each edge's far end from the vertex. */
   | { ok: true; kind: 'angle'; dim: Extract<DrawingDimension, { kind: 'angle' }>; vertex: XY; from: XY; to: XY; ends: [XY, XY]; value: number; text: string; alt?: string }
   /** A pitch circle (R14.5): `center` in the view, `center3` in the model, `radius` (mm), `members` in the view; `value` its diameter. */
@@ -145,6 +158,7 @@ export function valueText(r: { kind: Extract<Resolved, { ok: true }>['kind']; va
     case 'linear': return f(r.value);
     case 'diameter': return `Ø${f(r.value)}`;
     case 'arc-length': return `ARC ${f(r.value)}`;
+    case 'chamfer': return `${f(r.value)} × 45°`;
     default: return `R${f(r.value)}`;
   }
 }
@@ -244,6 +258,23 @@ export function resolveDimension(views: Partial<Record<DimView, BrepProjection>>
     const value = linearValue(pr, a, b, dim.orient);
     if (value < 1e-9) return { ok: false, dim, reason: 'Its two points now coincide in this view.' };
     return { ok: true, kind: 'linear', dim, a: inView(pr, a), b: inView(pr, b), value, text: valueText({ kind: 'linear', value }, fmtMM) };
+  }
+  if (dim.kind === 'chamfer') {
+    if (dim.tol || dim.basic || dim.count !== undefined || dim.auto) {
+      return { ok: false, dim, reason: '45° chamfer dimensions do not support tolerances, basic frames, count multipliers, or Auto-dimension.' };
+    }
+    const resolved = resolveChamferEdges(pr, dim.chamfer, dim.adjacent, dim.view);
+    if (!resolved.ok) return { ok: false, dim, reason: resolved.reason };
+    const g = resolved.geometry;
+    return {
+      ok: true,
+      kind: 'chamfer',
+      dim,
+      midpoint: g.midpoint,
+      angleDeg: g.angleDeg,
+      value: g.setback,
+      text: valueText({ kind: 'chamfer', value: g.setback }, fmtMM),
+    };
   }
   if (dim.kind === 'arc-length') {
     const resolved = resolveArcLengthEdge(pr, dim.arc, dim.view, showHidden);

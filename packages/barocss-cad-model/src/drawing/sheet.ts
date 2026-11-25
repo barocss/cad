@@ -155,6 +155,9 @@ export function buildSheet(views: DrawingViews, layout: SheetLayout, settings: D
     if (d.kind === 'arc-length' && layout.views[view].breaks?.length) {
       return { ok: false, dim: d, reason: 'Arc length dimensions are not supported on a broken view.' };
     }
+    if (d.kind === 'chamfer' && layout.views[view].breaks?.length) {
+      return { ok: false, dim: d, reason: '45° chamfer dimensions are not supported on a broken view.' };
+    }
     const patternProblem = (message: string): Resolved => {
       const action = d.tol || d.basic || attachedFrames.some(frame => frame.dim === d.id)
         ? 'Review this dimension and its attached controls before replacing it.'
@@ -890,7 +893,7 @@ export function withShownText(r: Extract<Resolved, { ok: true }>, callout: ((edg
       const q = digits === undefined ? p : withDigits(p, u, digits), f = lengthFormats(q), state = { digits: Math.max(digits ?? 0, tol ? deviationsOf(tol, '', q, u, r.value).digits : 0) };
       const format = u === p.units ? f.primary : f.secondary!;
       // Fractional inch applies only to plain untoleranced, non-basic, non-callout length dimensions; model mm is never altered.
-      const canFraction = u === 'inch' && p.inchFraction !== undefined && r.kind !== 'angle' && !r.dim.tol && !r.dim.basic;
+      const canFraction = u === 'inch' && p.inchFraction !== undefined && r.kind !== 'angle' && r.kind !== 'chamfer' && !r.dim.tol && !r.dim.basic;
       const calloutText = canFraction && r.kind === 'diameter' && callout ? callout(r.dim.edge, 2 * r.radius, format) : null;
       const activeFormat: LengthFormat = canFraction && calloutText === null
         ? Object.assign((mm: number, places?: 2 | 3 | 4) => {
@@ -1103,6 +1106,23 @@ export function dimensionMarks(v: ViewPlacement, r: Extract<Resolved, { ok: true
     }
     const mid = at(theta / 2), out = unit(sub(mid, X));
     marks.push(...valueMarks(add(add(mid, out, 2.5), [0, 1.2]), 0, out[0] > 0.3 ? 'start' : out[0] < -0.3 ? 'end' : 'middle', r.text, r.dim.tol, '°', p));
+    return marks;
+  }
+  if (r.kind === 'chamfer') {
+    // Leader from chamfer bevel midpoint to placement knee, horizontal shoulder, and `setback × 45°` text.
+    const M = toSheet(v, r.midpoint);
+    const delta = sub(place, M);
+    const dist = Math.hypot(delta[0], delta[1]);
+    const right = delta[0] >= 0;
+    const knee: XY = dist > 1e-6 ? place : add(M, [8, -8]);
+    const shoulder = add(knee, [right ? 1 : -1, 0], 3);
+    const dirToTip = sub(M, knee);
+    marks.push(
+      { kind: 'line', a: M, b: knee, pen: 'thin', role: 'leader' },
+      { kind: 'line', a: knee, b: shoulder, pen: 'thin', role: 'leader' },
+      arrow(M, Math.hypot(dirToTip[0], dirToTip[1]) > 1e-6 ? dirToTip : [-1, 1], p),
+      ...valueMarks(add(shoulder, [right ? 1 : -1, 0], 0.8), 0, right ? 'start' : 'end', r.text, undefined, '', p, r.alt, r.value),
+    );
     return marks;
   }
   if (r.kind === 'arc-length') {

@@ -34,13 +34,14 @@ export interface DimensionsListProps {
   onForeshortenRemove?(id: string): void;
   occurrenceReasons: ReadonlyMap<string, string>;
   onReattach(id: string): void;
+  onReselectChamfer?(id: string): void;
   onSelect(id: string): void;
   remove(id: string): void;
   autoDimension(): Promise<void>;
 }
 
 export function DimensionsList({
-  sheet, views, layout, scope, settings, occurrenceReasons, onReattach, selected, onSelect, remove, autoDimension,
+  sheet, views, layout, scope, settings, occurrenceReasons, onReattach, onReselectChamfer, selected, onSelect, remove, autoDimension,
   extensionReady = false, arrowReady = false, onArrow, crossingBreakReady = false, crossingBreakCandidates = [], onCrossingBreak,
   extensionJogReady = false, onExtensionJog, onExtension, onExtensionPreview,
   foreshortenMovingId = null, onForeshorten, onForeshortenMove, onForeshortenRemove,
@@ -181,6 +182,8 @@ export function DimensionsList({
             {!r.ok && r.dim.kind === 'diameter' && ((r.dim.view !== 'iso' && isViewId(r.dim.view) && occurrenceReasons.has(r.dim.id))
               || (scope.kind === 'part' && isDetailRef(r.dim.view) && sheet?.details?.some(d => `detail:${d.id}` === r.dim.view)))
               && <Button variant="ghost" size="xs" aria-label={`Reattach diameter ${r.dim.id}`} onClick={() => onReattach(r.dim.id)}>Reattach</Button>}
+            {!r.ok && r.dim.kind === 'chamfer' && scope.kind === 'part' && isViewId(r.dim.view) && r.dim.view !== 'iso' && onReselectChamfer
+              && <Button variant="ghost" size="xs" aria-label={`Reselect chamfer ${r.dim.id}`} onClick={() => onReselectChamfer(r.dim.id)}>Reselect</Button>}
             <Button variant="ghost" size="xs" aria-label={`Remove dimension ${r.ok ? r.text : r.dim.id}`} onClick={e => { e.stopPropagation(); remove(r.dim.id); }}><Icon name="close" small /></Button>
           </div>)}
           {lost.length > 0 && <div className="empty" style={{ color: 'var(--warn)' }}>{lost.length} dimension{lost.length > 1 ? 's' : ''} lost {lost.length > 1 ? 'their' : 'its'} reference (the part changed).</div>}

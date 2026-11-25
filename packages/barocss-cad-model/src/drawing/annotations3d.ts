@@ -43,7 +43,7 @@ export interface ModelAnnotation {
   anchor: Vec3; text: string[]; texts: Text3[];
   targets: Target[];
   lines: Line3[]; arcs: Arc3[]; arrows: Head3[];
-  dimension?: { measure: 'linear' | 'diameter' | 'radius' | 'arc-length' | 'pcd' | 'angle'; value: number; unit: 'mm' | 'deg'; text: string; /** On a dual drawing: the text in the other unit. */ alt?: string; tol?: Tolerance; basic?: true; count?: number };
+  dimension?: { measure: 'linear' | 'diameter' | 'radius' | 'arc-length' | 'chamfer' | 'pcd' | 'angle'; value: number; unit: 'mm' | 'deg'; text: string; /** On a dual drawing: the text in the other unit. */ alt?: string; tol?: Tolerance; basic?: true; count?: number };
   /** The frame's compartments in order (the symbol's, the zone and value, each datum), and its box in plane coordinates [u0, v0, u1, v1]. */
   frame?: { characteristic: Characteristic; zone: 'diameter' | 'linear' | 'sphere'; statistical?: boolean; unequal?: number; around?: 'all-around' | 'all-over'; stacked?: { zone: 'diameter' | 'linear' | 'sphere'; value: number; datums: string[]; material?: MaterialModifier; datumModifiers?: Record<string, MaterialModifier>; cells: { text: string; symbol?: Characteristic }[] }; value: number; datums: string[]; dim: string; material?: MaterialModifier; datumModifiers?: Record<string, MaterialModifier>; projected?: number; freeState?: boolean; tangentPlane?: boolean; cells: { text: string; symbol?: Characteristic }[]; composite?: { zone: 'diameter' | 'linear' | 'sphere'; value: number; datums: string[]; material?: MaterialModifier; datumModifiers?: Record<string, MaterialModifier>; cells: { text: string }[] }; box: [number, number, number, number] };
   /** A datum target also says its kind, its area (model mm, as the symbol's upper text reads it) and whether it is the moveable symbol. */
@@ -164,6 +164,7 @@ function targetsOf(d: DrawingDimension): Target[] {
   if (d.kind === 'linear') return [p(d.a), p(d.b)];
   if (d.kind === 'angle') return [p(d.a), p(d.b)];
   if (d.kind === 'arc-length') return [p(d.arc)];
+  if (d.kind === 'chamfer') return [p(d.chamfer), p(d.adjacent)];
   if (d.kind === 'pcd') return d.ring.map(x => ({ at: [...x.near] as Vec3, edge: x.edge, centre: true as const }));
   return [{ at: [...d.near] as Vec3, edge: d.edge, centre: true }];
 }

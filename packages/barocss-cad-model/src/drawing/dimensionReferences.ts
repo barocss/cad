@@ -5,6 +5,7 @@ export function dimensionEdgeNames(dim: DrawingDimension): (string | undefined)[
   if (dim.kind === 'linear') return [dim.a?.edge, dim.b?.edge, ...(dim.a?.ring ?? []).map(member => member.edge), ...(dim.b?.ring ?? []).map(member => member.edge)];
   if (dim.kind === 'angle') return [dim.a?.edge, dim.b?.edge];
   if (dim.kind === 'arc-length') return [dim.arc?.edge];
+  if (dim.kind === 'chamfer') return [dim.chamfer?.edge, dim.adjacent?.edge];
   if (dim.kind === 'pcd') return (dim.ring ?? []).map(member => member.edge);
   return [dim.edge];
 }

@@ -536,6 +536,10 @@ function renameDimension(d: DrawingDimension, rename: (name: string) => string |
   const ring = (r: readonly CentreRef[]) => { const out = r.map(m => { const e = rename(m.edge); return e === null ? null : { ...m, edge: e }; }); return out.some(m => m === null) ? null : out as CentreRef[]; };
   if (d.kind === 'pcd') { const r = ring(d.ring); return r ? { ...d, ring: r } : null; }
   if (d.kind === 'arc-length') { const edge = rename(d.arc.edge); return edge === null ? null : { ...d, arc: { ...d.arc, edge } }; }
+  if (d.kind === 'chamfer') {
+    const c = rename(d.chamfer.edge), a = rename(d.adjacent.edge);
+    return c === null || a === null ? null : { ...d, chamfer: { ...d.chamfer, edge: c }, adjacent: { ...d.adjacent, edge: a } };
+  }
   const point = (p: DimPoint): DimPoint | null => { if (p.at === 'pcd') { const r = ring(p.ring ?? []); return r ? { ...p, edge: r[0].edge, ring: r } : null; } const e = rename(p.edge); return e === null ? null : { ...p, edge: e }; };
   const a = d.kind === 'linear' ? point(d.a) : (() => { const e = rename(d.a.edge); return e === null ? null : { ...d.a, edge: e }; })();
   const b = d.kind === 'linear' ? point(d.b) : (() => { const e = rename(d.b.edge); return e === null ? null : { ...d.b, edge: e }; })();

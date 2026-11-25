@@ -165,11 +165,22 @@ export interface ArcLengthDimensionData {
   place: XY;
 }
 
+export interface ChamferDimensionData {
+  id: string;
+  view: DimView;
+  kind: 'chamfer';
+  /** Nested bevel and adjacent wall references so older readers never misread chamfer as radius or angle. */
+  chamfer: EdgeRef;
+  adjacent: EdgeRef;
+  place: XY;
+}
+
 export type DrawingDimension = ({ tol?: Tolerance; count?: number; auto?: true; basic?: true }) & (
   | { id: string; view: DimView; kind: 'linear'; a: DimPoint; b: DimPoint; orient: 'horizontal' | 'vertical' | 'aligned'; place: XY; /** Hide only this reference role’s extension line; omitted means both visible. */ hideExtension?: 'a' | 'b'; arrowPlacement?: LinearArrowPlacement; /** Optional sheet-mm break on this linear dimension line where it crosses one verified sibling linear dimension line. */ crossingBreak?: LinearCrossingBreak; /** Optional display-only jog on one extension line ('a' or 'b'); measured endpoints and value stay unchanged. */ extensionJog?: LinearExtensionJog }
   | { id: string; view: DimView; kind: 'diameter'; edge: string; near: Vec3; place: XY; sig?: Sig; was?: string }
   | { id: string; view: DimView; kind: 'radius'; edge: string; near: Vec3; place: XY; sig?: Sig; was?: string; /** Optional foreshortened display origin in view model coordinates (mm); true radius and center remain native. */ foreshorten?: ForeshortenedRadius }
   | ArcLengthDimensionData
+  | ChamferDimensionData
   /** A pitch circle (R14.5, O6): the circle through the centres of three or more holes, its diameter as `Ø40 PCD`. */
   | { id: string; view: DimView; kind: 'pcd'; ring: CentreRef[]; place: XY }
   /** Between two straight edges (each the one of its name nearest `near`), in the sector holding `place`. */
@@ -417,14 +428,16 @@ export function readDrawing(raw: unknown): DrawingSettings {
     ...(typeof r.title === 'string' && r.title ? { title: r.title } : {}),
     ...(typeof r.revision === 'string' && r.revision ? { revision: r.revision.slice(0, 6) } : {}),
     ...(typeof r.revisedModel === 'string' ? { revisedModel: r.revisedModel } : {}),
-    dimensions: Array.isArray(r.dimensions) ? r.dimensions.filter(x => x && typeof x.id === 'string' && isDimView(x.view) && (x.kind !== 'pcd' || ringOk(x.ring)) && (x.kind !== 'arc-length' || (x.auto !== true && isOrthographicView(x.view) && isXY(x.place) && edgeRefOk((x as { arc?: unknown }).arc))) && (x.kind !== 'linear' || ((x.a?.at !== 'pcd' || ringOk(x.a.ring)) && (x.b?.at !== 'pcd' || ringOk(x.b.ring))))).map(x => {
-      const { tol, count, auto, basic, foreshorten, arrowPlacement, crossingBreak, extensionJog, ...rest } = x as DrawingDimension & { foreshorten?: unknown; arrowPlacement?: unknown; crossingBreak?: unknown; extensionJog?: unknown }; const t = readTolerance(tol);
+    dimensions: Array.isArray(r.dimensions) ? r.dimensions.filter(x => x && typeof x.id === 'string' && isDimView(x.view) && (x.kind !== 'pcd' || ringOk(x.ring)) && (x.kind !== 'arc-length' || (x.auto !== true && isOrthographicView(x.view) && isXY(x.place) && edgeRefOk((x as { arc?: unknown }).arc))) && (x.kind !== 'chamfer' || (x.auto !== true && isOrthographicView(x.view) && isXY(x.place) && edgeRefOk((x as { chamfer?: unknown }).chamfer) && edgeRefOk((x as { adjacent?: unknown }).adjacent))) && (x.kind !== 'linear' || ((x.a?.at !== 'pcd' || ringOk(x.a.ring)) && (x.b?.at !== 'pcd' || ringOk(x.b.ring))))).map(x => {
+      const { tol, count, auto, basic, foreshorten, arrowPlacement, crossingBreak, extensionJog, ...rest } = x as DrawingDimension & { foreshorten?: unknown; arrowPlacement?: unknown; crossingBreak?: unknown; extensionJog?: unknown }; const t = x.kind === 'chamfer' ? null : readTolerance(tol);
       const arrows = x.kind === 'linear' && auto !== true && isOrthographicView(x.view) ? readLinearArrowPlacement(arrowPlacement) : undefined;
       const cBreak = x.kind === 'linear' && auto !== true && isOrthographicView(x.view) ? readLinearCrossingBreak(crossingBreak) : undefined;
       const extJog = x.kind === 'linear' && auto !== true && isOrthographicView(x.view) ? readLinearExtensionJog(extensionJog) : undefined;
       const fs = x.kind === 'radius' && auto !== true && isOrthographicView(x.view) && foreshortenOk(foreshorten)
         ? { origin: [foreshorten.origin[0], foreshorten.origin[1]] as XY } : null;
-      return { ...rest, ...(t ? { tol: t } : {}), ...(Number.isInteger(count) && count! >= 2 && count! <= 999 ? { count } : {}), ...(auto === true ? { auto: true } : {}), ...(basic === true ? { basic: true } : {}), ...(fs ? { foreshorten: fs } : {}), ...(arrows ? { arrowPlacement: arrows } : {}), ...(cBreak ? { crossingBreak: cBreak } : {}), ...(extJog ? { extensionJog: extJog } : {}) } as DrawingDimension;
+      const allowCount = x.kind !== 'chamfer' && Number.isInteger(count) && count! >= 2 && count! <= 999;
+      const allowBasic = x.kind !== 'chamfer' && basic === true;
+      return { ...rest, ...(t ? { tol: t } : {}), ...(allowCount ? { count } : {}), ...(auto === true ? { auto: true } : {}), ...(allowBasic ? { basic: true } : {}), ...(fs ? { foreshorten: fs } : {}), ...(arrows ? { arrowPlacement: arrows } : {}), ...(cBreak ? { crossingBreak: cBreak } : {}), ...(extJog ? { extensionJog: extJog } : {}) } as DrawingDimension;
     }) : [],
     ...(Array.isArray(r.views) && r.views.includes('front') && r.views.includes('top') ? { views: VIEW_IDS.filter(v => r.views!.includes(v)) } : {}),
     ...(readRoom(r.room) ? { room: readRoom(r.room)! } : {}),

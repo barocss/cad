@@ -10,7 +10,7 @@ export function ToleranceEditor({ selDim, settings, tolDraft, setTolDraft, commi
   commitDims(dimensions: DrawingDimension[]): void; setMessage(message: string | null): void;
 }) {
   return <>
-        {selDim && <>
+        {selDim && selDim.kind !== 'chamfer' && <>
           <div className="card-title" style={{ marginTop: 8 }}>TOLERANCE</div>
           <label className={FIELD}><span>Kind</span><NativeSelect className={CONTROL} aria-label="Tolerance" value={selDim.tol?.kind ?? 'none'} onChange={e => {
             const k = e.target.value, rest = { ...selDim }; delete rest.tol;
