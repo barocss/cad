@@ -164,7 +164,7 @@ export function buildSheet(views: DrawingViews, layout: SheetLayout, settings: D
     return withShownText(resolved, meta.callout, p);
   });
   for (const r of inViews) if (r.ok) {
-    const marks = dimensionMarks(layout.views[r.dim.view as ViewId], r, p);
+    const marks = dimensionMarks(layout.views[r.dim.view as ViewId], r, p, settings.scope?.kind !== 'assembly');
     if (r.dim.basic) marks.push(...basicBox(marks));
     groups.push({ role: 'dimension', id: r.dim.id, view: r.dim.view, marks });
   }
@@ -483,7 +483,9 @@ function placeShortLinearText(groups: MarkGroup[], dimensions: readonly Resolved
     const A2 = heads[0].head!.tip, B2 = heads[1].head!.tip, span = sub(B2, A2), length = Math.hypot(...span); if (length < LABEL_NUMERIC_EPS) continue;
     const axis: XY = [span[0] / length, span[1] / length], middle = add(A2, span, 0.5), along = labelProjection(payload.box, axis), origin = dot2(middle, axis);
     const inside = length >= 2 * p.arrowLength + 1, free = inside ? length / 2 - p.arrowLength : length / 2;
-    const fitsSpan = along[0] >= origin - free && along[1] <= origin + free;
+    const actual = linearArrowPolicy(v, r, length, p, settings.scope?.kind !== 'assembly');
+    const [lo, hi] = actual ? actual.free : [-free, free];
+    const fitsSpan = along[0] >= origin + lo && along[1] <= origin + hi;
     const A = toSheet(v, r.a), B = toSheet(v, r.b), measured = add(A, sub(B, A), 0.5), normal = sub(middle, measured), distance = Math.hypot(...normal); if (distance < LABEL_NUMERIC_EPS) continue;
     const outward: XY = [normal[0] / distance, normal[1] / distance], obstacles = labelObstacles(groups, layout, placed), relevant: LabelObstacle[] = [];
     for (const obstacle of obstacles) {
@@ -1054,7 +1056,16 @@ function dimensionValueMarks(at: XY, angle: number, anchor: 'start' | 'middle' |
   return marks;
 }
 
-export function dimensionMarks(v: ViewPlacement, r: Extract<Resolved, { ok: true }>, p: StandardPreset = PLAIN): Mark[] {
+/** Overrides affect only unbroken orthographic part views, never the measured endpoints. */
+export function linearArrowPolicy(v: ViewPlacement, r: Extract<Resolved, { ok: true; kind: 'linear' }>, span: number, p: StandardPreset, allowManual = true) {
+  const override = r.dim.arrowPlacement;
+  if (!allowManual || !override || r.dim.auto || v.breaks?.length || !['front', 'top', 'right'].includes(r.dim.view)) return null;
+  const auto = span >= 2 * p.arrowLength + 1;
+  const a = override.a ? override.a === 'inside' : auto, b = override.b ? override.b === 'inside' : auto;
+  const free: [number, number] = [-span / 2 + (a ? p.arrowLength : 0), span / 2 - (b ? p.arrowLength : 0)];
+  return { a, b, free, crowded: (a || b) && free[0] >= free[1] };
+}
+export function dimensionMarks(v: ViewPlacement, r: Extract<Resolved, { ok: true }>, p: StandardPreset = PLAIN, allowManualArrows = true): Mark[] {
   if (r.shownPrecision) p = { ...p, precision: { ...p.precision, ...r.shownPrecision } };
   if (r.kind === 'pcd') {
     // A pitch circle (R14.5): the circle in chain line through the holes' centres, a leader to it like a diameter's.
@@ -1095,19 +1106,17 @@ export function dimensionMarks(v: ViewPlacement, r: Extract<Resolved, { ok: true
     }
     const along = sub(B2, A2), len = Math.hypot(along[0], along[1]), e = unit(along), mid = add(A2, along, 0.5);
     const inside = len >= 2 * p.arrowLength + 1;
-    // ASME: the text reads horizontally in a break of the line; room for it between the arrows, else it sits beside the line.
-    const text = p.dimensionText === 'unidirectional' ? unidirectional(mid, e, r.text, r.alt, r.value, r.dim.tol, inside ? [-len / 2 + p.arrowLength, len / 2 - p.arrowLength] : [0, 0], p) : null;
-    if (inside) {
-      if (text?.gap) marks.push({ kind: 'line', a: A2, b: add(mid, e, text.gap[0]), pen: 'thin', role: 'dimension' }, { kind: 'line', a: add(mid, e, text.gap[1]), b: B2, pen: 'thin', role: 'dimension' });
-      else marks.push({ kind: 'line', a: A2, b: B2, pen: 'thin', role: 'dimension' });
-      marks.push(arrow(A2, [-e[0], -e[1]], p), arrow(B2, e, p));
-    } else {
-      // Too short for arrows inside: arrows outside, pointing in.
-      marks.push({ kind: 'line', a: add(A2, e, -p.arrowLength - 3), b: add(B2, e, p.arrowLength + 3), pen: 'thin', role: 'dimension' }, arrow(A2, e, p), arrow(B2, [-e[0], -e[1]], p));
-    }
-    // Text over the line (the side away from the measured points' middle when the line is beside them).
+    const manual = linearArrowPolicy(v, r, len, p, allowManualArrows);
+    const insideA = manual?.a ?? inside, insideB = manual?.b ?? inside;
+    const free: [number, number] = manual?.free ?? (inside ? [-len / 2 + p.arrowLength, len / 2 - p.arrowLength] : [-len / 2, len / 2]);
+    // Preserve the legacy all-outside ASME label behavior when there is no authored override.
+    const text = p.dimensionText === 'unidirectional' ? unidirectional(mid, e, r.text, r.alt, r.value, r.dim.tol, manual || inside ? free : [0, 0], p) : null;
+    const start = insideA ? A2 : add(A2, e, -p.arrowLength - 3), end = insideB ? B2 : add(B2, e, p.arrowLength + 3);
+    if (text?.gap && (manual || inside)) marks.push({ kind: 'line', a: start, b: add(mid, e, text.gap[0]), pen: 'thin', role: 'dimension' }, { kind: 'line', a: add(mid, e, text.gap[1]), b: end, pen: 'thin', role: 'dimension' });
+    else marks.push({ kind: 'line', a: start, b: end, pen: 'thin', role: 'dimension' });
+    marks.push(arrow(A2, insideA ? [-e[0], -e[1]] : e, p), arrow(B2, insideB ? e : [-e[0], -e[1]], p));
     if (text) marks.push(...text.marks);
-    else marks.push(...clearOfLine(valueMarks(add(mid, textUp(e), 1.2), readAngle(e), 'middle', r.text, r.dim.tol, '', p, r.alt, r.value), mid, e, inside ? [-len / 2 + p.arrowLength, len / 2 - p.arrowLength] : [-len / 2, len / 2], true, !!r.dim.basic));
+    else marks.push(...clearOfLine(valueMarks(add(mid, textUp(e), 1.2), readAngle(e), 'middle', r.text, r.dim.tol, '', p, r.alt, r.value), mid, e, free, true, !!r.dim.basic));
     return marks;
   }
   const C = toSheet(v, r.center), R = r.radius * v.scale, toPlace = sub(place, C), dist = Math.hypot(toPlace[0], toPlace[1]);

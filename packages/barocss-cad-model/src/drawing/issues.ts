@@ -35,7 +35,7 @@ import type { BrepProjection } from '@barocss/cad';
 import { autoDimensions, axisOf, holesOf, levels, type Hole } from './auto';
 import { sameLinearDependency, samePointDependency } from './measurement';
 import { datumTargetConflicts, resolveDatumTarget, type DatumTargetFailureCode } from './datumTargets';
-import { PENS, basicBox, buildSheet, datumMarks, dimensionMarks, frameMarks, placementOf, projectionOf, sectionExtents, tableRoom, type Mark, type MarkGroup, type Sheet, type SheetSection } from './sheet';
+import { PENS, basicBox, buildSheet, datumMarks, dimensionMarks, frameMarks, linearArrowPolicy, placementOf, projectionOf, sectionExtents, tableRoom, type Mark, type MarkGroup, type Sheet, type SheetSection } from './sheet';
 import { textCorners } from './text';
 import { SCALES, layoutSheet, scaleLabel, sectionDepth, type SheetLayout } from './views';
 import { detailScale } from './detail';
@@ -49,7 +49,7 @@ import { SECTION_VIEWS, VIEW_IDS, baseViewOf, detailLetter, isDetailRef, isViewI
 
 export const DRAWING_ISSUES_VERSION = 'cad-studio-drawing-issues-v1';
 
-export type DrawingIssueCode = 'SHEET_SET' | 'UNIT_PRECISION' | 'FORESHORTEN_INVALID' | 'DIM_ON_HIDDEN' | 'DATUM_LOST' | 'FRAME_LOST' | 'FRAME_VIEW_MISSING' | 'DATUM_UNDEFINED' | 'FRAME_RULE' | 'DATUM_TWICE' | 'VIEW_NEEDED' | 'DIMENSION_LOST' | 'TEXT_OVERLAP' | 'TEXT_OVER_LINES' | 'OFF_SHEET' | 'VIEWS_DONT_FIT' | 'DUPLICATE' | 'REMATCHED' | 'HOLE_SIZE_MISSING' | 'HOLE_NOT_LOCATED' | 'STEP_NOT_LOCATED' | 'OVERALL_MISSING' | 'TABLE_SOURCE' | 'WELD_NOT_SHOWN' | 'BALLOON_NOT_CLEAR' | 'BALLOON_NO_EDGE' | 'FIT_ROW_MISSING' | 'FOLLOWED_CHANGED' | 'DETAIL_PARENT_MISSING' | 'DETAIL_EMPTY' | 'DETAIL_NO_ROOM' | 'BREAK_NO_VIEW' | 'SECTION_NO_ROOM' | 'SECTION_NO_VIEW' | 'DATUM_TARGET_OUTSIDE' | DatumTargetFailureCode | NoteTargetFailureCode;
+export type DrawingIssueCode = 'SHEET_SET' | 'UNIT_PRECISION' | 'FORESHORTEN_INVALID' | 'LINEAR_ARROWS_CROWDED' | 'DIM_ON_HIDDEN' | 'DATUM_LOST' | 'FRAME_LOST' | 'FRAME_VIEW_MISSING' | 'DATUM_UNDEFINED' | 'FRAME_RULE' | 'DATUM_TWICE' | 'VIEW_NEEDED' | 'DIMENSION_LOST' | 'TEXT_OVERLAP' | 'TEXT_OVER_LINES' | 'OFF_SHEET' | 'VIEWS_DONT_FIT' | 'DUPLICATE' | 'REMATCHED' | 'HOLE_SIZE_MISSING' | 'HOLE_NOT_LOCATED' | 'STEP_NOT_LOCATED' | 'OVERALL_MISSING' | 'TABLE_SOURCE' | 'WELD_NOT_SHOWN' | 'BALLOON_NOT_CLEAR' | 'BALLOON_NO_EDGE' | 'FIT_ROW_MISSING' | 'FOLLOWED_CHANGED' | 'DETAIL_PARENT_MISSING' | 'DETAIL_EMPTY' | 'DETAIL_NO_ROOM' | 'BREAK_NO_VIEW' | 'SECTION_NO_ROOM' | 'SECTION_NO_VIEW' | 'DATUM_TARGET_OUTSIDE' | DatumTargetFailureCode | NoteTargetFailureCode;
 export type DrawingFix =
   | { kind: 'remove'; dim: string }
   | { kind: 'move'; dim: string; place: XY }
@@ -440,6 +440,16 @@ export function drawingIssues(ctx: IssueContext): DrawingIssue[] {
     }
     if (r.fractionFallback === 'below-grid' && preset.inchFraction !== undefined) {
       out.push({ code: 'UNIT_PRECISION', severity: 'warning', message: `Dimension ${r.dim.id}: its length is smaller than half of 1/${preset.inchFraction} inch, so it stays decimal instead of rounding to 0. Use a finer inch fraction denominator or decimal inches.`, dims: [r.dim.id], view: r.dim.view });
+    }
+    if (r.kind === 'linear' && r.dim.arrowPlacement) {
+      const vp = placementOf(layout, sheet, r.dim.view);
+      const d = sheet.groups.find(g => g.role === 'dimension' && g.id === r.dim.id);
+      const tips = d?.marks.flatMap(m => m.kind === 'fill' && m.head ? [m.head.tip] : []);
+      if (vp && !vp.hidden && tips?.length === 2) {
+        const span = Math.hypot(tips[1][0] - tips[0][0], tips[1][1] - tips[0][1]);
+        if (linearArrowPolicy(vp, r, span, preset, settings.scope?.kind !== 'assembly')?.crowded)
+          out.push({ code: 'LINEAR_ARROWS_CROWDED', severity: 'warning', message: `Dimension ${r.dim.id}: the selected arrowheads do not fit at this sheet scale. Choose Outside or Auto, or make the view larger.`, dims: [r.dim.id], view: r.dim.view });
+      }
     }
     if (r.kind === 'radius' && r.dim.kind === 'radius' && r.dim.foreshorten) {
       const origin = r.dim.foreshorten.origin;

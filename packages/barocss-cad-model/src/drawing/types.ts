@@ -69,8 +69,19 @@ export type Tolerance = { kind: 'symmetric'; value: number } | { kind: 'deviatio
  * for as many equal spaces of a row (`3× 20`). `auto`: placed by Auto-dimension. Authored tolerances and controls protect it from replacement.
  * `basic` (R14.4, O5): a theoretically exact dimension, its text boxed (a position tolerance's frame holds the tolerance).
  */
+export type LinearArrowSide = 'inside' | 'outside';
+export type LinearArrowPlacement = Partial<Record<'a' | 'b', LinearArrowSide>>;
+
+/** Persist only explicit, valid A/B overrides; a missing endpoint follows Auto. */
+export function readLinearArrowPlacement(raw: unknown): LinearArrowPlacement | undefined {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
+  const { a, b } = raw as Record<string, unknown>;
+  const placement: LinearArrowPlacement = { ...(a === 'inside' || a === 'outside' ? { a } : {}), ...(b === 'inside' || b === 'outside' ? { b } : {}) };
+  return placement.a || placement.b ? placement : undefined;
+}
+
 export type DrawingDimension = ({ tol?: Tolerance; count?: number; auto?: true; basic?: true }) & (
-  | { id: string; view: DimView; kind: 'linear'; a: DimPoint; b: DimPoint; orient: 'horizontal' | 'vertical' | 'aligned'; place: XY; /** Hide only this reference role’s extension line; omitted means both visible. */ hideExtension?: 'a' | 'b' }
+  | { id: string; view: DimView; kind: 'linear'; a: DimPoint; b: DimPoint; orient: 'horizontal' | 'vertical' | 'aligned'; place: XY; /** Hide only this reference role’s extension line; omitted means both visible. */ hideExtension?: 'a' | 'b'; arrowPlacement?: LinearArrowPlacement }
   | { id: string; view: DimView; kind: 'diameter'; edge: string; near: Vec3; place: XY; sig?: Sig; was?: string }
   | { id: string; view: DimView; kind: 'radius'; edge: string; near: Vec3; place: XY; sig?: Sig; was?: string; /** Optional foreshortened display origin in view model coordinates (mm); true radius and center remain native. */ foreshorten?: ForeshortenedRadius }
   /** A pitch circle (R14.5, O6): the circle through the centres of three or more holes, its diameter as `Ø40 PCD`. */
@@ -321,10 +332,11 @@ export function readDrawing(raw: unknown): DrawingSettings {
     ...(typeof r.revision === 'string' && r.revision ? { revision: r.revision.slice(0, 6) } : {}),
     ...(typeof r.revisedModel === 'string' ? { revisedModel: r.revisedModel } : {}),
     dimensions: Array.isArray(r.dimensions) ? r.dimensions.filter(x => x && typeof x.id === 'string' && isDimView(x.view) && (x.kind !== 'pcd' || ringOk(x.ring)) && (x.kind !== 'linear' || ((x.a?.at !== 'pcd' || ringOk(x.a.ring)) && (x.b?.at !== 'pcd' || ringOk(x.b.ring))))).map(x => {
-      const { tol, count, auto, basic, foreshorten, ...rest } = x as DrawingDimension & { foreshorten?: unknown }; const t = readTolerance(tol);
+      const { tol, count, auto, basic, foreshorten, arrowPlacement, ...rest } = x as DrawingDimension & { foreshorten?: unknown; arrowPlacement?: unknown }; const t = readTolerance(tol);
+      const arrows = x.kind === 'linear' && auto !== true && isOrthographicView(x.view) ? readLinearArrowPlacement(arrowPlacement) : undefined;
       const fs = x.kind === 'radius' && auto !== true && isOrthographicView(x.view) && foreshortenOk(foreshorten)
         ? { origin: [foreshorten.origin[0], foreshorten.origin[1]] as XY } : null;
-      return { ...rest, ...(t ? { tol: t } : {}), ...(Number.isInteger(count) && count! >= 2 && count! <= 999 ? { count } : {}), ...(auto === true ? { auto: true } : {}), ...(basic === true ? { basic: true } : {}), ...(fs ? { foreshorten: fs } : {}) } as DrawingDimension;
+      return { ...rest, ...(t ? { tol: t } : {}), ...(Number.isInteger(count) && count! >= 2 && count! <= 999 ? { count } : {}), ...(auto === true ? { auto: true } : {}), ...(basic === true ? { basic: true } : {}), ...(fs ? { foreshorten: fs } : {}), ...(arrows ? { arrowPlacement: arrows } : {}) } as DrawingDimension;
     }) : [],
     ...(Array.isArray(r.views) && r.views.includes('front') && r.views.includes('top') ? { views: VIEW_IDS.filter(v => r.views!.includes(v)) } : {}),
     ...(readRoom(r.room) ? { room: readRoom(r.room)! } : {}),

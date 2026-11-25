@@ -20,6 +20,7 @@ export function ExportActions({ canExportDimensionCsv, exportDimensionCsv, sheet
 }) {
   const hasShortenedRadius = sheet?.dimensions.some(r => r.ok && r.dim.kind === 'radius' && r.dim.foreshorten
     && sheet.groups.some(group => group.id === r.dim.id && group.marks.some(mark => mark.kind === 'polyline')));
+  const hasManualArrows = sheet?.dimensions.some(r => r.ok && r.dim.kind === 'linear' && r.dim.arrowPlacement);
   const confirmPanel = useRef<HTMLDivElement>(null);
   const pendingFormat = confirmation?.format;
   useEffect(() => {
@@ -41,6 +42,7 @@ export function ExportActions({ canExportDimensionCsv, exportDimensionCsv, sheet
         <div className="empty" role="note">Dimension CSV: current base-part sheet only, linear/diameter dimensions in unbroken front/top/right views. Unresolved rows are retained with blank values; unsupported dimensions refuse the whole export. Model values are mm, separate from printed units/text. Not an issued snapshot, inspection register, measurement or acceptance record. Spreadsheet-safe text may include a protective apostrophe.</div>
         {sheet?.groups.some(group => group.marks.some(mark => mark.kind === 'hatch' && !!mark.svgTextExclusions?.length)) && <div className="empty" role="note">Screen/SVG only: dimension-text hatch clearance. PDF and DXF retain the original hatching; section DXF retains the original cut geometry.</div>}
         {hasShortenedRadius && <div className="empty" role="note" aria-label="DXF radius display compatibility">DXF stores the shortened leader in the dimension’s display block. If another CAD redraws the dimension, it may show an ordinary radius. Use SVG for the drawn appearance.</div>}
+        {hasManualArrows && <div className="empty" role="note" aria-label="DXF arrow display compatibility">DXF stores manual arrow placement in the dimension’s display block. Another CAD may use automatic placement when it redraws the dimension. Use SVG for the drawn appearance.</div>}
         {confirmation && <div ref={confirmPanel} tabIndex={-1} className="dw-export-confirm" role="group" aria-label="Confirm drawing export">
           <ul>{confirmation.messages.map((message, i) => <li key={i}>{message}</li>)}</ul>
           <div className="dw-actions">

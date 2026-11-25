@@ -58,7 +58,7 @@ import { drawingOccurrencePath } from '@barocss/cad-model/drawing/dimensionRefer
 import { diameterRims } from './drawing/diameterRims';
 import { Button } from '@/components/ui/button';
 import { BreaksList } from './drawing/BreaksList';
-import { VIEW_IDS, annotatedDetailLetters, detailLetter, isDetailRef, isSectionRef, isViewId, nextSectionId, reservedDetailLetters, sameSection, sectionLetter, sectionsOf, withSections, type DimView, type DimPoint, type DrawingNote, type EdgeRef, type DrawingDimension, type DrawingSettings, type DrawingViews, type Vec3, type ViewId, type XY } from '@barocss/cad-model/drawing/types';
+import { VIEW_IDS, annotatedDetailLetters, detailLetter, isDetailRef, isSectionRef, isViewId, nextSectionId, reservedDetailLetters, sameSection, sectionLetter, sectionsOf, withSections, readLinearArrowPlacement, type LinearArrowSide, type DimView, type DimPoint, type DrawingNote, type EdgeRef, type DrawingDimension, type DrawingSettings, type DrawingViews, type Vec3, type ViewId, type XY } from '@barocss/cad-model/drawing/types';
 import { downloadBytes } from './files';
 import { ShortcutHelp } from './ShortcutHelp';
 import { today, useDrawingSheet } from './useDrawingSheet';
@@ -1464,6 +1464,18 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
     const next = side ? { ...rest, hideExtension: side } : rest;
     commitDims(settings.dimensions.map(d => d === selDim ? next : d));
   };
+  const selectedLinearPlacement = supportedExtension && selDim ? placementAt(selDim.view) : undefined;
+  const arrowReady = extensionReady && !!selectedLinearPlacement && !selectedLinearPlacement.hidden && !selectedLinearPlacement.breaks?.length;
+  const changeArrow = (id: string, side: 'a' | 'b', placement: LinearArrowSide | 'auto') => {
+    if (liveExtensionOwner.current !== extensionOwner || !arrowReady || selDim?.kind !== 'linear' || selDim.id !== id
+      || !extensionResolved?.ok || extensionResolved.kind !== 'linear'
+      || wholeSettings.dimensions.filter(d => d.id === id).length !== 1) return;
+    if ((selDim.arrowPlacement?.[side] ?? 'auto') === placement) return;
+    const { arrowPlacement, ...ordinary } = selDim;
+    const arrows = readLinearArrowPlacement({ ...arrowPlacement, [side]: placement });
+    const next = arrows ? { ...ordinary, arrowPlacement: arrows } : ordinary;
+    if (commitDims(settings.dimensions.map(d => d === selDim ? next : d))) setMessage(null);
+  };
   const previewExtension = (side: 'a' | 'b' | null) => {
     if (liveExtensionOwner.current !== extensionOwner) return;
     setExtensionPreview(side && extensionReady ? { owner: extensionOwner, side } : null);
@@ -1595,7 +1607,7 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
         <DimensionsList foreshortenMovingId={currentRadiusMove?.dim.id} onForeshorten={id => { editRadius(id, 'add'); }}
           onForeshortenMove={id => { if (radiusReady && selDim?.id === id && radiusPlacement && !radiusPlacement.hidden && !radiusPlacement.breaks?.length) {
             cancel(); setDrag(null); setTool('select'); setRadiusMove({ owner: extensionOwner, dim: selDim }); svg.current?.focus();
-          } }} onForeshortenRemove={id => { setRadiusMove(null); editRadius(id, 'remove'); }} extensionReady={extensionReady} onExtension={changeExtension} onExtensionPreview={previewExtension} sheet={sheet} views={views} layout={layout} scope={scope} settings={settings} occurrenceReasons={lossByDimension} onReattach={startReattachment} selected={selDim?.id ?? null} onSelect={id => { selectAnnotationRow('dimension', id); setNoteDraft(null); }} remove={id => removeAnnotation({ kind: 'dimension', id })} autoDimension={autoDimension} />
+          } }} onForeshortenRemove={id => { setRadiusMove(null); editRadius(id, 'remove'); }} extensionReady={extensionReady} arrowReady={arrowReady} onArrow={changeArrow} onExtension={changeExtension} onExtensionPreview={previewExtension} sheet={sheet} views={views} layout={layout} scope={scope} settings={settings} occurrenceReasons={lossByDimension} onReattach={startReattachment} selected={selDim?.id ?? null} onSelect={id => { selectAnnotationRow('dimension', id); setNoteDraft(null); }} remove={id => removeAnnotation({ kind: 'dimension', id })} autoDimension={autoDimension} />
 
         <ToleranceEditor selDim={selDim} settings={settings} tolDraft={tolDraft} setTolDraft={setTolDraft} commitDims={commitDims} setMessage={setMessage} />
 

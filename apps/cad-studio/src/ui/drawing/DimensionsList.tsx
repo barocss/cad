@@ -2,9 +2,10 @@
 import { useId } from 'react';
 import { dimensionLine } from '@barocss/cad-model/drawing/sheet';
 import { presetFor } from '@barocss/cad-model/drawing/standard';
-import { isDetailRef, isViewId, type DrawingSettings } from '@barocss/cad-model/drawing/types';
+import { isDetailRef, isViewId, type LinearArrowSide, type DrawingSettings } from '@barocss/cad-model/drawing/types';
 import type { useDrawingSheet } from '../useDrawingSheet';
 import { Icon } from '../atoms';
+import { NativeSelect } from '@/components/ui/native-select';
 import { Button } from '@/components/ui/button';
 
 type Sheet = ReturnType<typeof useDrawingSheet>;
@@ -17,6 +18,8 @@ export interface DimensionsListProps {
   settings: DrawingSettings;
   selected: string | null;
   extensionReady?: boolean;
+  arrowReady?: boolean;
+  onArrow?(id: string, side: 'a' | 'b', placement: LinearArrowSide | 'auto'): void;
   onExtension?(id: string, side: 'a' | 'b' | undefined): void;
   onExtensionPreview?(side: 'a' | 'b' | null): void;
   foreshortenMovingId?: string | null;
@@ -32,7 +35,7 @@ export interface DimensionsListProps {
 
 export function DimensionsList({
   sheet, views, layout, scope, settings, occurrenceReasons, onReattach, selected, onSelect, remove, autoDimension,
-  extensionReady = false, onExtension, onExtensionPreview,
+  extensionReady = false, arrowReady = false, onArrow, onExtension, onExtensionPreview,
   foreshortenMovingId = null, onForeshorten, onForeshortenMove, onForeshortenRemove,
 }: DimensionsListProps) {
   const unavailableReason = useId();
@@ -66,6 +69,20 @@ export function DimensionsList({
                 onMouseEnter={() => onExtensionPreview?.(side ?? null)} onMouseLeave={() => onExtensionPreview?.(null)}
                 onFocus={() => onExtensionPreview?.(side ?? null)} onBlur={() => onExtensionPreview?.(null)}>{side ? `Hide ${side.toUpperCase()}` : 'Both'}</Button>)}
               {!r.ok && <span role="status" className="small">The reference is unresolved. The saved extension setting is retained.</span>}
+            </div>}
+            {selected === r.dim.id && r.dim.kind === 'linear' && !r.dim.auto && ['front', 'top', 'right'].includes(r.dim.view) && !assembly && onArrow && <div role="group" aria-label={`Arrow placement ${r.dim.id}`} style={{ flexBasis: '100%', order: 2, display: 'flex', gap: 8 }}>
+              {(['a', 'b'] as const).map(side => <label key={side} className="small">
+                Arrow {side.toUpperCase()}
+                <NativeSelect aria-label={`Arrow ${side.toUpperCase()} placement`} value={r.dim.kind === 'linear' ? r.dim.arrowPlacement?.[side] ?? 'auto' : 'auto'}
+                  disabled={!r.ok || !arrowReady} onChange={e => {
+                    const value = e.currentTarget.value;
+                    if (value === 'auto' || value === 'inside' || value === 'outside') onArrow(r.dim.id, side, value);
+                  }} onMouseEnter={() => onExtensionPreview?.(side)} onMouseLeave={() => onExtensionPreview?.(null)}
+                    onFocus={() => onExtensionPreview?.(side)} onBlur={() => onExtensionPreview?.(null)}>
+                  <option value="auto">Auto</option><option value="inside">Inside</option><option value="outside">Outside</option>
+                </NativeSelect>
+              </label>)}
+              {!r.ok && r.dim.arrowPlacement && <span role="status" className="small">The reference is unresolved. The saved arrow placement is retained.</span>}
             </div>}
             {selected === r.dim.id && r.dim.kind === 'radius' && !r.dim.auto && ['front', 'top', 'right'].includes(r.dim.view) && scope.kind === 'part' && onForeshorten && <div role="group" aria-label={`Foreshorten controls ${r.dim.id}`} style={{ flexBasis: '100%', order: 2, display: 'flex', flexWrap: 'wrap', gap: 4 }}>
               {!r.dim.foreshorten ? (
