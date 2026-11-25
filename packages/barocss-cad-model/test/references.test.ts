@@ -272,3 +272,58 @@ test('Open holds a retired line in a terminal two-edge constant Fillet without r
   assert.ok(Math.abs((await bodiesOf(accepted))[0].volume! - (30400 - 20 * (4 - Math.PI))) < 1e-7);
   assert.deepEqual(await verifyReferences(accepted, await bodiesOf(accepted), evaluate), { doc: accepted, changes: [], problems: [] });
 });
+
+test('Open holds a retired line in a two-edge constant Fillet before a downstream Through Hole', async () => {
+  const stock = rectanglePart(80, 40, 10);
+  const [sketch, extrude] = stock.nodes;
+  assert.ok(sketch.kind === 'sketch' && sketch.profile === 'rectangle');
+  const parent: StudioDoc = { ...stock, nodes: [{ ...sketch, min: [-20, -20], max: [60, 20],
+    sideTags: { outer: ['e1', 'e2', 'e3', 'e4'] } }, extrude] };
+  const old = 'n1.side[e1]|n1.side[e4]', candidate = 'n1.side[e4]|n1.side[e5]', stable = 'n1.side[e2]|n1.side[e3]';
+  const withFillet = withNode(parent, { kind: 'fillet', parent: { node: 1, side: 'solid' }, edges: [old, stable], radius: 2 });
+  const hole = { kind: 'hole' as const, parent: { node: 2, side: 'solid' as const }, axis: 'z' as const, side: 'max' as const, face: 'n1.top', center: [20, 0] as [number, number], radius: 2 };
+  const doc = captureSignatures(withNode(withFillet, hole), await bodiesOf(parent));
+  const moved = structuredClone(doc), profile = moved.nodes[0];
+  assert.ok(profile.kind === 'sketch' && profile.profile === 'rectangle');
+  profile.min = [-20, -18];
+  assert.deepEqual(await verifyReferences(moved, await bodiesOf(moved), evaluate), { doc: moved, changes: [], problems: [] });
+
+  const retired = structuredClone(moved), retiredProfile = retired.nodes[0];
+  assert.ok(retiredProfile.kind === 'sketch' && retiredProfile.profile === 'rectangle');
+  retiredProfile.sideTags!.outer[0] = 'e5';
+  const original = structuredClone(retired);
+  const review = await verifyReferences(retired, [], evaluate);
+  assert.deepEqual(retired, original);
+  assert.deepEqual(review.changes, []);
+  assert.deepEqual(review.problems.map(p => [p.name, p.candidates]), [[old, [candidate]]]);
+  assert.deepEqual(review.doc.nodes[2], { ...original.nodes[2], suppressed: true, held: `"${old}" could be ${candidate}` });
+  assert.deepEqual(review.doc.nodes[3], original.nodes[3]);
+  const held = await bodiesOf(review.doc);
+  assert.equal(held.length, 1);
+  assert.equal(held[0].key, 'b3');
+  assert.ok(Math.abs(held[0].volume! - (30400 - 40 * Math.PI)) < 1e-7);
+
+  const accepted = await confirmReference(review.doc, review.problems[0].index, held, evaluate, candidate);
+  const result = accepted.nodes[2], prior = original.nodes[2];
+  assert.ok(result.kind === 'fillet' && prior.kind === 'fillet');
+  assert.deepEqual(result.edges, [candidate, stable]);
+  assert.deepEqual(result.sigs?.[stable], prior.sigs?.[stable]);
+  assert.deepEqual(accepted.nodes[3], original.nodes[3]);
+  const rebuilt = await bodiesOf(accepted);
+  assert.ok(Math.abs(rebuilt[0].volume! - (30400 - 40 * Math.PI - 20 * (4 - Math.PI))) < 1e-7);
+  assert.deepEqual(await verifyReferences(accepted, rebuilt, evaluate), { doc: accepted, changes: [], problems: [] });
+
+  const corner = structuredClone(retired);
+  assert.equal(corner.nodes[3].kind, 'hole');
+  corner.nodes[3].center = [-19.7, -17.7];
+  corner.nodes[3].radius = 0.2;
+  const cornerReview = await verifyReferences(corner, [], evaluate);
+  assert.deepEqual(cornerReview.changes, []);
+  assert.deepEqual(cornerReview.problems.map(p => [p.name, p.candidates]), [[old, [candidate]]]);
+  const cornerHeld = await bodiesOf(cornerReview.doc);
+  assert.ok(Math.abs(cornerHeld[0].volume! - (30400 - 0.4 * Math.PI)) < 1e-7);
+  const cornerAttempt = await confirmReference(cornerReview.doc, cornerReview.problems[0].index, cornerHeld, evaluate, candidate);
+  const cornerEval = await evaluate(cornerAttempt);
+  assert.equal(cornerEval.ok, false);
+  assert.equal(cornerEval.error.feature, 'n3');
+});

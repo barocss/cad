@@ -341,9 +341,10 @@ export async function verifyReferences(doc: StudioDoc, finals: readonly BodyResu
     const varying = finish?.kind === 'fillet' && finish.edges.length === 1 && !finish.section &&
       finish.radii?.length === 2 && finish.radii.every(radius => radius.atEnd === true && typeof radius.radius === 'number')
       ? finish.radii : undefined;
-    // A terminal Constant Fillet can have a single retired slot while its other
-    // authored lines stay valid. Do not rename that slot or lose the recovery on Open.
-    const constantLineGroup = finish?.kind === 'fillet' && ref.node === out.nodes.length - 1 &&
+    // A Constant Fillet with two or three distinct straight lines can have a retired
+    // slot while its other authored lines stay valid, even before downstream features.
+    // Do not rename that slot or lose explicit recovery on Open.
+    const constantLineGroup = finish?.kind === 'fillet' &&
       (finish.edges.length === 2 || finish.edges.length === 3) && new Set(finish.edges).size === finish.edges.length &&
       !finish.radii && finish.section === undefined &&
       finish.edges.every(edge => finish.sigs?.[edge]?.k === 'line' && finish.sigs[edge].n === undefined);
