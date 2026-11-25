@@ -327,3 +327,45 @@ test('Open holds a retired line in a two-edge constant Fillet before a downstrea
   assert.equal(cornerEval.ok, false);
   assert.equal(cornerEval.error.feature, 'n3');
 });
+
+test('Open holds both a two-edge constant Fillet and a downstream Chamfer sharing one retired sketch side', async () => {
+  const stock = rectanglePart(80, 40, 10);
+  const [sketch, extrude] = stock.nodes;
+  assert.ok(sketch.kind === 'sketch' && sketch.profile === 'rectangle');
+  const parent: StudioDoc = { ...stock, nodes: [{ ...sketch, min: [-20, -20], max: [60, 20],
+    sideTags: { outer: ['e1', 'e2', 'e3', 'e4'] } }, extrude] };
+  const filletOld = 'n1.bottom|n1.side[e1]', filletNew = 'n1.bottom|n1.side[e5]', filletStable = 'n1.bottom|n1.side[e3]';
+  const chamferOld = 'n1.side[e1]|n1.top', chamferNew = 'n1.side[e5]|n1.top';
+  const withFillet = captureSignatures(withNode(parent, { kind: 'fillet', parent: { node: 1, side: 'solid' }, edges: [filletOld, filletStable], radius: 2 }), await bodiesOf(parent));
+  const doc = captureSignatures(withNode(withFillet, { kind: 'chamfer', parent: { node: 2, side: 'solid' }, edges: [chamferOld], distance: 1 }), await bodiesOf(withFillet));
+  const moved = structuredClone(doc), profile = moved.nodes[0];
+  assert.ok(profile.kind === 'sketch' && profile.profile === 'rectangle');
+  profile.min = [-20, -18];
+  assert.deepEqual(await verifyReferences(moved, await bodiesOf(moved), evaluate), { doc: moved, changes: [], problems: [] });
+
+  const retired = structuredClone(moved), retiredProfile = retired.nodes[0];
+  assert.ok(retiredProfile.kind === 'sketch' && retiredProfile.profile === 'rectangle');
+  retiredProfile.sideTags!.outer[0] = 'e5';
+  const original = structuredClone(retired);
+  const review = await verifyReferences(retired, [], evaluate);
+  assert.deepEqual(retired, original);
+  assert.deepEqual(review.changes, []);
+  assert.deepEqual(review.problems.map(p => [p.node, p.name, p.candidates]), [
+    [2, filletOld, [filletNew]],
+    [3, chamferOld, [chamferNew]],
+  ]);
+  assert.equal(review.doc.nodes[2].suppressed, true);
+  assert.equal(review.doc.nodes[3].suppressed, true);
+  const heldBodies = await bodiesOf(review.doc);
+  assert.ok(Math.abs(heldBodies[0].volume! - 30400) < 1e-7);
+
+  const filletAccepted = await confirmReference(review.doc, review.problems[0].index, heldBodies, evaluate, filletNew);
+  const filletBodies = await bodiesOf(filletAccepted);
+  assert.ok(Math.abs(filletBodies[0].volume! - (30400 - 160 * (4 - Math.PI))) < 1e-7);
+  assert.equal(filletAccepted.nodes[3].suppressed, true);
+
+  const allAccepted = await confirmReference(filletAccepted, review.problems[1].index, filletBodies, evaluate, chamferNew);
+  const finalBodies = await bodiesOf(allAccepted);
+  assert.ok(Math.abs(finalBodies[0].volume! - (30400 - 160 * (4 - Math.PI) - 40)) < 1e-7);
+  assert.deepEqual(await verifyReferences(allAccepted, finalBodies, evaluate), { doc: allAccepted, changes: [], problems: [] });
+});

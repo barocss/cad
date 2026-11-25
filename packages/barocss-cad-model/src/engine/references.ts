@@ -316,16 +316,28 @@ export async function verifyReferences(doc: StudioDoc, finals: readonly BodyResu
   options?: { preserveAgentRematch?: boolean }): Promise<{ doc: StudioDoc; changes: Verified[]; problems: Problem[] }> {
   const { doc: out, refs } = referencesOf(doc);
   if (!refs.some(r => r.sig || r.datumTarget || r.noteTarget)) return { doc, changes: [], problems: [] };
-  const parents = await parentBodies(out, refs.filter(r => r.sig), evaluate), changes: Verified[] = [], problems: Problem[] = [];
-  refs.forEach((ref, index) => {
+  const memoEvaluate = rememberedEvaluate(evaluate);
+  const parents = new Map<string, BodyResult | undefined>();
+  const ensureParent = async (ref: Ref) => {
+    if (ref.node === null || !ref.parent) return;
+    const key = parentKey(ref.node, ref.parent);
+    if (parents.has(key)) return;
+    // Evaluate each feature's parent against the current `out` so holding an earlier feature lets later ones verify.
+    const r = await memoEvaluate(prefixDoc(out, ref.node));
+    parents.set(key, r?.ok ? r.bodies.find(b => b.key === bodyKeyFor(out.nodes, ref.parent!.node, ref.parent!.side)) : undefined);
+  };
+  const changes: Verified[] = [], problems: Problem[] = [];
+  for (let index = 0; index < refs.length; index++) {
+    const ref = refs[index];
     if (ref.datumTarget || ref.noteTarget) {
       const live = candidatesOf(ref, finals, parents, tables)?.get(ref.name);
       if (!ref.targetEndpoint || !ref.sig || ref.rematched || !live || !sameDatumTargetSourceSig(ref.sig, toSig(live)))
         problems.push({ index, where: ref.where, node: ref.node, name: ref.name, candidates: [] });
-      return;
+      continue;
     }
-    if (!ref.sig) return;
-    const cands = candidatesOf(ref, finals, parents, tables); if (!cands) return;
+    if (!ref.sig) continue;
+    await ensureParent(ref);
+    const cands = candidatesOf(ref, finals, parents, tables); if (!cands) continue;
     const splitCap = ref.nativeFace !== 'plane' && ref.node !== null && !ref.edge && isSplitCapFace(out.nodes, ref.name);
     const parent = splitCap && ref.parent ? parents.get(parentKey(ref.node!, ref.parent)) : undefined;
     const ambiguous = parent !== undefined && hasSplitShellCapAmbiguity(out.nodes, out.nodes[ref.node!], parent, ref.name);
@@ -374,10 +386,10 @@ export async function verifyReferences(doc: StudioDoc, finals: readonly BodyResu
       if (m !== ref.name) {
         // Keep an existing name of the same live display edge, not merely an equal signature.
         const live = cands.get(ref.name);
-        if (ref.edge && live !== undefined && live === cands.get(m)) return;
+        if (ref.edge && live !== undefined && live === cands.get(m)) continue;
         changes.push({ where: ref.where, was: ref.name, now: m }); ref.rename(m, true);
       }
-      return;
+      continue;
     }
     let reason: Problem['reason'] = ambiguous ? 'ambiguous-split-cap' : undefined;
     if (needsChoice && varying && ref.node !== null && ref.parent && m.length) {
@@ -393,7 +405,7 @@ export async function verifyReferences(doc: StudioDoc, finals: readonly BodyResu
         : ambiguous ? `Split cap "${ref.name}" is ambiguous` : m.length ? `"${ref.name}" could be ${m.join(' or ')}` : `"${ref.name}" is gone`;
       if (!n.suppressed) out.nodes[ref.node] = { ...n, suppressed: true, held };
     }
-  });
+  }
   return { doc: changes.length || problems.length ? prefixDoc(out, out.nodes.length) : doc, changes, problems };
 }
 
