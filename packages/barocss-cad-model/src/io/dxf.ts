@@ -99,7 +99,7 @@ function markEntities(m: Mark, H: number, out: DxfEntity[], solidFills: boolean)
 const unit = (v: XY): XY => { const l = Math.hypot(v[0], v[1]) || 1; return [v[0] / l, v[1] / l]; };
 
 /** A dimension's DXF geometry, text and measurement, from what it measures (sheet coordinates, then up). */
-function dimensionEntity(r: Extract<Resolved, { ok: true }>, v: ViewPlacement, g: MarkGroup, H: number, solidFills: boolean, p: StandardPreset): DxfEntity {
+function dimensionEntity(r: Extract<Resolved, { ok: true; kind: 'linear' | 'angle' | 'diameter' | 'radius' }>, v: ViewPlacement, g: MarkGroup, H: number, solidFills: boolean, p: StandardPreset): DxfEntity {
   const block: DxfEntity[] = [];
   for (const m of g.marks) markEntities(m, H, block, solidFills);
   const main = g.marks.find((m): m is Extract<Mark, { kind: 'text' }> => m.kind === 'text');
@@ -135,9 +135,9 @@ export function sheetDxfDocument(sheet: Sheet, layout: SheetLayout, version: Dxf
     if (g.role === 'frame' || g.role === 'title') { for (const m of g.marks) markEntities(m, H, title, solidFills); continue; }
     if (g.role === 'dimension') {
       const r = sheet.dimensions.find((x): x is Extract<Resolved, { ok: true }> => x.ok && x.dim.id === g.id);
-      // (A pitch circle has no DXF dimension type: its lines, arrow and text as they are.)
+      // (Pitch circles and arc-length dimensions have no DXF R12/2000 native DIMENSION type: export their exact drawn marks.)
       const v = r && placementOf(layout, sheet, r.dim.view);
-      if (r && v && r.kind !== 'pcd') { entities.push(dimensionEntity(r, v, g, H, solidFills, presetFor(sheet.units ?? {}))); continue; }
+      if (r && v && r.kind !== 'pcd' && r.kind !== 'arc-length') { entities.push(dimensionEntity(r, v, g, H, solidFills, presetFor(sheet.units ?? {}))); continue; }
     }
     const first = entities.length;
     for (const m of g.marks) markEntities(m, H, entities, solidFills);

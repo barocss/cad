@@ -10,6 +10,7 @@ import { nextFreeId } from '../util/ids';
 import { formatNumber, type LengthFormat, type UnitPrecision } from './standard';
 import type { DrawingDetail } from './detail';
 import { reflexAngle } from './reflexAngle';
+import { resolveArcLengthEdge } from './arcLength';
 
 const sub3 = (a: readonly number[], b: readonly number[]): Vec3 => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
 const dist3 = (a: readonly number[], b: readonly number[]) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
@@ -107,10 +108,26 @@ export function pitchCircle(pr: BrepProjection, ring: readonly CentreRef[]): { c
 }
 const cross3 = (a: readonly number[], b: readonly number[]): Vec3 => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
 
+export interface ResolvedArcLength {
+  ok: true;
+  kind: 'arc-length';
+  dim: Extract<DrawingDimension, { kind: 'arc-length' }>;
+  center: XY;
+  radius: number;
+  startAngle: number;
+  sweep: number;
+  midAngle: number;
+  ends: readonly [XY, XY];
+  value: number;
+  text: string;
+  alt?: string;
+}
+
 /** `alt` (11 ③b): on a dual drawing, the same text in the other unit; the sheet sets it, resolving never does. */
 export type Resolved = (
   | { ok: true; kind: 'linear'; dim: Extract<DrawingDimension, { kind: 'linear' }>; a: XY; b: XY; value: number; text: string; alt?: string }
   | { ok: true; kind: 'diameter' | 'radius'; dim: Extract<DrawingDimension, { kind: 'diameter' | 'radius' }>; center: XY; radius: number; value: number; text: string; alt?: string; detailArcs?: readonly CircularArc[]; radiusRim?: XY }
+  | ResolvedArcLength
   /** `vertex`: where the two lines meet; `from`/`to`: the sector's bounding directions (counter-clockwise from → to); `ends`: each edge's far end from the vertex. */
   | { ok: true; kind: 'angle'; dim: Extract<DrawingDimension, { kind: 'angle' }>; vertex: XY; from: XY; to: XY; ends: [XY, XY]; value: number; text: string; alt?: string }
   /** A pitch circle (R14.5): `center` in the view, `center3` in the model, `radius` (mm), `members` in the view; `value` its diameter. */
@@ -127,6 +144,7 @@ export function valueText(r: { kind: Extract<Resolved, { ok: true }>['kind']; va
     case 'pcd': return `Ø${f(r.value)} PCD${r.even ? ` · ${r.members!.length}× EQ SP` : ''}`;
     case 'linear': return f(r.value);
     case 'diameter': return `Ø${f(r.value)}`;
+    case 'arc-length': return `ARC ${f(r.value)}`;
     default: return `R${f(r.value)}`;
   }
 }
@@ -226,6 +244,24 @@ export function resolveDimension(views: Partial<Record<DimView, BrepProjection>>
     const value = linearValue(pr, a, b, dim.orient);
     if (value < 1e-9) return { ok: false, dim, reason: 'Its two points now coincide in this view.' };
     return { ok: true, kind: 'linear', dim, a: inView(pr, a), b: inView(pr, b), value, text: valueText({ kind: 'linear', value }, fmtMM) };
+  }
+  if (dim.kind === 'arc-length') {
+    const resolved = resolveArcLengthEdge(pr, dim.arc, dim.view, showHidden);
+    if (!resolved.ok) return { ok: false, dim, reason: resolved.reason };
+    const g = resolved.geometry;
+    return {
+      ok: true,
+      kind: 'arc-length',
+      dim,
+      center: g.center,
+      radius: g.radius,
+      startAngle: g.startAngle,
+      sweep: g.sweep,
+      midAngle: g.midAngle,
+      ends: g.ends,
+      value: g.value,
+      text: valueText({ kind: 'arc-length', value: g.value }, fmtMM),
+    };
   }
   const best = closestCircleEdge(pr, dim);
   if (!best?.circle) {

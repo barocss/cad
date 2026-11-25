@@ -23,6 +23,7 @@ export function ExportActions({ canExportDimensionCsv, exportDimensionCsv, sheet
   const hasManualArrows = sheet?.dimensions.some(r => r.ok && r.dim.kind === 'linear' && r.dim.arrowPlacement);
   const hasCrossingBreak = sheet?.crossingBreaks?.some(cb => cb.status === 'applied');
   const hasExtensionJog = sheet?.dimensions.some(r => r.ok && r.dim.kind === 'linear' && r.dim.extensionJog && r.dim.hideExtension !== r.dim.extensionJog.side);
+  const hasArcLength = sheet?.dimensions.some(r => r.ok && r.dim.kind === 'arc-length');
   const confirmPanel = useRef<HTMLDivElement>(null);
   const pendingFormat = confirmation?.format;
   useEffect(() => {
@@ -47,6 +48,7 @@ export function ExportActions({ canExportDimensionCsv, exportDimensionCsv, sheet
         {hasManualArrows && <div className="empty" role="note" aria-label="DXF arrow display compatibility">DXF stores manual arrow placement in the dimension’s display block. Another CAD may use automatic placement when it redraws the dimension. Use SVG for the drawn appearance.</div>}
         {hasCrossingBreak && <div className="empty" role="note" aria-label="DXF crossing break compatibility">DXF stores crossing breaks in the dimension’s display block while preserving the measured linear geometry. Another CAD may redraw an unbroken line. Use SVG for the drawn appearance.</div>}
         {hasExtensionJog && <div className="empty" role="note" aria-label="DXF extension jog compatibility">DXF stores jogged extension lines in the dimension’s display block while preserving the measured linear geometry. Another CAD may redraw straight extension lines. Use SVG for the drawn appearance.</div>}
+        {hasArcLength && <div className="empty" role="note" aria-label="DXF arc length compatibility">DXF exports arc length dimensions as drawn arc, extension lines, arrowheads, and text rather than a native DXF dimension entity. Use SVG for the drawn appearance.</div>}
         {confirmation && <div ref={confirmPanel} tabIndex={-1} className="dw-export-confirm" role="group" aria-label="Confirm drawing export">
           <ul>{confirmation.messages.map((message, i) => <li key={i}>{message}</li>)}</ul>
           <div className="dw-actions">

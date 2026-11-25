@@ -156,10 +156,20 @@ export function readLinearArrowPlacement(raw: unknown): LinearArrowPlacement | u
   return placement.a || placement.b ? placement : undefined;
 }
 
+export interface ArcLengthDimensionData {
+  id: string;
+  view: DimView;
+  kind: 'arc-length';
+  /** Nested arc reference (not top-level `edge`/`near`) so older readers never misread arc length as radius. */
+  arc: EdgeRef;
+  place: XY;
+}
+
 export type DrawingDimension = ({ tol?: Tolerance; count?: number; auto?: true; basic?: true }) & (
   | { id: string; view: DimView; kind: 'linear'; a: DimPoint; b: DimPoint; orient: 'horizontal' | 'vertical' | 'aligned'; place: XY; /** Hide only this reference role’s extension line; omitted means both visible. */ hideExtension?: 'a' | 'b'; arrowPlacement?: LinearArrowPlacement; /** Optional sheet-mm break on this linear dimension line where it crosses one verified sibling linear dimension line. */ crossingBreak?: LinearCrossingBreak; /** Optional display-only jog on one extension line ('a' or 'b'); measured endpoints and value stay unchanged. */ extensionJog?: LinearExtensionJog }
   | { id: string; view: DimView; kind: 'diameter'; edge: string; near: Vec3; place: XY; sig?: Sig; was?: string }
   | { id: string; view: DimView; kind: 'radius'; edge: string; near: Vec3; place: XY; sig?: Sig; was?: string; /** Optional foreshortened display origin in view model coordinates (mm); true radius and center remain native. */ foreshorten?: ForeshortenedRadius }
+  | ArcLengthDimensionData
   /** A pitch circle (R14.5, O6): the circle through the centres of three or more holes, its diameter as `Ø40 PCD`. */
   | { id: string; view: DimView; kind: 'pcd'; ring: CentreRef[]; place: XY }
   /** Between two straight edges (each the one of its name nearest `near`), in the sector holding `place`. */
@@ -407,7 +417,7 @@ export function readDrawing(raw: unknown): DrawingSettings {
     ...(typeof r.title === 'string' && r.title ? { title: r.title } : {}),
     ...(typeof r.revision === 'string' && r.revision ? { revision: r.revision.slice(0, 6) } : {}),
     ...(typeof r.revisedModel === 'string' ? { revisedModel: r.revisedModel } : {}),
-    dimensions: Array.isArray(r.dimensions) ? r.dimensions.filter(x => x && typeof x.id === 'string' && isDimView(x.view) && (x.kind !== 'pcd' || ringOk(x.ring)) && (x.kind !== 'linear' || ((x.a?.at !== 'pcd' || ringOk(x.a.ring)) && (x.b?.at !== 'pcd' || ringOk(x.b.ring))))).map(x => {
+    dimensions: Array.isArray(r.dimensions) ? r.dimensions.filter(x => x && typeof x.id === 'string' && isDimView(x.view) && (x.kind !== 'pcd' || ringOk(x.ring)) && (x.kind !== 'arc-length' || (x.auto !== true && isOrthographicView(x.view) && isXY(x.place) && edgeRefOk((x as { arc?: unknown }).arc))) && (x.kind !== 'linear' || ((x.a?.at !== 'pcd' || ringOk(x.a.ring)) && (x.b?.at !== 'pcd' || ringOk(x.b.ring))))).map(x => {
       const { tol, count, auto, basic, foreshorten, arrowPlacement, crossingBreak, extensionJog, ...rest } = x as DrawingDimension & { foreshorten?: unknown; arrowPlacement?: unknown; crossingBreak?: unknown; extensionJog?: unknown }; const t = readTolerance(tol);
       const arrows = x.kind === 'linear' && auto !== true && isOrthographicView(x.view) ? readLinearArrowPlacement(arrowPlacement) : undefined;
       const cBreak = x.kind === 'linear' && auto !== true && isOrthographicView(x.view) ? readLinearCrossingBreak(crossingBreak) : undefined;
@@ -442,6 +452,7 @@ function readRoom(raw: unknown): ViewRoom | null {
 }
 /** A pitch circle's members: three or more holes, each by an edge name and a point. */
 const ringOk = (ring: unknown): boolean => Array.isArray(ring) && ring.length >= 3 && ring.length <= 360 && ring.every(m => m && typeof m.edge === 'string' && Array.isArray(m.near) && m.near.length === 3);
+const edgeRefOk = (ref: unknown): ref is EdgeRef => !!ref && typeof ref === 'object' && !Array.isArray(ref) && typeof (ref as EdgeRef).edge === 'string' && !!(ref as EdgeRef).edge && isVec3((ref as EdgeRef).near);
 const isXY = (p: unknown): p is XY => Array.isArray(p) && p.length === 2 && p.every(x => typeof x === 'number' && Number.isFinite(x));
 const CORNERS: readonly TableCorner[] = ['top-left', 'top-right', 'bottom-left', 'bottom-right'];
 const cellOk = (c: unknown) => c === null || (typeof c === 'number' && Number.isFinite(c)) || (typeof c === 'string' && c.length <= 120);

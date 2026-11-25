@@ -152,6 +152,9 @@ export function buildSheet(views: DrawingViews, layout: SheetLayout, settings: D
   const inViews = settings.dimensions.filter(d => isViewId(d.view)).map((d): Resolved => {
     const view = d.view as ViewId;
     if (layout.views[view].hidden) return { ok: false, dim: d, reason: `Its view (${view}) is not shown.` };
+    if (d.kind === 'arc-length' && layout.views[view].breaks?.length) {
+      return { ok: false, dim: d, reason: 'Arc length dimensions are not supported on a broken view.' };
+    }
     const patternProblem = (message: string): Resolved => {
       const action = d.tol || d.basic || attachedFrames.some(frame => frame.dim === d.id)
         ? 'Review this dimension and its attached controls before replacing it.'
@@ -1100,6 +1103,42 @@ export function dimensionMarks(v: ViewPlacement, r: Extract<Resolved, { ok: true
     }
     const mid = at(theta / 2), out = unit(sub(mid, X));
     marks.push(...valueMarks(add(add(mid, out, 2.5), [0, 1.2]), 0, out[0] > 0.3 ? 'start' : out[0] < -0.3 ? 'end' : 'middle', r.text, r.dim.tol, '°', p));
+    return marks;
+  }
+  if (r.kind === 'arc-length') {
+    // Concentric arc spanning the native arc's exact [startAngle, startAngle + sweep] in view coords
+    // (mapped to sheet y-down). Placement adjusts only radial distance and never flips to the conjugate arc.
+    const C = toSheet(v, r.center);
+    const arcRadius = r.radius * v.scale;
+    const dimRadius = Math.max(Math.hypot(place[0] - C[0], place[1] - C[1]), 2);
+    const t0 = r.startAngle;
+    const t1 = r.startAngle + r.sweep;
+    const u: XY = [dimRadius, 0];
+    const w: XY = [0, -dimRadius];
+    const at = (t: number): XY => [C[0] + dimRadius * Math.cos(t), C[1] - dimRadius * Math.sin(t)];
+    const radial = (t: number): XY => [Math.cos(t), -Math.sin(t)];
+    const tangent = (t: number): XY => [-Math.sin(t), -Math.cos(t)];
+    marks.push({ kind: 'arc', center: C, u, v: w, t0, t1, pen: 'thin', role: 'dimension' });
+    const inside = dimRadius * r.sweep >= 2 * p.arrowLength + 1;
+    const tan0 = tangent(t0);
+    const tan1 = tangent(t1);
+    marks.push(
+      arrow(at(t0), inside ? [-tan0[0], -tan0[1]] : tan0, p),
+      arrow(at(t1), inside ? tan1 : [-tan1[0], -tan1[1]], p),
+    );
+    for (const angle of [t0, t1]) {
+      const rad = radial(angle);
+      if (dimRadius > arcRadius + GAP) {
+        marks.push({ kind: 'line', a: add(C, rad, arcRadius + GAP), b: add(C, rad, dimRadius + OVER), pen: 'thin', role: 'extension' });
+      } else if (arcRadius - dimRadius > GAP) {
+        marks.push({ kind: 'line', a: add(C, rad, arcRadius - GAP), b: add(C, rad, Math.max(0, dimRadius - OVER)), pen: 'thin', role: 'extension' });
+      }
+    }
+    const mid = at(r.midAngle);
+    const out = radial(r.midAngle);
+    const yOff = out[1] > 0.3 ? p.text : out[1] < -0.3 ? -0.5 : p.text * 0.35;
+    const anchor: 'start' | 'middle' | 'end' = out[0] > 0.3 ? 'start' : out[0] < -0.3 ? 'end' : 'middle';
+    marks.push(...valueMarks(add(add(mid, out, 2.5), [0, yOff]), 0, anchor, r.text, r.dim.tol, '', p, r.alt, r.value));
     return marks;
   }
   if (r.kind === 'linear') {

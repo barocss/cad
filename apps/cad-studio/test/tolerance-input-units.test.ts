@@ -10,6 +10,7 @@ function dimension(kind: DrawingDimension['kind'], tol: Tolerance): DrawingDimen
   const common = { id: 'D1', view: 'front' as const, place: [10, 12] as [number, number], tol };
   if (kind === 'linear') return { ...common, kind, a: point, b: { ...point, near: [25.4, 0, 0] }, orient: 'horizontal' };
   if (kind === 'angle') return { ...common, kind, a: point, b: { ...point, edge: 'edge2' } };
+  if (kind === 'arc-length') return { ...common, kind, arc: { edge: 'edge1', near: [0, 0, 0] } };
   if (kind === 'pcd') return { ...common, kind, ring: [point, { ...point, edge: 'edge2' }, { ...point, edge: 'edge3' }] };
   return { ...common, kind, edge: 'edge1', near: [0, 0, 0] };
 }
@@ -31,8 +32,8 @@ function input(html: string, name: string) {
   const found = inputs.find(tag => tag.includes(`aria-label="Tolerance ${name}"`));
   assert.ok(found, name); return found;
 }
-test('all four length dimension kinds retain visible mm and accessible millimetres in mm/inch and dual displays', () => {
-  for (const kind of ['linear', 'diameter', 'radius', 'pcd'] as const) for (const display of displays) {
+test('all five length dimension kinds retain visible mm and accessible millimetres in mm/inch and dual displays', () => {
+  for (const kind of ['linear', 'diameter', 'radius', 'arc-length', 'pcd'] as const) for (const display of displays) {
     for (const tol of [{ kind: 'symmetric', value: 0.254 }, { kind: 'deviation', upper: 0.254, lower: -0.127 }] as Tolerance[]) {
       const html = render(dimension(kind, tol), display);
       const fields = tol.kind === 'symmetric' ? [['±', '0.254']] : [['Upper', '0.254'], ['Lower', '-0.127']];
