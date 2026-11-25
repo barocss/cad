@@ -6,10 +6,14 @@ export function openChainGuidance(shape: Polygon, tool?: string): string {
   const canClose = shape.points.length >= 2 && (shape.points.length >= 3 || tool === 'arc' || shape.bulges?.some(Boolean));
   return canClose ? 'Open profile · click the first point to close' : 'Open profile · add the next point';
 }
+/** Same unfinished material-chain eligibility as Finish. */
+export function unfinishedMaterialChains(shapes: readonly SketchShape[]): Polygon[] {
+  return shapes.filter((shape): shape is Polygon => shape.kind === 'polygon' && !shape.construction
+    && shape.points.length >= 2 && (!shape.closed || !!shape.pending));
+}
 /** Same unfinished material-chain eligibility as Finish; one location reports actions and endpoints. */
 export function openChainFinishGuidance(shapes: readonly SketchShape[]): string {
-  const chains = shapes.filter((shape): shape is Polygon => shape.kind === 'polygon' && !shape.construction
-    && shape.points.length >= 2 && (!shape.closed || !!shape.pending));
+  const chains = unfinishedMaterialChains(shapes);
   return chains.map((shape, index) => {
     const first = shape.points[0].join(', '), last = shape.points[shape.points.length - 1].join(', ');
     const action = shape.pending ? 'Place the last arc or trim'

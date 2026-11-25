@@ -3,7 +3,7 @@ import { manualSketchRegion } from './manualSketchRegion';
 import { readOwnedNativeEdges, ownsNativeEdgeCopy } from '../app/ownedNativeEdgeCopy';
 import { nativeEdgeCurveSource } from '../app/nativeEdgeCurveSource';
 import { directTrimRestriction } from './directTrimReadiness';
-import { openChainFinishGuidance } from '../app/sketchOpenGuidance';
+import { openChainFinishGuidance, unfinishedMaterialChains } from '../app/sketchOpenGuidance';
 import { offsetRecoveryMessage } from '../app/sketchOffsetDistance';
 import { sketchOffsetTarget } from '../app/sketchOffsetTarget';
 import { emptyDirect } from '../app/directGeometry';
@@ -44,8 +44,7 @@ import type { DragTrimOwner, DragTrimPlan } from '../viewport/dragTrimStroke';
 import { preserveConstruction } from './preserveConstruction';
 
 function unfinishedChain(shapes: readonly SketchShape[]): Polygon | undefined {
-  return shapes.find((shape): shape is Polygon => shape.kind === 'polygon' && !shape.construction
-    && shape.points.length >= 2 && (!shape.closed || !!shape.pending));
+  return unfinishedMaterialChains(shapes)[0];
 }
 interface SketchActionOptions {
   model: { doc: StudioDoc; evaluated: StudioDoc; fresh: boolean; busy: boolean; bodies: BodyResult[]; selection: Selection; marker: number | null };
@@ -72,7 +71,8 @@ export function useSketchActions({ model, editor, owner, worker, viewport, chang
   const { doc, evaluated, fresh, busy, bodies, selection, marker } = model;
   const { sketch, setSketch, sketchGeneration, recordDraft } = editor;
   const sketchRenderGeneration = sketchGeneration.current;
-  const [finishRefusal, setFinishRefusal] = useState<{ generation: number; message: string } | null>(null);
+  const [finishRefusal, setFinishRefusal] = useState<{ generation: number; message: string; openChainToken?: number } | null>(null);
+  const openChainTokenRef = useRef(0);
   const reopenedDraft = useRef<{ doc: StudioDoc; source: SketchNode; draft: SketchState; recoveredLengths: WeakSet<Polygon> } | null>(null);
   const pendingFinish = useRef<{ doc: StudioDoc; generation: number } | null>(null);
   const { docNow, acceptanceScope } = owner;
@@ -356,7 +356,8 @@ export function useSketchActions({ model, editor, owner, worker, viewport, chang
     const { authored, protectedShapes, joined } = sketchFinishInputs(finishing);
     const openChain = sketch.band ? undefined : unfinishedChain(joined);
     if (openChain) {
-      setFinishRefusal({ generation: requestedGeneration, message: openChainFinishGuidance(joined) });
+      openChainTokenRef.current += 1;
+      setFinishRefusal({ generation: requestedGeneration, message: openChainFinishGuidance(joined), openChainToken: openChainTokenRef.current });
       return;
     }
     const shapes = withIds(joined, undefined, protectedShapes);
@@ -415,5 +416,6 @@ export function useSketchActions({ model, editor, owner, worker, viewport, chang
   }, [sketch, doc, marker, commit, engine, setSketch, acceptanceScope]);
 
   const finishError = sketch && finishRefusal?.generation === sketchGeneration.current ? finishRefusal.message : null;
-  return { fitActiveSketch, currentSketchSource, makeSketchBand, editSketchBand, removeSketchBand, placeSketch, sketchToCurves, edgesToCurves, offsetSketch, useFaceOutline, clearSketchProfile, trimSketch, trimSelectedEdge, dragTrim, editSketch, linkSketchInset, finishSketch, finishError };
+  const finishOpenChainToken = sketch && finishRefusal?.generation === sketchGeneration.current ? (finishRefusal.openChainToken ?? null) : null;
+  return { fitActiveSketch, currentSketchSource, makeSketchBand, editSketchBand, removeSketchBand, placeSketch, sketchToCurves, edgesToCurves, offsetSketch, useFaceOutline, clearSketchProfile, trimSketch, trimSelectedEdge, dragTrim, editSketch, linkSketchInset, finishSketch, finishError, finishOpenChainToken };
 }

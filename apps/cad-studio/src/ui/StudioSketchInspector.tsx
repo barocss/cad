@@ -11,6 +11,7 @@ import { PathGapControls } from '../sketch/PathGapControls';
 import { SketchSnapControls } from '../sketch/SketchSnapControls';
 import type { useSketchDraftHistory } from '../sketch/useSketchDraftHistory';
 import { ownsPanelDrivingLength } from '../viewport/studioSketchViewportActions';
+import { OpenEndsControls } from './OpenEndsControls';
 import { OverlaidLinesControls } from './OverlaidLinesControls';
 import { SavedBezierPicker } from './SavedBezierPicker';
 import { SketchOutlineTools } from './SketchOutlineTools';
@@ -34,6 +35,7 @@ interface Props {
     circle: ComponentProps<typeof CircleChordControls>['circle'];
     gap: ComponentProps<typeof PathGapControls>['gap'];
     scan: ComponentProps<typeof OverlaidLinesControls>['scan'];
+    openEnds: ComponentProps<typeof OpenEndsControls>['openEnds'];
     setObjectKinds: Dispatch<SetStateAction<ObjectSnapKinds>>;
     closeDimension(): void;
   };
@@ -49,7 +51,7 @@ export function StudioSketchInspector({ sketch, document, draft, constraints, to
   const doc = document.shown;
   const { coordinateFeedback, sketchIssue, renderedSketch, liveShape, generation, pickerGeneration,
     updateShape, setActiveOutline, setSketch, finishError } = draft;
-  const { twoPoint, circle, extension, objectKinds, gap, scan } = tools;
+  const { twoPoint, circle, extension, objectKinds, gap, scan, openEnds } = tools;
   const ellipse = sketchIssue?.ellipse;
   const conflict = sketchIssue?.conflict;
   const canEditAxes = ownsEllipseAxesRecovery(ellipse, doc, sketch);
@@ -85,6 +87,7 @@ export function StudioSketchInspector({ sketch, document, draft, constraints, to
       <PathGapControls gap={gap} />
       <CircleChordControls circle={{ ...circle, begin: () => { twoPoint.cancel(); circle.begin(); } }} />
       <OverlaidLinesControls scan={scan} />
+      <OpenEndsControls openEnds={openEnds} />
     </>}
     referencePicker={<SavedBezierPicker sketch={sketch} onActivate={selectSaved} />}
     onActivateOutline={sketch.editNode !== undefined && (sketch.tool === 'select' || sketch.tool === 'dimension') ? selectOutline : undefined}

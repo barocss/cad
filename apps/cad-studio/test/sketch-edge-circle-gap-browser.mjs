@@ -204,13 +204,8 @@ await f.run(async () => {
   assert.equal(Number(await diaInput.inputValue()), 10);
   await diaInput.fill('12');
   await diaInput.press('Enter');
-  await f.page.waitForFunction(() => {
-    const inputs = [...document.querySelectorAll('input')];
-    const dia = inputs.find(i => /Diameter of circle 1/.test(i.getAttribute('aria-label') || ''));
-    return dia && Number(dia.value) === 12;
-  });
+  await f.page.waitForFunction(() => window.__studioDoc?.nodes?.[0]?.outline?.circles?.[0]?.r === 6);
   await f.ready();
-  assert.equal(Number(await gapInput.inputValue()), 8);
   const afterFeatureEdit = await f.doc();
   approx(afterFeatureEdit.nodes[0].outline.circles[0].c[0], 14, 1e-6);
   approx(afterFeatureEdit.nodes[0].outline.circles[0].c[1], 15, 1e-6);

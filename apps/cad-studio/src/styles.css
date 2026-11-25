@@ -99,6 +99,12 @@ button { font: inherit; color: inherit; }
 .vp-overlay .sk-trim { fill: none; stroke: #ef6f6c; stroke-width: 4; stroke-linecap: round; opacity: 0.9; pointer-events: none; }
 .vp-overlay .sk-overlaid-line { fill: var(--accent); stroke: var(--accent); stroke-width: 2; pointer-events: none; }
 .vp-overlay .sk-overlaid-line line { stroke-width: 3; stroke-linecap: round; }
+.vp-overlay .sk-open-ends, .vp-overlay .sk-open-end { pointer-events: none; }
+.vp-overlay .sk-open-end-ring { fill: none; stroke: #ff941f; stroke-width: 2; stroke-dasharray: 4 3; }
+.vp-overlay .sk-open-end-diamond { fill: #1b1d22; stroke: #ff941f; stroke-width: 2; }
+.vp-overlay .sk-open-end-leader { stroke: #ff941f; stroke-width: 1.25; stroke-dasharray: 2 2; opacity: 0.85; }
+.vp-overlay .sk-open-end-pill { fill: #23190c; stroke: #ff941f; stroke-width: 1.25; }
+.vp-overlay .sk-open-end-text { fill: #ffd08a; font: 600 10.5px var(--mono, ui-monospace, monospace); }
 .vp-overlay .vertex-mark { fill: var(--selection-soft); stroke: var(--selection-hover); stroke-width: 2; pointer-events: none; }
 .vp-overlay .vertex-mark.selected { fill: var(--selection); stroke: var(--selection-ring); stroke-width: 2; paint-order: stroke; }
 .vp-overlay .vertex-mark.hover { fill: var(--selection-soft); stroke: var(--selection-hover); }

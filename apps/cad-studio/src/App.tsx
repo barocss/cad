@@ -60,6 +60,7 @@ import { useArcExtensionSnap } from './sketch/useArcExtensionSnap';
 import { defaultObjectSnapKinds } from './sketch/objectSnapKinds';
 import { usePathGap } from './sketch/usePathGap';
 import { useOverlaidLines } from './sketch/useOverlaidLines';
+import { useSketchOpenEnds } from './sketch/useSketchOpenEnds';
 import { useInsetRelink } from './sketch/useInsetRelink';
 import { useMidpointSketch } from './sketch/useMidpointSketch';
 import { useSketchActions } from './sketch/useSketchActions';
@@ -1293,6 +1294,7 @@ export function App() {
   });
   const bezierPickerOwner = renderedSketch.current;
   const overlaidLines = useOverlaidLines(doc, sketch, docNow, sketchGeneration, setActiveOutline, trimSelectedEdge);
+  const openEnds = useSketchOpenEnds(doc, sketch, sketchActions.finishOpenChainToken);
   const sketchViewportActions = { ...studioSketchViewportActions({ liveShape, sketch, currentSketchSource, setSketch, setSketchError,
     offerEllipseAxes: draft => setSketchIssue({ reason: 'Edit Rx or Ry in the Ellipse section.', ellipse: { doc, draft } }),
     clearOutlinePickIssue: () => setSketchIssue(issue => isOutlinePickIssue(issue?.reason) ? null : issue),
@@ -1302,7 +1304,7 @@ export function App() {
       updateShape({ ...shape, r: diameter / 2 }, false, 'panel');
     },
     setConstraintConflict: (reason, source, ids) => setSketchIssue({ reason, conflict: { doc, source, ids } }), updateShape, trimSketch }),
-    dragTrim: { doc, scope: acceptanceScope, apply: dragTrim }, pathGap: pathGap.input, circleChord: circleChord.input, overlaidLine: overlaidLines.highlight, onSketchDragChange: overlaidLines.onSketchDragChange };
+    dragTrim: { doc, scope: acceptanceScope, apply: dragTrim }, pathGap: pathGap.input, circleChord: circleChord.input, overlaidLine: overlaidLines.highlight, openEnds: openEnds.ends, onSketchDragChange: overlaidLines.onSketchDragChange };
 
   const viewBodiesRef = useRef<BodyResult[]>(null!);
   const sectionPickRef = useRef<SectionPick>(() => ({ face: null, edge: null, cap: false }));
@@ -1724,7 +1726,7 @@ export function App() {
     command: { active, start, apply, cancel, repeat: commandApply.requestRepeat },
     sketch: {
       current: sketch, update: setSketch, finish: finishSketch,
-      cancelAction: repeat => !!(circleChord.escape(repeat) || overlaidLines.close()
+      cancelAction: repeat => !!(circleChord.escape(repeat) || overlaidLines.close() || openEnds.hide()
         || twoPointSnap.cancel() || arcExtensionSnap.cancel() || pathGap.cancel()),
       applyAction: () => !!(circleChord.input.read(sketch) || twoPointSnap.input.read()
         || arcExtensionSnap.input.read(sketch) || pathGap.input.read(sketch)),
@@ -2175,7 +2177,7 @@ export function App() {
         tools={{ twoPoint: twoPointSnap, circle: circleChord, extension: arcExtensionSnap, objectKinds: objectSnapKinds,
           setObjectKinds: setObjectSnapKinds, crossingToolSupported: usesNativeCrossings,
           placedRotationLimited: placedSketchSnaps?.sources.some(({ instance }) => !supportsPlacedBoxSnapRotation(instance.rotation)),
-          closeDimension: () => sketchViewportActions.onDimEdit?.(null), gap: pathGap, scan: overlaidLines }}
+          closeDimension: () => sketchViewportActions.onDimEdit?.(null), gap: pathGap, scan: overlaidLines, openEnds }}
         edit={{ place: placeSketch, recoverLength: sketchViewportActions.recoverPanelLength,
           onOffset: offsetSketch, onLinkedInset: linkSketchInset, onToCurves: sketchToCurves, onUseOutline: useFaceOutline,
           band: { make: makeSketchBand, edit: editSketchBand, remove: removeSketchBand } }} />}

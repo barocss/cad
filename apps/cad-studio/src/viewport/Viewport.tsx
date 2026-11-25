@@ -51,6 +51,7 @@ import { useSketchLengthLabelLayout } from './sketchLengthLabelLayout';
 import { createConstraintInspection, type ConstraintInspectionStore } from '../sketch/constraintInspection';
 import { useStoreValue } from '../state/valueStore';
 import type { OverlaidLine } from '../sketch/overlaidLines';
+import type { SketchOpenEnd } from '../sketch/openEnds';
 import { banding, cutting, picking, useViewportPointerInput, type ViewportHover, type ViewportPointerProps } from './viewportPointerInput';
 
 import type { SketchState } from '@barocss/cad-model/sketch/types';
@@ -116,6 +117,7 @@ interface Props extends ViewportPointerProps, MarkHandlers {
   continuityLocation?: EdgeCurvatureMeasurement | null;
   constraintInspection?: ConstraintInspectionStore;
   overlaidLine?: OverlaidLine;
+  openEnds?: readonly SketchOpenEnd[];
   /** G23 CNC: the preview's stock, paths, remaining stock and tool (world coordinates), beside the native bodies. */
   camDisplay?: CamDisplay | null;
   annotationSelected?: string | null;
@@ -1046,6 +1048,7 @@ export const Viewport = forwardRef<ViewportHandle, Props>(function Viewport(sour
       pathGap: props.pathGap?.read(sk) ?? undefined,
       circleChord: props.circleChord?.read(sk) ?? undefined,
       overlaidLine: props.overlaidLine,
+      openEnds: props.openEnds,
       dragTrim: input.dragTrimPreview(),
       inspected: inspection?.target === 'row' ? inspection.entry.involves
         : inspection?.target === 'mobility' ? [inspection.entity] : undefined,

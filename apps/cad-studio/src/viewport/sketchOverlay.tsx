@@ -19,6 +19,7 @@ import type { CircleChordDraft } from '../sketch/useCircleFromChord';
 import { CircleChordMarks } from './CircleChordMarks';
 import type { PathGapDraft } from '../sketch/usePathGap';
 import type { OverlaidLine } from '../sketch/overlaidLines';
+import { openEndLabelOffsets, type SketchOpenEnd } from '../sketch/openEnds';
 import { draftEllipse, ellipseAxis, ellipseSamples, type EllipseDraft } from './ellipseDraft';
 import { closedSplineOf, splineHandleGeometry } from './splineHandles';
 import { orthographicSketchScale, projectSketchCircle, projectSketchEdge, type SketchViewportPick } from './sketchOutlinePick';
@@ -83,6 +84,7 @@ interface SketchOverlayInputs {
   pathGap?: PathGapDraft;
   circleChord?: CircleChordDraft;
   overlaidLine?: OverlaidLine;
+  openEnds?: readonly SketchOpenEnd[];
   dragTrim?: DragTrimPreview | null;
   inspected?: readonly SketchPick[];
   constraintComparison?: Polygon;
@@ -98,7 +100,7 @@ interface SketchOverlayInputs {
 
 /** Add the active sketch's SVG marks and return its separate HTML dimension editor. */
 export function drawSketchOverlay({
-  sk, shape, cam, w, h, rail, dimensionArea, draft, bezierPoles, ellipse, centreArc, extensionGuide, pathGap, circleChord, overlaidLine, dragTrim, inspected, constraintComparison, cornerPreview, bandCache, picking, cutting, banding, dimensions, lengthLabelLayout, items,
+  sk, shape, cam, w, h, rail, dimensionArea, draft, bezierPoles, ellipse, centreArc, extensionGuide, pathGap, circleChord, overlaidLine, openEnds, dragTrim, inspected, constraintComparison, cornerPreview, bandCache, picking, cutting, banding, dimensions, lengthLabelLayout, items,
 }: SketchOverlayInputs): ReactNode {
   let editor: ReactNode = null;
   const P = (u: number, v: number) => cam.project(toWorld(sk.plane, [u, v]), w, h);
@@ -362,6 +364,43 @@ export function drawSketchOverlay({
       <circle cx={a[0]} cy={a[1]} r={3.5} />
       <circle cx={b[0]} cy={b[1]} r={3.5} fill="var(--bg)" />
     </g>);
+  }
+  if (openEnds?.length) {
+    const projected: [number, number][] = openEnds.map(end => {
+      const q = P(end.point[0], end.point[1]);
+      return [q[0], q[1]];
+    });
+    const offsets = openEndLabelOffsets(projected);
+    items.push(
+      <g key="open-ends" className="sk-open-ends" pointerEvents="none">
+        {openEnds.map((end, index) => {
+          const [x, y] = projected[index];
+          if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+          const { dx, dy } = offsets[index];
+          const labelWidth = Math.max(44, end.label.length * 6.8 + 10);
+          const bx = dx < 0 ? x + dx : x + dx;
+          const by = y + dy;
+          const leaderX = dx < 0 ? bx + labelWidth : bx;
+          return (
+            <g
+              key={`open-end-${end.chainIndex}-${end.role}`}
+              className="sk-open-end"
+              data-open-end={end.label}
+              data-open-chain={end.chainIndex + 1}
+              data-open-role={end.role}
+              data-open-point={`${end.point[0]},${end.point[1]}`}
+              pointerEvents="none"
+            >
+              <circle cx={x} cy={y} r={10} className="sk-open-end-ring" />
+              <polygon points={`${x},${y - 5.5} ${x + 5.5},${y} ${x},${y + 5.5} ${x - 5.5},${y}`} className="sk-open-end-diamond" />
+              <line x1={x} y1={y} x2={leaderX} y2={by + 9} className="sk-open-end-leader" />
+              <rect x={bx} y={by} width={labelWidth} height={18} rx={4} className="sk-open-end-pill" />
+              <text x={bx + labelWidth / 2} y={by + 12.5} textAnchor="middle" className="sk-open-end-text">{end.label}</text>
+            </g>
+          );
+        })}
+      </g>,
+    );
   }
   const cur = picking || circleChord?.second ? null : draft.cursor;
   if (cur) { const p = P(cur[0], cur[1]); items.push(<g key="cur"><line x1={p[0] - 8} y1={p[1]} x2={p[0] + 8} y2={p[1]} className="sk-cursor" /><line x1={p[0]} y1={p[1] - 8} x2={p[0]} y2={p[1] + 8} className="sk-cursor" /></g>); }
