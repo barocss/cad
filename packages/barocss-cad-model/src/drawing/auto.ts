@@ -345,7 +345,7 @@ const ringKey = (ring: readonly { edge: string; near: readonly number[] }[]) => 
 /** The same measurement as a retained one: same view, kind, orientation and source references. */
 function sameAs(d: DrawingDimension, m: DrawingDimension): boolean {
   if (d.view !== m.view || d.kind !== m.kind) return false;
-  const ref = (p: DimPoint) => p.at === 'pcd' ? ringKey(p.ring ?? []) : p.at === 'virtual-sharp' && p.second ? `virtual-sharp|${[edgeKey(p), edgeKey(p.second)].sort().join('|')}` : `${p.at}|${edgeKey(p)}`;
+  const ref = (p: DimPoint) => p.at === 'com' ? `com|${p.bodyKey ?? ''}` : p.at === 'pcd' ? ringKey(p.ring ?? []) : p.at === 'virtual-sharp' && p.second ? `virtual-sharp|${[edgeKey(p), edgeKey(p.second)].sort().join('|')}` : `${p.at}|${edgeKey(p)}`;
   if (d.kind === 'linear' && m.kind === 'linear') {
     if (d.orient !== m.orient || (d.count ?? 1) !== (m.count ?? 1)) return false;
     return (ref(d.a) === ref(m.a) && ref(d.b) === ref(m.b)) || (!d.count && !m.count && ref(d.a) === ref(m.b) && ref(d.b) === ref(m.a));

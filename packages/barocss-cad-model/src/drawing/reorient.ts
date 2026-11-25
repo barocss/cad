@@ -11,6 +11,7 @@ import { resolveDimension, type Resolved } from './dimensions';
 import { resolveCenterMarkGroup } from './centerMarkGroup';
 import { resolveBisectorCenterline } from './bisectorCenterline';
 import { resolveVirtualSharp } from './virtualSharp';
+import { resolveCenterOfMass, type DrawingBodyMassSource } from './centerOfMass';
 import { baseViewOf, detailLetter, isDetailRef, isSectionRef, isViewId, sectionLetter, sectionsOf, withSections, type DimView, type SectionRef, type DrawingSection, type DrawingSettings, type DrawingViews, type ViewId, type XY } from './types';
 import { sectionDepth, type Orientation } from './views';
 
@@ -54,7 +55,7 @@ export function turnSections(settings: DrawingSettings, next: Orientation): Draw
   return kept;
 }
 /** The settings turned to `next` (its views projected for it), or why not. */
-export function reorient(from: DrawingViews, to: DrawingViews, settings: DrawingSettings, next: Orientation): ReorientResult {
+export function reorient(from: DrawingViews, to: DrawingViews, settings: DrawingSettings, next: Orientation, comSources?: ReadonlyMap<string, DrawingBodyMassSource>): ReorientResult {
   const map = viewMap(from, to), was = orientationOf(settings);
   const base: DrawingSettings = { ...settings }; delete base.orientation;
   const turned: DrawingSettings = next === 'y-' ? base : { ...base, orientation: next };
@@ -132,6 +133,10 @@ export function reorient(from: DrawingViews, to: DrawingViews, settings: Drawing
     const mapped = map.get(vs.view)?.view ?? vs.view;
     return { ...vs, view: mapped as typeof vs.view };
   });
+  if (settings.centerOfMass) turned.centerOfMass = settings.centerOfMass.map(cm => {
+    const mapped = map.get(cm.view)?.view ?? cm.view;
+    return { ...cm, view: mapped as typeof cm.view };
+  });
   if (settings.datumTargets) turned.datumTargets = settings.datumTargets.map((d): typeof d => {
     const [view, place] = mapPlace(d.view, d.place), m = map.get(d.view);
     // A line's ends and an area's centre are view points: they turn as the symbol's place does; a rectangle's width and height swap with the axes.
@@ -158,7 +163,7 @@ export function reorient(from: DrawingViews, to: DrawingViews, settings: Drawing
     // (A detail's dimension on a view reads as its parent's would: the detail only clips what it shows.)
     const own = isDetailRef(d.view) && settings.details?.find(x => x.id === detailLetter(d.view as `detail:${string}`));
     const parentWas = own && isViewId(own.view) ? own.view : null, parentNow = parentWas ? map.get(parentWas)?.view ?? parentWas : null;
-    const before = resolveDimension(parentWas ? { [d.view]: from[parentWas] } : from, d), after = resolveDimension(parentNow ? { [d.view]: to[parentNow] } : to, turned.dimensions[k]);
+    const before = resolveDimension(parentWas ? { [d.view]: from[parentWas] } : from, d, undefined, false, undefined, comSources), after = resolveDimension(parentNow ? { [d.view]: to[parentNow] } : to, turned.dimensions[k], undefined, false, undefined, comSources);
     if (!before.ok) return;
     if (!after.ok || after.kind !== before.kind || Math.abs(after.value - before.value) > 1e-9 * Math.max(1, Math.abs(before.value))) failed.push({ dim: d.id, was: readOf(before), now: readOf(after) });
   });
@@ -187,6 +192,15 @@ export function reorient(from: DrawingViews, to: DrawingViews, settings: Drawing
     const after = resolveVirtualSharp(to[mapped.view], mapped.first, mapped.second, mapped.view);
     if (!after.ok || Math.hypot(after.geometry.point3[0] - before.geometry.point3[0], after.geometry.point3[1] - before.geometry.point3[1], after.geometry.point3[2] - before.geometry.point3[2]) > 1e-5) {
       failed.push({ dim: vs.id, was: `(${before.geometry.point3.join(',')})`, now: after.ok ? `(${after.geometry.point3.join(',')})` : `lost: ${after.reason}` });
+    }
+  });
+  (settings.centerOfMass ?? []).forEach((cm, k) => {
+    const before = resolveCenterOfMass(from[cm.view], cm.bodyKey, cm.view, comSources, cm.diameter);
+    if (!before.ok) return;
+    const mapped = turned.centerOfMass![k];
+    const after = resolveCenterOfMass(to[mapped.view], mapped.bodyKey, mapped.view, comSources, mapped.diameter);
+    if (!after.ok || Math.hypot(after.geometry.centroid3[0] - before.geometry.centroid3[0], after.geometry.centroid3[1] - before.geometry.centroid3[1], after.geometry.centroid3[2] - before.geometry.centroid3[2]) > 1e-5) {
+      failed.push({ dim: cm.id, was: `(${before.geometry.centroid3.join(',')})`, now: after.ok ? `(${after.geometry.centroid3.join(',')})` : `lost: ${after.reason}` });
     }
   });
   if (failed.length) return { ok: false, code: 'ORIENTATION_REMAP_FAILED', message: `${failed.length} dimension${failed.length > 1 ? 's' : ''} would not read the same from the new front: nothing was turned.`, failed };

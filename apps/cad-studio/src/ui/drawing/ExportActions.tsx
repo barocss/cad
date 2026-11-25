@@ -32,6 +32,7 @@ export function ExportActions({ canExportDimensionCsv, exportDimensionCsv, sheet
   const hasCenterMarkGroup = sheet?.centerMarkGroups?.some(r => r.ok && r.item.connectingLines);
   const hasBisectorCenterline = sheet?.bisectorCenterlines?.some(r => r.ok);
   const hasVirtualSharp = sheet?.virtualSharps?.some(r => r.ok);
+  const hasCenterOfMass = sheet?.centerOfMass?.some(r => r.ok && !r.item.hidden);
   const confirmPanel = useRef<HTMLDivElement>(null);
   const pendingFormat = confirmation?.format;
   useEffect(() => {
@@ -65,6 +66,7 @@ export function ExportActions({ canExportDimensionCsv, exportDimensionCsv, sheet
         {hasCenterMarkGroup && <div className="empty" role="note" aria-label="DXF hole row compatibility">DXF exports hole row connecting lines as non-associative LINE entities on the CENTER layer. Keep the .bcad in a Studio version with hole row support; older versions may discard these groups on re-save.</div>}
         {hasBisectorCenterline && <div className="empty" role="note" aria-label="DXF straight centerline compatibility">DXF exports parallel-edge centerlines as non-associative LINE entities on the CENTER layer. Keep the .bcad in a Studio version with straight centerline support; older versions may discard these annotations on re-save.</div>}
         {hasVirtualSharp && <div className="empty" role="note" aria-label="DXF virtual sharp compatibility">DXF exports virtual sharp witness markers as non-associative LINE entities on the THIN layer. Keep the .bcad in a Studio version with virtual sharp support; older versions may discard these markers on re-save.</div>}
+        {hasCenterOfMass && <div className="empty" role="note" aria-label="DXF center of mass compatibility">DXF exports center-of-mass symbols as non-associative circle, crosshair lines, and filled quadrants on the THIN layer; linear dimensions to center of mass export as native DXF linear dimensions. Keep the .bcad in a Studio version with center-of-mass support.</div>}
         {confirmation && <div ref={confirmPanel} tabIndex={-1} className="dw-export-confirm" role="group" aria-label="Confirm drawing export">
           <ul>{confirmation.messages.map((message, i) => <li key={i}>{message}</li>)}</ul>
           <div className="dw-actions">

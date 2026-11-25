@@ -44,6 +44,9 @@
 .bisector-centerline.sel line { stroke: #c27a00; }
 .virtual-sharp { cursor: pointer; }
 .virtual-sharp.sel line { stroke: #c27a00; }
+.center-of-mass { cursor: pointer; }
+.center-of-mass.sel line, .center-of-mass.sel path { stroke: #c27a00; }
+.center-of-mass.sel path[fill='#000'] { fill: #c27a00; }
 .dw-pan { cursor: grabbing; }
 .dw-note-text { max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .dw-note-edit { width: 100%; margin-top: 4px; padding: 6px; border-radius: 4px; border: 1px solid #4a4d53; background: var(--bg); color: var(--text); font: 500 12px var(--mono); resize: vertical; }

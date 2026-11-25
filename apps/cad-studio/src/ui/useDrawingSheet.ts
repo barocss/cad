@@ -16,6 +16,7 @@ import { bomPanelData } from '@barocss/cad-model/bom/bom';
 import type { Bom } from '@barocss/cad-model/bom/core';
 import type { StudioDoc } from '@barocss/cad-model/engine/doc';
 import { buildSheet, sectionExtents, sheetSections } from '@barocss/cad-model/drawing/sheet';
+import { qualifiedCenterOfMassSources } from '@barocss/cad-model/drawing/centerOfMass';
 import { bodyFacesOf } from '@barocss/cad-model/drawing/balloons';
 import { drawingHoleCallouts } from '@barocss/cad-model/drawing/callout';
 import { threadsOf } from '@barocss/cad-model/app/threads';
@@ -169,10 +170,11 @@ export function useDrawingSheet(active: boolean, { engine, doc: sourceDoc, bodie
   const weldJoints = useMemo(() => settings.weldSymbols && bodies ? weldList(doc, bodies).joints : undefined, [settings.weldSymbols, doc, bodies]);
   // (O177: the base part's bodies' face names, for the balloons of its own BOM lines — members, made bodies.)
   const bodyFaces = useMemo(() => settings.balloons && bodies ? bodyFacesOf(bodies) : undefined, [settings.balloons, bodies]);
+  const bodyMassSources = useMemo(() => active && sourceCurrent && !scoped.error && bodies ? qualifiedCenterOfMassSources(doc, bodies, scope) : undefined, [active, sourceCurrent, scoped.error, doc, bodies, scopeKey]);
   const svgSectionTextClearance = active && sourceCurrent && projectionCurrent && !scoped.error
     && sectionTextClearanceScope(sourceDoc, doc, settings, bodies);
-  const sheet = useMemo(() => views && layout && buildSheet(views, layout, settings, { svgSectionTextClearance, title, date: today(), source, callout, threads, tableContent: tableContentOf, welds: weldJoints, bodyFaces, ...(bom ? { bom } : {}) }, cuts), [views, layout, settings, title, cuts, callout, threads, tableContentOf, weldJoints, bodyFaces, bom, svgSectionTextClearance]);
+  const sheet = useMemo(() => views && layout && buildSheet(views, layout, settings, { svgSectionTextClearance, title, date: today(), source, callout, threads, tableContent: tableContentOf, welds: weldJoints, bodyFaces, bodyMassSources, ...(bom ? { bom } : {}) }, cuts), [views, layout, settings, title, cuts, callout, threads, tableContentOf, weldJoints, bodyFaces, bodyMassSources, bom, svgSectionTextClearance]);
   const annotations = useMemo<ModelAnnotations | null>(() => active && wantAnnotations && sheet && layout && views ? modelAnnotations({ views, layout, settings, sheet, ...(weldJoints ? { welds: weldJoints } : {}) }) : null,
     [active, wantAnnotations, sheet, layout, views, settings, weldJoints]);
-  return { source, bodyScope, scopeRead, scope, scopeKey, scoped, doc, model, currentModel, bodies, projected, projectionCurrent, views, cutsMade, sectionList, sectionKey, error, empty, busy, title, cuts, sectionA, cutA, layout, elements, callout, locationOwner, calloutsFor, fitMissOf, followedChanged, threads, wantsBom, bom, bomError, sourced, tableContentOf, hasSheet, hasFrame, kinds, hasBought, weldJoints, bodyFaces, svgSectionTextClearance, sheet, annotations };
+  return { source, bodyScope, scopeRead, scope, scopeKey, scoped, doc, model, currentModel, bodies, projected, projectionCurrent, views, cutsMade, sectionList, sectionKey, error, empty, busy, title, cuts, sectionA, cutA, layout, elements, callout, locationOwner, calloutsFor, fitMissOf, followedChanged, threads, wantsBom, bom, bomError, sourced, tableContentOf, hasSheet, hasFrame, kinds, hasBought, weldJoints, bodyFaces, bodyMassSources, svgSectionTextClearance, sheet, annotations };
 }

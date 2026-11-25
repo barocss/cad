@@ -60,8 +60,9 @@ export interface CentreRef { edge: string; near: Vec3; sig?: Sig; was?: string }
  * `at: 'pcd'` (R14.5, O6): the centre of the circle through the centres of `ring`'s holes (a bolt circle's centre, which
  * no edge has); `edge`/`near` are then its first member's.
  * `at: 'virtual-sharp'`: the theoretical intersection of two non-parallel coplanar straight edges (`edge`/`near` + `second`).
+ * `at: 'com'`: the live 3D center of mass of an explicit qualified made solid body (`bodyKey`).
  */
-export interface DimPoint { edge: string; at: 'end' | 'center' | 'pcd' | 'virtual-sharp'; near: Vec3; sig?: Sig; was?: string; ring?: CentreRef[]; second?: EdgeRef; virtualSharpId?: string }
+export interface DimPoint { edge: string; at: 'end' | 'center' | 'pcd' | 'virtual-sharp' | 'com'; near: Vec3; sig?: Sig; was?: string; ring?: CentreRef[]; second?: EdgeRef; virtualSharpId?: string; bodyKey?: string; comId?: string }
 /** A dimension's tolerance: ± one value, an upper and a lower deviation, or a fit (H7, h6, …). */
 export type Tolerance = { kind: 'symmetric'; value: number } | { kind: 'deviation'; upper: number; lower: number } | { kind: 'fit'; code: string };
 /**
@@ -286,6 +287,17 @@ export interface DrawingVirtualSharp {
   second: EdgeRef;
 }
 
+/** A source-bound center-of-mass symbol on an orthographic view for one explicit made solid body. */
+export interface DrawingCenterOfMass {
+  id: string;
+  view: SectionViewId;
+  bodyKey: string;
+  /** Presentation-only: hides the CG symbol while preserving dependent dimensions. */
+  hidden?: true;
+  /** Optional symbol circle diameter in sheet mm (2..12; default 4). Presentation-only. */
+  diameter?: number;
+}
+
 /** The revision after `rev`: A → B … Z → AA, 01 → 02, 1 → 2; none → A. */
 export function nextRevision(rev: string | undefined): string {
   if (!rev || rev === '-') return 'A';
@@ -379,6 +391,8 @@ export interface DrawingSettings {
   bisectorCenterlines?: DrawingBisectorCenterline[];
   /** Source-bound virtual sharps at theoretical straight-edge intersections. */
   virtualSharps?: DrawingVirtualSharp[];
+  /** Source-bound center-of-mass symbols on orthographic views. */
+  centerOfMass?: DrawingCenterOfMass[];
   /** Never stored: set on the settings of one sheet of a drawing with sheets (sheets.ts `forSheet`), which then lay out and build as a drawing of that sheet alone. */
   sheetContext?: SheetContext;
 }
@@ -513,7 +527,7 @@ export function readDrawing(raw: unknown): DrawingSettings {
     ...(typeof r.title === 'string' && r.title ? { title: r.title } : {}),
     ...(typeof r.revision === 'string' && r.revision ? { revision: r.revision.slice(0, 6) } : {}),
     ...(typeof r.revisedModel === 'string' ? { revisedModel: r.revisedModel } : {}),
-    dimensions: Array.isArray(r.dimensions) ? r.dimensions.filter(x => x && typeof x.id === 'string' && isDimView(x.view) && (x.kind !== 'pcd' || ringOk(x.ring)) && (x.kind !== 'arc-length' || (x.auto !== true && isOrthographicView(x.view) && isXY(x.place) && edgeRefOk((x as { arc?: unknown }).arc))) && (x.kind !== 'chamfer' || (x.auto !== true && isOrthographicView(x.view) && isXY(x.place) && edgeRefOk((x as { chamfer?: unknown }).chamfer) && edgeRefOk((x as { adjacent?: unknown }).adjacent))) && (x.kind !== 'radial-thickness' || (x.auto !== true && isOrthographicView(x.view) && isXY(x.place) && edgeRefOk((x as { first?: unknown }).first) && edgeRefOk((x as { second?: unknown }).second))) && (x.kind !== 'cylinder-diameter' || (x.auto !== true && isOrthographicView(x.view) && isXY(x.place) && cylinderFaceRefOk((x as { cylinder?: unknown }).cylinder))) && (x.kind !== 'circle-separation' || (x.auto !== true && isOrthographicView(x.view) && isXY(x.place) && ((x as { mode?: unknown }).mode === 'min' || (x as { mode?: unknown }).mode === 'max') && edgeRefOk((x as { first?: unknown }).first) && edgeRefOk((x as { second?: unknown }).second))) && (x.kind !== 'linear' || ((x.a?.at !== 'pcd' || ringOk(x.a.ring)) && (x.b?.at !== 'pcd' || ringOk(x.b.ring)) && (x.a?.at !== 'virtual-sharp' || (isOrthographicView(x.view) && edgeRefOk(x.a) && edgeRefOk(x.a.second))) && (x.b?.at !== 'virtual-sharp' || (isOrthographicView(x.view) && edgeRefOk(x.b) && edgeRefOk(x.b.second)))))).map(x => {
+    dimensions: Array.isArray(r.dimensions) ? r.dimensions.filter(x => x && typeof x.id === 'string' && isDimView(x.view) && (x.kind !== 'pcd' || ringOk(x.ring)) && (x.kind !== 'arc-length' || (x.auto !== true && isOrthographicView(x.view) && isXY(x.place) && edgeRefOk((x as { arc?: unknown }).arc))) && (x.kind !== 'chamfer' || (x.auto !== true && isOrthographicView(x.view) && isXY(x.place) && edgeRefOk((x as { chamfer?: unknown }).chamfer) && edgeRefOk((x as { adjacent?: unknown }).adjacent))) && (x.kind !== 'radial-thickness' || (x.auto !== true && isOrthographicView(x.view) && isXY(x.place) && edgeRefOk((x as { first?: unknown }).first) && edgeRefOk((x as { second?: unknown }).second))) && (x.kind !== 'cylinder-diameter' || (x.auto !== true && isOrthographicView(x.view) && isXY(x.place) && cylinderFaceRefOk((x as { cylinder?: unknown }).cylinder))) && (x.kind !== 'circle-separation' || (x.auto !== true && isOrthographicView(x.view) && isXY(x.place) && ((x as { mode?: unknown }).mode === 'min' || (x as { mode?: unknown }).mode === 'max') && edgeRefOk((x as { first?: unknown }).first) && edgeRefOk((x as { second?: unknown }).second))) && (x.kind !== 'linear' || ((x.a?.at !== 'pcd' || ringOk(x.a.ring)) && (x.b?.at !== 'pcd' || ringOk(x.b.ring)) && (x.a?.at !== 'virtual-sharp' || (isOrthographicView(x.view) && edgeRefOk(x.a) && edgeRefOk(x.a.second))) && (x.b?.at !== 'virtual-sharp' || (isOrthographicView(x.view) && edgeRefOk(x.b) && edgeRefOk(x.b.second))) && (x.a?.at !== 'com' || (isOrthographicView(x.view) && comPointOk(x.a))) && (x.b?.at !== 'com' || (isOrthographicView(x.view) && comPointOk(x.b)))))).map(x => {
       const { tol, count, auto, basic, foreshorten, arrowPlacement, crossingBreak, extensionJog, ...rest } = x as DrawingDimension & { foreshorten?: unknown; arrowPlacement?: unknown; crossingBreak?: unknown; extensionJog?: unknown }; const t = x.kind === 'chamfer' ? null : readTolerance(tol);
       const arrows = x.kind === 'linear' && auto !== true && isOrthographicView(x.view) ? readLinearArrowPlacement(arrowPlacement) : undefined;
       const cBreak = x.kind === 'linear' && auto !== true && isOrthographicView(x.view) ? readLinearCrossingBreak(crossingBreak) : undefined;
@@ -536,6 +550,7 @@ export function readDrawing(raw: unknown): DrawingSettings {
     ...(readCenterMarkGroups(r.centerMarkGroups).length ? { centerMarkGroups: readCenterMarkGroups(r.centerMarkGroups) } : {}),
     ...(readBisectorCenterlines(r.bisectorCenterlines).length ? { bisectorCenterlines: readBisectorCenterlines(r.bisectorCenterlines) } : {}),
     ...(readVirtualSharps(r.virtualSharps).length ? { virtualSharps: readVirtualSharps(r.virtualSharps) } : {}),
+    ...(readCenterOfMass(r.centerOfMass).length ? { centerOfMass: readCenterOfMass(r.centerOfMass) } : {}),
     ...(Array.isArray(r.notes) && r.notes.some(isNote) ? { notes: r.notes.filter(isNote).map(n => ({ id: n.id, text: n.text, at: [n.at[0], n.at[1]] as XY, ...(n.leader && VIEW_IDS.includes(n.leader.view) && isXY(n.leader.at) ? { leader: { view: n.leader.view, at: [n.leader.at[0], n.leader.at[1]] as XY, ...(Object.hasOwn(n.leader, 'target') ? { target: readNoteTarget(n.leader.target) } : {}) } } : {}), ...(typeof n.sheet === 'string' && /^[A-Za-z0-9_-]{1,16}$/.test(n.sheet) ? { sheet: n.sheet } : {}) })) } : {}),
     ...(readTables(r.tables).length ? { tables: readTables(r.tables) } : {}),
   };
@@ -629,6 +644,31 @@ function readVirtualSharps(raw: unknown): DrawingVirtualSharp[] {
     if (x.first.edge === x.second.edge && x.first.near[0] === x.second.near[0] && x.first.near[1] === x.second.near[1] && x.first.near[2] === x.second.near[2]) continue;
     seen.add(x.id);
     out.push({ id: x.id, view: x.view, first: copyEdgeRef(x.first), second: copyEdgeRef(x.second) });
+  }
+  return out;
+}
+const comPointOk = (ref: unknown): boolean => !!ref && typeof ref === 'object' && !Array.isArray(ref)
+  && typeof (ref as DimPoint).bodyKey === 'string' && !!(ref as DimPoint).bodyKey!.trim()
+  && isVec3((ref as DimPoint).near);
+function readCenterOfMass(raw: unknown): DrawingCenterOfMass[] {
+  if (!Array.isArray(raw)) return [];
+  const seen = new Set<string>(), out: DrawingCenterOfMass[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) continue;
+    const x = item as Partial<DrawingCenterOfMass>;
+    if (typeof x.id !== 'string' || !x.id.trim() || seen.has(x.id)) continue;
+    if (!x.view || !SECTION_VIEWS.includes(x.view)) continue;
+    if (typeof x.bodyKey !== 'string' || !x.bodyKey.trim()) continue;
+    seen.add(x.id);
+    const diameter = typeof x.diameter === 'number' && Number.isFinite(x.diameter) && x.diameter >= 2 && x.diameter <= 12
+      ? Math.round(x.diameter * 1000) / 1000 : undefined;
+    out.push({
+      id: x.id,
+      view: x.view,
+      bodyKey: x.bodyKey,
+      ...(x.hidden === true ? { hidden: true as const } : {}),
+      ...(diameter !== undefined && Math.abs(diameter - 4) > 1e-6 ? { diameter } : {}),
+    });
   }
   return out;
 }

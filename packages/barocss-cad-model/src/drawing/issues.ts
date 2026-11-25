@@ -50,13 +50,14 @@ import { SECTION_VIEWS, VIEW_IDS, baseViewOf, detailLetter, isDetailRef, isViewI
 
 export const DRAWING_ISSUES_VERSION = 'cad-studio-drawing-issues-v1';
 
-export type DrawingIssueCode = 'SHEET_SET' | 'UNIT_PRECISION' | 'FORESHORTEN_INVALID' | 'LINEAR_ARROWS_CROWDED' | 'CROSSING_BREAK_CONFLICT' | 'CROSSING_BREAK_INACTIVE' | 'EXTENSION_JOG_INVALID' | 'DIM_ON_HIDDEN' | 'ARC_CENTERLINE_LOST' | 'CENTER_MARK_GROUP_LOST' | 'BISECTOR_CENTERLINE_LOST' | 'VIRTUAL_SHARP_LOST' | 'DATUM_LOST' | 'FRAME_LOST' | 'FRAME_VIEW_MISSING' | 'DATUM_UNDEFINED' | 'FRAME_RULE' | 'DATUM_TWICE' | 'VIEW_NEEDED' | 'DIMENSION_LOST' | 'TEXT_OVERLAP' | 'TEXT_OVER_LINES' | 'OFF_SHEET' | 'VIEWS_DONT_FIT' | 'DUPLICATE' | 'REMATCHED' | 'HOLE_SIZE_MISSING' | 'HOLE_NOT_LOCATED' | 'STEP_NOT_LOCATED' | 'OVERALL_MISSING' | 'TABLE_SOURCE' | 'WELD_NOT_SHOWN' | 'BALLOON_NOT_CLEAR' | 'BALLOON_NO_EDGE' | 'FIT_ROW_MISSING' | 'FOLLOWED_CHANGED' | 'DETAIL_PARENT_MISSING' | 'DETAIL_EMPTY' | 'DETAIL_NO_ROOM' | 'BREAK_NO_VIEW' | 'SECTION_NO_ROOM' | 'SECTION_NO_VIEW' | 'DATUM_TARGET_OUTSIDE' | DatumTargetFailureCode | NoteTargetFailureCode;
+export type DrawingIssueCode = 'SHEET_SET' | 'UNIT_PRECISION' | 'FORESHORTEN_INVALID' | 'LINEAR_ARROWS_CROWDED' | 'CROSSING_BREAK_CONFLICT' | 'CROSSING_BREAK_INACTIVE' | 'EXTENSION_JOG_INVALID' | 'DIM_ON_HIDDEN' | 'ARC_CENTERLINE_LOST' | 'CENTER_MARK_GROUP_LOST' | 'BISECTOR_CENTERLINE_LOST' | 'VIRTUAL_SHARP_LOST' | 'CENTER_OF_MASS_LOST' | 'DATUM_LOST' | 'FRAME_LOST' | 'FRAME_VIEW_MISSING' | 'DATUM_UNDEFINED' | 'FRAME_RULE' | 'DATUM_TWICE' | 'VIEW_NEEDED' | 'DIMENSION_LOST' | 'TEXT_OVERLAP' | 'TEXT_OVER_LINES' | 'OFF_SHEET' | 'VIEWS_DONT_FIT' | 'DUPLICATE' | 'REMATCHED' | 'HOLE_SIZE_MISSING' | 'HOLE_NOT_LOCATED' | 'STEP_NOT_LOCATED' | 'OVERALL_MISSING' | 'TABLE_SOURCE' | 'WELD_NOT_SHOWN' | 'BALLOON_NOT_CLEAR' | 'BALLOON_NO_EDGE' | 'FIT_ROW_MISSING' | 'FOLLOWED_CHANGED' | 'DETAIL_PARENT_MISSING' | 'DETAIL_EMPTY' | 'DETAIL_NO_ROOM' | 'BREAK_NO_VIEW' | 'SECTION_NO_ROOM' | 'SECTION_NO_VIEW' | 'DATUM_TARGET_OUTSIDE' | DatumTargetFailureCode | NoteTargetFailureCode;
 export type DrawingFix =
   | { kind: 'remove'; dim: string }
   | { kind: 'remove-arc-centerline'; id: string }
   | { kind: 'remove-center-mark-group'; id: string }
   | { kind: 'remove-bisector-centerline'; id: string }
   | { kind: 'remove-virtual-sharp'; id: string }
+  | { kind: 'remove-center-of-mass'; id: string }
   | { kind: 'move'; dim: string; place: XY }
   | { kind: 'move-note'; note: string; at: XY }
   /** A table's top-left corner to `at` (O49). */
@@ -559,6 +560,11 @@ export function drawingIssues(ctx: IssueContext): DrawingIssue[] {
       out.push({ code: 'VIRTUAL_SHARP_LOST', severity: 'error', message: `Virtual sharp ${vs.item.id} in ${viewName(vs.item.view)} is lost: ${vs.reason}`, view: vs.item.view, fix: { kind: 'remove-virtual-sharp', id: vs.item.id } });
     } else if (vs.item.first.was !== undefined || vs.item.second.was !== undefined) {
       out.push({ code: 'REMATCHED', severity: 'warning', message: `Virtual sharp ${vs.item.id} in ${viewName(vs.item.view)}: a straight edge it follows was matched again after an edit. Check it.`, view: vs.item.view });
+    }
+  }
+  for (const cm of sheet.centerOfMass ?? []) {
+    if (!cm.ok) {
+      out.push({ code: 'CENTER_OF_MASS_LOST', severity: 'error', message: `Center of mass ${cm.item.id} in ${viewName(cm.item.view)} is lost: ${cm.reason}`, view: cm.item.view, fix: { kind: 'remove-center-of-mass', id: cm.item.id } });
     }
   }
   for (const r of sheet.dimensions) {
@@ -1111,6 +1117,7 @@ export function applyFix(ctx: IssueContext, fix: DrawingFix): DrawingSettings {
     case 'remove-center-mark-group': { const kept = (s.centerMarkGroups ?? []).filter(g => g.id !== fix.id), rest = { ...s }; delete rest.centerMarkGroups; return kept.length ? { ...rest, centerMarkGroups: kept } : rest; }
     case 'remove-bisector-centerline': { const kept = (s.bisectorCenterlines ?? []).filter(cl => cl.id !== fix.id), rest = { ...s }; delete rest.bisectorCenterlines; return kept.length ? { ...rest, bisectorCenterlines: kept } : rest; }
     case 'remove-virtual-sharp': { const kept = (s.virtualSharps ?? []).filter(vs => vs.id !== fix.id), rest = { ...s }; delete rest.virtualSharps; return kept.length ? { ...rest, virtualSharps: kept } : rest; }
+    case 'remove-center-of-mass': { const kept = (s.centerOfMass ?? []).filter(cm => cm.id !== fix.id), rest = { ...s }; delete rest.centerOfMass; return kept.length ? { ...rest, centerOfMass: kept } : rest; }
     case 'remove-detail': { const kept = (s.details ?? []).filter(d => d.id !== fix.detail), rest: DrawingSettings = { ...s, dimensions: s.dimensions.filter(d => d.view !== `detail:${fix.detail}`) }; delete rest.details; return kept.length ? { ...rest, details: kept } : rest; }
     case 'remove-break': { const kept = (s.breaks ?? []).filter((_, k) => k !== fix.index), rest = { ...s }; delete rest.breaks; return kept.length ? { ...rest, breaks: kept } : rest; }
     case 'remove-datum': return { ...s, datums: (s.datums ?? []).filter(d => d.id !== fix.datum) };

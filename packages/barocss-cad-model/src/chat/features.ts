@@ -549,6 +549,7 @@ function renameDimension(d: DrawingDimension, rename: (name: string) => string |
     return face === null ? null : { ...d, cylinder: { ...d.cylinder, face } };
   }
   const point = (p: DimPoint): DimPoint | null => {
+    if (p.at === 'com') return p;
     if (p.at === 'pcd') { const r = ring(p.ring ?? []); return r ? { ...p, edge: r[0].edge, ring: r } : null; }
     if (p.at === 'virtual-sharp' && p.second) {
       const e1 = rename(p.edge), e2 = rename(p.second.edge);

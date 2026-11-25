@@ -20,6 +20,9 @@ function deviations(tolerance: Tolerance): readonly [lower: number, upper: numbe
 
 /** Match identical resolver inputs. Different reference pairs can still be mechanically dependent. */
 function referenceKey(point: DimPoint): string {
+  if (point.at === 'com') {
+    return JSON.stringify([point.at, point.bodyKey ?? '']);
+  }
   if (point.at === 'pcd') {
     return JSON.stringify([point.at, point.ring?.map(({ edge, near }) => [edge, near])]);
   }

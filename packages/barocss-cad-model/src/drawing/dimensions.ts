@@ -16,6 +16,7 @@ import { resolveRadialThicknessEdges } from './radialThickness';
 import { resolveCylinderDiameter } from './cylinderDiameter';
 import { resolveCircleSeparationEdges } from './circleSeparation';
 import { resolveVirtualSharpInProjection } from './virtualSharp';
+import { resolveCenterOfMassPoint, type DrawingBodyMassSource } from './centerOfMass';
 
 const sub3 = (a: readonly number[], b: readonly number[]): Vec3 => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
 const dist3 = (a: readonly number[], b: readonly number[]) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
@@ -76,8 +77,9 @@ export function arcPoints(c: Extract<ProjectedCurve, { kind: 'arc' }>, n: number
   return Array.from({ length: n + 1 }, (_, k) => { const t = c.t0 + (c.t1 - c.t0) * k / n; return [c.center[0] + c.u[0] * Math.cos(t) + c.v[0] * Math.sin(t), c.center[1] + c.u[1] * Math.cos(t) + c.v[1] * Math.sin(t)] as XY; });
 }
 
-/** A dimension point on the current model (null: its edge is gone). */
-export function resolvePoint(pr: BrepProjection, ref: DimPoint): Vec3 | null {
+/** A dimension point on the current model (null: its edge or mass source is gone). */
+export function resolvePoint(pr: BrepProjection, ref: DimPoint, comSources?: ReadonlyMap<string, DrawingBodyMassSource>): Vec3 | null {
+  if (ref.at === 'com') return resolveCenterOfMassPoint(ref.bodyKey, comSources);
   if (ref.at === 'pcd') { const c = pitchCircle(pr, ref.ring ?? []); return c && c.center; }
   if (ref.at === 'virtual-sharp') {
     if (!ref.second) return null;
@@ -288,7 +290,7 @@ export function closestDetailRim(arcs: readonly CircularArc[], label: XY): XY | 
   }
   return best;
 }
-export function resolveDimension(views: Partial<Record<DimView, BrepProjection>> & Pick<DrawingViews, 'nativeTop'>, dim: DrawingDimension, detail?: Pick<DrawingDetail, 'center' | 'radius'>, showHidden = false, detailParent?: BrepProjection): Resolved {
+export function resolveDimension(views: Partial<Record<DimView, BrepProjection>> & Pick<DrawingViews, 'nativeTop'>, dim: DrawingDimension, detail?: Pick<DrawingDetail, 'center' | 'radius'>, showHidden = false, detailParent?: BrepProjection, comSources?: ReadonlyMap<string, DrawingBodyMassSource>): Resolved {
   const pr = views[dim.view];
   if (!pr) return { ok: false, dim, reason: `Its view (${dim.view}) is not on the sheet.` };
   // A missing projected reference does not establish that its source feature was deleted.
@@ -315,8 +317,15 @@ export function resolveDimension(views: Partial<Record<DimView, BrepProjection>>
     return { ok: true, kind: 'pcd', dim, center: inView(pr, c.center), center3: c.center, radius: c.radius, members: c.members.map(p => inView(pr, p)), even: c.even, value: 2 * c.radius, text: valueText({ kind: 'pcd', value: 2 * c.radius, members: c.members, even: c.even }, fmtMM) };
   }
   if (dim.kind === 'linear') {
-    const a = resolvePoint(pr, dim.a), b = resolvePoint(pr, dim.b);
-    if (!a || !b) return { ok: false, dim, reason: missingEdge };
+    const hasCom = dim.a.at === 'com' || dim.b.at === 'com';
+    if (hasCom && dim.view !== 'front' && dim.view !== 'top' && dim.view !== 'right') {
+      return { ok: false, dim, reason: 'Center-of-mass dimensions are supported only on ordinary front, top, and right views.' };
+    }
+    const a = resolvePoint(pr, dim.a, comSources), b = resolvePoint(pr, dim.b, comSources);
+    if (!a || !b) {
+      const missingCom = (!a && dim.a.at === 'com') || (!b && dim.b.at === 'com');
+      return { ok: false, dim, reason: missingCom ? 'Its center-of-mass source body is unavailable, excluded, or pending exact mass calculation.' : missingEdge };
+    }
     const value = linearValue(pr, a, b, dim.orient);
     if (value < 1e-9) return { ok: false, dim, reason: 'Its two points now coincide in this view.' };
     return { ok: true, kind: 'linear', dim, a: inView(pr, a), b: inView(pr, b), value, text: valueText({ kind: 'linear', value }, fmtMM) };

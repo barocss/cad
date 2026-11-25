@@ -61,6 +61,7 @@ import { newArcCenterlineId, pickArcCenterlineEdge, resolveArcCenterline } from 
 import { MIN_CENTER_MARK_GROUP_MEMBERS, newCenterMarkGroupId, pickCenterMarkGroupCircle, resolveCenterMarkGroup, validateCenterMarkGroupCandidate } from '@barocss/cad-model/drawing/centerMarkGroup';
 import { BISECTOR_EXTENSION_MM, newBisectorCenterlineId, pickBisectorCenterlineEdge, resolveBisectorCenterline } from '@barocss/cad-model/drawing/bisectorCenterline';
 import { VIRTUAL_SHARP_OVERSHOOT_MM, newVirtualSharpId, pickVirtualSharpEdge, resolveVirtualSharp } from '@barocss/cad-model/drawing/virtualSharp';
+import { newCenterOfMassId, resolveCenterOfMassPoint, type DrawingBodyMassSource } from '@barocss/cad-model/drawing/centerOfMass';
 import { DETAIL_PARENTS, type DetailParent, type DrawingDetail } from '@barocss/cad-model/drawing/detail';
 import { DetailsList } from './drawing/DetailsList';
 import { clipProjectionOutside } from '@barocss/cad-model/drawing/breaks';
@@ -69,7 +70,7 @@ import { drawingOccurrencePath } from '@barocss/cad-model/drawing/dimensionRefer
 import { diameterRims } from './drawing/diameterRims';
 import { Button } from '@/components/ui/button';
 import { BreaksList } from './drawing/BreaksList';
-import { VIEW_IDS, annotatedDetailLetters, detailLetter, isDetailRef, isSectionRef, isViewId, nextSectionId, reservedDetailLetters, sameSection, sectionLetter, sectionsOf, withSections, readLinearArrowPlacement, type CentreRef, type CircleSeparationMode, type CylinderFaceRef, type DrawingArcCenterline, type DrawingBisectorCenterline, type DrawingCenterMarkGroup, type DrawingVirtualSharp, type LinearArrowSide, type DimView, type DimPoint, type DrawingNote, type EdgeRef, type DrawingDimension, type DrawingSettings, type DrawingViews, type SectionViewId, type Vec3, type ViewId, type XY } from '@barocss/cad-model/drawing/types';
+import { VIEW_IDS, annotatedDetailLetters, detailLetter, isDetailRef, isSectionRef, isViewId, nextSectionId, reservedDetailLetters, sameSection, sectionLetter, sectionsOf, withSections, readLinearArrowPlacement, type CentreRef, type CircleSeparationMode, type CylinderFaceRef, type DrawingArcCenterline, type DrawingBisectorCenterline, type DrawingCenterMarkGroup, type DrawingCenterOfMass, type DrawingVirtualSharp, type LinearArrowSide, type DimView, type DimPoint, type DrawingNote, type EdgeRef, type DrawingDimension, type DrawingSettings, type DrawingViews, type SectionViewId, type Vec3, type ViewId, type XY } from '@barocss/cad-model/drawing/types';
 import { downloadBytes } from './files';
 import { ShortcutHelp } from './ShortcutHelp';
 import { today, useDrawingSheet } from './useDrawingSheet';
@@ -96,7 +97,7 @@ import { ExportActions } from './drawing/ExportActions';
 import { dimensionPairLabelsMoved, dimensionPairPaperDelta, drawingDimensionPair, moveDrawingDimensionPair, type DrawingDimensionPair } from '../app/drawingDimensionGroup';
 import '../drawing/drawing.css';
 
-type Tool = 'select' | 'linear' | 'diameter' | 'radius' | 'arc-length' | 'chamfer' | 'radial-thickness' | 'cylinder-diameter' | 'circle-separation' | 'arc-centerline' | 'center-mark-group' | 'bisector-centerline' | 'virtual-sharp' | 'angle' | 'reflex-angle' | 'note' | 'detail' | 'datum-target';
+type Tool = 'select' | 'linear' | 'diameter' | 'radius' | 'arc-length' | 'chamfer' | 'radial-thickness' | 'cylinder-diameter' | 'circle-separation' | 'arc-centerline' | 'center-mark-group' | 'bisector-centerline' | 'virtual-sharp' | 'center-of-mass' | 'angle' | 'reflex-angle' | 'note' | 'detail' | 'datum-target';
 type DimensionGroup = { owner: object; pair: DrawingDimensionPair };
 type DimensionGroupDrag = { dimensionGroup: DimensionGroup; pointer: number; start: XY; scale: number; paperDelta: number };
 const TOOLS: { tool: Tool; label: string; icon: string; key: string; hint: string }[] = [
@@ -113,6 +114,7 @@ const TOOLS: { tool: Tool; label: string; icon: string; key: string; hint: strin
   { tool: 'center-mark-group', label: 'Hole row', icon: 'polyline', key: 'H', hint: 'Click 3 to 32 collinear equal-radius circular holes, then click Create row' },
   { tool: 'bisector-centerline', label: 'Centerline', icon: 'tune', key: 'B', hint: 'Click two parallel equal-span straight edges to add a centerline' },
   { tool: 'virtual-sharp', label: 'Virtual sharp', icon: 'add', key: 'X', hint: 'Click two non-parallel straight edges to mark their theoretical intersection' },
+  { tool: 'center-of-mass', label: 'Center of mass', icon: 'filter_center_focus', key: 'Q', hint: 'Click an unbroken front, top, or right view to place a live center-of-mass symbol' },
   { tool: 'angle', label: 'Angle', icon: 'architecture', key: 'A', hint: 'Click two straight edges, then the side of their corner the angle goes on' },
   { tool: 'reflex-angle', label: 'Reflex angle', icon: 'restart_alt', key: 'G', hint: 'Pick two straight edges that share a corner in the Top view' },
   { tool: 'note', label: 'Note', icon: 'sticky_note_2', key: 'N', hint: 'Click on the paper for a note, or on a view for a leader and then where its text goes' },
@@ -184,7 +186,10 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
       : local;
   }, [wholeSettings, current, drawingSetWantsBom]);
   // (The sheet's pipeline, shared with the viewport's 3D annotations, G24: views, layout, sheet and what they are built from.)
-  const { source, bodyScope, scopeRead, scope, scopeKey, doc, model, currentModel, bodies, views, projectionCurrent, cutsMade, sectionList, error, empty, busy, title, cuts, sectionA, cutA, layout, elements, callout, locationOwner, calloutsFor, fitMissOf, followedChanged, threads, wantsBom, bom, bomError, tableContentOf, hasSheet, hasFrame, kinds, hasBought, weldJoints, bodyFaces, svgSectionTextClearance, sheet } = useDrawingSheet(true, { engine, doc: sourceDoc, bodies: sourceBodies, settings, fileName, modelInput, workerSession, sourceCurrent, drawingSetWantsBom, ...(wholeSettings.sheets?.length ? { allSections: sectionsOf(wholeSettings) } : {}) });
+  const { source, bodyScope, scopeRead, scope, scopeKey, doc, model, currentModel, bodies, views, projectionCurrent, cutsMade, sectionList, error, empty, busy, title, cuts, sectionA, cutA, layout, elements, callout, locationOwner, calloutsFor, fitMissOf, followedChanged, threads, wantsBom, bom, bomError, tableContentOf, hasSheet, hasFrame, kinds, hasBought, weldJoints, bodyFaces, bodyMassSources, svgSectionTextClearance, sheet } = useDrawingSheet(true, { engine, doc: sourceDoc, bodies: sourceBodies, settings, fileName, modelInput, workerSession, sourceCurrent, drawingSetWantsBom, ...(wholeSettings.sheets?.length ? { allSections: sectionsOf(wholeSettings) } : {}) });
+  const comBodyList = useMemo(() => bodyMassSources ? [...bodyMassSources.values()] : [], [bodyMassSources]);
+  const [comBodyChoice, setComBodyChoice] = useState<string>('');
+  const activeComBodyKey = comBodyList.some(b => b.key === comBodyChoice) ? comBodyChoice : (comBodyList.length === 1 ? comBodyList[0].key : '');
   const projectionActionOwner = useMemo(() => ({}), [sourceDoc, wholeSettings, model, workerSession, engine, current, sourceCurrent]);
   const liveProjectionAction = useRef(projectionActionOwner); liveProjectionAction.current = projectionActionOwner;
   /** The whole drawing's next settings, as the file will have them. */
@@ -318,7 +323,7 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
   // The drawing's issue list (R14.2, O3): what is wrong on the sheet, then what is missing; fixes where safe.
   const issues = useMemo<DrawingIssue[]>(() => views && layout && sheet ? [...drawingIssues({ views, layout, settings, sheet, callout, locationOwner, fitMiss: fitMissOf, followedChanged, elements, ...(cuts.length ? { sections: cuts } : {}) }),
     // (11 ④: what is missing judged on the whole drawing, and a sheet with no view: this sheet's share.)
-    ...(sheetTotal > 1 ? setIssuesOn({ views, settings: wholeSettings, callout, locationOwner, fitMiss: fitMissOf, followedChanged, elements, meta: { title, date: today(), source, threads, tableContent: tableContentOf, welds: weldJoints, bodyFaces, ...(bom ? { bom } : {}) }, ...(cuts.length ? { sections: cuts } : {}) }, current) : [])].map(issue => {
+    ...(sheetTotal > 1 ? setIssuesOn({ views, settings: wholeSettings, callout, locationOwner, fitMiss: fitMissOf, followedChanged, elements, meta: { title, date: today(), source, threads, tableContent: tableContentOf, welds: weldJoints, bodyFaces, bodyMassSources, ...(bom ? { bom } : {}) }, ...(cuts.length ? { sections: cuts } : {}) }, current) : [])].map(issue => {
       const reason = issue.code === 'DIMENSION_LOST' && issue.dims?.length === 1 ? lossByDimension.get(issue.dims[0]) : undefined;
       return reason ? { ...issue, message: `Dimension ${issue.dims![0]} · ${reason}` } : issue;
     }) : [], [views, layout, settings, wholeSettings, current, sheet, callout, locationOwner, fitMissOf, followedChanged, elements, cuts, lossByDimension]);
@@ -326,7 +331,7 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
   const suggestions = useMemo<ToleranceSuggestion[]>(() => views && layout && sheet ? toleranceSuggestions({ views, layout, settings, sheet, callout, locationOwner, fastenerSizes: fastenerSizesOf(doc) }) : [], [views, layout, settings, sheet, callout, locationOwner, doc.fastenerSizes]);
   const acceptEvery = () => {
     if (!views) return;
-    const r = acceptAll({ views, settings, fastenerSizes: fastenerSizesOf(doc), callout, locationOwner, fitMiss: fitMissOf, meta: { title, date: today(), source, threads, tableContent: tableContentOf, welds: weldJoints, bodyFaces, ...(bom ? { bom } : {}) }, ...(cuts.length ? { sections: cuts } : {}) });
+    const r = acceptAll({ views, settings, fastenerSizes: fastenerSizesOf(doc), callout, locationOwner, fitMiss: fitMissOf, meta: { title, date: today(), source, threads, tableContent: tableContentOf, welds: weldJoints, bodyFaces, bodyMassSources, ...(bom ? { bom } : {}) }, ...(cuts.length ? { sections: cuts } : {}) });
     if (!onChange(r.settings)) return;
     const est = r.accepted.filter(x => x.estimate).length;
     onToast({ title: `${r.accepted.length} suggestion${r.accepted.length === 1 ? '' : 's'} accepted`, hint: est ? `${est} of them ${est === 1 ? 'is an estimate' : 'are estimates'}: check ${est === 1 ? 'it' : 'them'} against your process.` : 'Each from the studio’s data.', detail: r.accepted.map(x => `${x.message} — ${x.basis}`).join('\n') });
@@ -357,7 +362,7 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
   // next round runs on the sheet with its view — one Fix, as the chat's fix_drawing, not a second click. The rounds stop
   // when the settings change from elsewhere. Each round is its own undo step.)
   const fixing = useRef<{ state: FixRounds; want: string } | null>(null);
-  const fixInputs = (): SheetInputs | null => views ? { views, settings, callout, locationOwner, elements, fitMiss: fitMissOf, meta: { title, date: today(), source, threads, tableContent: tableContentOf, welds: weldJoints, bodyFaces, ...(bom ? { bom } : {}) }, ...(cuts.length ? { sections: cuts } : {}) } : null;
+  const fixInputs = (): SheetInputs | null => views ? { views, settings, callout, locationOwner, elements, fitMiss: fitMissOf, meta: { title, date: today(), source, threads, tableContent: tableContentOf, welds: weldJoints, bodyFaces, bodyMassSources, ...(bom ? { bom } : {}) }, ...(cuts.length ? { sections: cuts } : {}) } : null;
   const protectedDetails = () => {
     const annotated = annotatedDetailLetters(wholeSettings);
     return new Set((sheet?.detailsMissing ?? []).filter(detail => annotated.has(detail.id)).map(detail => detail.id));
@@ -484,8 +489,21 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
         },
       });
     }
+    for (const r of sheet?.centerOfMass ?? []) {
+      if (!r.ok || r.item.hidden) continue;
+      (byView[r.item.view] ??= []).push({
+        at: r.geometry.point,
+        ref: {
+          edge: '',
+          at: 'com',
+          near: [...r.geometry.centroid3] as Vec3,
+          bodyKey: r.item.bodyKey,
+          comId: r.item.id,
+        },
+      });
+    }
     return byView;
-  }, [views, sheet?.sections, sheet?.details, sheet?.virtualSharps]);
+  }, [views, sheet?.sections, sheet?.details, sheet?.virtualSharps, sheet?.centerOfMass]);
   const placementAt = (v: DimView) => layout ? placementOf(layout, sheet ?? undefined, v) : undefined;
   const projectionAt = (v: DimView) => views ? projectionOf(views, sheet ?? undefined, v) : undefined;
 
@@ -504,6 +522,7 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
       const rims = diameterRims(projection, at, 6 * mmPerPx() / v.scale, tol, visibleRimOnly, scope.kind === 'assembly');
       return { q, view, at, snap: null, edge: rims[0] ?? null, visibleRimOnly, rims };
     }
+    if (tool === 'center-of-mass') return { q, view, at, snap: null, edge: null };
     if (tool === 'arc-length' || tool === 'chamfer' || tool === 'radial-thickness' || tool === 'cylinder-diameter' || tool === 'circle-separation' || tool === 'arc-centerline' || tool === 'center-mark-group' || tool === 'bisector-centerline' || tool === 'virtual-sharp') return { q, view, at, snap: null, edge: edgeAt(pr, at, 6 * mmPerPx() / v.scale, true) };
     if (tool === 'reflex-angle') return { q, view, at, snap: null, edge: view === 'top' && !v.breaks?.length
       ? edgeAt(pr, at, 6 * mmPerPx() / v.scale, true) : null };
@@ -532,7 +551,7 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
     if (!views || !layout || !sheet) return;
     const dimensions = moveDrawingDimensionPair(settings.dimensions, pair, scale, paperDelta);
     if (dimensions === settings.dimensions) return;
-    const preview = buildSheet(views, layout, { ...settings, dimensions }, { svgSectionTextClearance, title, date: today(), callout, threads, tableContent: tableContentOf, welds: weldJoints, bodyFaces, ...(bom ? { bom } : {}) }, cuts);
+    const preview = buildSheet(views, layout, { ...settings, dimensions }, { svgSectionTextClearance, title, date: today(), callout, threads, tableContent: tableContentOf, welds: weldJoints, bodyFaces, bodyMassSources, ...(bom ? { bom } : {}) }, cuts);
     if (dimensionPairLabelsMoved(sheet, preview, pair, paperDelta)) return { dimensions, preview };
   };
   const commitFrames = (frames: DrawingFrame[]) => {
@@ -823,14 +842,14 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
     const pr = projectionAt(placing ? pending.view : h.view); if (!pr) return;
     if (tool === 'linear') {
       if (pending?.kind === 'linear' && pending.b) {
-        const a = pointIn(pr, pending.a), b = pointIn(pr, pending.b);
+        const a = pointIn(pr, pending.a, bodyMassSources), b = pointIn(pr, pending.b, bodyMassSources);
         commitDims([...settings.dimensions, { id: newDimensionId(wholeSettings.dimensions, wholeSettings.frames), view: pending.view, kind: 'linear', a: pending.a, b: pending.b, orient: orientFor(a, b, place), place }]);
         setPending(null); return;
       }
       if (pending?.kind === 'linear' && pending.view !== h.view) { setMessage('Pick the second point in the same view.'); return; }
       if (h.snap) {
         if (!pending || pending.kind !== 'linear') { setPending({ kind: 'linear', view: h.view, a: h.snap.ref }); return; }
-        const a = pointIn(pr, pending.a);
+        const a = pointIn(pr, pending.a, bodyMassSources);
         if (Math.hypot(a[0] - h.snap.at[0], a[1] - h.snap.at[1]) < 1e-9) { setMessage('Pick a different point.'); return; }
         setPending({ ...pending, b: h.snap.ref }); return;
       }
@@ -1327,6 +1346,37 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
       setSelectedFrame(null);
       return;
     }
+    if (tool === 'center-of-mass') {
+      if (scope.kind !== 'part') { setMessage('Center of mass uses a part drawing.'); return; }
+      if (!isViewId(h.view) || h.view === 'iso') {
+        setMessage('Center of mass is supported only on ordinary front, top, and right views.'); return;
+      }
+      if (placementAt(h.view)?.breaks?.length) {
+        setMessage('Center of mass is not supported on a broken view.'); return;
+      }
+      if (!bodyMassSources || !comBodyList.length) {
+        setMessage('No qualified solid body center of mass is available yet.'); return;
+      }
+      if (!activeComBodyKey) {
+        setMessage('Choose a body in the Center of mass panel first.'); return;
+      }
+      if ((settings.centerOfMass ?? []).some(x => x.view === h.view && x.bodyKey === activeComBodyKey)) {
+        setMessage(`Center of mass for ${activeComBodyKey} is already on the ${viewLabel(h.view)}.`); return;
+      }
+      const item: DrawingCenterOfMass = {
+        id: newCenterOfMassId(wholeSettings.centerOfMass),
+        view: h.view as SectionViewId,
+        bodyKey: activeComBodyKey,
+      };
+      if (!onChange({ ...settings, centerOfMass: [...(settings.centerOfMass ?? []), item] })) return;
+      setPending(null);
+      setMessage(null);
+      setTool('select');
+      setSelected({ kind: 'center-of-mass', id: item.id });
+      setSelectedTarget(null);
+      setSelectedFrame(null);
+      return;
+    }
   };
 
   /** DR-1: the detail tool — its centre on a view or a section, then a point its circle reaches; the next free letter, its scale and place automatic. */
@@ -1494,12 +1544,14 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
       const cmgId = (e.target as Element).closest?.('g.center-mark-group[data-center-mark-group]')?.getAttribute('data-center-mark-group') ?? null;
       const clId = (e.target as Element).closest?.('g.bisector-centerline[data-bisector-centerline]')?.getAttribute('data-bisector-centerline') ?? null;
       const vsId = (e.target as Element).closest?.('g.virtual-sharp[data-virtual-sharp]')?.getAttribute('data-virtual-sharp') ?? null;
+      const comId = (e.target as Element).closest?.('g.center-of-mass[data-center-of-mass]')?.getAttribute('data-center-of-mass') ?? null;
       const d = target?.matches('g.dimension') ? settings.dimensions.find(x => x.id === id) : undefined;
       const n = target?.matches('g.note') ? settings.notes?.find(x => x.id === id) : undefined;
       const ac = !d && !n && acId ? settings.arcCenterlines?.find(x => x.id === acId) : undefined;
       const cmg = !d && !n && !ac && cmgId ? settings.centerMarkGroups?.find(x => x.id === cmgId) : undefined;
       const cl = !d && !n && !ac && !cmg && clId ? settings.bisectorCenterlines?.find(x => x.id === clId) : undefined;
       const vs = !d && !n && !ac && !cmg && !cl && vsId ? settings.virtualSharps?.find(x => x.id === vsId) : undefined;
+      const com = !d && !n && !ac && !cmg && !cl && !vs && comId ? settings.centerOfMass?.find(x => x.id === comId) : undefined;
       if (d && e.shiftKey) {
         if (activeDimensionGroup) {
           const pair = activeDimensionGroup.pair;
@@ -1528,12 +1580,12 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
         return;
       }
       clearDimensionGroup();
-      setSelected(d ? { kind: 'dimension', id: d.id } : n ? { kind: 'note', id: n.id } : ac ? { kind: 'arc-centerline', id: ac.id } : cmg ? { kind: 'center-mark-group', id: cmg.id } : cl ? { kind: 'bisector-centerline', id: cl.id } : vs ? { kind: 'virtual-sharp', id: vs.id } : null);
+      setSelected(d ? { kind: 'dimension', id: d.id } : n ? { kind: 'note', id: n.id } : ac ? { kind: 'arc-centerline', id: ac.id } : cmg ? { kind: 'center-mark-group', id: cmg.id } : cl ? { kind: 'bisector-centerline', id: cl.id } : vs ? { kind: 'virtual-sharp', id: vs.id } : com ? { kind: 'center-of-mass', id: com.id } : null);
       setNoteDraft(null); setTolDraft({});
       if (n) setNoteDraft(n.text);
       if (d) setDrag({ id: d.id, place: d.place });
       else if (n && qd) setDrag({ note: n.id, at: n.at, grab: [qd[0] - n.at[0], qd[1] - n.at[1]] });
-      else if (ac || cmg || cl || vs) return;
+      else if (ac || cmg || cl || vs || com) return;
       else setDrag({ pan: [e.clientX, e.clientY], box: [...viewBox] as [number, number, number, number] });
       (e.currentTarget as Element).setPointerCapture(e.pointerId);
       return;
@@ -1638,7 +1690,7 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
       const d = settings.dimensions.find(x => x.id === drag.id);
       if (d && (d.place[0] !== drag.place[0] || d.place[1] !== drag.place[1])) {
         commitDims(settings.dimensions.map(x => x.id !== d.id ? x : x.kind === 'linear' && views
-          ? { ...x, place: drag.place, orient: orientFor(pointIn(projectionOf(views, sheet ?? undefined, x.view)!, x.a), pointIn(projectionOf(views, sheet ?? undefined, x.view)!, x.b), drag.place) } : { ...x, place: drag.place }));
+          ? { ...x, place: drag.place, orient: orientFor(pointIn(projectionOf(views, sheet ?? undefined, x.view)!, x.a, bodyMassSources), pointIn(projectionOf(views, sheet ?? undefined, x.view)!, x.b, bodyMassSources), drag.place) } : { ...x, place: drag.place }));
       }
     }
     setDrag(null);
@@ -1684,8 +1736,31 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
     });
   };
 
+  const toggleCenterOfMassHidden = (id: string) => {
+    if (busy || !sourceCurrent) return;
+    if (settings.centerOfMass?.filter(cm => cm.id === id).length !== 1) return;
+    onChange({
+      ...settings,
+      centerOfMass: settings.centerOfMass.map(cm => {
+        if (cm.id !== id) return cm;
+        if (cm.hidden) {
+          const { hidden: _h, ...rest } = cm; void _h;
+          return rest;
+        }
+        return { ...cm, hidden: true as const };
+      }),
+    });
+  };
+
   const removeAnnotation = ({ kind, id }: SheetAnnotationSelection) => {
-    if (kind === 'virtual-sharp') {
+    if (kind === 'center-of-mass') {
+      if (settings.centerOfMass?.filter(cm => cm.id === id).length !== 1) return;
+      const kept = settings.centerOfMass.filter(cm => cm.id !== id);
+      const next = { ...settings };
+      if (kept.length) next.centerOfMass = kept;
+      else delete next.centerOfMass;
+      if (!onChange(next)) return;
+    } else if (kind === 'virtual-sharp') {
       if (settings.virtualSharps?.filter(vs => vs.id === id).length !== 1) return;
       const kept = settings.virtualSharps.filter(vs => vs.id !== id);
       const next = { ...settings };
@@ -1797,6 +1872,7 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
       ...(sheet.centerMarkGroups ? { centerMarkGroups: sheet.centerMarkGroups.map(r => r.ok ? { id: r.item.id, view: r.item.view, count: r.item.members.length, connectingLines: r.item.connectingLines, segments: r.geometry.segments } : { id: r.item.id, view: r.item.view, connectingLines: r.item.connectingLines, lost: r.reason }) } : {}),
       ...(sheet.bisectorCenterlines ? { bisectorCenterlines: sheet.bisectorCenterlines.map(r => r.ok ? { id: r.item.id, view: r.item.view, start: r.geometry.start, end: r.geometry.end, length: r.geometry.length, separation: r.geometry.separation } : { id: r.item.id, view: r.item.view, lost: r.reason }) } : {}),
       ...(sheet.virtualSharps ? { virtualSharps: sheet.virtualSharps.map(r => r.ok ? { id: r.item.id, view: r.item.view, point: r.geometry.point, point3: r.geometry.point3, angleDeg: r.geometry.angleDeg } : { id: r.item.id, view: r.item.view, lost: r.reason }) } : {}),
+      ...(sheet.centerOfMass ? { centerOfMass: sheet.centerOfMass.map(r => r.ok ? { id: r.item.id, view: r.item.view, bodyKey: r.item.bodyKey, hidden: !!r.item.hidden, diameter: r.geometry.diameter, point: r.geometry.point, centroid3: r.geometry.centroid3, massMethod: r.geometry.massMethod } : { id: r.item.id, view: r.item.view, bodyKey: r.item.bodyKey, hidden: !!r.item.hidden, lost: r.reason }) } : {}),
       suggestions: suggestions.map(x => ({ id: x.id, kind: x.kind, estimate: x.estimate })) };
     // (G24: the drawing's annotations on the model, for the GPU lane's 3D display and the flow.)
     w.__studioAnnotations = () => sheet && layout && views ? modelAnnotations({ views, layout, settings, sheet, ...(weldJoints ? { welds: weldJoints } : {}) }) : null;
@@ -1858,7 +1934,7 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
   };
   const exportPdf = () => {
     if (!sheet || !canExportPdf) return;
-    const all = sheetTotal > 1 && views ? buildSheets(views, wholeSettings, { title, date: today(), source, callout, threads, tableContent: tableContentOf, welds: weldJoints, bodyFaces, ...(bom ? { bom } : {}) }, cuts).map(x => x.sheet) : [sheet];
+    const all = sheetTotal > 1 && views ? buildSheets(views, wholeSettings, { title, date: today(), source, callout, threads, tableContent: tableContentOf, welds: weldJoints, bodyFaces, bodyMassSources, ...(bom ? { bom } : {}) }, cuts).map(x => x.sheet) : [sheet];
     const missingFits = all.flatMap((page, index) => page.dimensions.flatMap(dimension => {
       if (!dimension.ok || dimension.kind !== 'diameter') return [];
       const reason = fitMissOf(dimension.dim.edge, 2 * dimension.radius);
@@ -1892,7 +1968,7 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
       const ts = turnSections(settings, pick.orientation), list = Array.isArray(ts) ? ts : [];
       const r = await engine.drawing(model, { tangentEdges: !!settings.tangent, ...(list.length ? { sections: list } : {}), ...(pick.orientation !== 'y-' ? { orientation: pick.orientation as 'x+' } : {}), made: drawsMadeOnly(settings), ...(scope.kind === 'part' && scope.body ? { body: scope.body } : {}) });
       if (currentModel.current !== model || liveProjectionAction.current !== owner) return;
-      const turned = r.ok ? reorient(views, r.views, settings, pick.orientation) : null;
+      const turned = r.ok ? reorient(views, r.views, settings, pick.orientation, bodyMassSources) : null;
       if (r.ok && turned?.ok) base = { views: r.views, settings: turned.settings, sections: sheetSections(r.sections ?? []) };
     }
     let result: ReturnType<typeof autoLayout>;
@@ -1919,7 +1995,7 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
     const r = await engine.drawing(model, { tangentEdges: !!settings.tangent, ...(o !== 'y-' ? { orientation: o as 'x+' } : {}), made: drawsMadeOnly(settings), ...(scope.kind === 'part' && scope.body ? { body: scope.body } : {}) });
     if (currentModel.current !== model || liveProjectionAction.current !== owner) return;
     if (!r.ok) { onToast({ title: 'Could not turn the drawing', hint: r.error, detail: '' }); return; }
-    const t = reorient(views, r.views, wholeSettings, o);
+    const t = reorient(views, r.views, wholeSettings, o, bodyMassSources);
     if (!t.ok) { onToast({ title: 'The drawing was not turned', hint: t.message, detail: t.code === 'ORIENTATION_REMAP_FAILED' ? t.failed.map(f => `${f.dim}: ${f.was} → ${f.now}`).join('\n') : '' }); return; }
     if (!commitWhole(t.settings)) return;
     if (t.moved.length) onToast({ title: `Front now seen from ${SIDE_NAMES[o]}`, hint: `Annotations moved with their axes: ${t.moved.map(m => `${m.from} → ${m.to}`).join(', ')}.`, detail: '' });
@@ -2148,12 +2224,12 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
       if (l) parts.push(`<g class="dw-hover">${marksSvg([{ kind: 'line', a: toSheet(P(pending.view), l[0]), b: toSheet(P(pending.view), l[1]), pen: 'visible' }])}</g>`);
     }
     if (pending?.kind === 'linear') for (const ref of [pending.a, ...(pending.b ? [pending.b] : [])]) {
-      const q = toSheet(P(pending.view), pointIn(R(pending.view), ref)); parts.push(`<circle class="dw-pick" cx="${q[0]}" cy="${q[1]}" r="0.9"/>`);
+      const q = toSheet(P(pending.view), pointIn(R(pending.view), ref, bodyMassSources)); parts.push(`<circle class="dw-pick" cx="${q[0]}" cy="${q[1]}" r="0.9"/>`);
     }
     if (placing && hover) {
       const at = fromSheet(P(pending.view), hover.q);
       const d: DrawingDimension = pending.kind === 'linear'
-        ? { id: 'preview', view: pending.view, kind: 'linear', a: pending.a, b: pending.b!, orient: orientFor(pointIn(R(pending.view), pending.a), pointIn(R(pending.view), pending.b!), at), place: at }
+        ? { id: 'preview', view: pending.view, kind: 'linear', a: pending.a, b: pending.b!, orient: orientFor(pointIn(R(pending.view), pending.a, bodyMassSources), pointIn(R(pending.view), pending.b!, bodyMassSources), at), place: at }
         : pending.kind === 'angle' ? { id: 'preview', view: pending.view, kind: 'angle', a: pending.a, b: pending.b!, place: at, ...(pending.mode ? { mode: pending.mode } : {}) }
         : pending.kind === 'arc-length' ? { id: 'preview', view: pending.view, kind: 'arc-length', arc: pending.arc, place: at }
         : pending.kind === 'chamfer' ? { id: 'preview', view: pending.view, kind: 'chamfer', chamfer: pending.chamfer!, adjacent: pending.adjacent!, place: at }
@@ -2161,7 +2237,7 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
         : pending.kind === 'cylinder-diameter' ? { id: 'preview', view: pending.view, kind: 'cylinder-diameter', cylinder: pending.cylinder!, place: at }
         : pending.kind === 'circle-separation' ? { id: 'preview', view: pending.view, kind: 'circle-separation', first: pending.first!, second: pending.second!, mode: circleGapMode, place: at }
         : { id: 'preview', view: pending.view, kind: pending.kind, edge: pending.edge, near: pending.near, place: at };
-      const r = resolveDimension({ ...views, [pending.view]: R(pending.view) }, d, detailFor(settings, pending.view), showDetailHidden(settings, pending.view));
+      const r = resolveDimension({ ...views, [pending.view]: R(pending.view) }, d, detailFor(settings, pending.view), showDetailHidden(settings, pending.view), undefined, bodyMassSources);
       if (r.ok) { const preset = presetFor(settings); parts.push(`<g class="dw-preview">${marksSvg(dimensionMarks(P(pending.view), withShownText(r, undefined, preset) as typeof r, preset))}</g>`); }
     } else if (hover && v && tool === 'datum-target' && isViewId(hover.view)) {
       for (const point of (bodies ? endpointSnap(views[hover.view], hover.at, 9 * mmPerPx() / v.scale, bodies).points : [])) {
@@ -2169,7 +2245,14 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
         parts.push(`<circle class="dw-snap" cx="${q[0]}" cy="${q[1]}" r="1.4"/>`);
       }
     } else if (hover && v && tool !== 'select') {
-      if (hover.snap && tool === 'linear') { const q = toSheet(v, hover.snap.at); parts.push(`<circle class="dw-snap" cx="${q[0]}" cy="${q[1]}" r="1.4"/>`); }
+      if (hover.snap && tool === 'linear') {
+        const q = toSheet(v, hover.snap.at);
+        if (hover.snap.ref.at === 'com') {
+          parts.push(`<g data-com-snap="1"><circle class="dw-snap" cx="${q[0]}" cy="${q[1]}" r="2.2"/><line class="dw-snap" x1="${q[0] - 3.2}" y1="${q[1]}" x2="${q[0] + 3.2}" y2="${q[1]}"/><line class="dw-snap" x1="${q[0]}" y1="${q[1] - 3.2}" x2="${q[0]}" y2="${q[1] + 3.2}"/></g>`);
+        } else {
+          parts.push(`<circle class="dw-snap" cx="${q[0]}" cy="${q[1]}" r="1.4"/>`);
+        }
+      }
       else if (hover.edge && (tool !== 'linear' || !pending)) {
         const ok = tool === 'reflex-angle' ? hover.edge.kind === 'line'
           : tool === 'arc-length' ? !v.breaks?.length && pickArcLengthEdge(R(hover.view), hover.edge, hover.view, false).ok
@@ -2210,7 +2293,7 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
       }
     }
     return parts.join('');
-  }, [layout, views, bodies, hover, pending, tool, circleGapMode, settings, inspectedTarget, targetChoices, projectionActionOwner, selected, sheet, busy, sourceCurrent, scope.kind]);
+  }, [layout, views, bodies, bodyMassSources, hover, pending, tool, circleGapMode, settings, inspectedTarget, targetChoices, projectionActionOwner, selected, sheet, busy, sourceCurrent, scope.kind]);
 
   // The dimension being dragged is drawn where it goes.
   const shownMarkup = useMemo(() => {
@@ -2220,13 +2303,13 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
       const moved = previewDimensionGroup(drag.dimensionGroup.pair, drag.scale, drag.paperDelta);
       return moved ? sheetGroupsSvg(moved.preview, null, null, null, selectedDimensionIds) : sheetMarkup;
     }
-    if ('target' in drag) return sheetGroupsSvg(buildSheet(views, layout, { ...settings, datumTargets: (settings.datumTargets ?? []).map(t => t.id === drag.target ? { ...t, place: drag.place } : t) }, { svgSectionTextClearance, title, date: today(), callout, threads, tableContent: tableContentOf, welds: weldJoints, bodyFaces, ...(bom ? { bom } : {}) }, cuts), selected, selectedTarget);
-    if ('detail' in drag) return sheetGroupsSvg(buildSheet(views, layout, { ...settings, details: (settings.details ?? []).map(d => d.id === drag.detail ? { ...d, at: drag.at } : d) }, { svgSectionTextClearance, title, date: today(), callout, threads, tableContent: tableContentOf, welds: weldJoints, bodyFaces, ...(bom ? { bom } : {}) }, cuts), selected, selectedTarget);
-    if ('removed' in drag) return sheetGroupsSvg(buildSheet(views, layout, withSections(settings, sectionsOf(settings).map(x => x.id === drag.removed && x.removed ? { ...x, removed: { ...x.removed, at: drag.at } } : x)), { svgSectionTextClearance, title, date: today(), callout, threads, tableContent: tableContentOf, welds: weldJoints, bodyFaces, ...(bom ? { bom } : {}) }, cuts), selected, selectedTarget);
-    if ('note' in drag) return sheetGroupsSvg(buildSheet(views, layout, { ...settings, notes: (settings.notes ?? []).map(n => n.id === drag.note ? { ...n, at: drag.at } : n) }, { svgSectionTextClearance, title, date: today(), callout, threads, tableContent: tableContentOf, welds: weldJoints, bodyFaces, ...(bom ? { bom } : {}) }, cuts), selected, selectedTarget);
-    const dims = settings.dimensions.map(d => d.id === drag.id ? (d.kind === 'linear' ? { ...d, place: drag.place, orient: orientFor(pointIn(projectionOf(views, sheet ?? undefined, d.view)!, d.a), pointIn(projectionOf(views, sheet ?? undefined, d.view)!, d.b), drag.place) } : { ...d, place: drag.place }) : d);
-    return sheetGroupsSvg(buildSheet(views, layout, { ...settings, dimensions: dims }, { svgSectionTextClearance, title, date: today(), callout, threads, tableContent: tableContentOf, welds: weldJoints, bodyFaces, ...(bom ? { bom } : {}) }, cuts), selected, selectedTarget);
-  }, [drag, views, layout, sheet, sheetMarkup, settings, title, selected, selectedTarget, weldJoints, bom, svgSectionTextClearance,
+    if ('target' in drag) return sheetGroupsSvg(buildSheet(views, layout, { ...settings, datumTargets: (settings.datumTargets ?? []).map(t => t.id === drag.target ? { ...t, place: drag.place } : t) }, { svgSectionTextClearance, title, date: today(), callout, threads, tableContent: tableContentOf, welds: weldJoints, bodyFaces, bodyMassSources, ...(bom ? { bom } : {}) }, cuts), selected, selectedTarget);
+    if ('detail' in drag) return sheetGroupsSvg(buildSheet(views, layout, { ...settings, details: (settings.details ?? []).map(d => d.id === drag.detail ? { ...d, at: drag.at } : d) }, { svgSectionTextClearance, title, date: today(), callout, threads, tableContent: tableContentOf, welds: weldJoints, bodyFaces, bodyMassSources, ...(bom ? { bom } : {}) }, cuts), selected, selectedTarget);
+    if ('removed' in drag) return sheetGroupsSvg(buildSheet(views, layout, withSections(settings, sectionsOf(settings).map(x => x.id === drag.removed && x.removed ? { ...x, removed: { ...x.removed, at: drag.at } } : x)), { svgSectionTextClearance, title, date: today(), callout, threads, tableContent: tableContentOf, welds: weldJoints, bodyFaces, bodyMassSources, ...(bom ? { bom } : {}) }, cuts), selected, selectedTarget);
+    if ('note' in drag) return sheetGroupsSvg(buildSheet(views, layout, { ...settings, notes: (settings.notes ?? []).map(n => n.id === drag.note ? { ...n, at: drag.at } : n) }, { svgSectionTextClearance, title, date: today(), callout, threads, tableContent: tableContentOf, welds: weldJoints, bodyFaces, bodyMassSources, ...(bom ? { bom } : {}) }, cuts), selected, selectedTarget);
+    const dims = settings.dimensions.map(d => d.id === drag.id ? (d.kind === 'linear' ? { ...d, place: drag.place, orient: orientFor(pointIn(projectionOf(views, sheet ?? undefined, d.view)!, d.a, bodyMassSources), pointIn(projectionOf(views, sheet ?? undefined, d.view)!, d.b, bodyMassSources), drag.place) } : { ...d, place: drag.place }) : d);
+    return sheetGroupsSvg(buildSheet(views, layout, { ...settings, dimensions: dims }, { svgSectionTextClearance, title, date: today(), callout, threads, tableContent: tableContentOf, welds: weldJoints, bodyFaces, bodyMassSources, ...(bom ? { bom } : {}) }, cuts), selected, selectedTarget);
+  }, [drag, views, layout, sheet, sheetMarkup, settings, title, selected, selectedTarget, weldJoints, bodyMassSources, bom, svgSectionTextClearance,
     activeDimensionGroup, selectedDimensionIds]);
 
   const hint = message ?? (radiusMove ? "Click the sheet to move the shortened leader origin. Esc cancels." : null) ?? (currentReattachment ? `Select a rim in the ${viewLabel(currentReattachment.original.view)} · Esc cancels` : null) ?? (pending ? (pending.kind === 'standalone-frame' ? `Click the sheet to place the frame. View: ${viewLabel(pending.view)}. Esc cancels.` : pending.kind === 'datum-target' ? 'Click where the target symbol goes · Esc cancels' : pending.kind === 'datum-line' ? 'Now the other end of the target line · Esc cancels' : pending.kind === 'note' ? 'Click where the note’s text goes · Esc cancels' : pending.kind === 'detail-center' ? `Select the centre of Detail ${pending.moving.detail.id} on the ${viewLabel(pending.view)} · Esc cancels` : pending.kind === 'detail' ? 'Now how far the detail’s circle reaches · Esc cancels' : pending.kind === 'radial-thickness' ? (!pending.first ? 'Select the first concentric full circle · Esc cancels' : !pending.second ? 'Now select the second concentric full circle · Esc cancels' : 'Click where the radial thickness goes · Esc cancels') : pending.kind === 'cylinder-diameter' ? (!pending.cylinder ? 'Select a visible cylinder side silhouette · Esc cancels' : 'Click where the side diameter goes · Esc cancels') : pending.kind === 'circle-separation' ? (!pending.first ? 'Select the first disjoint full circle · Esc cancels' : !pending.second ? 'Now select the second disjoint full circle · Esc cancels' : `Click where the ${circleGapMode} circle gap goes · Esc cancels`) : pending.kind === 'arc-centerline' ? 'Now click the second concentric partial circular arc · Esc cancels' : pending.kind === 'center-mark-group' ? `${pending.members.length} hole${pending.members.length === 1 ? '' : 's'} selected${pending.members.length < MIN_CENTER_MARK_GROUP_MEMBERS ? ` — pick at least ${MIN_CENTER_MARK_GROUP_MEMBERS - pending.members.length} more collinear hole${MIN_CENTER_MARK_GROUP_MEMBERS - pending.members.length === 1 ? '' : 's'}` : ' — click Create row or pick more collinear holes'} · Esc cancels` : pending.kind === 'bisector-centerline' ? 'Now click the second parallel equal-span straight edge · Esc cancels' : pending.kind === 'virtual-sharp' ? 'Now click the second non-parallel straight edge · Esc cancels' : pending.kind === 'chamfer' ? (!pending.chamfer ? 'Select the 45° chamfer bevel edge · Esc cancels' : !pending.adjacent ? 'Now click an adjacent straight wall sharing a corner with the bevel · Esc cancels' : 'Click where the chamfer callout goes · Esc cancels') : pending.kind === 'angle' ? (pending.b ? (pending.mode ? 'Click to place the reflex angle · Esc cancels' : 'Choose the side of the corner to measure, then click to place the angle · Esc cancels') : 'Now the second edge · Esc cancels') : pending.kind === 'linear' && !pending.b ? 'Now the second point · Esc cancels' : pending.kind === 'diameter' && pending.owner ? `${pending.owner} · Click where the dimension goes · Esc cancels` : 'Click where the dimension goes · Esc cancels') : tool === 'select' ? null : tool === 'datum-target' ? (targetDraft.kind === 'point' ? 'Click a straight edge endpoint · Esc cancels' : targetDraft.kind === 'line' ? 'Click the first end of the target line · Esc cancels' : 'Click the centre of the target area · Esc cancels') : TOOLS.find(t => t.tool === tool)!.hint);
@@ -2574,6 +2657,24 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
           </div>
         </div>}
 
+        {((settings.centerOfMass?.length ?? 0) > 0 || (tool === 'center-of-mass' && comBodyList.length > 1)) && <div role="group" aria-label="Center of mass">
+          <div className="card-title" style={{ marginTop: 8 }}>CENTER OF MASS <span className="muted">{settings.centerOfMass?.length ?? 0}</span></div>
+          {comBodyList.length > 1 && <label className="field"><span>Body</span><select aria-label="Center of mass body" value={activeComBodyKey} onChange={e => setComBodyChoice(e.target.value)}>
+            <option value="">Choose body…</option>
+            {comBodyList.map(b => <option key={b.key} value={b.key}>{b.name ? `${b.name} (${b.key})` : b.key}</option>)}
+          </select></label>}
+          <div className="dw-dims">
+            {(sheet?.centerOfMass ?? []).map(r => <div key={r.item.id} className={'dw-dim' + (selected?.kind === 'center-of-mass' && selected.id === r.item.id ? ' sel' : '') + (r.ok ? '' : ' lost')} title={r.ok ? `${r.item.bodyKey} · ${r.geometry.massMethod}` : r.reason}>
+              <button type="button" className="dw-annotation-select" aria-pressed={selected?.kind === 'center-of-mass' && selected.id === r.item.id}
+                onClick={() => { cancel(); setTool('select'); setSelected({ kind: 'center-of-mass', id: r.item.id }); setSelectedTarget(null); setSelectedFrame(null); }}>
+                <b>{r.ok ? `(${Math.round(r.geometry.point[0] * 100) / 100}, ${Math.round(r.geometry.point[1] * 100) / 100})` : 'lost'}</b><span>{r.item.id} · {r.item.view}{r.item.hidden ? ' · hidden' : ''}</span>
+              </button>
+              <Button variant="ghost" size="xs" aria-label={`${r.item.hidden ? 'Show' : 'Hide'} center of mass ${r.item.id}`} onClick={e => { e.stopPropagation(); toggleCenterOfMassHidden(r.item.id); }}>{r.item.hidden ? 'Show' : 'Hide'}</Button>
+              <Button variant="ghost" size="xs" aria-label={`Remove center of mass ${r.item.id}`} onClick={e => { e.stopPropagation(); removeAnnotation({ kind: 'center-of-mass', id: r.item.id }); }}><Icon name="close" small /></Button>
+            </div>)}
+          </div>
+        </div>}
+
         <DatumsEditor settings={settings} allDatums={wholeSettings.datums ?? []} availableViews={(['front', 'top', 'right'] as const).filter(id => { const placement = placementAt(id); return !!placement && !placement.hidden; })} views={views} scale={layout?.scale ?? 1} onChange={onChange} onRefused={setMessage} />
 
         <DatumTargetsEditor draft={targetDraft} onDraft={next => {
@@ -2656,8 +2757,12 @@ function endpointSnap(pr: DrawingViews[ViewId], at: XY, tolerance: number, bodie
   return { points: out };
 }
 
-/** A dimension point in a view's coordinates, by its stored model point (it may since have moved). */
-function pointIn(pr: DrawingViews[ViewId], ref: DimPoint): XY {
+/** A dimension point in a view's coordinates, by its live mass source or stored model point. */
+function pointIn(pr: DrawingViews[ViewId], ref: DimPoint, comSources?: ReadonlyMap<string, DrawingBodyMassSource>): XY {
+  if (ref.at === 'com') {
+    const p = resolveCenterOfMassPoint(ref.bodyKey, comSources);
+    if (p) return inView(pr, p);
+  }
   for (const e of pr.edges) if (e.name === ref.edge) {
     const cands = ref.at === 'center' ? (e.circle ? [e.circle.center] : []) : (e.ends ?? []);
     let best: readonly number[] | null = null, bd = Infinity;
