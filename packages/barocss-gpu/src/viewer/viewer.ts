@@ -314,6 +314,7 @@ export class Viewer {
   private scheduled = 0;
   private waiters: { resolve: () => void; reject: (error: unknown) => void }[] = [];
   private disposed = false;
+  private contextConfigured = false;
   /** The device, for compute passes beside the drawing (G25, experimental): null before it is ready or once disposed. */
   get computeDevice(): object | null { return this.ready ? this.device ?? null : null; }
   private recovering: Promise<void> | null = null;
@@ -337,17 +338,49 @@ export class Viewer {
   /** Open a viewer on a canvas. Throws a ViewerError when WebGPU or a device is not available. */
   static async create(canvas: HTMLCanvasElement, options: ViewerOptions = {}): Promise<Viewer> {
     const v = new Viewer(canvas, options);
-    await v.start();
-    if (options.controls !== false) {
-      const opts = typeof options.controls === 'object' ? options.controls : {};
-      (v as { controls: OrbitControls | null }).controls = new OrbitControls(canvas, () => v.camera, () => v.requestRender(), { pointAt: (x, y) => v.pointAt(x, y), ...opts });
+    try {
+      await v.start();
+      if (options.controls !== false) {
+        const opts = typeof options.controls === 'object' ? options.controls : {};
+        (v as { controls: OrbitControls | null }).controls = new OrbitControls(canvas, () => v.camera, () => v.requestRender(), { pointAt: (x, y) => v.pointAt(x, y), ...opts });
+      }
+      if (options.autoResize !== false && typeof ResizeObserver !== 'undefined') {
+        const observer = new ResizeObserver(() => v.resize());
+        v.resizeObserver = observer;
+        observer.observe(canvas);
+      }
+      if (options.autoResize !== false) v.resize();
+      return v;
+    } catch (error) {
+      try { v.dispose(); } catch { /* Keep the original initialization error. */ }
+      throw error;
     }
-    if (options.autoResize !== false && typeof ResizeObserver !== 'undefined') {
-      v.resizeObserver = new ResizeObserver(() => v.resize());
-      v.resizeObserver.observe(canvas);
-    }
-    if (options.autoResize !== false) v.resize();
-    return v;
+  }
+
+  /** Release every GPU resource allocated during start() without throwing (safe for partial initialization). */
+  private releaseStartResources(pendingWhite?: Texture | null): void {
+    const release = (resource: { destroy(): void } | null | undefined): void => {
+      if (!resource) return;
+      try { resource.destroy(); } catch { /* Keep the initial error. */ }
+    };
+    release(this.outputBuffer); this.outputBuffer = undefined!;
+    release(this.frameBuffer); this.frameBuffer = undefined!;
+    release(this.objectBuffer); this.objectBuffer = undefined!;
+    this.objectCapacity = 0;
+    for (const buffer of this.shadowFrameBuffers) release(buffer);
+    this.shadowFrameBuffers = []; this.shadowFrameGroups = []; this.shadowCapGroups = [];
+    release(this.zeroParams); this.zeroParams = undefined!;
+    release(this.identityInstance); this.identityInstance = undefined!;
+    if (pendingWhite && pendingWhite !== this.white?.texture) release(pendingWhite);
+    release(this.white?.texture); this.white = undefined!;
+    release(this.black); this.black = undefined!;
+    release(this.emptyShadow); this.emptyShadow = undefined!;
+    release(this.emptyFront); this.emptyFront = undefined!;
+    release(this.emptyFrontSamples); this.emptyFrontSamples = undefined!;
+    release(this.brdfLut); this.brdfLut = undefined!;
+    this.pipelines.clear(); this.mipPipelines.clear(); this.envPipelines.clear(); this.bloomPipelines.clear();
+    this.focusPipeline = null;
+    this.releaseBloom(); this.releaseFocus();
   }
 
   private async start(): Promise<void> {
@@ -357,7 +390,7 @@ export class Viewer {
     this.alive();
     if (!adapter) throw new ViewerError('NO_ADAPTER', 'No WebGPU adapter');
     const device = await adapter.requestDevice();
-    let context: CanvasContext | null = null, configured = false;
+    let context: CanvasContext | null = null, configured = false, whiteTexture: Texture | null = null;
     try {
       this.alive();
       context = this.canvas.getContext('webgpu') as unknown as CanvasContext | null;
@@ -365,12 +398,15 @@ export class Viewer {
       this.device = device; this.context = context; this.format = gpu.getPreferredCanvasFormat();
       device.onuncapturederror = e => this.report(e.error.message);
       context.configure({ device, format: this.format, alphaMode: this.background ? 'opaque' : 'premultiplied', usage: TextureUsage.RENDER_ATTACHMENT | TextureUsage.COPY_SRC });
-      configured = true;
+      configured = true; this.contextConfigured = true;
       await this.createPipelines();
       this.alive();
       this.outputBuffer = device.createBuffer({ size: OUTPUT_BYTES, usage: BufferUsage.UNIFORM | BufferUsage.COPY_DST, label: 'viewer output' });
       this.frameBuffer = device.createBuffer({ size: FRAME_BYTES, usage: BufferUsage.UNIFORM | BufferUsage.COPY_DST, label: 'viewer frame' });
-      this.shadowFrameBuffers = Array.from({ length: MAX_SHADOWS }, (_, i) => device.createBuffer({ size: FRAME_BYTES, usage: BufferUsage.UNIFORM | BufferUsage.COPY_DST, label: `viewer shadow frame ${i}` }));
+      this.shadowFrameBuffers = [];
+      for (let i = 0; i < MAX_SHADOWS; i++) {
+        this.shadowFrameBuffers.push(device.createBuffer({ size: FRAME_BYTES, usage: BufferUsage.UNIFORM | BufferUsage.COPY_DST, label: `viewer shadow frame ${i}` }));
+      }
       this.shadowSampler = (device as unknown as { createSampler(d: object): object }).createSampler({ compare: 'less', magFilter: 'linear', minFilter: 'linear', addressModeU: 'clamp-to-edge', addressModeV: 'clamp-to-edge' });
       this.mipSampler = device.createSampler({ minFilter: 'linear', magFilter: 'linear' });
       this.rampSampler = device.createSampler({ minFilter: 'linear', magFilter: 'linear', addressModeU: 'clamp-to-edge', addressModeV: 'clamp-to-edge' });
@@ -378,13 +414,14 @@ export class Viewer {
       this.mipPipelines.clear();
       this.envPipelines.clear(); this.bloomPipelines.clear(); this.focusPipeline = null; this.releaseFocus();
       this.envSampler = device.createSampler({ minFilter: 'linear', magFilter: 'linear', mipmapFilter: 'linear', addressModeU: 'repeat', addressModeV: 'clamp-to-edge' });
-      const white = device.createTexture({ size: [1, 1], format: 'rgba8unorm', usage: TextureUsage.TEXTURE_BINDING | TextureUsage.COPY_DST, label: 'viewer white' });
-      device.queue.writeTexture({ texture: white }, new Uint8Array([255, 255, 255, 255]), { bytesPerRow: 4 }, [1, 1]);
+      whiteTexture = device.createTexture({ size: [1, 1], format: 'rgba8unorm', usage: TextureUsage.TEXTURE_BINDING | TextureUsage.COPY_DST, label: 'viewer white' });
+      device.queue.writeTexture({ texture: whiteTexture }, new Uint8Array([255, 255, 255, 255]), { bytesPerRow: 4 }, [1, 1]);
       this.black = device.createTexture({ size: [1, 1], format: 'rgba8unorm', usage: TextureUsage.TEXTURE_BINDING | TextureUsage.COPY_DST, label: 'viewer black' });
       device.queue.writeTexture({ texture: this.black }, new Uint8Array([0, 0, 0, 0]), { bytesPerRow: 4 }, [1, 1]);
       this.bloomChain = null;
       this.zeroParams = device.createBuffer({ size: 64, usage: BufferUsage.UNIFORM | BufferUsage.COPY_DST, label: 'viewer no params' });
-      this.white = { texture: white, group: device.createBindGroup({ layout: this.materialLayout, entries: this.materialEntries(white, this.mipSampler, this.zeroParams, undefined, white) }) };
+      this.white = { texture: whiteTexture, group: device.createBindGroup({ layout: this.materialLayout, entries: this.materialEntries(whiteTexture, this.mipSampler, this.zeroParams, undefined, whiteTexture) }) };
+      whiteTexture = null;
       this.identityInstance = device.createBuffer({ size: INSTANCE_STRIDE, usage: BufferUsage.VERTEX | BufferUsage.COPY_DST, label: 'viewer identity instance' });
       device.queue.writeBuffer(this.identityInstance, 0, new Uint8Array(packInstances({ transforms: identity() }).data));
       this.emptyShadow = device.createTexture({ size: [1, 1], format: 'depth32float', usage: TextureUsage.TEXTURE_BINDING | TextureUsage.RENDER_ATTACHMENT, label: 'viewer no shadow' });
@@ -404,8 +441,18 @@ export class Viewer {
     } catch (error) {
       // dispose() may already have released a device published before an asynchronous pipeline wait.
       if (!this.disposed || this.device !== device) {
-        if (configured) try { context?.unconfigure(); } catch { /* Keep the initial error. */ }
+        try { device.onuncapturederror = null; } catch { /* Keep the initial error. */ }
+        if (this.device === device) this.releaseStartResources(whiteTexture);
+        else try { whiteTexture?.destroy(); } catch { /* Keep the initial error. */ }
+        if (configured) {
+          if (this.context === context) this.contextConfigured = false;
+          try { context?.unconfigure(); } catch { /* Keep the initial error. */ }
+        }
         try { device.destroy(); } catch { /* Keep the initial error. */ }
+        if (this.device === device) {
+          this.device = undefined!;
+          this.context = undefined!;
+        }
       }
       throw error;
     }
@@ -988,15 +1035,18 @@ export class Viewer {
     }
     // (The BRDF table reads nothing: its pass has no bindings.)
     const sourced = entry !== 'fsLut', buffer = sourced ? this.device.createBuffer({ size: 16, usage: BufferUsage.UNIFORM | BufferUsage.COPY_DST, label: 'viewer environment parameters' }) : null;
-    if (buffer) this.device.queue.writeBuffer(buffer, 0, new Float32Array(params));
-    const group = buffer ? this.device.createBindGroup({ layout: pipeline.getBindGroupLayout(0), entries: [
-      { binding: 0, resource: source.createView() }, { binding: 1, resource: this.envSampler }, { binding: 2, resource: { buffer } },
-    ] }) : null;
-    const enc = this.device.createCommandEncoder();
-    const pass = enc.beginRenderPass({ label: `viewer environment ${entry}`, colorAttachments: [{ view: target.createView({ baseMipLevel: level, mipLevelCount: 1 }), loadOp: 'clear', storeOp: 'store', clearValue: { r: 0, g: 0, b: 0, a: 0 } }] });
-    pass.setPipeline(pipeline); if (group) pass.setBindGroup(0, group); pass.draw(3); pass.end();
-    this.device.queue.submit([enc.finish()]);
-    buffer?.destroy();
+    try {
+      if (buffer) this.device.queue.writeBuffer(buffer, 0, new Float32Array(params));
+      const group = buffer ? this.device.createBindGroup({ layout: pipeline.getBindGroupLayout(0), entries: [
+        { binding: 0, resource: source.createView() }, { binding: 1, resource: this.envSampler }, { binding: 2, resource: { buffer } },
+      ] }) : null;
+      const enc = this.device.createCommandEncoder();
+      const pass = enc.beginRenderPass({ label: `viewer environment ${entry}`, colorAttachments: [{ view: target.createView({ baseMipLevel: level, mipLevelCount: 1 }), loadOp: 'clear', storeOp: 'store', clearValue: { r: 0, g: 0, b: 0, a: 0 } }] });
+      pass.setPipeline(pipeline); if (group) pass.setBindGroup(0, group); pass.draw(3); pass.end();
+      this.device.queue.submit([enc.finish()]);
+    } finally {
+      buffer?.destroy();
+    }
   }
 
   /** Fill a texture's mip levels, each a filtered half of the one above. */
@@ -2371,7 +2421,10 @@ export class Viewer {
     this.recovering = Promise.resolve().then(async () => {
       if (this.disposed) { this.recovering = null; return; }
       try {
-        this.context.unconfigure();
+        if (this.contextConfigured) {
+          this.contextConfigured = false;
+          this.context.unconfigure();
+        }
         await this.start();
       } catch (cause) {
         if (this.disposed) return;
@@ -2421,23 +2474,32 @@ export class Viewer {
     for (const session of this.pathTraces) session.dispose();
     this.pathTraces.clear();
     this.controls?.dispose();
+    (this as { controls: OrbitControls | null }).controls = null;
     this.resizeObserver?.disconnect();
+    this.resizeObserver = null;
     this.cancelScheduled();
     for (const g of this.geometries) g.release();
     for (const m of this.meshes) { m.instances?.buffer?.destroy(); m.materialState?.params.destroy(); m.materialState?.pbrParams.destroy(); m.mapState?.params.destroy(); m.mapState?.texture.destroy(); }
     this.geometries.clear(); this.meshes = [];
     this.targets?.msaa?.destroy(); this.targets?.scene.destroy(); this.targets?.depth.destroy();
     if (this.pickTargets) { this.pickTargets.id.destroy(); this.pickTargets.z.destroy(); this.pickTargets.instance.destroy(); this.pickTargets.depth.destroy(); this.pickTargets.read.destroy(); }
+    if (this.oit) { this.oit.accumMs?.destroy(); this.oit.revealMs?.destroy(); this.oit.accum.destroy(); this.oit.reveal.destroy(); this.oit = null; }
+    this.atlasGpu?.texture.destroy(); this.atlasGpu = null;
+    this.zeroUV?.buffer.destroy(); this.zeroUV = null;
     this.frameBuffer?.destroy(); this.objectBuffer?.destroy(); this.outputBuffer?.destroy();
     for (const buffer of this.shadowFrameBuffers) buffer.destroy();
     this.shadowFrameBuffers = []; this.shadowFrameGroups = []; this.shadowCapGroups = [];
     this.targets?.mask.destroy(); this.targets?.maskDepth.destroy(); this.targets?.capFront.destroy(); this.targets?.capFrontSamples?.destroy(); this.emptyFront?.destroy(); this.emptyFrontSamples?.destroy(); this.lightProbe?.destroy();
-    this.shadowMap?.destroy(); this.emptyShadow?.destroy(); this.identityInstance?.destroy(); this.white?.texture.destroy(); this.zeroParams?.destroy();
+    this.shadowMap?.destroy(); this.emptyShadow?.destroy(); this.identityInstance?.destroy(); this.white?.texture.destroy(); this.zeroParams?.destroy(); this.brdfLut?.destroy();
     this.releaseBloom(); this.releaseFocus(); this.black?.destroy();
     for (const t of this.textures) t.dispose();
     this.textures.clear();
     let cleanupError: unknown, cleanupFailed = false;
-    try { this.context?.unconfigure(); } catch (error) { cleanupError = error; cleanupFailed = true; }
+    if (this.device) try { this.device.onuncapturederror = null; } catch { /* Best-effort handler cleanup. */ }
+    if (this.contextConfigured) {
+      this.contextConfigured = false;
+      try { this.context?.unconfigure(); } catch (error) { cleanupError = error; cleanupFailed = true; }
+    }
     try { this.device?.destroy(); } catch (error) { if (!cleanupFailed) { cleanupError = error; cleanupFailed = true; } }
     for (const waiter of this.waiters.splice(0)) waiter.resolve();
     if (cleanupFailed) throw cleanupError;

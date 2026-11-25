@@ -59,34 +59,39 @@ export class OrbitControls {
       element.addEventListener(type, fn as EventListener, opts);
       this.off.push(() => element.removeEventListener(type, fn as EventListener, opts));
     };
-    on('pointerdown', e => {
-      if (!this.enabled || this.drag) return;
-      const mode = e.button === 0 && !e.shiftKey ? 'orbit' : e.button <= 2 ? 'pan' : null;
-      if (!mode) return;
-      this.drag = { id: e.pointerId, mode, x: e.clientX, y: e.clientY };
-      element.setPointerCapture?.(e.pointerId);
-    });
-    on('pointermove', e => {
-      const d = this.drag;
-      if (!d || d.id !== e.pointerId) return;
-      const dx = e.clientX - d.x, dy = e.clientY - d.y;
-      d.x = e.clientX; d.y = e.clientY;
-      if (d.mode === 'orbit') { const s = this.options.rotateSpeed ?? 0.008; orbit(this.camera(), dx * s, dy * s); }
-      else pan(this.camera(), dx, dy, element.clientHeight);
-      this.onChange();
-    });
-    const end = (e: PointerEvent) => { if (this.drag?.id === e.pointerId) { this.drag = null; element.releasePointerCapture?.(e.pointerId); } };
-    on('pointerup', end); on('pointercancel', end);
-    on('contextmenu', e => e.preventDefault());
-    on('wheel', e => {
-      if (!this.enabled) return;
-      e.preventDefault();
-      const notch = e.deltaMode === 1 ? e.deltaY / 3 : e.deltaMode === 2 ? e.deltaY * 10 : e.deltaY / 100;
-      const factor = Math.pow(this.options.zoomSpeed ?? 1.2, notch), r = element.getBoundingClientRect();
-      const apply = (p: Vec3 | null) => { zoom(this.camera(), factor, p ?? undefined); this.onChange(); };
-      const p = this.options.pointAt?.(e.clientX - r.left, e.clientY - r.top);
-      if (p instanceof Promise) p.then(apply, () => apply(null)); else apply(p ?? null);
-    }, { passive: false });
+    try {
+      on('pointerdown', e => {
+        if (!this.enabled || this.drag) return;
+        const mode = e.button === 0 && !e.shiftKey ? 'orbit' : e.button <= 2 ? 'pan' : null;
+        if (!mode) return;
+        this.drag = { id: e.pointerId, mode, x: e.clientX, y: e.clientY };
+        element.setPointerCapture?.(e.pointerId);
+      });
+      on('pointermove', e => {
+        const d = this.drag;
+        if (!d || d.id !== e.pointerId) return;
+        const dx = e.clientX - d.x, dy = e.clientY - d.y;
+        d.x = e.clientX; d.y = e.clientY;
+        if (d.mode === 'orbit') { const s = this.options.rotateSpeed ?? 0.008; orbit(this.camera(), dx * s, dy * s); }
+        else pan(this.camera(), dx, dy, element.clientHeight);
+        this.onChange();
+      });
+      const end = (e: PointerEvent) => { if (this.drag?.id === e.pointerId) { this.drag = null; element.releasePointerCapture?.(e.pointerId); } };
+      on('pointerup', end); on('pointercancel', end);
+      on('contextmenu', e => e.preventDefault());
+      on('wheel', e => {
+        if (!this.enabled) return;
+        e.preventDefault();
+        const notch = e.deltaMode === 1 ? e.deltaY / 3 : e.deltaMode === 2 ? e.deltaY * 10 : e.deltaY / 100;
+        const factor = Math.pow(this.options.zoomSpeed ?? 1.2, notch), r = element.getBoundingClientRect();
+        const apply = (p: Vec3 | null) => { zoom(this.camera(), factor, p ?? undefined); this.onChange(); };
+        const p = this.options.pointAt?.(e.clientX - r.left, e.clientY - r.top);
+        if (p instanceof Promise) p.then(apply, () => apply(null)); else apply(p ?? null);
+      }, { passive: false });
+    } catch (error) {
+      this.dispose();
+      throw error;
+    }
   }
 
   dispose(): void { for (const f of this.off.splice(0)) f(); this.drag = null; }
