@@ -427,7 +427,7 @@ export type { ProfileWithHolesInput } from './brep/brep-sweep.js';
 export { tessellateBrep, triangulatePolygonWithHoles } from './brep/brep-tessellate.js';
 export type { BrepMesh, BrepMeshFace, BrepMeshEdge, BrepTessellationOptions } from './brep/brep-tessellate.js';
 export { projectBrepHiddenLines } from './brep/brep-hidden-line.js';
-export type { BrepProjection, HiddenLineOptions, HiddenLineView, ProjectedCurve, ProjectedEdge, ProjectedPiece, ProjectedXY } from './brep/brep-hidden-line.js';
+export type { BrepProjection, HiddenLineOptions, HiddenLineView, ProjectedCurve, ProjectedCylinderSource, ProjectedEdge, ProjectedPiece, ProjectedXY } from './brep/brep-hidden-line.js';
 export { booleanPolygons, planarArrangementCounts, planarArrangementError, isPlanarArrangementError } from './brep/planar-arrangement.js';
 export type { PolygonWithHoles, PlanarBooleanOperation } from './brep/planar-arrangement.js';
 export { booleanPolyhedra } from './brep/polyhedral-boolean.js';

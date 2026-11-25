@@ -55,6 +55,8 @@ export interface Ref {
   drawingBodyKey?: string | null;
   /** Datum targets keep their exact edge name and require an explicitly selected endpoint. */
   datumTarget?: true; noteTarget?: true; targetEndpoint?: 'min' | 'max';
+  /** Cylinder side-diameter face references keep any valid half-cylinder name of the same live display face. */
+  cylinderFace?: true;
   /** `node`: that feature's parent body; `part`: that part's face table (a mate); neither: the part's bodies. */
   node: number | null; parent?: { node: number; side: string }; part?: string;
   /** The name it had before a re-match (while marked). */
@@ -100,6 +102,7 @@ function writable(d: StudioDoc): StudioDoc {
       if (dimension.kind === 'arc-length') return { ...dimension, arc: { ...dimension.arc } };
       if (dimension.kind === 'chamfer') return { ...dimension, chamfer: { ...dimension.chamfer }, adjacent: { ...dimension.adjacent } };
       if (dimension.kind === 'radial-thickness') return { ...dimension, first: { ...dimension.first }, second: { ...dimension.second } };
+      if (dimension.kind === 'cylinder-diameter') return { ...dimension, cylinder: { ...dimension.cylinder } };
       return { ...dimension };
     }),
   };
@@ -147,6 +150,7 @@ export function referencesOf(source: StudioDoc, readOnly = false): { doc: Studio
     else if (d.kind === 'arc-length') { const x: Pointed & { edge: string } = d.arc; refs.push(pointed(`dimension ${d.id}`, true, x, () => x.edge, e => { x.edge = e; })); }
     else if (d.kind === 'chamfer') for (const x of [d.chamfer, d.adjacent] as (Pointed & { edge: string })[]) refs.push(pointed(`dimension ${d.id}`, true, x, () => x.edge, e => { x.edge = e; }));
     else if (d.kind === 'radial-thickness') for (const x of [d.first, d.second] as (Pointed & { edge: string })[]) refs.push(pointed(`dimension ${d.id}`, true, x, () => x.edge, e => { x.edge = e; }));
+    else if (d.kind === 'cylinder-diameter') { const x: Pointed & { face: string } = d.cylinder; refs.push({ ...pointed(`dimension ${d.id}`, false, x, () => x.face, f => { x.face = f; }), nativeFace: true, cylinderFace: true }); }
     // (A pitch circle, or a point at its centre: each member hole's edge, R14.5.)
     else if (d.kind === 'pcd') for (const m of d.ring as (Pointed & { edge: string })[]) refs.push(pointed(`dimension ${d.id}`, true, m, () => m.edge, e => { m.edge = e; }));
     else if ('a' in d) for (const p of [d.a, d.b] as unknown as (Pointed & { edge: string; at?: string; ring?: (Pointed & { edge: string })[] })[]) {
@@ -201,7 +205,7 @@ function unsigned(doc: StudioDoc): boolean {
   for (const m of doc.mates ?? []) for (const side of [m.a, m.b]) if (side.face && !frameFace(side.face) && !side.sig) return true;
   for (const d of doc.drawing?.dimensions ?? []) {
     const unsignedPoint = (p: { sig?: unknown; at?: string; ring?: { sig?: unknown }[] }) => p.at === 'pcd' ? (p.ring ?? []).some(m => !m.sig) : !p.sig;
-    if (d.kind === 'pcd' ? d.ring.some(m => !m.sig) : d.kind === 'arc-length' ? !d.arc.sig : d.kind === 'chamfer' ? !d.chamfer.sig || !d.adjacent.sig : d.kind === 'radial-thickness' ? !d.first.sig || !d.second.sig : 'a' in d ? (d.kind === 'linear' ? unsignedPoint(d.a) || unsignedPoint(d.b) : !d.a.sig || !d.b.sig) : !d.sig) return true;
+    if (d.kind === 'pcd' ? d.ring.some(m => !m.sig) : d.kind === 'arc-length' ? !d.arc.sig : d.kind === 'chamfer' ? !d.chamfer.sig || !d.adjacent.sig : d.kind === 'radial-thickness' ? !d.first.sig || !d.second.sig : d.kind === 'cylinder-diameter' ? !d.cylinder.sig : 'a' in d ? (d.kind === 'linear' ? unsignedPoint(d.a) || unsignedPoint(d.b) : !d.a.sig || !d.b.sig) : !d.sig) return true;
   }
   for (const target of doc.drawing?.datumTargets ?? []) if (target.point && target.point.endpoint !== undefined && !target.point.sig && target.point.was === undefined) return true;
   for (const look of Object.values(doc.bodies ?? {})) if (look.faces && Object.keys(look.faces).some(f => !look.faceSigs?.[f])) return true;
@@ -390,9 +394,9 @@ export async function verifyReferences(doc: StudioDoc, finals: readonly BodyResu
     }
     if (typeof m === 'string') {
       if (m !== ref.name) {
-        // Keep an existing name of the same live display edge, not merely an equal signature.
+        // Keep an existing name of the same live display edge (or merged cylindrical face), not merely an equal signature.
         const live = cands.get(ref.name);
-        if (ref.edge && live !== undefined && live === cands.get(m)) continue;
+        if ((ref.edge || ref.cylinderFace) && live !== undefined && live === cands.get(m)) continue;
         changes.push({ where: ref.where, was: ref.name, now: m }); ref.rename(m, true);
       }
       continue;

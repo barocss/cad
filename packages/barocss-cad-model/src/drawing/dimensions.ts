@@ -13,6 +13,7 @@ import { reflexAngle } from './reflexAngle';
 import { resolveArcLengthEdge } from './arcLength';
 import { resolveChamferEdges } from './chamferDim';
 import { resolveRadialThicknessEdges } from './radialThickness';
+import { resolveCylinderDiameter } from './cylinderDiameter';
 
 const sub3 = (a: readonly number[], b: readonly number[]): Vec3 => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
 const dist3 = (a: readonly number[], b: readonly number[]) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
@@ -151,6 +152,22 @@ export interface ResolvedRadialThickness {
   alt?: string;
 }
 
+export interface ResolvedCylinderDiameter {
+  ok: true;
+  kind: 'cylinder-diameter';
+  dim: Extract<DrawingDimension, { kind: 'cylinder-diameter' }>;
+  generator: readonly [XY, XY];
+  opposite: readonly [XY, XY];
+  anchor: XY;
+  axisPoint: XY;
+  axisDir: XY;
+  radialDir: XY;
+  radius: number;
+  value: number;
+  text: string;
+  alt?: string;
+}
+
 /** `alt` (11 ③b): on a dual drawing, the same text in the other unit; the sheet sets it, resolving never does. */
 export type Resolved = (
   | { ok: true; kind: 'linear'; dim: Extract<DrawingDimension, { kind: 'linear' }>; a: XY; b: XY; value: number; text: string; alt?: string }
@@ -158,6 +175,7 @@ export type Resolved = (
   | ResolvedArcLength
   | ResolvedChamfer
   | ResolvedRadialThickness
+  | ResolvedCylinderDiameter
   /** `vertex`: where the two lines meet; `from`/`to`: the sector's bounding directions (counter-clockwise from → to); `ends`: each edge's far end from the vertex. */
   | { ok: true; kind: 'angle'; dim: Extract<DrawingDimension, { kind: 'angle' }>; vertex: XY; from: XY; to: XY; ends: [XY, XY]; value: number; text: string; alt?: string }
   /** A pitch circle (R14.5): `center` in the view, `center3` in the model, `radius` (mm), `members` in the view; `value` its diameter. */
@@ -173,7 +191,8 @@ export function valueText(r: { kind: Extract<Resolved, { ok: true }>['kind']; va
     case 'angle': return `${fmtMM(r.value)}°`;
     case 'pcd': return `Ø${f(r.value)} PCD${r.even ? ` · ${r.members!.length}× EQ SP` : ''}`;
     case 'linear': return f(r.value);
-    case 'diameter': return `Ø${f(r.value)}`;
+    case 'diameter':
+    case 'cylinder-diameter': return `Ø${f(r.value)}`;
     case 'arc-length': return `ARC ${f(r.value)}`;
     case 'chamfer': return `${f(r.value)} × 45°`;
     case 'radial-thickness': return f(r.value);
@@ -276,6 +295,25 @@ export function resolveDimension(views: Partial<Record<DimView, BrepProjection>>
     const value = linearValue(pr, a, b, dim.orient);
     if (value < 1e-9) return { ok: false, dim, reason: 'Its two points now coincide in this view.' };
     return { ok: true, kind: 'linear', dim, a: inView(pr, a), b: inView(pr, b), value, text: valueText({ kind: 'linear', value }, fmtMM) };
+  }
+  if (dim.kind === 'cylinder-diameter') {
+    const resolved = resolveCylinderDiameter(pr, dim.cylinder, dim.view);
+    if (!resolved.ok) return { ok: false, dim, reason: resolved.reason };
+    const g = resolved.geometry;
+    return {
+      ok: true,
+      kind: 'cylinder-diameter',
+      dim,
+      generator: g.generator,
+      opposite: g.opposite,
+      anchor: g.anchor,
+      axisPoint: g.axisPoint,
+      axisDir: g.axisDir,
+      radialDir: g.radialDir,
+      radius: g.radius,
+      value: g.diameter,
+      text: valueText({ kind: 'cylinder-diameter', value: g.diameter }, fmtMM),
+    };
   }
   if (dim.kind === 'radial-thickness') {
     const resolved = resolveRadialThicknessEdges(pr, dim.first, dim.second, dim.view, dim.place);

@@ -161,6 +161,9 @@ export function buildSheet(views: DrawingViews, layout: SheetLayout, settings: D
     if (d.kind === 'radial-thickness' && layout.views[view].breaks?.length) {
       return { ok: false, dim: d, reason: 'Radial thickness dimensions are not supported on a broken view.' };
     }
+    if (d.kind === 'cylinder-diameter' && layout.views[view].breaks?.length) {
+      return { ok: false, dim: d, reason: 'Cylinder side diameter dimensions are not supported on a broken view.' };
+    }
     const patternProblem = (message: string): Resolved => {
       const action = d.tol || d.basic || attachedFrames.some(frame => frame.dim === d.id)
         ? 'Review this dimension and its attached controls before replacing it.'
@@ -1109,6 +1112,79 @@ export function dimensionMarks(v: ViewPlacement, r: Extract<Resolved, { ok: true
     }
     const mid = at(theta / 2), out = unit(sub(mid, X));
     marks.push(...valueMarks(add(add(mid, out, 2.5), [0, 1.2]), 0, out[0] > 0.3 ? 'start' : out[0] < -0.3 ? 'end' : 'middle', r.text, r.dim.tol, '°', p));
+    return marks;
+  }
+  if (r.kind === 'cylinder-diameter') {
+    // Side-view cylinder diameter spanning perpendicular to the cylinder axis across its two silhouette generators.
+    const G0 = toSheet(v, r.generator[0]);
+    const G1 = toSheet(v, r.generator[1]);
+    const O0 = toSheet(v, r.opposite[0]);
+    const O1 = toSheet(v, r.opposite[1]);
+    const genVec = sub(G1, G0);
+    const genLen = Math.hypot(genVec[0], genVec[1]);
+    const ax = genLen > 1e-9 ? unit(genVec) : [1, 0] as XY;
+    const tPlace = dot2(sub(place, G0), ax);
+    const A = add(O0, ax, tPlace);
+    const B = add(G0, ax, tPlace);
+    const span = sub(B, A);
+    const len = Math.hypot(span[0], span[1]);
+    const e = len > 1e-9 ? unit(span) : [0, 1] as XY;
+    const mid = add(A, span, 0.5);
+    // Extension lines when placed past either axial end of the cylinder silhouette.
+    if (tPlace < -GAP) {
+      marks.push(
+        { kind: 'line', a: add(O0, ax, -GAP), b: add(A, ax, -OVER), pen: 'thin', role: 'extension' },
+        { kind: 'line', a: add(G0, ax, -GAP), b: add(B, ax, -OVER), pen: 'thin', role: 'extension' },
+      );
+    } else if (tPlace > genLen + GAP) {
+      marks.push(
+        { kind: 'line', a: add(O1, ax, GAP), b: add(A, ax, OVER), pen: 'thin', role: 'extension' },
+        { kind: 'line', a: add(G1, ax, GAP), b: add(B, ax, OVER), pen: 'thin', role: 'extension' },
+      );
+    }
+    const inside = len >= 2 * p.arrowLength + 1;
+    const start = inside ? A : add(A, e, -p.arrowLength - 3);
+    const end = inside ? B : add(B, e, p.arrowLength + 3);
+    const outPastB = dot2(sub(place, B), e);
+    const inPastA = dot2(sub(A, place), e);
+    marks.push(
+      arrow(A, inside ? [-e[0], -e[1]] : e, p),
+      arrow(B, inside ? e : [-e[0], -e[1]], p),
+    );
+    if (outPastB > 2) {
+      const knee = add(B, e, outPastB);
+      const right = e[0] >= 0;
+      const shoulder = add(knee, [right ? 1 : -1, 0], 3);
+      marks.push(
+        { kind: 'line', a: start, b: knee, pen: 'thin', role: 'dimension' },
+        { kind: 'line', a: knee, b: shoulder, pen: 'thin', role: 'leader' },
+        ...valueMarks(add(shoulder, [right ? 1 : -1, 0], 0.8), 0, right ? 'start' : 'end', r.text, r.dim.tol, '', p, r.alt, r.value),
+      );
+      return marks;
+    }
+    if (inPastA > 2) {
+      const knee = add(A, e, -inPastA);
+      const right = e[0] < 0;
+      const shoulder = add(knee, [right ? 1 : -1, 0], 3);
+      marks.push(
+        { kind: 'line', a: knee, b: end, pen: 'thin', role: 'dimension' },
+        { kind: 'line', a: knee, b: shoulder, pen: 'thin', role: 'leader' },
+        ...valueMarks(add(shoulder, [right ? 1 : -1, 0], 0.8), 0, right ? 'start' : 'end', r.text, r.dim.tol, '', p, r.alt, r.value),
+      );
+      return marks;
+    }
+    const free: [number, number] = inside ? [-len / 2 + p.arrowLength, len / 2 - p.arrowLength] : [-len / 2, len / 2];
+    const text = p.dimensionText === 'unidirectional' ? unidirectional(mid, e, r.text, r.alt, r.value, r.dim.tol, inside ? free : [0, 0], p) : null;
+    if (text?.gap && inside) {
+      marks.push(
+        { kind: 'line', a: start, b: add(mid, e, text.gap[0]), pen: 'thin', role: 'dimension' },
+        { kind: 'line', a: add(mid, e, text.gap[1]), b: end, pen: 'thin', role: 'dimension' },
+      );
+    } else {
+      marks.push({ kind: 'line', a: start, b: end, pen: 'thin', role: 'dimension' });
+    }
+    if (text) marks.push(...text.marks);
+    else marks.push(...clearOfLine(valueMarks(add(mid, textUp(e), 1.2), readAngle(e), 'middle', r.text, r.dim.tol, '', p, r.alt, r.value), mid, e, free, true, !!r.dim.basic));
     return marks;
   }
   if (r.kind === 'radial-thickness') {

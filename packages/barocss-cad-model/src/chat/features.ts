@@ -544,6 +544,10 @@ function renameDimension(d: DrawingDimension, rename: (name: string) => string |
     const f = rename(d.first.edge), s = rename(d.second.edge);
     return f === null || s === null ? null : { ...d, first: { ...d.first, edge: f }, second: { ...d.second, edge: s } };
   }
+  if (d.kind === 'cylinder-diameter') {
+    const face = rename(d.cylinder.face);
+    return face === null ? null : { ...d, cylinder: { ...d.cylinder, face } };
+  }
   const point = (p: DimPoint): DimPoint | null => { if (p.at === 'pcd') { const r = ring(p.ring ?? []); return r ? { ...p, edge: r[0].edge, ring: r } : null; } const e = rename(p.edge); return e === null ? null : { ...p, edge: e }; };
   const a = d.kind === 'linear' ? point(d.a) : (() => { const e = rename(d.a.edge); return e === null ? null : { ...d.a, edge: e }; })();
   const b = d.kind === 'linear' ? point(d.b) : (() => { const e = rename(d.b.edge); return e === null ? null : { ...d.b, edge: e }; })();

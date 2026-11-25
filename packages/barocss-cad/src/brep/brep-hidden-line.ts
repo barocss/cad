@@ -30,6 +30,12 @@ export interface ProjectedPiece {
   /** Source-only duplicate of a native silhouette: retain for references, but do not draw its ink. */
   readonly ink?: false;
 }
+export interface ProjectedCylinderSource {
+  readonly face: string;
+  readonly axis: Point;
+  readonly origin: Point;
+  readonly radius: number;
+}
 /**
  * One curve of the view: a B-rep edge (by its persistent name) or a face's silhouette (`<face>~sil<k>`).
  * `ends`: its 3D end points (none for a closed circle); `circle`: a circular edge's exact geometry (`sweep`: its angle).
@@ -42,6 +48,8 @@ export interface ProjectedEdge {
   readonly tangent?: true;
   readonly ends: readonly [Point, Point] | null;
   readonly circle: { readonly center: Point; readonly radius: number; readonly normal: Point; readonly full: boolean; readonly sweep: number } | null;
+  /** Analytic cylinder provenance for exact cylinder side silhouettes (absent on non-cylindrical edges). */
+  readonly cylinder?: ProjectedCylinderSource;
   readonly pieces: readonly ProjectedPiece[];
 }
 /** 2D coordinates are `p·right`, `p·up`; `min`/`max` bound every piece. */
@@ -76,6 +84,8 @@ interface Candidate {
   own?: Own;
   /** Exact straight cylinder generators, scoped to the input body and supporting faces. */
   generator?: HiddenGenerator;
+  /** Analytic cylinder provenance when this candidate is a straight cylinder silhouette. */
+  cylinder?: ProjectedCylinderSource;
 }
 
 const dist2 = (a: XY, b: XY) => Math.hypot(b[0] - a[0], b[1] - a[1]);
@@ -203,8 +213,14 @@ export function projectBrepHiddenLines(breps: readonly Brep[], view: HiddenLineV
         const A = c.controlPoints[0] as Point, B = c.controlPoints[1] as Point;
         const L = dist2(P(A), P(B));
         if (L <= 1e-9 * size) continue; // seen end-on
-        const generator = kind === 'silhouette' && fs.some(f => geomOf(f).kind === 'cylinder') ? { body: bi, faces: fs, native: true } : undefined;
-        into.push({ name, ...tangent, generator, kind: kind === 'silhouette' ? 'silhouette' : 'line', ends: [A, B], circle: null, s0: 0, s1: 1, eps: 1e-5 * size,
+        const cylFaceId = kind === 'silhouette' ? fs.find(f => geomOf(f).kind === 'cylinder') : undefined;
+        const cylGeom = cylFaceId ? geomOf(cylFaceId) : undefined;
+        const cylFace = cylFaceId ? faceById.get(cylFaceId) : undefined;
+        const cylinder: ProjectedCylinderSource | undefined = cylGeom?.kind === 'cylinder' && cylFace
+          ? { face: `${options.prefixes?.[bi] ?? ''}${cylFace.name ?? cylFace.id}`, axis: cylGeom.a, origin: cylGeom.c, radius: cylGeom.r }
+          : undefined;
+        const generator = cylFaceId ? { body: bi, faces: fs, native: true } : undefined;
+        into.push({ name, ...tangent, generator, ...(cylinder ? { cylinder } : {}), kind: kind === 'silhouette' ? 'silhouette' : 'line', ends: [A, B], circle: null, s0: 0, s1: 1, eps: 1e-5 * size,
           at: s => lerp3(A, B, s), out: (s0, s1) => ({ kind: 'line', a: P(lerp3(A, B, s0)), b: P(lerp3(A, B, s1)) }),
           samples: () => steps(0, 1, Math.ceil(L / h)) });
         continue;
@@ -304,8 +320,12 @@ export function projectBrepHiddenLines(breps: readonly Brep[], view: HiddenLineV
         if (ch.length === 2) {
           const [A, B] = ch, L = dist2(P(A), P(B));
           if (L <= 1e-6 * size) return;
+          const cylinder: ProjectedCylinderSource | undefined = cyl
+            ? { face: `${options.prefixes?.[bi] ?? ''}${face.name ?? face.id}`, axis: cyl.a, origin: cyl.c, radius: cyl.r }
+            : undefined;
           silhouettes.push({ name, kind: 'silhouette', ends: [A, B], circle: null, s0: 0, s1: 1, eps, own,
             generator: cyl ? { body: bi, faces: [face.id], native: false } : undefined,
+            ...(cylinder ? { cylinder } : {}),
             at: s => lerp3(A, B, s), out: (s0, s1) => ({ kind: 'line', a: P(lerp3(A, B, s0)), b: P(lerp3(A, B, s1)) }),
             samples: () => steps(0, 1, Math.ceil(L / h)) });
         } else { const cand = polylineCandidate(name, 'silhouette', ch, P, h, eps); if (cand) silhouettes.push({ ...cand, own }); }
@@ -361,7 +381,7 @@ export function projectBrepHiddenLines(breps: readonly Brep[], view: HiddenLineV
   const out: ProjectedEdge[] = [];
   const min: XY = [Infinity, Infinity], max: XY = [-Infinity, -Infinity];
   for (const [c, pieces] of edges) {
-    out.push({ name: c.name, kind: c.kind, ...(c.tangent ? { tangent: true as const } : {}), ends: c.ends, circle: c.circle, pieces });
+    out.push({ name: c.name, kind: c.kind, ...(c.tangent ? { tangent: true as const } : {}), ends: c.ends, circle: c.circle, ...(c.cylinder ? { cylinder: c.cylinder } : {}), pieces });
     for (const p of pieces) for (const q of flatten(p.curve, 1e-6 * size)) for (const k of [0, 1]) { min[k] = Math.min(min[k], q[k]); max[k] = Math.max(max[k], q[k]); }
   }
   if (!out.length) { min[0] = min[1] = max[0] = max[1] = 0; }
