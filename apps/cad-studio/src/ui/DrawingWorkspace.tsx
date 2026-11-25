@@ -32,6 +32,7 @@ import type { StudioDoc } from '@barocss/cad-model/engine/doc';
 import type { FriendlyError } from '@barocss/cad-model/engine/errors';
 import { defaultForeshortenOrigin, foreshortenGeometry, foreshortenOk, foreshortenSupported } from '@barocss/cad-model/drawing/foreshorten';
 import { DEFAULT_CROSSING_BREAK_GAP, crossingBreakGapOk, eligibleCrossingBreaks, readLinearCrossingBreak } from '@barocss/cad-model/drawing/crossingBreak';
+import { extensionJogFromSheetPoint, extensionJogGeometry, readLinearExtensionJog, type LinearExtensionJog } from '@barocss/cad-model/drawing/extensionJog';
 import { presetFor } from '@barocss/cad-model/drawing/standard';
 import { buildSheet, curveMark, dimensionMarks, placementOf, projectionOf, sheetSections, withShownText } from '@barocss/cad-model/drawing/sheet';
 import { marksSvg, sheetGroupsSvg, sheetSvg, type SheetAnnotationSelection } from '@barocss/cad-model/io/svg';
@@ -243,6 +244,7 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
     setTool('select');
   };
   const [radiusMove, setRadiusMove] = useState<{ owner: object; dim: DrawingDimension; preview?: XY } | null>(null);
+  const [jogDrag, setJogDrag] = useState<{ owner: object; dim: Extract<DrawingDimension, { kind: 'linear' }>; pointer: number; preview: LinearExtensionJog } | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   useLayoutEffect(() => {
     if (pending?.kind !== 'diameter' || !pending.source) return;
@@ -975,6 +977,16 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
     const h = hoverAt(e.clientX, e.clientY) ?? placingAt(e.clientX, e.clientY); if (h) click(h);
   };
   const onPointerMove = (e: React.PointerEvent) => {
+    if (currentJogDrag) {
+      if (e.pointerId !== currentJogDrag.pointer || !selectedLinearGeom) return;
+      const q = sheetPoint(e.clientX, e.clientY);
+      if (!q) return;
+      const P = currentJogDrag.preview.side === 'a' ? selectedLinearGeom.A : selectedLinearGeom.B;
+      const Q = currentJogDrag.preview.side === 'a' ? selectedLinearGeom.A2 : selectedLinearGeom.B2;
+      const next = extensionJogFromSheetPoint(P, Q, selectedLinearGeom.axis, currentJogDrag.preview.side, q);
+      if (next) setJogDrag({ ...currentJogDrag, preview: next });
+      return;
+    }
     if (currentRadiusMove) {
       const preview = radiusPoint(e.clientX, e.clientY);
       setRadiusMove({ ...currentRadiusMove, preview: preview && checkRadiusOrigin(preview)?.ok ? preview : undefined });
@@ -1009,6 +1021,13 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
     setHover(hoverAt(e.clientX, e.clientY) ?? placingAt(e.clientX, e.clientY));
   };
   const onPointerUp = (e: React.PointerEvent) => {
+    if (jogDrag) {
+      if (e.pointerId !== jogDrag.pointer) return;
+      const active = currentJogDrag;
+      setJogDrag(null);
+      if (active && liveExtensionOwner.current === active.owner) changeExtensionJog(active.dim.id, active.preview);
+      return;
+    }
     if (drag && 'dimensionGroup' in drag) {
       if (e.pointerId !== drag.pointer) return;
       setDrag(null);
@@ -1102,6 +1121,7 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
         setDimensionGroup(null);
         onClearReferencePreview();
         if (radiusMove) { setRadiusMove(null); setMessage(null); }
+        if (jogDrag) { setJogDrag(null); setMessage(null); }
         else if (reattach) cancelReattachment();
         else if (noteAttach || pending || currentRimChoice || targetChoices.length || reselectTarget) cancel();
         else { setSelected(null); setSelectedTarget(null); setSelectedFrame(null); setTool('select'); setMessage(null); }
@@ -1516,6 +1536,62 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
     const { crossingBreak: _old, ...ordinary } = selDim; void _old;
     if (commitDims(settings.dimensions.map(d => d === selDim ? { ...ordinary, crossingBreak: nextBreak } : d))) setMessage(null);
   };
+  const selectedLinearGeom = useMemo(() => {
+    if (!arrowReady || selDim?.kind !== 'linear' || !selectedLinearPlacement || !extensionResolved?.ok || extensionResolved.kind !== 'linear') return null;
+    const A = toSheet(selectedLinearPlacement, extensionResolved.a);
+    const B = toSheet(selectedLinearPlacement, extensionResolved.b);
+    const place = toSheet(selectedLinearPlacement, selDim.place);
+    const d: XY = selDim.orient === 'horizontal' ? [1, 0] : selDim.orient === 'vertical' ? [0, 1] : (() => { const dx = B[0] - A[0], dy = B[1] - A[1], l = Math.hypot(dx, dy) || 1; return [dx / l, dy / l]; })();
+    const n: XY = [-d[1], d[0]];
+    const dotN = (q: XY, p: XY) => (q[0] - p[0]) * n[0] + (q[1] - p[1]) * n[1];
+    const A2: XY = [A[0] + n[0] * dotN(place, A), A[1] + n[1] * dotN(place, A)];
+    const B2: XY = [B[0] + n[0] * dotN(place, B), B[1] + n[1] * dotN(place, B)];
+    const along: XY = [B2[0] - A2[0], B2[1] - A2[1]];
+    const al = Math.hypot(along[0], along[1]);
+    const axis: XY = al > 1e-9 ? [along[0] / al, along[1] / al] : d;
+    return { A, B, A2, B2, axis };
+  }, [arrowReady, selDim, selectedLinearPlacement, extensionResolved]);
+  const currentJogDrag = jogDrag?.owner === extensionOwner && jogDrag.dim === selDim && !!selectedLinearGeom && tool === 'select' ? jogDrag : null;
+  useEffect(() => {
+    if (jogDrag && !currentJogDrag) setJogDrag(null);
+  }, [jogDrag, currentJogDrag]);
+  const activeExtensionJog = currentJogDrag?.preview ?? (selDim?.kind === 'linear' ? selDim.extensionJog : undefined);
+  const jogHandle = useMemo(() => {
+    if (!selectedLinearGeom || !activeExtensionJog || selDim?.kind !== 'linear' || selDim.hideExtension === activeExtensionJog.side) return null;
+    const P = activeExtensionJog.side === 'a' ? selectedLinearGeom.A : selectedLinearGeom.B;
+    const Q = activeExtensionJog.side === 'a' ? selectedLinearGeom.A2 : selectedLinearGeom.B2;
+    return extensionJogGeometry(P, Q, selectedLinearGeom.axis, activeExtensionJog);
+  }, [selectedLinearGeom, activeExtensionJog, selDim]);
+  const changeExtensionJog = (id: string, jog: LinearExtensionJog | null) => {
+    if (liveExtensionOwner.current !== extensionOwner || !arrowReady || selDim?.kind !== 'linear' || selDim.id !== id
+      || wholeSettings.dimensions.filter(d => d.id === id).length !== 1) return;
+    if (jog === null) {
+      if (!selDim.extensionJog) return;
+      const { extensionJog: _old, ...ordinary } = selDim; void _old;
+      if (commitDims(settings.dimensions.map(d => d === selDim ? ordinary : d))) setMessage(null);
+      return;
+    }
+    if (!selectedLinearGeom || !extensionResolved?.ok || extensionResolved.kind !== 'linear') return;
+    const clean = readLinearExtensionJog(jog);
+    if (!clean) {
+      setMessage('Extension jog requires side A or B and a paper offset between 1 and 40 mm.');
+      return;
+    }
+    if (selDim.hideExtension === clean.side) {
+      setMessage(`Extension ${clean.side.toUpperCase()} is hidden. Show it before editing its jog.`);
+      return;
+    }
+    const P = clean.side === 'a' ? selectedLinearGeom.A : selectedLinearGeom.B;
+    const Q = clean.side === 'a' ? selectedLinearGeom.A2 : selectedLinearGeom.B2;
+    const geom = extensionJogGeometry(P, Q, selectedLinearGeom.axis, clean);
+    if (!geom.ok) {
+      setMessage(geom.reason);
+      return;
+    }
+    if (selDim.extensionJog?.side === clean.side && selDim.extensionJog.offset === clean.offset && selDim.extensionJog.at === clean.at) return;
+    const { extensionJog: _old, ...ordinary } = selDim; void _old;
+    if (commitDims(settings.dimensions.map(d => d === selDim ? { ...ordinary, extensionJog: clean } : d))) setMessage(null);
+  };
   const previewExtension = (side: 'a' | 'b' | null) => {
     if (liveExtensionOwner.current !== extensionOwner) return;
     setExtensionPreview(side && extensionReady ? { owner: extensionOwner, side } : null);
@@ -1552,8 +1628,8 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
         <div className="dw-paper">
           {layout && <svg ref={svg} tabIndex={-1} viewBox={viewBox.join(' ')} className={drag && 'pan' in drag ? 'dw-pan' : ''} aria-label="Drawing sheet" data-scale={layout.scale}
             onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp}
-            onPointerCancel={() => { cancelDimensionGroupDrag(); setRadiusMove(null); setMessage(null); }} onLostPointerCapture={cancelDimensionGroupDrag}
-            onBlur={cancelDimensionGroupDrag} onPointerLeave={() => setHover(null)} onWheel={onWheel}>
+            onPointerCancel={() => { cancelDimensionGroupDrag(); setRadiusMove(null); setJogDrag(null); setMessage(null); }} onLostPointerCapture={() => { cancelDimensionGroupDrag(); setJogDrag(null); }}
+            onBlur={() => { cancelDimensionGroupDrag(); setJogDrag(null); }} onPointerLeave={() => setHover(null)} onWheel={onWheel}>
             <rect className="dw-sheet" x={0} y={0} width={W} height={H} fill="#fff" />
             <g fill="none" stroke="#000" strokeLinecap="round" strokeLinejoin="round" fontFamily="Helvetica, Arial, sans-serif" dangerouslySetInnerHTML={{ __html: shownMarkup }} />
             <g dangerouslySetInnerHTML={{ __html: overlay }} />
@@ -1563,6 +1639,19 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
                 <circle cx={point[0]} cy={point[1]} r={extensionPreview?.owner === extensionOwner && extensionPreview.side === side ? 1.8 : 1.1} />
                 <text x={point[0] + 2} y={point[1] - 2} fontSize="3" stroke="none">{side.toUpperCase()}</text>
               </g>)}
+            </g>}
+            {jogHandle?.ok && selDim?.kind === 'linear' && tool === 'select' && <g aria-label={`Extension jog handle ${selDim.id}`}>
+              {currentJogDrag && <g className="dw-hover" pointerEvents="none" aria-label="Extension jog preview"
+                dangerouslySetInnerHTML={{ __html: marksSvg(jogHandle.geometry.segments.map(([a, b]) => ({ kind: 'line' as const, a, b, pen: 'thin' as const, role: 'extension' as const }))) }} />}
+              <circle data-jog-handle={selDim.id} cx={jogHandle.geometry.handle[0]} cy={jogHandle.geometry.handle[1]} r={1.8}
+                fill="#0284c7" stroke="#fff" strokeWidth="0.35" style={{ cursor: 'grab' }}
+                onPointerDown={e => {
+                  if (e.button !== 0 || !arrowReady || !selDim.extensionJog) return;
+                  e.stopPropagation();
+                  e.preventDefault();
+                  setJogDrag({ owner: extensionOwner, dim: selDim, pointer: e.pointerId, preview: selDim.extensionJog });
+                  svg.current?.setPointerCapture(e.pointerId);
+                }} />
             </g>}
             {selectedTarget && !(drag && 'target' in drag) && sheet?.groups.filter(g => g.datumTarget && g.id === selectedTarget).length === 1 && <g className="dw-hover" pointerEvents="none" aria-label="Selected datum target" dangerouslySetInnerHTML={{ __html: marksSvg(sheet.groups.find(g => g.datumTarget && g.id === selectedTarget)!.marks) }} />}
             {selectedFrame && sheet?.groups.filter(g => g.standaloneFrame && g.id === selectedFrame).length === 1 && <g className="dw-hover" pointerEvents="none" aria-label="Selected standalone frame" dangerouslySetInnerHTML={{ __html: marksSvg(sheet.groups.find(g => g.standaloneFrame && g.id === selectedFrame)!.marks) }} />}
@@ -1647,7 +1736,7 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
         <DimensionsList foreshortenMovingId={currentRadiusMove?.dim.id} onForeshorten={id => { editRadius(id, 'add'); }}
           onForeshortenMove={id => { if (radiusReady && selDim?.id === id && radiusPlacement && !radiusPlacement.hidden && !radiusPlacement.breaks?.length) {
             cancel(); setDrag(null); setTool('select'); setRadiusMove({ owner: extensionOwner, dim: selDim }); svg.current?.focus();
-          } }} onForeshortenRemove={id => { setRadiusMove(null); editRadius(id, 'remove'); }} extensionReady={extensionReady} arrowReady={arrowReady} onArrow={changeArrow} crossingBreakReady={arrowReady} crossingBreakCandidates={crossingBreakCandidates} onCrossingBreak={changeCrossingBreak} onExtension={changeExtension} onExtensionPreview={previewExtension} sheet={sheet} views={views} layout={layout} scope={scope} settings={settings} occurrenceReasons={lossByDimension} onReattach={startReattachment} selected={selDim?.id ?? null} onSelect={id => { selectAnnotationRow('dimension', id); setNoteDraft(null); }} remove={id => removeAnnotation({ kind: 'dimension', id })} autoDimension={autoDimension} />
+          } }} onForeshortenRemove={id => { setRadiusMove(null); editRadius(id, 'remove'); }} extensionReady={extensionReady} arrowReady={arrowReady} onArrow={changeArrow} crossingBreakReady={arrowReady} crossingBreakCandidates={crossingBreakCandidates} onCrossingBreak={changeCrossingBreak} extensionJogReady={arrowReady} onExtensionJog={changeExtensionJog} onExtension={changeExtension} onExtensionPreview={previewExtension} sheet={sheet} views={views} layout={layout} scope={scope} settings={settings} occurrenceReasons={lossByDimension} onReattach={startReattachment} selected={selDim?.id ?? null} onSelect={id => { selectAnnotationRow('dimension', id); setNoteDraft(null); }} remove={id => removeAnnotation({ kind: 'dimension', id })} autoDimension={autoDimension} />
 
         <ToleranceEditor selDim={selDim} settings={settings} tolDraft={tolDraft} setTolDraft={setTolDraft} commitDims={commitDims} setMessage={setMessage} />
 

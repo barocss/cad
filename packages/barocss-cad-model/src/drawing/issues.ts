@@ -43,13 +43,14 @@ import { viewBreaksOf } from './breaks';
 import { ambiguousFrameDimensions, ambiguousFrameMessage, frameNotes, frameRules } from './controls';
 import { UNPRINTABLE_FIT_LIMITS, deviationPair, frameValue, presetFor, type DrawingUnits, type FrameRounding } from './standard';
 import { foreshortenGeometry } from './foreshorten';
+import { extensionJogGeometry } from './extensionJog';
 import { toSheet } from './views';
 import { fmtMM, resolvePoint, type Resolved } from './dimensions';
 import { SECTION_VIEWS, VIEW_IDS, baseViewOf, detailLetter, isDetailRef, isViewId, isSectionRef, nextSectionId, reservedSectionLetters, sectionLetter, sectionsOf, withSections, type DimPoint, type SectionViewId, type DimView, type DrawingDimension, type DrawingSettings, type DrawingViews, type ViewId, type XY } from './types';
 
 export const DRAWING_ISSUES_VERSION = 'cad-studio-drawing-issues-v1';
 
-export type DrawingIssueCode = 'SHEET_SET' | 'UNIT_PRECISION' | 'FORESHORTEN_INVALID' | 'LINEAR_ARROWS_CROWDED' | 'CROSSING_BREAK_CONFLICT' | 'CROSSING_BREAK_INACTIVE' | 'DIM_ON_HIDDEN' | 'DATUM_LOST' | 'FRAME_LOST' | 'FRAME_VIEW_MISSING' | 'DATUM_UNDEFINED' | 'FRAME_RULE' | 'DATUM_TWICE' | 'VIEW_NEEDED' | 'DIMENSION_LOST' | 'TEXT_OVERLAP' | 'TEXT_OVER_LINES' | 'OFF_SHEET' | 'VIEWS_DONT_FIT' | 'DUPLICATE' | 'REMATCHED' | 'HOLE_SIZE_MISSING' | 'HOLE_NOT_LOCATED' | 'STEP_NOT_LOCATED' | 'OVERALL_MISSING' | 'TABLE_SOURCE' | 'WELD_NOT_SHOWN' | 'BALLOON_NOT_CLEAR' | 'BALLOON_NO_EDGE' | 'FIT_ROW_MISSING' | 'FOLLOWED_CHANGED' | 'DETAIL_PARENT_MISSING' | 'DETAIL_EMPTY' | 'DETAIL_NO_ROOM' | 'BREAK_NO_VIEW' | 'SECTION_NO_ROOM' | 'SECTION_NO_VIEW' | 'DATUM_TARGET_OUTSIDE' | DatumTargetFailureCode | NoteTargetFailureCode;
+export type DrawingIssueCode = 'SHEET_SET' | 'UNIT_PRECISION' | 'FORESHORTEN_INVALID' | 'LINEAR_ARROWS_CROWDED' | 'CROSSING_BREAK_CONFLICT' | 'CROSSING_BREAK_INACTIVE' | 'EXTENSION_JOG_INVALID' | 'DIM_ON_HIDDEN' | 'DATUM_LOST' | 'FRAME_LOST' | 'FRAME_VIEW_MISSING' | 'DATUM_UNDEFINED' | 'FRAME_RULE' | 'DATUM_TWICE' | 'VIEW_NEEDED' | 'DIMENSION_LOST' | 'TEXT_OVERLAP' | 'TEXT_OVER_LINES' | 'OFF_SHEET' | 'VIEWS_DONT_FIT' | 'DUPLICATE' | 'REMATCHED' | 'HOLE_SIZE_MISSING' | 'HOLE_NOT_LOCATED' | 'STEP_NOT_LOCATED' | 'OVERALL_MISSING' | 'TABLE_SOURCE' | 'WELD_NOT_SHOWN' | 'BALLOON_NOT_CLEAR' | 'BALLOON_NO_EDGE' | 'FIT_ROW_MISSING' | 'FOLLOWED_CHANGED' | 'DETAIL_PARENT_MISSING' | 'DETAIL_EMPTY' | 'DETAIL_NO_ROOM' | 'BREAK_NO_VIEW' | 'SECTION_NO_ROOM' | 'SECTION_NO_VIEW' | 'DATUM_TARGET_OUTSIDE' | DatumTargetFailureCode | NoteTargetFailureCode;
 export type DrawingFix =
   | { kind: 'remove'; dim: string }
   | { kind: 'move'; dim: string; place: XY }
@@ -449,6 +450,30 @@ export function drawingIssues(ctx: IssueContext): DrawingIssue[] {
         const span = Math.hypot(tips[1][0] - tips[0][0], tips[1][1] - tips[0][1]);
         if (linearArrowPolicy(vp, r, span, preset, settings.scope?.kind !== 'assembly')?.crowded)
           out.push({ code: 'LINEAR_ARROWS_CROWDED', severity: 'warning', message: `Dimension ${r.dim.id}: the selected arrowheads do not fit at this sheet scale. Choose Outside or Auto, or make the view larger.`, dims: [r.dim.id], view: r.dim.view });
+      }
+    }
+    if (r.kind === 'linear' && r.dim.extensionJog) {
+      const jog = r.dim.extensionJog;
+      const vp = placementOf(layout, sheet, r.dim.view);
+      if (vp && !vp.hidden) {
+        let why: string | null = null;
+        if (settings.scope?.kind === 'assembly') why = 'Extension jog is not supported in assembly drawings.';
+        else if (vp.breaks?.length) why = 'Extension jog is not supported on a broken view.';
+        else if (r.dim.hideExtension === jog.side) why = `Extension ${jog.side.toUpperCase()} is hidden; its saved jog is retained until shown.`;
+        else {
+          const A = toSheet(vp, r.a), B = toSheet(vp, r.b), place = toSheet(vp, r.dim.place);
+          const d: XY = r.dim.orient === 'horizontal' ? [1, 0] : r.dim.orient === 'vertical' ? [0, 1] : (() => { const dx = B[0] - A[0], dy = B[1] - A[1], l = Math.hypot(dx, dy) || 1; return [dx / l, dy / l]; })();
+          const n: XY = [-d[1], d[0]];
+          const dotN = (q: XY, p: XY) => (q[0] - p[0]) * n[0] + (q[1] - p[1]) * n[1];
+          const A2: XY = [A[0] + n[0] * dotN(place, A), A[1] + n[1] * dotN(place, A)];
+          const B2: XY = [B[0] + n[0] * dotN(place, B), B[1] + n[1] * dotN(place, B)];
+          const along: XY = [B2[0] - A2[0], B2[1] - A2[1]];
+          const al = Math.hypot(along[0], along[1]);
+          const axis: XY = al > 1e-9 ? [along[0] / al, along[1] / al] : d;
+          const res = extensionJogGeometry(jog.side === 'a' ? A : B, jog.side === 'a' ? A2 : B2, axis, jog);
+          if (!res.ok) why = res.reason;
+        }
+        if (why) out.push({ code: 'EXTENSION_JOG_INVALID', severity: 'warning', message: `Dimension ${r.dim.id}: ${why}`, dims: [r.dim.id], view: r.dim.view });
       }
     }
     if (r.kind === 'radius' && r.dim.kind === 'radius' && r.dim.foreshorten) {

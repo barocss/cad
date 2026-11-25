@@ -2,7 +2,7 @@
 import { useId } from 'react';
 import { dimensionLine } from '@barocss/cad-model/drawing/sheet';
 import { presetFor } from '@barocss/cad-model/drawing/standard';
-import { isDetailRef, isViewId, type LinearArrowSide, type DrawingSettings } from '@barocss/cad-model/drawing/types';
+import { isDetailRef, isViewId, type LinearArrowSide, type LinearExtensionJog, type DrawingSettings } from '@barocss/cad-model/drawing/types';
 import type { CrossingBreakCandidate } from '@barocss/cad-model/drawing/crossingBreak';
 import type { useDrawingSheet } from '../useDrawingSheet';
 import { Icon } from '../atoms';
@@ -24,6 +24,8 @@ export interface DimensionsListProps {
   crossingBreakReady?: boolean;
   crossingBreakCandidates?: readonly CrossingBreakCandidate[];
   onCrossingBreak?(id: string, overId: string | null, gap?: number): void;
+  extensionJogReady?: boolean;
+  onExtensionJog?(id: string, jog: LinearExtensionJog | null): void;
   onExtension?(id: string, side: 'a' | 'b' | undefined): void;
   onExtensionPreview?(side: 'a' | 'b' | null): void;
   foreshortenMovingId?: string | null;
@@ -40,7 +42,7 @@ export interface DimensionsListProps {
 export function DimensionsList({
   sheet, views, layout, scope, settings, occurrenceReasons, onReattach, selected, onSelect, remove, autoDimension,
   extensionReady = false, arrowReady = false, onArrow, crossingBreakReady = false, crossingBreakCandidates = [], onCrossingBreak,
-  onExtension, onExtensionPreview,
+  extensionJogReady = false, onExtensionJog, onExtension, onExtensionPreview,
   foreshortenMovingId = null, onForeshorten, onForeshortenMove, onForeshortenRemove,
 }: DimensionsListProps) {
   const unavailableReason = useId();
@@ -123,6 +125,48 @@ export function DimensionsList({
                 </label>}
                 {savedBreak && <Button variant="ghost" size="xs" aria-label={`Remove crossing break ${r.dim.id}`} disabled={!crossingBreakReady} onClick={() => onCrossingBreak(r.dim.id, null)}>Clear</Button>}
                 {status && status.status !== 'applied' && status.reason && <span role="status" className="small" style={{ flexBasis: '100%' }}>{status.reason}</span>}
+              </div>;
+            })()}
+            {selected === r.dim.id && r.dim.kind === 'linear' && !r.dim.auto && ['front', 'top', 'right'].includes(r.dim.view) && !assembly && onExtensionJog && (() => {
+              const savedJog = r.dim.extensionJog;
+              const hiddenSide = r.dim.hideExtension;
+              const presets = [-8, -6, -4, -2, 2, 4, 6, 8];
+              const offsetChoices = savedJog && !presets.includes(savedJog.offset) ? [...presets, savedJog.offset].sort((a, b) => a - b) : presets;
+              return <div role="group" aria-label={`Extension jog ${r.dim.id}`} style={{ flexBasis: '100%', order: 2, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6 }}>
+                <label className="small">
+                  Extension jog
+                  <NativeSelect aria-label="Extension jog side" value={savedJog?.side ?? ''}
+                    disabled={!r.ok || !extensionJogReady}
+                    onMouseEnter={() => onExtensionPreview?.(savedJog?.side ?? null)}
+                    onMouseLeave={() => onExtensionPreview?.(null)}
+                    onFocus={() => onExtensionPreview?.(savedJog?.side ?? null)}
+                    onBlur={() => onExtensionPreview?.(null)}
+                    onChange={e => {
+                      const next = e.currentTarget.value;
+                      if (next === 'a' || next === 'b') onExtensionJog(r.dim.id, { side: next, offset: savedJog?.offset ?? -4, ...(savedJog?.at !== undefined ? { at: savedJog.at } : {}) });
+                      else onExtensionJog(r.dim.id, null);
+                    }}>
+                    <option value="">None</option>
+                    <option value="a" disabled={hiddenSide === 'a'}>A{hiddenSide === 'a' ? ' (hidden)' : ''}</option>
+                    <option value="b" disabled={hiddenSide === 'b'}>B{hiddenSide === 'b' ? ' (hidden)' : ''}</option>
+                  </NativeSelect>
+                </label>
+                {savedJog && <label className="small">
+                  Offset
+                  <NativeSelect aria-label="Extension jog offset" value={String(savedJog.offset)}
+                    disabled={!r.ok || !extensionJogReady || hiddenSide === savedJog.side}
+                    onMouseEnter={() => onExtensionPreview?.(savedJog.side)}
+                    onMouseLeave={() => onExtensionPreview?.(null)}
+                    onChange={e => {
+                      const parsed = Number(e.currentTarget.value);
+                      if (Number.isFinite(parsed)) onExtensionJog(r.dim.id, { side: savedJog.side, offset: parsed, ...(savedJog.at !== undefined ? { at: savedJog.at } : {}) });
+                    }}>
+                    {offsetChoices.map(mm => <option key={mm} value={String(mm)}>{mm > 0 ? `+${mm}` : String(mm)} mm</option>)}
+                  </NativeSelect>
+                </label>}
+                {savedJog && <Button variant="ghost" size="xs" aria-label={`Remove extension jog ${r.dim.id}`} disabled={!extensionJogReady} onClick={() => onExtensionJog(r.dim.id, null)}>Clear</Button>}
+                {savedJog && hiddenSide === savedJog.side && <span role="status" className="small" style={{ flexBasis: '100%' }}>Extension {savedJog.side.toUpperCase()} is hidden. The saved jog is retained until shown.</span>}
+                {!r.ok && savedJog && <span role="status" className="small" style={{ flexBasis: '100%' }}>The reference is unresolved. The saved extension jog is retained.</span>}
               </div>;
             })()}
             {selected === r.dim.id && r.dim.kind === 'radius' && !r.dim.auto && ['front', 'top', 'right'].includes(r.dim.view) && scope.kind === 'part' && onForeshorten && <div role="group" aria-label={`Foreshorten controls ${r.dim.id}`} style={{ flexBasis: '100%', order: 2, display: 'flex', flexWrap: 'wrap', gap: 4 }}>

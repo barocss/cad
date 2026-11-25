@@ -76,6 +76,41 @@ export const DEFAULT_CROSSING_BREAK_GAP = 2;
 export const MIN_CROSSING_BREAK_GAP = 1;
 export const MAX_CROSSING_BREAK_GAP = 10;
 
+export const DEFAULT_EXTENSION_JOG_OFFSET = -4;
+export const MIN_EXTENSION_JOG_OFFSET = 1;
+export const MAX_EXTENSION_JOG_OFFSET = 40;
+export const DEFAULT_EXTENSION_JOG_AT = 0.5;
+export const MIN_EXTENSION_JOG_AT = 0.2;
+export const MAX_EXTENSION_JOG_AT = 0.8;
+
+export interface LinearExtensionJog {
+  readonly side: 'a' | 'b';
+  readonly offset: number;
+  readonly at?: number;
+}
+
+export function extensionJogOffsetOk(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value)
+    && Math.abs(value) >= MIN_EXTENSION_JOG_OFFSET && Math.abs(value) <= MAX_EXTENSION_JOG_OFFSET;
+}
+
+export function extensionJogAtOk(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value)
+    && value >= MIN_EXTENSION_JOG_AT && value <= MAX_EXTENSION_JOG_AT;
+}
+
+/** Persist only verified endpoint role ('a' | 'b'), bounded nonzero sheet-mm offset, and optional normalized position. */
+export function readLinearExtensionJog(raw: unknown): LinearExtensionJog | undefined {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
+  const r = raw as Record<string, unknown>;
+  if (r.side !== 'a' && r.side !== 'b') return undefined;
+  if (!extensionJogOffsetOk(r.offset)) return undefined;
+  if (r.at !== undefined && !extensionJogAtOk(r.at)) return undefined;
+  const offset = Math.round(r.offset * 1000) / 1000;
+  const at = r.at !== undefined ? Math.round(r.at * 1000) / 1000 : undefined;
+  return { side: r.side, offset, ...(at !== undefined && Math.abs(at - DEFAULT_EXTENSION_JOG_AT) > 1e-6 ? { at } : {}) };
+}
+
 export interface LinearCrossingBreakTarget {
   readonly id: string;
   readonly orient: 'horizontal' | 'vertical' | 'aligned';
@@ -122,7 +157,7 @@ export function readLinearArrowPlacement(raw: unknown): LinearArrowPlacement | u
 }
 
 export type DrawingDimension = ({ tol?: Tolerance; count?: number; auto?: true; basic?: true }) & (
-  | { id: string; view: DimView; kind: 'linear'; a: DimPoint; b: DimPoint; orient: 'horizontal' | 'vertical' | 'aligned'; place: XY; /** Hide only this reference role’s extension line; omitted means both visible. */ hideExtension?: 'a' | 'b'; arrowPlacement?: LinearArrowPlacement; /** Optional sheet-mm break on this linear dimension line where it crosses one verified sibling linear dimension line. */ crossingBreak?: LinearCrossingBreak }
+  | { id: string; view: DimView; kind: 'linear'; a: DimPoint; b: DimPoint; orient: 'horizontal' | 'vertical' | 'aligned'; place: XY; /** Hide only this reference role’s extension line; omitted means both visible. */ hideExtension?: 'a' | 'b'; arrowPlacement?: LinearArrowPlacement; /** Optional sheet-mm break on this linear dimension line where it crosses one verified sibling linear dimension line. */ crossingBreak?: LinearCrossingBreak; /** Optional display-only jog on one extension line ('a' or 'b'); measured endpoints and value stay unchanged. */ extensionJog?: LinearExtensionJog }
   | { id: string; view: DimView; kind: 'diameter'; edge: string; near: Vec3; place: XY; sig?: Sig; was?: string }
   | { id: string; view: DimView; kind: 'radius'; edge: string; near: Vec3; place: XY; sig?: Sig; was?: string; /** Optional foreshortened display origin in view model coordinates (mm); true radius and center remain native. */ foreshorten?: ForeshortenedRadius }
   /** A pitch circle (R14.5, O6): the circle through the centres of three or more holes, its diameter as `Ø40 PCD`. */
@@ -373,12 +408,13 @@ export function readDrawing(raw: unknown): DrawingSettings {
     ...(typeof r.revision === 'string' && r.revision ? { revision: r.revision.slice(0, 6) } : {}),
     ...(typeof r.revisedModel === 'string' ? { revisedModel: r.revisedModel } : {}),
     dimensions: Array.isArray(r.dimensions) ? r.dimensions.filter(x => x && typeof x.id === 'string' && isDimView(x.view) && (x.kind !== 'pcd' || ringOk(x.ring)) && (x.kind !== 'linear' || ((x.a?.at !== 'pcd' || ringOk(x.a.ring)) && (x.b?.at !== 'pcd' || ringOk(x.b.ring))))).map(x => {
-      const { tol, count, auto, basic, foreshorten, arrowPlacement, crossingBreak, ...rest } = x as DrawingDimension & { foreshorten?: unknown; arrowPlacement?: unknown; crossingBreak?: unknown }; const t = readTolerance(tol);
+      const { tol, count, auto, basic, foreshorten, arrowPlacement, crossingBreak, extensionJog, ...rest } = x as DrawingDimension & { foreshorten?: unknown; arrowPlacement?: unknown; crossingBreak?: unknown; extensionJog?: unknown }; const t = readTolerance(tol);
       const arrows = x.kind === 'linear' && auto !== true && isOrthographicView(x.view) ? readLinearArrowPlacement(arrowPlacement) : undefined;
       const cBreak = x.kind === 'linear' && auto !== true && isOrthographicView(x.view) ? readLinearCrossingBreak(crossingBreak) : undefined;
+      const extJog = x.kind === 'linear' && auto !== true && isOrthographicView(x.view) ? readLinearExtensionJog(extensionJog) : undefined;
       const fs = x.kind === 'radius' && auto !== true && isOrthographicView(x.view) && foreshortenOk(foreshorten)
         ? { origin: [foreshorten.origin[0], foreshorten.origin[1]] as XY } : null;
-      return { ...rest, ...(t ? { tol: t } : {}), ...(Number.isInteger(count) && count! >= 2 && count! <= 999 ? { count } : {}), ...(auto === true ? { auto: true } : {}), ...(basic === true ? { basic: true } : {}), ...(fs ? { foreshorten: fs } : {}), ...(arrows ? { arrowPlacement: arrows } : {}), ...(cBreak ? { crossingBreak: cBreak } : {}) } as DrawingDimension;
+      return { ...rest, ...(t ? { tol: t } : {}), ...(Number.isInteger(count) && count! >= 2 && count! <= 999 ? { count } : {}), ...(auto === true ? { auto: true } : {}), ...(basic === true ? { basic: true } : {}), ...(fs ? { foreshorten: fs } : {}), ...(arrows ? { arrowPlacement: arrows } : {}), ...(cBreak ? { crossingBreak: cBreak } : {}), ...(extJog ? { extensionJog: extJog } : {}) } as DrawingDimension;
     }) : [],
     ...(Array.isArray(r.views) && r.views.includes('front') && r.views.includes('top') ? { views: VIEW_IDS.filter(v => r.views!.includes(v)) } : {}),
     ...(readRoom(r.room) ? { room: readRoom(r.room)! } : {}),

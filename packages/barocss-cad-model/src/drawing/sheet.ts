@@ -29,6 +29,7 @@ import { VIEW_IDS, detailLetter, isDetailRef, isSectionRef, isViewId, sameSectio
 import { clipProjectionToDisk, clipRingsToDisk, detailScale, type DetailParent, type DrawingDetail } from './detail';
 import { clipProjectionOutside, clipRingsOutside } from './breaks';
 import { applyLinearCrossingBreaks, type CrossingBreakEvaluation } from './crossingBreak';
+import { extensionJogGeometry } from './extensionJog';
 import type { SectionCircleHatch } from './sectionCircleHatch';
 
 /** visible 0.5, hidden 0.35 dashed, thin 0.25 (dimensions, title block rules), centre 0.25 chain, phantom 0.25 two-dot chain (datum target lines and areas), frame 0.7. */
@@ -1105,12 +1106,20 @@ export function dimensionMarks(v: ViewPlacement, r: Extract<Resolved, { ok: true
     const A = toSheet(v, r.a), B = toSheet(v, r.b), orient = r.dim.orient;
     const d: XY = orient === 'horizontal' ? [1, 0] : orient === 'vertical' ? [0, 1] : unit(sub(B, A)), n: XY = [-d[1], d[0]];
     const A2 = add(A, n, dot2(sub(place, A), n)), B2 = add(B, n, dot2(sub(place, B), n));
+    const along = sub(B2, A2), len = Math.hypot(along[0], along[1]), e = unit(along), mid = add(A2, along, 0.5);
+    const jogAllowed = allowManualArrows && !r.dim.auto && !v.breaks?.length && ['front', 'top', 'right'].includes(r.dim.view);
     for (const [role, P, Q] of [['a', A, A2], ['b', B, B2]] as const) {
       if (r.dim.hideExtension === role) continue;
+      if (jogAllowed && r.dim.extensionJog?.side === role) {
+        const jog = extensionJogGeometry(P, Q, len > 1e-9 ? e : d, r.dim.extensionJog);
+        if (jog.ok) {
+          for (const [s, t] of jog.geometry.segments) marks.push({ kind: 'line', a: s, b: t, pen: 'thin', role: 'extension' });
+          continue;
+        }
+      }
       const out = sub(Q, P), l = Math.hypot(out[0], out[1]);
-      if (l > GAP) { const e = unit(out); marks.push({ kind: 'line', a: add(P, e, GAP), b: add(Q, e, OVER), pen: 'thin', role: 'extension' }); }
+      if (l > GAP) { const ext = unit(out); marks.push({ kind: 'line', a: add(P, ext, GAP), b: add(Q, ext, OVER), pen: 'thin', role: 'extension' }); }
     }
-    const along = sub(B2, A2), len = Math.hypot(along[0], along[1]), e = unit(along), mid = add(A2, along, 0.5);
     const inside = len >= 2 * p.arrowLength + 1;
     const manual = linearArrowPolicy(v, r, len, p, allowManualArrows);
     const insideA = manual?.a ?? inside, insideB = manual?.b ?? inside;
