@@ -103,3 +103,22 @@ test('reopened verified fixed triangle still recovers only its third edge', () =
   assert.deepEqual(state.conflicts, []);
   assert.deepEqual(state.errors, []);
 });
+
+test('panel attributes a straight edge length conflict between two fixed endpoints to both Fix rows', () => {
+  const base: Polygon = {
+    kind: 'polygon', closed: true, points: [[0, 0], [40, 0], [40, 20], [0, 20]],
+    hv: { h: [0, 2], v: [1, 3] },
+    rules: [{ kind: 'fix', point: 1, at: [40, 0] }, { kind: 'fix', point: 2, at: [40, 20] }],
+  };
+  for (const source of [base, { ...base, lengths: { 1: 20 } }]) {
+    const original = structuredClone(source), { actions, shapes, errors, conflicts } = harness(source);
+    assert.equal(actions.recoverPanelLength(source, 1, 25), true);
+    assert.deepEqual(conflicts, [{
+      reason: 'Length of edge 2 = 25 mm conflicts with the 20 mm distance set by fixed points 2 and 3.',
+      shape: source,
+      ids: ['rule:0', 'rule:1'],
+    }]);
+    assert.deepEqual({ shapes, errors }, { shapes: [], errors: [] });
+    assert.deepEqual(source, original);
+  }
+});

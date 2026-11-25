@@ -28,6 +28,20 @@ test('D1105 attributes a point distance only to the two explicit and unambiguous
   }
 });
 
+test('D1994 attributes a straight edge length to the two explicit Fix rows on its endpoints', () => {
+  const shape: Polygon = { ...rectangle, rules: [
+    { kind: 'fix', point: 1, at: [40, 0] }, { kind: 'fix', point: 2, at: [40, 20] },
+  ] };
+  assert.deepEqual(fixedPointDistanceConflict(shape, 'len1', 25), { ids: ['rule:0', 'rule:1'], points: [1, 2], distance: 20 });
+  assert.equal(fixedPointDistanceConflict(shape, 'len1', 20), undefined);
+  assert.equal(fixedPointDistanceConflict(shape, 'len1', 20 + 7e-7), undefined);
+  // Arc edge, anchor-adjacent edges, and unfixed edges stay excluded.
+  assert.equal(fixedPointDistanceConflict({ ...shape, bulges: [0, 0.2, 0, 0] }, 'len1', 25), undefined);
+  for (const key of ['len0', 'len2', 'len3', 'len4']) assert.equal(fixedPointDistanceConflict(shape, key, 25), undefined);
+  // Duplicate Fix on an endpoint stays ambiguous/unattributed.
+  assert.equal(fixedPointDistanceConflict({ ...shape, rules: [...shape.rules!, { kind: 'fix', point: 2, at: [40, 20] }] }, 'len1', 25), undefined);
+});
+
 test('D1104 proves both sign branches conflict with an opposite distance and a locked span', () => {
   const shape: Polygon = { ...rectangle, points: [[0, 0], [60, 0], [60, 40], [0, 40]], lengths: { 1: 40 },
     circles: [{ c: [30, 22], r: 5 }, { c: [40, 20], r: 4 }],

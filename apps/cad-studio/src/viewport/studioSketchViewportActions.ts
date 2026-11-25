@@ -92,6 +92,15 @@ export function studioSketchViewportActions({ liveShape, sketch, currentSketchSo
           return true;
         }
       }
+      const fixed = fixedPointDistanceConflict(source, key, value);
+      if (fixed) {
+        const result = commitDimension(source, key, value);
+        if (!result.ok) {
+          const [a, b] = fixed.points;
+          setConstraintConflict(`${dimensionLabel(source, key)} = ${value} mm conflicts with the ${Number(fixed.distance.toPrecision(15))} mm distance set by fixed points ${a + 1} and ${b + 1}.`, source, fixed.ids);
+          return true;
+        }
+      }
       const opened = edge === 2 ? currentSketchSource() : undefined;
       if (opened && canRecoverLength(sketch, opened, source)) {
         if (value !== source.lengths?.[edge]) applyDimension(opened, source, key, value);

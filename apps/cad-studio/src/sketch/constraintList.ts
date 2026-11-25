@@ -128,13 +128,26 @@ export function edgeCircleDistanceConflict(shape: Polygon, key: string, value: n
   }
 }
 
-/** Attribute a refused point distance to the two explicit Fix rows that determine it. */
+/** Attribute a refused point distance or straight edge length to the two explicit Fix rows that determine it. */
 export function fixedPointDistanceConflict(shape: Polygon, key: string, value: number) {
+  if (!shape.closed || shape.pending || !isSolverLength(value)) return;
   const pair = /^(dist|dx|dy)(\d+)_(\d+)$/.exec(key);
-  if (!pair || !shape.closed || shape.pending || !isSolverLength(value)) return;
-  const a = Number(pair[2]), b = Number(pair[3]);
-  // The implicit anchor also fixes point 0. This diagnostic identifies explicit Fix rows only.
-  if (a <= 0 || a >= b || !shape.points[a] || !shape.points[b]) return;
+  const edgeMatch = pair ? null : /^len(\d+)$/.exec(key);
+  let kind: 'dist' | 'dx' | 'dy', a: number, b: number;
+  if (pair) {
+    kind = pair[1] as 'dist' | 'dx' | 'dy';
+    a = Number(pair[2]);
+    b = Number(pair[3]);
+    // The implicit anchor also fixes point 0. This diagnostic identifies explicit Fix rows only.
+    if (a <= 0 || a >= b || !shape.points[a] || !shape.points[b]) return;
+  } else if (edgeMatch) {
+    const edge = Number(edgeMatch[1]);
+    if (!Number.isSafeInteger(edge) || edge < 0 || edge >= shape.points.length || shape.bulges?.[edge]) return;
+    kind = 'dist';
+    a = edge;
+    b = (edge + 1) % shape.points.length;
+    if (a <= 0 || b <= 0 || a === b || !shape.points[a] || !shape.points[b]) return;
+  } else return;
   const target = (point: number) => {
     const matches = (shape.rules ?? []).flatMap((rule, i) =>
       rule.kind === 'fix' && rule.point === point ? [{ id: `rule:${i}`, at: rule.at }] : []);
@@ -145,7 +158,7 @@ export function fixedPointDistanceConflict(shape: Polygon, key: string, value: n
   const first = target(a), second = target(b);
   if (!first || !second) return;
   const dx = Math.abs(second.at[0] - first.at[0]), dy = Math.abs(second.at[1] - first.at[1]);
-  const distance = pair[1] === 'dx' ? dx : pair[1] === 'dy' ? dy : Math.hypot(dx, dy);
+  const distance = kind === 'dx' ? dx : kind === 'dy' ? dy : Math.hypot(dx, dy);
   // Include both fixed-point residuals, the distance measurement and (for axes)
   // its helper ties and run, with room for floating-point arithmetic.
   if (Math.abs(distance - value) <= 8 * CadNumericPolicy.linearTolerance) return;
