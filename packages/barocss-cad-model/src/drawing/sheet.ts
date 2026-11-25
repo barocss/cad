@@ -32,6 +32,7 @@ import { applyLinearCrossingBreaks, type CrossingBreakEvaluation } from './cross
 import { extensionJogGeometry } from './extensionJog';
 import { resolveArcCenterline, type ResolvedArcCenterline } from './arcCenterline';
 import { resolveCenterMarkGroup, type ResolvedCenterMarkGroup } from './centerMarkGroup';
+import { BISECTOR_EXTENSION_MM, resolveBisectorCenterline, type ResolvedBisectorCenterline } from './bisectorCenterline';
 import type { SectionCircleHatch } from './sectionCircleHatch';
 
 /** visible 0.5, hidden 0.35 dashed, thin 0.25 (dimensions, title block rules), centre 0.25 chain, phantom 0.25 two-dot chain (datum target lines and areas), frame 0.7. */
@@ -111,12 +112,12 @@ export function sectionExtents(settings: DrawingSettings, sections?: readonly Sh
   return out;
 }
 /** `detail` (DR-1): a detail's circle and letter on its parent (`view` the parent), or the detail itself (`view` its own `detail:B`). */
-export interface MarkGroup { role: 'frame' | 'title' | 'view' | 'label' | 'dimension' | 'section' | 'note' | 'datum' | 'control' | 'table' | 'weld' | 'balloon' | 'detail'; id?: string; view?: DimView; /** A point target, kept distinct from a datum feature even when their ids coincide. */ datumTarget?: true; /** A frame with its own view/place rather than a dimension attachment. */ standaloneFrame?: true; /** Source-bound curved centerline between concentric partial arcs. */ arcCenterline?: true; /** Source-bound linear hole-row center mark group connecting line. */ centerMarkGroup?: true; marks: Mark[] }
+export interface MarkGroup { role: 'frame' | 'title' | 'view' | 'label' | 'dimension' | 'section' | 'note' | 'datum' | 'control' | 'table' | 'weld' | 'balloon' | 'detail'; id?: string; view?: DimView; /** A point target, kept distinct from a datum feature even when their ids coincide. */ datumTarget?: true; /** A frame with its own view/place rather than a dimension attachment. */ standaloneFrame?: true; /** Source-bound curved centerline between concentric partial arcs. */ arcCenterline?: true; /** Source-bound linear hole-row center mark group connecting line. */ centerMarkGroup?: true; /** Source-bound straight centerline bisecting two parallel straight edges. */ bisectorCenterline?: true; marks: Mark[] }
 export interface SheetSectionPlaced { id: string; view: SectionViewId; placement: SectionPlacement; projection: BrepProjection; form?: 'removed' | 'revolved'; on?: ViewId }
 /** DR-1: a detail as the sheet drew it: its parent, scale, placement (its circle's square) and clipped projection; where its dimensions are drawn. */
 export interface SheetDetail { id: string; view: DetailParent; scale: number; placement: ViewPlacement; projection: BrepProjection }
 /** `tables`: each table placed (its box), or why its source gave nothing (drawn with the reason). */
-export interface Sheet { /** Transient source preset for export style defaults; not an authored drawing setting. */ standard?: DrawingStandard; size: [number, number]; groups: MarkGroup[]; dimensions: Resolved[]; /** Resolved source-bound curved centerlines between concentric partial arcs. */ arcCenterlines?: readonly ResolvedArcCenterline[]; /** Resolved source-bound linear hole-row center mark groups. */ centerMarkGroups?: readonly ResolvedCenterMarkGroup[]; /** Optional crossing-break evaluations for authored manual linear dimension breaks. */ crossingBreaks?: readonly CrossingBreakEvaluation[]; /** 11 ③b: the units the sheet prints in, when not plain mm (DXF dimension text follows them). */ units?: { units: DrawingUnits; dual: boolean; precision: UnitPrecision; inchFraction?: InchFractionDenominator }; tables?: { id: string; box: [number, number, number, number]; error?: string; /** FRa (O115): a table in blocks, this one's place: [k, of n]. */ part?: [number, number] }[]; /** FRd2 (O119): the weld symbols placed (each joint's view, arrow tip, seam edge) and the joints seen in no view. */ welds?: { placed: readonly WeldPlaced[]; unshown: readonly string[] }; /** O147 B2: the item balloons placed, the item numbers with no clear room, and those with no visible edge. */ balloons?: { placed: readonly BalloonPlaced[]; unclear: readonly number[]; noEdge: readonly number[] }; /** O148 X2: each section as placed (moved under its view's name) with its projection: where its dimensions are drawn. DR-4: `form` a removed or revolved one's, `on` the view a revolved one is drawn on. */ sections?: SheetSectionPlaced[]; /** DR-4: the removed sections with no free room, the revolved ones with no view to be drawn on. */ sectionsMissing?: { id: string; why: 'room' | 'view' }[]; /** DR-1: each detail drawn; `unplaced`: the details whose parent is not on the sheet, and those with no room. */ details?: SheetDetail[]; detailsMissing?: { id: string; why: 'parent' | 'room' | 'empty' }[] }
+export interface Sheet { /** Transient source preset for export style defaults; not an authored drawing setting. */ standard?: DrawingStandard; size: [number, number]; groups: MarkGroup[]; dimensions: Resolved[]; /** Resolved source-bound curved centerlines between concentric partial arcs. */ arcCenterlines?: readonly ResolvedArcCenterline[]; /** Resolved source-bound linear hole-row center mark groups. */ centerMarkGroups?: readonly ResolvedCenterMarkGroup[]; /** Resolved source-bound straight centerlines bisecting parallel edges. */ bisectorCenterlines?: readonly ResolvedBisectorCenterline[]; /** Optional crossing-break evaluations for authored manual linear dimension breaks. */ crossingBreaks?: readonly CrossingBreakEvaluation[]; /** 11 ③b: the units the sheet prints in, when not plain mm (DXF dimension text follows them). */ units?: { units: DrawingUnits; dual: boolean; precision: UnitPrecision; inchFraction?: InchFractionDenominator }; tables?: { id: string; box: [number, number, number, number]; error?: string; /** FRa (O115): a table in blocks, this one's place: [k, of n]. */ part?: [number, number] }[]; /** FRd2 (O119): the weld symbols placed (each joint's view, arrow tip, seam edge) and the joints seen in no view. */ welds?: { placed: readonly WeldPlaced[]; unshown: readonly string[] }; /** O147 B2: the item balloons placed, the item numbers with no clear room, and those with no visible edge. */ balloons?: { placed: readonly BalloonPlaced[]; unclear: readonly number[]; noEdge: readonly number[] }; /** O148 X2: each section as placed (moved under its view's name) with its projection: where its dimensions are drawn. DR-4: `form` a removed or revolved one's, `on` the view a revolved one is drawn on. */ sections?: SheetSectionPlaced[]; /** DR-4: the removed sections with no free room, the revolved ones with no view to be drawn on. */ sectionsMissing?: { id: string; why: 'room' | 'view' }[]; /** DR-1: each detail drawn; `unplaced`: the details whose parent is not on the sheet, and those with no room. */ details?: SheetDetail[]; detailsMissing?: { id: string; why: 'parent' | 'room' | 'empty' }[] }
 
 /** The plain sheet's lettering height; a drawing standard sets another (`p.text`, standard.ts). */
 export const TEXT = 3.5;
@@ -194,6 +195,36 @@ export function buildSheet(views: DrawingViews, layout: SheetLayout, settings: D
           b: toSheet(v, b),
           pen: 'center',
         })),
+      });
+    }
+  }
+  const bisectorCenterlines: ResolvedBisectorCenterline[] = (settings.bisectorCenterlines ?? []).map((item): ResolvedBisectorCenterline => {
+    const v = layout.views[item.view];
+    if (v.hidden) return { ok: false, item, reason: `Its view (${item.view}) is not shown.` };
+    if (v.breaks?.length) return { ok: false, item, reason: 'Parallel-edge centerlines are not supported on a broken view.' };
+    const resolved = resolveBisectorCenterline(views[item.view], item.first, item.second, item.view);
+    return resolved.ok ? { ok: true, item, geometry: resolved.geometry } : { ok: false, item, reason: resolved.reason };
+  });
+  if (settings.centers !== false) {
+    for (const r of bisectorCenterlines) {
+      if (!r.ok) continue;
+      const v = layout.views[r.item.view];
+      const A = toSheet(v, r.geometry.start);
+      const B = toSheet(v, r.geometry.end);
+      const dx = B[0] - A[0], dy = B[1] - A[1], len = Math.hypot(dx, dy);
+      if (len <= 1e-9) continue;
+      const ux = dx / len, uy = dy / len;
+      groups.push({
+        role: 'view',
+        bisectorCenterline: true,
+        id: r.item.id,
+        view: r.item.view,
+        marks: [{
+          kind: 'line',
+          a: [A[0] - ux * BISECTOR_EXTENSION_MM, A[1] - uy * BISECTOR_EXTENSION_MM],
+          b: [B[0] + ux * BISECTOR_EXTENSION_MM, B[1] + uy * BISECTOR_EXTENSION_MM],
+          pen: 'center',
+        }],
       });
     }
   }
@@ -361,7 +392,7 @@ export function buildSheet(views: DrawingViews, layout: SheetLayout, settings: D
       if (boxes.length) group.marks = group.marks.map(m => m === hatchMark ? { ...hatchMark, svgTextExclusions: boxes } : m);
     }
   }
-  return { size: [W, H], groups, dimensions, ...(arcCenterlines.length ? { arcCenterlines } : {}), ...(centerMarkGroups.length ? { centerMarkGroups } : {}), ...(crossingBreaks.length ? { crossingBreaks } : {}), ...(settings.standard ? { standard: settings.standard } : {}), ...(hasUnitSettings(p) ? { units: { units: p.units, dual: p.dual, precision: p.precision, ...(p.inchFraction !== undefined ? { inchFraction: p.inchFraction } : {}) } } : {}), ...(tables.placed.length ? { tables: tables.placed } : {}), ...(welds ? { welds: { placed: welds.placed, unshown: welds.unshown } } : {}), ...(balloons ? { balloons: { placed: balloons.placed, unclear: balloons.unclear, noEdge: balloons.noEdge } } : {}), ...(onSheet.length ? { sections: onSheet } : {}), ...(drawn.details.length ? { details: drawn.details.map(x => x.detail) } : {}), ...(drawn.missing.length ? { detailsMissing: drawn.missing } : {}), ...(apart.missing.length ? { sectionsMissing: apart.missing } : {}) };
+  return { size: [W, H], groups, dimensions, ...(arcCenterlines.length ? { arcCenterlines } : {}), ...(centerMarkGroups.length ? { centerMarkGroups } : {}), ...(bisectorCenterlines.length ? { bisectorCenterlines } : {}), ...(crossingBreaks.length ? { crossingBreaks } : {}), ...(settings.standard ? { standard: settings.standard } : {}), ...(hasUnitSettings(p) ? { units: { units: p.units, dual: p.dual, precision: p.precision, ...(p.inchFraction !== undefined ? { inchFraction: p.inchFraction } : {}) } } : {}), ...(tables.placed.length ? { tables: tables.placed } : {}), ...(welds ? { welds: { placed: welds.placed, unshown: welds.unshown } } : {}), ...(balloons ? { balloons: { placed: balloons.placed, unclear: balloons.unclear, noEdge: balloons.noEdge } } : {}), ...(onSheet.length ? { sections: onSheet } : {}), ...(drawn.details.length ? { details: drawn.details.map(x => x.detail) } : {}), ...(drawn.missing.length ? { detailsMissing: drawn.missing } : {}), ...(apart.missing.length ? { sectionsMissing: apart.missing } : {}) };
 }
 
 // D416: one local label fallback after all obstacles/attachments exist. Conservative annotation bounds, not glyph ink.

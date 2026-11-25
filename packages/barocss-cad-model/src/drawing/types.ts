@@ -269,6 +269,14 @@ export interface DrawingCenterMarkGroup {
   connectingLines: boolean;
 }
 
+/** A source-bound straight centerline bisecting two parallel coplanar equal-span straight edges. */
+export interface DrawingBisectorCenterline {
+  id: string;
+  view: SectionViewId;
+  first: EdgeRef;
+  second: EdgeRef;
+}
+
 /** The revision after `rev`: A → B … Z → AA, 01 → 02, 1 → 2; none → A. */
 export function nextRevision(rev: string | undefined): string {
   if (!rev || rev === '-') return 'A';
@@ -358,6 +366,8 @@ export interface DrawingSettings {
   arcCenterlines?: DrawingArcCenterline[];
   /** Source-bound linear hole-row center mark groups with toggleable connecting lines. */
   centerMarkGroups?: DrawingCenterMarkGroup[];
+  /** Source-bound straight centerlines bisecting two parallel straight edges. */
+  bisectorCenterlines?: DrawingBisectorCenterline[];
   /** Never stored: set on the settings of one sheet of a drawing with sheets (sheets.ts `forSheet`), which then lay out and build as a drawing of that sheet alone. */
   sheetContext?: SheetContext;
 }
@@ -513,6 +523,7 @@ export function readDrawing(raw: unknown): DrawingSettings {
     ...(readFrames(r.frames).length ? { frames: readFrames(r.frames) } : {}),
     ...(readArcCenterlines(r.arcCenterlines).length ? { arcCenterlines: readArcCenterlines(r.arcCenterlines) } : {}),
     ...(readCenterMarkGroups(r.centerMarkGroups).length ? { centerMarkGroups: readCenterMarkGroups(r.centerMarkGroups) } : {}),
+    ...(readBisectorCenterlines(r.bisectorCenterlines).length ? { bisectorCenterlines: readBisectorCenterlines(r.bisectorCenterlines) } : {}),
     ...(Array.isArray(r.notes) && r.notes.some(isNote) ? { notes: r.notes.filter(isNote).map(n => ({ id: n.id, text: n.text, at: [n.at[0], n.at[1]] as XY, ...(n.leader && VIEW_IDS.includes(n.leader.view) && isXY(n.leader.at) ? { leader: { view: n.leader.view, at: [n.leader.at[0], n.leader.at[1]] as XY, ...(Object.hasOwn(n.leader, 'target') ? { target: readNoteTarget(n.leader.target) } : {}) } } : {}), ...(typeof n.sheet === 'string' && /^[A-Za-z0-9_-]{1,16}$/.test(n.sheet) ? { sheet: n.sheet } : {}) })) } : {}),
     ...(readTables(r.tables).length ? { tables: readTables(r.tables) } : {}),
   };
@@ -576,6 +587,21 @@ function readCenterMarkGroups(raw: unknown): DrawingCenterMarkGroup[] {
     if (hasDuplicate) continue;
     seen.add(x.id);
     out.push({ id: x.id, kind: 'linear', view: x.view, members: x.members.map(copyEdgeRef), connectingLines: x.connectingLines });
+  }
+  return out;
+}
+function readBisectorCenterlines(raw: unknown): DrawingBisectorCenterline[] {
+  if (!Array.isArray(raw)) return [];
+  const seen = new Set<string>(), out: DrawingBisectorCenterline[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) continue;
+    const x = item as Partial<DrawingBisectorCenterline>;
+    if (typeof x.id !== 'string' || !x.id.trim() || seen.has(x.id)) continue;
+    if (!x.view || !SECTION_VIEWS.includes(x.view)) continue;
+    if (!edgeRefOk(x.first) || !edgeRefOk(x.second)) continue;
+    if (x.first.edge === x.second.edge && x.first.near[0] === x.second.near[0] && x.first.near[1] === x.second.near[1] && x.first.near[2] === x.second.near[2]) continue;
+    seen.add(x.id);
+    out.push({ id: x.id, view: x.view, first: copyEdgeRef(x.first), second: copyEdgeRef(x.second) });
   }
   return out;
 }

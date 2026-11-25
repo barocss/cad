@@ -30,6 +30,7 @@ export function ExportActions({ canExportDimensionCsv, exportDimensionCsv, sheet
   const hasCircleSeparation = sheet?.dimensions.some(r => r.ok && r.dim.kind === 'circle-separation');
   const hasArcCenterline = sheet?.arcCenterlines?.some(r => r.ok);
   const hasCenterMarkGroup = sheet?.centerMarkGroups?.some(r => r.ok && r.item.connectingLines);
+  const hasBisectorCenterline = sheet?.bisectorCenterlines?.some(r => r.ok);
   const confirmPanel = useRef<HTMLDivElement>(null);
   const pendingFormat = confirmation?.format;
   useEffect(() => {
@@ -61,6 +62,7 @@ export function ExportActions({ canExportDimensionCsv, exportDimensionCsv, sheet
         {hasCircleSeparation && <div className="empty" role="note" aria-label="DXF circle separation compatibility">DXF exports circle separation dimensions as drawn extension lines, arrowheads, and text rather than a native DXF dimension entity. Use SVG for the drawn appearance.</div>}
         {hasArcCenterline && <div className="empty" role="note" aria-label="DXF curved centerline compatibility">DXF exports curved centerlines as non-associative ARC entities on the CENTER layer. Keep the .bcad in a Studio version with curved centerline support; older versions may discard these annotations on re-save.</div>}
         {hasCenterMarkGroup && <div className="empty" role="note" aria-label="DXF hole row compatibility">DXF exports hole row connecting lines as non-associative LINE entities on the CENTER layer. Keep the .bcad in a Studio version with hole row support; older versions may discard these groups on re-save.</div>}
+        {hasBisectorCenterline && <div className="empty" role="note" aria-label="DXF straight centerline compatibility">DXF exports parallel-edge centerlines as non-associative LINE entities on the CENTER layer. Keep the .bcad in a Studio version with straight centerline support; older versions may discard these annotations on re-save.</div>}
         {confirmation && <div ref={confirmPanel} tabIndex={-1} className="dw-export-confirm" role="group" aria-label="Confirm drawing export">
           <ul>{confirmation.messages.map((message, i) => <li key={i}>{message}</li>)}</ul>
           <div className="dw-actions">
