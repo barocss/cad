@@ -8,6 +8,7 @@ export function dimensionEdgeNames(dim: DrawingDimension): (string | undefined)[
   if (dim.kind === 'chamfer') return [dim.chamfer?.edge, dim.adjacent?.edge];
   if (dim.kind === 'radial-thickness') return [dim.first?.edge, dim.second?.edge];
   if (dim.kind === 'cylinder-diameter') return [dim.cylinder?.face];
+  if (dim.kind === 'circle-separation') return [dim.first?.edge, dim.second?.edge];
   if (dim.kind === 'pcd') return (dim.ring ?? []).map(member => member.edge);
   return [dim.edge];
 }

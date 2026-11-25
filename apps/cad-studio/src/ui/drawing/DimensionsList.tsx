@@ -2,7 +2,7 @@
 import { useId } from 'react';
 import { dimensionLine } from '@barocss/cad-model/drawing/sheet';
 import { presetFor } from '@barocss/cad-model/drawing/standard';
-import { isDetailRef, isViewId, type LinearArrowSide, type LinearExtensionJog, type DrawingSettings } from '@barocss/cad-model/drawing/types';
+import { isDetailRef, isViewId, type CircleSeparationMode, type LinearArrowSide, type LinearExtensionJog, type DrawingSettings } from '@barocss/cad-model/drawing/types';
 import type { CrossingBreakCandidate } from '@barocss/cad-model/drawing/crossingBreak';
 import type { useDrawingSheet } from '../useDrawingSheet';
 import { Icon } from '../atoms';
@@ -37,13 +37,15 @@ export interface DimensionsListProps {
   onReselectChamfer?(id: string): void;
   onReselectRadialThickness?(id: string): void;
   onReselectCylinderDiameter?(id: string): void;
+  onReselectCircleSeparation?(id: string): void;
+  onCircleSeparationMode?(id: string, mode: CircleSeparationMode): void;
   onSelect(id: string): void;
   remove(id: string): void;
   autoDimension(): Promise<void>;
 }
 
 export function DimensionsList({
-  sheet, views, layout, scope, settings, occurrenceReasons, onReattach, onReselectChamfer, onReselectRadialThickness, onReselectCylinderDiameter, selected, onSelect, remove, autoDimension,
+  sheet, views, layout, scope, settings, occurrenceReasons, onReattach, onReselectChamfer, onReselectRadialThickness, onReselectCylinderDiameter, onReselectCircleSeparation, onCircleSeparationMode, selected, onSelect, remove, autoDimension,
   extensionReady = false, arrowReady = false, onArrow, crossingBreakReady = false, crossingBreakCandidates = [], onCrossingBreak,
   extensionJogReady = false, onExtensionJog, onExtension, onExtensionPreview,
   foreshortenMovingId = null, onForeshorten, onForeshortenMove, onForeshortenRemove,
@@ -188,8 +190,18 @@ export function DimensionsList({
               && <Button variant="ghost" size="xs" aria-label={`Reselect chamfer ${r.dim.id}`} onClick={() => onReselectChamfer(r.dim.id)}>Reselect</Button>}
             {!r.ok && r.dim.kind === 'radial-thickness' && scope.kind === 'part' && isViewId(r.dim.view) && r.dim.view !== 'iso' && onReselectRadialThickness
               && <Button variant="ghost" size="xs" aria-label={`Reselect wall thickness ${r.dim.id}`} onClick={() => onReselectRadialThickness(r.dim.id)}>Reselect</Button>}
+            {selected === r.dim.id && r.dim.kind === 'circle-separation' && !r.dim.auto && ['front', 'top', 'right'].includes(r.dim.view) && scope.kind === 'part' && onCircleSeparationMode && <div role="group" aria-label={`Circle separation mode ${r.dim.id}`} style={{ flexBasis: '100%', order: 2, display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+              <span className="small">Gap mode:</span>
+              {(['min', 'max'] as const).map(mode => <Button key={mode} variant="ghost" size="xs"
+                aria-label={`Set gap mode ${mode === 'min' ? 'Min' : 'Max'} ${r.dim.id}`}
+                aria-pressed={r.dim.kind === 'circle-separation' && r.dim.mode === mode}
+                disabled={!r.ok || !extensionReady}
+                onClick={() => onCircleSeparationMode(r.dim.id, mode)}>{mode === 'min' ? 'Min' : 'Max'}</Button>)}
+            </div>}
             {!r.ok && r.dim.kind === 'cylinder-diameter' && scope.kind === 'part' && isViewId(r.dim.view) && r.dim.view !== 'iso' && onReselectCylinderDiameter
               && <Button variant="ghost" size="xs" aria-label={`Reselect side diameter ${r.dim.id}`} onClick={() => onReselectCylinderDiameter(r.dim.id)}>Reselect</Button>}
+            {!r.ok && r.dim.kind === 'circle-separation' && scope.kind === 'part' && isViewId(r.dim.view) && r.dim.view !== 'iso' && onReselectCircleSeparation
+              && <Button variant="ghost" size="xs" aria-label={`Reselect circle gap ${r.dim.id}`} onClick={() => onReselectCircleSeparation(r.dim.id)}>Reselect</Button>}
             <Button variant="ghost" size="xs" aria-label={`Remove dimension ${r.ok ? r.text : r.dim.id}`} onClick={e => { e.stopPropagation(); remove(r.dim.id); }}><Icon name="close" small /></Button>
           </div>)}
           {lost.length > 0 && <div className="empty" style={{ color: 'var(--warn)' }}>{lost.length} dimension{lost.length > 1 ? 's' : ''} lost {lost.length > 1 ? 'their' : 'its'} reference (the part changed).</div>}

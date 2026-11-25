@@ -202,6 +202,19 @@ export interface CylinderDiameterDimensionData {
   place: XY;
 }
 
+export type CircleSeparationMode = 'min' | 'max';
+
+export interface CircleSeparationDimensionData {
+  id: string;
+  view: DimView;
+  kind: 'circle-separation';
+  /** Nested references to two distinct coplanar externally disjoint full circles (no top-level `edge`/`near`). */
+  first: EdgeRef;
+  second: EdgeRef;
+  mode: CircleSeparationMode;
+  place: XY;
+}
+
 export type DrawingDimension = ({ tol?: Tolerance; count?: number; auto?: true; basic?: true }) & (
   | { id: string; view: DimView; kind: 'linear'; a: DimPoint; b: DimPoint; orient: 'horizontal' | 'vertical' | 'aligned'; place: XY; /** Hide only this reference role’s extension line; omitted means both visible. */ hideExtension?: 'a' | 'b'; arrowPlacement?: LinearArrowPlacement; /** Optional sheet-mm break on this linear dimension line where it crosses one verified sibling linear dimension line. */ crossingBreak?: LinearCrossingBreak; /** Optional display-only jog on one extension line ('a' or 'b'); measured endpoints and value stay unchanged. */ extensionJog?: LinearExtensionJog }
   | { id: string; view: DimView; kind: 'diameter'; edge: string; near: Vec3; place: XY; sig?: Sig; was?: string }
@@ -210,6 +223,7 @@ export type DrawingDimension = ({ tol?: Tolerance; count?: number; auto?: true; 
   | ChamferDimensionData
   | RadialThicknessDimensionData
   | CylinderDiameterDimensionData
+  | CircleSeparationDimensionData
   /** A pitch circle (R14.5, O6): the circle through the centres of three or more holes, its diameter as `Ø40 PCD`. */
   | { id: string; view: DimView; kind: 'pcd'; ring: CentreRef[]; place: XY }
   /** Between two straight edges (each the one of its name nearest `near`), in the sector holding `place`. */
@@ -457,7 +471,7 @@ export function readDrawing(raw: unknown): DrawingSettings {
     ...(typeof r.title === 'string' && r.title ? { title: r.title } : {}),
     ...(typeof r.revision === 'string' && r.revision ? { revision: r.revision.slice(0, 6) } : {}),
     ...(typeof r.revisedModel === 'string' ? { revisedModel: r.revisedModel } : {}),
-    dimensions: Array.isArray(r.dimensions) ? r.dimensions.filter(x => x && typeof x.id === 'string' && isDimView(x.view) && (x.kind !== 'pcd' || ringOk(x.ring)) && (x.kind !== 'arc-length' || (x.auto !== true && isOrthographicView(x.view) && isXY(x.place) && edgeRefOk((x as { arc?: unknown }).arc))) && (x.kind !== 'chamfer' || (x.auto !== true && isOrthographicView(x.view) && isXY(x.place) && edgeRefOk((x as { chamfer?: unknown }).chamfer) && edgeRefOk((x as { adjacent?: unknown }).adjacent))) && (x.kind !== 'radial-thickness' || (x.auto !== true && isOrthographicView(x.view) && isXY(x.place) && edgeRefOk((x as { first?: unknown }).first) && edgeRefOk((x as { second?: unknown }).second))) && (x.kind !== 'cylinder-diameter' || (x.auto !== true && isOrthographicView(x.view) && isXY(x.place) && cylinderFaceRefOk((x as { cylinder?: unknown }).cylinder))) && (x.kind !== 'linear' || ((x.a?.at !== 'pcd' || ringOk(x.a.ring)) && (x.b?.at !== 'pcd' || ringOk(x.b.ring))))).map(x => {
+    dimensions: Array.isArray(r.dimensions) ? r.dimensions.filter(x => x && typeof x.id === 'string' && isDimView(x.view) && (x.kind !== 'pcd' || ringOk(x.ring)) && (x.kind !== 'arc-length' || (x.auto !== true && isOrthographicView(x.view) && isXY(x.place) && edgeRefOk((x as { arc?: unknown }).arc))) && (x.kind !== 'chamfer' || (x.auto !== true && isOrthographicView(x.view) && isXY(x.place) && edgeRefOk((x as { chamfer?: unknown }).chamfer) && edgeRefOk((x as { adjacent?: unknown }).adjacent))) && (x.kind !== 'radial-thickness' || (x.auto !== true && isOrthographicView(x.view) && isXY(x.place) && edgeRefOk((x as { first?: unknown }).first) && edgeRefOk((x as { second?: unknown }).second))) && (x.kind !== 'cylinder-diameter' || (x.auto !== true && isOrthographicView(x.view) && isXY(x.place) && cylinderFaceRefOk((x as { cylinder?: unknown }).cylinder))) && (x.kind !== 'circle-separation' || (x.auto !== true && isOrthographicView(x.view) && isXY(x.place) && ((x as { mode?: unknown }).mode === 'min' || (x as { mode?: unknown }).mode === 'max') && edgeRefOk((x as { first?: unknown }).first) && edgeRefOk((x as { second?: unknown }).second))) && (x.kind !== 'linear' || ((x.a?.at !== 'pcd' || ringOk(x.a.ring)) && (x.b?.at !== 'pcd' || ringOk(x.b.ring))))).map(x => {
       const { tol, count, auto, basic, foreshorten, arrowPlacement, crossingBreak, extensionJog, ...rest } = x as DrawingDimension & { foreshorten?: unknown; arrowPlacement?: unknown; crossingBreak?: unknown; extensionJog?: unknown }; const t = x.kind === 'chamfer' ? null : readTolerance(tol);
       const arrows = x.kind === 'linear' && auto !== true && isOrthographicView(x.view) ? readLinearArrowPlacement(arrowPlacement) : undefined;
       const cBreak = x.kind === 'linear' && auto !== true && isOrthographicView(x.view) ? readLinearCrossingBreak(crossingBreak) : undefined;

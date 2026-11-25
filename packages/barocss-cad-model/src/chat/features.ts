@@ -540,7 +540,7 @@ function renameDimension(d: DrawingDimension, rename: (name: string) => string |
     const c = rename(d.chamfer.edge), a = rename(d.adjacent.edge);
     return c === null || a === null ? null : { ...d, chamfer: { ...d.chamfer, edge: c }, adjacent: { ...d.adjacent, edge: a } };
   }
-  if (d.kind === 'radial-thickness') {
+  if (d.kind === 'radial-thickness' || d.kind === 'circle-separation') {
     const f = rename(d.first.edge), s = rename(d.second.edge);
     return f === null || s === null ? null : { ...d, first: { ...d.first, edge: f }, second: { ...d.second, edge: s } };
   }

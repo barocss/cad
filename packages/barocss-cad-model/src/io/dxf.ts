@@ -135,9 +135,9 @@ export function sheetDxfDocument(sheet: Sheet, layout: SheetLayout, version: Dxf
     if (g.role === 'frame' || g.role === 'title') { for (const m of g.marks) markEntities(m, H, title, solidFills); continue; }
     if (g.role === 'dimension') {
       const r = sheet.dimensions.find((x): x is Extract<Resolved, { ok: true }> => x.ok && x.dim.id === g.id);
-      // (Pitch circles, arc-length, chamfer, radial-thickness, and cylinder-diameter dimensions have no DXF R12/2000 native DIMENSION type: export their exact drawn marks.)
+      // (Pitch circles, arc-length, chamfer, radial-thickness, cylinder-diameter, and circle-separation dimensions have no DXF R12/2000 native DIMENSION type: export their exact drawn marks.)
       const v = r && placementOf(layout, sheet, r.dim.view);
-      if (r && v && r.kind !== 'pcd' && r.kind !== 'arc-length' && r.kind !== 'chamfer' && r.kind !== 'radial-thickness' && r.kind !== 'cylinder-diameter') { entities.push(dimensionEntity(r, v, g, H, solidFills, presetFor(sheet.units ?? {}))); continue; }
+      if (r && v && r.kind !== 'pcd' && r.kind !== 'arc-length' && r.kind !== 'chamfer' && r.kind !== 'radial-thickness' && r.kind !== 'cylinder-diameter' && r.kind !== 'circle-separation') { entities.push(dimensionEntity(r, v, g, H, solidFills, presetFor(sheet.units ?? {}))); continue; }
     }
     const first = entities.length;
     for (const m of g.marks) markEntities(m, H, entities, solidFills);

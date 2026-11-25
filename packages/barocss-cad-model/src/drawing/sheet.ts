@@ -164,6 +164,9 @@ export function buildSheet(views: DrawingViews, layout: SheetLayout, settings: D
     if (d.kind === 'cylinder-diameter' && layout.views[view].breaks?.length) {
       return { ok: false, dim: d, reason: 'Cylinder side diameter dimensions are not supported on a broken view.' };
     }
+    if (d.kind === 'circle-separation' && layout.views[view].breaks?.length) {
+      return { ok: false, dim: d, reason: 'Circle separation dimensions are not supported on a broken view.' };
+    }
     const patternProblem = (message: string): Resolved => {
       const action = d.tol || d.basic || attachedFrames.some(frame => frame.dim === d.id)
         ? 'Review this dimension and its attached controls before replacing it.'
@@ -1112,6 +1115,46 @@ export function dimensionMarks(v: ViewPlacement, r: Extract<Resolved, { ok: true
     }
     const mid = at(theta / 2), out = unit(sub(mid, X));
     marks.push(...valueMarks(add(add(mid, out, 2.5), [0, 1.2]), 0, out[0] > 0.3 ? 'start' : out[0] < -0.3 ? 'end' : 'middle', r.text, r.dim.tol, '°', p));
+    return marks;
+  }
+  if (r.kind === 'circle-separation') {
+    // Aligned circumference-to-circumference gap (`min` or `max`) between two strictly disjoint coplanar full circles.
+    const A = toSheet(v, r.pointA);
+    const B = toSheet(v, r.pointB);
+    const span = sub(B, A);
+    const len = Math.hypot(span[0], span[1]);
+    const d: XY = len > 1e-9 ? unit(span) : [1, 0];
+    const n: XY = [-d[1], d[0]];
+    const offset = dot2(sub(place, A), n);
+    const A2 = add(A, n, offset);
+    const B2 = add(B, n, offset);
+    const along = sub(B2, A2);
+    const e = Math.hypot(along[0], along[1]) > 1e-9 ? unit(along) : d;
+    const mid = add(A2, along, 0.5);
+    for (const [P, Q] of [[A, A2], [B, B2]] as const) {
+      const out = sub(Q, P);
+      const l = Math.hypot(out[0], out[1]);
+      if (l > GAP) {
+        const ext = unit(out);
+        marks.push({ kind: 'line', a: add(P, ext, GAP), b: add(Q, ext, OVER), pen: 'thin', role: 'extension' });
+      }
+    }
+    const inside = len >= 2 * p.arrowLength + 1;
+    const free: [number, number] = inside ? [-len / 2 + p.arrowLength, len / 2 - p.arrowLength] : [-len / 2, len / 2];
+    const text = p.dimensionText === 'unidirectional' ? unidirectional(mid, e, r.text, r.alt, r.value, r.dim.tol, inside ? free : [0, 0], p) : null;
+    const start = inside ? A2 : add(A2, e, -p.arrowLength - 3);
+    const end = inside ? B2 : add(B2, e, p.arrowLength + 3);
+    if (text?.gap && inside) {
+      marks.push(
+        { kind: 'line', a: start, b: add(mid, e, text.gap[0]), pen: 'thin', role: 'dimension' },
+        { kind: 'line', a: add(mid, e, text.gap[1]), b: end, pen: 'thin', role: 'dimension' },
+      );
+    } else {
+      marks.push({ kind: 'line', a: start, b: end, pen: 'thin', role: 'dimension' });
+    }
+    marks.push(arrow(A2, inside ? [-e[0], -e[1]] : e, p), arrow(B2, inside ? e : [-e[0], -e[1]], p));
+    if (text) marks.push(...text.marks);
+    else marks.push(...clearOfLine(valueMarks(add(mid, textUp(e), 1.2), readAngle(e), 'middle', r.text, r.dim.tol, '', p, r.alt, r.value), mid, e, free, true, !!r.dim.basic));
     return marks;
   }
   if (r.kind === 'cylinder-diameter') {

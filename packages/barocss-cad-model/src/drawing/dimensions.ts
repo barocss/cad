@@ -14,6 +14,7 @@ import { resolveArcLengthEdge } from './arcLength';
 import { resolveChamferEdges } from './chamferDim';
 import { resolveRadialThicknessEdges } from './radialThickness';
 import { resolveCylinderDiameter } from './cylinderDiameter';
+import { resolveCircleSeparationEdges } from './circleSeparation';
 
 const sub3 = (a: readonly number[], b: readonly number[]): Vec3 => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
 const dist3 = (a: readonly number[], b: readonly number[]) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
@@ -168,6 +169,22 @@ export interface ResolvedCylinderDiameter {
   alt?: string;
 }
 
+export interface ResolvedCircleSeparation {
+  ok: true;
+  kind: 'circle-separation';
+  dim: Extract<DrawingDimension, { kind: 'circle-separation' }>;
+  centerA: XY;
+  centerB: XY;
+  radiusA: number;
+  radiusB: number;
+  pointA: XY;
+  pointB: XY;
+  mode: 'min' | 'max';
+  value: number;
+  text: string;
+  alt?: string;
+}
+
 /** `alt` (11 ③b): on a dual drawing, the same text in the other unit; the sheet sets it, resolving never does. */
 export type Resolved = (
   | { ok: true; kind: 'linear'; dim: Extract<DrawingDimension, { kind: 'linear' }>; a: XY; b: XY; value: number; text: string; alt?: string }
@@ -176,6 +193,7 @@ export type Resolved = (
   | ResolvedChamfer
   | ResolvedRadialThickness
   | ResolvedCylinderDiameter
+  | ResolvedCircleSeparation
   /** `vertex`: where the two lines meet; `from`/`to`: the sector's bounding directions (counter-clockwise from → to); `ends`: each edge's far end from the vertex. */
   | { ok: true; kind: 'angle'; dim: Extract<DrawingDimension, { kind: 'angle' }>; vertex: XY; from: XY; to: XY; ends: [XY, XY]; value: number; text: string; alt?: string }
   /** A pitch circle (R14.5): `center` in the view, `center3` in the model, `radius` (mm), `members` in the view; `value` its diameter. */
@@ -195,7 +213,8 @@ export function valueText(r: { kind: Extract<Resolved, { ok: true }>['kind']; va
     case 'cylinder-diameter': return `Ø${f(r.value)}`;
     case 'arc-length': return `ARC ${f(r.value)}`;
     case 'chamfer': return `${f(r.value)} × 45°`;
-    case 'radial-thickness': return f(r.value);
+    case 'radial-thickness':
+    case 'circle-separation': return f(r.value);
     default: return `R${f(r.value)}`;
   }
 }
@@ -295,6 +314,25 @@ export function resolveDimension(views: Partial<Record<DimView, BrepProjection>>
     const value = linearValue(pr, a, b, dim.orient);
     if (value < 1e-9) return { ok: false, dim, reason: 'Its two points now coincide in this view.' };
     return { ok: true, kind: 'linear', dim, a: inView(pr, a), b: inView(pr, b), value, text: valueText({ kind: 'linear', value }, fmtMM) };
+  }
+  if (dim.kind === 'circle-separation') {
+    const resolved = resolveCircleSeparationEdges(pr, dim.first, dim.second, dim.mode, dim.view);
+    if (!resolved.ok) return { ok: false, dim, reason: resolved.reason };
+    const g = resolved.geometry;
+    return {
+      ok: true,
+      kind: 'circle-separation',
+      dim,
+      centerA: g.centerA,
+      centerB: g.centerB,
+      radiusA: g.radiusA,
+      radiusB: g.radiusB,
+      pointA: g.pointA,
+      pointB: g.pointB,
+      mode: g.mode,
+      value: g.value,
+      text: valueText({ kind: 'circle-separation', value: g.value }, fmtMM),
+    };
   }
   if (dim.kind === 'cylinder-diameter') {
     const resolved = resolveCylinderDiameter(pr, dim.cylinder, dim.view);

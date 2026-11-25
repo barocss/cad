@@ -27,6 +27,7 @@ export function ExportActions({ canExportDimensionCsv, exportDimensionCsv, sheet
   const hasChamfer = sheet?.dimensions.some(r => r.ok && r.dim.kind === 'chamfer');
   const hasRadialThickness = sheet?.dimensions.some(r => r.ok && r.dim.kind === 'radial-thickness');
   const hasCylinderDiameter = sheet?.dimensions.some(r => r.ok && r.dim.kind === 'cylinder-diameter');
+  const hasCircleSeparation = sheet?.dimensions.some(r => r.ok && r.dim.kind === 'circle-separation');
   const confirmPanel = useRef<HTMLDivElement>(null);
   const pendingFormat = confirmation?.format;
   useEffect(() => {
@@ -55,6 +56,7 @@ export function ExportActions({ canExportDimensionCsv, exportDimensionCsv, sheet
         {hasChamfer && <div className="empty" role="note" aria-label="DXF chamfer compatibility">DXF exports 45° chamfer dimensions as drawn leader lines, arrowhead, and text rather than a native DXF dimension entity. Use SVG for the drawn appearance.</div>}
         {hasRadialThickness && <div className="empty" role="note" aria-label="DXF radial thickness compatibility">DXF exports concentric radial thickness dimensions as drawn lines, arrowheads, and text rather than a native DXF dimension entity. Use SVG for the drawn appearance.</div>}
         {hasCylinderDiameter && <div className="empty" role="note" aria-label="DXF cylinder diameter compatibility">DXF exports cylinder side diameter dimensions as drawn lines, arrowheads, and text rather than a native DXF dimension entity. Use SVG for the drawn appearance.</div>}
+        {hasCircleSeparation && <div className="empty" role="note" aria-label="DXF circle separation compatibility">DXF exports circle separation dimensions as drawn extension lines, arrowheads, and text rather than a native DXF dimension entity. Use SVG for the drawn appearance.</div>}
         {confirmation && <div ref={confirmPanel} tabIndex={-1} className="dw-export-confirm" role="group" aria-label="Confirm drawing export">
           <ul>{confirmation.messages.map((message, i) => <li key={i}>{message}</li>)}</ul>
           <div className="dw-actions">

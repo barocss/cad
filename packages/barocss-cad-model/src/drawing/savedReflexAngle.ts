@@ -9,7 +9,7 @@ const edgeRef = (value: unknown) => record(value) && typeof value.edge === 'stri
 /** Validate only the new opt-in field before saved drawing readers can discard malformed input. */
 export function checkSavedReflexAngle(raw: unknown): Problem[] {
   if (!record(raw) || !Array.isArray(raw.dimensions)) return [];
-  const flagged = raw.dimensions.filter((dimension: unknown): dimension is Record<string, unknown> => record(dimension) && Object.hasOwn(dimension, 'mode'));
+  const flagged = raw.dimensions.filter((dimension: unknown): dimension is Record<string, unknown> => record(dimension) && dimension.kind !== 'circle-separation' && Object.hasOwn(dimension, 'mode'));
   if (!flagged.length) return [];
   const fail = (why: string) => [problem('DRAWING_OPTIONS', `Reflex angle: ${why}. Keep the original document; omit mode for ordinary angles.`)];
   if (raw.scope !== undefined) {
