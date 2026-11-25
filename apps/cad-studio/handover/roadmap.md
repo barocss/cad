@@ -1,12 +1,12 @@
 # CAD roadmap — current status and execution order
 
-Updated 2026-11-25 · Priority authority: D520 · Latest delivery: D1983 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
+Updated 2026-11-25 · Priority authority: D520 · Latest delivery: D1984 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
 
 This is the only current status index. Detailed tracks define acceptance; the 34 stable row pages retain scope and issue navigation. Immutable decision notes retain results. Do not append chronological status paragraphs here. [D520 decision](notes/cad-roadmap-replan-2026-11-04/README.md) supersedes D445 execution order and historical next-item text, while retaining its safeguards and bounded proofs.
 
 ## Now and next
 
-- **Current position:** [D1983](notes/sketch-new-edge-lock-diagnostic-2026-11-25/README.md), P1 rows 9 and 16. The Sketch panel names the attempted straight edge length for a redundant or unproven new lock without recording it. The [D1982](notes/parallel-planar-end-face-closeout-2026-11-25/README.md) closeout remains complete for #222.
+- **Current position:** [D1984](notes/partial-held-constant-fillet-2026-11-25/README.md), P1 rows 15 and 16. Opening a terminal Constant Fillet with one retired signed line offers explicit recovery without substituting the nearest edge. [#20](https://github.com/barocss/cad/issues/20) remains open.
 - **Next MAIN:** Select the oldest uncovered, actionable P1 acceptance against the current source and existing issue evidence. Keep arbitrary curved targets and implicit joins outside the verified end-face contract.
 - **Separate follow-ups:** Continue Studio App extraction in cohesive parts with affected desktop checks. [#608 Rendering](https://github.com/barocss/cad/issues/608) stays on HOLD. API inventory drift remains open. The issue tracker records [#126](https://github.com/barocss/cad/issues/126), [#613](https://github.com/barocss/cad/issues/613), [#152](https://github.com/barocss/cad/issues/152) and [#22](https://github.com/barocss/cad/issues/22) as closed.
 - **Active repository:** [barocss/cad](https://github.com/barocss/cad), based on `origin/main`. Fetch before work and preserve unexpected changes. The [migration record](../../../docs/migration/README.md) maps the former `local/cad-dev` history and issue numbers.

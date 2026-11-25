@@ -240,3 +240,35 @@ test('a Split cap with two descendants refuses a Shell edit and stays held on Fi
   assert.equal(shell.suppressed, true);
   assert.ok(Math.abs((await bodiesOf(verified.doc)).find(body => body.key === 'b6')!.volume! - 8860) < 1e-8);
 });
+
+test('Open holds a retired line in a terminal two-edge constant Fillet without reassigning its stable slot', async () => {
+  const stock = rectanglePart(80, 40, 10);
+  const [sketch, extrude] = stock.nodes;
+  assert.ok(sketch.kind === 'sketch' && sketch.profile === 'rectangle');
+  const parent: StudioDoc = { ...stock, nodes: [{ ...sketch, min: [-20, -20], max: [60, 20],
+    sideTags: { outer: ['e1', 'e2', 'e3', 'e4'] } }, extrude] };
+  const old = 'n1.side[e1]|n1.side[e4]', candidate = 'n1.side[e4]|n1.side[e5]', stable = 'n1.side[e2]|n1.side[e3]';
+  const doc = captureSignatures(withNode(parent, { kind: 'fillet', parent: { node: 1, side: 'solid' }, edges: [old, stable], radius: 2 }), await bodiesOf(parent));
+  const moved = structuredClone(doc), profile = moved.nodes[0];
+  assert.ok(profile.kind === 'sketch' && profile.profile === 'rectangle');
+  profile.min = [-20, -18];
+  assert.deepEqual(await verifyReferences(moved, await bodiesOf(moved), evaluate), { doc: moved, changes: [], problems: [] });
+  const retired = structuredClone(moved), retiredProfile = retired.nodes[0];
+  assert.ok(retiredProfile.kind === 'sketch' && retiredProfile.profile === 'rectangle');
+  retiredProfile.sideTags!.outer[0] = 'e5';
+  const original = structuredClone(retired);
+  const review = await verifyReferences(retired, [], evaluate);
+  assert.deepEqual(retired, original);
+  assert.deepEqual(review.changes, []);
+  assert.deepEqual(review.problems.map(p => [p.name, p.candidates]), [[old, [candidate]]]);
+  assert.deepEqual(review.doc.nodes[2], { ...original.nodes[2], suppressed: true, held: `"${old}" could be ${candidate}` });
+  const held = await bodiesOf(review.doc);
+  assert.ok(Math.abs(held[0].volume! - 30400) < 1e-7);
+  const accepted = await confirmReference(review.doc, review.problems[0].index, held, evaluate, candidate);
+  const result = accepted.nodes[2], prior = original.nodes[2];
+  assert.ok(result.kind === 'fillet' && prior.kind === 'fillet');
+  assert.deepEqual(result.edges, [candidate, stable]);
+  assert.deepEqual(result.sigs?.[stable], prior.sigs?.[stable]);
+  assert.ok(Math.abs((await bodiesOf(accepted))[0].volume! - (30400 - 20 * (4 - Math.PI))) < 1e-7);
+  assert.deepEqual(await verifyReferences(accepted, await bodiesOf(accepted), evaluate), { doc: accepted, changes: [], problems: [] });
+});
