@@ -1442,8 +1442,10 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
       if (!origin) return false;
       const checked = checkRadiusOrigin(origin);
       if (!checked?.ok) { setMessage(checked?.reason ?? 'Choose a valid origin for this radius.'); return false; }
-      if (origin[0] !== foreshorten?.origin[0] || origin[1] !== foreshorten?.origin[1])
-        commitDims(settings.dimensions.map(d => d === r.dim ? { ...r.dim, foreshorten: { origin } } : d));
+      if (origin[0] !== foreshorten?.origin[0] || origin[1] !== foreshorten?.origin[1]) {
+        const next: DrawingDimension = { ...r.dim, foreshorten: { origin } };
+        commitDims(settings.dimensions.map(d => d === r.dim ? next : d));
+      }
     }
     setMessage(null);
     return true;
