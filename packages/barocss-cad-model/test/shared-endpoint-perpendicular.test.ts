@@ -61,3 +61,18 @@ test('marking an unsatisfied saved rule does not authorize its admission', async
   assert.ok('error' in result);
   assert.match(result.error, /\[BAD_REFERENCE\].*marked shared-endpoint perpendicular/);
 });
+
+test('tangent and perpendicular conflict in either order without rewriting the accepted outline', () => {
+  const tangentSeed: Polygon = { ...base, points: [[0, 0], [8, 0], [16, 8], [0, 12]], bulges: [0, bulge, 0, 0] };
+  const selected = [edge(0), edge(1)];
+  const tangent = applyConstraint(tangentSeed, selected, 'tangent');
+  const perp = applyConstraint(base, selected, 'perpendicular');
+  assert.ok(tangent.ok && perp.ok);
+  for (const [source, rejected] of [[tangent.shape, 'perpendicular'], [perp.shape, 'tangent']] as const) {
+    const before = structuredClone(source);
+    const result = applyConstraint(source, selected, rejected);
+    assert.ok(!result.ok);
+    assert.match(result.reason, /cannot be tangent and perpendicular/);
+    assert.deepEqual(source, before);
+  }
+});

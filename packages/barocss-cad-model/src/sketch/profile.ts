@@ -5,7 +5,7 @@ import { diagnoseXYNumericalSketchMobility, solveXYNumericalSketchPoints, type X
 import { ruleTerms, type SketchRule } from './terms';
 import { rectilinearConflict } from './conflict';
 import type { FixedTriangleSeed } from './fixedTriangleLength';
-import { endpointRuleProblem } from './endpointPerpendicular';
+import { endpointPerpendicular, endpointRuleProblem } from './endpointPerpendicular';
 
 export type P2 = [number, number];
 export type LoopSegment = { kind: 'line'; start: P2 } | { kind: 'arc'; start: P2; center: P2; direction: 'ccw' | 'cw' };
@@ -245,6 +245,11 @@ export function solveOutline(points: P2[], c: OutlineConstraints = {}, bulgesIn?
   for (const rule of c.rules ?? []) {
     const problem = endpointRuleProblem(rule, points, bulgesIn ?? []);
     if (problem) return { ok: false, reason: problem };
+    if (rule.kind === 'perpendicular' && rule.at === 'shared-endpoint' && c.tangents?.length) {
+      const pair = endpointPerpendicular(points, bulgesIn ?? [], rule.a, rule.b);
+      if (pair && c.tangents.includes(pair.joint))
+        return { ok: false, conflict: true, reason: 'Conflict: the same line and arc cannot be tangent and perpendicular at their shared endpoint.' };
+    }
   }
   const system = outlineSystem(points, c, bulgesIn);
   if (!system) return { ok: false, reason: 'Too many points, arcs and point dimensions for the sketch solver (64 points / 64 segments)' };
