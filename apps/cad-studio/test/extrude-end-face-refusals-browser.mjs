@@ -136,7 +136,7 @@ await f.run(async () => {
   await pick([-8, -8, 30]);
   await status('refused');
   await hud().getByText('n3.bottom', { exact: true }).waitFor();
-  await readRefusal(/one straight rectangular trim without holes/i);
+  await readRefusal(/one convex straight trim of 3 to 16 edges without holes/i);
   assert.equal(await apply().isDisabled(), true);
   f.report.observations.push({ label: 'invalid-end-face-status', checked: await checked() });
   assertExact(await f.snapshot('02-holed-cap-refused'), before);
