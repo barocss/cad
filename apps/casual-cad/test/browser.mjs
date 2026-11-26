@@ -109,7 +109,10 @@ try {
     await studio.goto('http://127.0.0.1:' + studioServer.address().port);
     await studio.getByLabel('Model file', { exact: true }).setInputFiles(done.path);
     const row = studio.locator('.history .hs[data-node-index="2"]');
-    await row.click({ timeout: 30_000 });
+    await row.waitFor({ timeout: 30_000 });
+    await studio.getByText(/Perspective · 1 solid/).waitFor({ timeout: 30_000 });
+    await studio.getByText(/^Bounds 60 × 40 × 5$/).waitFor({ timeout: 30_000 });
+    await row.click();
     const fields = studio.locator('.node-editor');
     const dia = fields.getByLabel('Diameter', { exact: true });
     assert.equal(await dia.inputValue(), '8');
