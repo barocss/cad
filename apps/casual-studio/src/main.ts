@@ -52,6 +52,8 @@ app.innerHTML = `
 <button id="start-vise" type="button">바이스 열기</button></div>
 </article>
 </div>
+<div class="start-file"><button id="start-rover" type="button">로버 조립 보기</button>
+<small>25개 부품을 조립·분해하고 4단계로 살펴봐요. 치수 편집은 하지 않아요.</small></div>
 <div class="start-file"><button id="start-code" type="button">코드로 만들기</button>
 <small>빈 캔버스에서 판과 관통 구멍을 코드로 정의해요.</small></div>
 <div class="start-file"><button id="open-start" type="button">내 CAD 파일 열기</button>
@@ -73,6 +75,7 @@ app.innerHTML = `
 <section id="recipe-workspace" hidden aria-label="코드 모델링"></section>
 <section id="sensor-workspace" hidden aria-label="센서 케이스 모델링"></section>
 <section id="vise-workspace" hidden aria-label="바이스 모델링"></section>
+<section id="rover-workspace" hidden aria-label="로버 조립 보기"></section>
 <dialog id="switch-dialog" aria-labelledby="switch-title" aria-describedby="switch-detail">
 <h2 id="switch-title">현재 편집을 버리고 이동할까요?</h2><p id="switch-detail"></p>
 <div><button id="keep" type="button" autofocus>계속 편집</button><button id="discard" type="button">버리고 이동</button></div></dialog>`;
@@ -82,6 +85,7 @@ let editing = false;
 let recipe: ReturnType<typeof import('./recipeWork')['mountRecipe']> | undefined;
 let sensor: ReturnType<typeof import('./sensorWork')['mountSensor']> | undefined;
 let vise: ReturnType<typeof import('./viseWork')['mountVise']> | undefined;
+let disposeRover: (() => void) | undefined;
 let fileName = 'cable-guide-adapter.bcad';
 let numberDraft = false, codeDraft = false;
 let pendingSwitch: (() => void) | undefined;
@@ -210,7 +214,8 @@ get('discard').onclick = () => {
 };
 function clearWorkspaces() {
   recipe = undefined; sensor = undefined; vise = undefined;
-  for (const id of ['recipe-workspace','sensor-workspace','vise-workspace']) {
+  disposeRover?.(); disposeRover=undefined;
+  for (const id of ['recipe-workspace','sensor-workspace','vise-workspace','rover-workspace']) {
     const host = get(id);
     host.hidden = true; host.onkeydown = null; host.replaceChildren();
   }
@@ -270,6 +275,23 @@ get('start-vise').onclick = async () => {
     const module=await import('./viseWork');
     if (token===fileRev) showVise(module);
   } catch { if (token===fileRev) { setEditing(false); notice('바이스를 열지 못했어요.'); } }
+};
+get('start-rover').onclick = async () => {
+  const token=++fileRev, button=get<HTMLButtonElement>('start-rover');
+  button.disabled=true; notice('로버를 여는 중이에요.');
+  try {
+    const module=await import('./roverWork');
+    const model=await module.loadRover();
+    if (token!==fileRev) return;
+    setEditing(false);
+    ++editRev;
+    get('start').hidden=true; notice();
+    const host=get('rover-workspace');
+    host.hidden=false;
+    disposeRover=module.mountRover(host,model,hooks);
+  } catch {
+    if (token===fileRev) {setEditing(false);notice('로버를 열지 못했어요. 다시 시도해주세요.');}
+  } finally {button.disabled=false;}
 };
 get('start-sensor').onclick = async () => {
   const token = ++fileRev;

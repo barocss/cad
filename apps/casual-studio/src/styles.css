@@ -158,3 +158,45 @@ button.sensor-row:hover,.sensor-row:focus-visible{background:#edf4fe}
 #vise-actions{justify-content:flex-end}
 #vise-scene [data-vise-part]{cursor:pointer}
 @media(min-width:940px){.examples{grid-template-columns:repeat(3,minmax(0,1fr))}}
+
+/* Rover is a review example, not another modeling editor. */
+#app:has(#rover-workspace:not([hidden]))>header{display:none}
+.rover-bar{justify-content:space-between;padding:13px 22px}
+.rover-bar nav{margin:0}
+#rover-title:focus{outline:none}
+#rover-export{background:#285dd3;border-color:#285dd3;color:#fff}
+.rover-work{display:grid;grid-template-columns:minmax(0,1fr) 263px;align-items:start;gap:20px;padding:19px 22px 8px}
+.rover-stage{position:relative;min-width:0;overflow:hidden;border:1px solid #d9e4ef;border-radius:10px;background:#edf3f9;background-image:radial-gradient(#d5e1ed 1px,transparent 1px);background-size:20px 20px}
+.rover-stage-bar,.rover-stage-foot{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:12px 14px}
+.rover-stage-bar{position:absolute;top:0;left:0;right:0;z-index:1;pointer-events:none}
+.rover-stage-bar>div{pointer-events:auto}
+#rover-count{font-size:13px}
+#rover-legend{margin-left:8px;color:#49647e;font-size:11px}
+.rover-views{display:flex;gap:3px;padding:3px;border:1px solid #d5e1ee;border-radius:8px;background:#f8fbff}
+.rover-views button{border:0;padding:6px 10px;background:none}
+.rover-views button[aria-pressed=true]{color:#1c50a3;background:#e0ebfb;font-weight:700}
+#rover-scene{display:block;width:100%;height:clamp(350px,calc(100svh - 216px),680px);cursor:grab;touch-action:none}
+#rover-scene:active{cursor:grabbing}
+#rover-scene:focus-visible{outline:2px solid #4277ce;outline-offset:-2px}
+#rover-no-3d{margin:64px 16px 16px;color:#47637e;line-height:1.6}
+.rover-stage-foot{padding:7px 12px;border-top:1px solid #d9e4ef;background:#f7fafe}
+.rover-stage-foot p{margin:0;font-size:11px;color:#48647f}
+#rover-reset{font-size:11px;padding:4px 8px;margin-left:auto}
+.rover-steps{min-width:0;padding:7px 0 0 1px}
+.rover-steps-head{display:flex;align-items:center;justify-content:space-between;gap:6px;margin-bottom:10px}
+.rover-steps h2{font-size:14px}
+#rover-overview{font-size:11px;padding:5px 7px}
+#rover-overview[aria-pressed=true]{border-color:#a6bfe3;color:#214f92;background:#e8f1fd}
+#rover-steps,#rover-parts{list-style:none;margin:0;padding:0}
+#rover-steps{display:grid;gap:5px}
+#rover-steps button{display:flex;align-items:center;gap:9px;width:100%;text-align:left;font-weight:650;padding:8px}
+#rover-steps button[aria-pressed=true]{color:#194e9b;background:#e7f0fc;border-color:#a4bfe8}
+.rover-step-number{font:11px ui-monospace,monospace;color:#537195}
+#rover-note{color:#4b637a;font-size:12px;line-height:1.55;margin:13px 0 8px}
+#rover-parts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:5px;max-height:174px;overflow:auto;padding:2px}
+#rover-parts button{width:100%;text-align:left;font-size:11px;padding:5px 6px;overflow-wrap:anywhere}
+#rover-parts button[aria-pressed=true]{color:#174d9e;border-color:#6b9add;background:#daeaff;font-weight:700}
+#rover-selection{margin:12px 0;color:#215aa8;font-size:12px;font-weight:650}
+#rover-selection:empty,#rover-status:empty{display:none}
+.rover-footer{min-height:32px;display:flex;gap:8px 16px;flex-wrap:wrap;justify-content:space-between;padding:0 23px 10px;color:#526982;font-size:11px;line-height:1.5}
+.rover-footer p{margin:0;color:#295ca2}

@@ -15,11 +15,13 @@ From the start screen, choose the cable-guide, sensor enclosure, or vise example
 
 **Self-centering vise.** Pick a jaw to edit its grip height alone, or choose the gap to move both jaws around a fixed center. The base and its mounting holes are inspect-only in this example. [Desktop workflow and native file](examples/centering-vise/README.md).
 
+**Rover assembly review.** Choose **로버 조립 보기** to rotate the 25-part model, switch between assembled and exploded views, or follow four assembly steps. The viewer highlights only the parts added at the selected step and leaves the original placements intact. **원본 CAD 받기** downloads the unchanged, editable Studio file. [Desktop captures](examples/rover-assembly/README.md).
+
 **Existing native file:** the bounded native import editor keeps the original feature graph and opens the optional one-line diameter editor on request. It does not generate a recipe from the file.
 
 **Create from code:** choose **코드로 만들기** for a blank document. Enter a version 1 recipe, preview, then apply. A recipe defines one rectangle/extrusion and up to eight vertical through-holes. Open and save the executable text as `.cadrecipe`, or export the applied native features as `.bcad`. Radius derived from a recipe diameter is exported as its current value; the source relation remains in the recipe. See the [working syntax example](PRODUCT.md#코드는-모델-전체를-정의할-수-있어야-한다).
 
-**Deliberate limits.** Existing `.bcad` import still accepts the bounded two-hole shape, not every recipe export; keep the corresponding recipe to reopen the source in Casual. Unsupported native files are not rewritten and may be opened in CAD Studio. Recipe hole diameter declarations are editable from the canvas; fixed literals are not. Arbitrary code execution and general import remain out of scope. App-local undo is not carried by the native file. Uses fixed viewport presets, not a full camera controller.
+**Deliberate limits.** Existing `.bcad` import still accepts the bounded two-hole shape, not every recipe export; keep the corresponding recipe to reopen the source in Casual. Unsupported native files are not rewritten and may be opened in CAD Studio. Recipe hole diameter declarations are editable from the canvas; fixed literals are not. Arbitrary code execution and general import remain out of scope. App-local undo is not carried by the native file. The editing examples have fixed viewport presets. The rover has a desktop review-only orbit; no geometry edits, motion, or general assembly authoring.
 
 See the [product plan](PRODUCT.md) and the [roadmap](ROADMAP.md) for the next use cases and their acceptance checks.
 
@@ -32,7 +34,7 @@ cd apps/casual-studio
 DESKTOP_ONLY=1 PLAYWRIGHT_MODULE=/path/to/playwright CHROME_PATH=/path/to/chromium node test/browser.mjs
 ```
 
-Build Studio from the same checkout with `pnpm build` and set `CHECK_STUDIO=1` to also exercise the real Studio feature editor and round trip, including opening the applied 64 mm sensor export and rebuilding it to 56 mm in Studio.
+Build Studio from the same checkout with `pnpm build` and set `CHECK_STUDIO=1` to also exercise the real Studio feature editor and round trip, including opening the applied 64 mm sensor export and rebuilding it to 56 mm in Studio, and reopening the untouched rover file with all 24 placed components and its saved steps.
 
 The landing page and first native import preview load no Studio shell, worker, WASM or recipe compiler in the tested build. The example and blank-code entry load the recipe compiler on demand. The shared evaluator and native format reader are still part of startup.
 

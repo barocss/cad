@@ -13,7 +13,7 @@ const serve = base => createServer(async (req, res) => {
     const file = pathname === '/' ? '/index.html' : pathname;
     if (!/^\/(?:index\.html|assets\/[\w.-]+)$/.test(file)) { res.writeHead(404).end(); return; }
     const bytes = await readFile(new URL(base + file, import.meta.url));
-    res.setHeader('Content-Type', file.endsWith('.js') ? 'text/javascript' : file.endsWith('.css') ? 'text/css' : 'text/html; charset=utf-8');
+    res.setHeader('Content-Type', file.endsWith('.js') ? 'text/javascript' : file.endsWith('.css') ? 'text/css' : file.endsWith('.bcad') ? 'application/octet-stream' : 'text/html; charset=utf-8');
     res.setHeader('Cache-Control', 'no-store');
     res.end(bytes);
   } catch { res.writeHead(404).end(); }
@@ -24,7 +24,7 @@ for (const s of [server, studioServer].filter(Boolean)) await new Promise(resolv
 let browser;
 const out = process.env.CASUAL_TEST_OUTPUT || await mkdtemp(join(tmpdir(), 'casual-browser-'));
 try {
-  browser = await chromium.launch({ executablePath: process.env.CHROME_PATH || undefined, args: studioServer ? ['--enable-unsafe-webgpu'] : [] });
+  browser = await chromium.launch({ executablePath: process.env.CHROME_PATH || undefined, args: ['--enable-unsafe-swiftshader', ...(studioServer ? ['--enable-unsafe-webgpu'] : [])] });
   const ctx = await browser.newContext({ acceptDownloads: true, viewport: { width: 1140, height: 750 } });
   const page = await ctx.newPage();
   page.setDefaultTimeout(7000);
@@ -561,8 +561,110 @@ output fixture
     await studio.getByText('Bounds 120 × 60 × 29',{exact:true}).waitFor();
     viseHandoff='PASS';
   }
+  assert.ok(!requested.some(p => /roverWork-|rover-assembly-/.test(p)), 'initial page must not fetch rover logic or geometry');
+  const rover = await ctx.newPage();
+  rover.on('pageerror',e=>errors.push(e.message));
+  const roverRequests = [];
+  rover.on('request',r=>roverRequests.push(new URL(r.url()).pathname));
+  await rover.goto(origin);
+  assert.ok(!roverRequests.some(p=>/roverWork-|rover-assembly-/.test(p)));
+  await rover.getByRole('button',{name:'로버 조립 보기',exact:true}).click();
+  const rv=id=>rover.locator('#rover-'+id);
+  await rv('scene').waitFor({timeout:30000});
+  assert.ok(roverRequests.some(p=>/rover-assembly-.*\.bcad$/.test(p)));
+  const waitFrame = () => rover.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  const roverOriginal = await readFile(new URL('../examples/rover-assembly/rover-assembly.bcad',import.meta.url));
+  async function saveRover(name) {
+    const waiting=rover.waitForEvent('download');
+    await rv('export').click();
+    const download=await waiting;
+    assert.equal(download.suggestedFilename(),'rover-assembly.bcad');
+    const outPath=join(out,name);
+    await download.saveAs(outPath);
+    assert.deepEqual(await readFile(outPath),roverOriginal);
+    return outPath;
+  }
+  const frame = async (visible,active) => {
+    await rover.waitForFunction(([v,a])=>{
+      const c=document.getElementById('rover-scene');
+      return c?.dataset.visible===String(v) && c.dataset.active===String(a);
+    },[visible,active]);
+  };
+  await frame(25,0);
+  await waitFrame();
+  const assembled=await rv('scene').screenshot();
+  await rover.screenshot({path:join(out,'casual-rover-assembled.png')});
+  const canvasBox=await rv('scene').boundingBox();
+  assert.ok(canvasBox);
+  await rover.mouse.move(canvasBox.x+290,canvasBox.y+250);
+  await rover.mouse.down();
+  await rover.mouse.move(canvasBox.x+390,canvasBox.y+285,{steps:5});
+  await rover.mouse.up();
+  await waitFrame();
+  assert.notDeepEqual(await rv('scene').screenshot(),assembled,'drag turns the displayed 3D model');
+  assert.equal(await rv('scene').getAttribute('data-selected'),'','rotation is not a selection');
+  await rv('reset').click(); await waitFrame();
+  assert.deepEqual(await rv('scene').screenshot(),assembled,'reset restores the exact original view');
+  await saveRover('rover-overview.bcad');
+  await rv('exploded').click();
+  await waitFrame();
+  const exploded=await rv('scene').screenshot();
+  assert.notDeepEqual(exploded,assembled);
+  await rover.screenshot({path:join(out,'casual-rover-exploded.png')});
+  const originalDoc = JSON.parse(roverOriginal.toString());
+  for (const [i,n] of [13,18,21,25].entries()) {
+    const step=originalDoc.assemblySteps[i];
+    await rv('steps').locator('[data-step='+step.id+']').click();
+    await frame(n,step.add.length);
+    const actual=await rv('parts').locator('button').evaluateAll(buttons=>buttons.map(b=>b.dataset.part));
+    assert.deepEqual(new Set(actual),new Set(step.add));
+  }
+  await rv('assembled').click();
+  await waitFrame();
+  // Inside the visible near transducer's front disk at the fixed default view.
+  const hit={x:496,y:269};
+  await rv('scene').click({position:hit});
+  assert.equal(await rv('scene').getAttribute('data-selected'),'right-eye');
+  await rv('parts').getByRole('button',{name:'거리 센서 보드',exact:true}).click();
+  assert.equal(await rv('scene').getAttribute('data-selected'),'sensor');
+  await rv('steps').locator('[data-step=controller]').click();
+  await frame(21,3);
+  assert.equal(await rv('parts').locator('[data-part=sensor]').count(),0);
+  assert.equal(await rv('scene').getAttribute('data-selected'),'');
+  assert.equal(await rv('selection').textContent(),'');
+  await rv('scene').click({position:hit});
+  const hiddenHit=await rv('scene').getAttribute('data-selected');
+  assert.ok(!originalDoc.assemblySteps[3].add.includes(hiddenHit),'waiting parts cannot be picked behind the canvas');
+  await rv('steps').locator('[data-step=sensor]').click();
+  await frame(25,4);
+  await rv('parts').getByRole('button',{name:'거리 센서 보드',exact:true}).click();
+  await rv('assembled').click(); await rv('exploded').click();
+  assert.equal(await rv('scene').getAttribute('data-selected'),'sensor');
+  await waitFrame();
+  await rover.screenshot({path:join(out,'casual-rover-sensor-step.png')});
+  await rv('overview').click(); await rv('assembled').click(); await rv('reset').click();
+  const roverCad=await saveRover('rover-reviewed.bcad');
+  let roverHandoff='NOT_RUN';
+  if (studioServer) {
+    const studio=await (await browser.newContext({viewport:{width:1440,height:950}})).newPage();
+    studio.on('pageerror',e=>errors.push(e.message));
+    await studio.goto('http://127.0.0.1:' + studioServer.address().port);
+    await studio.getByLabel('Model file',{exact:true}).setInputFiles(roverCad);
+    await studio.getByRole('button',{name:'Explode',exact:true}).waitFor({timeout:30000});
+    assert.equal(await studio.locator('.ol.instance:not(.nested)').count(),24);
+    await studio.evaluate(()=>document.activeElement?.blur());
+    await studio.keyboard.press('Space');
+    await studio.locator('.palette input').fill('Assembly steps');
+    await studio.keyboard.press('Enter');
+    const panel=studio.getByRole('complementary',{name:'Assembly steps panel',exact:true});
+    await panel.getByRole('button',{name:'Go to step 4: Front range sensor'}).click();
+    assert.equal(await panel.getByRole('status',{name:'Step position'}).textContent(),'Step 4 of 4');
+    roverHandoff='PASS';
+  }
+  await rv('home').click();
+  await rover.getByRole('button',{name:'로버 조립 보기',exact:true}).waitFor();
   assert.deepEqual(errors, []);
-  console.log(JSON.stringify({ result:'PASS', studioHandoff, recipeHandoff, sensorHandoff, viseHandoff, desktopOnly, requested:[...new Set(requested)], output:out }));
+  console.log(JSON.stringify({ result:'PASS', studioHandoff, recipeHandoff, sensorHandoff, viseHandoff, roverHandoff, desktopOnly, requested:[...new Set(requested)], output:out }));
 } finally {
   await browser?.close();
   server.close();
