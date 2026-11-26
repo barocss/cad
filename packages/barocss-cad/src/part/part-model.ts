@@ -403,22 +403,24 @@ function evaluateWith(input: CadPartDocument, previous: Cache | undefined, optio
           const sourceTool = ref(prototype.tool, `${label} original cutter`);
           const sourceSketch = sourceTool.author?.kind === 'extrude' ? ref(sourceTool.author.sketch, `${label} original sketch`).author : undefined;
           if (sourceSketch?.kind === 'sketch' && sourceSketch.profile === 'circle') {
-            const requirement = `${label} needs one original circular extrusion followed by original rectangular extrusions on upright rectangular stock`;
+            const allowedLater = pattern === 'linear' ? 'rectangular or circular' : 'rectangular';
+            const requirement = `${label} needs one original circular extrusion followed by original ${allowedLater} extrusions on upright rectangular stock`;
             if (links.length < 2) return fail('CAPABILITY', requirement);
-            const exactOriginal = (reference: unknown, profile: 'circle' | 'rectangle', what: string): Part => {
+            const exactOriginal = (reference: unknown, profiles: readonly ('circle' | 'rectangle')[], what: string): Part => {
               const producer = ref(reference, what);
               if (reference !== producer.id || producer.part !== null || producer.author?.kind !== 'extrude' || ('suppressed' in producer.author && producer.author.suppressed)
                 || (producer.author.draft !== undefined && producer.author.draft !== 0)) return fail('CAPABILITY', requirement);
               const sketch = ref(producer.author.sketch, `${what} sketch`).author;
-              if (sketch?.kind !== 'sketch' || sketch.profile !== profile || ('suppressed' in sketch && sketch.suppressed)
+              if (sketch?.kind !== 'sketch' || !profiles.some(profile => sketch.profile === profile) || ('suppressed' in sketch && sketch.suppressed)
                 || sketch.holes?.length || sketch.regions?.length) return fail('CAPABILITY', requirement);
               if (producer.result.kind !== 'solid' || producer.result.parts.length !== 1 || empty(producer.result.parts[0].solid))
                 return fail('REFERENCE', `${what} must be one nonempty solid`);
               return producer.result.parts[0];
             };
-            const stock = exactOriginal(prototype.target, 'rectangle', 'source stock');
-            const first = { result: links[0].result, cutter: exactOriginal(links[0].cutterRef, 'circle', 'source circular cutter') };
-            const later = links.slice(1).map((link, i) => ({ result: link.result, cutter: exactOriginal(link.cutterRef, 'rectangle', `source later cutter ${i + 1}`) }));
+            const stock = exactOriginal(prototype.target, ['rectangle'], 'source stock');
+            const first = { result: links[0].result, cutter: exactOriginal(links[0].cutterRef, ['circle'], 'source circular cutter') };
+            const laterProfiles = pattern === 'linear' ? ['rectangle', 'circle'] as const : ['rectangle'] as const;
+            const later = links.slice(1).map((link, i) => ({ result: link.result, cutter: exactOriginal(link.cutterRef, laterProfiles, `source later cutter ${i + 1}`) }));
             return { seed: solids(r, 'target')[0], tool: [first.cutter], priorCircular: { stock, first, later } };
           }
         }

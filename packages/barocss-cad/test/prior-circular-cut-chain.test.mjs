@@ -100,9 +100,37 @@ test('multi-later circular pattern refuses collision with second or third later 
   overlapLater.features.push({ id: 'repeat', kind: 'linear-feature-pattern', target: 'third', source: 'first', axis: 'x', spacing: 8, count: 2 });
   assert.throws(() => evaluateCadPart(overlapLater), e => e instanceof CadPartError && e.feature === 'repeat' && e.code === 'GEOMETRY');
 
-  // Non-rectangular later cut (circle) in the chain remains refused
+  // A circular later cut still remains out of scope for the Rectangular producer
   const circleLater = chainBase();
   circleLater.features[8] = { id: 'later2Sketch', kind: 'sketch', profile: 'circle', center: [44, 10], radius: 2 };
-  circleLater.features.push({ id: 'repeat', kind: 'linear-feature-pattern', target: 'third', source: 'first', axis: 'x', spacing: 8, count: 2 });
+  circleLater.features.push({ id: 'repeat', kind: 'rectangular-feature-pattern', target: 'third', source: 'first', axis: 'x', spacing: 8, count: 2, axis2: 'y', spacing2: 14, count2: 2 });
   assert.throws(() => evaluateCadPart(circleLater), e => e instanceof CadPartError && e.feature === 'repeat' && e.code === 'CAPABILITY');
+});
+
+test('signed Linear repeats the selected circular cut past later mixed through cuts, preserving the later R3 bore', () => {
+  const model = chainBase();
+  model.features[8] = { id: 'later2Sketch', kind: 'sketch', profile: 'circle', center: [44, 10], radius: 3 };
+  const repeat = { id: 'repeat', kind: 'linear-feature-pattern', target: 'third', source: 'first', axis: 'x', spacing: 8, count: 2 };
+  for (const spacing of [8, -5]) {
+    const snapshot = evaluateCadPart({ ...model, features: [...model.features, { ...repeat, spacing }] });
+    const brep = snapshot.outputs[0].brep;
+    const quality = checkBrep(brep, { strict: true });
+    assert.ok(quality.valid, quality.issues.join('\n'));
+    assert.equal(quality.topology[0].genus, 4);
+    near(brepMassProperties(brep, 1).volume, 24000 - 80 - (2 * 40 + 90) * Math.PI);
+    const cylinders = brep.faces.map(face => faceGeometry(face)).filter(surface => surface.kind === 'cylinder');
+    assert.equal(cylinders.length, 6);
+    for (const [x, radius] of [[10, 2], [10 + spacing, 2], [44, 3]]) {
+      assert.equal(cylinders.filter(c => Math.abs(c.r - radius) < 1e-8 && Math.hypot(c.c[0] - x, c.c[1] - 10) < 1e-8).length, 2);
+    }
+    assert.deepEqual(loadCadPart(saveCadPart(snapshot)).outputs[0].brep, brep);
+  }
+  for (const spacing of [29, 32]) {
+    assert.throws(() => evaluateCadPart({ ...model, features: [...model.features, { ...repeat, spacing }] }),
+      e => e instanceof CadPartError && e.feature === 'repeat' && e.code === 'GEOMETRY');
+  }
+  // Even if a pocket or a merged cavity evaluates in isolation, it cannot be used as a through-cut witness.
+  model.features[9] = { ...model.features[9], height: 8 };
+  assert.throws(() => evaluateCadPart({ ...model, features: [...model.features, repeat] }),
+    e => e instanceof CadPartError && e.feature === 'repeat' && e.code === 'CAPABILITY');
 });

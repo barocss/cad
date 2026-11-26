@@ -122,7 +122,7 @@ test('source radius/centre, later size and spacing are independent dependencies 
   assert.deepEqual(verify(reevaluate(initial, { parameters: {} })).brep, initial.outputs[0].brep);
 });
 
-test('partial, transformed, holed, longer and unsupported source families remain outside the circular certificate', () => {
+test('partial, transformed, holed and unsupported source families remain outside the circular certificate', () => {
   const refused = change => { const doc = document(); change(doc); const before = structuredClone(doc);
     assert.throws(() => evaluateCadPart(doc), e => e instanceof CadPartError && e.feature === 'repeat' && ['CAPABILITY', 'REFERENCE'].includes(e.code));
     assert.deepEqual(doc, before);
@@ -136,7 +136,7 @@ test('partial, transformed, holed, longer and unsupported source families remain
   refused(doc => { doc.features.splice(4, 0, { id: 'movedTool', kind: 'translate', target: 'circleTool', offset: [0, 0, 0] }); doc.features.find(f => f.id === 'first').tool = 'movedTool'; });
   refused(doc => { doc.features.splice(-1, 0,
     { id: 'extraSketch', kind: 'sketch', profile: 'circle', center: [42, 22], radius: 2 },
-    { id: 'extraTool', kind: 'extrude', sketch: 'extraSketch', height: 10 },
+    { id: 'extraTool', kind: 'extrude', sketch: 'extraSketch', height: 5 },
     { id: 'third', kind: 'difference', target: 'second', tool: 'extraTool' }); doc.features.at(-1).target = 'third'; });
   refused(doc => {
     Object.assign(doc.features.at(-1), { kind: 'fill-feature-pattern', region: { points: [[0, 0], [60, 0], [60, 40], [0, 40]] }, anchor: [10, 10], spacing2: 8, count2: 1 });

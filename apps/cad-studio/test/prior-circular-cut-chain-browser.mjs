@@ -4,6 +4,8 @@ import { clickModelCommand } from './model-rail-helper.mjs';
 import { choosePriorCutSource, equivalent } from './prior-cut-pattern-browser-fixture.mjs';
 
 const baseline = process.argv.includes('--baseline');
+const mixed = process.argv.includes('--mixed');
+const laterName = mixed ? 'one later rectangle and one later circle' : 'two later rectangles';
 const pins = [
   'apps/cad-studio/test/prior-circular-cut-chain-browser.mjs',
   'apps/cad-studio/test/prior-cut-pattern-browser-fixture.mjs',
@@ -12,8 +14,8 @@ const pins = [
 ];
 const f = await createFlow({
   name: 'prior-circular-cut-chain', output: process.argv[2], envFrozen: 'D1993_SOURCE_FROZEN',
-  qualification: 'Repeat an earlier original circular through-Subtract across two later original rectangular through-Subtracts.',
-  limits: ['One original upright rectangular stock, one circular through-cut followed by two rectangular through-cuts, and signed Linear copies.'],
+  qualification: `Repeat an earlier original circular through-Subtract across ${laterName}.`,
+  limits: [`One original upright rectangular stock, one circular through-cut followed by ${laterName}, and signed Linear copies.`],
   initialFiles: pins, requiredFrozen: pins,
   inspectorSource: `
 import { readFileSync } from 'node:fs';
@@ -57,7 +59,8 @@ const stock = {
     { kind: 'sketch', profile: 'rectangle', min: [24, 8], max: [28, 10], id: 'n5' },
     { kind: 'extrude', sketch: 5, height: 10, id: 'n6' },
     { kind: 'difference', parent: ref(4), tool: ref(6), id: 'n7' },
-    { kind: 'sketch', profile: 'rectangle', min: [42, 8], max: [46, 12], id: 'n8' },
+    mixed ? { kind: 'sketch', profile: 'circle', center: [44, 10], radius: 3, id: 'n8' }
+      : { kind: 'sketch', profile: 'rectangle', min: [42, 8], max: [46, 12], id: 'n8' },
     { kind: 'extrude', sketch: 8, height: 10, id: 'n9' },
     { kind: 'difference', parent: ref(7), tool: ref(9), id: 'n10' },
   ],
@@ -76,23 +79,24 @@ async function inspect(label, doc, centers) {
   assert.equal(check.topology[0].shells, 1);
   assert.equal(check.topology[0].genus, centers.length + 2);
   assert.equal(caps.length, 2);
-  assert.equal(cylinders.length, 2 * centers.length);
-  for (const [x, y] of centers) {
+  const circularOpenings = [...centers.map(([x, y]) => [x, y, 2]), ...(mixed ? [[44, 10, 3]] : [])];
+  assert.equal(cylinders.length, 2 * circularOpenings.length);
+  for (const [x, y, radius] of circularOpenings) {
     const walls = cylinders.filter(wall => Math.hypot(wall.c[0] - x, wall.c[1] - y) < 1e-8);
     assert.equal(walls.length, 2);
     for (const wall of walls) {
-      equivalent(wall.r, 2);
+      equivalent(wall.r, radius);
       equivalent(Math.abs(wall.a[2]), 1);
       assert.equal(wall.out, -1);
     }
   }
-  const rectBounds = [[[24, 28], [8, 10]], [[42, 46], [8, 12]]];
+  const rectBounds = mixed ? [[[24, 28], [8, 10]]] : [[[24, 28], [8, 10]], [[42, 46], [8, 12]]];
   for (const cap of caps) {
     assert.equal(cap.outer, 1);
     assert.equal(cap.openings.length, centers.length + 2);
     equivalent(cap.z, cap.outward < 0 ? 0 : 10);
     const rects = cap.openings.filter(opening => opening.degree.length === 4 && opening.degree.every(degree => degree === 1));
-    assert.equal(rects.length, 2);
+    assert.equal(rects.length, rectBounds.length);
     for (const [[x0, x1], [y0, y1]] of rectBounds) {
       assert.equal(rects.filter(r =>
         Math.abs(Math.min(...r.points.map(p => p[0])) - x0) < 1e-7 &&
@@ -101,15 +105,16 @@ async function inspect(label, doc, centers) {
         Math.abs(Math.max(...r.points.map(p => p[1])) - y1) < 1e-7).length, 1);
     }
     const circles = cap.openings.filter(opening => !rects.includes(opening));
-    assert.equal(circles.length, centers.length);
-    for (const [x, y] of centers) {
-      assert.equal(circles.filter(ring => ring.points.every(p => Math.abs(Math.hypot(p[0] - x, p[1] - y) - 2) < 1e-8)).length, 1);
+    assert.equal(circles.length, circularOpenings.length);
+    for (const [x, y, radius] of circularOpenings) {
+      assert.equal(circles.filter(ring => ring.points.every(p => Math.abs(Math.hypot(p[0] - x, p[1] - y) - radius) < 1e-8)).length, 1);
     }
   }
-  const removed = 40 * Math.PI, volume = 23760 - centers.length * removed;
+  const removed = 40 * Math.PI, laterRemoved = mixed ? 90 * Math.PI : 160;
+  const volume = 24000 - 80 - laterRemoved - centers.length * removed;
   // Base stock 24000 (cx=30, cy=20) - rect1 80 (cx=26, cy=9) - rect2 160 (cx=44, cy=10)
-  const baseMx = 24000 * 30 - 80 * 26 - 160 * 44;
-  const baseMy = 24000 * 20 - 80 * 9 - 160 * 10;
+  const baseMx = 24000 * 30 - 80 * 26 - laterRemoved * 44;
+  const baseMy = 24000 * 20 - 80 * 9 - laterRemoved * 10;
   const moment = [baseMx, baseMy].map((value, axis) => value - removed * centers.reduce((sum, c) => sum + c[axis], 0));
   equivalent(mass.volume, volume);
   for (let axis = 0; axis < 2; axis++) equivalent(mass.centroid[axis], moment[axis] / volume);
@@ -138,7 +143,7 @@ await f.run(async () => {
   await field(panel(), 'Spacing').fill('8');
 
   if (baseline) {
-    f.phase = 'Reproduce refusal of two later rectangular cuts after circular source';
+    f.phase = `Reproduce prior refusal with ${laterName}`;
     await status('refused');
     assert.ok(await button('Apply', panel()).isDisabled());
     await f.same(stock);
@@ -146,7 +151,7 @@ await f.run(async () => {
     return;
   }
 
-  f.phase = 'Reject collision with the second later rectangular cut (n10) without changing document or History';
+  f.phase = 'Reject collision with the second later cut (n10) without changing document or History';
   const undo = await button('Undo').getAttribute('data-tip');
   await status('preview');
   await field(panel(), 'Spacing').fill('32');
@@ -155,8 +160,15 @@ await f.run(async () => {
   await f.same(stock);
   assert.equal(await button('Undo').getAttribute('data-tip'), undo);
   await f.snapshot('01-later-cut-3-collision-refused');
+  if (mixed) {
+    await field(panel(), 'Spacing').fill('29'); // X=39: R2 copy exactly tangent to the later R3 bore at X44.
+    await status('refused');
+    assert.ok(await button('Apply', panel()).isDisabled());
+    await f.same(stock);
+    await f.snapshot('01b-later-circle-tangency-refused');
+  }
 
-  f.phase = 'Apply Linear cut pattern across both later rectangular cuts';
+  f.phase = 'Apply Linear cut pattern across both later cuts';
   await field(panel(), 'Spacing').fill('8');
   await status('preview');
   await button('Apply', panel()).click();
