@@ -3,6 +3,7 @@
 // edges are kept in the outline's own `hv` lists, so they are not rules.
 import type { solveXYNumericalSketch } from '@barocss/cad';
 import { endpointPerpendicular, hasEndpointMarker } from './endpointPerpendicular';
+import { patternOffset, type SketchLinearPattern } from './linearPattern';
 
 type P2 = [number, number];
 type Doc = Parameters<typeof solveXYNumericalSketch>[0];
@@ -28,6 +29,19 @@ export interface EdgeCircleGapRule {
   edge: number;
   circle: number;
   axis: 0 | 1;
+  side: -1 | 1;
+  value: number;
+}
+
+/**
+ * A driving horizontal (`pcdx`) or vertical (`pcdy`) distance from outline point `a` to the centre of a derived
+ * linear pattern copy (`pattern`, `ordinal` >= 1). Solved directly against the seed circle centre with zero extra DOF.
+ */
+export interface PatternCopyDimRule {
+  kind: 'pcdx' | 'pcdy';
+  a: number;
+  pattern: string;
+  ordinal: number;
   side: -1 | 1;
   value: number;
 }
@@ -62,7 +76,9 @@ export type SketchRule =
   /** Two points mirror images of each other across a straight edge's line. */
   | { kind: 'symmetric'; a: number; b: number; line: number }
   /** A driving revolve diameter about the sketch local X or Y axis to an outline point. */
-  | AxisDiameterRule;
+  | AxisDiameterRule
+  /** A driving X or Y distance from an outline point to a derived linear pattern copy centre (drives the seed). */
+  | PatternCopyDimRule;
 
 const angle = (v: P2) => Math.atan2(v[1], v[0]);
 const wrap = (a: number) => { const w = Math.atan2(Math.sin(a), Math.cos(a)); return w === -Math.PI ? Math.PI : w; };
@@ -95,7 +111,14 @@ export function edgeAngle(points: readonly P2[], a: number, b: number): { degree
  * segment between them, so it never collapses when the points line up. Rules that no longer fit the
  * outline (an edge that became an arc, a point that is gone) are skipped.
  */
-export function ruleTerms(rules: readonly SketchRule[], points: readonly P2[], bulges: readonly number[], circles: readonly P2[] = [], radii: readonly number[] = []): { points: KernelPoint[]; segments: KernelSegment[]; constraints: KernelConstraint[] } {
+export function ruleTerms(
+  rules: readonly SketchRule[],
+  points: readonly P2[],
+  bulges: readonly number[],
+  circles: readonly P2[] = [],
+  radii: readonly number[] = [],
+  patterns: readonly SketchLinearPattern[] = [],
+): { points: KernelPoint[]; segments: KernelSegment[]; constraints: KernelConstraint[] } {
   const n = points.length, line = (i: number) => i >= 0 && i < n && !bulges[i], arc = (i: number) => i >= 0 && i < n && !!bulges[i], point = (i: number) => i >= 0 && i < n;
   const helpers: KernelPoint[] = [], segments: KernelSegment[] = [], constraints: KernelConstraint[] = [];
   /** A circle centre as a solver point `k<j>` (added once). */
@@ -193,6 +216,45 @@ export function ruleTerms(rules: readonly SketchRule[], points: readonly P2[], b
         { id: id + 'f', kind: 'fixed', pointId: 'ap' + k, target: anchorPos },
         { id, kind: m === 0 ? 'vertical' : 'horizontal', segmentId: 'as' + k },
       );
+    }
+    else if ((r.kind === 'pcdx' || r.kind === 'pcdy') && point(r.a)
+      && (r.side === -1 || r.side === 1) && Number.isFinite(r.value) && r.value >= 0.001) {
+      const pat = patterns.find(p => p.id === r.pattern);
+      if (pat && Number.isInteger(r.ordinal) && r.ordinal >= 1 && r.ordinal < pat.count
+        && pat.seedCircle >= 0 && pat.seedCircle < circles.length) {
+        // Exact signed offset chain: C_seed[m] - p_a[m] = side * value - offset[m],
+        // encoded with 3 helpers (+6 vars) and 7 scalar equations => net -1 DOF on seed, zero extra DOF,
+        // and strictly positive segment lengths even when C_seed[m] - p_a[m] <= 0.
+        const m: 0 | 1 = r.kind === 'pcdx' ? 0 : 1, o = 1 - m;
+        const aPt = points[r.a], seedPt = circles[pat.seedCircle];
+        const off = patternOffset(pat, r.ordinal);
+        const targetDelta = r.side * r.value - off[m];
+        const across = Math.max(aPt[o], seedPt[o]) + 10;
+        const shift = Math.max(20, Math.abs(targetDelta) + 20, Math.abs(seedPt[m] - aPt[m]) + 20);
+        const at = (u: number, v: number): P2 => m === 0 ? [u, v] : [v, u];
+        const hp = 'pp' + k, h0 = 'p0' + k, hb = 'pb' + k;
+        helpers.push(
+          { id: hp, position: at(aPt[m], across) },
+          { id: h0, position: at(aPt[m] - shift, across) },
+          { id: hb, position: at(seedPt[m], across) },
+        );
+        const tie = m === 0 ? 'vertical' : 'horizontal', run = m === 0 ? 'horizontal' : 'vertical';
+        segments.push(
+          { id: 'pt' + k, startPointId: 'p' + r.a, endPointId: hp },
+          { id: 'ps' + k, startPointId: hp, endPointId: h0 },
+          { id: 'pm' + k, startPointId: h0, endPointId: hb },
+          { id: 'pk' + k, startPointId: centre(pat.seedCircle), endPointId: hb },
+        );
+        constraints.push(
+          { id: id + 'a', kind: tie, segmentId: 'pt' + k },
+          { id: id + 'o', kind: 'length', segmentId: 'pt' + k, length: across - aPt[o] },
+          { id: id + 's', kind: run, segmentId: 'ps' + k },
+          { id: id + 'l', kind: 'length', segmentId: 'ps' + k, length: shift },
+          { id: id + 'r', kind: run, segmentId: 'pm' + k },
+          { id: id + 'm', kind: 'length', segmentId: 'pm' + k, length: shift + targetDelta },
+          { id, kind: tie, segmentId: 'pk' + k },
+        );
+      }
     }
   });
   return { points: helpers, segments, constraints };

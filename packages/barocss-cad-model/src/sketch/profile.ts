@@ -3,6 +3,7 @@
 // (bulge 0) or a circular arc. Bulge is the DXF convention: tan(sweep / 4), positive = counter-clockwise.
 import { diagnoseXYNumericalSketchMobility, solveXYNumericalSketchPoints, type XYNumericalSketchDocumentV0 } from '@barocss/cad';
 import { ruleTerms, type SketchRule } from './terms';
+import type { SketchLinearPattern } from './linearPattern';
 import { rectilinearConflict } from './conflict';
 import type { FixedTriangleSeed } from './fixedTriangleLength';
 import { endpointPerpendicular, endpointRuleProblem } from './endpointPerpendicular';
@@ -101,6 +102,8 @@ export interface OutlineConstraints {
   hv?: { h: number[]; v: number[] }; rules?: SketchRule[];
   /** Centres of circles positioned by the rules (cdist / cdx / cdy), and their radii (for tangents). */
   circles?: P2[]; circleRadii?: number[];
+  /** 1D linear patterns derived from attached seed circles (for pcdx / pcdy copy-driven constraints). */
+  patterns?: SketchLinearPattern[];
 }
 /** `rows`: scalar equations; more rows than `rank` means some constraints are redundant (over-defined). */
 export interface SolveReport { ok: true; dof: number; rank: number; rows: number; points: P2[]; bulges: number[]; circles: P2[]; recoveredFixedTriangle?: true }
@@ -166,7 +169,7 @@ function outlineSystem(points: P2[], c: OutlineConstraints, bulgesIn?: number[])
   const n = points.length, bulges = points.map((_, i) => bulgesIn?.[i] ?? 0), arcs = bulges.flatMap((b, i) => b ? [i] : []);
   if (c.rules?.some(rule => endpointRuleProblem(rule, points, bulges))) return null;
   // Points = outline + one centre per arc; segments = lines + two radii per arc. Both are n + arcs.
-  const extra = ruleTerms(c.rules ?? [], points, bulges, c.circles ?? [], c.circleRadii ?? []);
+  const extra = ruleTerms(c.rules ?? [], points, bulges, c.circles ?? [], c.circleRadii ?? [], c.patterns ?? []);
   // (The kernel's -v1 sketch profile: 64 points, 64 segments, 128 constraints.)
   if (n + arcs.length + extra.points.length > 64 || n + arcs.length + extra.segments.length > 64) return null;
   const centres = new Map(arcs.map(i => [i, arcOf(points[i], points[(i + 1) % n], bulges[i]).center]));

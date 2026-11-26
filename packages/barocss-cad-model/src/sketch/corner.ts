@@ -217,7 +217,7 @@ function replaceCorner(s: Polygon, i: number, A: P2, B: P2, bulge: number, chamf
         return (trimsA || trimsB) && !(chamfer && trimsA && trimsB) ? [] : [{ ...rule, a: seg(rule.a), b: seg(rule.b) }];
       }
       // Point to circle centre; edge to circle centre (the edge's direction is kept); circle to circle.
-      case 'cdist': case 'cdx': case 'cdy': return pt(rule.a) < 0 ? [] : [{ ...rule, a: pt(rule.a) }];
+      case 'cdist': case 'cdx': case 'cdy': case 'pcdx': case 'pcdy': return pt(rule.a) < 0 ? [] : [{ ...rule, a: pt(rule.a) }];
       case 'cedge': case 'cgap': return [{ ...rule, edge: seg(rule.edge) }];
       case 'ccdist': case 'ccdx': case 'ccdy': case 'cconc': return [rule];
       case 'ctan': return [prev, i].includes(rule.edge) ? [] : [{ ...rule, edge: seg(rule.edge) }];

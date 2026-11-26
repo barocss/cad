@@ -14,22 +14,32 @@ import {
   AXIS_DIAMETER_MIN_MM, axisDiameterEndpoints, axisDiameterGeometry, axisDiameterKey, axisDiameterProblem, parseAxisDiameterKey,
   type AxisDiameterEndpoints, type AxisDiameterGeometry, type ParsedAxisDiameterKey,
 } from './axisDiameter';
+import {
+  derivedPatternCircles, findDerivedPatternCircle, linearPatternsProblem, nextPatternId, parsePatternCopyKey,
+  patternCopyDimensionKeys, patternCopySideId, patternOffset, patternParamProblem, patternReferencingRuleIndices,
+  patternsWithoutCircle, SKETCH_PATTERN_MAX_COUNT, SKETCH_PATTERN_MIN_COUNT, SKETCH_PATTERN_MIN_SPACING,
+  type DerivedPatternCircle, type ParsedPatternCopyKey, type SketchLinearPattern, type SketchPatternAxis,
+} from './linearPattern';
 export {
   edgeCircleGapEndpoints, edgeCircleGapGeometry, type EdgeCircleGapEndpoints, type EdgeCircleGapGeometry,
   AXIS_DIAMETER_MIN_MM, axisDiameterEndpoints, axisDiameterGeometry, axisDiameterKey, parseAxisDiameterKey,
   type AxisDiameterEndpoints, type AxisDiameterGeometry, type ParsedAxisDiameterKey,
+  derivedPatternCircles, findDerivedPatternCircle, linearPatternsProblem, nextPatternId, parsePatternCopyKey,
+  patternCopyDimensionKeys, patternCopySideId, patternOffset, patternParamProblem, patternReferencingRuleIndices,
+  patternsWithoutCircle, SKETCH_PATTERN_MAX_COUNT, SKETCH_PATTERN_MIN_COUNT, SKETCH_PATTERN_MIN_SPACING,
+  type DerivedPatternCircle, type ParsedPatternCopyKey, type SketchLinearPattern, type SketchPatternAxis,
 };
 
 export type Polygon = Extract<SketchShape, { kind: 'polygon' }>;
 /**
- * A picked outline point, segment (line or arc) or circle by index. A circle is one of the outline's
- * circles (`circles`), or with `done` a finished circle shape of the sketch (`done` index) not yet attached.
+ * A picked outline point, segment (line or arc), circle by index, or derived linear pattern copy
+ * (`kind: 'pattern-circle'`, `pattern`: stable pattern ID, `i`: 1-based ordinal).
  */
-export interface SketchPick { kind: 'point' | 'edge' | 'circle'; i: number; done?: true }
+export interface SketchPick { kind: 'point' | 'edge' | 'circle' | 'pattern-circle'; i: number; done?: true; pattern?: string }
 export type ConstraintKind = 'horizontal' | 'vertical' | 'parallel' | 'perpendicular' | 'equal' | 'fix' | 'coincident' | 'tangent' | 'symmetric';
 
 export const isSettled = (s: SketchShape | null | undefined): s is Polygon => s?.kind === 'polygon' && s.closed && !s.pending;
-export const samePick = (a: SketchPick, b: SketchPick) => a.kind === b.kind && a.i === b.i && !a.done === !b.done;
+export const samePick = (a: SketchPick, b: SketchPick) => a.kind === b.kind && a.i === b.i && !a.done === !b.done && (a.pattern ?? '') === (b.pattern ?? '');
 const isArc = (s: Polygon, i: number) => !!s.bulges?.[i];
 const isLine = (s: Polygon, i: number) => i >= 0 && i < s.points.length && !isArc(s, i);
 const edgeName = (s: Polygon, i: number) => `${isArc(s, i) ? 'arc' : 'edge'} ${i + 1}`;
@@ -41,7 +51,7 @@ export const hvOf = (s: Polygon) => s.hv ?? inferredHV(s.points as P2[], s.bulge
 
 export const constraintsOf = (s: Polygon): OutlineConstraints => ({
   lengths: s.lengths, radii: s.radii, tangents: s.tangents, equalRadii: s.equalRadii, concentric: s.concentric, hv: hvOf(s), rules: s.rules,
-  circles: s.circles?.map(c => c.c), circleRadii: s.circles?.map(c => c.r),
+  circles: s.circles?.map(c => c.c), circleRadii: s.circles?.map(c => c.r), patterns: s.patterns,
 });
 
 const solved = new WeakMap<Polygon, SolveResult>();
@@ -98,6 +108,8 @@ function checkedEdit(candidate: Polygon, prev: Polygon | null, what: string, r: 
       if (problem) return { ok: false, reason: `${what}: ${problem}` };
     }
   }
+  const patProblem = linearPatternsProblem(shape);
+  if (patProblem) return { ok: false, reason: `${what}: ${patProblem}` };
   solved.set(shape, r);
   return { ok: true, shape, report: r };
 }
@@ -124,6 +136,10 @@ function selectedLineArcJoint(s: Polygon, picks: readonly SketchPick[]): number 
 
 /** Why each constraint cannot apply to the selection (null: it can). */
 export function constraintOptions(s: Polygon, picks: readonly SketchPick[]): Record<ConstraintKind, string | null> {
+  if (picks.some(p => p.kind === 'pattern-circle')) {
+    const why = 'A linear pattern copy is derived from its seed: select it with an outline point to add a Horizontal or Vertical driving dimension';
+    return { horizontal: why, vertical: why, parallel: why, perpendicular: why, equal: why, fix: why, coincident: why, tangent: why, symmetric: why };
+  }
   if (picks.some(p => p.kind === 'circle')) {
     const why = 'A circle takes dimensions: its diameter, or its centre from an outline point (Dimension)';
     // Two circles: one centre (concentric).
@@ -169,6 +185,17 @@ function pointOnArcEnd(s: Polygon, point: number, arc: number): string | null {
 
 /** The selection's dimension: an edge's length, an arc's radius, or the distance between two points (null: none). */
 export function dimensionKey(s: Polygon, picks: readonly SketchPick[]): string | null {
+  const patCopies = picks.filter(p => p.kind === 'pattern-circle');
+  if (patCopies.length) {
+    if (patCopies.length === 1 && picks.length === 2) {
+      const pt = picks.find(p => p.kind === 'point');
+      const pc = patCopies[0];
+      if (pt && pc.pattern && findDerivedPatternCircle(s, pc.pattern, pc.i)) {
+        return patternCopyDimensionKeys(pt.i, pc.pattern, pc.i).dx;
+      }
+    }
+    return null;
+  }
   const { points, edges, circles } = split(s, picks);
   if (circles.length === 1 && !edges.length && points.length <= 1) return points.length ? `cdist${points[0]}_${circles[0]}` : `cdia${circles[0]}`;
   if (circles.length === 1 && edges.length === 1 && !points.length) return edgeCircleKey(s, edges[0], circles[0]);
@@ -255,6 +282,13 @@ export function applyConstraint(s: Polygon, picks: readonly SketchPick[], kind: 
 
 /** A dimension's current value in the drawing (len<i>, rad<i>, dist / dx / dy <a>_<b>). */
 export function dimensionValue(s: Polygon, key: string): number | null {
+  const pk = parsePatternCopyKey(key);
+  if (pk) {
+    const a = s.points[pk.a], dc = findDerivedPatternCircle(s, pk.pattern, pk.ordinal);
+    if (!a || !dc) return null;
+    const axis = pk.kind === 'pcdx' ? 0 : 1;
+    return Math.abs(dc.c[axis] - a[axis]);
+  }
   const ad = parseAxisDiameterKey(key);
   if (ad) return axisDiameterGeometry(s, ad.point, ad.axis)?.diameter ?? null;
   const l = parseLinkKey(key);
@@ -287,6 +321,8 @@ export function drivingDimensionValue(s: Polygon, key: string): number | undefin
     const rule = s.rules?.find(matches);
     return rule && 'value' in rule ? rule.value : undefined;
   };
+  const pk = parsePatternCopyKey(key);
+  if (pk) return authored(r => r.kind === pk.kind && r.a === pk.a && r.pattern === pk.pattern && r.ordinal === pk.ordinal);
   const ad = parseAxisDiameterKey(key);
   if (ad) return authored(r => r.kind === 'adia' && r.point === ad.point && r.axis === ad.axis);
   const l = parseLinkKey(key);
@@ -351,6 +387,8 @@ function parseKey(key: string): { kind: 'len' | 'rad'; i: number } | { kind: Poi
   const d = /^(dist|dx|dy)(\d+)_(\d+)$/.exec(key); return d ? { kind: d[1] as PointDim, a: Number(d[2]), b: Number(d[3]) } : null;
 }
 export function dimensionLabel(s: Polygon, key: string): string {
+  const pk = parsePatternCopyKey(key);
+  if (pk) return `${pk.kind === 'pcdx' ? 'Horizontal' : 'Vertical'} distance point ${pk.a + 1} – pattern ${pk.pattern} copy #${pk.ordinal}`;
   const ad = parseAxisDiameterKey(key);
   if (ad) return `Diameter of point ${ad.point + 1} about ${ad.axis.toUpperCase()} axis`;
   const l = parseLinkKey(key);
@@ -373,6 +411,20 @@ export function commitInlineDimension(s: Polygon, key: string, value: number): E
 }
 
 function editDimension(s: Polygon, key: string, value: number, recoverTriangle: boolean): EditResult {
+  const pk = parsePatternCopyKey(key);
+  if (pk) {
+    if (!Number.isFinite(value) || value < 0.001) return { ok: false, reason: 'A dimension must be greater than 0' };
+    const a = s.points[pk.a], dc = findDerivedPatternCircle(s, pk.pattern, pk.ordinal);
+    if (!a || !dc) return { ok: false, reason: 'Pattern copy no longer exists on this outline' };
+    const axis: 0 | 1 = pk.kind === 'pcdx' ? 0 : 1;
+    const what = `${dimensionLabel(s, key)} = ${round(value)}`, base = { ...s, hv: hvOf(s) };
+    const existing = (s.rules ?? []).find(r => r.kind === pk.kind && r.a === pk.a && r.pattern === pk.pattern && r.ordinal === pk.ordinal);
+    const side: -1 | 1 = existing && (existing.kind === 'pcdx' || existing.kind === 'pcdy')
+      ? existing.side
+      : dc.c[axis] >= a[axis] ? 1 : -1;
+    const rules = (s.rules ?? []).filter(r => !(r.kind === pk.kind && r.a === pk.a && r.pattern === pk.pattern && r.ordinal === pk.ordinal));
+    return checkEdit({ ...base, rules: [...rules, { kind: pk.kind, a: pk.a, pattern: pk.pattern, ordinal: pk.ordinal, side, value }] }, s, what);
+  }
   const ad = parseAxisDiameterKey(key);
   if (ad) {
     if (!Number.isFinite(value) || value < AXIS_DIAMETER_MIN_MM) return { ok: false, reason: 'An axis diameter must be at least 0.002 mm' };
@@ -479,6 +531,12 @@ export function constraintEntries(s: Polygon): ConstraintEntry[] {
     else if (r.kind === 'cconc') add(id, 'Concentric', `circle ${r.a + 1} · circle ${r.b + 1}`, [C(r.a), C(r.b)]);
     else if (r.kind === 'angle') add(id, 'Angle', `edge ${r.a + 1} ∠ edge ${r.b + 1} = ${round(r.value)}°`, [E(r.a), E(r.b)]);
     else if (r.kind === 'adia') add(id, 'Axis diameter', `point ${r.point + 1} about ${r.axis.toUpperCase()} = Ø${round(r.value)}`, [P(r.point)]);
+    else if (r.kind === 'pcdx' || r.kind === 'pcdy') add(
+      id,
+      r.kind === 'pcdx' ? 'Horizontal distance' : 'Vertical distance',
+      `point ${r.a + 1} – pattern ${r.pattern} copy #${r.ordinal} = ${round(r.value)}`,
+      [P(r.a), { kind: 'pattern-circle', pattern: r.pattern, i: r.ordinal }],
+    );
     else if (r.kind === 'distance' || r.kind === 'dx' || r.kind === 'dy') add(id, pointDimName[r.kind === 'distance' ? 'dist' : r.kind], `point ${r.a + 1} – point ${r.b + 1} = ${round(r.value)}`, [P(r.a), P(r.b)]);
   });
   s.bulges?.forEach((b, i) => { if (b) add('arc:' + i, 'Arc', `edge ${i + 1} ${b > 0 ? 'ccw' : 'cw'}`, [E(i)], false); });
@@ -521,6 +579,147 @@ export function rulesWithoutCircle(rules: readonly SketchRule[], j: number): Ske
     out.push(renumberCircle(r, fields.filter(f => rec[f] > j)));
   }
   return out;
+}
+
+export interface LinearPatternInput {
+  seedCircle: number;
+  axis: SketchPatternAxis;
+  sign: -1 | 1;
+  spacing: number;
+  count: number;
+}
+
+export interface LinearPatternPatch {
+  axis?: SketchPatternAxis;
+  sign?: -1 | 1;
+  spacing?: number;
+  count?: number;
+}
+
+export interface PatternEditOptions {
+  dropReferencedConstraints?: boolean;
+}
+
+export type PatternEditResult =
+  | { ok: true; shape: Polygon; report: SolveReport; patternId: string; removedRuleIndices: number[] }
+  | { ok: false; reason: string; blockingRuleIndices?: number[] };
+
+/** Adds one derived 1D linear pattern from an attached seed circle, validating containment and non-overlap. */
+export function addLinearPattern(s: Polygon, input: LinearPatternInput): PatternEditResult {
+  const { id, seq } = nextPatternId(s);
+  const pattern: SketchLinearPattern = {
+    id,
+    seedCircle: input.seedCircle,
+    axis: input.axis,
+    sign: input.sign,
+    spacing: input.spacing,
+    count: input.count,
+  };
+  const paramErr = patternParamProblem(pattern, s.circles?.length ?? 0);
+  if (paramErr) return { ok: false, reason: paramErr };
+  if ((s.patterns ?? []).some(p => p.seedCircle === input.seedCircle)) {
+    return { ok: false, reason: `Circle ${input.seedCircle + 1} already belongs to a linear pattern` };
+  }
+  const candidate: Polygon = {
+    ...s,
+    hv: hvOf(s),
+    patterns: [...(s.patterns ?? []), pattern],
+    patternSeq: seq,
+  };
+  const edit = checkEdit(candidate, s, `Linear pattern ${id}`);
+  if (!edit.ok) return edit;
+  return { ok: true, shape: edit.shape, report: edit.report, patternId: id, removedRuleIndices: [] };
+}
+
+/**
+ * Updates a linear pattern's count, spacing, or direction.
+ * Reducing `count` while a removed copy is referenced by a constraint is explicitly refused unless
+ * `options.dropReferencedConstraints` is true (which removes those constraints in the same atomic transaction).
+ */
+export function updateLinearPattern(
+  s: Polygon,
+  patternId: string,
+  patch: LinearPatternPatch,
+  options?: PatternEditOptions,
+): PatternEditResult {
+  const idx = (s.patterns ?? []).findIndex(p => p.id === patternId);
+  if (idx < 0) return { ok: false, reason: `Pattern "${patternId}" does not exist` };
+  const current = s.patterns![idx];
+  const next: SketchLinearPattern = {
+    ...current,
+    ...(patch.axis !== undefined ? { axis: patch.axis } : {}),
+    ...(patch.sign !== undefined ? { sign: patch.sign } : {}),
+    ...(patch.spacing !== undefined ? { spacing: patch.spacing } : {}),
+    ...(patch.count !== undefined ? { count: patch.count } : {}),
+  };
+  const paramErr = patternParamProblem(next, s.circles?.length ?? 0);
+  if (paramErr) return { ok: false, reason: paramErr };
+  const blocking = patternReferencingRuleIndices(s.rules, patternId, next.count);
+  if (blocking.length && !options?.dropReferencedConstraints) {
+    const names = blocking.map(i => {
+      const r = s.rules![i];
+      return r.kind === 'pcdx' || r.kind === 'pcdy' ? `copy #${r.ordinal} (${r.kind === 'pcdx' ? 'Horizontal' : 'Vertical'} = ${round(r.value)})` : `rule ${i + 1}`;
+    });
+    return {
+      ok: false,
+      reason: `Cannot reduce pattern ${patternId} count to ${next.count}: referenced by ${list(names)}. Remove the referencing constraint(s) first or confirm removal together.`,
+      blockingRuleIndices: blocking,
+    };
+  }
+  const removeSet = new Set(blocking);
+  const rules = (s.rules ?? []).filter((_, i) => !removeSet.has(i));
+  const patterns = s.patterns!.map((p, i) => (i === idx ? next : p));
+  const candidate: Polygon = {
+    ...s,
+    hv: hvOf(s),
+    patterns,
+    ...(rules.length ? { rules } : { rules: [] }),
+  };
+  const edit = checkEdit(candidate, s, `Update pattern ${patternId}`);
+  if (!edit.ok) return edit;
+  return { ok: true, shape: edit.shape, report: edit.report, patternId, removedRuleIndices: blocking };
+}
+
+/**
+ * Removes a linear pattern (preserving `patternSeq` so its ID is never reused by a later pattern).
+ * Refused if any constraint references a copy of the pattern unless `options.dropReferencedConstraints` is true.
+ */
+export function removeLinearPattern(
+  s: Polygon,
+  patternId: string,
+  options?: PatternEditOptions,
+): PatternEditResult {
+  const exists = (s.patterns ?? []).some(p => p.id === patternId);
+  if (!exists) return { ok: false, reason: `Pattern "${patternId}" does not exist` };
+  const blocking = patternReferencingRuleIndices(s.rules, patternId, 1);
+  if (blocking.length && !options?.dropReferencedConstraints) {
+    const names = blocking.map(i => {
+      const r = s.rules![i];
+      return r.kind === 'pcdx' || r.kind === 'pcdy' ? `copy #${r.ordinal} (${r.kind === 'pcdx' ? 'Horizontal' : 'Vertical'} = ${round(r.value)})` : `rule ${i + 1}`;
+    });
+    return {
+      ok: false,
+      reason: `Cannot remove pattern ${patternId}: referenced by ${list(names)}. Remove the referencing constraint(s) first or confirm removal together.`,
+      blockingRuleIndices: blocking,
+    };
+  }
+  const removeSet = new Set(blocking);
+  const rules = (s.rules ?? []).filter((_, i) => !removeSet.has(i));
+  const patterns = (s.patterns ?? []).filter(p => p.id !== patternId);
+  const seq = Math.max(s.patternSeq ?? 0, ...(s.patterns ?? []).map(p => {
+    const m = /^sp(\d+)$/.exec(p.id);
+    return m ? Number(m[1]) : 0;
+  }));
+  const candidate: Polygon = {
+    ...s,
+    hv: hvOf(s),
+    patterns,
+    patternSeq: seq,
+    rules,
+  };
+  const edit = checkEdit(candidate, s, `Remove pattern ${patternId}`);
+  if (!edit.ok) return edit;
+  return { ok: true, shape: edit.shape, report: edit.report, patternId, removedRuleIndices: blocking };
 }
 
 export {

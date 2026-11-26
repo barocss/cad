@@ -13,6 +13,7 @@ import { ellipseMatches, wellFormedEllipse } from './ellipse';
 import { refusal } from '../engine/refusal';
 import { matchesRegionLengths } from './internal/regionLengths';
 import { matchesHoleOutline } from './internal/holeOutline';
+import { derivedPatternCircles, linearPatternsProblem, patternsWithoutCircle } from './linearPattern';
 
 type Params = Readonly<Record<string, number>>;
 
@@ -62,9 +63,11 @@ export function resolveSketchDims(node: SketchNode, params: Params = {}): Sketch
 const sameIds = (a: readonly string[] | undefined, b: readonly string[]) => !!a && a.length === b.length && a.every((x, i) => x === b[i]);
 const dropCircleAt = (p: Extract<SketchShape, { kind: 'polygon' }>, j: number): SketchShape => {
   const rest: Record<string, unknown> = { ...p }, circles = (p.circles ?? []).filter((_, k) => k !== j), circleIds = (p.circleIds ?? []).filter((_, k) => k !== j);
-  delete rest.circles; delete rest.circleIds; delete rest.rules;
-  const rules = rulesWithoutCircle(p.rules ?? [], j);
-  return { ...rest, ...(circles.length ? { circles } : {}), ...(circleIds.length ? { circleIds } : {}), ...(p.rules ? { rules } : {}) } as SketchShape;
+  const droppedPatterns = new Set((p.patterns ?? []).filter(pat => pat.seedCircle === j).map(pat => pat.id));
+  const patterns = patternsWithoutCircle(p.patterns ?? [], j);
+  delete rest.circles; delete rest.circleIds; delete rest.rules; delete rest.patterns;
+  const rules = rulesWithoutCircle(p.rules ?? [], j).filter(r => !((r.kind === 'pcdx' || r.kind === 'pcdy') && droppedPatterns.has(r.pattern)));
+  return { ...rest, ...(circles.length ? { circles } : {}), ...(circleIds.length ? { circleIds } : {}), ...(patterns.length ? { patterns } : {}), ...(p.rules ? { rules } : {}) } as SketchShape;
 };
 /** The stored main circle that a click attached to a polygon's outline, as a circle shape of its own (with the polygon minus it), or null. */
 function attachedMain(shape: SketchShape | null, done: readonly SketchShape[], id: string): SketchShape[] | null {
@@ -174,6 +177,8 @@ export const outlinePolygon = (o: SketchOutline): Polygon => {
     ...(o.references?.length ? { references: o.references.map(r => ({ ...r })) } : {}),
     ...(wellFormedSpline(o.spline) ? { spline: wellFormedSpline(o.spline)!, fromSpline: true as const } : {}),
     ...(o.circles ? { circles: o.circles.map(c => ({ c: [c.c[0], c.c[1]] as [number, number], r: c.r })) } : {}),
+    ...(o.patterns?.length ? { patterns: o.patterns.map(p => ({ ...p })) } : {}),
+    ...(o.patternSeq && Number.isInteger(o.patternSeq) && o.patternSeq > 0 ? { patternSeq: o.patternSeq } : {}),
   };
   const ellipse = wellFormedEllipse(o.ellipse);
   return ellipse && ellipseMatches({ ...poly, ellipse }) ? { ...poly, ellipse, fromEllipse: true } : poly;
@@ -290,8 +295,13 @@ export function sketchShapes(stored: SketchNode, params: Params = {}): { shape: 
   const node = resolveSketchDims(stored, params);
   // A band sketch (B1) holds only its construction sources; the band comes back resolved, its ids seed the fresh ones.
   if (node.profile === 'band') return { shape: null, done: constructionOf(node), band: node.band };
-  // Circles the outline keeps come back on it, not beside it.
+  // Circles the outline keeps (and derived linear pattern copies) come back on it, not beside it.
+  if (node.outline && (node.outline.patterns?.length || node.outline.rules?.some(r => r.kind === 'pcdx' || r.kind === 'pcdy'))) {
+    const patErr = linearPatternsProblem(node.outline);
+    if (patErr) throw refusal('VALUE', `Sketch linear pattern is invalid: ${patErr}`);
+  }
   const attached = node.outline?.circles ?? [], sameCircle = (s: SketchShape | null, c: { c: [number, number]; r: number }) => !!s && s.kind === 'circle' && Math.hypot(c.c[0] - s.c[0], c.c[1] - s.c[1]) < 1e-6 && Math.abs(c.r - s.r) < 1e-6;
+  const derived = node.outline ? derivedPatternCircles(node.outline) : [];
   const tags = node.sideTags, positional: Record<string, string> = {};
   let k = nextIdOf(constructionOf(node));
   for (const t of [...(tags?.outer ?? []), ...(tags?.regions ?? []).flat(), ...(tags?.holes ?? []).flat()]) { const m = /^e(\d+)$/.exec(t); if (m) k = Math.max(k, Number(m[1]) + 1); }
@@ -323,6 +333,8 @@ export function sketchShapes(stored: SketchNode, params: Params = {}): { shape: 
   }
   let shape: SketchShape | null = main && { ...main, ids: authoredOuter };
   if (shape?.kind === 'polygon' && attached.length) shape = { ...shape, circleIds: attached.map(c => loops.find(x => sameCircle(x.s, c))?.ids[0] ?? `e${k++}`) };
-  const done = loops.filter(x => !!x.s && !attached.some(c => sameCircle(x.s, c))).map(x => ({ ...x.s!, ids: x.ids }) as SketchShape);
+  const done = loops.filter(x => !!x.s
+    && !attached.some(c => sameCircle(x.s, c))
+    && !derived.some(d => d.sideId === x.ids[0] || sameCircle(x.s, d))).map(x => ({ ...x.s!, ids: x.ids }) as SketchShape);
   return { shape, done: [...done, ...constructionOf(node)], ...(Object.keys(positional).length && !tags ? { positional } : {}) };
 }

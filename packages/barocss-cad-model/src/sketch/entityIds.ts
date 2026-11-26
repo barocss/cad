@@ -73,6 +73,8 @@ export function carryPolygon(old: Polygon, next: Polygon, from: readonly number[
   set('rules', rules);
   if (old.references?.length) out.references = old.references.map(r => ({ ...r }));
   if (old.circles) { out.circles = old.circles.map(c => ({ c: [c.c[0], c.c[1]], r: c.r })); if (old.circleIds) out.circleIds = [...old.circleIds]; }
+  if (old.patterns?.length) out.patterns = old.patterns.map(p => ({ ...p }));
+  if (old.patternSeq) out.patternSeq = old.patternSeq;
   if (old.fromRectangle && n1 === 4) out.fromRectangle = true; else delete out.fromRectangle;
   // (A point inserted or removed makes a spline or ellipse an ordinary outline.)
   delete out.fromSpline; delete out.spline; delete out.fromEllipse; delete out.ellipse;
@@ -85,7 +87,7 @@ function ruleFields(r: SketchRule): [string, 'pt' | 'seg'][] {
     case 'fix': case 'adia': return [['point', 'pt']];
     case 'coincident': return [['point', 'pt'], ['arc', 'seg']];
     case 'distance': case 'dx': case 'dy': return [['a', 'pt'], ['b', 'pt']];
-    case 'cdist': case 'cdx': case 'cdy': return [['a', 'pt']];
+    case 'cdist': case 'cdx': case 'cdy': case 'pcdx': case 'pcdy': return [['a', 'pt']];
     case 'cedge': case 'cgap': case 'ctan': return [['edge', 'seg']];
     case 'symmetric': return [['a', 'pt'], ['b', 'pt'], ['line', 'seg']];
     default: return [];

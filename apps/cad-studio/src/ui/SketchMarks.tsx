@@ -5,9 +5,9 @@ import type { MouseEvent, PointerEvent, ReactNode } from 'react';
 import type { SketchShape } from '../viewport/Viewport';
 import { arcOf, type P2 } from '@barocss/cad-model/sketch/profile';
 import {
-  axisDiameterEndpoints, axisDiameterGeometry, axisDiameterKey, dimensionLabel, dimensionValue, drivingDimensionValue,
-  edgeCircleGapEndpoints, edgeCircleGapGeometry, parseAxisDiameterKey, resolveReferenceDimension, samePick,
-  type Polygon, type SketchPick,
+  axisDiameterEndpoints, axisDiameterGeometry, axisDiameterKey, derivedPatternCircles, dimensionLabel, dimensionValue,
+  drivingDimensionValue, edgeCircleGapEndpoints, edgeCircleGapGeometry, findDerivedPatternCircle, parseAxisDiameterKey,
+  parsePatternCopyKey, resolveReferenceDimension, samePick, type Polygon, type SketchPick,
 } from '@barocss/cad-model/sketch/rules';
 import type { Project } from '@barocss/cad-model/sketch/select';
 import { InlineSketchDimension, type DimensionAxis } from './InlineSketchDimension';
@@ -56,17 +56,27 @@ export function sketchMarks({ shape: s, project, outlinePath, view, dimensionAre
 
   const ring = (c: readonly number[], r: number) => Array.from({ length: 73 }, (_, k) => P([c[0] + r * Math.cos(k * Math.PI / 36), c[1] + r * Math.sin(k * Math.PI / 36)]));
   const circleOf = (p: SketchPick) => { if (p.done) { const d = done[p.i]; return d?.kind === 'circle' ? d : null; } return s.circles?.[p.i] ?? null; };
-  // The outline's attached circles, with their diameter (double-click to edit).
+  // The outline's attached circles and derived linear pattern copies.
   (s.circles ?? []).forEach((c, j) => {
     const q = P(c.c);
     under.push(<polyline key={'ci' + j} points={ring(c.c, c.r).map(p => p.join(',')).join(' ')} className="sk-shape" />, <circle key={'cc' + j} cx={q[0]} cy={q[1]} r={2.5} className="sk-point" />);
   });
+  derivedPatternCircles(s).forEach(dc => {
+    const q = P(dc.c);
+    under.push(
+      <polyline key={'pci' + dc.sideId} data-pattern-copy={`${dc.patternId}:${dc.ordinal}`} points={ring(dc.c, dc.r).map(p => p.join(',')).join(' ')} className="sk-shape" strokeDasharray="5 3" />,
+      <circle key={'pcc' + dc.sideId} cx={q[0]} cy={q[1]} r={2.5} className="sk-point" />,
+    );
+  });
 
   // Draw inspection first so the selected entities retain their own marks on top.
   const mark = (p: SketchPick, cls: 'inspected' | 'hover' | 'on') => {
-    const entity = `${p.kind}:${p.done ? 'done:' : ''}${p.i}`;
+    const entity = p.kind === 'pattern-circle' ? `pattern-circle:${p.pattern ?? ''}:${p.i}` : `${p.kind}:${p.done ? 'done:' : ''}${p.i}`;
     const key = `${cls}:${entity}`;
-    if (p.kind === 'circle') {
+    if (p.kind === 'pattern-circle') {
+      const dc = p.pattern ? findDerivedPatternCircle(s, p.pattern, p.i) : null;
+      if (dc) under.push(<polyline key={key} data-sketch-entity={entity} points={ring(dc.c, dc.r).map(q => q.join(',')).join(' ')} className={'sk-pick-edge ' + cls} />);
+    } else if (p.kind === 'circle') {
       const c = circleOf(p);
       if (c) under.push(<polyline key={key} data-sketch-entity={entity} points={ring(c.c, c.r).map(q => q.join(',')).join(' ')} className={'sk-pick-edge ' + cls} />);
     } else if (p.kind === 'point') {
@@ -194,6 +204,14 @@ export function sketchMarks({ shape: s, project, outlinePath, view, dimensionAre
       const m = r.kind === 'ccdx' ? 0 : 1, o = 1 - m, far = Math.max(a[o], b[o]), at = (p: readonly number[]) => P(m === 0 ? [p[0], far] : [far, p[1]]);
       linear(P(a), P(b), r.value, key, [at(a), at(b)]); return;
     }
+    if (r.kind === 'pcdx' || r.kind === 'pcdy') {
+      const dc = findDerivedPatternCircle(s, r.pattern, r.ordinal), a = s.points[r.a];
+      if (!dc || !a) return;
+      const key = `${r.kind}${r.a}_${r.pattern}_${r.ordinal}`;
+      const m = r.kind === 'pcdx' ? 0 : 1, o = 1 - m, far = Math.max(a[o], dc.c[o]);
+      const at = (p: readonly number[]) => P(m === 0 ? [p[0], far] : [far, p[1]]);
+      linear(pts[r.a], P(dc.c), r.value, key, [at(a), at(dc.c)]); return;
+    }
     if (r.kind !== 'cdist' && r.kind !== 'cdx' && r.kind !== 'cdy') return;
     const c = s.circles?.[r.circle], a = s.points[r.a]; if (!c || !a) return;
     const key = `${r.kind}${r.a}_${r.circle}`;
@@ -306,9 +324,13 @@ export function sketchMarks({ shape: s, project, outlinePath, view, dimensionAre
     const d = /^(?:dist|dx|dy)(\d+)_(\d+)$/.exec(editDim), g = /^ang(\d+)_(\d+)$/.exec(editDim), cd = /^(?:cdist|cdx|cdy)(\d+)_(\d+)$/.exec(editDim);
     const cc = /^(?:ccdist|ccdx|ccdy)(\d+)_(\d+)$/.exec(editDim), ce = /^cedge(\d+)_(\d+)$/.exec(editDim), cg = /^cgap(\d+)_(\d+)$/.exec(editDim);
     const ad = parseAxisDiameterKey(editDim);
+    const pk = parsePatternCopyKey(editDim);
     const centreOf = (j: number) => s.circles?.[j] ? P(s.circles[j].c) : null;
     const halfway = (a: XY | null, b: XY | null) => a && b ? [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2] as XY : null;
-    const at = anchors.get(editDim) ?? (ad ? (() => {
+    const at = anchors.get(editDim) ?? (pk ? (() => {
+      const a = pts[pk.a], dc = findDerivedPatternCircle(s, pk.pattern, pk.ordinal);
+      return a && dc ? halfway(a, P(dc.c)) : null;
+    })() : ad ? (() => {
       const g = axisDiameterGeometry(s, ad.point, ad.axis);
       if (!g) return null;
       const pt = P(g.target), mir = P(g.mirror), foot = P(g.foot), u = unit(mir, pt);

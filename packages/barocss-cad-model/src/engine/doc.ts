@@ -1102,6 +1102,10 @@ export interface SketchOutline {
   references?: SketchReferenceDimension[];
   /** Circles dimensioned from the outline (they are also the profile's holes or regions). */
   circles?: { c: [number, number]; r: number }[];
+  /** 1D linear circle patterns derived from attached seed circles (#223). */
+  patterns?: SketchLinearPattern[];
+  /** Monotonic pattern ID counter so deleted pattern IDs are never reused. */
+  patternSeq?: number;
   /** A spline outline's fit points and handle directions (degrees; null = automatic), kept while the points still are what it makes. */
   spline?: { fit: [number, number][]; closed: boolean; handles?: (number | null)[] };
   /** An ellipse outline's definition (centre, semi-axes in mm, the first axis's angle in degrees), kept while the points still are what it makes. */
@@ -1521,6 +1525,7 @@ export function holeCentres(center: readonly number[], p?: HolePattern): [number
 
 import type { RenderSettings } from './render';
 import type { SketchRule } from '../sketch/terms';
+import type { SketchLinearPattern } from '../sketch/linearPattern';
 import type { SketchReferenceDimension } from '../sketch/referenceDimensions';
 import type { DirectGeometry } from './direct';
 import type { DrawingSettings } from '../drawing/types';

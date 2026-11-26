@@ -4,6 +4,7 @@ import type { PocketFloorBinding } from '../engine/pocketFloor';
 import type { PlanarFaceOutlineInsetAssociation, SketchBand } from '../engine/doc';
 import type { PlaneKind, SketchPlane } from './plane';
 import type { SketchRule } from './terms';
+import type { SketchLinearPattern } from './linearPattern';
 import type { SketchReferenceDimension } from './referenceDimensions';
 import type { SketchPick } from './rules';
 import type { SplineDef } from './spline';
@@ -38,7 +39,11 @@ export type SketchShape = (
       /** Circles attached to the outline: dimensioned from its points and solved with it (holes or bosses of the profile). */
       circles?: { c: [number, number]; r: number }[];
       /** The attached circles' side ids (R10a, D86), one a circle. */
-      circleIds?: string[] }
+      circleIds?: string[];
+      /** 1D linear circle patterns derived from attached seed circles (#223). */
+      patterns?: SketchLinearPattern[];
+      /** Monotonic pattern ID counter so deleted pattern IDs are never reused. */
+      patternSeq?: number }
   | { kind: 'slot'; a: [number, number]; b: [number, number]; r: number }
   /** A Bézier curve from its control points (3 = quadratic, 4 = cubic): open, never part of a profile (sketch/bezier.ts). */
   | { kind: 'bezier'; poles: [number, number][] }

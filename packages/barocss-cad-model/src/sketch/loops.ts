@@ -10,6 +10,7 @@ import { ellipseMatches } from './ellipse';
 import { bezierSamples, wellFormedBezier } from './bezier';
 import { matchesRegionLengths } from './internal/regionLengths';
 import { matchesHoleOutline } from './internal/holeOutline';
+import { derivedPatternCircles, linearPatternsProblem } from './linearPattern';
 
 export function isConvex(points: [number, number][]) {
   let sign = 0; const n = points.length;
@@ -45,7 +46,7 @@ export function shapeNode(s: SketchShape): SketchNode | null {
  */
 export function rectangleNode(s: Extract<SketchShape, { kind: 'polygon' }>): SketchNode | null {
   if (!s.fromRectangle || s.points.length !== 4 || s.bulges?.some(Boolean)) return null;
-  if ([s.radii, s.tangents, s.equalRadii, s.concentric, s.rules].some(v => v && (Array.isArray(v) ? v.length : Object.keys(v).length))) return null;
+  if ([s.radii, s.tangents, s.equalRadii, s.concentric, s.rules, s.patterns].some(v => v && (Array.isArray(v) ? v.length : Object.keys(v).length))) return null;
   const hv = s.hv, p = s.points, eq = (a: number, b: number) => Math.abs(a - b) < 1e-9;
   if (!hv || hv.h.length + hv.v.length !== 4 || ![0, 1, 2, 3].every(i => hv.h.includes(i) || hv.v.includes(i))) return null;
   const aligned = hv.h.includes(0)
@@ -60,11 +61,11 @@ export function rectangleNode(s: Extract<SketchShape, { kind: 'polygon' }>): Ske
 
 /** The outline recipe kept by the sketch node. Spline and ellipse definitions must still match the shape. */
 export function outlineOf(s: Extract<SketchShape, { kind: 'polygon' }>): SketchOutline | null {
-  const { points, bulges, lengths, radii, tangents, equalRadii, concentric, hv, rules, references, circles } = s;
+  const { points, bulges, lengths, radii, tangents, equalRadii, concentric, hv, rules, references, circles, patterns, patternSeq } = s;
   const has = (v: unknown) => Array.isArray(v) ? v.length > 0 : !!v && Object.keys(v).length > 0;
   const spline = s.spline && splineMatches(s) ? s.spline : undefined, ellipse = s.ellipse && ellipseMatches(s) ? s.ellipse : undefined;
   // An empty H/V recipe prevents legacy coordinate-based inference when the outline reopens.
-  if (!spline && !ellipse && ![lengths, radii, tangents, equalRadii, concentric, rules, references, circles].some(has) && hv === undefined) return null;
+  if (!spline && !ellipse && ![lengths, radii, tangents, equalRadii, concentric, rules, references, circles, patterns].some(has) && hv === undefined && !patternSeq) return null;
   const out: SketchOutline = { points: points.map(p => [p[0], p[1]] as [number, number]) };
   if (bulges?.some(Boolean)) out.bulges = [...bulges];
   if (has(lengths)) out.lengths = { ...lengths }; if (has(radii)) out.radii = { ...radii }; if (has(tangents)) out.tangents = [...tangents!];
@@ -72,6 +73,8 @@ export function outlineOf(s: Extract<SketchShape, { kind: 'polygon' }>): SketchO
   if (hv) out.hv = { h: [...hv.h], v: [...hv.v] }; if (has(rules)) out.rules = rules!.map(r => ({ ...r }));
   if (has(references)) out.references = references!.map(r => ({ ...r }));
   if (has(circles)) out.circles = circles!.map(c => ({ c: [c.c[0], c.c[1]], r: c.r }));
+  if (has(patterns)) out.patterns = patterns!.map(p => ({ ...p }));
+  if (patternSeq && Number.isInteger(patternSeq) && patternSeq > 0) out.patternSeq = patternSeq;
   if (spline) out.spline = { fit: spline.fit.map(p => [p[0], p[1]] as [number, number]), closed: spline.closed, ...(spline.handles ? { handles: [...spline.handles] } : {}) };
   if (ellipse) out.ellipse = { center: [ellipse.center[0], ellipse.center[1]], rx: ellipse.rx, ry: ellipse.ry, angle: ellipse.angle };
   return out;
@@ -147,8 +150,20 @@ export function loopOf(n: SketchNode): DocSegment[] {
 export function profileOf(all: SketchShape[]): { node: SketchNode } | { error: string } {
   // (Construction shapes are references: they make no part of the profile. Every side has its id, R10a.)
   let shapes = withIds(all).filter(s => !s.construction && s.kind !== 'bezier');
-  // An outline's attached circles are shapes of the profile beside it (holes inside it, regions outside).
-  shapes = shapes.flatMap(s => s.kind === 'polygon' && s.closed && s.circles?.length ? [s, ...s.circles.map((c, i): SketchShape => ({ kind: 'circle', c: c.c, r: c.r, ...(s.circleIds?.[i] ? { ids: [s.circleIds[i]] } : {}) }))] : [s]);
+  for (const s of shapes) {
+    if (s.kind === 'polygon' && s.closed && s.patterns?.length) {
+      const err = linearPatternsProblem(s);
+      if (err) return { error: err };
+    }
+  }
+  // An outline's attached circles (and any derived linear pattern copies) are shapes of the profile beside it.
+  shapes = shapes.flatMap(s => s.kind === 'polygon' && s.closed && (s.circles?.length || s.patterns?.length)
+    ? [
+      s,
+      ...(s.circles ?? []).map((c, i): SketchShape => ({ kind: 'circle', c: c.c, r: c.r, ...(s.circleIds?.[i] ? { ids: [s.circleIds[i]] } : {}) })),
+      ...derivedPatternCircles(s).map((dc): SketchShape => ({ kind: 'circle', c: dc.c, r: dc.r, ids: [dc.sideId] })),
+    ]
+    : [s]);
   const closed = shapes.map(s => ({ s, node: shapeNode(s) })).filter((x): x is { s: SketchShape; node: SketchNode } => !!x.node);
   if (!closed.length) return { error: 'Draw a closed rectangle, circle, slot or outline on the sketch plane.' };
   if (closed.length === 1) return { node: tagged(closed[0].node, closed[0].s, [], []) };

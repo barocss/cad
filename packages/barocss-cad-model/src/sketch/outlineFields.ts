@@ -6,7 +6,7 @@ import type { ModelNode, SketchNode, SketchOutline } from '../engine/doc';
 import { bindSketchLengthNode, unbindSketchLengthNode, resolveDrivenSketch } from './driven';
 import type { BindableField, EditField } from '../app/editFields';
 import { outlineOf, profileOf } from './loops';
-import { commitDimension, dimensionLabel, dimensionValue } from './rules';
+import { commitDimension, dimensionLabel, dimensionValue, parsePatternCopyKey } from './rules';
 import { mainShape, outlinePolygon, rebindDims, replaceSketchProfile, resolveSketchDims, sketchShapes } from './reopen';
 export { outlinePolygon };
 
@@ -19,6 +19,7 @@ export function drivingDimensions(o: SketchOutline): string[] {
       : r.kind === 'cdist' || r.kind === 'cdx' || r.kind === 'cdy' ? [`${r.kind}${r.a}_${r.circle}`] : r.kind === 'cedge' ? [`cedge${r.edge}_${r.circle}`]
       : r.kind === 'cgap' ? [`cgap${r.edge}_${r.circle}`]
       : r.kind === 'adia' ? [`adia${r.axis}${r.point}`]
+      : r.kind === 'pcdx' || r.kind === 'pcdy' ? [`${r.kind}${r.a}_${r.pattern}_${r.ordinal}`]
       : r.kind === 'ccdist' || r.kind === 'ccdx' || r.kind === 'ccdy' ? [`${r.kind}${r.a}_${r.b}`] : []),
     ...(o.circles ?? []).map((_, j) => 'cdia' + j)];
 }
@@ -31,6 +32,8 @@ export function drivingValue(o: SketchOutline, key: string): number | null {
   if (ce) { const r = (o.rules ?? []).find(x => x.kind === 'cedge' && x.edge === Number(ce[1]) && x.circle === Number(ce[2])); return r && 'value' in r ? r.value : null; }
   const cg = /^cgap(\d+)_(\d+)$/.exec(key);
   if (cg) { const r = (o.rules ?? []).find(x => x.kind === 'cgap' && x.edge === Number(cg[1]) && x.circle === Number(cg[2])); return r && 'value' in r ? r.value : null; }
+  const pk = parsePatternCopyKey(key);
+  if (pk) { const r = (o.rules ?? []).find(x => x.kind === pk.kind && x.a === pk.a && x.pattern === pk.pattern && x.ordinal === pk.ordinal); return r && 'value' in r ? r.value : null; }
   const ad = /^adia([xy])(\d+)$/.exec(key);
   if (ad) { const r = (o.rules ?? []).find(x => x.kind === 'adia' && x.axis === ad[1] && x.point === Number(ad[2])); return r && 'value' in r ? r.value : null; }
   const cc = /^(ccdist|ccdx|ccdy)(\d+)_(\d+)$/.exec(key);

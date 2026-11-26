@@ -2,7 +2,7 @@
 // Select and Dimension tools.
 import type { SketchShape, SketchState } from './types';
 import { sampleSegment, type P2 } from './profile';
-import { angleKey, circlePairKeys, distanceKey, edgeCircleKey, isSettled, samePick, type Polygon, type SketchPick } from './rules';
+import { angleKey, circlePairKeys, derivedPatternCircles, distanceKey, edgeCircleKey, isSettled, patternCopyDimensionKeys, samePick, type Polygon, type SketchPick } from './rules';
 import { segmentDistance as toSegment, insideRing, signedArea } from '../engine/geom2';
 import { shapeNode, shapeOutline } from './loops';
 import { tagsOf } from './entityIds';
@@ -30,6 +30,7 @@ export function pickSketch(s: Polygon, project: Project, x: number, y: number, d
   };
   // Later categories win an exact distance tie.
   done.forEach((c, i) => { if (c.kind !== 'circle') return; const d = circleDistance(c.c, c.r); if (d <= bestD) { bestD = d; best = { kind: 'circle', i, done: true }; } });
+  derivedPatternCircles(s).forEach(dc => { const d = circleDistance(dc.c, dc.r); if (d <= bestD) { bestD = d; best = { kind: 'pattern-circle', pattern: dc.patternId, i: dc.ordinal }; } });
   (s.circles ?? []).forEach((c, i) => { const d = circleDistance(c.c, c.r); if (d <= bestD) { bestD = d; best = { kind: 'circle', i }; } });
   for (let i = 0; i < n; i++) {
     const a = s.points[i] as P2, b = s.points[(i + 1) % n] as P2;
@@ -88,6 +89,11 @@ export function sketchClick(s: SketchState, hit: SketchPick | null, additive: bo
   if (!isSettled(shape)) return { ...s, picked: [], editDim: null };
   if (s.tool !== 'dimension') return { ...s, picked: nextPicks(s.picked ?? [], hit, additive), editDim: null };
   if (!hit) return { ...s, picked: [], editDim: null };
+  if (hit.kind === 'pattern-circle' && hit.pattern) {
+    const prev = (s.picked ?? [])[0];
+    if (prev?.kind === 'point') return { ...s, picked: [], editDim: patternCopyDimensionKeys(prev.i, hit.pattern, hit.i).dx };
+    return { ...s, picked: [hit], editDim: null };
+  }
   if (hit.kind === 'circle') {
     // After a point, a horizontal / vertical edge or another circle: the distance to its centre; alone: its diameter.
     const prev = (s.picked ?? [])[0];
@@ -103,6 +109,8 @@ export function sketchClick(s: SketchState, hit: SketchPick | null, additive: bo
     if (prev && prev.i !== hit.i && line(prev.i) && line(hit.i)) return { ...s, picked: [], editDim: angleKey(prev.i, hit.i) };
     return { ...s, picked: line(hit.i) ? [hit] : [], editDim: (line(hit.i) ? 'len' : 'rad') + hit.i };
   }
+  const patCopy = (s.picked ?? []).find(p => p.kind === 'pattern-circle' && p.pattern);
+  if (patCopy?.pattern) return { ...s, picked: [], editDim: patternCopyDimensionKeys(hit.i, patCopy.pattern, patCopy.i).dx };
   const ring = (s.picked ?? []).find(p => p.kind === 'circle');
   if (ring) return { ...s, picked: [], editDim: `cdist${hit.i}_${ring.i}` };
   const first = (s.picked ?? []).find(p => p.kind === 'point');
