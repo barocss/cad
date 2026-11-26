@@ -1,0 +1,2232 @@
+{
+  "format": "barocss-cad-model",
+  "schema": 3,
+  "units": "mm",
+  "parameters": {},
+  "nodes": [
+    {
+      "kind": "sketch",
+      "profile": "polygon",
+      "points": [
+        [
+          -64,
+          -45
+        ],
+        [
+          64,
+          -45
+        ],
+        [
+          75,
+          -34
+        ],
+        [
+          75,
+          34
+        ],
+        [
+          64,
+          45
+        ],
+        [
+          -64,
+          45
+        ],
+        [
+          -75,
+          34
+        ],
+        [
+          -75,
+          -34
+        ]
+      ],
+      "id": "n0"
+    },
+    {
+      "kind": "extrude",
+      "sketch": 0,
+      "height": 4,
+      "id": "n1"
+    },
+    {
+      "kind": "hole",
+      "parent": {
+        "node": 1,
+        "side": "solid"
+      },
+      "center": [
+        -43,
+        -32
+      ],
+      "radius": 2.25,
+      "axis": "z",
+      "id": "n2"
+    },
+    {
+      "kind": "hole",
+      "parent": {
+        "node": 2,
+        "side": "solid"
+      },
+      "center": [
+        43,
+        -32
+      ],
+      "radius": 2.25,
+      "axis": "z",
+      "id": "n3"
+    },
+    {
+      "kind": "hole",
+      "parent": {
+        "node": 3,
+        "side": "solid"
+      },
+      "center": [
+        -43,
+        32
+      ],
+      "radius": 2.25,
+      "axis": "z",
+      "id": "n4"
+    },
+    {
+      "kind": "hole",
+      "parent": {
+        "node": 4,
+        "side": "solid"
+      },
+      "center": [
+        43,
+        32
+      ],
+      "radius": 2.25,
+      "axis": "z",
+      "id": "n5"
+    }
+  ],
+  "outputs": {
+    "b5": {
+      "node": 5,
+      "side": "solid"
+    }
+  },
+  "nextId": 6,
+  "bodies": {
+    "b5": {
+      "name": "Lower deck",
+      "color": "#406981"
+    }
+  },
+  "instances": [
+    {
+      "id": "motor-fl",
+      "name": "Motor FL",
+      "doc": {
+        "format": "barocss-cad-model",
+        "schema": 3,
+        "units": "mm",
+        "parameters": {},
+        "nodes": [
+          {
+            "kind": "sketch",
+            "profile": "rectangle",
+            "min": [
+              -14,
+              -10
+            ],
+            "max": [
+              14,
+              10
+            ],
+            "id": "n0"
+          },
+          {
+            "kind": "extrude",
+            "sketch": 0,
+            "height": 12,
+            "id": "n1"
+          }
+        ],
+        "outputs": {
+          "b1": {
+            "node": 1,
+            "side": "solid"
+          }
+        },
+        "nextId": 2,
+        "bodies": {
+          "b1": {
+            "name": "Gear motor",
+            "color": "#c69048"
+          }
+        }
+      },
+      "position": [
+        48,
+        33,
+        -12
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "id": "axle-fl",
+      "name": "Shaft FL",
+      "doc": {
+        "format": "barocss-cad-model",
+        "schema": 3,
+        "units": "mm",
+        "parameters": {},
+        "nodes": [
+          {
+            "kind": "sketch",
+            "profile": "circle",
+            "center": [
+              0,
+              0
+            ],
+            "radius": 2.7,
+            "id": "n0"
+          },
+          {
+            "kind": "extrude",
+            "sketch": 0,
+            "height": 23,
+            "id": "n1"
+          }
+        ],
+        "outputs": {
+          "b1": {
+            "node": 1,
+            "side": "solid"
+          }
+        },
+        "nextId": 2,
+        "bodies": {
+          "b1": {
+            "name": "Motor shaft",
+            "color": "#cfd8de"
+          }
+        }
+      },
+      "position": [
+        48,
+        38,
+        -6
+      ],
+      "rotation": [
+        -90,
+        0,
+        0
+      ]
+    },
+    {
+      "id": "wheel-fl",
+      "name": "Wheel FL",
+      "doc": {
+        "format": "barocss-cad-model",
+        "schema": 3,
+        "units": "mm",
+        "parameters": {},
+        "nodes": [
+          {
+            "kind": "sketch",
+            "profile": "circle",
+            "center": [
+              0,
+              0
+            ],
+            "radius": 23,
+            "id": "n0"
+          },
+          {
+            "kind": "extrude",
+            "sketch": 0,
+            "height": 13,
+            "id": "n1"
+          },
+          {
+            "kind": "hole",
+            "parent": {
+              "node": 1,
+              "side": "solid"
+            },
+            "center": [
+              0,
+              0
+            ],
+            "radius": 2.75,
+            "axis": "z",
+            "id": "n2"
+          }
+        ],
+        "outputs": {
+          "b2": {
+            "node": 2,
+            "side": "solid"
+          }
+        },
+        "nextId": 3,
+        "bodies": {
+          "b2": {
+            "name": "Wheel with axle bore",
+            "color": "#343f4d"
+          }
+        }
+      },
+      "position": [
+        48,
+        47,
+        -6
+      ],
+      "rotation": [
+        -90,
+        0,
+        0
+      ]
+    },
+    {
+      "id": "motor-fr",
+      "name": "Motor FR",
+      "doc": {
+        "format": "barocss-cad-model",
+        "schema": 3,
+        "units": "mm",
+        "parameters": {},
+        "nodes": [
+          {
+            "kind": "sketch",
+            "profile": "rectangle",
+            "min": [
+              -14,
+              -10
+            ],
+            "max": [
+              14,
+              10
+            ],
+            "id": "n0"
+          },
+          {
+            "kind": "extrude",
+            "sketch": 0,
+            "height": 12,
+            "id": "n1"
+          }
+        ],
+        "outputs": {
+          "b1": {
+            "node": 1,
+            "side": "solid"
+          }
+        },
+        "nextId": 2,
+        "bodies": {
+          "b1": {
+            "name": "Gear motor",
+            "color": "#c69048"
+          }
+        }
+      },
+      "position": [
+        48,
+        -33,
+        -12
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "id": "axle-fr",
+      "name": "Shaft FR",
+      "doc": {
+        "format": "barocss-cad-model",
+        "schema": 3,
+        "units": "mm",
+        "parameters": {},
+        "nodes": [
+          {
+            "kind": "sketch",
+            "profile": "circle",
+            "center": [
+              0,
+              0
+            ],
+            "radius": 2.7,
+            "id": "n0"
+          },
+          {
+            "kind": "extrude",
+            "sketch": 0,
+            "height": 23,
+            "id": "n1"
+          }
+        ],
+        "outputs": {
+          "b1": {
+            "node": 1,
+            "side": "solid"
+          }
+        },
+        "nextId": 2,
+        "bodies": {
+          "b1": {
+            "name": "Motor shaft",
+            "color": "#cfd8de"
+          }
+        }
+      },
+      "position": [
+        48,
+        -38,
+        -6
+      ],
+      "rotation": [
+        90,
+        0,
+        0
+      ]
+    },
+    {
+      "id": "wheel-fr",
+      "name": "Wheel FR",
+      "doc": {
+        "format": "barocss-cad-model",
+        "schema": 3,
+        "units": "mm",
+        "parameters": {},
+        "nodes": [
+          {
+            "kind": "sketch",
+            "profile": "circle",
+            "center": [
+              0,
+              0
+            ],
+            "radius": 23,
+            "id": "n0"
+          },
+          {
+            "kind": "extrude",
+            "sketch": 0,
+            "height": 13,
+            "id": "n1"
+          },
+          {
+            "kind": "hole",
+            "parent": {
+              "node": 1,
+              "side": "solid"
+            },
+            "center": [
+              0,
+              0
+            ],
+            "radius": 2.75,
+            "axis": "z",
+            "id": "n2"
+          }
+        ],
+        "outputs": {
+          "b2": {
+            "node": 2,
+            "side": "solid"
+          }
+        },
+        "nextId": 3,
+        "bodies": {
+          "b2": {
+            "name": "Wheel with axle bore",
+            "color": "#343f4d"
+          }
+        }
+      },
+      "position": [
+        48,
+        -47,
+        -6
+      ],
+      "rotation": [
+        90,
+        0,
+        0
+      ]
+    },
+    {
+      "id": "motor-rl",
+      "name": "Motor RL",
+      "doc": {
+        "format": "barocss-cad-model",
+        "schema": 3,
+        "units": "mm",
+        "parameters": {},
+        "nodes": [
+          {
+            "kind": "sketch",
+            "profile": "rectangle",
+            "min": [
+              -14,
+              -10
+            ],
+            "max": [
+              14,
+              10
+            ],
+            "id": "n0"
+          },
+          {
+            "kind": "extrude",
+            "sketch": 0,
+            "height": 12,
+            "id": "n1"
+          }
+        ],
+        "outputs": {
+          "b1": {
+            "node": 1,
+            "side": "solid"
+          }
+        },
+        "nextId": 2,
+        "bodies": {
+          "b1": {
+            "name": "Gear motor",
+            "color": "#c69048"
+          }
+        }
+      },
+      "position": [
+        -48,
+        33,
+        -12
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "id": "axle-rl",
+      "name": "Shaft RL",
+      "doc": {
+        "format": "barocss-cad-model",
+        "schema": 3,
+        "units": "mm",
+        "parameters": {},
+        "nodes": [
+          {
+            "kind": "sketch",
+            "profile": "circle",
+            "center": [
+              0,
+              0
+            ],
+            "radius": 2.7,
+            "id": "n0"
+          },
+          {
+            "kind": "extrude",
+            "sketch": 0,
+            "height": 23,
+            "id": "n1"
+          }
+        ],
+        "outputs": {
+          "b1": {
+            "node": 1,
+            "side": "solid"
+          }
+        },
+        "nextId": 2,
+        "bodies": {
+          "b1": {
+            "name": "Motor shaft",
+            "color": "#cfd8de"
+          }
+        }
+      },
+      "position": [
+        -48,
+        38,
+        -6
+      ],
+      "rotation": [
+        -90,
+        0,
+        0
+      ]
+    },
+    {
+      "id": "wheel-rl",
+      "name": "Wheel RL",
+      "doc": {
+        "format": "barocss-cad-model",
+        "schema": 3,
+        "units": "mm",
+        "parameters": {},
+        "nodes": [
+          {
+            "kind": "sketch",
+            "profile": "circle",
+            "center": [
+              0,
+              0
+            ],
+            "radius": 23,
+            "id": "n0"
+          },
+          {
+            "kind": "extrude",
+            "sketch": 0,
+            "height": 13,
+            "id": "n1"
+          },
+          {
+            "kind": "hole",
+            "parent": {
+              "node": 1,
+              "side": "solid"
+            },
+            "center": [
+              0,
+              0
+            ],
+            "radius": 2.75,
+            "axis": "z",
+            "id": "n2"
+          }
+        ],
+        "outputs": {
+          "b2": {
+            "node": 2,
+            "side": "solid"
+          }
+        },
+        "nextId": 3,
+        "bodies": {
+          "b2": {
+            "name": "Wheel with axle bore",
+            "color": "#343f4d"
+          }
+        }
+      },
+      "position": [
+        -48,
+        47,
+        -6
+      ],
+      "rotation": [
+        -90,
+        0,
+        0
+      ]
+    },
+    {
+      "id": "motor-rr",
+      "name": "Motor RR",
+      "doc": {
+        "format": "barocss-cad-model",
+        "schema": 3,
+        "units": "mm",
+        "parameters": {},
+        "nodes": [
+          {
+            "kind": "sketch",
+            "profile": "rectangle",
+            "min": [
+              -14,
+              -10
+            ],
+            "max": [
+              14,
+              10
+            ],
+            "id": "n0"
+          },
+          {
+            "kind": "extrude",
+            "sketch": 0,
+            "height": 12,
+            "id": "n1"
+          }
+        ],
+        "outputs": {
+          "b1": {
+            "node": 1,
+            "side": "solid"
+          }
+        },
+        "nextId": 2,
+        "bodies": {
+          "b1": {
+            "name": "Gear motor",
+            "color": "#c69048"
+          }
+        }
+      },
+      "position": [
+        -48,
+        -33,
+        -12
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "id": "axle-rr",
+      "name": "Shaft RR",
+      "doc": {
+        "format": "barocss-cad-model",
+        "schema": 3,
+        "units": "mm",
+        "parameters": {},
+        "nodes": [
+          {
+            "kind": "sketch",
+            "profile": "circle",
+            "center": [
+              0,
+              0
+            ],
+            "radius": 2.7,
+            "id": "n0"
+          },
+          {
+            "kind": "extrude",
+            "sketch": 0,
+            "height": 23,
+            "id": "n1"
+          }
+        ],
+        "outputs": {
+          "b1": {
+            "node": 1,
+            "side": "solid"
+          }
+        },
+        "nextId": 2,
+        "bodies": {
+          "b1": {
+            "name": "Motor shaft",
+            "color": "#cfd8de"
+          }
+        }
+      },
+      "position": [
+        -48,
+        -38,
+        -6
+      ],
+      "rotation": [
+        90,
+        0,
+        0
+      ]
+    },
+    {
+      "id": "wheel-rr",
+      "name": "Wheel RR",
+      "doc": {
+        "format": "barocss-cad-model",
+        "schema": 3,
+        "units": "mm",
+        "parameters": {},
+        "nodes": [
+          {
+            "kind": "sketch",
+            "profile": "circle",
+            "center": [
+              0,
+              0
+            ],
+            "radius": 23,
+            "id": "n0"
+          },
+          {
+            "kind": "extrude",
+            "sketch": 0,
+            "height": 13,
+            "id": "n1"
+          },
+          {
+            "kind": "hole",
+            "parent": {
+              "node": 1,
+              "side": "solid"
+            },
+            "center": [
+              0,
+              0
+            ],
+            "radius": 2.75,
+            "axis": "z",
+            "id": "n2"
+          }
+        ],
+        "outputs": {
+          "b2": {
+            "node": 2,
+            "side": "solid"
+          }
+        },
+        "nextId": 3,
+        "bodies": {
+          "b2": {
+            "name": "Wheel with axle bore",
+            "color": "#343f4d"
+          }
+        }
+      },
+      "position": [
+        -48,
+        -47,
+        -6
+      ],
+      "rotation": [
+        90,
+        0,
+        0
+      ]
+    },
+    {
+      "id": "spacer-1",
+      "name": "Standoff 1",
+      "doc": {
+        "format": "barocss-cad-model",
+        "schema": 3,
+        "units": "mm",
+        "parameters": {},
+        "nodes": [
+          {
+            "kind": "sketch",
+            "profile": "circle",
+            "center": [
+              0,
+              0
+            ],
+            "radius": 4.8,
+            "id": "n0"
+          },
+          {
+            "kind": "extrude",
+            "sketch": 0,
+            "height": 22,
+            "id": "n1"
+          },
+          {
+            "kind": "hole",
+            "parent": {
+              "node": 1,
+              "side": "solid"
+            },
+            "center": [
+              0,
+              0
+            ],
+            "radius": 2.25,
+            "axis": "z",
+            "id": "n2"
+          }
+        ],
+        "outputs": {
+          "b2": {
+            "node": 2,
+            "side": "solid"
+          }
+        },
+        "nextId": 3,
+        "bodies": {
+          "b2": {
+            "name": "Deck standoff",
+            "color": "#c99953"
+          }
+        }
+      },
+      "position": [
+        -43,
+        -32,
+        4
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "id": "spacer-2",
+      "name": "Standoff 2",
+      "doc": {
+        "format": "barocss-cad-model",
+        "schema": 3,
+        "units": "mm",
+        "parameters": {},
+        "nodes": [
+          {
+            "kind": "sketch",
+            "profile": "circle",
+            "center": [
+              0,
+              0
+            ],
+            "radius": 4.8,
+            "id": "n0"
+          },
+          {
+            "kind": "extrude",
+            "sketch": 0,
+            "height": 22,
+            "id": "n1"
+          },
+          {
+            "kind": "hole",
+            "parent": {
+              "node": 1,
+              "side": "solid"
+            },
+            "center": [
+              0,
+              0
+            ],
+            "radius": 2.25,
+            "axis": "z",
+            "id": "n2"
+          }
+        ],
+        "outputs": {
+          "b2": {
+            "node": 2,
+            "side": "solid"
+          }
+        },
+        "nextId": 3,
+        "bodies": {
+          "b2": {
+            "name": "Deck standoff",
+            "color": "#c99953"
+          }
+        }
+      },
+      "position": [
+        43,
+        -32,
+        4
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "id": "spacer-3",
+      "name": "Standoff 3",
+      "doc": {
+        "format": "barocss-cad-model",
+        "schema": 3,
+        "units": "mm",
+        "parameters": {},
+        "nodes": [
+          {
+            "kind": "sketch",
+            "profile": "circle",
+            "center": [
+              0,
+              0
+            ],
+            "radius": 4.8,
+            "id": "n0"
+          },
+          {
+            "kind": "extrude",
+            "sketch": 0,
+            "height": 22,
+            "id": "n1"
+          },
+          {
+            "kind": "hole",
+            "parent": {
+              "node": 1,
+              "side": "solid"
+            },
+            "center": [
+              0,
+              0
+            ],
+            "radius": 2.25,
+            "axis": "z",
+            "id": "n2"
+          }
+        ],
+        "outputs": {
+          "b2": {
+            "node": 2,
+            "side": "solid"
+          }
+        },
+        "nextId": 3,
+        "bodies": {
+          "b2": {
+            "name": "Deck standoff",
+            "color": "#c99953"
+          }
+        }
+      },
+      "position": [
+        -43,
+        32,
+        4
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "id": "spacer-4",
+      "name": "Standoff 4",
+      "doc": {
+        "format": "barocss-cad-model",
+        "schema": 3,
+        "units": "mm",
+        "parameters": {},
+        "nodes": [
+          {
+            "kind": "sketch",
+            "profile": "circle",
+            "center": [
+              0,
+              0
+            ],
+            "radius": 4.8,
+            "id": "n0"
+          },
+          {
+            "kind": "extrude",
+            "sketch": 0,
+            "height": 22,
+            "id": "n1"
+          },
+          {
+            "kind": "hole",
+            "parent": {
+              "node": 1,
+              "side": "solid"
+            },
+            "center": [
+              0,
+              0
+            ],
+            "radius": 2.25,
+            "axis": "z",
+            "id": "n2"
+          }
+        ],
+        "outputs": {
+          "b2": {
+            "node": 2,
+            "side": "solid"
+          }
+        },
+        "nextId": 3,
+        "bodies": {
+          "b2": {
+            "name": "Deck standoff",
+            "color": "#c99953"
+          }
+        }
+      },
+      "position": [
+        43,
+        32,
+        4
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "id": "upper",
+      "name": "Upper deck",
+      "doc": {
+        "format": "barocss-cad-model",
+        "schema": 3,
+        "units": "mm",
+        "parameters": {},
+        "nodes": [
+          {
+            "kind": "sketch",
+            "profile": "polygon",
+            "points": [
+              [
+                -57,
+                -41
+              ],
+              [
+                57,
+                -41
+              ],
+              [
+                66,
+                -32
+              ],
+              [
+                66,
+                32
+              ],
+              [
+                57,
+                41
+              ],
+              [
+                -57,
+                41
+              ],
+              [
+                -66,
+                32
+              ],
+              [
+                -66,
+                -32
+              ]
+            ],
+            "id": "n0"
+          },
+          {
+            "kind": "extrude",
+            "sketch": 0,
+            "height": 4,
+            "id": "n1"
+          },
+          {
+            "kind": "hole",
+            "parent": {
+              "node": 1,
+              "side": "solid"
+            },
+            "center": [
+              -43,
+              -32
+            ],
+            "radius": 2.25,
+            "axis": "z",
+            "id": "n2"
+          },
+          {
+            "kind": "hole",
+            "parent": {
+              "node": 2,
+              "side": "solid"
+            },
+            "center": [
+              43,
+              -32
+            ],
+            "radius": 2.25,
+            "axis": "z",
+            "id": "n3"
+          },
+          {
+            "kind": "hole",
+            "parent": {
+              "node": 3,
+              "side": "solid"
+            },
+            "center": [
+              -43,
+              32
+            ],
+            "radius": 2.25,
+            "axis": "z",
+            "id": "n4"
+          },
+          {
+            "kind": "hole",
+            "parent": {
+              "node": 4,
+              "side": "solid"
+            },
+            "center": [
+              43,
+              32
+            ],
+            "radius": 2.25,
+            "axis": "z",
+            "id": "n5"
+          }
+        ],
+        "outputs": {
+          "b5": {
+            "node": 5,
+            "side": "solid"
+          }
+        },
+        "nextId": 6,
+        "bodies": {
+          "b5": {
+            "name": "Upper deck",
+            "color": "#668ca5"
+          }
+        }
+      },
+      "position": [
+        0,
+        0,
+        26
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "id": "battery",
+      "name": "Battery pack",
+      "doc": {
+        "format": "barocss-cad-model",
+        "schema": 3,
+        "units": "mm",
+        "parameters": {},
+        "nodes": [
+          {
+            "kind": "sketch",
+            "profile": "rectangle",
+            "min": [
+              -23,
+              -17
+            ],
+            "max": [
+              23,
+              17
+            ],
+            "id": "n0"
+          },
+          {
+            "kind": "extrude",
+            "sketch": 0,
+            "height": 16,
+            "id": "n1"
+          }
+        ],
+        "outputs": {
+          "b1": {
+            "node": 1,
+            "side": "solid"
+          }
+        },
+        "nextId": 2,
+        "bodies": {
+          "b1": {
+            "name": "Battery pack",
+            "color": "#657380"
+          }
+        }
+      },
+      "position": [
+        -31,
+        0,
+        30
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "id": "board",
+      "name": "Controller board",
+      "doc": {
+        "format": "barocss-cad-model",
+        "schema": 3,
+        "units": "mm",
+        "parameters": {},
+        "nodes": [
+          {
+            "kind": "sketch",
+            "profile": "rectangle",
+            "min": [
+              -17,
+              -12
+            ],
+            "max": [
+              17,
+              12
+            ],
+            "id": "n0"
+          },
+          {
+            "kind": "extrude",
+            "sketch": 0,
+            "height": 2,
+            "id": "n1"
+          },
+          {
+            "kind": "hole",
+            "parent": {
+              "node": 1,
+              "side": "solid"
+            },
+            "center": [
+              -12,
+              -8
+            ],
+            "radius": 1.25,
+            "axis": "z",
+            "id": "n2"
+          },
+          {
+            "kind": "hole",
+            "parent": {
+              "node": 2,
+              "side": "solid"
+            },
+            "center": [
+              12,
+              8
+            ],
+            "radius": 1.25,
+            "axis": "z",
+            "id": "n3"
+          }
+        ],
+        "outputs": {
+          "b3": {
+            "node": 3,
+            "side": "solid"
+          }
+        },
+        "nextId": 4,
+        "bodies": {
+          "b3": {
+            "name": "Controller board",
+            "color": "#418977"
+          }
+        }
+      },
+      "position": [
+        18,
+        0,
+        30
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "id": "chip",
+      "name": "Controller package",
+      "doc": {
+        "format": "barocss-cad-model",
+        "schema": 3,
+        "units": "mm",
+        "parameters": {},
+        "nodes": [
+          {
+            "kind": "sketch",
+            "profile": "rectangle",
+            "min": [
+              -6,
+              -5
+            ],
+            "max": [
+              6,
+              5
+            ],
+            "id": "n0"
+          },
+          {
+            "kind": "extrude",
+            "sketch": 0,
+            "height": 3,
+            "id": "n1"
+          }
+        ],
+        "outputs": {
+          "b1": {
+            "node": 1,
+            "side": "solid"
+          }
+        },
+        "nextId": 2,
+        "bodies": {
+          "b1": {
+            "name": "Controller package",
+            "color": "#323d47"
+          }
+        }
+      },
+      "position": [
+        18,
+        0,
+        32
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "id": "bracket",
+      "name": "Sensor bracket",
+      "doc": {
+        "format": "barocss-cad-model",
+        "schema": 3,
+        "units": "mm",
+        "parameters": {},
+        "nodes": [
+          {
+            "kind": "sketch",
+            "profile": "rectangle",
+            "min": [
+              -3,
+              -16
+            ],
+            "max": [
+              3,
+              16
+            ],
+            "id": "n0"
+          },
+          {
+            "kind": "extrude",
+            "sketch": 0,
+            "height": 12,
+            "id": "n1"
+          }
+        ],
+        "outputs": {
+          "b1": {
+            "node": 1,
+            "side": "solid"
+          }
+        },
+        "nextId": 2,
+        "bodies": {
+          "b1": {
+            "name": "Sensor bracket",
+            "color": "#8195a7"
+          }
+        }
+      },
+      "position": [
+        62,
+        0,
+        30
+      ],
+      "rotation": [
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "id": "sensor",
+      "name": "Range sensor board",
+      "doc": {
+        "format": "barocss-cad-model",
+        "schema": 3,
+        "units": "mm",
+        "parameters": {},
+        "nodes": [
+          {
+            "kind": "sketch",
+            "profile": "rectangle",
+            "min": [
+              -15,
+              -8
+            ],
+            "max": [
+              15,
+              8
+            ],
+            "id": "n0"
+          },
+          {
+            "kind": "extrude",
+            "sketch": 0,
+            "height": 2,
+            "id": "n1"
+          }
+        ],
+        "outputs": {
+          "b1": {
+            "node": 1,
+            "side": "solid"
+          }
+        },
+        "nextId": 2,
+        "bodies": {
+          "b1": {
+            "name": "Range sensor board",
+            "color": "#438a78"
+          }
+        }
+      },
+      "position": [
+        65,
+        0,
+        42
+      ],
+      "rotation": [
+        90,
+        0,
+        90
+      ]
+    },
+    {
+      "id": "left-eye",
+      "name": "Left transducer",
+      "doc": {
+        "format": "barocss-cad-model",
+        "schema": 3,
+        "units": "mm",
+        "parameters": {},
+        "nodes": [
+          {
+            "kind": "sketch",
+            "profile": "circle",
+            "center": [
+              0,
+              0
+            ],
+            "radius": 6.2,
+            "id": "n0"
+          },
+          {
+            "kind": "extrude",
+            "sketch": 0,
+            "height": 5,
+            "id": "n1"
+          }
+        ],
+        "outputs": {
+          "b1": {
+            "node": 1,
+            "side": "solid"
+          }
+        },
+        "nextId": 2,
+        "bodies": {
+          "b1": {
+            "name": "Transducer",
+            "color": "#b6c7d1"
+          }
+        }
+      },
+      "position": [
+        67,
+        8,
+        42
+      ],
+      "rotation": [
+        90,
+        0,
+        90
+      ]
+    },
+    {
+      "id": "right-eye",
+      "name": "Right transducer",
+      "doc": {
+        "format": "barocss-cad-model",
+        "schema": 3,
+        "units": "mm",
+        "parameters": {},
+        "nodes": [
+          {
+            "kind": "sketch",
+            "profile": "circle",
+            "center": [
+              0,
+              0
+            ],
+            "radius": 6.2,
+            "id": "n0"
+          },
+          {
+            "kind": "extrude",
+            "sketch": 0,
+            "height": 5,
+            "id": "n1"
+          }
+        ],
+        "outputs": {
+          "b1": {
+            "node": 1,
+            "side": "solid"
+          }
+        },
+        "nextId": 2,
+        "bodies": {
+          "b1": {
+            "name": "Transducer",
+            "color": "#b6c7d1"
+          }
+        }
+      },
+      "position": [
+        67,
+        -8,
+        42
+      ],
+      "rotation": [
+        90,
+        0,
+        90
+      ]
+    }
+  ],
+  "mates": [
+    {
+      "id": "m-motor-fl",
+      "kind": "lock",
+      "a": {
+        "part": "base",
+        "face": ""
+      },
+      "b": {
+        "part": "motor-fl",
+        "face": ""
+      },
+      "rel": {
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "position": [
+          48,
+          33,
+          -12
+        ]
+      }
+    },
+    {
+      "id": "m-axle-fl",
+      "kind": "lock",
+      "a": {
+        "part": "base",
+        "face": ""
+      },
+      "b": {
+        "part": "axle-fl",
+        "face": ""
+      },
+      "rel": {
+        "rotation": [
+          -90,
+          0,
+          0
+        ],
+        "position": [
+          48,
+          38,
+          -6
+        ]
+      }
+    },
+    {
+      "id": "m-wheel-fl",
+      "kind": "lock",
+      "a": {
+        "part": "base",
+        "face": ""
+      },
+      "b": {
+        "part": "wheel-fl",
+        "face": ""
+      },
+      "rel": {
+        "rotation": [
+          -90,
+          0,
+          0
+        ],
+        "position": [
+          48,
+          47,
+          -6
+        ]
+      }
+    },
+    {
+      "id": "m-motor-fr",
+      "kind": "lock",
+      "a": {
+        "part": "base",
+        "face": ""
+      },
+      "b": {
+        "part": "motor-fr",
+        "face": ""
+      },
+      "rel": {
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "position": [
+          48,
+          -33,
+          -12
+        ]
+      }
+    },
+    {
+      "id": "m-axle-fr",
+      "kind": "lock",
+      "a": {
+        "part": "base",
+        "face": ""
+      },
+      "b": {
+        "part": "axle-fr",
+        "face": ""
+      },
+      "rel": {
+        "rotation": [
+          90,
+          0,
+          0
+        ],
+        "position": [
+          48,
+          -38,
+          -6
+        ]
+      }
+    },
+    {
+      "id": "m-wheel-fr",
+      "kind": "lock",
+      "a": {
+        "part": "base",
+        "face": ""
+      },
+      "b": {
+        "part": "wheel-fr",
+        "face": ""
+      },
+      "rel": {
+        "rotation": [
+          90,
+          0,
+          0
+        ],
+        "position": [
+          48,
+          -47,
+          -6
+        ]
+      }
+    },
+    {
+      "id": "m-motor-rl",
+      "kind": "lock",
+      "a": {
+        "part": "base",
+        "face": ""
+      },
+      "b": {
+        "part": "motor-rl",
+        "face": ""
+      },
+      "rel": {
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "position": [
+          -48,
+          33,
+          -12
+        ]
+      }
+    },
+    {
+      "id": "m-axle-rl",
+      "kind": "lock",
+      "a": {
+        "part": "base",
+        "face": ""
+      },
+      "b": {
+        "part": "axle-rl",
+        "face": ""
+      },
+      "rel": {
+        "rotation": [
+          -90,
+          0,
+          0
+        ],
+        "position": [
+          -48,
+          38,
+          -6
+        ]
+      }
+    },
+    {
+      "id": "m-wheel-rl",
+      "kind": "lock",
+      "a": {
+        "part": "base",
+        "face": ""
+      },
+      "b": {
+        "part": "wheel-rl",
+        "face": ""
+      },
+      "rel": {
+        "rotation": [
+          -90,
+          0,
+          0
+        ],
+        "position": [
+          -48,
+          47,
+          -6
+        ]
+      }
+    },
+    {
+      "id": "m-motor-rr",
+      "kind": "lock",
+      "a": {
+        "part": "base",
+        "face": ""
+      },
+      "b": {
+        "part": "motor-rr",
+        "face": ""
+      },
+      "rel": {
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "position": [
+          -48,
+          -33,
+          -12
+        ]
+      }
+    },
+    {
+      "id": "m-axle-rr",
+      "kind": "lock",
+      "a": {
+        "part": "base",
+        "face": ""
+      },
+      "b": {
+        "part": "axle-rr",
+        "face": ""
+      },
+      "rel": {
+        "rotation": [
+          90,
+          0,
+          0
+        ],
+        "position": [
+          -48,
+          -38,
+          -6
+        ]
+      }
+    },
+    {
+      "id": "m-wheel-rr",
+      "kind": "lock",
+      "a": {
+        "part": "base",
+        "face": ""
+      },
+      "b": {
+        "part": "wheel-rr",
+        "face": ""
+      },
+      "rel": {
+        "rotation": [
+          90,
+          0,
+          0
+        ],
+        "position": [
+          -48,
+          -47,
+          -6
+        ]
+      }
+    },
+    {
+      "id": "m-spacer-1",
+      "kind": "lock",
+      "a": {
+        "part": "base",
+        "face": ""
+      },
+      "b": {
+        "part": "spacer-1",
+        "face": ""
+      },
+      "rel": {
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "position": [
+          -43,
+          -32,
+          4
+        ]
+      }
+    },
+    {
+      "id": "m-spacer-2",
+      "kind": "lock",
+      "a": {
+        "part": "base",
+        "face": ""
+      },
+      "b": {
+        "part": "spacer-2",
+        "face": ""
+      },
+      "rel": {
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "position": [
+          43,
+          -32,
+          4
+        ]
+      }
+    },
+    {
+      "id": "m-spacer-3",
+      "kind": "lock",
+      "a": {
+        "part": "base",
+        "face": ""
+      },
+      "b": {
+        "part": "spacer-3",
+        "face": ""
+      },
+      "rel": {
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "position": [
+          -43,
+          32,
+          4
+        ]
+      }
+    },
+    {
+      "id": "m-spacer-4",
+      "kind": "lock",
+      "a": {
+        "part": "base",
+        "face": ""
+      },
+      "b": {
+        "part": "spacer-4",
+        "face": ""
+      },
+      "rel": {
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "position": [
+          43,
+          32,
+          4
+        ]
+      }
+    },
+    {
+      "id": "m-upper",
+      "kind": "lock",
+      "a": {
+        "part": "base",
+        "face": ""
+      },
+      "b": {
+        "part": "upper",
+        "face": ""
+      },
+      "rel": {
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "position": [
+          0,
+          0,
+          26
+        ]
+      }
+    },
+    {
+      "id": "m-battery",
+      "kind": "lock",
+      "a": {
+        "part": "base",
+        "face": ""
+      },
+      "b": {
+        "part": "battery",
+        "face": ""
+      },
+      "rel": {
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "position": [
+          -31,
+          0,
+          30
+        ]
+      }
+    },
+    {
+      "id": "m-board",
+      "kind": "lock",
+      "a": {
+        "part": "base",
+        "face": ""
+      },
+      "b": {
+        "part": "board",
+        "face": ""
+      },
+      "rel": {
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "position": [
+          18,
+          0,
+          30
+        ]
+      }
+    },
+    {
+      "id": "m-chip",
+      "kind": "lock",
+      "a": {
+        "part": "base",
+        "face": ""
+      },
+      "b": {
+        "part": "chip",
+        "face": ""
+      },
+      "rel": {
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "position": [
+          18,
+          0,
+          32
+        ]
+      }
+    },
+    {
+      "id": "m-bracket",
+      "kind": "lock",
+      "a": {
+        "part": "base",
+        "face": ""
+      },
+      "b": {
+        "part": "bracket",
+        "face": ""
+      },
+      "rel": {
+        "rotation": [
+          0,
+          0,
+          0
+        ],
+        "position": [
+          62,
+          0,
+          30
+        ]
+      }
+    },
+    {
+      "id": "m-sensor",
+      "kind": "lock",
+      "a": {
+        "part": "base",
+        "face": ""
+      },
+      "b": {
+        "part": "sensor",
+        "face": ""
+      },
+      "rel": {
+        "rotation": [
+          90,
+          0,
+          90
+        ],
+        "position": [
+          65,
+          0,
+          42
+        ]
+      }
+    },
+    {
+      "id": "m-left-eye",
+      "kind": "lock",
+      "a": {
+        "part": "base",
+        "face": ""
+      },
+      "b": {
+        "part": "left-eye",
+        "face": ""
+      },
+      "rel": {
+        "rotation": [
+          90,
+          0,
+          90
+        ],
+        "position": [
+          67,
+          8,
+          42
+        ]
+      }
+    },
+    {
+      "id": "m-right-eye",
+      "kind": "lock",
+      "a": {
+        "part": "base",
+        "face": ""
+      },
+      "b": {
+        "part": "right-eye",
+        "face": ""
+      },
+      "rel": {
+        "rotation": [
+          90,
+          0,
+          90
+        ],
+        "position": [
+          67,
+          -8,
+          42
+        ]
+      }
+    }
+  ],
+  "assemblySteps": [
+    {
+      "id": "drive",
+      "name": "Drive modules",
+      "note": "Four motor shafts pass through the wheel bores.",
+      "add": [
+        "motor-fl",
+        "axle-fl",
+        "wheel-fl",
+        "motor-fr",
+        "axle-fr",
+        "wheel-fr",
+        "motor-rl",
+        "axle-rl",
+        "wheel-rl",
+        "motor-rr",
+        "axle-rr",
+        "wheel-rr"
+      ]
+    },
+    {
+      "id": "decks",
+      "name": "Upper deck and standoffs",
+      "note": "Four spacer axes follow the same mounting grid on both decks.",
+      "add": [
+        "spacer-1",
+        "spacer-2",
+        "spacer-3",
+        "spacer-4",
+        "upper"
+      ]
+    },
+    {
+      "id": "controller",
+      "name": "Power and controller",
+      "note": "Battery and controller are placed on the upper deck.",
+      "add": [
+        "battery",
+        "board",
+        "chip"
+      ]
+    },
+    {
+      "id": "sensor",
+      "name": "Front range sensor",
+      "note": "The forward-facing board seats against its bracket.",
+      "add": [
+        "bracket",
+        "sensor",
+        "left-eye",
+        "right-eye"
+      ]
+    }
+  ]
+}
