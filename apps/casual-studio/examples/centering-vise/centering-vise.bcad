@@ -1,0 +1,289 @@
+{
+  "format": "barocss-cad-model",
+  "schema": 3,
+  "units": "mm",
+  "parameters": {
+    "leftOutside": -36,
+    "leftFace": -20,
+    "rightFace": 20,
+    "rightOutside": 36
+  },
+  "nodes": [
+    {
+      "kind": "sketch",
+      "profile": "rectangle",
+      "min": [
+        -60,
+        -30
+      ],
+      "max": [
+        60,
+        30
+      ],
+      "id": "n0"
+    },
+    {
+      "kind": "extrude",
+      "sketch": 0,
+      "from": 0,
+      "height": 8,
+      "id": "n1"
+    },
+    {
+      "kind": "hole",
+      "parent": {
+        "node": 1,
+        "side": "solid"
+      },
+      "center": [
+        -51,
+        -23
+      ],
+      "radius": 3.3,
+      "axis": "z",
+      "id": "n2"
+    },
+    {
+      "kind": "hole",
+      "parent": {
+        "node": 2,
+        "side": "solid"
+      },
+      "center": [
+        -51,
+        23
+      ],
+      "radius": 3.3,
+      "axis": "z",
+      "id": "n3"
+    },
+    {
+      "kind": "hole",
+      "parent": {
+        "node": 3,
+        "side": "solid"
+      },
+      "center": [
+        51,
+        -23
+      ],
+      "radius": 3.3,
+      "axis": "z",
+      "id": "n4"
+    },
+    {
+      "kind": "hole",
+      "parent": {
+        "node": 4,
+        "side": "solid"
+      },
+      "center": [
+        51,
+        23
+      ],
+      "radius": 3.3,
+      "axis": "z",
+      "id": "n5"
+    },
+    {
+      "kind": "sketch",
+      "profile": "rectangle",
+      "min": [
+        {
+          "parameter": "leftOutside"
+        },
+        -20
+      ],
+      "max": [
+        {
+          "parameter": "leftFace"
+        },
+        20
+      ],
+      "id": "n6"
+    },
+    {
+      "kind": "extrude",
+      "sketch": 6,
+      "from": 8,
+      "height": 5,
+      "id": "n7"
+    },
+    {
+      "kind": "sketch",
+      "profile": "rectangle",
+      "min": [
+        {
+          "parameter": "leftOutside"
+        },
+        -16
+      ],
+      "max": [
+        {
+          "parameter": "leftFace"
+        },
+        16
+      ],
+      "id": "n8"
+    },
+    {
+      "kind": "extrude",
+      "sketch": 8,
+      "from": 12,
+      "height": 15,
+      "id": "n9"
+    },
+    {
+      "kind": "union",
+      "left": {
+        "node": 7,
+        "side": "solid"
+      },
+      "right": {
+        "node": 9,
+        "side": "solid"
+      },
+      "id": "n10"
+    },
+    {
+      "kind": "sketch",
+      "profile": "rectangle",
+      "min": [
+        {
+          "parameter": "rightFace"
+        },
+        -20
+      ],
+      "max": [
+        {
+          "parameter": "rightOutside"
+        },
+        20
+      ],
+      "id": "n11"
+    },
+    {
+      "kind": "extrude",
+      "sketch": 11,
+      "from": 8,
+      "height": 5,
+      "id": "n12"
+    },
+    {
+      "kind": "sketch",
+      "profile": "rectangle",
+      "min": [
+        {
+          "parameter": "rightFace"
+        },
+        -16
+      ],
+      "max": [
+        {
+          "parameter": "rightOutside"
+        },
+        16
+      ],
+      "id": "n13"
+    },
+    {
+      "kind": "extrude",
+      "sketch": 13,
+      "from": 12,
+      "height": 15,
+      "id": "n14"
+    },
+    {
+      "kind": "union",
+      "left": {
+        "node": 12,
+        "side": "solid"
+      },
+      "right": {
+        "node": 14,
+        "side": "solid"
+      },
+      "id": "n15"
+    }
+  ],
+  "outputs": {
+    "b5": {
+      "node": 5,
+      "side": "solid"
+    },
+    "b10": {
+      "node": 10,
+      "side": "solid"
+    },
+    "b15": {
+      "node": 15,
+      "side": "solid"
+    }
+  },
+  "nextId": 16,
+  "variability": {
+    "version": 1,
+    "inputs": [
+      {
+        "name": "opening",
+        "type": "number",
+        "unit": "mm",
+        "min": 40,
+        "max": 60,
+        "default": 40,
+        "bindings": [
+          {
+            "parameter": "leftOutside",
+            "scale": -0.5,
+            "offset": -16,
+            "to": "parameter",
+            "part": "base"
+          },
+          {
+            "parameter": "leftFace",
+            "scale": -0.5,
+            "offset": 0,
+            "to": "parameter",
+            "part": "base"
+          },
+          {
+            "parameter": "rightFace",
+            "scale": 0.5,
+            "offset": 0,
+            "to": "parameter",
+            "part": "base"
+          },
+          {
+            "parameter": "rightOutside",
+            "scale": 0.5,
+            "offset": 16,
+            "to": "parameter",
+            "part": "base"
+          }
+        ]
+      }
+    ],
+    "variants": [
+      {
+        "name": "60 mm opening",
+        "values": {
+          "opening": 60
+        }
+      }
+    ]
+  },
+  "bodies": {
+    "b1": {
+      "name": "Vise base",
+      "color": "#567b93"
+    },
+    "b7": {
+      "name": "Left jaw",
+      "color": "#a0b7c6"
+    },
+    "b12": {
+      "name": "Right jaw",
+      "color": "#a0b7c6"
+    }
+  }
+}
