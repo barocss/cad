@@ -19,3 +19,25 @@ svg{display:block;width:100%;height:100%;overflow:visible}.pickable{cursor:point
 #code-panel{width:245px;flex:none;padding:16px;border-right:1px solid #cedcec;background:#fff} #code-panel label{display:block;font-weight:700;margin-bottom:9px} textarea{font:13px/1.6 ui-monospace,monospace;width:100%;min-height:85px;resize:vertical;border:1px solid #ccd8e7;border-radius:6px;padding:7px;background:#f6f9fd;color:#254874}#code-panel small{display:block;margin:5px 0 9px;color:#536e8b}
 @media(min-width:970px){.popover{position:absolute;right:18px;bottom:24px;width:232px}}
 @media(max-width:710px){body{padding:8px}header{flex-wrap:wrap;padding:8px}.workarea{flex-direction:column;min-height:unset}.workspace{padding:12px}#code-panel{order:2;width:100%;border-top:1px solid #cedcec;border-right:0}.canvas-head p{font-size:12px}nav{gap:4px}button{padding:5px 7px}.popover{margin:0 auto}.hole-label{font-size:11px}}
+.start{max-width:840px;margin:auto;padding:58px 32px 38px}
+.start-intro{margin-bottom:34px}
+.eyebrow{margin:0 0 9px;font-size:11px;letter-spacing:.14em;font-weight:700;color:#41638d}
+.start h1{font-size:clamp(24px,4vw,38px);letter-spacing:-.045em}
+.start h1:focus,.workspace h1:focus{outline:none}
+.start-intro>p:last-child,.example-copy>p:not(.eyebrow){color:#496178;line-height:1.6}
+.example{display:grid;grid-template-columns:2fr 3fr;overflow:hidden;border:1px solid #d6e1ee;border-radius:12px;background:#fff}
+.example-art{display:grid;place-items:center;padding:18px;background:#e7eff8}
+.example-art svg{max-width:280px}
+.example-copy{padding:24px}
+.example-copy h2{font-size:19px}
+.example-copy .editable-values{font-weight:600;font-size:12px}
+#starter{color:#fff;background:#285dd3;border-color:#285dd3}
+.start-file{display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin-top:18px}
+.start-file small,#start-notice{color:#496178;line-height:1.5}
+#start-notice{min-height:20px}
+.workspace h1{font-size:15px;margin:0 0 7px;overflow-wrap:anywhere}
+dialog{width:min(440px,calc(100vw - 32px));border:1px solid #b9cce0;border-radius:12px;padding:22px;color:#1c3148;box-shadow:0 10px 40px #142f5240}
+dialog::backdrop{background:#162c4966}
+dialog h2{font-size:17px}dialog p{line-height:1.6}dialog div{display:flex;justify-content:flex-end;gap:8px}
+#discard{color:#893c22;border-color:#ebc6b7}
+@media(max-width:550px){.start{padding:26px 15px 16px}.start-intro{margin-bottom:18px}.example{grid-template-columns:1fr}.example-art{padding:8px}.example-art svg{max-width:172px}.example-copy{padding:15px}}

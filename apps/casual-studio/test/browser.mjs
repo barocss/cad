@@ -13,7 +13,7 @@ const serve = base => createServer(async (req, res) => {
     const file = pathname === '/' ? '/index.html' : pathname;
     if (!/^\/(?:index\.html|assets\/[\w.-]+)$/.test(file)) { res.writeHead(404).end(); return; }
     const bytes = await readFile(new URL(base + file, import.meta.url));
-    res.setHeader('Content-Type', file.endsWith('.js') ? 'text/javascript' : file.endsWith('.css') ? 'text/css' : 'text/html');
+    res.setHeader('Content-Type', file.endsWith('.js') ? 'text/javascript' : file.endsWith('.css') ? 'text/css' : 'text/html; charset=utf-8');
     res.setHeader('Cache-Control', 'no-store');
     res.end(bytes);
   } catch { res.writeHead(404).end(); }
@@ -33,6 +33,12 @@ try {
   page.on('pageerror', e => errors.push(e.message));
   const origin = 'http://127.0.0.1:' + server.address().port;
   await page.goto(origin);
+  await page.getByRole('heading', { name:'있는 설계를 내 부품에 맞추세요' }).waitFor();
+  assert.equal(await page.locator('#scene polygon').count(), 0, 'starter should not generate scene geometry');
+  assert.equal(await page.locator('#tools').isHidden(), true);
+  await page.screenshot({ path: join(out, 'casual-start-desktop.png') });
+  await page.getByRole('button', { name:'이 예제로 시작' }).click();
+  assert.equal(await page.locator('#start').isHidden(), true);
   await page.getByRole('button', { name: '구멍 A 지름 6 mm' }).waitFor();
   const input = page.locator('#diameter');
   const action = id => page.locator('#' + id).click();
@@ -78,7 +84,7 @@ try {
   await action('cancel'); await control('구멍 A 지름 6 mm').waitFor();
   await pick('polyline[data-rim=n3]'); assert.match(await page.locator('#selection').textContent(), /구멍 B/);
   // Blank/panel and cap still do not create a new target.
-  await page.locator('svg').click({ position: { x: 8, y: 8 } }); assert.equal(await page.locator('#editor').isHidden(), true);
+  await page.locator('#scene').click({ position: { x: 8, y: 8 } }); assert.equal(await page.locator('#editor').isHidden(), true);
   await pick('polyline[data-rim=n2]'); await input.fill('100');
   assert.equal(await page.locator('#apply').isDisabled(), true);
   await input.fill('8');
@@ -95,10 +101,47 @@ try {
   const done = await download('edited.bcad');
   assert.deepEqual(done.doc.nodes.map(n => [n.id, n.kind]), [['n0','sketch'],['n1','extrude'],['n2','hole'],['n3','hole']]);
   assert.deepEqual(done.doc.nodes.slice(2).map(n => [n.center,n.radius]), [[[15,20],4],[[45,20],3]]);
-  const fresh = await browser.newContext();
+  // A rejected file does not replace the current model or discard a pending edit.
+  await input.fill('9');
+  await page.locator('#file').setInputFiles({ name:'bad.bcad', mimeType:'application/octet-stream', buffer:Buffer.from('not a CAD file') });
+  await page.waitForFunction(() => document.getElementById('notice').textContent.length > 0);
+  assert.equal(await page.locator('#switch-dialog').isHidden(), true);
+  await control('구멍 A 지름 9 mm').waitFor();
+  // After saving Ø8, pending Ø9 is the only change lost by replacing it.
+  await page.locator('#file').setInputFiles(uncommitted.path);
+  await page.getByRole('dialog').waitFor();
+  assert.match(await page.locator('#switch-detail').textContent(), /적용하지 않은/);
+  assert.doesNotMatch(await page.locator('#switch-detail').textContent(), /저장하지 않은/);
+  await action('keep'); await control('구멍 A 지름 9 mm').waitFor();
+  await action('apply');
+  await input.fill('10');
+  await action('home');
+  assert.match(await page.locator('#switch-detail').textContent(), /적용하지 않은.*저장하지 않은/);
+  await page.keyboard.press('Escape');
+  await control('구멍 A 지름 10 mm').waitFor();
+  await action('cancel');
+  await action('home');
+  assert.doesNotMatch(await page.locator('#switch-detail').textContent(), /적용하지 않은/);
+  assert.match(await page.locator('#switch-detail').textContent(), /저장하지 않은/);
+  await action('discard');
+  await control('이 예제로 시작').waitFor();
+  await action('starter'); await control('구멍 A 지름 6 mm').waitFor();
+  assert.equal(await page.locator('#undo').isDisabled(), true);
+  await control('구멍 A 지름 6 mm').click();
+  await input.fill('7');
+  await page.locator('#file').setInputFiles(done.path);
+  await page.getByRole('dialog').waitFor();
+  await action('discard'); await control('구멍 A 지름 8 mm').waitFor();
+  await action('home'); await control('이 예제로 시작').waitFor();
+  const fresh = await browser.newContext({ viewport: { width: 390, height: 844 } });
   const reopen = await fresh.newPage();
   await reopen.goto(origin);
-  await reopen.locator('#file').setInputFiles(done.path);
+  await reopen.getByRole('button', { name:'이 예제로 시작' }).waitFor();
+  assert.equal(await reopen.evaluate(() => document.documentElement.scrollWidth === innerWidth), true, 'mobile starter horizontal overflow');
+  await reopen.screenshot({ path: join(out, 'casual-start-mobile.png') });
+  const chooser = reopen.waitForEvent('filechooser');
+  await reopen.getByRole('button', { name:'내 CAD 파일 열기' }).click();
+  await (await chooser).setFiles(done.path);
   await reopen.getByRole('button', { name:'구멍 A 지름 8 mm' }).waitFor();
   await reopen.getByRole('button', { name:'구멍 B 지름 6 mm' }).waitFor();
   let studioHandoff = 'NOT_RUN';
