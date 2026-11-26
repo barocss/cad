@@ -66,6 +66,7 @@ import { newOrdinateGroupId, newOrdinateMemberId, ordinateAxisFor } from '@baroc
 import { HOLE_TABLE_MAX_MEMBERS, holeTagOk, newHoleTableId, newHoleTableMemberId, nextHoleTableTag, qualifyHoleTableRim } from '@barocss/cad-model/drawing/holeTable';
 import { borderZoneFor, newRevisionMarkerId, sheetIdForIndex } from '@barocss/cad-model/drawing/revisionMarkers';
 import { captureInspectionBaseline, diffInspectionBaseline, dimensionTargetKey, inspectionItemEligible, inspectionListCsv, inspectionNumberReuseRevision, newInspectionItemId, nextInspectionNumber, resolveAllInspectionItems, validateInspectionNumber } from '@barocss/cad-model/drawing/inspectionItems';
+import { EDGE_CONDITION_DIRECTIONS, EDGE_CONDITION_SIGNS, checkEdgeConditionValues, edgeConditionMarks, newEdgeConditionId, pickEdgeConditionEdge, resolveEdgeCondition } from '@barocss/cad-model/drawing/edgeCondition';
 import { DETAIL_PARENTS, type DetailParent, type DrawingDetail } from '@barocss/cad-model/drawing/detail';
 import { DetailsList } from './drawing/DetailsList';
 import { clipProjectionOutside } from '@barocss/cad-model/drawing/breaks';
@@ -74,7 +75,7 @@ import { drawingOccurrencePath } from '@barocss/cad-model/drawing/dimensionRefer
 import { diameterRims } from './drawing/diameterRims';
 import { Button } from '@/components/ui/button';
 import { BreaksList } from './drawing/BreaksList';
-import { VIEW_IDS, annotatedDetailLetters, detailLetter, isDetailRef, isSectionRef, isViewId, nextSectionId, reservedDetailLetters, sameSection, sectionLetter, sectionsOf, withSections, readLinearArrowPlacement, type CentreRef, type CircleSeparationMode, type CylinderFaceRef, type DrawingArcCenterline, type DrawingBisectorCenterline, type DrawingCenterMarkGroup, type DrawingCenterOfMass, type DrawingHoleTable, type DrawingHoleTableMember, type DrawingInspectionItem, type DrawingOrdinateGroup, type DrawingRevisionMarker, type DrawingVirtualSharp, type LinearArrowSide, type DimView, type DimPoint, type DrawingNote, type EdgeRef, type DrawingDimension, type DrawingSettings, type DrawingViews, type SectionViewId, type Vec3, type ViewId, type XY } from '@barocss/cad-model/drawing/types';
+import { VIEW_IDS, annotatedDetailLetters, detailLetter, isDetailRef, isSectionRef, isViewId, nextSectionId, reservedDetailLetters, sameSection, sectionLetter, sectionsOf, withSections, readLinearArrowPlacement, type CentreRef, type CircleSeparationMode, type CylinderFaceRef, type DrawingArcCenterline, type DrawingBisectorCenterline, type DrawingCenterMarkGroup, type DrawingCenterOfMass, type DrawingEdgeCondition, type DrawingHoleTable, type DrawingHoleTableMember, type DrawingInspectionItem, type DrawingOrdinateGroup, type DrawingRevisionMarker, type DrawingVirtualSharp, type EdgeConditionDirection, type EdgeConditionSign, type LinearArrowSide, type DimView, type DimPoint, type DrawingNote, type EdgeRef, type DrawingDimension, type DrawingSettings, type DrawingViews, type SectionViewId, type Vec3, type ViewId, type XY } from '@barocss/cad-model/drawing/types';
 import { downloadBytes } from './files';
 import { ShortcutHelp } from './ShortcutHelp';
 import { today, useDrawingSheet } from './useDrawingSheet';
@@ -101,7 +102,7 @@ import { ExportActions } from './drawing/ExportActions';
 import { dimensionPairLabelsMoved, dimensionPairPaperDelta, drawingDimensionPair, moveDrawingDimensionPair, type DrawingDimensionPair } from '../app/drawingDimensionGroup';
 import '../drawing/drawing.css';
 
-type Tool = 'select' | 'linear' | 'diameter' | 'radius' | 'arc-length' | 'chamfer' | 'radial-thickness' | 'cylinder-diameter' | 'circle-separation' | 'arc-centerline' | 'center-mark-group' | 'bisector-centerline' | 'virtual-sharp' | 'center-of-mass' | 'ordinate' | 'hole-table' | 'revision-marker' | 'angle' | 'reflex-angle' | 'note' | 'detail' | 'datum-target';
+type Tool = 'select' | 'linear' | 'diameter' | 'radius' | 'arc-length' | 'chamfer' | 'radial-thickness' | 'cylinder-diameter' | 'circle-separation' | 'arc-centerline' | 'center-mark-group' | 'bisector-centerline' | 'virtual-sharp' | 'center-of-mass' | 'ordinate' | 'hole-table' | 'revision-marker' | 'edge-condition' | 'angle' | 'reflex-angle' | 'note' | 'detail' | 'datum-target';
 type DimensionGroup = { owner: object; pair: DrawingDimensionPair };
 type DimensionGroupDrag = { dimensionGroup: DimensionGroup; pointer: number; start: XY; scale: number; paperDelta: number };
 const TOOLS: { tool: Tool; label: string; icon: string; key: string; hint: string }[] = [
@@ -122,6 +123,7 @@ const TOOLS: { tool: Tool; label: string; icon: string; key: string; hint: strin
   { tool: 'ordinate', label: 'Ordinate', icon: 'square_foot', key: 'U', hint: 'Click an origin point, click where the baseline sits, then click points to add ordinate members · Esc finishes' },
   { tool: 'hole-table', label: 'Hole table', icon: 'texture', key: 'J', hint: 'Click a datum origin point, then click 1–3 plain through-hole rims and click Create hole table · Esc cancels' },
   { tool: 'revision-marker', label: 'Revision marker', icon: 'history', key: 'I', hint: 'Click inside the sheet frame to place a revision change marker for a recorded revision' },
+  { tool: 'edge-condition', label: 'Edge condition', icon: 'crop_square', key: 'P', hint: 'Click a visible edge in front, top, or right view, then click where the edge-condition symbol goes · Esc cancels' },
   { tool: 'angle', label: 'Angle', icon: 'architecture', key: 'A', hint: 'Click two straight edges, then the side of their corner the angle goes on' },
   { tool: 'reflex-angle', label: 'Reflex angle', icon: 'restart_alt', key: 'G', hint: 'Pick two straight edges that share a corner in the Top view' },
   { tool: 'note', label: 'Note', icon: 'sticky_note_2', key: 'N', hint: 'Click on the paper for a note, or on a view for a leader and then where its text goes' },
@@ -155,6 +157,7 @@ type Pending =
   | { kind: 'ordinate-origin'; view: SectionViewId; origin: DimPoint; source: { projection: DrawingViews; settings: DrawingSettings } }
   | { kind: 'ordinate-members'; view: SectionViewId; groupId: string }
   | { kind: 'hole-table'; view: SectionViewId; origin: DimPoint; members: DrawingHoleTableMember[]; source: { projection: DrawingViews; settings: DrawingSettings } }
+  | { kind: 'edge-condition'; view: SectionViewId; edge: EdgeRef; source: { projection: DrawingViews; settings: DrawingSettings } }
   | { kind: 'angle'; view: DimView; a: EdgeRef; b?: EdgeRef; mode?: 'reflex'; owner?: object }
   | { kind: 'note'; leader: { view: ViewId; at: XY } }
   /** DR-1: a detail's circle, its centre picked on its parent. */
@@ -231,6 +234,7 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
   const [dxfSection, setDxfSection] = useState<string | null>(null);
   const [tool, setTool] = useState<Tool>('select');
   const [circleGapMode, setCircleGapMode] = useState<CircleSeparationMode>('min');
+  const [ecDraft, setEcDraft] = useState<{ sign: EdgeConditionSign; direction: EdgeConditionDirection; upper: string; lower: string; allAround: boolean }>({ sign: '-', direction: 'any', upper: '0.5', lower: '', allAround: false });
   const [shortcutHelp, setShortcutHelp] = useState(false);
   const shortcutOpener = useRef<HTMLElement | null>(null);
   const shortcutButton = useRef<HTMLButtonElement>(null);
@@ -307,7 +311,7 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
     if (!loss.length) { run(); return; }
     setControlDeletion({ settings: wholeSettings, model, sheet: current, loss, run });
   };
-  const [drag, setDrag] = useState<DimensionGroupDrag | { id: string; place: XY } | { ordinate: string; lineCoord: number } | { target: string; original: DrawingDatumTarget; place: XY } | { note: string; at: XY; grab: XY } | { revisionMarker: string; at: XY; grab: XY } | { inspectionItem: string; offset: XY; startPointer: XY; initialOffset: XY } | { detail: string; original: DrawingDetail; owner: object; initialAt: XY; initialPointer: XY; at: XY; grab: XY } | { removed: string; at: XY; grab: XY } | { pan: XY; box: [number, number, number, number] } | null>(null);
+  const [drag, setDrag] = useState<DimensionGroupDrag | { id: string; place: XY } | { ordinate: string; lineCoord: number } | { edgeCondition: string; place: XY } | { target: string; original: DrawingDatumTarget; place: XY } | { note: string; at: XY; grab: XY } | { revisionMarker: string; at: XY; grab: XY } | { inspectionItem: string; offset: XY; startPointer: XY; initialOffset: XY } | { detail: string; original: DrawingDetail; owner: object; initialAt: XY; initialPointer: XY; at: XY; grab: XY } | { removed: string; at: XY; grab: XY } | { pan: XY; box: [number, number, number, number] } | null>(null);
   const cancelDimensionGroupDrag = () => setDrag(current => current && 'dimensionGroup' in current ? null : current);
   const clearDimensionGroup = () => { setDimensionGroup(null); cancelDimensionGroupDrag(); };
   /** The selected note's text while it is typed, and the selected dimension's tolerance fields. */
@@ -551,7 +555,7 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
     }
     if (tool === 'center-of-mass') return { q, view, at, snap: null, edge: null };
     if (tool === 'hole-table' && pending?.kind === 'hole-table') return { q, view, at, snap: null, edge: edgeAt(pr, at, 6 * mmPerPx() / v.scale, true) };
-    if (tool === 'arc-length' || tool === 'chamfer' || tool === 'radial-thickness' || tool === 'cylinder-diameter' || tool === 'circle-separation' || tool === 'arc-centerline' || tool === 'center-mark-group' || tool === 'bisector-centerline' || tool === 'virtual-sharp') return { q, view, at, snap: null, edge: edgeAt(pr, at, 6 * mmPerPx() / v.scale, true) };
+    if (tool === 'arc-length' || tool === 'chamfer' || tool === 'radial-thickness' || tool === 'cylinder-diameter' || tool === 'circle-separation' || tool === 'arc-centerline' || tool === 'center-mark-group' || tool === 'bisector-centerline' || tool === 'virtual-sharp' || tool === 'edge-condition') return { q, view, at, snap: null, edge: edgeAt(pr, at, 6 * mmPerPx() / v.scale, true) };
     if (tool === 'reflex-angle') return { q, view, at, snap: null, edge: view === 'top' && !v.breaks?.length
       ? edgeAt(pr, at, 6 * mmPerPx() / v.scale, true) : null };
     const breaks = tool === 'linear' || tool === 'ordinate' || tool === 'angle' || tool === 'radius' ? v.breaks : undefined;
@@ -1374,6 +1378,50 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
       setSelectedFrame(null);
       return;
     }
+    if (tool === 'edge-condition') {
+      if (scope.kind !== 'part') { setMessage('Edge-condition symbols use a part drawing.'); return; }
+      if (pending?.kind === 'edge-condition') {
+        if (pending.source.projection !== views || pending.source.settings !== settings || busy) {
+          cancel(); setMessage('The drawing changed. Select the target edge again.'); return;
+        }
+        const upperMm = ecDraft.sign === 'unspecified' || !ecDraft.upper.trim() ? undefined : Number(ecDraft.upper.trim());
+        const lowerMm = ecDraft.sign === 'unspecified' || !ecDraft.lower.trim() ? undefined : Number(ecDraft.lower.trim());
+        const check = checkEdgeConditionValues(ecDraft.sign, ecDraft.direction, upperMm, lowerMm);
+        if (!check.ok) { setMessage(check.reason); return; }
+        const item: DrawingEdgeCondition = {
+          id: newEdgeConditionId(wholeSettings.edgeConditions),
+          view: pending.view,
+          edge: pending.edge,
+          place,
+          sign: ecDraft.sign,
+          ...(upperMm !== undefined ? { upperMm } : {}),
+          ...(lowerMm !== undefined ? { lowerMm } : {}),
+          direction: ecDraft.direction,
+          ...(ecDraft.allAround ? { allAround: true as const } : {}),
+        };
+        const resolved = resolveEdgeCondition(views[pending.view], item, pending.view, presetFor(settings));
+        if (!resolved.ok) { setMessage(resolved.reason); return; }
+        if (!onChange({ ...settings, edgeConditions: [...(settings.edgeConditions ?? []), item] })) return;
+        setPending(null);
+        setSelected({ kind: 'edge-condition', id: item.id });
+        setSelectedTarget(null);
+        setSelectedFrame(null);
+        setMessage(null);
+        return;
+      }
+      if (!isViewId(h.view) || h.view === 'iso') {
+        setMessage('Edge-condition symbols are supported only on ordinary front, top, and right views.'); return;
+      }
+      if (placementAt(h.view)?.breaks?.length) {
+        setMessage('Edge-condition symbols are not supported on a broken view.'); return;
+      }
+      if (!h.edge) { setMessage('Click a visible edge in this view.'); return; }
+      const picked = pickEdgeConditionEdge(pr, h.edge, h.view as SectionViewId);
+      if (!picked.ok) { setMessage(picked.reason); return; }
+      setPending({ kind: 'edge-condition', view: h.view as SectionViewId, edge: picked.ref, source: { projection: views, settings } });
+      setMessage(null);
+      return;
+    }
     if (tool === 'center-of-mass') {
       if (scope.kind !== 'part') { setMessage('Center of mass uses a part drawing.'); return; }
       if (!isViewId(h.view) || h.view === 'iso') {
@@ -1688,6 +1736,7 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
       const htId = (e.target as Element).closest?.('g.hole-table[data-hole-table]')?.getAttribute('data-hole-table') ?? null;
       const rmId = (e.target as Element).closest?.('g.revision-marker[data-revision-marker]')?.getAttribute('data-revision-marker') ?? null;
       const iiId = (e.target as Element).closest?.('g.inspection-item[data-inspection-item]')?.getAttribute('data-inspection-item') ?? null;
+      const ecId = (e.target as Element).closest?.('g.edge-condition[data-edge-condition]')?.getAttribute('data-edge-condition') ?? null;
       const d = target?.matches('g.dimension') ? settings.dimensions.find(x => x.id === id) : undefined;
       const n = target?.matches('g.note') ? settings.notes?.find(x => x.id === id) : undefined;
       const ac = !d && !n && acId ? settings.arcCenterlines?.find(x => x.id === acId) : undefined;
@@ -1699,6 +1748,7 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
       const ht = !d && !n && !ac && !cmg && !cl && !vs && !com && !ord && htId ? settings.holeTables?.find(x => x.id === htId) : undefined;
       const rm = !d && !n && !ac && !cmg && !cl && !vs && !com && !ord && !ht && rmId ? settings.revisionMarkers?.find(x => x.id === rmId) : undefined;
       const ii = !d && !n && !ac && !cmg && !cl && !vs && !com && !ord && !ht && !rm && iiId ? settings.inspectionItems?.find(x => x.id === iiId) : undefined;
+      const ec = !d && !n && !ac && !cmg && !cl && !vs && !com && !ord && !ht && !rm && !ii && ecId ? settings.edgeConditions?.find(x => x.id === ecId) : undefined;
       if (d && e.shiftKey) {
         if (activeDimensionGroup) {
           const pair = activeDimensionGroup.pair;
@@ -1727,11 +1777,12 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
         return;
       }
       clearDimensionGroup();
-      setSelected(d ? { kind: 'dimension', id: d.id } : n ? { kind: 'note', id: n.id } : ac ? { kind: 'arc-centerline', id: ac.id } : cmg ? { kind: 'center-mark-group', id: cmg.id } : cl ? { kind: 'bisector-centerline', id: cl.id } : vs ? { kind: 'virtual-sharp', id: vs.id } : com ? { kind: 'center-of-mass', id: com.id } : ord ? { kind: 'ordinate-group', id: ord.id } : ht ? { kind: 'hole-table', id: ht.id } : rm ? { kind: 'revision-marker', id: rm.id } : ii ? { kind: 'inspection-item', id: ii.id } : null);
+      setSelected(d ? { kind: 'dimension', id: d.id } : n ? { kind: 'note', id: n.id } : ac ? { kind: 'arc-centerline', id: ac.id } : cmg ? { kind: 'center-mark-group', id: cmg.id } : cl ? { kind: 'bisector-centerline', id: cl.id } : vs ? { kind: 'virtual-sharp', id: vs.id } : com ? { kind: 'center-of-mass', id: com.id } : ord ? { kind: 'ordinate-group', id: ord.id } : ht ? { kind: 'hole-table', id: ht.id } : rm ? { kind: 'revision-marker', id: rm.id } : ii ? { kind: 'inspection-item', id: ii.id } : ec ? { kind: 'edge-condition', id: ec.id } : null);
       setNoteDraft(null); setTolDraft({});
       if (n) setNoteDraft(n.text);
       if (d) setDrag({ id: d.id, place: d.place });
       else if (ord) setDrag({ ordinate: ord.id, lineCoord: ord.lineCoord });
+      else if (ec) setDrag({ edgeCondition: ec.id, place: ec.place });
       else if (n && qd) setDrag({ note: n.id, at: n.at, grab: [qd[0] - n.at[0], qd[1] - n.at[1]] });
       else if (rm && qd) setDrag({ revisionMarker: rm.id, at: rm.at, grab: [qd[0] - rm.at[0], qd[1] - rm.at[1]] });
       else if (ii && qd) { const init: XY = ii.offset ?? [0, -6]; setDrag({ inspectionItem: ii.id, offset: init, startPointer: qd, initialOffset: init }); }
@@ -1784,6 +1835,11 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
         : [Math.round((q[0] - drag.grab[0]) * 10) / 10, Math.round((q[1] - drag.grab[1]) * 10) / 10] });
       return;
     }
+    if (drag && 'edgeCondition' in drag) {
+      const ec = settings.edgeConditions?.find(x => x.id === drag.edgeCondition), q = sheetPoint(e.clientX, e.clientY);
+      if (ec && q && layout) setDrag({ edgeCondition: ec.id, place: fromSheet(layout.views[ec.view], q) });
+      return;
+    }
     if (drag && 'ordinate' in drag) {
       const ord = settings.ordinateGroups?.find(g => g.id === drag.ordinate), q = sheetPoint(e.clientX, e.clientY);
       if (ord && q && layout) {
@@ -1827,6 +1883,13 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
       if (moved) { if (commitDims(moved.dimensions)) setMessage(null); }
       else setMessage('The labels cannot keep their spacing at that position.');
       return;
+    }
+    if (drag && 'edgeCondition' in drag) {
+      const ec = settings.edgeConditions?.find(x => x.id === drag.edgeCondition);
+      if (ec && (ec.place[0] !== drag.place[0] || ec.place[1] !== drag.place[1])) {
+        onChange({ ...settings, edgeConditions: settings.edgeConditions!.map(x => x.id === ec.id ? { ...x, place: drag.place } : x) });
+      }
+      setDrag(null); return;
     }
     if (drag && 'ordinate' in drag) {
       const ord = settings.ordinateGroups?.find(g => g.id === drag.ordinate);
@@ -2154,8 +2217,39 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
     downloadBytes(new TextEncoder().encode(result.csv), `${fileName}-inspection.csv`, 'text/csv;charset=utf-8');
   };
 
+  const updateEdgeCondition = (id: string, patch: Partial<Pick<DrawingEdgeCondition, 'sign' | 'direction' | 'upperMm' | 'lowerMm' | 'allAround' | 'place'>>) => {
+    if (busy || !sourceCurrent) return;
+    const target = settings.edgeConditions?.find(ec => ec.id === id);
+    if (!target) return;
+    const nextSign = patch.sign ?? target.sign;
+    const nextDir = patch.direction ?? target.direction;
+    const nextUpper = nextSign === 'unspecified' ? undefined : ('upperMm' in patch ? patch.upperMm : target.upperMm);
+    const nextLower = nextSign === 'unspecified' ? undefined : ('lowerMm' in patch ? patch.lowerMm : target.lowerMm);
+    const check = checkEdgeConditionValues(nextSign, nextDir, nextUpper, nextLower);
+    if (!check.ok) { setMessage(check.reason); return; }
+    const { upperMm: _u, lowerMm: _l, allAround: _a, ...base } = target; void _u; void _l; void _a;
+    const nextAllAround = 'allAround' in patch ? patch.allAround : target.allAround;
+    const updated: DrawingEdgeCondition = {
+      ...base,
+      sign: nextSign,
+      direction: nextDir,
+      place: patch.place ?? target.place,
+      ...(nextUpper !== undefined ? { upperMm: nextUpper } : {}),
+      ...(nextLower !== undefined ? { lowerMm: nextLower } : {}),
+      ...(nextAllAround ? { allAround: true as const } : {}),
+    };
+    if (onChange({ ...settings, edgeConditions: settings.edgeConditions!.map(ec => ec.id === id ? updated : ec) })) setMessage(null);
+  };
+
   const removeAnnotation = ({ kind, id }: SheetAnnotationSelection) => {
-    if (kind === 'inspection-item') {
+    if (kind === 'edge-condition') {
+      if (settings.edgeConditions?.filter(ec => ec.id === id).length !== 1) return;
+      const kept = settings.edgeConditions.filter(ec => ec.id !== id);
+      const next = { ...settings };
+      if (kept.length) next.edgeConditions = kept;
+      else delete next.edgeConditions;
+      if (!onChange(next)) return;
+    } else if (kind === 'inspection-item') {
       const existing = wholeSettings.inspectionItems ?? [];
       if (existing.filter(ii => ii.id === id).length !== 1) return;
       const kept = existing.filter(ii => ii.id !== id);
@@ -2312,6 +2406,7 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
       ...(sheet.holeTables ? { holeTables: sheet.holeTables.map(r => r.ok ? { id: r.table.id, view: r.table.view, origin: r.origin2, hasLostMember: r.hasLostMember, members: r.members.map(m => m.ok ? { id: m.member.id, tag: m.member.tag, owner: m.member.owner, x: m.x, y: m.y, diameter: m.diameter, xText: m.xText, yText: m.yText, sizeText: m.sizeText } : { id: m.member.id, tag: m.member.tag, owner: m.member.owner, lost: m.reason }) } : { id: r.table.id, view: r.table.view, lost: r.reason }) } : {}),
       ...(sheet.revisionMarkers ? { revisionMarkers: sheet.revisionMarkers.map(r => r.ok ? { id: r.marker.id, revision: r.marker.revision, sheet: r.marker.sheet, sheetNumber: r.sheetNumber, zone: r.zone, at: r.marker.at, hidden: !!r.marker.hidden } : { id: r.marker.id, revision: r.marker.revision, sheet: r.marker.sheet, code: r.code, lost: r.reason }) } : {}),
       ...(allInspectionResolved.length ? { inspectionItems: allInspectionResolved.map(r => ({ id: r.item.id, number: r.item.number, dim: r.item.dim, status: r.status, sheetNumber: r.sheetNumber, view: r.view, nominalMm: r.nominalMm, displayText: r.displayText, tolerance: r.tolerance, reusedFromRevision: r.reusedFromRevision, reason: r.reason })) } : {}),
+      ...(sheet.edgeConditions ? { edgeConditions: sheet.edgeConditions.map(r => r.ok ? { id: r.item.id, view: r.item.view, sign: r.item.sign, direction: r.item.direction, upperMm: r.item.upperMm ?? null, lowerMm: r.item.lowerMm ?? null, allAround: !!r.item.allAround, upperText: r.upperText, lowerText: r.lowerText, summaryText: r.summaryText } : { id: r.item.id, view: r.item.view, code: r.code, lost: r.reason }) } : {}),
       suggestions: suggestions.map(x => ({ id: x.id, kind: x.kind, estimate: x.estimate })) };
     // (G24: the drawing's annotations on the model, for the GPU lane's 3D display and the flow.)
     w.__studioAnnotations = () => sheet && layout && views ? modelAnnotations({ views, layout, settings, sheet, ...(weldJoints ? { welds: weldJoints } : {}) }) : null;
@@ -2652,7 +2747,7 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
         }
       }
     }
-    const placing = pending && hover && pending.kind !== 'note' && pending.kind !== 'arc-centerline' && pending.kind !== 'center-mark-group' && pending.kind !== 'bisector-centerline' && pending.kind !== 'virtual-sharp' && pending.kind !== 'ordinate-origin' && pending.kind !== 'ordinate-members' && pending.kind !== 'hole-table' && ((pending.kind !== 'linear' && pending.kind !== 'angle' && pending.kind !== 'chamfer' && pending.kind !== 'radial-thickness' && pending.kind !== 'cylinder-diameter' && pending.kind !== 'circle-separation') || (pending.kind === 'chamfer' ? !!pending.adjacent : pending.kind === 'radial-thickness' || pending.kind === 'circle-separation' ? !!pending.second : pending.kind === 'cylinder-diameter' ? !!pending.cylinder : !!pending.b));
+    const placing = pending && hover && pending.kind !== 'note' && pending.kind !== 'arc-centerline' && pending.kind !== 'center-mark-group' && pending.kind !== 'bisector-centerline' && pending.kind !== 'virtual-sharp' && pending.kind !== 'ordinate-origin' && pending.kind !== 'ordinate-members' && pending.kind !== 'hole-table' && pending.kind !== 'edge-condition' && ((pending.kind !== 'linear' && pending.kind !== 'angle' && pending.kind !== 'chamfer' && pending.kind !== 'radial-thickness' && pending.kind !== 'cylinder-diameter' && pending.kind !== 'circle-separation') || (pending.kind === 'chamfer' ? !!pending.adjacent : pending.kind === 'radial-thickness' || pending.kind === 'circle-separation' ? !!pending.second : pending.kind === 'cylinder-diameter' ? !!pending.cylinder : !!pending.b));
     if (pending?.kind === 'angle' && pending.mode && pending.owner !== projectionActionOwner) return '';
     if (pending?.kind === 'angle') for (const ref of [pending.a, ...(pending.b ? [pending.b] : [])]) {
       const l = resolveLine(R(pending.view), ref);
@@ -2675,6 +2770,28 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
       for (const m of pending.members) {
         const mq = toSheet(P(pending.view), inView(R(pending.view), m.rim.near));
         parts.push(`<circle class="dw-pick" cx="${mq[0]}" cy="${mq[1]}" r="1.0"/>`);
+      }
+    }
+    if (pending?.kind === 'edge-condition' && hover) {
+      const placement = layout.views[pending.view];
+      const upperMm = ecDraft.sign === 'unspecified' || !ecDraft.upper.trim() ? undefined : Number(ecDraft.upper.trim());
+      const lowerMm = ecDraft.sign === 'unspecified' || !ecDraft.lower.trim() ? undefined : Number(ecDraft.lower.trim());
+      if (checkEdgeConditionValues(ecDraft.sign, ecDraft.direction, upperMm, lowerMm).ok) {
+        const previewItem: DrawingEdgeCondition = {
+          id: 'preview',
+          view: pending.view,
+          edge: pending.edge,
+          place: fromSheet(placement, hover.q),
+          sign: ecDraft.sign,
+          ...(upperMm !== undefined ? { upperMm } : {}),
+          ...(lowerMm !== undefined ? { lowerMm } : {}),
+          direction: ecDraft.direction,
+          ...(ecDraft.allAround ? { allAround: true as const } : {}),
+        };
+        const resolved = resolveEdgeCondition(views[pending.view], previewItem, pending.view, presetFor(settings));
+        if (resolved.ok) {
+          parts.push(`<g class="dw-preview" data-edge-condition-preview pointer-events="none">${marksSvg(edgeConditionMarks(placement, resolved))}</g>`);
+        }
       }
     }
     if (placing && hover) {
@@ -2737,6 +2854,7 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
               : true;
           })()
           : tool === 'hole-table' ? pending?.kind === 'hole-table' && pending.view === hover.view && !v.breaks?.length && qualifyHoleTableRim(doc, R(hover.view), hover.view, hover.edge).ok
+          : tool === 'edge-condition' ? !pending && !v.breaks?.length && isViewId(hover.view) && hover.view !== 'iso' && pickEdgeConditionEdge(R(hover.view), hover.edge, hover.view).ok
           : tool === 'linear' || tool === 'angle' ? hover.edge.kind !== 'circle' && hover.edge.kind !== 'curve'
           : !!hover.edge.circle && roundIn(R(hover.view), hover.edge);
         const pieces = tool === 'reflex-angle' || tool === 'arc-length' || tool === 'chamfer' || tool === 'radial-thickness' || tool === 'cylinder-diameter' || tool === 'circle-separation' || tool === 'arc-centerline' || tool === 'center-mark-group' || tool === 'bisector-centerline' || tool === 'virtual-sharp' || hover.visibleRimOnly || (tool === 'diameter' && isDetailRef(hover.view) && !showDetailHidden(settings, hover.view))
@@ -2756,6 +2874,7 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
       return moved ? sheetGroupsSvg(moved.preview, null, null, null, selectedDimensionIds) : sheetMarkup;
     }
     if ('ordinate' in drag) return sheetGroupsSvg(buildSheet(views, layout, { ...settings, ordinateGroups: (settings.ordinateGroups ?? []).map(g => g.id === drag.ordinate ? { ...g, lineCoord: drag.lineCoord } : g) }, { svgSectionTextClearance, title, date: today(), callout, threads, tableContent: tableContentOf, welds: weldJoints, bodyFaces, bodyMassSources, doc, ...(bom ? { bom } : {}) }, cuts), selected, selectedTarget);
+    if ('edgeCondition' in drag) return sheetGroupsSvg(buildSheet(views, layout, { ...settings, edgeConditions: (settings.edgeConditions ?? []).map(ec => ec.id === drag.edgeCondition ? { ...ec, place: drag.place } : ec) }, { svgSectionTextClearance, title, date: today(), callout, threads, tableContent: tableContentOf, welds: weldJoints, bodyFaces, bodyMassSources, doc, ...(bom ? { bom } : {}) }, cuts), selected, selectedTarget);
     if ('target' in drag) return sheetGroupsSvg(buildSheet(views, layout, { ...settings, datumTargets: (settings.datumTargets ?? []).map(t => t.id === drag.target ? { ...t, place: drag.place } : t) }, { svgSectionTextClearance, title, date: today(), callout, threads, tableContent: tableContentOf, welds: weldJoints, bodyFaces, bodyMassSources, doc, ...(bom ? { bom } : {}) }, cuts), selected, selectedTarget);
     if ('detail' in drag) return sheetGroupsSvg(buildSheet(views, layout, { ...settings, details: (settings.details ?? []).map(d => d.id === drag.detail ? { ...d, at: drag.at } : d) }, { svgSectionTextClearance, title, date: today(), callout, threads, tableContent: tableContentOf, welds: weldJoints, bodyFaces, bodyMassSources, doc, ...(bom ? { bom } : {}) }, cuts), selected, selectedTarget);
     if ('removed' in drag) return sheetGroupsSvg(buildSheet(views, layout, withSections(settings, sectionsOf(settings).map(x => x.id === drag.removed && x.removed ? { ...x, removed: { ...x.removed, at: drag.at } } : x)), { svgSectionTextClearance, title, date: today(), callout, threads, tableContent: tableContentOf, welds: weldJoints, bodyFaces, bodyMassSources, doc, ...(bom ? { bom } : {}) }, cuts), selected, selectedTarget);
@@ -2767,7 +2886,7 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
   }, [drag, views, layout, sheet, sheetMarkup, settings, title, selected, selectedTarget, weldJoints, bodyMassSources, bom, svgSectionTextClearance,
     activeDimensionGroup, selectedDimensionIds]);
 
-  const hint = message ?? (radiusMove ? "Click the sheet to move the shortened leader origin. Esc cancels." : null) ?? (currentReattachment ? `Select a rim in the ${viewLabel(currentReattachment.original.view)} · Esc cancels` : null) ?? (pending ? (pending.kind === 'standalone-frame' ? `Click the sheet to place the frame. View: ${viewLabel(pending.view)}. Esc cancels.` : pending.kind === 'datum-target' ? 'Click where the target symbol goes · Esc cancels' : pending.kind === 'datum-line' ? 'Now the other end of the target line · Esc cancels' : pending.kind === 'note' ? 'Click where the note’s text goes · Esc cancels' : pending.kind === 'detail-center' ? `Select the centre of Detail ${pending.moving.detail.id} on the ${viewLabel(pending.view)} · Esc cancels` : pending.kind === 'detail' ? 'Now how far the detail’s circle reaches · Esc cancels' : pending.kind === 'radial-thickness' ? (!pending.first ? 'Select the first concentric full circle · Esc cancels' : !pending.second ? 'Now select the second concentric full circle · Esc cancels' : 'Click where the radial thickness goes · Esc cancels') : pending.kind === 'cylinder-diameter' ? (!pending.cylinder ? 'Select a visible cylinder side silhouette · Esc cancels' : 'Click where the side diameter goes · Esc cancels') : pending.kind === 'circle-separation' ? (!pending.first ? 'Select the first disjoint full circle · Esc cancels' : !pending.second ? 'Now select the second disjoint full circle · Esc cancels' : `Click where the ${circleGapMode} circle gap goes · Esc cancels`) : pending.kind === 'arc-centerline' ? 'Now click the second concentric partial circular arc · Esc cancels' : pending.kind === 'center-mark-group' ? `${pending.members.length} hole${pending.members.length === 1 ? '' : 's'} selected${pending.members.length < MIN_CENTER_MARK_GROUP_MEMBERS ? ` — pick at least ${MIN_CENTER_MARK_GROUP_MEMBERS - pending.members.length} more collinear hole${MIN_CENTER_MARK_GROUP_MEMBERS - pending.members.length === 1 ? '' : 's'}` : ' — click Create row or pick more collinear holes'} · Esc cancels` : pending.kind === 'bisector-centerline' ? 'Now click the second parallel equal-span straight edge · Esc cancels' : pending.kind === 'virtual-sharp' ? 'Now click the second non-parallel straight edge · Esc cancels' : pending.kind === 'ordinate-origin' ? 'Click above/below (horizontal) or beside (vertical) the origin to place the ordinate baseline · Esc cancels' : pending.kind === 'ordinate-members' ? `Click points in the ${viewLabel(pending.view)} to add ordinate members to ${pending.groupId} · Esc finishes` : pending.kind === 'hole-table' ? `${pending.members.length}/${HOLE_TABLE_MAX_MEMBERS} hole${pending.members.length === 1 ? '' : 's'} selected in ${viewLabel(pending.view)} — click plain through-hole rims, then Create hole table · Esc cancels` : pending.kind === 'chamfer' ? (!pending.chamfer ? 'Select the 45° chamfer bevel edge · Esc cancels' : !pending.adjacent ? 'Now click an adjacent straight wall sharing a corner with the bevel · Esc cancels' : 'Click where the chamfer callout goes · Esc cancels') : pending.kind === 'angle' ? (pending.b ? (pending.mode ? 'Click to place the reflex angle · Esc cancels' : 'Choose the side of the corner to measure, then click to place the angle · Esc cancels') : 'Now the second edge · Esc cancels') : pending.kind === 'linear' && !pending.b ? 'Now the second point · Esc cancels' : pending.kind === 'diameter' && pending.owner ? `${pending.owner} · Click where the dimension goes · Esc cancels` : 'Click where the dimension goes · Esc cancels') : tool === 'select' ? null : tool === 'datum-target' ? (targetDraft.kind === 'point' ? 'Click a straight edge endpoint · Esc cancels' : targetDraft.kind === 'line' ? 'Click the first end of the target line · Esc cancels' : 'Click the centre of the target area · Esc cancels') : TOOLS.find(t => t.tool === tool)!.hint);
+  const hint = message ?? (radiusMove ? "Click the sheet to move the shortened leader origin. Esc cancels." : null) ?? (currentReattachment ? `Select a rim in the ${viewLabel(currentReattachment.original.view)} · Esc cancels` : null) ?? (pending ? (pending.kind === 'standalone-frame' ? `Click the sheet to place the frame. View: ${viewLabel(pending.view)}. Esc cancels.` : pending.kind === 'datum-target' ? 'Click where the target symbol goes · Esc cancels' : pending.kind === 'datum-line' ? 'Now the other end of the target line · Esc cancels' : pending.kind === 'note' ? 'Click where the note’s text goes · Esc cancels' : pending.kind === 'detail-center' ? `Select the centre of Detail ${pending.moving.detail.id} on the ${viewLabel(pending.view)} · Esc cancels` : pending.kind === 'detail' ? 'Now how far the detail’s circle reaches · Esc cancels' : pending.kind === 'radial-thickness' ? (!pending.first ? 'Select the first concentric full circle · Esc cancels' : !pending.second ? 'Now select the second concentric full circle · Esc cancels' : 'Click where the radial thickness goes · Esc cancels') : pending.kind === 'cylinder-diameter' ? (!pending.cylinder ? 'Select a visible cylinder side silhouette · Esc cancels' : 'Click where the side diameter goes · Esc cancels') : pending.kind === 'circle-separation' ? (!pending.first ? 'Select the first disjoint full circle · Esc cancels' : !pending.second ? 'Now select the second disjoint full circle · Esc cancels' : `Click where the ${circleGapMode} circle gap goes · Esc cancels`) : pending.kind === 'arc-centerline' ? 'Now click the second concentric partial circular arc · Esc cancels' : pending.kind === 'center-mark-group' ? `${pending.members.length} hole${pending.members.length === 1 ? '' : 's'} selected${pending.members.length < MIN_CENTER_MARK_GROUP_MEMBERS ? ` — pick at least ${MIN_CENTER_MARK_GROUP_MEMBERS - pending.members.length} more collinear hole${MIN_CENTER_MARK_GROUP_MEMBERS - pending.members.length === 1 ? '' : 's'}` : ' — click Create row or pick more collinear holes'} · Esc cancels` : pending.kind === 'bisector-centerline' ? 'Now click the second parallel equal-span straight edge · Esc cancels' : pending.kind === 'virtual-sharp' ? 'Now click the second non-parallel straight edge · Esc cancels' : pending.kind === 'ordinate-origin' ? 'Click above/below (horizontal) or beside (vertical) the origin to place the ordinate baseline · Esc cancels' : pending.kind === 'ordinate-members' ? `Click points in the ${viewLabel(pending.view)} to add ordinate members to ${pending.groupId} · Esc finishes` : pending.kind === 'hole-table' ? `${pending.members.length}/${HOLE_TABLE_MAX_MEMBERS} hole${pending.members.length === 1 ? '' : 's'} selected in ${viewLabel(pending.view)} — click plain through-hole rims, then Create hole table · Esc cancels` : pending.kind === 'edge-condition' ? 'Click where the edge-condition symbol goes · Esc cancels' : pending.kind === 'chamfer' ? (!pending.chamfer ? 'Select the 45° chamfer bevel edge · Esc cancels' : !pending.adjacent ? 'Now click an adjacent straight wall sharing a corner with the bevel · Esc cancels' : 'Click where the chamfer callout goes · Esc cancels') : pending.kind === 'angle' ? (pending.b ? (pending.mode ? 'Click to place the reflex angle · Esc cancels' : 'Choose the side of the corner to measure, then click to place the angle · Esc cancels') : 'Now the second edge · Esc cancels') : pending.kind === 'linear' && !pending.b ? 'Now the second point · Esc cancels' : pending.kind === 'diameter' && pending.owner ? `${pending.owner} · Click where the dimension goes · Esc cancels` : 'Click where the dimension goes · Esc cancels') : tool === 'select' ? null : tool === 'datum-target' ? (targetDraft.kind === 'point' ? 'Click a straight edge endpoint · Esc cancels' : targetDraft.kind === 'line' ? 'Click the first end of the target line · Esc cancels' : 'Click the centre of the target area · Esc cancels') : TOOLS.find(t => t.tool === tool)!.hint);
   const selDim = selected?.kind === 'dimension' ? settings.dimensions.find(d => d.id === selected.id) : undefined;
   const extensionReady = !busy && projectionCurrent && sourceCurrent !== false;
   const extensionOwner = useMemo(() => ({}), [projectionActionOwner, selected, sheet, extensionReady]);
@@ -3250,6 +3369,35 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
               Baseline Rev {latest.revision}: {diff.map(d => `#${d.number} ${d.kind}`).join(' · ')}
             </div>;
           })()}
+        </div>}
+
+        {((settings.edgeConditions?.length ?? 0) > 0 || tool === 'edge-condition') && <div role="group" aria-label="Edge conditions">
+          <div className="card-title" style={{ marginTop: 8 }}>EDGE CONDITIONS <span className="muted">{settings.edgeConditions?.length ?? 0}</span></div>
+          {tool === 'edge-condition' && <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 4 }}>
+            <label className={FIELD}><span>Sign</span><select aria-label="Edge condition sign" value={ecDraft.sign} onChange={e => setEcDraft(d => ({ ...d, sign: e.target.value as EdgeConditionSign }))}>
+              {EDGE_CONDITION_SIGNS.map(s => <option key={s} value={s}>{s === '-' ? '− (removal)' : s === '+' ? '+ (burr/excess)' : s === '±' ? '± (either)' : '? (unspecified)'}</option>)}
+            </select></label>
+            <label className={FIELD}><span>Direction</span><select aria-label="Edge condition direction" value={ecDraft.direction} onChange={e => setEcDraft(d => ({ ...d, direction: e.target.value as EdgeConditionDirection }))}>
+              {EDGE_CONDITION_DIRECTIONS.map(dir => <option key={dir} value={dir}>{dir}</option>)}
+            </select></label>
+            {ecDraft.sign !== 'unspecified' && <>
+              <label className={FIELD}><span>Upper (mm)</span><input aria-label="Edge condition upper mm" type="number" step="any" min="0" style={{ width: 64 }} value={ecDraft.upper} onChange={e => setEcDraft(d => ({ ...d, upper: e.target.value }))} /></label>
+              <label className={FIELD}><span>Lower (mm)</span><input aria-label="Edge condition lower mm" type="number" step="any" min="0" style={{ width: 64 }} value={ecDraft.lower} onChange={e => setEcDraft(d => ({ ...d, lower: e.target.value }))} /></label>
+            </>}
+            <label className={FIELD}><span>All around</span><input className={TICK} type="checkbox" aria-label="Edge condition all around" checked={ecDraft.allAround} onChange={e => setEcDraft(d => ({ ...d, allAround: e.target.checked }))} /></label>
+            <div className="empty">Declared edge requirement only; does not alter part geometry or certify burr/chamfer inspection.</div>
+          </div>}
+          <div className="dw-dims">
+            {(sheet?.edgeConditions ?? []).map(r => <div key={r.item.id} className={'dw-dim' + (selected?.kind === 'edge-condition' && selected.id === r.item.id ? ' sel' : '') + (r.ok ? '' : ' lost')} title={r.ok ? `${r.item.view} · ${r.summaryText}` : r.reason}>
+              <button type="button" className="dw-annotation-select" aria-pressed={selected?.kind === 'edge-condition' && selected.id === r.item.id}
+                onClick={() => { cancel(); setTool('select'); setSelected({ kind: 'edge-condition', id: r.item.id }); setSelectedTarget(null); setSelectedFrame(null); }}>
+                <b>{r.ok ? r.summaryText : 'lost'}</b><span>{r.item.id} · {r.item.view}</span>
+              </button>
+              {r.ok && <Button variant="ghost" size="xs" aria-label={`Move edge condition ${r.item.id}`} onClick={e => { e.stopPropagation(); updateEdgeCondition(r.item.id, { place: [Math.round((r.item.place[0] + 6) * 100) / 100, Math.round((r.item.place[1] + 4) * 100) / 100] }); }}>Move</Button>}
+              {r.ok && <Button variant="ghost" size="xs" aria-label={`Flip sign ${r.item.id}`} onClick={e => { e.stopPropagation(); updateEdgeCondition(r.item.id, { sign: r.item.sign === '-' ? '+' : '-' }); }}>{r.item.sign === '-' ? '+' : '−'}</Button>}
+              <Button variant="ghost" size="xs" aria-label={`Remove edge condition ${r.item.id}`} onClick={e => { e.stopPropagation(); removeAnnotation({ kind: 'edge-condition', id: r.item.id }); }}><Icon name="close" small /></Button>
+            </div>)}
+          </div>
         </div>}
 
         <DatumsEditor settings={settings} allDatums={wholeSettings.datums ?? []} availableViews={(['front', 'top', 'right'] as const).filter(id => { const placement = placementAt(id); return !!placement && !placement.hidden; })} views={views} scale={layout?.scale ?? 1} onChange={onChange} onRefused={setMessage} />

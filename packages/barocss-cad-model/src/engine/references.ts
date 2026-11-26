@@ -218,6 +218,9 @@ export function referencesOf(source: StudioDoc, readOnly = false): { doc: Studio
       refs.push(pointed(`hole-table ${ht.id}.${m.id}`, true, m.rim, () => m.rim.edge, e => { m.rim.edge = e; }));
     }
   }
+  for (const ec of doc.drawing?.edgeConditions ?? []) {
+    refs.push(pointed(`edge-condition ${ec.id}`, true, ec.edge, () => ec.edge.edge, e => { ec.edge.edge = e; }));
+  }
   const scope = doc.drawing?.scope;
   if (scope?.kind === 'part' && scope.body) {
     const key = checkDrawingBodyOwner(doc, scope.body).length ? null : scope.body.key;

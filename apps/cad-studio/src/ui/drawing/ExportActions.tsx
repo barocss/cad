@@ -38,6 +38,7 @@ export function ExportActions({ canExportDimensionCsv, exportDimensionCsv, canEx
   const hasHoleTable = sheet?.holeTables?.some(r => r.ok);
   const hasRevisionMarker = sheet?.revisionMarkers?.some(r => r.ok && !r.marker.hidden);
   const hasInspectionItem = sheet?.inspectionItems?.some(r => r.status === 'ok');
+  const hasEdgeCondition = sheet?.edgeConditions?.some(r => r.ok);
   const confirmPanel = useRef<HTMLDivElement>(null);
   const pendingFormat = confirmation?.format;
   useEffect(() => {
@@ -77,6 +78,7 @@ export function ExportActions({ canExportDimensionCsv, exportDimensionCsv, canEx
         {hasHoleTable && <div className="empty" role="note" aria-label="DXF hole table compatibility">DXF exports hole tables and tag bubbles as non-associative lines, circles, and text on the VISIBLE, THIN, and TEXT layers. Keep the .bcad in a Studio version with hole table support.</div>}
         {hasRevisionMarker && <div className="empty" role="note" aria-label="DXF revision marker compatibility">DXF exports revision change markers as non-associative triangle polylines and text on the VISIBLE and TEXT layers. Keep the .bcad in a Studio version with revision marker support.</div>}
         {hasInspectionItem && <div className="empty" role="note" aria-label="DXF inspection item compatibility">DXF exports inspection item badges as non-associative lines, arcs, and text on the VISIBLE and TEXT layers. Keep the .bcad in a Studio version with inspection item support.</div>}
+        {hasEdgeCondition && <div className="empty" role="note" aria-label="DXF edge condition compatibility">DXF exports edge-condition symbols as non-associative leader lines, arrowheads, corner glyphs, and text on the VISIBLE, THIN, and TEXT layers rather than native semantic symbols. Keep the .bcad in a Studio version with edge-condition support.</div>}
         {confirmation && <div ref={confirmPanel} tabIndex={-1} className="dw-export-confirm" role="group" aria-label="Confirm drawing export">
           <ul>{confirmation.messages.map((message, i) => <li key={i}>{message}</li>)}</ul>
           <div className="dw-actions">

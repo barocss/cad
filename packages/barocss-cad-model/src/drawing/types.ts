@@ -374,6 +374,24 @@ export interface DrawingInspectionBaseline {
   readonly entries: readonly DrawingInspectionSnapshotEntry[];
 }
 
+export type EdgeConditionSign = '+' | '-' | '±' | 'unspecified';
+export type EdgeConditionDirection = 'any' | 'horizontal' | 'vertical';
+
+/** Structured edge-state manufacturing requirement on a uniquely resolved orthographic edge (D2024, #212). */
+export interface DrawingEdgeCondition {
+  id: string;
+  view: SectionViewId;
+  edge: EdgeRef;
+  place: XY;
+  sign: EdgeConditionSign;
+  /** Native model-mm upper/single edge-condition size (> 0 when present; undefined = unspecified). */
+  upperMm?: number;
+  /** Optional native model-mm lower edge-condition size (> 0 and <= upperMm). */
+  lowerMm?: number;
+  direction: EdgeConditionDirection;
+  allAround?: true;
+}
+
 /** The revision after `rev`: A → B … Z → AA, 01 → 02, 1 → 2; none → A. */
 export function nextRevision(rev: string | undefined): string {
   if (!rev || rev === '-') return 'A';
@@ -479,6 +497,8 @@ export interface DrawingSettings {
   inspectionItems?: DrawingInspectionItem[];
   /** Explicit per-revision recorded inspection baseline snapshots for cross-revision change tracking. */
   inspectionBaselines?: DrawingInspectionBaseline[];
+  /** Structured edge-condition symbols bound to visible orthographic edges. */
+  edgeConditions?: DrawingEdgeCondition[];
   /** Never stored: set on the settings of one sheet of a drawing with sheets (sheets.ts `forSheet`), which then lay out and build as a drawing of that sheet alone. */
   sheetContext?: SheetContext;
 }
@@ -642,6 +662,7 @@ export function readDrawing(raw: unknown): DrawingSettings {
     ...(readRevisionMarkers(r.revisionMarkers).length ? { revisionMarkers: readRevisionMarkers(r.revisionMarkers) } : {}),
     ...(readInspectionItems(r.inspectionItems).length ? { inspectionItems: readInspectionItems(r.inspectionItems) } : {}),
     ...(readInspectionBaselines(r.inspectionBaselines).length ? { inspectionBaselines: readInspectionBaselines(r.inspectionBaselines) } : {}),
+    ...(readEdgeConditions(r.edgeConditions).length ? { edgeConditions: readEdgeConditions(r.edgeConditions) } : {}),
     ...(Array.isArray(r.notes) && r.notes.some(isNote) ? { notes: r.notes.filter(isNote).map(n => ({ id: n.id, text: n.text, at: [n.at[0], n.at[1]] as XY, ...(n.leader && VIEW_IDS.includes(n.leader.view) && isXY(n.leader.at) ? { leader: { view: n.leader.view, at: [n.leader.at[0], n.leader.at[1]] as XY, ...(Object.hasOwn(n.leader, 'target') ? { target: readNoteTarget(n.leader.target) } : {}) } } : {}), ...(typeof n.sheet === 'string' && /^[A-Za-z0-9_-]{1,16}$/.test(n.sheet) ? { sheet: n.sheet } : {}) })) } : {}),
     ...(readTables(r.tables).length ? { tables: readTables(r.tables) } : {}),
   };
@@ -951,6 +972,35 @@ function readInspectionBaselines(raw: unknown): DrawingInspectionBaseline[] {
     }
     seenRev.add(x.revision);
     out.push({ revision: x.revision, entries });
+  }
+  return out;
+}
+function readEdgeConditions(raw: unknown): DrawingEdgeCondition[] {
+  if (!Array.isArray(raw)) return [];
+  const seen = new Set<string>(), out: DrawingEdgeCondition[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) continue;
+    const x = item as Partial<DrawingEdgeCondition>;
+    if (typeof x.id !== 'string' || !x.id.trim() || seen.has(x.id)) continue;
+    if (!x.view || !SECTION_VIEWS.includes(x.view)) continue;
+    if (!edgeRefOk(x.edge) || !isXY(x.place)) continue;
+    if (x.sign !== '+' && x.sign !== '-' && x.sign !== '±' && x.sign !== 'unspecified') continue;
+    if (x.direction !== 'any' && x.direction !== 'horizontal' && x.direction !== 'vertical') continue;
+    if (x.sign === 'unspecified' && (x.upperMm !== undefined || x.lowerMm !== undefined)) continue;
+    if (x.upperMm !== undefined && (typeof x.upperMm !== 'number' || !Number.isFinite(x.upperMm) || x.upperMm <= 0 || x.upperMm > 1000)) continue;
+    if (x.lowerMm !== undefined && (x.upperMm === undefined || typeof x.lowerMm !== 'number' || !Number.isFinite(x.lowerMm) || x.lowerMm <= 0 || x.lowerMm > x.upperMm)) continue;
+    seen.add(x.id);
+    out.push({
+      id: x.id,
+      view: x.view,
+      edge: copyEdgeRef(x.edge),
+      place: [x.place[0], x.place[1]],
+      sign: x.sign,
+      ...(x.upperMm !== undefined ? { upperMm: x.upperMm } : {}),
+      ...(x.lowerMm !== undefined ? { lowerMm: x.lowerMm } : {}),
+      direction: x.direction,
+      ...(x.allAround === true ? { allAround: true as const } : {}),
+    });
   }
   return out;
 }

@@ -142,5 +142,41 @@ export function checkSavedAnnotationRefs(raw: unknown): Problem[] {
       }
     }
   }
+  if (Object.hasOwn(raw, 'edgeConditions') && raw.edgeConditions !== undefined) {
+    if (!Array.isArray(raw.edgeConditions)) {
+      return [problem('DRAWING_OPTIONS', 'Drawing edgeConditions must be an array. The original drawing is unchanged.')];
+    }
+    const seenIds = new Set<string>();
+    for (let i = 0; i < raw.edgeConditions.length; i++) {
+      const item = raw.edgeConditions[i];
+      if (!isRecord(item)) {
+        return [problem('DRAWING_OPTIONS', `Drawing edgeConditions[${i}] must be an object. The original drawing is unchanged.`)];
+      }
+      if (typeof item.id !== 'string' || !item.id.trim() || seenIds.has(item.id)) {
+        return [problem('DRAWING_OPTIONS', `Drawing edgeConditions[${i}] needs a unique non-empty id. The original drawing is unchanged.`)];
+      }
+      seenIds.add(item.id);
+      const edgeIssue = checkRef(item.edge, `edgeConditions[${i}].edge`);
+      if (edgeIssue) return [edgeIssue];
+      if (!Array.isArray(item.place) || item.place.length !== 2 || typeof item.place[0] !== 'number' || !Number.isFinite(item.place[0]) || typeof item.place[1] !== 'number' || !Number.isFinite(item.place[1])) {
+        return [problem('DRAWING_OPTIONS', `Drawing edgeConditions[${i}].place must be finite [x, y] view mm coordinates. The original drawing is unchanged.`)];
+      }
+      if (item.sign !== '+' && item.sign !== '-' && item.sign !== '±' && item.sign !== 'unspecified') {
+        return [problem('DRAWING_OPTIONS', `Drawing edgeConditions[${i}].sign must be +, -, ±, or unspecified. The original drawing is unchanged.`)];
+      }
+      if (item.direction !== 'any' && item.direction !== 'horizontal' && item.direction !== 'vertical') {
+        return [problem('DRAWING_OPTIONS', `Drawing edgeConditions[${i}].direction must be any, horizontal, or vertical. The original drawing is unchanged.`)];
+      }
+      if (item.sign === 'unspecified' && (item.upperMm !== undefined || item.lowerMm !== undefined)) {
+        return [problem('DRAWING_OPTIONS', `Drawing edgeConditions[${i}] with unspecified sign cannot carry numeric size limits. The original drawing is unchanged.`)];
+      }
+      if (item.upperMm !== undefined && (typeof item.upperMm !== 'number' || !Number.isFinite(item.upperMm) || item.upperMm <= 0 || item.upperMm > 1000)) {
+        return [problem('DRAWING_OPTIONS', `Drawing edgeConditions[${i}].upperMm must be a finite number in (0, 1000]. The original drawing is unchanged.`)];
+      }
+      if (item.lowerMm !== undefined && (item.upperMm === undefined || typeof item.lowerMm !== 'number' || !Number.isFinite(item.lowerMm) || item.lowerMm <= 0 || item.lowerMm > item.upperMm)) {
+        return [problem('DRAWING_OPTIONS', `Drawing edgeConditions[${i}].lowerMm must be in (0, upperMm]. The original drawing is unchanged.`)];
+      }
+    }
+  }
   return [];
 }
