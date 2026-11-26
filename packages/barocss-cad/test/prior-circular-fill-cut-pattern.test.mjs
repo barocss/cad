@@ -143,8 +143,6 @@ test('admitted unsafe tools, overlaps, invalid bounds and unsupported history re
   refused(doc => { doc.features.at(-1).source = 'first/0'; });
   refused(doc => { doc.features.splice(4, 0, { id: 'movedTool', kind: 'translate', target: 'circleTool', offset: [0, 0, 0] }); doc.features.find(f => f.id === 'first').tool = 'movedTool'; });
   refused(doc => { doc.features[2].holes = [[{ kind: 'arc', center: [10, 10], start: [11, 10], direction: 'ccw' }]]; doc.features[2].sideTags.holes = [['island']]; });
-  refused(doc => { doc.features.splice(-1, 0, { id: 'extraSketch', kind: 'sketch', profile: 'circle', center: [42, 22], radius: 2 },
-    { id: 'extraTool', kind: 'extrude', sketch: 'extraSketch', height: 10 }, { id: 'third', kind: 'difference', target: 'second', tool: 'extraTool' }); doc.features.at(-1).target = 'third'; });
   refused(doc => { Object.assign(doc.features.at(-1), { kind: 'curve-feature-pattern', path: { degree: 1, knots: [0, 0, 1, 1], controlPoints: [[0, 0, 0], [8, 0, 1]], weights: [1, 1] } }); });
 });
 
@@ -157,4 +155,51 @@ test('omitted source still patterns only the newer rectangular cutter at the cap
   assert.ok(output.brep.faces.some(face => face.name === 'laterTool.side[a]@1,0'));
   assert.ok(output.brep.faces.some(face => face.name === 'laterTool.side[a]@1,1'));
   assert.ok(!output.brep.faces.some(face => face.name?.includes('@0,1') || face.name?.startsWith('circleTool.side[round]@')));
+});
+
+test('mixed Fill certifies captured cells against later rectangular and circular cavities, never uncaptured cells', () => {
+  const doc = document();
+  doc.features.splice(-1, 0,
+    { id: 'extraSketch', kind: 'sketch', profile: 'circle', center: [22, 25], radius: 3, sideTags: { outer: ['laterRound'] } },
+    { id: 'extraTool', kind: 'extrude', sketch: 'extraSketch', height: 10 },
+    { id: 'third', kind: 'difference', target: 'second', tool: 'extraTool' });
+  doc.features.at(-1).target = 'third';
+  const initial = evaluateCadPart(doc), published = saveCadPart(initial);
+  const inspect = (snapshot, centers) => {
+    const { brep } = snapshot.outputs[0];
+    const strict = checkBrep(brep, { strict: true });
+    assert.ok(strict.valid, strict.issues.join('\n'));
+    assert.equal(strict.topology[0].genus, centers.length + 2);
+    near(brepMassProperties(brep, 1).volume, 23920 - (90 + 40 * centers.length) * Math.PI);
+    const cylinders = brep.faces.filter(f => faceGeometry(f).kind === 'cylinder');
+    assert.equal(cylinders.length, 2 * (centers.length + 1));
+    for (const [x, y, suffix] of [...centers, [22, 25, 'later']]) {
+      const walls = cylinders.filter(f => Math.hypot(faceGeometry(f).c[0] - x, faceGeometry(f).c[1] - y) < 1e-8);
+      assert.equal(walls.length, 2);
+      for (const f of walls) {
+        const g = faceGeometry(f);
+        near(g.r, suffix === 'later' ? 3 : 2); assert.equal(g.out, -1);
+        assert.ok(f.name.startsWith(suffix === 'later' ? 'extraTool.side[laterRound]' : `circleTool.side[round]${suffix}`));
+        assert.equal(f.name.includes('@'), suffix.startsWith('@'));
+      }
+    }
+    return brep;
+  };
+  const baselineCenters = [[10, 10, ''], [18, 10, '@1,0'], [18, 18, '@1,1']];
+  assert.deepEqual(inspect(loadCadPart(published), baselineCenters), inspect(initial, baselineCenters));
+  const edited = reevaluate(initial, { parameters: { pitchY: 11 } });
+  inspect(edited, [[10, 10, ''], [18, 10, '@1,0'], [18, 21, '@1,1']]);
+  for (const pitchY of [12, 12.5]) {
+    assert.throws(() => reevaluate(initial, { parameters: { pitchY } }),
+      e => e instanceof CadPartError && e.code === 'GEOMETRY' && e.feature === 'repeat');
+  }
+  // At the very same tangent offset, the captured mask can omit the second row.
+  const masked = structuredClone(doc);
+  masked.parameters.pitchY = 12;
+  masked.features.at(-1).region = mask(17, 29, 5, 21);
+  inspect(evaluateCadPart(masked), baselineCenters.slice(0, 2));
+  const shallow = structuredClone(doc);
+  shallow.features.find(f => f.id === 'extraTool').height = 5;
+  assert.throws(() => evaluateCadPart(shallow), e => e instanceof CadPartError && e.code === 'CAPABILITY' && e.feature === 'repeat');
+  assert.equal(saveCadPart(initial), published);
 });

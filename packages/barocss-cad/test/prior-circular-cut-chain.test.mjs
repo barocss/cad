@@ -164,10 +164,8 @@ test('Rectangular repeats only the original R2 on an XY grid after later rectang
     assert.throws(() => evaluated({ spacing }), e => e instanceof CadPartError && e.feature === 'repeat' && e.code === 'GEOMETRY');
   }
   assert.throws(() => evaluated({ axis2: 'z' }), e => e instanceof CadPartError && e.feature === 'repeat' && e.code === 'CAPABILITY');
-  for (const different of [
-    { kind: 'fill-feature-pattern', region: { points: [[5, 5], [22, 5], [22, 30], [5, 30]] }, anchor: [10, 10] },
-    { kind: 'curve-feature-pattern', path: { degree: 1, knots: [0, 0, 1, 1], controlPoints: [[0, 0, 0], [0, 16, 0]], weights: [1, 1] } },
-  ]) assert.throws(() => evaluated(different), e => e instanceof CadPartError && e.feature === 'repeat' && e.code === 'CAPABILITY');
+  const path = { kind: 'curve-feature-pattern', path: { degree: 1, knots: [0, 0, 1, 1], controlPoints: [[0, 0, 0], [0, 16, 0]], weights: [1, 1] } };
+  assert.throws(() => evaluated(path), e => e instanceof CadPartError && e.feature === 'repeat' && e.code === 'CAPABILITY');
   model.features[9] = { ...model.features[9], height: 8 };
   assert.throws(() => evaluated({}), e => e instanceof CadPartError && e.feature === 'repeat' && e.code === 'CAPABILITY');
 });

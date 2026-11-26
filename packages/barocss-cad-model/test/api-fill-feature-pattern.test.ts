@@ -155,3 +155,44 @@ test('an empty original tool retains stock and one-cell recipes still validate s
   last.count = 1; last.count2 = 1; invalid.nodes[last.parent.node].suppressed = true;
   assert.throws(() => part('invalid one cell', invalid));
 });
+
+test('Fill command repeats the selected older circle past a later rectangle and circle, and edits and opens its accepted snapshot', async () => {
+  const ref = (node: number) => ({ node, side: 'solid' as const });
+  const nodes: Parameters<typeof withNode>[1][] = [
+    { kind: 'sketch', profile: 'rectangle', min: [0, 0], max: [60, 40] },
+    { kind: 'extrude', sketch: 0, height: 10 },
+    { kind: 'sketch', profile: 'circle', center: [10, 10], radius: 2 },
+    { kind: 'extrude', sketch: 2, height: 10 },
+    { kind: 'difference', parent: ref(1), tool: ref(3) },
+    { kind: 'sketch', profile: 'rectangle', min: [24, 8], max: [28, 10] },
+    { kind: 'extrude', sketch: 5, height: 10 },
+    { kind: 'difference', parent: ref(4), tool: ref(6) },
+    { kind: 'sketch', profile: 'circle', center: [22, 25], radius: 3 },
+    { kind: 'extrude', sketch: 8, height: 10 },
+    { kind: 'difference', parent: ref(7), tool: ref(9) },
+    { kind: 'sketch', profile: 'rectangle', min: [17, 5], max: [29, 23] },
+  ];
+  const doc = nodes.reduce((d, node) => withNode(d, node), emptyDoc());
+  const prior = evaluateDoc(doc, 1); assert.ok(prior.ok, prior.ok ? '' : prior.error.detail);
+  const ctx: Ctx = { doc, bodies: prior.bodies, selection: { faces: [], edges: [], bodies: [0] }, rectangularCutSource: ref(4) };
+  const cmd = commandById('fill-feature-pattern')!;
+  const values = { region: '11', anchorX: 10, anchorY: 10, spacing: 8, count: 2, spacing2: 8, count2: 2 };
+  const before = structuredClone(doc);
+  assert.equal(cmd.available(ctx).ok, true);
+  const candidate = cmd.build!(ctx, values), feature = candidate.nodes.at(-1)!;
+  assert.ok(feature.kind === 'fill-feature-pattern');
+  assert.deepEqual([feature.parent, feature.source], [ref(10), ref(4)]);
+  assert.deepEqual(candidate.nodes.slice(0, -1), before.nodes);
+  const result = evaluateDoc(candidate, 1); assert.ok(result.ok, result.ok ? '' : result.error.detail);
+  assert.equal(evaluateDoc(cmd.build!(ctx, { ...values, spacing2: 12 }), 1).ok, false);
+  const slot = candidate.nodes.length - 1;
+  const edited = { ...candidate, nodes: candidate.nodes.map((node, index) => index === slot ? { ...feature, spacing2: 11 } : node) };
+  const opened = await readStudioFile(encodeStudioFile(edited)); assert.ok('doc' in opened);
+  assert.deepEqual(opened.doc, edited);
+  const [exact] = partBreps(opened.doc);
+  const strict = checkBrep(exact.brep, { strict: true });
+  assert.ok(strict.valid, strict.issues.join('\n'));
+  assert.equal(strict.topology[0].genus, 5);
+  close(part('mixed native', opened.doc).mass({ density: 1 }).volume, 23920 - 210 * Math.PI);
+  assert.deepEqual(doc, before);
+});

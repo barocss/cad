@@ -13,8 +13,8 @@ export type PriorCircularCut = {
 type Circle = { center: readonly [number, number]; radius: number; tag: string };
 type Rectangle = NonNullable<ReturnType<typeof priorCutRectangle>>;
 type Pattern = 'linear' | 'rectangular' | 'fill' | 'path';
-/** Only the signed axis line and the explicit XY grid share the mixed through-cut certificate. */
-export const allowsLaterCircularCut = (pattern: Pattern) => pattern === 'linear' || pattern === 'rectangular';
+/** Signed Linear, Rectangular and captured Fill share the mixed through-cut certificate; Path does not. */
+export const allowsLaterCircularCut = (pattern: Pattern) => pattern === 'linear' || pattern === 'rectangular' || pattern === 'fill';
 const requirement = (pattern: Pattern) => `${pattern} feature pattern source needs one original circular through cut followed by original ${allowsLaterCircularCut(pattern) ? 'rectangular or circular' : 'rectangular'} through cuts on upright rectangular stock and ${pattern === 'linear' ? 'one XY line' : pattern === 'fill' ? 'selected XY placements' : pattern === 'path' ? 'an open XY path of exact straight spans, one polynomial quadratic or one canonical quarter arc' : 'an XY grid'}`;
 
 function profile(part: Part) {

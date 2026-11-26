@@ -147,7 +147,7 @@ test('omitted source repeats the current rectangle while unsupported original fa
   refused(doc => { doc.features[2].holes = [[{ kind: 'arc', center: [10, 10], start: [11, 10], direction: 'ccw' }]]; doc.features[2].sideTags.holes = [['island']]; });
   refused(doc => {
     Object.assign(doc.features.at(-1), { kind: 'fill-feature-pattern', region: { points: [[0, 0], [60, 0], [60, 40], [0, 40]] }, anchor: [10, 10] });
-    Object.assign(doc.features[5], { profile: 'circle', center: [26, 9], radius: 1, sideTags: { outer: ['laterRound'] } });
-  });
+    Object.assign(doc.features[5], { profile: 'circle', center: [18, 7.5], radius: 1, sideTags: { outer: ['laterRound'] } });
+  }, ['GEOMETRY']);
   refused(doc => { Object.assign(doc.features.at(-1), { kind: 'curve-feature-pattern', path: { degree: 1, knots: [0, 0, 1, 1], controlPoints: [[0, 0, 0], [8, 0, 1]], weights: [1, 1] } }); });
 });

@@ -23,7 +23,7 @@ import { createRequire } from 'node:module';
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { mkdir, readFile, writeFile, readdir } from 'node:fs/promises';
-import { join, resolve, relative } from 'node:path';
+import { join, resolve, relative, sep } from 'node:path';
 import { createServer } from 'vite';
 
 /** sha256 hex digest of a string or buffer. */
@@ -31,7 +31,7 @@ export const sha256 = value => createHash('sha256').update(value).digest('hex');
 
 /** Hash every file (repo-relative, de-duplicated, sorted) and write source-<label>.json into output; returns { relativeFile: sha256 }. */
 export async function capsule(repo, output, label, files) {
-  const unique = [...new Set(files.map(file => relative(repo, resolve(repo, file))))].sort();
+  const unique = [...new Set(files.map(file => relative(repo, resolve(repo, file)).split(sep).join('/')))].sort();
   assert.ok(unique.length <= 4096, 'capsule size');
   const hashes = {};
   for (const file of unique) hashes[file] = sha256(await readFile(resolve(repo, file)));
@@ -158,7 +158,7 @@ export async function createFlow(options) {
     const page = f.page = await f.context.newPage();
     page.on('pageerror', e => report.errors.push(e.stack ?? String(e))); page.on('console', m => { if (m.type() === 'error') report.consoleErrors.push(m.text()); });
     page.on('download', d => report.downloads.push({ phase: f.phase, suggestedFilename: d.suggestedFilename() })); page.on('dialog', d => d.accept());
-    await page.goto(f.server.resolvedUrls.local[0]); await page.waitForSelector(`.viewport[data-renderer="${backend}"]`, { timeout: 30000 }); await f.ready();
+    await page.goto(f.server.resolvedUrls.local[0], { timeout: options.navigationTimeoutMs ?? 30000 }); await page.waitForSelector(`.viewport[data-renderer="${backend}"]`, { timeout: 30000 }); await f.ready();
   };
   /** Open a model file through the file input and wait for `nodeCount` nodes. */
   f.openFile = async (file, nodeCount) => { await f.page.setInputFiles('input[aria-label="Model file"]', file); await f.page.waitForFunction(n => window.__studioDoc?.nodes?.length === n, nodeCount, { timeout: 60000 }); await f.ready(); };

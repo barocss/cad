@@ -4,6 +4,8 @@ import { clickModelCommand } from './model-rail-helper.mjs';
 import { choosePriorCutSource, equivalent } from './prior-cut-pattern-browser-fixture.mjs';
 
 const baseline = process.argv.includes('--baseline');
+const mixed = process.argv.includes('--mixed');
+const extra = { center: [22, 25], radius: 3 };
 const pins = ['apps/cad-studio/test/prior-circular-fill-cut-pattern-browser.mjs', 'apps/cad-studio/test/prior-cut-pattern-browser-fixture.mjs',
   'apps/cad-studio/src/app/cutPatternSource.ts', 'packages/barocss-cad-model/src/engine/doc.ts',
   'packages/barocss-cad/src/features/fill-cut-pattern.ts', 'packages/barocss-cad/src/part/part-model.ts',
@@ -11,9 +13,9 @@ const pins = ['apps/cad-studio/test/prior-circular-fill-cut-pattern-browser.mjs'
   'packages/barocss-cad/src/part/part-prior-rectangular-cut.ts'];
 const f = await createFlow({
   name: 'prior-circular-fill-cut-pattern', output: process.argv[2], envFrozen: 'D1909_SOURCE_FROZEN',
-  qualification: 'Repeat only the first original circular through-Subtract across one later rectangular through-Subtract.',
-  limits: ['One original rectangular upright stock, two original full-height cuts and selected XY copies under a captured mask.'],
-  initialFiles: pins, requiredFrozen: pins,
+  qualification: 'Repeat only the first original circular through-Subtract across the captured cells, retaining later rectangular and optional circular through cuts.',
+  limits: ['One original rectangular upright stock, original full-height cuts and selected XY copies under a captured mask. Mixed mode adds a later R3 bore.'],
+  initialFiles: pins, requiredFrozen: pins, navigationTimeoutMs: 120000,
   inspectorSource: `
 import { readFileSync } from 'node:fs';
 import { brepMassProperties, checkBrep, curveDomain, evaluateCurve, faceGeometry } from '@barocss/cad';
@@ -45,7 +47,7 @@ console.log(JSON.stringify({ check: checkBrep(brep, { strict: true }), mass: bre
 });
 const ref = node => ({ node, side: 'solid' });
 const stock = {
-  format: 'barocss-cad-model', schema: 3, units: 'mm', parameters: {}, nextId: 9,
+  format: 'barocss-cad-model', schema: 3, units: 'mm', parameters: {}, nextId: mixed ? 12 : 9,
   nodes: [
     { kind: 'sketch', profile: 'rectangle', min: [0, 0], max: [60, 40], id: 'n0' },
     { kind: 'extrude', sketch: 0, height: 10, id: 'n1' },
@@ -55,9 +57,14 @@ const stock = {
     { kind: 'sketch', profile: 'rectangle', min: [24, 8], max: [28, 10], id: 'n5' },
     { kind: 'extrude', sketch: 5, height: 10, id: 'n6' },
     { kind: 'difference', parent: ref(4), tool: ref(6), id: 'n7' },
-    { kind: 'sketch', profile: 'rectangle', min: [17, 5], max: [29, 23], id: 'n8' },
+    ...(mixed ? [
+      { kind: 'sketch', profile: 'circle', center: extra.center, radius: extra.radius, id: 'n8' },
+      { kind: 'extrude', sketch: 8, height: 10, id: 'n9' },
+      { kind: 'difference', parent: ref(7), tool: ref(9), id: 'n10' },
+    ] : []),
+    { kind: 'sketch', profile: 'rectangle', min: [17, 5], max: [29, 23], id: mixed ? 'n11' : 'n8' },
   ],
-  outputs: { b7: ref(7) },
+  outputs: mixed ? { b10: ref(10) } : { b7: ref(7) },
 };
 const button = (name, scope = f.page) => scope.getByRole('button', { name, exact: true });
 const field = (panel, name) => panel.getByLabel(name, { exact: true });
@@ -69,25 +76,28 @@ async function inspect(label, doc, centers, grid = false) {
   assert.ok(check.valid, check.issues.join('\n'));
   assert.equal(check.topology.length, 1);
   assert.equal(check.topology[0].shells, 1);
-  assert.equal(check.topology[0].genus, centers.length + 1);
+  const all = centers.map(([x, y]) => [x, y, 2]);
+  if (mixed) all.push([...extra.center, extra.radius]);
+  assert.equal(check.topology[0].genus, all.length + 1);
   assert.equal(caps.length, 2);
-  assert.equal(cylinders.length, 2 * centers.length);
-  for (const [x, y] of centers) {
+  assert.equal(cylinders.length, 2 * all.length);
+  for (const [x, y, r] of all) {
     const walls = cylinders.filter(wall => Math.hypot(wall.c[0] - x, wall.c[1] - y) < 1e-8);
     assert.equal(walls.length, 2);
-    if (grid) {
+    if (grid && r === 2) {
       const i = x === centers[0][0] ? 0 : 1, j = y === centers[0][1] ? 0 : 1;
       if (i || j) for (const wall of walls) assert.ok(wall.name.includes(`@${i},${j}`));
     }
     for (const wall of walls) {
-      equivalent(wall.r, 2);
+      equivalent(wall.r, r);
+      if (r === 3) assert.ok(!wall.name.includes('@'));
       equivalent(Math.abs(wall.a[2]), 1);
       assert.equal(wall.out, -1);
     }
   }
   for (const cap of caps) {
     assert.equal(cap.outer, 1);
-    assert.equal(cap.openings.length, centers.length + 1);
+    assert.equal(cap.openings.length, all.length + 1);
     equivalent(cap.z, cap.outward < 0 ? 0 : 10);
     const rectangle = cap.openings.find(opening => opening.degree.length === 4 && opening.degree.every(degree => degree === 1));
     assert.ok(rectangle);
@@ -96,15 +106,16 @@ async function inspect(label, doc, centers, grid = false) {
       equivalent(Math.max(...rectangle.points.map(point => point[axis])), hi);
     }
     const circles = cap.openings.filter(opening => opening !== rectangle);
-    for (const [x, y] of centers) {
-      const rings = circles.filter(ring => ring.points.every(point => Math.abs(Math.hypot(point[0] - x, point[1] - y) - 2) < 1e-8));
+    for (const [x, y, r] of all) {
+      const rings = circles.filter(ring => ring.points.every(point => Math.abs(Math.hypot(point[0] - x, point[1] - y) - r) < 1e-8));
       assert.equal(rings.length, 1);
       assert.deepEqual(rings[0].degree, [2, 2]);
     }
     for (const point of cap.openings.flatMap(opening => opening.points)) equivalent(point[2], cap.z);
   }
-  const removed = 40 * Math.PI, volume = 23920 - centers.length * removed;
-  const moment = [717920, 479280].map((value, axis) => value - removed * centers.reduce((sum, center) => sum + center[axis], 0));
+  const removed = r => 10 * Math.PI * r * r;
+  const volume = 23920 - all.reduce((sum, [, , r]) => sum + removed(r), 0);
+  const moment = [717920, 479280].map((value, axis) => value - all.reduce((sum, center) => sum + removed(center[2]) * center[axis], 0));
   equivalent(mass.volume, volume);
   for (let axis = 0; axis < 2; axis++) equivalent(mass.centroid[axis], moment[axis] / volume);
   equivalent(mass.centroid[2], 5);
@@ -128,7 +139,7 @@ async function openFill(entry) {
   await choosePriorCutSource(f, entry);
   await clickModelCommand(f.page, 'Pattern', 'Fill cut pattern');
   await panel().getByText('Subtract 1 (n4)', { exact: true }).waitFor();
-  await field(panel(), 'Region snapshot').selectOption('8');
+  await field(panel(), 'Region snapshot').selectOption(mixed ? '11' : '8');
   for (const [label, value] of [['Reference X', 10], ['Reference Y', 10], ['X spacing', 8], ['Columns', 2], ['Y spacing', 8], ['Rows', 2]]) {
     await field(panel(), label).fill(String(value));
   }
@@ -152,6 +163,15 @@ await f.run(async () => {
     return;
   }
   await status('preview');
+  if (mixed) {
+    f.phase = 'refuse only the captured row that touches the later round cavity';
+    for (const pitch of ['12', '12.5']) {
+      await field(panel(), 'Y spacing').fill(pitch);
+      await refused(stock, history, '01-circular-conflict-' + pitch);
+    }
+    await field(panel(), 'Y spacing').fill('8');
+    await status('preview');
+  }
   f.phase = 'refuse a selected cell that hits the later rectangular cavity';
   await field(panel(), 'X spacing').fill('16');
   await refused(stock, history, '01-mask-overlap-refused');
@@ -162,11 +182,11 @@ await f.run(async () => {
   const applied = (await f.snapshot('02-circular-fill-applied')).doc, pattern = applied.nodes.at(-1);
   assert.deepEqual(applied.nodes.slice(0, -1), stock.nodes);
   assert.deepEqual([pattern.kind, pattern.parent, pattern.source, pattern.anchor, pattern.spacing, pattern.count,
-    pattern.spacing2, pattern.count2], ['fill-feature-pattern', ref(7), ref(4), [10, 10], 8, 2, 8, 2]);
+    pattern.spacing2, pattern.count2], ['fill-feature-pattern', ref(mixed ? 10 : 7), ref(4), [10, 10], 8, 2, 8, 2]);
   assert.deepEqual(pattern.region, { points: [[17, 5], [29, 5], [29, 23], [17, 23]] });
   const accepted = await inspect('fill-native', applied, [[10, 10], [18, 10], [18, 18]], true);
   assert.deepEqual(accepted.filter(wall => original.some(old => old.name === wall.name)), original);
-  await f.openFeatureEditor(9, 'Fill source spacing');
+  await f.openFeatureEditor(mixed ? 12 : 9, 'Fill source spacing');
   await f.editor().getByText('Subtract 1 (n4)', { exact: true }).waitFor();
   await field(f.editor(), 'Y spacing').fill('11');
   const edited = (await f.applyEditor(applied, '03-y-spacing-edited')).doc;
