@@ -128,3 +128,9 @@ test('canvas diameter edits preserve original text and update all bound geometry
   assert.equal(previewRecipeDiameter(base,base.holes[2].id,10).ok,false);
   assert.equal(previewRecipeDiameter(base,base.holes[1].id,40).ok,false);
 });
+
+test('same physical numeric value leaves source spelling and snapshot intact', () => {
+  const base = ok(compileCasualRecipe(source.replace('guideDia = 6', 'guideDia = 6.00')));
+  assert.equal(ok(previewRecipeDiameter(base,base.holes[1].id,6)),base);
+  assert.match(base.source,/guideDia = 6\.00/);
+});

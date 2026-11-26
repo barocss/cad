@@ -13,7 +13,7 @@ const output = new RegExp('^output +(' + id + ')$');
 type Hole = { name: string; id: string; x: number; y: number; diameter: number; diameterParam?: string };
 type Value = { value: number; native: Dim };
 type Declaration = { start: number; end: number; uses: Set<string> };
-export type RecipeModel = { source: string; scene: CasualSolidScene; doc: StudioDoc; holes: Hole[]; resolvedDiameters: string[]; declarations: ReadonlyMap<string, Declaration> };
+export type RecipeModel = { source: string; scene: CasualSolidScene; doc: StudioDoc; plateName: string; holes: Hole[]; resolvedDiameters: string[]; declarations: ReadonlyMap<string, Declaration> };
 type Result = { ok: true; value: RecipeModel } | { ok: false; line: number; reason: string };
 
 // Exact base-64 encoding of up to eight identifier characters; independent of statement order.
@@ -90,7 +90,7 @@ export function compileCasualRecipe(source: string): Result {
     outputs: { ['b' + lastNode.id!.slice(1)]: { node:nodes.length-1, side:'solid' } } };
   try {
     const solid = evaluateCasualSolid(doc, 'n1', holes);
-    return solid.ok ? { ok:true, value:{ source, scene:solid.value, doc, holes, resolvedDiameters, declarations } } : bad(last, solid.reason);
+    return solid.ok ? { ok:true, value:{ source, scene:solid.value, doc, plateName:base.name, holes, resolvedDiameters, declarations } } : bad(last, solid.reason);
   } catch {
     return bad(last, '닫힌 형상을 계산하지 못했어요. 구멍 위치와 판 치수를 확인하세요.');
   }
@@ -102,5 +102,6 @@ export function previewRecipeDiameter(base: RecipeModel, holeId: string, diamete
   const declaration = hole?.diameterParam ? base.declarations.get(hole.diameterParam) : undefined;
   if (!declaration || !hole) return { ok:false, line:1, reason:'이 구멍의 지름은 코드 줄에서 수정하세요.' };
   if (!positive(diameter)) return { ok:false, line:1, reason:'지름은 0.01~10000 mm로 입력하세요.' };
+  if (diameter === hole.diameter) return { ok:true, value:base };
   return compileCasualRecipe(base.source.slice(0, declaration.start) + String(diameter) + base.source.slice(declaration.end));
 }

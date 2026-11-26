@@ -63,12 +63,20 @@ export function mountRecipe(root: HTMLElement, hooks: Hooks, loaded?: { model: R
   const file = loaded?.filename ?? 'plate.cadrecipe';
   const past: (RecipeModel | undefined)[] = [], next: (RecipeModel | undefined)[] = [];
   input.value = saved;
-  const hasDraft = () => input.value !== (committed?.source ?? '');
+  let rawDiameter: string | undefined, diameterImpact: string | undefined;
+  const textareaValue = (source = '') => source.replace(/\r\n?/g,'\n');
+  const hasCodeDraft = () => input.value !== textareaValue(committed?.source);
+  const hasDraft = () => rawDiameter !== undefined || hasCodeDraft();
   const notice = (message: string) => { status.textContent = message; };
   function render() {
     const showing = preview ?? committed;
     if (!showing?.holes.some(h => h.id === selected)) selected = null;
-    if (showing) viewport(svg, showing.scene, selected, top, preview ? committed?.scene : undefined);
+    const uses = diameterImpact ? preview?.declarations.get(diameterImpact)?.uses : undefined;
+    const impact = uses && preview ? {
+      holes: new Set(preview.holes.filter(h => uses.has(h.name)).map(h => h.id)),
+      plate: uses.has(preview.plateName),
+    } : undefined;
+    if (showing) viewport(svg, showing.scene, selected, top, preview ? committed?.scene : undefined, impact);
     else svg.replaceChildren();
     query<HTMLElement>('recipe-empty').hidden = Boolean(showing);
     const picked = showing?.holes.find(h => h.id === selected);
@@ -89,15 +97,17 @@ export function mountRecipe(root: HTMLElement, hooks: Hooks, loaded?: { model: R
     const binding = picked?.diameterParam;
     dimensions.hidden = !binding;
     if (binding && picked) {
-      diameter.value = String(picked.diameter);
-      diameter.disabled = button('size').disabled = hasDraft();
+      const value = rawDiameter ?? String(picked.diameter);
+      if (diameter.value !== value) diameter.value = value;
+      diameter.disabled = button('size').disabled = hasCodeDraft();
       const consumers = showing?.declarations.get(binding)?.uses;
       query('recipe-binding').textContent = '코드의 ' + binding + ' 수정 · 연결된 피처: ' +
-        [...(consumers ?? [])].join(', ') + (hasDraft() ? ' · 현재 초안을 먼저 적용하거나 취소하세요.' : '');
+        [...(consumers ?? [])].join(', ') + (hasCodeDraft() ? ' · 현재 초안을 먼저 적용하거나 취소하세요.' : '');
     }
     query('recipe-state').textContent = preview ? '미리보기 · 관통 구멍 ' + preview.holes.length + '개'
       : committed ? '마지막 적용 모델 · 관통 구멍 ' + committed.holes.length + '개' : '빈 프로젝트';
-    button('run').disabled = !hasDraft();
+    input.readOnly = rawDiameter !== undefined;
+    button('run').disabled = !hasCodeDraft() || rawDiameter !== undefined;
     button('insert').disabled = input.value.length > 0;
     button('apply').disabled = !preview;
     button('cancel').disabled = !hasDraft();
@@ -108,23 +118,23 @@ export function mountRecipe(root: HTMLElement, hooks: Hooks, loaded?: { model: R
     button('view').textContent = top ? '입체로 보기' : '위에서 보기';
   }
   function revised() {
-    hooks.touch(); preview = undefined; error.textContent = ''; dimensionError.textContent = ''; notice(''); render();
+    hooks.touch(); preview = undefined; diameterImpact = undefined; error.textContent = ''; dimensionError.textContent = ''; notice(''); render();
   }
   input.oninput = revised;
   button('insert').onclick = () => { if (!input.value) { input.value = sample; revised(); input.focus(); } };
   button('run').onclick = () => {
-    if (!hasDraft()) return;
+    if (!hasCodeDraft() || rawDiameter !== undefined) return;
     const result = compileCasualRecipe(input.value);
     if (result.ok) { error.textContent = ''; preview = result.value; notice('형상을 확인한 뒤 적용하세요.'); }
     else { preview = undefined; error.textContent = result.line + '행: ' + result.reason; notice('적용된 모델은 그대로예요.'); }
     render();
   };
   function load(value: RecipeModel | undefined) {
-    committed = value; input.value = committed?.source ?? ''; revised();
+    rawDiameter = undefined; committed = value; input.value = committed?.source ?? ''; revised();
   }
   button('cancel').onclick = () => load(committed);
   button('apply').onclick = () => {
-    if (!preview || preview.source !== input.value) return;
+    if (!preview || textareaValue(preview.source) !== input.value) return;
     past.push(committed); if (past.length > 16) past.shift(); next.length = 0;
     load(preview); notice('레시피를 적용했어요.');
   };
@@ -135,15 +145,29 @@ export function mountRecipe(root: HTMLElement, hooks: Hooks, loaded?: { model: R
   button('undo').onclick = () => history(past, next);
   button('redo').onclick = () => history(next, past);
   button('view').onclick = () => { top = !top; render(); };
-  function choose(id: string | null) { selected = id; dimensionError.textContent = ''; render(); }
+  function choose(id: string | null) {
+    if (rawDiameter !== undefined && id !== selected) {
+      notice('입력한 지름을 미리 보거나 초안을 취소한 뒤 다른 구멍을 고르세요.');
+      return;
+    }
+    selected = id; dimensionError.textContent = ''; render();
+  }
+  diameter.oninput = () => {
+    const picked = committed?.holes.find(h => h.id === selected);
+    if (!picked || hasCodeDraft()) return;
+    rawDiameter = diameter.value === String(picked.diameter) ? undefined : diameter.value;
+    hooks.touch(); dimensionError.textContent = ''; render();
+  };
   svg.addEventListener('click', event => choose((event.target as SVGElement).closest<SVGElement>('[data-hole]')?.dataset.hole ?? null));
   dimensions.onsubmit = event => {
     event.preventDefault();
-    if (!committed || !selected || hasDraft()) return;
+    if (!committed || !selected || hasCodeDraft()) return;
     const result = previewRecipeDiameter(committed, selected, diameter.valueAsNumber);
     if (!result.ok) { dimensionError.textContent = result.reason; return; }
-    if (result.value.source === committed.source) { dimensionError.textContent = '변경 없음'; return; }
-    hooks.touch(); dimensionError.textContent = ''; error.textContent = '';
+    rawDiameter = undefined; hooks.touch();
+    if (result.value === committed) { render(); dimensionError.textContent = '변경 없음'; return; }
+    diameterImpact = committed.holes.find(h => h.id === selected)?.diameterParam;
+    dimensionError.textContent = ''; error.textContent = '';
     input.value = result.value.source; preview = result.value;
     notice('연결된 곳을 확인한 뒤 적용하세요.'); render();
   };
@@ -162,7 +186,7 @@ export function mountRecipe(root: HTMLElement, hooks: Hooks, loaded?: { model: R
     if (!committed) return;
     try {
       hooks.download(new Blob([new Uint8Array(encodeStudioFile(committed.doc))], { type:'application/octet-stream' }), file.replace(/\.cadrecipe$/i, '') + '.bcad');
-      notice((hasDraft() ? '미적용 코드는 제외했어요. ' : '') + (committed.resolvedDiameters.length
+      notice((hasDraft() ? '미적용 입력은 제외했어요. ' : '') + (committed.resolvedDiameters.length
         ? '지름 연결은 현재 값으로 내보냈어요. 원본 연결을 보존하려면 레시피를 저장하세요.'
         : 'CAD 파일 다운로드를 시작했어요. 원문은 레시피 저장으로 보관하세요.'));
     } catch { notice('CAD 파일을 만들지 못했어요. 레시피는 그대로예요.'); }

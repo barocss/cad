@@ -254,6 +254,26 @@ output fixture
   await rb('redo').click();
   assert.match(await rb('selection').textContent(),/near · Ø9 mm/);
   await recipe.screenshot({ path:join(out,'casual-parameter-chrome.png') });
+  const coupled = authored.replace('guideDia = 6','guideDia = 6.00').replace('thickness=7','thickness=guideDia').replace('diameter=8','diameter=guideDia');
+  await editor.fill(coupled);
+  await rb('run').click(); await rb('apply').click();
+  await rb('size').click();
+  assert.match(await rb('dimension-error').textContent(),/변경 없음/);
+  assert.equal(await editor.inputValue(),coupled);
+  assert.equal(await rb('apply').isDisabled(),true);
+  await rb('diameter').fill('8');
+  await rb('view').click();
+  assert.equal(await rb('diameter').inputValue(),'8');
+  await rb('home').click();
+  await recipe.getByRole('dialog').waitFor();
+  assert.match(await recipe.locator('#switch-detail').textContent(),/적용하지 않은/);
+  await recipe.locator('#keep').click();
+  assert.equal(await rb('diameter').inputValue(),'8');
+  await rb('size').click();
+  assert.equal(new Set(await rb('scene').locator('[data-previous-rim]').evaluateAll(es => es.map(e => e.dataset.previousRim))).size,2);
+  assert.equal(await rb('scene').locator('[data-previous-plate]').count(),1);
+  await rb('apply').click();
+  assert.equal(await editor.inputValue(),coupled.replace('6.00','8'));
   let recipeHandoff = 'NOT_RUN';
   if (studioServer) {
     const studio = await (await browser.newContext({ acceptDownloads:true })).newPage();

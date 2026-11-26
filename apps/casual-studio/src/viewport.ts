@@ -6,7 +6,7 @@ const el = <K extends keyof SVGElementTagNameMap>(tag: K, attrs: Record<string, 
   return node;
 };
 
-export function viewport(svg: SVGSVGElement, scene: CasualSolidScene, selected: string | null, top: boolean, before?: CasualSolidScene) {
+export function viewport(svg: SVGSVGElement, scene: CasualSolidScene, selected: string | null, top: boolean, before?: CasualSolidScene, impact?: { holes: ReadonlySet<string>; plate: boolean }) {
   const { positions, indices, faces, edges } = scene.mesh;
   const project = (x: number, y: number, z: number): [number, number, number] => top
     ? [x, -y, z] : [.91 * x + .42 * y, .19 * x - .42 * y - .88 * z, .37 * x - .80 * y + .49 * z];
@@ -14,6 +14,15 @@ export function viewport(svg: SVGSVGElement, scene: CasualSolidScene, selected: 
   for (let i = 0; i < positions.length; i += 3) projected.push(project(positions[i], positions[i + 1], positions[i + 2]));
   let left = Infinity, right = -Infinity, bottom = -Infinity, topY = Infinity;
   for (const [x, y] of projected) { left = Math.min(left, x); right = Math.max(right, x); topY = Math.min(topY, y); bottom = Math.max(bottom, y); }
+  if (before && impact?.plate) {
+    const old = before.mesh.positions;
+    for (let i = 0; i < old.length; i += 3) {
+      const [x,y] = project(old[i],old[i+1],old[i+2]);
+      left = Math.min(left,x); right = Math.max(right,x);
+      topY = Math.min(topY,y); bottom = Math.max(bottom,y);
+    }
+  }
+  const highlighted = (owner: string) => impact ? impact.holes.has(owner) : selected === owner;
   const scale = Math.min(590 / (right - left), 310 / (bottom - topY));
   const xy = ([x, y]: number[]) => [(x - (left + right) / 2) * scale + 375, (y - (topY + bottom) / 2) * scale + 220];
   const points = (list: number[][]) => list.map(p => xy(p).map(v => v.toFixed(2)).join(',')).join(' ');
@@ -26,7 +35,7 @@ export function viewport(svg: SVGSVGElement, scene: CasualSolidScene, selected: 
       const signedArea = (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
       if (signedArea >= -1e-9) continue; // front-facing triangles, y-down
       const nz = Math.abs(scene.mesh.normals[ia * 3 + 2]);
-      const fill = owner ? selected === owner ? '#315da2' : '#526b82' : nz > .95 ? '#cfdeec' : '#849bb1';
+      const fill = owner ? highlighted(owner) ? '#315da2' : '#526b82' : nz > .95 ? '#cfdeec' : '#849bb1';
       const node = el('polygon', { points: points([a, b, c]), fill, stroke: fill, 'stroke-width': .5 });
       if (owner) { node.dataset.hole = owner; node.classList.add('pickable'); }
       tris.push({ depth: (a[2] + b[2] + c[2]) / 3, node });
@@ -39,8 +48,21 @@ export function viewport(svg: SVGSVGElement, scene: CasualSolidScene, selected: 
     for (let i = 0; i < edge.points.length; i += 3) list.push(project(edge.points[i], edge.points[i+1], edge.points[i+2]));
     return points(list);
   };
-  if (before && selected) for (const edge of before.mesh.edges) if (before.rimOwners.get(edge.edgeId) === selected) {
-    contents.push(el('polyline', { points: outline(edge), fill: 'none', stroke: '#eaf1ff', 'stroke-width': 2, 'stroke-dasharray': '4 3', 'pointer-events': 'none' }));
+  if (before) for (const edge of before.mesh.edges) {
+    const owner = before.rimOwners.get(edge.edgeId);
+    if (owner && highlighted(owner)) contents.push(el('polyline', { points: outline(edge), fill: 'none',
+      stroke: '#eaf1ff', 'stroke-width': 2, 'stroke-dasharray': '4 3', 'pointer-events': 'none', 'data-previous-rim': owner }));
+  }
+  if (before && impact?.plate) {
+    const old = before.mesh.positions;
+    const min = [Infinity,Infinity,Infinity], max = [-Infinity,-Infinity,-Infinity];
+    for (let i = 0; i < old.length; i++) {
+      const axis = i % 3; min[axis] = Math.min(min[axis],old[i]); max[axis] = Math.max(max[axis],old[i]);
+    }
+    const [x,y] = min, [X,Y,z] = max;
+    const oldTop = [[x,y],[X,y],[X,Y],[x,Y],[x,y]].map(([a,b]) => project(a,b,z));
+    contents.push(el('polyline',{ points:points(oldTop), fill:'none', stroke:'#285dd3', 'stroke-width':2,
+      'stroke-dasharray':'5 4', 'pointer-events':'none', 'data-previous-plate':'true' }));
   }
   for (const edge of edges) {
     const owner = scene.rimOwners.get(edge.edgeId);
