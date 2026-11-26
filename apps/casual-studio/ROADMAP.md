@@ -20,6 +20,8 @@
 2. **편집 완료.** 범위 안의 보드 폭 하나만 미리 보고 적용한다. 잘못된 치수나 취소는 Undo를 만들지 않는다. 미리보기에서 전후 값을 보여주고, 각 행을 포커스하면 관련 부품 또는 고정점이 강조된다.
 3. **파일 검증 완료.** 데스크탑 Chrome에서 미리보기·적용·취소·Undo/Redo·레시피 재열기를 확인했다. 64 mm를 적용해 내보낸 CAD에서 72 mm 본체를 열고, 56 mm로 바꿔 64 mm 본체를 다시 계산했다. 시작 화면의 두 번째 예제로 제공한다.
 
+**후속 백로그: 실제 PCB 연동.** 현재 예제의 단순화한 보드와 별개로, [CAD Studio의 PCB–케이스 연동 트랙](../cad-studio/handover/roadmap-tracks/03-platform-and-extensions.md#pcbenclosure-mechanical-fit-backlog)에서 KiCad 보드 가져오기 → 장착·뚜껑·포트 검사 → 개정 반영을 검증한다. [#756](https://github.com/barocss/cad/issues/756)이 통과한 뒤 Casual에서 실제 보드를 확인하는 예제를 검토한다. 지금 구현 순서는 바꾸지 않는다.
+
 ## 셀프센터링 바이스 구현 순서
 
 1. **형상 완료.** [검증용 모델](examples/centering-vise/README.md)에서 40→60 mm일 때 실제 왼쪽 조 −10 mm, 오른쪽 조 +10 mm, 중심축과 베이스 고정홀 유지 및 CAD Studio 파일 재열기를 확인했다.
