@@ -348,6 +348,32 @@ export interface DrawingRevisionMarker {
   hidden?: true;
 }
 
+/** A numbered drawing inspection item with stable identity separated from display number and target dimension (D2023, #225). */
+export interface DrawingInspectionItem {
+  id: string;
+  number: number;
+  dim: string;
+  targetKey: string;
+  /** Optional presentation-only sheet-mm offset from the target dimension text anchor. */
+  offset?: XY;
+}
+
+export interface DrawingInspectionSnapshotEntry {
+  readonly id: string;
+  readonly number: number;
+  readonly dim: string;
+  readonly targetKey: string;
+  readonly nominalMm: number | null;
+  readonly text: string | null;
+  readonly toleranceSummary: string | null;
+}
+
+/** Explicit recorded inspection baseline snapshot for one revision label (never auto-overwritten). */
+export interface DrawingInspectionBaseline {
+  readonly revision: string;
+  readonly entries: readonly DrawingInspectionSnapshotEntry[];
+}
+
 /** The revision after `rev`: A → B … Z → AA, 01 → 02, 1 → 2; none → A. */
 export function nextRevision(rev: string | undefined): string {
   if (!rev || rev === '-') return 'A';
@@ -449,6 +475,10 @@ export interface DrawingSettings {
   holeTables?: DrawingHoleTable[];
   /** Paper-space revision change markers linked to revision history records and stable sheet IDs. */
   revisionMarkers?: DrawingRevisionMarker[];
+  /** Numbered drawing inspection items linked to linear/diameter dimensions. */
+  inspectionItems?: DrawingInspectionItem[];
+  /** Explicit per-revision recorded inspection baseline snapshots for cross-revision change tracking. */
+  inspectionBaselines?: DrawingInspectionBaseline[];
   /** Never stored: set on the settings of one sheet of a drawing with sheets (sheets.ts `forSheet`), which then lay out and build as a drawing of that sheet alone. */
   sheetContext?: SheetContext;
 }
@@ -610,6 +640,8 @@ export function readDrawing(raw: unknown): DrawingSettings {
     ...(readOrdinateGroups(r.ordinateGroups).length ? { ordinateGroups: readOrdinateGroups(r.ordinateGroups) } : {}),
     ...(readHoleTables(r.holeTables).length ? { holeTables: readHoleTables(r.holeTables) } : {}),
     ...(readRevisionMarkers(r.revisionMarkers).length ? { revisionMarkers: readRevisionMarkers(r.revisionMarkers) } : {}),
+    ...(readInspectionItems(r.inspectionItems).length ? { inspectionItems: readInspectionItems(r.inspectionItems) } : {}),
+    ...(readInspectionBaselines(r.inspectionBaselines).length ? { inspectionBaselines: readInspectionBaselines(r.inspectionBaselines) } : {}),
     ...(Array.isArray(r.notes) && r.notes.some(isNote) ? { notes: r.notes.filter(isNote).map(n => ({ id: n.id, text: n.text, at: [n.at[0], n.at[1]] as XY, ...(n.leader && VIEW_IDS.includes(n.leader.view) && isXY(n.leader.at) ? { leader: { view: n.leader.view, at: [n.leader.at[0], n.leader.at[1]] as XY, ...(Object.hasOwn(n.leader, 'target') ? { target: readNoteTarget(n.leader.target) } : {}) } } : {}), ...(typeof n.sheet === 'string' && /^[A-Za-z0-9_-]{1,16}$/.test(n.sheet) ? { sheet: n.sheet } : {}) })) } : {}),
     ...(readTables(r.tables).length ? { tables: readTables(r.tables) } : {}),
   };
@@ -867,6 +899,58 @@ function readRevisionMarkers(raw: unknown): DrawingRevisionMarker[] {
       at: [x.at[0], x.at[1]],
       ...(x.hidden === true ? { hidden: true as const } : {}),
     });
+  }
+  return out;
+}
+function readInspectionItems(raw: unknown): DrawingInspectionItem[] {
+  if (!Array.isArray(raw)) return [];
+  const seenIds = new Set<string>(), seenNums = new Set<number>(), out: DrawingInspectionItem[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) continue;
+    const x = item as Partial<DrawingInspectionItem>;
+    if (typeof x.id !== 'string' || !x.id.trim() || seenIds.has(x.id)) continue;
+    if (typeof x.number !== 'number' || !Number.isInteger(x.number) || x.number < 1 || x.number > 9999 || seenNums.has(x.number)) continue;
+    if (typeof x.dim !== 'string' || !x.dim.trim()) continue;
+    if (typeof x.targetKey !== 'string' || !x.targetKey.trim()) continue;
+    seenIds.add(x.id);
+    seenNums.add(x.number);
+    out.push({
+      id: x.id,
+      number: x.number,
+      dim: x.dim,
+      targetKey: x.targetKey,
+      ...(x.offset !== undefined && isXY(x.offset) ? { offset: [x.offset[0], x.offset[1]] as XY } : {}),
+    });
+  }
+  return out;
+}
+function readInspectionBaselines(raw: unknown): DrawingInspectionBaseline[] {
+  if (!Array.isArray(raw)) return [];
+  const seenRev = new Set<string>(), out: DrawingInspectionBaseline[] = [];
+  for (const b of raw) {
+    if (!b || typeof b !== 'object' || Array.isArray(b)) continue;
+    const x = b as Partial<DrawingInspectionBaseline>;
+    if (typeof x.revision !== 'string' || !x.revision.trim() || x.revision.length > 6 || /[\r\n\t]/.test(x.revision) || seenRev.has(x.revision)) continue;
+    if (!Array.isArray(x.entries)) continue;
+    const entries: DrawingInspectionSnapshotEntry[] = [];
+    for (const rawE of x.entries) {
+      if (!rawE || typeof rawE !== 'object' || Array.isArray(rawE)) continue;
+      const e = rawE as Partial<DrawingInspectionSnapshotEntry>;
+      if (typeof e.id !== 'string' || !e.id.trim()) continue;
+      if (typeof e.number !== 'number' || !Number.isInteger(e.number) || e.number < 1 || e.number > 9999) continue;
+      if (typeof e.dim !== 'string' || !e.dim.trim() || typeof e.targetKey !== 'string' || !e.targetKey.trim()) continue;
+      entries.push({
+        id: e.id,
+        number: e.number,
+        dim: e.dim,
+        targetKey: e.targetKey,
+        nominalMm: typeof e.nominalMm === 'number' && Number.isFinite(e.nominalMm) ? e.nominalMm : null,
+        text: typeof e.text === 'string' ? e.text : null,
+        toleranceSummary: typeof e.toleranceSummary === 'string' ? e.toleranceSummary : null,
+      });
+    }
+    seenRev.add(x.revision);
+    out.push({ revision: x.revision, entries });
   }
   return out;
 }

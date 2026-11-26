@@ -50,7 +50,7 @@ import { SECTION_VIEWS, VIEW_IDS, baseViewOf, detailLetter, isDetailRef, isViewI
 
 export const DRAWING_ISSUES_VERSION = 'cad-studio-drawing-issues-v1';
 
-export type DrawingIssueCode = 'SHEET_SET' | 'UNIT_PRECISION' | 'FORESHORTEN_INVALID' | 'LINEAR_ARROWS_CROWDED' | 'CROSSING_BREAK_CONFLICT' | 'CROSSING_BREAK_INACTIVE' | 'EXTENSION_JOG_INVALID' | 'DIM_ON_HIDDEN' | 'ARC_CENTERLINE_LOST' | 'CENTER_MARK_GROUP_LOST' | 'BISECTOR_CENTERLINE_LOST' | 'VIRTUAL_SHARP_LOST' | 'CENTER_OF_MASS_LOST' | 'ORDINATE_ORIGIN_LOST' | 'ORDINATE_MEMBER_LOST' | 'HOLE_TABLE_ORIGIN_LOST' | 'HOLE_TABLE_MEMBER_LOST' | 'REVISION_MARKER_ORPHAN' | 'REVISION_MARKER_OFF_SHEET' | 'DATUM_LOST' | 'FRAME_LOST' | 'FRAME_VIEW_MISSING' | 'DATUM_UNDEFINED' | 'FRAME_RULE' | 'DATUM_TWICE' | 'VIEW_NEEDED' | 'DIMENSION_LOST' | 'TEXT_OVERLAP' | 'TEXT_OVER_LINES' | 'OFF_SHEET' | 'VIEWS_DONT_FIT' | 'DUPLICATE' | 'REMATCHED' | 'HOLE_SIZE_MISSING' | 'HOLE_NOT_LOCATED' | 'STEP_NOT_LOCATED' | 'OVERALL_MISSING' | 'TABLE_SOURCE' | 'WELD_NOT_SHOWN' | 'BALLOON_NOT_CLEAR' | 'BALLOON_NO_EDGE' | 'FIT_ROW_MISSING' | 'FOLLOWED_CHANGED' | 'DETAIL_PARENT_MISSING' | 'DETAIL_EMPTY' | 'DETAIL_NO_ROOM' | 'BREAK_NO_VIEW' | 'SECTION_NO_ROOM' | 'SECTION_NO_VIEW' | 'DATUM_TARGET_OUTSIDE' | DatumTargetFailureCode | NoteTargetFailureCode;
+export type DrawingIssueCode = 'SHEET_SET' | 'UNIT_PRECISION' | 'FORESHORTEN_INVALID' | 'LINEAR_ARROWS_CROWDED' | 'CROSSING_BREAK_CONFLICT' | 'CROSSING_BREAK_INACTIVE' | 'EXTENSION_JOG_INVALID' | 'DIM_ON_HIDDEN' | 'ARC_CENTERLINE_LOST' | 'CENTER_MARK_GROUP_LOST' | 'BISECTOR_CENTERLINE_LOST' | 'VIRTUAL_SHARP_LOST' | 'CENTER_OF_MASS_LOST' | 'ORDINATE_ORIGIN_LOST' | 'ORDINATE_MEMBER_LOST' | 'HOLE_TABLE_ORIGIN_LOST' | 'HOLE_TABLE_MEMBER_LOST' | 'REVISION_MARKER_ORPHAN' | 'REVISION_MARKER_OFF_SHEET' | 'INSPECTION_ITEM_LOST' | 'INSPECTION_ITEM_STALE' | 'INSPECTION_NUMBER_REUSED' | 'DATUM_LOST' | 'FRAME_LOST' | 'FRAME_VIEW_MISSING' | 'DATUM_UNDEFINED' | 'FRAME_RULE' | 'DATUM_TWICE' | 'VIEW_NEEDED' | 'DIMENSION_LOST' | 'TEXT_OVERLAP' | 'TEXT_OVER_LINES' | 'OFF_SHEET' | 'VIEWS_DONT_FIT' | 'DUPLICATE' | 'REMATCHED' | 'HOLE_SIZE_MISSING' | 'HOLE_NOT_LOCATED' | 'STEP_NOT_LOCATED' | 'OVERALL_MISSING' | 'TABLE_SOURCE' | 'WELD_NOT_SHOWN' | 'BALLOON_NOT_CLEAR' | 'BALLOON_NO_EDGE' | 'FIT_ROW_MISSING' | 'FOLLOWED_CHANGED' | 'DETAIL_PARENT_MISSING' | 'DETAIL_EMPTY' | 'DETAIL_NO_ROOM' | 'BREAK_NO_VIEW' | 'SECTION_NO_ROOM' | 'SECTION_NO_VIEW' | 'DATUM_TARGET_OUTSIDE' | DatumTargetFailureCode | NoteTargetFailureCode;
 export type DrawingFix =
   | { kind: 'remove'; dim: string }
   | { kind: 'remove-arc-centerline'; id: string }
@@ -63,6 +63,7 @@ export type DrawingFix =
   | { kind: 'remove-hole-table'; id: string }
   | { kind: 'remove-hole-table-member'; tableId: string; memberId: string }
   | { kind: 'remove-revision-marker'; id: string }
+  | { kind: 'remove-inspection-item'; id: string }
   | { kind: 'move'; dim: string; place: XY }
   | { kind: 'move-note'; note: string; at: XY }
   /** A table's top-left corner to `at` (O49). */
@@ -615,6 +616,22 @@ export function drawingIssues(ctx: IssueContext): DrawingIssue[] {
       });
     }
   }
+  for (const ii of sheet.inspectionItems ?? []) {
+    if (ii.status === 'lost' || ii.status === 'stale') {
+      out.push({
+        code: ii.status === 'lost' ? 'INSPECTION_ITEM_LOST' : 'INSPECTION_ITEM_STALE',
+        severity: 'error',
+        message: `Inspection item #${ii.item.number} (${ii.item.id} → ${ii.item.dim}): ${ii.reason}`,
+        fix: { kind: 'remove-inspection-item', id: ii.item.id },
+      });
+    } else if (ii.reusedFromRevision) {
+      out.push({
+        code: 'INSPECTION_NUMBER_REUSED',
+        severity: 'warning',
+        message: `Inspection item #${ii.item.number} (${ii.item.id}) reuses a number previously assigned in revision ${ii.reusedFromRevision} to a different requirement.`,
+      });
+    }
+  }
   for (const r of sheet.dimensions) {
     if (!r.ok) { out.push({ code: 'DIMENSION_LOST', severity: 'error', message: `A ${r.dim.kind} dimension in ${viewName(r.dim.view)} is lost: ${r.reason}${drawingFixControlLoss(settings, { kind: 'remove', dim: r.dim.id }).length ? ' Fix all retains this dimension and its authored controls for review.' : ''}`, dims: [r.dim.id], view: r.dim.view, fix: { kind: 'remove', dim: r.dim.id } }); continue; }
     // (O146: a linear dimension measuring to a hidden line — a keyseat under its hub, say — is said; a section through it
@@ -680,7 +697,7 @@ export function drawingIssues(ctx: IssueContext): DrawingIssue[] {
     out.push({ code: 'BREAK_NO_VIEW', severity: 'warning', message: `The break along ${b.axis.toUpperCase()} from ${fmtMM(b.from)} to ${fmtMM(b.to)} shortens no view: it misses the part, or no view shown has its axis across or up.`, fix: { kind: 'remove-break', index } });
   });
   for (const tb of sheet.tables ?? []) if (tb.error) out.push({ code: 'TABLE_SOURCE', severity: 'error', message: `Table ${tb.id} has no rows from its source: ${tb.error}.`, tables: [tb.id] });
-  const placed = sheet.groups.filter(g => g.standaloneFrame || g.role === 'dimension' || (g.role === 'note' && !g.revisionMarker) || g.role === 'label' || g.role === 'datum' || g.role === 'table' || g.role === 'weld' || g.role === 'balloon').map(g => g.role === 'dimension' ? placedOf({ ...g, marks: [...g.marks, ...sheet.groups.filter(c => c.role === 'control' && settings.frames?.some(f => f.id === c.id && f.dim === g.id)).flatMap(c => c.marks)] }) : placedOf(g));
+  const placed = sheet.groups.filter(g => g.standaloneFrame || g.role === 'dimension' || (g.role === 'note' && !g.revisionMarker && !g.inspectionItem) || g.role === 'label' || g.role === 'datum' || g.role === 'table' || g.role === 'weld' || g.role === 'balloon').map(g => g.role === 'dimension' ? placedOf({ ...g, marks: [...g.marks, ...sheet.groups.filter(c => c.role === 'control' && settings.frames?.some(f => f.id === c.id && f.dim === g.id)).flatMap(c => c.marks)] }) : placedOf(g));
   const viewLines: [XY, XY][] = [];
   for (const g of sheet.groups) if (g.role === 'view' || g.role === 'section' || g.role === 'detail') for (const m of g.marks) segments(m, viewLines);
   const viewGrid = new SegmentGrid(viewLines);
@@ -1178,6 +1195,7 @@ export function applyFix(ctx: IssueContext, fix: DrawingFix): DrawingSettings {
       return next.length ? { ...rest, holeTables: next } : rest;
     }
     case 'remove-revision-marker': { const kept = (s.revisionMarkers ?? []).filter(rm => rm.id !== fix.id), rest = { ...s }; delete rest.revisionMarkers; return kept.length ? { ...rest, revisionMarkers: kept } : rest; }
+    case 'remove-inspection-item': { const kept = (s.inspectionItems ?? []).filter(ii => ii.id !== fix.id), rest = { ...s }; delete rest.inspectionItems; return kept.length ? { ...rest, inspectionItems: kept } : rest; }
     case 'remove-detail': { const kept = (s.details ?? []).filter(d => d.id !== fix.detail), rest: DrawingSettings = { ...s, dimensions: s.dimensions.filter(d => d.view !== `detail:${fix.detail}`) }; delete rest.details; return kept.length ? { ...rest, details: kept } : rest; }
     case 'remove-break': { const kept = (s.breaks ?? []).filter((_, k) => k !== fix.index), rest = { ...s }; delete rest.breaks; return kept.length ? { ...rest, breaks: kept } : rest; }
     case 'remove-datum': return { ...s, datums: (s.datums ?? []).filter(d => d.id !== fix.datum) };

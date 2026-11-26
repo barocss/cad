@@ -65,6 +65,7 @@ import { newCenterOfMassId, resolveCenterOfMassPoint, type DrawingBodyMassSource
 import { newOrdinateGroupId, newOrdinateMemberId, ordinateAxisFor } from '@barocss/cad-model/drawing/ordinate';
 import { HOLE_TABLE_MAX_MEMBERS, holeTagOk, newHoleTableId, newHoleTableMemberId, nextHoleTableTag, qualifyHoleTableRim } from '@barocss/cad-model/drawing/holeTable';
 import { borderZoneFor, newRevisionMarkerId, sheetIdForIndex } from '@barocss/cad-model/drawing/revisionMarkers';
+import { captureInspectionBaseline, diffInspectionBaseline, dimensionTargetKey, inspectionItemEligible, inspectionListCsv, inspectionNumberReuseRevision, newInspectionItemId, nextInspectionNumber, resolveAllInspectionItems, validateInspectionNumber } from '@barocss/cad-model/drawing/inspectionItems';
 import { DETAIL_PARENTS, type DetailParent, type DrawingDetail } from '@barocss/cad-model/drawing/detail';
 import { DetailsList } from './drawing/DetailsList';
 import { clipProjectionOutside } from '@barocss/cad-model/drawing/breaks';
@@ -73,13 +74,13 @@ import { drawingOccurrencePath } from '@barocss/cad-model/drawing/dimensionRefer
 import { diameterRims } from './drawing/diameterRims';
 import { Button } from '@/components/ui/button';
 import { BreaksList } from './drawing/BreaksList';
-import { VIEW_IDS, annotatedDetailLetters, detailLetter, isDetailRef, isSectionRef, isViewId, nextSectionId, reservedDetailLetters, sameSection, sectionLetter, sectionsOf, withSections, readLinearArrowPlacement, type CentreRef, type CircleSeparationMode, type CylinderFaceRef, type DrawingArcCenterline, type DrawingBisectorCenterline, type DrawingCenterMarkGroup, type DrawingCenterOfMass, type DrawingHoleTable, type DrawingHoleTableMember, type DrawingOrdinateGroup, type DrawingRevisionMarker, type DrawingVirtualSharp, type LinearArrowSide, type DimView, type DimPoint, type DrawingNote, type EdgeRef, type DrawingDimension, type DrawingSettings, type DrawingViews, type SectionViewId, type Vec3, type ViewId, type XY } from '@barocss/cad-model/drawing/types';
+import { VIEW_IDS, annotatedDetailLetters, detailLetter, isDetailRef, isSectionRef, isViewId, nextSectionId, reservedDetailLetters, sameSection, sectionLetter, sectionsOf, withSections, readLinearArrowPlacement, type CentreRef, type CircleSeparationMode, type CylinderFaceRef, type DrawingArcCenterline, type DrawingBisectorCenterline, type DrawingCenterMarkGroup, type DrawingCenterOfMass, type DrawingHoleTable, type DrawingHoleTableMember, type DrawingInspectionItem, type DrawingOrdinateGroup, type DrawingRevisionMarker, type DrawingVirtualSharp, type LinearArrowSide, type DimView, type DimPoint, type DrawingNote, type EdgeRef, type DrawingDimension, type DrawingSettings, type DrawingViews, type SectionViewId, type Vec3, type ViewId, type XY } from '@barocss/cad-model/drawing/types';
 import { downloadBytes } from './files';
 import { ShortcutHelp } from './ShortcutHelp';
 import { today, useDrawingSheet } from './useDrawingSheet';
 import { fastenerSizesOf } from '@barocss/cad-model/engine/fastenerSizeRows';
 import { Icon, Kbd } from './atoms';
-import { SIDE_NAMES } from './drawing/sheetShared';
+import { FIELD, SIDE_NAMES, TICK, withTable } from './drawing/sheetShared';
 import { SheetSettings } from './drawing/SheetSettings';
 import { IssuesList } from './drawing/IssuesList';
 import { TolerancingList } from './drawing/TolerancingList';
@@ -306,7 +307,7 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
     if (!loss.length) { run(); return; }
     setControlDeletion({ settings: wholeSettings, model, sheet: current, loss, run });
   };
-  const [drag, setDrag] = useState<DimensionGroupDrag | { id: string; place: XY } | { ordinate: string; lineCoord: number } | { target: string; original: DrawingDatumTarget; place: XY } | { note: string; at: XY; grab: XY } | { revisionMarker: string; at: XY; grab: XY } | { detail: string; original: DrawingDetail; owner: object; initialAt: XY; initialPointer: XY; at: XY; grab: XY } | { removed: string; at: XY; grab: XY } | { pan: XY; box: [number, number, number, number] } | null>(null);
+  const [drag, setDrag] = useState<DimensionGroupDrag | { id: string; place: XY } | { ordinate: string; lineCoord: number } | { target: string; original: DrawingDatumTarget; place: XY } | { note: string; at: XY; grab: XY } | { revisionMarker: string; at: XY; grab: XY } | { inspectionItem: string; offset: XY; startPointer: XY; initialOffset: XY } | { detail: string; original: DrawingDetail; owner: object; initialAt: XY; initialPointer: XY; at: XY; grab: XY } | { removed: string; at: XY; grab: XY } | { pan: XY; box: [number, number, number, number] } | null>(null);
   const cancelDimensionGroupDrag = () => setDrag(current => current && 'dimensionGroup' in current ? null : current);
   const clearDimensionGroup = () => { setDimensionGroup(null); cancelDimensionGroupDrag(); };
   /** The selected note's text while it is typed, and the selected dimension's tolerance fields. */
@@ -458,8 +459,20 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
     if (!referencePreview) return;
     setSelected(referenceDimensionId === null ? null : { kind: 'dimension', id: referenceDimensionId }); setSelectedTarget(null); setSelectedFrame(null); setTargetChoices([]); setReselectTarget(null); setTool('select'); setPending(null);
   }, [referencePreview, referenceDimensionId]);
-  const sheetMarkup = useMemo(() => sheet ? sheetGroupsSvg(sheet, selected, selectedTarget, selectedFrame, selectedDimensionIds) : '',
-    [sheet, selected, selectedTarget, selectedFrame, selectedDimensionIds]);
+  const allInspectionResolved = useMemo(
+    () => (views ? resolveAllInspectionItems(views, wholeSettings, sheet?.dimensions ?? [], presetFor(wholeSettings)) : []),
+    [views, wholeSettings, sheet?.dimensions],
+  );
+  const highlightedDimensionIds = useMemo(() => {
+    const base = selectedDimensionIds ? [...selectedDimensionIds] : [];
+    if (selected?.kind === 'inspection-item') {
+      const linked = wholeSettings.inspectionItems?.find(item => item.id === selected.id)?.dim;
+      if (linked && !base.includes(linked)) base.push(linked);
+    }
+    return base;
+  }, [selectedDimensionIds, selected, wholeSettings.inspectionItems]);
+  const sheetMarkup = useMemo(() => sheet ? sheetGroupsSvg(sheet, selected, selectedTarget, selectedFrame, highlightedDimensionIds) : '',
+    [sheet, selected, selectedTarget, selectedFrame, highlightedDimensionIds]);
   const [W, H] = layout?.size ?? [297, 210];
   const [box, setBox] = useState<[number, number, number, number] | null>(null);
   useEffect(() => { setBox(null); }, [settings.sheet, current]);
@@ -1674,6 +1687,7 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
       const ordId = (e.target as Element).closest?.('g.ordinate-group[data-ordinate-group]')?.getAttribute('data-ordinate-group') ?? null;
       const htId = (e.target as Element).closest?.('g.hole-table[data-hole-table]')?.getAttribute('data-hole-table') ?? null;
       const rmId = (e.target as Element).closest?.('g.revision-marker[data-revision-marker]')?.getAttribute('data-revision-marker') ?? null;
+      const iiId = (e.target as Element).closest?.('g.inspection-item[data-inspection-item]')?.getAttribute('data-inspection-item') ?? null;
       const d = target?.matches('g.dimension') ? settings.dimensions.find(x => x.id === id) : undefined;
       const n = target?.matches('g.note') ? settings.notes?.find(x => x.id === id) : undefined;
       const ac = !d && !n && acId ? settings.arcCenterlines?.find(x => x.id === acId) : undefined;
@@ -1684,6 +1698,7 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
       const ord = !d && !n && !ac && !cmg && !cl && !vs && !com && ordId ? settings.ordinateGroups?.find(x => x.id === ordId) : undefined;
       const ht = !d && !n && !ac && !cmg && !cl && !vs && !com && !ord && htId ? settings.holeTables?.find(x => x.id === htId) : undefined;
       const rm = !d && !n && !ac && !cmg && !cl && !vs && !com && !ord && !ht && rmId ? settings.revisionMarkers?.find(x => x.id === rmId) : undefined;
+      const ii = !d && !n && !ac && !cmg && !cl && !vs && !com && !ord && !ht && !rm && iiId ? settings.inspectionItems?.find(x => x.id === iiId) : undefined;
       if (d && e.shiftKey) {
         if (activeDimensionGroup) {
           const pair = activeDimensionGroup.pair;
@@ -1712,13 +1727,14 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
         return;
       }
       clearDimensionGroup();
-      setSelected(d ? { kind: 'dimension', id: d.id } : n ? { kind: 'note', id: n.id } : ac ? { kind: 'arc-centerline', id: ac.id } : cmg ? { kind: 'center-mark-group', id: cmg.id } : cl ? { kind: 'bisector-centerline', id: cl.id } : vs ? { kind: 'virtual-sharp', id: vs.id } : com ? { kind: 'center-of-mass', id: com.id } : ord ? { kind: 'ordinate-group', id: ord.id } : ht ? { kind: 'hole-table', id: ht.id } : rm ? { kind: 'revision-marker', id: rm.id } : null);
+      setSelected(d ? { kind: 'dimension', id: d.id } : n ? { kind: 'note', id: n.id } : ac ? { kind: 'arc-centerline', id: ac.id } : cmg ? { kind: 'center-mark-group', id: cmg.id } : cl ? { kind: 'bisector-centerline', id: cl.id } : vs ? { kind: 'virtual-sharp', id: vs.id } : com ? { kind: 'center-of-mass', id: com.id } : ord ? { kind: 'ordinate-group', id: ord.id } : ht ? { kind: 'hole-table', id: ht.id } : rm ? { kind: 'revision-marker', id: rm.id } : ii ? { kind: 'inspection-item', id: ii.id } : null);
       setNoteDraft(null); setTolDraft({});
       if (n) setNoteDraft(n.text);
       if (d) setDrag({ id: d.id, place: d.place });
       else if (ord) setDrag({ ordinate: ord.id, lineCoord: ord.lineCoord });
       else if (n && qd) setDrag({ note: n.id, at: n.at, grab: [qd[0] - n.at[0], qd[1] - n.at[1]] });
       else if (rm && qd) setDrag({ revisionMarker: rm.id, at: rm.at, grab: [qd[0] - rm.at[0], qd[1] - rm.at[1]] });
+      else if (ii && qd) { const init: XY = ii.offset ?? [0, -6]; setDrag({ inspectionItem: ii.id, offset: init, startPointer: qd, initialOffset: init }); }
       else if (ac || cmg || cl || vs || com || ht) return;
       else setDrag({ pan: [e.clientX, e.clientY], box: [...viewBox] as [number, number, number, number] });
       (e.currentTarget as Element).setPointerCapture(e.pointerId);
@@ -1750,6 +1766,17 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
     }
     if (drag && 'pan' in drag) {
       const k = mmPerPx(); setBox([drag.box[0] - (e.clientX - drag.pan[0]) * k, drag.box[1] - (e.clientY - drag.pan[1]) * k, drag.box[2], drag.box[3]]); return;
+    }
+    if (drag && 'inspectionItem' in drag) {
+      const q = sheetPoint(e.clientX, e.clientY);
+      if (q) setDrag({
+        ...drag,
+        offset: [
+          Math.round((drag.initialOffset[0] + q[0] - drag.startPointer[0]) * 10) / 10,
+          Math.round((drag.initialOffset[1] + q[1] - drag.startPointer[1]) * 10) / 10,
+        ],
+      });
+      return;
     }
     if (drag && ('note' in drag || 'revisionMarker' in drag || 'detail' in drag || 'removed' in drag)) {
       const q = sheetPoint(e.clientX, e.clientY);
@@ -1827,6 +1854,14 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
       if (drag.owner === live.owner && live.ready && currentModel.current === live.model) {
         const next = commitDetailPaperDrag(settings, drag.original, drag.initialAt, drag.at);
         if (next !== settings) onChange(next);
+      }
+      setDrag(null); return;
+    }
+    if (drag && 'inspectionItem' in drag) {
+      const ii = settings.inspectionItems?.find(x => x.id === drag.inspectionItem);
+      const prev = ii?.offset ?? [0, -6];
+      if (ii && (prev[0] !== drag.offset[0] || prev[1] !== drag.offset[1])) {
+        onChange({ ...settings, inspectionItems: settings.inspectionItems!.map(x => x.id === ii.id ? { ...x, offset: drag.offset } : x) });
       }
       setDrag(null); return;
     }
@@ -2052,8 +2087,83 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
     });
   };
 
+  const addInspectionItemForDim = (dim: DrawingDimension) => {
+    if (busy || !sourceCurrent) return;
+    const eligible = inspectionItemEligible(dim);
+    if (!eligible.ok) { setMessage(eligible.reason); return; }
+    const existing = wholeSettings.inspectionItems ?? [];
+    if (existing.some(item => item.dim === dim.id)) {
+      setMessage(`Dimension ${dim.id} already has an inspection item.`); return;
+    }
+    const item: DrawingInspectionItem = {
+      id: newInspectionItemId(existing, wholeSettings.inspectionBaselines ?? []),
+      number: nextInspectionNumber(existing, wholeSettings.inspectionBaselines ?? []),
+      dim: dim.id,
+      targetKey: dimensionTargetKey(dim),
+    };
+    const nextWhole: DrawingSettings = {
+      ...wholeSettings,
+      inspectionItems: [...existing, item],
+    };
+    const withInspectionTable = nextWhole.tables?.some(t => t.from === 'inspection')
+      ? nextWhole
+      : withTable(nextWhole, 'inspection', true);
+    if (!commitWhole(withInspectionTable)) return;
+    setSelected({ kind: 'inspection-item', id: item.id });
+    setSelectedTarget(null);
+    setSelectedFrame(null);
+    setMessage(null);
+  };
+
+  const renumberInspectionItem = (id: string, raw: string) => {
+    if (busy || !sourceCurrent) return;
+    const parsed = Number(raw.trim());
+    const existing = wholeSettings.inspectionItems ?? [];
+    const currentItem = existing.find(item => item.id === id);
+    if (!currentItem) return;
+    const check = validateInspectionNumber(parsed, existing, id);
+    if (!check.ok) { setMessage(check.reason); return; }
+    if (check.number === currentItem.number) return;
+    const updated: DrawingInspectionItem = { ...currentItem, number: check.number };
+    const nextItems = existing.map(item => item.id === id ? updated : item);
+    if (!commitWhole({ ...wholeSettings, inspectionItems: nextItems })) return;
+    const reusedFrom = inspectionNumberReuseRevision(updated, wholeSettings.inspectionBaselines ?? []);
+    setMessage(reusedFrom ? `Warning: number ${check.number} was previously used in revision ${reusedFrom} for a different requirement.` : null);
+  };
+
+  const recordInspectionBaseline = () => {
+    if (busy || !sourceCurrent) return;
+    const rev = wholeSettings.revision?.trim();
+    if (!rev) { setMessage('Set a Revision label before recording an inspection baseline.'); return; }
+    if (!allInspectionResolved.length) { setMessage('Add at least one inspection item before recording a baseline.'); return; }
+    const existing = wholeSettings.inspectionBaselines ?? [];
+    if (existing.some(b => b.revision === rev)) {
+      setMessage(`Inspection baseline for revision ${rev} is already recorded and cannot be overwritten.`); return;
+    }
+    const snapshot = captureInspectionBaseline(rev, allInspectionResolved);
+    if (commitWhole({ ...wholeSettings, inspectionBaselines: [...existing, snapshot] })) setMessage(null);
+  };
+
+  const exportInspectionCsv = () => {
+    if (!exportableSheet || !views || busy || !sourceCurrent) return;
+    const result = inspectionListCsv(title, wholeSettings, allInspectionResolved, presetFor(wholeSettings));
+    if (!result.ok) {
+      onToast({ title: 'Inspection CSV not written', hint: result.error, detail: '' });
+      return;
+    }
+    downloadBytes(new TextEncoder().encode(result.csv), `${fileName}-inspection.csv`, 'text/csv;charset=utf-8');
+  };
+
   const removeAnnotation = ({ kind, id }: SheetAnnotationSelection) => {
-    if (kind === 'revision-marker') {
+    if (kind === 'inspection-item') {
+      const existing = wholeSettings.inspectionItems ?? [];
+      if (existing.filter(ii => ii.id === id).length !== 1) return;
+      const kept = existing.filter(ii => ii.id !== id);
+      const next = { ...wholeSettings };
+      if (kept.length) next.inspectionItems = kept;
+      else delete next.inspectionItems;
+      if (!commitWhole(next)) return;
+    } else if (kind === 'revision-marker') {
       if (settings.revisionMarkers?.filter(rm => rm.id === id).length !== 1) return;
       const kept = settings.revisionMarkers.filter(rm => rm.id !== id);
       const next = { ...settings };
@@ -2201,6 +2311,7 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
       ...(sheet.ordinateGroups ? { ordinateGroups: sheet.ordinateGroups.map(r => r.ok ? { id: r.group.id, view: r.group.view, axis: r.group.axis, lineCoord: r.group.lineCoord, origin: r.origin, originText: r.originText, members: r.members.map(m => m.ok ? { id: m.member.id, value: m.value, text: m.text, jog: m.jog } : { id: m.member.id, lost: m.reason }) } : { id: r.group.id, view: r.group.view, axis: r.group.axis, lost: r.reason }) } : {}),
       ...(sheet.holeTables ? { holeTables: sheet.holeTables.map(r => r.ok ? { id: r.table.id, view: r.table.view, origin: r.origin2, hasLostMember: r.hasLostMember, members: r.members.map(m => m.ok ? { id: m.member.id, tag: m.member.tag, owner: m.member.owner, x: m.x, y: m.y, diameter: m.diameter, xText: m.xText, yText: m.yText, sizeText: m.sizeText } : { id: m.member.id, tag: m.member.tag, owner: m.member.owner, lost: m.reason }) } : { id: r.table.id, view: r.table.view, lost: r.reason }) } : {}),
       ...(sheet.revisionMarkers ? { revisionMarkers: sheet.revisionMarkers.map(r => r.ok ? { id: r.marker.id, revision: r.marker.revision, sheet: r.marker.sheet, sheetNumber: r.sheetNumber, zone: r.zone, at: r.marker.at, hidden: !!r.marker.hidden } : { id: r.marker.id, revision: r.marker.revision, sheet: r.marker.sheet, code: r.code, lost: r.reason }) } : {}),
+      ...(allInspectionResolved.length ? { inspectionItems: allInspectionResolved.map(r => ({ id: r.item.id, number: r.item.number, dim: r.item.dim, status: r.status, sheetNumber: r.sheetNumber, view: r.view, nominalMm: r.nominalMm, displayText: r.displayText, tolerance: r.tolerance, reusedFromRevision: r.reusedFromRevision, reason: r.reason })) } : {}),
       suggestions: suggestions.map(x => ({ id: x.id, kind: x.kind, estimate: x.estimate })) };
     // (G24: the drawing's annotations on the model, for the GPU lane's 3D display and the flow.)
     w.__studioAnnotations = () => sheet && layout && views ? modelAnnotations({ views, layout, settings, sheet, ...(weldJoints ? { welds: weldJoints } : {}) }) : null;
@@ -2649,7 +2760,8 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
     if ('detail' in drag) return sheetGroupsSvg(buildSheet(views, layout, { ...settings, details: (settings.details ?? []).map(d => d.id === drag.detail ? { ...d, at: drag.at } : d) }, { svgSectionTextClearance, title, date: today(), callout, threads, tableContent: tableContentOf, welds: weldJoints, bodyFaces, bodyMassSources, doc, ...(bom ? { bom } : {}) }, cuts), selected, selectedTarget);
     if ('removed' in drag) return sheetGroupsSvg(buildSheet(views, layout, withSections(settings, sectionsOf(settings).map(x => x.id === drag.removed && x.removed ? { ...x, removed: { ...x.removed, at: drag.at } } : x)), { svgSectionTextClearance, title, date: today(), callout, threads, tableContent: tableContentOf, welds: weldJoints, bodyFaces, bodyMassSources, doc, ...(bom ? { bom } : {}) }, cuts), selected, selectedTarget);
     if ('note' in drag) return sheetGroupsSvg(buildSheet(views, layout, { ...settings, notes: (settings.notes ?? []).map(n => n.id === drag.note ? { ...n, at: drag.at } : n) }, { svgSectionTextClearance, title, date: today(), callout, threads, tableContent: tableContentOf, welds: weldJoints, bodyFaces, bodyMassSources, doc, ...(bom ? { bom } : {}) }, cuts), selected, selectedTarget);
-    if ('revisionMarker' in drag) return sheetGroupsSvg(buildSheet(views, layout, { ...settings, revisionMarkers: (settings.revisionMarkers ?? []).map(rm => rm.id === drag.revisionMarker ? { ...rm, at: drag.at } : rm) }, { svgSectionTextClearance, title, date: today(), callout, threads, tableContent: tableContentOf, welds: weldJoints, bodyFaces, bodyMassSources, doc, ...(bom ? { bom } : {}) }, cuts), selected, selectedTarget);
+    if ('revisionMarker' in drag) return sheetGroupsSvg(buildSheet(views, layout, { ...settings, revisionMarkers: (settings.revisionMarkers ?? []).map(rm => rm.id === drag.revisionMarker ? { ...rm, at: drag.at } : rm) }, { svgSectionTextClearance, title, date: today(), callout, threads, tableContent: tableContentOf, welds: weldJoints, bodyFaces, bodyMassSources, doc, ...(bom ? { bom } : {}) }, cuts), selected, selectedTarget, selectedFrame, highlightedDimensionIds);
+    if ('inspectionItem' in drag) return sheetGroupsSvg(buildSheet(views, layout, { ...settings, inspectionItems: (settings.inspectionItems ?? []).map(ii => ii.id === drag.inspectionItem ? { ...ii, offset: drag.offset } : ii) }, { svgSectionTextClearance, title, date: today(), callout, threads, tableContent: tableContentOf, welds: weldJoints, bodyFaces, bodyMassSources, doc, ...(bom ? { bom } : {}) }, cuts), selected, selectedTarget, selectedFrame, highlightedDimensionIds);
     const dims = settings.dimensions.map(d => d.id === drag.id ? (d.kind === 'linear' ? { ...d, place: drag.place, orient: orientFor(pointIn(projectionOf(views, sheet ?? undefined, d.view)!, d.a, bodyMassSources), pointIn(projectionOf(views, sheet ?? undefined, d.view)!, d.b, bodyMassSources), drag.place) } : { ...d, place: drag.place }) : d);
     return sheetGroupsSvg(buildSheet(views, layout, { ...settings, dimensions: dims }, { svgSectionTextClearance, title, date: today(), callout, threads, tableContent: tableContentOf, welds: weldJoints, bodyFaces, bodyMassSources, doc, ...(bom ? { bom } : {}) }, cuts), selected, selectedTarget);
   }, [drag, views, layout, sheet, sheetMarkup, settings, title, selected, selectedTarget, weldJoints, bodyMassSources, bom, svgSectionTextClearance,
@@ -3094,6 +3206,52 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
           </div>
         </div>}
 
+        {((wholeSettings.inspectionItems?.length ?? 0) > 0 || (selDim && (selDim.kind === 'linear' || selDim.kind === 'diameter'))) && <div role="group" aria-label="Inspection items">
+          <div className="card-title" style={{ marginTop: 8 }}>INSPECTION ITEMS <span className="muted">{wholeSettings.inspectionItems?.length ?? 0}</span></div>
+          <label className={FIELD}><span>Inspection table</span><input className={TICK} type="checkbox" aria-label="Inspection table" checked={!!wholeSettings.tables?.some(t => t.from === 'inspection')}
+            onChange={e => commitWhole(withTable(wholeSettings, 'inspection', e.target.checked))} /></label>
+          <div className="dw-actions">
+            <Button variant="ghost" size="xs" aria-label="Add inspection item"
+              disabled={!selDim || !inspectionItemEligible(selDim).ok || !!(wholeSettings.inspectionItems?.some(i => i.dim === selDim.id)) || busy}
+              onClick={() => { if (selDim) addInspectionItemForDim(selDim); }}>Add inspection item</Button>
+            <Button variant="ghost" size="xs" aria-label="Record inspection baseline"
+              disabled={!wholeSettings.revision || !allInspectionResolved.length || !!(wholeSettings.inspectionBaselines?.some(b => b.revision === wholeSettings.revision)) || busy}
+              onClick={recordInspectionBaseline}>Record baseline ({wholeSettings.revision || '—'})</Button>
+          </div>
+          <div className="dw-dims">
+            {allInspectionResolved.map(r => <div key={r.item.id} className={'dw-dim' + (selected?.kind === 'inspection-item' && selected.id === r.item.id ? ' sel' : '') + (r.status !== 'ok' ? ' lost' : '')} title={r.reason ?? `${r.item.id} → ${r.item.dim}${r.reusedFromRevision ? ` · reused from rev ${r.reusedFromRevision}` : ''}`}>
+              <input
+                aria-label={`Inspection number ${r.item.id}`}
+                type="number"
+                min={1}
+                max={9999}
+                defaultValue={r.item.number}
+                key={`${r.item.id}:${r.item.number}`}
+                style={{ width: 44, fontSize: 11, padding: '1px 3px' }}
+                onBlur={e => { if (Number(e.currentTarget.value.trim()) !== r.item.number) renumberInspectionItem(r.item.id, e.currentTarget.value); }}
+                onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }}
+              />
+              <button type="button" className="dw-annotation-select" aria-pressed={selected?.kind === 'inspection-item' && selected.id === r.item.id}
+                onClick={() => {
+                  cancel(); setTool('select');
+                  if (r.sheetNumber && r.sheetNumber - 1 !== current) selectSheet(r.sheetNumber - 1);
+                  setSelected({ kind: 'inspection-item', id: r.item.id }); setSelectedTarget(null); setSelectedFrame(null);
+                }}>
+                <b>{r.status === 'ok' ? (r.displayText ?? r.item.dim) : r.status.toUpperCase()}</b>
+                <span>{r.item.id}{r.sheetNumber ? ` · S${r.sheetNumber}` : ''}{r.reusedFromRevision ? ` · reused(${r.reusedFromRevision})` : ''}</span>
+              </button>
+              <Button variant="ghost" size="xs" aria-label={`Remove inspection item ${r.item.id}`} onClick={e => { e.stopPropagation(); removeAnnotation({ kind: 'inspection-item', id: r.item.id }); }}><Icon name="close" small /></Button>
+            </div>)}
+          </div>
+          {(wholeSettings.inspectionBaselines?.length ?? 0) > 0 && (() => {
+            const latest = wholeSettings.inspectionBaselines![wholeSettings.inspectionBaselines!.length - 1];
+            const diff = diffInspectionBaseline(latest, allInspectionResolved);
+            return <div className="empty" role="status" aria-label="Inspection baseline diff">
+              Baseline Rev {latest.revision}: {diff.map(d => `#${d.number} ${d.kind}`).join(' · ')}
+            </div>;
+          })()}
+        </div>}
+
         <DatumsEditor settings={settings} allDatums={wholeSettings.datums ?? []} availableViews={(['front', 'top', 'right'] as const).filter(id => { const placement = placementAt(id); return !!placement && !placement.hidden; })} views={views} scale={layout?.scale ?? 1} onChange={onChange} onRefused={setMessage} />
 
         <DatumTargetsEditor draft={targetDraft} onDraft={next => {
@@ -3143,7 +3301,7 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
           {noteAttach.choices?.points.map((point, i) => <Button key={i} variant="ghost" onClick={() => chooseNoteEndpoint(noteAttach.choices!.view, point)}>{point.edge} · {point.endpoint} · {point.near.join(', ')}</Button>)}
         </div>}
 
-        <ExportActions canExportDimensionCsv={!!dimensionCsvReady} exportDimensionCsv={exportDimensionCsv} sheets={sheetTotal} sheet={exportableSheet} canExportPdf={canExportPdf} layout={layout} views={views} cuts={cuts} settings={settings} dxfVersion={dxfVersion} setDxfVersion={version => { setExportLoss(null); setDxfVersion(version); }} dxfCut={dxfCut} setDxfSection={setDxfSection} exportSvg={exportSvg} exportPdf={exportPdf} exportDxf={exportDxf} exportSectionDxf={exportSectionDxf}
+        <ExportActions canExportDimensionCsv={!!dimensionCsvReady} exportDimensionCsv={exportDimensionCsv} canExportInspectionCsv={!!exportableSheet && allInspectionResolved.length > 0 && !busy && sourceCurrent} exportInspectionCsv={exportInspectionCsv} sheets={sheetTotal} sheet={exportableSheet} canExportPdf={canExportPdf} layout={layout} views={views} cuts={cuts} settings={settings} dxfVersion={dxfVersion} setDxfVersion={version => { setExportLoss(null); setDxfVersion(version); }} dxfCut={dxfCut} setDxfSection={setDxfSection} exportSvg={exportSvg} exportPdf={exportPdf} exportDxf={exportDxf} exportSectionDxf={exportSectionDxf}
           confirmation={exportConfirmation && { format: exportConfirmation.format, messages: exportConfirmation.messages,
             onCancel: () => setExportLoss(null), onConfirm: () => { setExportLoss(null); exportConfirmation.write(); } }} />
       </aside>

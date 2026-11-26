@@ -10,9 +10,10 @@ import { Button } from '@/components/ui/button';
 import { NativeSelect } from '@/components/ui/native-select';
 
 type Sheet = ReturnType<typeof useDrawingSheet>;
-export function ExportActions({ canExportDimensionCsv, exportDimensionCsv, sheets = 1, sheet, canExportPdf, layout, views, cuts, settings, dxfVersion, setDxfVersion, dxfCut, setDxfSection, exportSvg, exportPdf, exportDxf, exportSectionDxf, confirmation }: {
+export function ExportActions({ canExportDimensionCsv, exportDimensionCsv, canExportInspectionCsv, exportInspectionCsv, sheets = 1, sheet, canExportPdf, layout, views, cuts, settings, dxfVersion, setDxfVersion, dxfCut, setDxfSection, exportSvg, exportPdf, exportDxf, exportSectionDxf, confirmation }: {
   /** 11 ④: how many sheets the drawing has (the PDF has them all; the SVG and the DXF are of the sheet shown). */ sheets?: number;
   canExportDimensionCsv: boolean; exportDimensionCsv(): void;
+  canExportInspectionCsv: boolean; exportInspectionCsv(): void;
   sheet: Sheet['sheet']; canExportPdf: boolean; layout: Sheet['layout']; views: Sheet['views']; cuts: Sheet['cuts']; settings: DrawingSettings;
   dxfVersion: DxfVersion; setDxfVersion(v: DxfVersion): void; dxfCut: Sheet['cuts'][number] | undefined; setDxfSection(id: string): void;
   confirmation: { format: string; messages: string[]; onCancel(): void; onConfirm(): void } | null;
@@ -36,6 +37,7 @@ export function ExportActions({ canExportDimensionCsv, exportDimensionCsv, sheet
   const hasOrdinateGroup = sheet?.ordinateGroups?.some(r => r.ok);
   const hasHoleTable = sheet?.holeTables?.some(r => r.ok);
   const hasRevisionMarker = sheet?.revisionMarkers?.some(r => r.ok && !r.marker.hidden);
+  const hasInspectionItem = sheet?.inspectionItems?.some(r => r.status === 'ok');
   const confirmPanel = useRef<HTMLDivElement>(null);
   const pendingFormat = confirmation?.format;
   useEffect(() => {
@@ -46,6 +48,7 @@ export function ExportActions({ canExportDimensionCsv, exportDimensionCsv, sheet
         <div className="dw-actions">
           <Button variant="default" disabled={!sheet} onClick={exportSvg} aria-label="Export SVG"><Icon name="download" small /> SVG</Button>
           <Button variant="ghost" disabled={!canExportDimensionCsv} onClick={exportDimensionCsv} aria-label="Export dimension CSV" title="Current-sheet dimension list only, not an issued inspection register">Dimension CSV</Button>
+          <Button variant="ghost" disabled={!canExportInspectionCsv} onClick={exportInspectionCsv} aria-label="Export inspection CSV" title="Numbered inspection items across all sheets with nominal mm, tolerance, and status (not measured actuals or pass/fail)">Inspection CSV</Button>
           <Button variant="ghost" disabled={!canExportPdf} onClick={exportPdf} aria-label="Export PDF" title={sheets > 1 ? `All ${sheets} sheets, one page each` : undefined}>PDF</Button>
           <Button variant="ghost" disabled={!sheet} onClick={exportDxf} aria-label="Export DXF" title="The sheet as DXF, at true size in mm, layers by line kind">DXF</Button>
           <NativeSelect className={CONTROL} aria-label="DXF version" value={dxfVersion} onChange={e => setDxfVersion(e.target.value as DxfVersion)} title="DXF 2000, or R12 for older programs (curves as polylines)">
@@ -73,6 +76,7 @@ export function ExportActions({ canExportDimensionCsv, exportDimensionCsv, sheet
         {hasOrdinateGroup && <div className="empty" role="note" aria-label="DXF ordinate compatibility">DXF exports ordinate dimension groups as non-associative witness lines, origin symbol, and text on the THIN and TEXT layers. Keep the .bcad in a Studio version with ordinate group support.</div>}
         {hasHoleTable && <div className="empty" role="note" aria-label="DXF hole table compatibility">DXF exports hole tables and tag bubbles as non-associative lines, circles, and text on the VISIBLE, THIN, and TEXT layers. Keep the .bcad in a Studio version with hole table support.</div>}
         {hasRevisionMarker && <div className="empty" role="note" aria-label="DXF revision marker compatibility">DXF exports revision change markers as non-associative triangle polylines and text on the VISIBLE and TEXT layers. Keep the .bcad in a Studio version with revision marker support.</div>}
+        {hasInspectionItem && <div className="empty" role="note" aria-label="DXF inspection item compatibility">DXF exports inspection item badges as non-associative lines, arcs, and text on the VISIBLE and TEXT layers. Keep the .bcad in a Studio version with inspection item support.</div>}
         {confirmation && <div ref={confirmPanel} tabIndex={-1} className="dw-export-confirm" role="group" aria-label="Confirm drawing export">
           <ul>{confirmation.messages.map((message, i) => <li key={i}>{message}</li>)}</ul>
           <div className="dw-actions">

@@ -116,5 +116,31 @@ export function checkSavedAnnotationRefs(raw: unknown): Problem[] {
       }
     }
   }
+  if (Object.hasOwn(raw, 'inspectionItems') && raw.inspectionItems !== undefined) {
+    if (!Array.isArray(raw.inspectionItems)) {
+      return [problem('DRAWING_OPTIONS', 'Drawing inspectionItems must be an array. The original drawing is unchanged.')];
+    }
+    const seenIds = new Set<string>(), seenNums = new Set<number>();
+    for (let i = 0; i < raw.inspectionItems.length; i++) {
+      const item = raw.inspectionItems[i];
+      if (!isRecord(item)) {
+        return [problem('DRAWING_OPTIONS', `Drawing inspectionItems[${i}] must be an object. The original drawing is unchanged.`)];
+      }
+      if (typeof item.id !== 'string' || !item.id.trim() || seenIds.has(item.id)) {
+        return [problem('DRAWING_OPTIONS', `Drawing inspectionItems[${i}] needs a unique non-empty id. The original drawing is unchanged.`)];
+      }
+      seenIds.add(item.id);
+      if (typeof item.number !== 'number' || !Number.isInteger(item.number) || item.number < 1 || item.number > 9999 || seenNums.has(item.number)) {
+        return [problem('DRAWING_OPTIONS', `Drawing inspectionItems[${i}] needs a unique integer number between 1 and 9999. The original drawing is unchanged.`)];
+      }
+      seenNums.add(item.number);
+      if (typeof item.dim !== 'string' || !item.dim.trim() || typeof item.targetKey !== 'string' || !item.targetKey.trim()) {
+        return [problem('DRAWING_OPTIONS', `Drawing inspectionItems[${i}] needs non-empty dim and targetKey references. The original drawing is unchanged.`)];
+      }
+      if (item.offset !== undefined && (!Array.isArray(item.offset) || item.offset.length !== 2 || typeof item.offset[0] !== 'number' || !Number.isFinite(item.offset[0]) || typeof item.offset[1] !== 'number' || !Number.isFinite(item.offset[1]))) {
+        return [problem('DRAWING_OPTIONS', `Drawing inspectionItems[${i}].offset must be finite [x, y] sheet mm coordinates. The original drawing is unchanged.`)];
+      }
+    }
+  }
   return [];
 }

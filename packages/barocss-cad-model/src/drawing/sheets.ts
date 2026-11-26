@@ -10,7 +10,7 @@
 // for what only a drawing set shows (SHEET n OF N, the sheet index, the cross-references). `mergeSheet` writes an edit made
 // on those settings back into the whole drawing's.
 import { problem, type Problem } from '../engine/refusal';
-import { VIEW_IDS, isDetailRef, isSectionRef, isViewId, nextSectionId, reservedDetailLetters, reservedSectionLetters, sectionLetter, sectionsOf, withSections, type DrawingDimension, type DrawingNote, type DrawingRevisionMarker, type DrawingSection, type DrawingSettings, type DrawingTable, type ViewId } from './types';
+import { VIEW_IDS, isDetailRef, isSectionRef, isViewId, nextSectionId, reservedDetailLetters, reservedSectionLetters, sectionLetter, sectionsOf, withSections, type DrawingDimension, type DrawingInspectionItem, type DrawingNote, type DrawingRevisionMarker, type DrawingSection, type DrawingSettings, type DrawingTable, type ViewId } from './types';
 import { FIRST_SHEET_ID, type RevisionMarkerSheetEntry } from './revisionMarkers';
 import type { DrawingDetail } from './detail';
 
@@ -51,6 +51,9 @@ export interface SheetContext {
   sheetEntries?: readonly RevisionMarkerSheetEntry[];
   /** Whole-drawing revision markers (for Sheet 1 revision table summary and cross-sheet ID allocation). */
   allRevisionMarkers?: readonly DrawingRevisionMarker[];
+  /** Whole-drawing dimensions and inspection items (for Sheet 1 INSPECTION LIST table and multi-sheet numbering). */
+  allDimensions?: readonly DrawingDimension[];
+  allInspectionItems?: readonly DrawingInspectionItem[];
 }
 
 export const MAX_SHEETS = 12;
@@ -202,6 +205,11 @@ export function forSheet(s: DrawingSettings, k: number): DrawingSettings {
   const validSheetIds = new Set(sheetEntries.map(e => e.id));
   const markersHere = (s.revisionMarkers ?? []).filter(m => m.sheet === thisSheetId || (k === 0 && !validSheetIds.has(m.sheet)));
   if (markersHere.length) out.revisionMarkers = markersHere; else delete out.revisionMarkers;
+  const inspectionHere = (s.inspectionItems ?? []).filter(item => {
+    const view = dimView.get(item.dim);
+    return view !== undefined ? here(view) : k === 0;
+  });
+  if (inspectionHere.length) out.inspectionItems = inspectionHere; else delete out.inspectionItems;
   const where: Record<string, number> = {}; for (const [ref, j] of at) where[ref] = j + 1;
   out.sheetContext = {
     n: k + 1, of: n, sheets: Array.from({ length: n }, (_, j) => ({ name: sheetName(s, j), size: sheetSize(s, j) })), where, allViews: shown,
@@ -219,6 +227,8 @@ export function forSheet(s: DrawingSettings, k: number): DrawingSettings {
     datumFirst: Object.fromEntries((s.datums ?? []).filter((d, j, all) => all.findIndex(o => o.letter === d.letter) === j).map(d => [d.letter, d.id])),
     sheetEntries,
     allRevisionMarkers: s.revisionMarkers ?? [],
+    allDimensions: s.dimensions,
+    allInspectionItems: s.inspectionItems ?? [],
   };
   return out;
 }
@@ -316,8 +326,18 @@ export function mergeSheet(whole: DrawingSettings, k: number, next: DrawingSetti
     markerHere,
     m => m.id,
   ));
+  const inspectionHere = (item: DrawingInspectionItem) => {
+    const view = dimView.get(item.dim);
+    return view !== undefined ? here(view) : k === 0;
+  };
+  set('inspectionItems', splice<DrawingInspectionItem>(
+    whole.inspectionItems ?? [],
+    next.inspectionItems ?? [],
+    inspectionHere,
+    item => item.id,
+  ));
   // Only the first sheet carries the tables (less the index made for it), the title block's fields and the notes without a leader.
-  if (k === 0) { set('tables', (next.tables ?? []).filter(t => t.id !== SHEET_INDEX)); set('holeTables', next.holeTables); } else { set('tables', whole.tables); set('holeTables', whole.holeTables); set('titleBlock', whole.titleBlock); set('revisions', whole.revisions); }
+  if (k === 0) { set('tables', (next.tables ?? []).filter(t => t.id !== SHEET_INDEX)); set('holeTables', next.holeTables); } else { set('tables', whole.tables); set('holeTables', whole.holeTables); set('titleBlock', whole.titleBlock); set('revisions', whole.revisions); set('inspectionBaselines', whole.inspectionBaselines); }
   return withSections(out, sections);
 }
 
