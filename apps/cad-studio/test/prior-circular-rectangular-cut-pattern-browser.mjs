@@ -4,13 +4,14 @@ import { clickModelCommand } from './model-rail-helper.mjs';
 import { choosePriorCutSource, equivalent } from './prior-cut-pattern-browser-fixture.mjs';
 
 const baseline = process.argv.includes('--baseline');
+const mixed = process.argv.includes('--mixed');
 const pins = ['apps/cad-studio/test/prior-circular-rectangular-cut-pattern-browser.mjs', 'apps/cad-studio/test/prior-cut-pattern-browser-fixture.mjs',
   'apps/cad-studio/src/app/cutPatternSource.ts', 'packages/barocss-cad-model/src/engine/doc.ts',
-  'packages/barocss-cad/src/part/part-model.ts', 'packages/barocss-cad/src/part/part-prior-rectangular-cut.ts'];
+  'packages/barocss-cad/src/part/part-model.ts', 'packages/barocss-cad/src/part/part-prior-circular-cut.ts', 'packages/barocss-cad/src/part/part-prior-rectangular-cut.ts'];
 const f = await createFlow({
   name: 'prior-circular-rectangular-cut-pattern', output: process.argv[2], envFrozen: 'D1908_SOURCE_FROZEN',
-  qualification: 'Repeat only the first original circular through-Subtract across one later rectangular through-Subtract.',
-  limits: ['One original rectangular upright stock, two original full-height cuts and XY Rectangular copies.'],
+  qualification: `Repeat only the first original circular through-Subtract across a later rectangle${mixed ? ' and a later R3 bore' : ''}.`,
+  limits: ['One original rectangular upright stock, strictly interior disjoint original full-height cuts and XY Rectangular copies.'],
   initialFiles: pins, requiredFrozen: pins,
   inspectorSource: `
 import { readFileSync } from 'node:fs';
@@ -43,7 +44,7 @@ console.log(JSON.stringify({ check: checkBrep(brep, { strict: true }), mass: bre
 });
 const ref = node => ({ node, side: 'solid' });
 const stock = {
-  format: 'barocss-cad-model', schema: 3, units: 'mm', parameters: {}, nextId: 8,
+  format: 'barocss-cad-model', schema: 3, units: 'mm', parameters: {}, nextId: mixed ? 11 : 8,
   nodes: [
     { kind: 'sketch', profile: 'rectangle', min: [0, 0], max: [60, 40], id: 'n0' },
     { kind: 'extrude', sketch: 0, height: 10, id: 'n1' },
@@ -53,8 +54,13 @@ const stock = {
     { kind: 'sketch', profile: 'rectangle', min: [24, 8], max: [28, 10], id: 'n5' },
     { kind: 'extrude', sketch: 5, height: 10, id: 'n6' },
     { kind: 'difference', parent: ref(4), tool: ref(6), id: 'n7' },
+    ...(mixed ? [
+      { kind: 'sketch', profile: 'circle', center: [44, 18], radius: 3, id: 'n8' },
+      { kind: 'extrude', sketch: 8, height: 10, id: 'n9' },
+      { kind: 'difference', parent: ref(7), tool: ref(9), id: 'n10' },
+    ] : []),
   ],
-  outputs: { b7: ref(7) },
+  outputs: mixed ? { b10: ref(10) } : { b7: ref(7) },
 };
 const button = (name, scope = f.page) => scope.getByRole('button', { name, exact: true });
 const field = (panel, name) => panel.getByLabel(name, { exact: true });
@@ -66,9 +72,14 @@ async function inspect(label, doc, centers, grid = false) {
   assert.ok(check.valid, check.issues.join('\n'));
   assert.equal(check.topology.length, 1);
   assert.equal(check.topology[0].shells, 1);
-  assert.equal(check.topology[0].genus, centers.length + 1);
+  assert.equal(check.topology[0].genus, centers.length + (mixed ? 2 : 1));
   assert.equal(caps.length, 2);
-  assert.equal(cylinders.length, 2 * centers.length);
+  assert.equal(cylinders.length, 2 * (centers.length + Number(mixed)));
+  if (mixed) {
+    const later = cylinders.filter(wall => Math.hypot(wall.c[0] - 44, wall.c[1] - 18) < 1e-8);
+    assert.equal(later.length, 2);
+    for (const wall of later) { equivalent(wall.r, 3); assert.equal(wall.out, -1); }
+  }
   for (const [x, y] of centers) {
     const walls = cylinders.filter(wall => Math.hypot(wall.c[0] - x, wall.c[1] - y) < 1e-8);
     assert.equal(walls.length, 2);
@@ -84,7 +95,7 @@ async function inspect(label, doc, centers, grid = false) {
   }
   for (const cap of caps) {
     assert.equal(cap.outer, 1);
-    assert.equal(cap.openings.length, centers.length + 1);
+    assert.equal(cap.openings.length, centers.length + (mixed ? 2 : 1));
     equivalent(cap.z, cap.outward < 0 ? 0 : 10);
     const rectangle = cap.openings.find(opening => opening.degree.length === 4 && opening.degree.every(degree => degree === 1));
     assert.ok(rectangle);
@@ -98,10 +109,11 @@ async function inspect(label, doc, centers, grid = false) {
       assert.equal(rings.length, 1);
       assert.deepEqual(rings[0].degree, [2, 2]);
     }
+    if (mixed) assert.equal(circles.filter(ring => ring.points.every(point => Math.abs(Math.hypot(point[0] - 44, point[1] - 18) - 3) < 1e-8)).length, 1);
     for (const point of cap.openings.flatMap(opening => opening.points)) equivalent(point[2], cap.z);
   }
-  const removed = 40 * Math.PI, volume = 23920 - centers.length * removed;
-  const moment = [717920, 479280].map((value, axis) => value - removed * centers.reduce((sum, center) => sum + center[axis], 0));
+  const removed = 40 * Math.PI, laterRemoved = mixed ? 90 * Math.PI : 0, volume = 23920 - centers.length * removed - laterRemoved;
+  const moment = [717920, 479280].map((value, axis) => value - laterRemoved * [44, 18][axis] - removed * centers.reduce((sum, center) => sum + center[axis], 0));
   equivalent(mass.volume, volume);
   for (let axis = 0; axis < 2; axis++) equivalent(mass.centroid[axis], moment[axis] / volume);
   equivalent(mass.centroid[2], 5);
@@ -141,7 +153,7 @@ async function refused(doc, history, label) {
 }
 await f.run(async () => {
   await f.newPage();
-  await openModel(stock, 'circle-rectangle-grid.bcad');
+  await openModel(stock, mixed ? 'mixed-through-cut-grid.bcad' : 'circle-rectangle-grid.bcad');
   f.phase = 'select the original circular Subtract as a Rectangular pattern source';
   const original = await inspect('original-circle-and-later-rectangle', stock, [[10, 10]]);
   await openPattern('Browser');
@@ -159,16 +171,31 @@ await f.run(async () => {
     await field(panel(), name).fill('8');
     await status('preview');
   }
+  if (mixed) {
+    f.phase = 'Only the diagonal copy touches or overlaps the later R3 bore';
+    for (const [label, pitch] of [['later-circle-tangent', 29], ['later-circle-overlap', 32]]) {
+      await field(panel(), 'First spacing').fill(String(pitch));
+      await field(panel(), 'Second count').fill('1');
+      await status('preview');
+      await field(panel(), 'First count').fill('1');
+      await field(panel(), 'Second count').fill('2');
+      await status('preview');
+      await field(panel(), 'First count').fill('2');
+      await refused(stock, history, '01-' + label);
+    }
+    await field(panel(), 'First spacing').fill('8');
+    await status('preview');
+  }
   f.phase = 'apply the original circle on a 2 by 2 grid';
   await button('Apply', panel()).click();
   await f.changed(stock);
   const applied = (await f.snapshot('02-circular-grid-applied')).doc, pattern = applied.nodes.at(-1);
   assert.deepEqual(applied.nodes.slice(0, -1), stock.nodes);
   assert.deepEqual([pattern.kind, pattern.parent, pattern.source, pattern.axis, pattern.spacing, pattern.count,
-    pattern.axis2, pattern.spacing2, pattern.count2], ['rectangular-feature-pattern', ref(7), ref(4), 'x', 8, 2, 'y', 8, 2]);
+    pattern.axis2, pattern.spacing2, pattern.count2], ['rectangular-feature-pattern', ref(mixed ? 10 : 7), ref(4), 'x', 8, 2, 'y', 8, 2]);
   const accepted = await inspect('grid-native', applied, [[10, 10], [18, 10], [10, 18], [18, 18]], true);
   assert.deepEqual(accepted.filter(wall => original.some(old => old.name === wall.name)), original);
-  await f.openFeatureEditor(8, 'Rectangular source spacing');
+  await f.openFeatureEditor(stock.nextId, 'Rectangular source spacing');
   await f.editor().getByText('Subtract 1 (n4)', { exact: true }).waitFor();
   await field(f.editor(), 'Second spacing').fill('14');
   const edited = (await f.applyEditor(applied, '03-y-spacing-edited')).doc;
@@ -181,6 +208,7 @@ await f.run(async () => {
   const reopened = await f.freshOpen(saved.file, edited, '04-fresh-open-circular-grid');
   await inspect('reopened-native', reopened.doc, centers, true);
 
+  if (mixed) return;
   f.phase = 'refuse a diagonal cell when the two axis-adjacent copies both fit';
   const diagonal = structuredClone(stock);
   diagonal.nodes[2].center = [10, 4];

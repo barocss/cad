@@ -25,7 +25,7 @@ import { retainSweepCircularJoinBindings } from '../brep/sweep-circular-join-bin
 import { cylindricalWrapFeature } from '../features/cylindrical-wrap-feature.js';
 import { transformOperation } from './part-transform.js';
 import { priorCutRectangle, type PriorRectangularCut } from './part-prior-rectangular-cut.js';
-import type { PriorCircularCut } from './part-prior-circular-cut.js';
+import { allowsLaterCircularCut, type PriorCircularCut } from './part-prior-circular-cut.js';
 import { blindDrillHoleOperation } from './part-blind-drill-hole.js';
 import { prismaticDetailOperation } from './part-prismatic-detail.js';
 import { profileSolidOperation } from './part-profile-solid.js';
@@ -403,7 +403,7 @@ function evaluateWith(input: CadPartDocument, previous: Cache | undefined, optio
           const sourceTool = ref(prototype.tool, `${label} original cutter`);
           const sourceSketch = sourceTool.author?.kind === 'extrude' ? ref(sourceTool.author.sketch, `${label} original sketch`).author : undefined;
           if (sourceSketch?.kind === 'sketch' && sourceSketch.profile === 'circle') {
-            const allowedLater = pattern === 'linear' ? 'rectangular or circular' : 'rectangular';
+            const allowedLater = allowsLaterCircularCut(pattern) ? 'rectangular or circular' : 'rectangular';
             const requirement = `${label} needs one original circular extrusion followed by original ${allowedLater} extrusions on upright rectangular stock`;
             if (links.length < 2) return fail('CAPABILITY', requirement);
             const exactOriginal = (reference: unknown, profiles: readonly ('circle' | 'rectangle')[], what: string): Part => {
@@ -419,7 +419,7 @@ function evaluateWith(input: CadPartDocument, previous: Cache | undefined, optio
             };
             const stock = exactOriginal(prototype.target, ['rectangle'], 'source stock');
             const first = { result: links[0].result, cutter: exactOriginal(links[0].cutterRef, ['circle'], 'source circular cutter') };
-            const laterProfiles = pattern === 'linear' ? ['rectangle', 'circle'] as const : ['rectangle'] as const;
+            const laterProfiles = allowsLaterCircularCut(pattern) ? ['rectangle', 'circle'] as const : ['rectangle'] as const;
             const later = links.slice(1).map((link, i) => ({ result: link.result, cutter: exactOriginal(link.cutterRef, laterProfiles, `source later cutter ${i + 1}`) }));
             return { seed: solids(r, 'target')[0], tool: [first.cutter], priorCircular: { stock, first, later } };
           }

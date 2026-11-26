@@ -99,12 +99,6 @@ test('multi-later circular pattern refuses collision with second or third later 
   overlapLater.features[8] = { id: 'later2Sketch', kind: 'sketch', profile: 'rectangle', min: [27, 8], max: [32, 12] };
   overlapLater.features.push({ id: 'repeat', kind: 'linear-feature-pattern', target: 'third', source: 'first', axis: 'x', spacing: 8, count: 2 });
   assert.throws(() => evaluateCadPart(overlapLater), e => e instanceof CadPartError && e.feature === 'repeat' && e.code === 'GEOMETRY');
-
-  // A circular later cut still remains out of scope for the Rectangular producer
-  const circleLater = chainBase();
-  circleLater.features[8] = { id: 'later2Sketch', kind: 'sketch', profile: 'circle', center: [44, 10], radius: 2 };
-  circleLater.features.push({ id: 'repeat', kind: 'rectangular-feature-pattern', target: 'third', source: 'first', axis: 'x', spacing: 8, count: 2, axis2: 'y', spacing2: 14, count2: 2 });
-  assert.throws(() => evaluateCadPart(circleLater), e => e instanceof CadPartError && e.feature === 'repeat' && e.code === 'CAPABILITY');
 });
 
 test('signed Linear repeats the selected circular cut past later mixed through cuts, preserving the later R3 bore', () => {
@@ -133,4 +127,47 @@ test('signed Linear repeats the selected circular cut past later mixed through c
   model.features[9] = { ...model.features[9], height: 8 };
   assert.throws(() => evaluateCadPart({ ...model, features: [...model.features, repeat] }),
     e => e instanceof CadPartError && e.feature === 'repeat' && e.code === 'CAPABILITY');
+});
+
+
+test('Rectangular repeats only the original R2 on an XY grid after later rectangular and circular through cuts', () => {
+  const model = chainBase();
+  model.features[8] = { id: 'later2Sketch', kind: 'sketch', profile: 'circle', center: [44, 18], radius: 3, sideTags: { outer: ['laterRound'] } };
+  const pattern = { id: 'repeat', kind: 'rectangular-feature-pattern', target: 'third', source: 'first',
+    axis: 'x', spacing: 8, count: 2, axis2: 'y', spacing2: 8, count2: 2 };
+  const evaluated = overrides => evaluateCadPart({ ...model, features: [...model.features, { ...pattern, ...overrides }] });
+  for (const spacing of [8, -5]) {
+    const snapshot = evaluated({ spacing });
+    const brep = snapshot.outputs[0].brep;
+    const quality = checkBrep(brep, { strict: true });
+    assert.ok(quality.valid, quality.issues.join('\n'));
+    assert.equal(quality.topology[0].shells, 1);
+    assert.equal(quality.topology[0].genus, 6);
+    near(brepMassProperties(brep, 1).volume, 24000 - 80 - (4 * 40 + 90) * Math.PI);
+    const cylinders = brep.faces.filter(face => faceGeometry(face).kind === 'cylinder');
+    assert.equal(cylinders.length, 10);
+    for (const [i, j] of [[0, 0], [1, 0], [0, 1], [1, 1]]) {
+      const walls = cylinders.filter(face => {
+        const c = faceGeometry(face);
+        return Math.abs(c.r - 2) < 1e-8 && Math.hypot(c.c[0] - (10 + i * spacing), c.c[1] - (10 + j * 8)) < 1e-8 && c.out === -1;
+      });
+      assert.equal(walls.length, 2);
+      for (const face of walls) assert.ok(face.name.includes(i || j ? `[round]@${i},${j}` : '[round]'));
+    }
+    assert.equal(cylinders.filter(face => face.name.includes('laterRound') && Math.abs(faceGeometry(face).r - 3) < 1e-8).length, 2);
+    assert.deepEqual(loadCadPart(saveCadPart(snapshot)).outputs[0].brep, brep);
+  }
+  for (const spacing of [29, 32]) {
+    // Each axis-adjacent cell alone is valid; adding the diagonal touches or overlaps the later R3.
+    evaluated({ spacing, count2: 1 });
+    evaluated({ spacing, count: 1 });
+    assert.throws(() => evaluated({ spacing }), e => e instanceof CadPartError && e.feature === 'repeat' && e.code === 'GEOMETRY');
+  }
+  assert.throws(() => evaluated({ axis2: 'z' }), e => e instanceof CadPartError && e.feature === 'repeat' && e.code === 'CAPABILITY');
+  for (const different of [
+    { kind: 'fill-feature-pattern', region: { points: [[5, 5], [22, 5], [22, 30], [5, 30]] }, anchor: [10, 10] },
+    { kind: 'curve-feature-pattern', path: { degree: 1, knots: [0, 0, 1, 1], controlPoints: [[0, 0, 0], [0, 16, 0]], weights: [1, 1] } },
+  ]) assert.throws(() => evaluated(different), e => e instanceof CadPartError && e.feature === 'repeat' && e.code === 'CAPABILITY');
+  model.features[9] = { ...model.features[9], height: 8 };
+  assert.throws(() => evaluated({}), e => e instanceof CadPartError && e.feature === 'repeat' && e.code === 'CAPABILITY');
 });

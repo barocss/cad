@@ -13,7 +13,9 @@ export type PriorCircularCut = {
 type Circle = { center: readonly [number, number]; radius: number; tag: string };
 type Rectangle = NonNullable<ReturnType<typeof priorCutRectangle>>;
 type Pattern = 'linear' | 'rectangular' | 'fill' | 'path';
-const requirement = (pattern: Pattern) => `${pattern} feature pattern source needs one original circular through cut followed by original ${pattern === 'linear' ? 'rectangular or circular' : 'rectangular'} through cuts on upright rectangular stock and ${pattern === 'linear' ? 'one XY line' : pattern === 'fill' ? 'selected XY placements' : pattern === 'path' ? 'an open XY path of exact straight spans, one polynomial quadratic or one canonical quarter arc' : 'an XY grid'}`;
+/** Only the signed axis line and the explicit XY grid share the mixed through-cut certificate. */
+export const allowsLaterCircularCut = (pattern: Pattern) => pattern === 'linear' || pattern === 'rectangular';
+const requirement = (pattern: Pattern) => `${pattern} feature pattern source needs one original circular through cut followed by original ${allowsLaterCircularCut(pattern) ? 'rectangular or circular' : 'rectangular'} through cuts on upright rectangular stock and ${pattern === 'linear' ? 'one XY line' : pattern === 'fill' ? 'selected XY placements' : pattern === 'path' ? 'an open XY path of exact straight spans, one polynomial quadratic or one canonical quarter arc' : 'an XY grid'}`;
 
 function profile(part: Part) {
   if (part.solid.kind !== 'upright' || part.solid.solid.slabs.length !== 1) return;
@@ -75,7 +77,7 @@ export function certifyPriorCircularPlacements(prior: PriorCircularCut, offsets:
   for (const stage of prior.later) {
     const cutter = profile(stage.cutter), result = profile(stage.result);
     const rectangle = cutter && priorCutRectangle(cutter.outer);
-    const round = !rectangle && pattern === 'linear' && cutter ? circle(cutter.outer) : undefined;
+    const round = !rectangle && allowsLaterCircularCut(pattern) && cutter ? circle(cutter.outer) : undefined;
     if (!cutter || cutter.holes.length || (!rectangle && !round) || !result || cutter.z0 > stock.z0 || cutter.z1 < stock.z1)
       return fail('CAPABILITY', requirement(pattern));
     if (rectangle) {

@@ -145,8 +145,6 @@ test('omitted source repeats the current rectangle while unsupported original fa
   refused(doc => { doc.parameters.pitchX = 0; }, ['PARAMETER']);
   refused(doc => { doc.features.splice(4, 0, { id: 'movedTool', kind: 'translate', target: 'circleTool', offset: [0, 0, 0] }); doc.features.find(f => f.id === 'first').tool = 'movedTool'; });
   refused(doc => { doc.features[2].holes = [[{ kind: 'arc', center: [10, 10], start: [11, 10], direction: 'ccw' }]]; doc.features[2].sideTags.holes = [['island']]; });
-  refused(doc => { doc.features.splice(-1, 0, { id: 'extraSketch', kind: 'sketch', profile: 'circle', center: [42, 22], radius: 2 },
-    { id: 'extraTool', kind: 'extrude', sketch: 'extraSketch', height: 10 }, { id: 'third', kind: 'difference', target: 'second', tool: 'extraTool' }); doc.features.at(-1).target = 'third'; });
   refused(doc => {
     Object.assign(doc.features.at(-1), { kind: 'fill-feature-pattern', region: { points: [[0, 0], [60, 0], [60, 40], [0, 40]] }, anchor: [10, 10] });
     Object.assign(doc.features[5], { profile: 'circle', center: [26, 9], radius: 1, sideTags: { outer: ['laterRound'] } });
