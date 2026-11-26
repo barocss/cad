@@ -235,6 +235,25 @@ output fixture
   await rb('run').click(); await rb('apply').click();
   const edited = JSON.parse(await readFile(await grab('export','recipe-reopened.bcad'),'utf8'));
   assert.deepEqual(edited.nodes.slice(2).map(n => n.radius),[3.5,4,2]);
+  // Canvas-to-source uses the same commit/undo path without exposing a fixed literal.
+  await recipe.getByRole('button',{ name:'far',exact:true }).click();
+  assert.equal(await rb('dimensions').isHidden(),true);
+  await recipe.getByRole('button',{ name:'near',exact:true }).click();
+  assert.match(await rb('binding').textContent(),/guideDia.*near/);
+  await rb('toggle').click();
+  assert.equal(await editor.isHidden(),true);
+  await rb('diameter').fill('9'); await rb('size').click();
+  assert.match(await rb('state').textContent(),/미리보기/);
+  await rb('apply').click();
+  await rb('toggle').click();
+  assert.equal(await editor.inputValue(),authored.replace('param guideDia = 6','param guideDia = 9'));
+  const changedCanvas = JSON.parse(await readFile(await grab('export','canvas-edited.bcad'),'utf8'));
+  assert.deepEqual(changedCanvas.nodes.slice(2).map(n => n.radius),[4.5,4,2]);
+  await rb('undo').click();
+  assert.equal(await editor.inputValue(),authored.replace('param guideDia = 6','param guideDia = 7'));
+  await rb('redo').click();
+  assert.match(await rb('selection').textContent(),/near · Ø9 mm/);
+  await recipe.screenshot({ path:join(out,'casual-parameter-chrome.png') });
   let recipeHandoff = 'NOT_RUN';
   if (studioServer) {
     const studio = await (await browser.newContext({ acceptDownloads:true })).newPage();

@@ -54,7 +54,7 @@ test('unsupported features are refused without altering the supplied document; n
   for (const bad of ['holeC.diameter = 8', 'holeA.diameter = 2*4', 'holeA.diameter = 8; alert(1)', 'holeA.diameter = 0', 'holeA.radius = 4']) assert.equal(parseDiameterCode(bad), null);
 });
 
-import { compileCasualRecipe } from '@barocss/cad-model/app/casualRecipe';
+import { compileCasualRecipe, previewRecipeDiameter } from '@barocss/cad-model/app/casualRecipe';
 const source = `recipe 1
 units mm
 param width = 64
@@ -108,4 +108,23 @@ test('supports a hole-free plate; reports first invalid line and enforces bounde
     if (r.ok) assert.fail('expected refusal');
     assert.equal(r.line,line,r.reason);
   }
+});
+
+test('canvas diameter edits preserve original text and update all bound geometry in one proposal', () => {
+  const original = source.replace('param guideDia = 6', '\tparam guideDia\t=\t6  # keep this note')
+    .replace('diameter=8','diameter=guideDia').replaceAll('\n', '\r\n');
+  const base = ok(compileCasualRecipe(original));
+  assert.deepEqual([...base.declarations.get('guideDia')!.uses],['far','near']);
+  const next = ok(previewRecipeDiameter(base,base.holes[1].id,10));
+  assert.equal(next.source,original.replace('=\t6  # keep this note','=\t10  # keep this note'));
+  assert.equal(base.source,original);
+  assert.deepEqual(next.holes.map(h => h.id),base.holes.map(h => h.id));
+  assert.deepEqual(next.holes.map(h => h.diameter),[10,10,4]);
+  for (const h of next.holes) {
+    const rims = next.scene.mesh.edges.filter(e => next.scene.rimOwners.get(e.edgeId) === h.id);
+    const x = rims.flatMap(e => Array.from(e.points).filter((_,i) => i%3 === 0));
+    near(Math.max(...x)-Math.min(...x),h.diameter);
+  }
+  assert.equal(previewRecipeDiameter(base,base.holes[2].id,10).ok,false);
+  assert.equal(previewRecipeDiameter(base,base.holes[1].id,40).ok,false);
 });

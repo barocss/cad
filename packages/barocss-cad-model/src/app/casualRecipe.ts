@@ -10,9 +10,10 @@ const param = new RegExp('^param +(' + id + ') *= *(' + number + ')$');
 const plate = new RegExp('^plate +(' + id + ') +width=' + dim + ' +depth=' + dim + ' +thickness=' + dim + '$');
 const hole = new RegExp('^hole +(' + id + ') +in=(' + id + ') +at=\\( *' + dim + ' *, *' + dim + ' *\\) +diameter=' + dim + '$');
 const output = new RegExp('^output +(' + id + ')$');
-type Hole = { name: string; id: string; x: number; y: number; diameter: number };
+type Hole = { name: string; id: string; x: number; y: number; diameter: number; diameterParam?: string };
 type Value = { value: number; native: Dim };
-export type RecipeModel = { source: string; scene: CasualSolidScene; doc: StudioDoc; holes: Hole[]; resolvedDiameters: string[] };
+type Declaration = { start: number; end: number; uses: Set<string> };
+export type RecipeModel = { source: string; scene: CasualSolidScene; doc: StudioDoc; holes: Hole[]; resolvedDiameters: string[]; declarations: ReadonlyMap<string, Declaration> };
 type Result = { ok: true; value: RecipeModel } | { ok: false; line: number; reason: string };
 
 // Exact base-64 encoding of up to eight identifier characters; independent of statement order.
@@ -24,20 +25,28 @@ const positive = (n: number) => n >= .01 && n <= 10_000;
 export function compileCasualRecipe(source: string): Result {
   const bad = (line: number, reason: string): Result => ({ ok: false, line, reason });
   if (source.length > RECIPE_LIMIT) return bad(1, '코드가 너무 길어요 (최대 8,192자).');
-  const lines = source.split(/\r?\n/).flatMap((raw, i) => {
-    const code = raw.split('#', 1)[0].trim().replace(/\t/g, ' ');
-    return code ? [{ code, line: i + 1 }] : [];
+  let offset = 0;
+  const lines = source.split('\n').flatMap((raw, i) => {
+    const original = raw.split('#', 1)[0];
+    const code = original.trim().replace(/\t/g, ' ');
+    const start = offset + original.length - original.trimStart().length;
+    offset += raw.length + 1;
+    return code ? [{ code, line: i + 1, start }] : [];
   });
   if (lines[0]?.code !== 'recipe 1') return bad(lines[0]?.line ?? 1, '첫 줄에 recipe 1을 적어주세요.');
   if (lines[1]?.code !== 'units mm') return bad(lines[1]?.line ?? 2, '단위는 units mm만 지원해요.');
   const parameters = new Map<string, number>(), names = new Set<string>();
+  const declarations = new Map<string, Declaration>();
+  const used = (feature: string, fields: Value[]) => {
+    for (const field of fields) if (typeof field.native !== 'number') declarations.get(field.native.parameter)?.uses.add(feature);
+  };
   const holes: Hole[] = [], nodes: ModelNode[] = [], resolvedDiameters: string[] = [];
   let base: { name: string; w: number; d: number } | undefined;
   let ended = false;
   const value = (token: string): Value | undefined =>
     parameters.has(token) ? { value: parameters.get(token)!, native: { parameter: token } } :
       Number.isFinite(Number(token)) ? { value: Number(token), native: Number(token) } : undefined;
-  for (const { code, line } of lines.slice(2)) {
+  for (const { code, line, start } of lines.slice(2)) {
     if (ended) return bad(line, 'output 뒤에는 코드를 적을 수 없어요.');
     let m: RegExpExecArray | null;
     if ((m = param.exec(code))) {
@@ -45,11 +54,13 @@ export function compileCasualRecipe(source: string): Result {
       const v = Number(m[2]);
       if (!Number.isFinite(v) || Math.abs(v) > 10_000) return bad(line, '값 범위는 -10000부터 10000까지예요.');
       names.add(m[1]); parameters.set(m[1], v);
+      declarations.set(m[1], { start:start + code.length - m[2].length, end:start + code.length, uses:new Set() });
     } else if ((m = plate.exec(code))) {
       if (base || names.has(m[1])) return bad(line, '이 버전은 고유 이름의 판 한 개만 지원해요.');
       const [w, d, t] = m.slice(2).map(value);
       if (!w || !d || !t) return bad(line, '정의되지 않은 치수가 있어요.');
       if (![w, d, t].every(n => positive(n.value))) return bad(line, '판 치수는 0.01~10000 mm로 입력하세요.');
+      used(m[1], [w,d,t]);
       names.add(m[1]); base = { name: m[1], w: w.value, d: d.value };
       nodes.push({ id:'n0', kind:'sketch', profile:'rectangle', min:[0,0], max:[w.native,d.native] });
       nodes.push({ id:'n1', kind:'extrude', sketch:0, height:t.native });
@@ -61,10 +72,11 @@ export function compileCasualRecipe(source: string): Result {
       const radius = d.value / 2;
       if (!positive(d.value) || Math.min(x.value, y.value, base.w-x.value, base.d-y.value) - radius < .001) return bad(line, '구멍 지름을 줄이거나 판 가장자리에서 안쪽으로 옮겨주세요.');
       if (holes.some(h => Math.hypot(h.x-x.value, h.y-y.value)-h.diameter/2-radius < .001)) return bad(line, '다른 구멍과 겹쳐요. 위치나 지름을 변경하세요.');
+      used(m[1], [x,y,d]);
       const nativeId = stableHoleId(m[1]);
       if (typeof d.native !== 'number') resolvedDiameters.push(m[1]);
       nodes.push({ id:nativeId, kind:'hole', parent:{ node:nodes.length-1, side:'solid' }, center:[x.native,y.native], radius, axis:'z' });
-      names.add(m[1]); holes.push({ name:m[1], id:nativeId, x:x.value, y:y.value, diameter:d.value });
+      names.add(m[1]); holes.push({ name:m[1], id:nativeId, x:x.value, y:y.value, diameter:d.value, ...(typeof d.native !== 'number' ? { diameterParam:d.native.parameter } : {}) });
     } else if ((m = output.exec(code))) {
       if (!base || base.name !== m[1]) return bad(line, 'output에서 위에서 정의한 판을 선택하세요.');
       ended = true;
@@ -78,8 +90,17 @@ export function compileCasualRecipe(source: string): Result {
     outputs: { ['b' + lastNode.id!.slice(1)]: { node:nodes.length-1, side:'solid' } } };
   try {
     const solid = evaluateCasualSolid(doc, 'n1', holes);
-    return solid.ok ? { ok:true, value:{ source, scene:solid.value, doc, holes, resolvedDiameters } } : bad(last, solid.reason);
+    return solid.ok ? { ok:true, value:{ source, scene:solid.value, doc, holes, resolvedDiameters, declarations } } : bad(last, solid.reason);
   } catch {
     return bad(last, '닫힌 형상을 계산하지 못했어요. 구멍 위치와 판 치수를 확인하세요.');
   }
+}
+
+/** Produce an edit from the applied snapshot, never from a stale preview or a reserialized document. */
+export function previewRecipeDiameter(base: RecipeModel, holeId: string, diameter: number): Result {
+  const hole = base.holes.find(h => h.id === holeId);
+  const declaration = hole?.diameterParam ? base.declarations.get(hole.diameterParam) : undefined;
+  if (!declaration || !hole) return { ok:false, line:1, reason:'이 구멍의 지름은 코드 줄에서 수정하세요.' };
+  if (!positive(diameter)) return { ok:false, line:1, reason:'지름은 0.01~10000 mm로 입력하세요.' };
+  return compileCasualRecipe(base.source.slice(0, declaration.start) + String(diameter) + base.source.slice(declaration.end));
 }

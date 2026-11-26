@@ -1,4 +1,4 @@
-import { compileCasualRecipe, RECIPE_LIMIT, type RecipeModel } from '@barocss/cad-model/app/casualRecipe';
+import { compileCasualRecipe, previewRecipeDiameter, RECIPE_LIMIT, type RecipeModel } from '@barocss/cad-model/app/casualRecipe';
 import { encodeStudioFile } from '@barocss/cad-model/engine/container';
 import { viewport } from './viewport';
 
@@ -40,7 +40,13 @@ export function mountRecipe(root: HTMLElement, hooks: Hooks, loaded?: { model: R
         <svg id="recipe-scene" viewBox="0 0 750 440" role="img" aria-label="레시피로 만든 판"></svg>
         <p id="recipe-empty">코드를 입력하고 미리보기를 누르면 여기에 모델이 나와요.</p>
       </div>
+      <div id="recipe-targets" class="recipe-actions" aria-label="구멍 선택"></div>
       <p id="recipe-selection"></p>
+      <form id="recipe-dimensions" hidden>
+        <label>지름 <input id="recipe-diameter" type="number" step="any" min="0.01" max="10000" required inputmode="decimal"> mm</label>
+        <button id="recipe-size" type="submit">치수 미리보기</button>
+        <p id="recipe-binding"></p><p id="recipe-dimension-error" role="alert"></p>
+      </form>
       <div class="recipe-actions"><button id="recipe-cancel" type="button">초안 취소</button><button id="recipe-apply" type="button">적용</button></div>
       <p id="recipe-status" role="status"></p>
     </section>
@@ -48,6 +54,8 @@ export function mountRecipe(root: HTMLElement, hooks: Hooks, loaded?: { model: R
   const query = <E extends Element>(id: string) => root.querySelector<E>('#' + id)!;
   const input = query<HTMLTextAreaElement>('recipe-source'), svg = query<SVGSVGElement>('recipe-scene');
   const panel = query<HTMLElement>('recipe-panel');
+  const dimensions = query<HTMLFormElement>('recipe-dimensions'), diameter = query<HTMLInputElement>('recipe-diameter');
+  const dimensionError = query('recipe-dimension-error'), targetList = query('recipe-targets');
   const button = (id: string) => query<HTMLButtonElement>('recipe-' + id);
   const error = query('recipe-error'), status = query('recipe-status');
   let committed = loaded?.model, preview: RecipeModel | undefined;
@@ -64,7 +72,29 @@ export function mountRecipe(root: HTMLElement, hooks: Hooks, loaded?: { model: R
     else svg.replaceChildren();
     query<HTMLElement>('recipe-empty').hidden = Boolean(showing);
     const picked = showing?.holes.find(h => h.id === selected);
-    query('recipe-selection').textContent = picked ? picked.name + ' · Ø' + picked.diameter + ' mm' : '';
+    query('recipe-selection').textContent = picked ? picked.name + ' · Ø' + picked.diameter + ' mm' +
+      (picked.diameterParam ? '' : ' · 지름은 코드에 직접 입력돼 있어요.') : '';
+    const targets = showing?.holes ?? [];
+    const focused = (document.activeElement as HTMLElement | null)?.dataset.recipeHole;
+    if (targetList.children.length !== targets.length || targets.some((h,i) => (targetList.children[i] as HTMLElement).dataset.recipeHole !== h.id)) {
+      targetList.replaceChildren(...targets.map(h => {
+        const b = document.createElement('button');
+        b.type = 'button'; b.dataset.recipeHole = h.id; b.textContent = h.name;
+        b.onclick = () => choose(h.id);
+        return b;
+      }));
+      if (focused) targetList.querySelector<HTMLButtonElement>('[data-recipe-hole="' + focused + '"]')?.focus();
+    }
+    for (const b of targetList.children) b.setAttribute('aria-pressed', String((b as HTMLElement).dataset.recipeHole === selected));
+    const binding = picked?.diameterParam;
+    dimensions.hidden = !binding;
+    if (binding && picked) {
+      diameter.value = String(picked.diameter);
+      diameter.disabled = button('size').disabled = hasDraft();
+      const consumers = showing?.declarations.get(binding)?.uses;
+      query('recipe-binding').textContent = '코드의 ' + binding + ' 수정 · 연결된 피처: ' +
+        [...(consumers ?? [])].join(', ') + (hasDraft() ? ' · 현재 초안을 먼저 적용하거나 취소하세요.' : '');
+    }
     query('recipe-state').textContent = preview ? '미리보기 · 관통 구멍 ' + preview.holes.length + '개'
       : committed ? '마지막 적용 모델 · 관통 구멍 ' + committed.holes.length + '개' : '빈 프로젝트';
     button('run').disabled = !hasDraft();
@@ -78,7 +108,7 @@ export function mountRecipe(root: HTMLElement, hooks: Hooks, loaded?: { model: R
     button('view').textContent = top ? '입체로 보기' : '위에서 보기';
   }
   function revised() {
-    hooks.touch(); preview = undefined; error.textContent = ''; notice(''); render();
+    hooks.touch(); preview = undefined; error.textContent = ''; dimensionError.textContent = ''; notice(''); render();
   }
   input.oninput = revised;
   button('insert').onclick = () => { if (!input.value) { input.value = sample; revised(); input.focus(); } };
@@ -105,10 +135,18 @@ export function mountRecipe(root: HTMLElement, hooks: Hooks, loaded?: { model: R
   button('undo').onclick = () => history(past, next);
   button('redo').onclick = () => history(next, past);
   button('view').onclick = () => { top = !top; render(); };
-  svg.addEventListener('click', event => {
-    selected = (event.target as SVGElement).closest<SVGElement>('[data-hole]')?.dataset.hole ?? null;
-    render();
-  });
+  function choose(id: string | null) { selected = id; dimensionError.textContent = ''; render(); }
+  svg.addEventListener('click', event => choose((event.target as SVGElement).closest<SVGElement>('[data-hole]')?.dataset.hole ?? null));
+  dimensions.onsubmit = event => {
+    event.preventDefault();
+    if (!committed || !selected || hasDraft()) return;
+    const result = previewRecipeDiameter(committed, selected, diameter.valueAsNumber);
+    if (!result.ok) { dimensionError.textContent = result.reason; return; }
+    if (result.value.source === committed.source) { dimensionError.textContent = '변경 없음'; return; }
+    hooks.touch(); dimensionError.textContent = ''; error.textContent = '';
+    input.value = result.value.source; preview = result.value;
+    notice('연결된 곳을 확인한 뒤 적용하세요.'); render();
+  };
   button('toggle').onclick = () => {
     panel.hidden = !panel.hidden;
     button('toggle').setAttribute('aria-expanded', String(!panel.hidden));
