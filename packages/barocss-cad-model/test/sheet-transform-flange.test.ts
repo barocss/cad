@@ -2,8 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { checkOutput, evaluateCadPart, flatPatternOf, massPropertiesOf, type SheetBendTable } from '@barocss/cad';
-import { dispatchTool } from '../src/chat/tools';
+import { checkOutput, evaluateCadPart, flatPatternOf, massPropertiesOf, type BendTable } from '@barocss/cad';
+import { dispatchTool, type ChatState } from '../src/chat/tools';
 import { emptyDoc, withNode, type StudioDoc } from '../src/engine/doc';
 import { duplicateBody } from '../src/chat/features';
 import { evaluateDoc, evaluatePart } from '../src/engine/evaluate';
@@ -20,7 +20,7 @@ interface CallFixture {
 
 async function buildAsymmetricSheetDoc(): Promise<StudioDoc> {
   const { calls } = JSON.parse(readFileSync(FIXTURE, 'utf8')) as CallFixture;
-  let state = { doc: emptyDoc(), bodies: [], turnBase: emptyDoc() };
+  let state: ChatState = { doc: emptyDoc(), bodies: [], turnBase: emptyDoc() };
   for (const [index, call] of calls.entries()) {
     const result = await dispatchTool(state, call.tool, call.args, async doc => evaluatePart(doc, index + 1));
     assert.equal(result.isError, false, result.content);
@@ -49,7 +49,7 @@ function flangedTruth(thickness: number, kFactor: number) {
 }
 
 test('single YZ reflection in StudioDoc supports subsequent flange, upstream thickness edit, and bend-table provenance', async () => {
-  const table: SheetBendTable = {
+  const table: BendTable = {
     id: 'studio-reflect-table',
     sources: [{ id: 'shop', label: 'Shop test coupon' }],
     rows: [
@@ -62,9 +62,7 @@ test('single YZ reflection in StudioDoc supports subsequent flange, upstream thi
     ...seed,
     nodes: seed.nodes.map((node, index) => {
       if (index !== 0 || node.kind !== 'sheet-contour') return node;
-      const rest = { ...node };
-      delete rest.kFactor;
-      return { ...rest, bendTable: table };
+      return { ...node, kFactor: undefined, bendTable: table };
     }),
   };
   const reflected = withNode(withTable, { kind: 'mirror', parent: { node: 6, side: 'solid' }, plane: 'yz', keep: false });
@@ -116,7 +114,7 @@ test('disjoint Duplicate supports copy-only subsequent flange and bend table whi
   const originalFlat = flatPatternOf(originalOutput);
 
   const duplicated = duplicateBody(seed, { node: 6, side: 'solid' }, [60, 0, 0]).doc;
-  const copyTable: SheetBendTable = {
+  const copyTable: BendTable = {
     id: 'copy-flange-table',
     sources: [{ id: 'coupon', label: 'Copy coupon' }],
     rows: [{ thickness: 1.5, radius: 1.5, angle: 90, kFactor: 0.46, source: 'coupon' }],
@@ -125,9 +123,7 @@ test('disjoint Duplicate supports copy-only subsequent flange and bend table whi
     ...duplicated,
     nodes: duplicated.nodes.map((node, index) => {
       if (index !== 7 || node.kind !== 'sheet-contour') return node;
-      const rest = { ...node };
-      delete rest.kFactor;
-      return { ...rest, bendTable: copyTable };
+      return { ...node, kFactor: undefined, bendTable: copyTable };
     }),
   };
   const copyFlanged = withNode(copyWithTable, { kind: 'sheet-flange', parent: { node: 14, side: 'solid' }, edges: ['n7.end|n7.leg1.a'], length: 20 });
