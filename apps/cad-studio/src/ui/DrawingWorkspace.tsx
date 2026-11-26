@@ -64,6 +64,7 @@ import { VIRTUAL_SHARP_OVERSHOOT_MM, newVirtualSharpId, pickVirtualSharpEdge, re
 import { newCenterOfMassId, resolveCenterOfMassPoint, type DrawingBodyMassSource } from '@barocss/cad-model/drawing/centerOfMass';
 import { newOrdinateGroupId, newOrdinateMemberId, ordinateAxisFor } from '@barocss/cad-model/drawing/ordinate';
 import { HOLE_TABLE_MAX_MEMBERS, holeTagOk, newHoleTableId, newHoleTableMemberId, nextHoleTableTag, qualifyHoleTableRim } from '@barocss/cad-model/drawing/holeTable';
+import { borderZoneFor, newRevisionMarkerId, sheetIdForIndex } from '@barocss/cad-model/drawing/revisionMarkers';
 import { DETAIL_PARENTS, type DetailParent, type DrawingDetail } from '@barocss/cad-model/drawing/detail';
 import { DetailsList } from './drawing/DetailsList';
 import { clipProjectionOutside } from '@barocss/cad-model/drawing/breaks';
@@ -72,7 +73,7 @@ import { drawingOccurrencePath } from '@barocss/cad-model/drawing/dimensionRefer
 import { diameterRims } from './drawing/diameterRims';
 import { Button } from '@/components/ui/button';
 import { BreaksList } from './drawing/BreaksList';
-import { VIEW_IDS, annotatedDetailLetters, detailLetter, isDetailRef, isSectionRef, isViewId, nextSectionId, reservedDetailLetters, sameSection, sectionLetter, sectionsOf, withSections, readLinearArrowPlacement, type CentreRef, type CircleSeparationMode, type CylinderFaceRef, type DrawingArcCenterline, type DrawingBisectorCenterline, type DrawingCenterMarkGroup, type DrawingCenterOfMass, type DrawingHoleTable, type DrawingHoleTableMember, type DrawingOrdinateGroup, type DrawingVirtualSharp, type LinearArrowSide, type DimView, type DimPoint, type DrawingNote, type EdgeRef, type DrawingDimension, type DrawingSettings, type DrawingViews, type SectionViewId, type Vec3, type ViewId, type XY } from '@barocss/cad-model/drawing/types';
+import { VIEW_IDS, annotatedDetailLetters, detailLetter, isDetailRef, isSectionRef, isViewId, nextSectionId, reservedDetailLetters, sameSection, sectionLetter, sectionsOf, withSections, readLinearArrowPlacement, type CentreRef, type CircleSeparationMode, type CylinderFaceRef, type DrawingArcCenterline, type DrawingBisectorCenterline, type DrawingCenterMarkGroup, type DrawingCenterOfMass, type DrawingHoleTable, type DrawingHoleTableMember, type DrawingOrdinateGroup, type DrawingRevisionMarker, type DrawingVirtualSharp, type LinearArrowSide, type DimView, type DimPoint, type DrawingNote, type EdgeRef, type DrawingDimension, type DrawingSettings, type DrawingViews, type SectionViewId, type Vec3, type ViewId, type XY } from '@barocss/cad-model/drawing/types';
 import { downloadBytes } from './files';
 import { ShortcutHelp } from './ShortcutHelp';
 import { today, useDrawingSheet } from './useDrawingSheet';
@@ -99,7 +100,7 @@ import { ExportActions } from './drawing/ExportActions';
 import { dimensionPairLabelsMoved, dimensionPairPaperDelta, drawingDimensionPair, moveDrawingDimensionPair, type DrawingDimensionPair } from '../app/drawingDimensionGroup';
 import '../drawing/drawing.css';
 
-type Tool = 'select' | 'linear' | 'diameter' | 'radius' | 'arc-length' | 'chamfer' | 'radial-thickness' | 'cylinder-diameter' | 'circle-separation' | 'arc-centerline' | 'center-mark-group' | 'bisector-centerline' | 'virtual-sharp' | 'center-of-mass' | 'ordinate' | 'hole-table' | 'angle' | 'reflex-angle' | 'note' | 'detail' | 'datum-target';
+type Tool = 'select' | 'linear' | 'diameter' | 'radius' | 'arc-length' | 'chamfer' | 'radial-thickness' | 'cylinder-diameter' | 'circle-separation' | 'arc-centerline' | 'center-mark-group' | 'bisector-centerline' | 'virtual-sharp' | 'center-of-mass' | 'ordinate' | 'hole-table' | 'revision-marker' | 'angle' | 'reflex-angle' | 'note' | 'detail' | 'datum-target';
 type DimensionGroup = { owner: object; pair: DrawingDimensionPair };
 type DimensionGroupDrag = { dimensionGroup: DimensionGroup; pointer: number; start: XY; scale: number; paperDelta: number };
 const TOOLS: { tool: Tool; label: string; icon: string; key: string; hint: string }[] = [
@@ -119,6 +120,7 @@ const TOOLS: { tool: Tool; label: string; icon: string; key: string; hint: strin
   { tool: 'center-of-mass', label: 'Center of mass', icon: 'filter_center_focus', key: 'Q', hint: 'Click an unbroken front, top, or right view to place a live center-of-mass symbol' },
   { tool: 'ordinate', label: 'Ordinate', icon: 'square_foot', key: 'U', hint: 'Click an origin point, click where the baseline sits, then click points to add ordinate members · Esc finishes' },
   { tool: 'hole-table', label: 'Hole table', icon: 'texture', key: 'J', hint: 'Click a datum origin point, then click 1–3 plain through-hole rims and click Create hole table · Esc cancels' },
+  { tool: 'revision-marker', label: 'Revision marker', icon: 'history', key: 'I', hint: 'Click inside the sheet frame to place a revision change marker for a recorded revision' },
   { tool: 'angle', label: 'Angle', icon: 'architecture', key: 'A', hint: 'Click two straight edges, then the side of their corner the angle goes on' },
   { tool: 'reflex-angle', label: 'Reflex angle', icon: 'restart_alt', key: 'G', hint: 'Pick two straight edges that share a corner in the Top view' },
   { tool: 'note', label: 'Note', icon: 'sticky_note_2', key: 'N', hint: 'Click on the paper for a note, or on a view for a leader and then where its text goes' },
@@ -197,6 +199,11 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
   const comBodyList = useMemo(() => bodyMassSources ? [...bodyMassSources.values()] : [], [bodyMassSources]);
   const [comBodyChoice, setComBodyChoice] = useState<string>('');
   const activeComBodyKey = comBodyList.some(b => b.key === comBodyChoice) ? comBodyChoice : (comBodyList.length === 1 ? comBodyList[0].key : '');
+  const recordedRevisions = wholeSettings.revisions ?? [];
+  const [revMarkerChoice, setRevMarkerChoice] = useState<string>('');
+  const activeMarkerRevision = recordedRevisions.some(r => r.revision === revMarkerChoice)
+    ? revMarkerChoice
+    : (recordedRevisions.some(r => r.revision === wholeSettings.revision) ? wholeSettings.revision! : (recordedRevisions[recordedRevisions.length - 1]?.revision ?? ''));
   const projectionActionOwner = useMemo(() => ({}), [sourceDoc, wholeSettings, model, workerSession, engine, current, sourceCurrent]);
   const liveProjectionAction = useRef(projectionActionOwner); liveProjectionAction.current = projectionActionOwner;
   /** The whole drawing's next settings, as the file will have them. */
@@ -299,7 +306,7 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
     if (!loss.length) { run(); return; }
     setControlDeletion({ settings: wholeSettings, model, sheet: current, loss, run });
   };
-  const [drag, setDrag] = useState<DimensionGroupDrag | { id: string; place: XY } | { ordinate: string; lineCoord: number } | { target: string; original: DrawingDatumTarget; place: XY } | { note: string; at: XY; grab: XY } | { detail: string; original: DrawingDetail; owner: object; initialAt: XY; initialPointer: XY; at: XY; grab: XY } | { removed: string; at: XY; grab: XY } | { pan: XY; box: [number, number, number, number] } | null>(null);
+  const [drag, setDrag] = useState<DimensionGroupDrag | { id: string; place: XY } | { ordinate: string; lineCoord: number } | { target: string; original: DrawingDatumTarget; place: XY } | { note: string; at: XY; grab: XY } | { revisionMarker: string; at: XY; grab: XY } | { detail: string; original: DrawingDetail; owner: object; initialAt: XY; initialPointer: XY; at: XY; grab: XY } | { removed: string; at: XY; grab: XY } | { pan: XY; box: [number, number, number, number] } | null>(null);
   const cancelDimensionGroupDrag = () => setDrag(current => current && 'dimensionGroup' in current ? null : current);
   const clearDimensionGroup = () => { setDimensionGroup(null); cancelDimensionGroupDrag(); };
   /** The selected note's text while it is typed, and the selected dimension's tolerance fields. */
@@ -1599,6 +1606,30 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
       return;
     }
     if (tool === 'note' && pending?.kind === 'note') { const q = sheetPoint(e.clientX, e.clientY); if (q) addNote(q, pending.leader); return; }
+    if (tool === 'revision-marker') {
+      const q = sheetPoint(e.clientX, e.clientY);
+      if (!q || !layout) return;
+      if (!activeMarkerRevision) {
+        setMessage('Record a revision in Revision history before placing a revision marker.');
+        return;
+      }
+      if (!borderZoneFor(settings.sheet, q, layout.frame)) {
+        setMessage('Click inside the sheet frame to place a revision marker.');
+        return;
+      }
+      const marker: DrawingRevisionMarker = {
+        id: newRevisionMarkerId(wholeSettings.revisionMarkers ?? []),
+        revision: activeMarkerRevision,
+        sheet: sheetIdForIndex(wholeSettings, current),
+        at: [Math.round(q[0] * 10) / 10, Math.round(q[1] * 10) / 10],
+      };
+      if (!onChange({ ...settings, revisionMarkers: [...(settings.revisionMarkers ?? []), marker] })) return;
+      setSelected({ kind: 'revision-marker', id: marker.id });
+      setSelectedTarget(null);
+      setSelectedFrame(null);
+      setMessage(null);
+      return;
+    }
     if (tool === 'select') {
       const hit = e.target as Element;
       // Section marks are read-only ink. Keep removed-section and detail dragging on their sheet-space paths.
@@ -1642,6 +1673,7 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
       const comId = (e.target as Element).closest?.('g.center-of-mass[data-center-of-mass]')?.getAttribute('data-center-of-mass') ?? null;
       const ordId = (e.target as Element).closest?.('g.ordinate-group[data-ordinate-group]')?.getAttribute('data-ordinate-group') ?? null;
       const htId = (e.target as Element).closest?.('g.hole-table[data-hole-table]')?.getAttribute('data-hole-table') ?? null;
+      const rmId = (e.target as Element).closest?.('g.revision-marker[data-revision-marker]')?.getAttribute('data-revision-marker') ?? null;
       const d = target?.matches('g.dimension') ? settings.dimensions.find(x => x.id === id) : undefined;
       const n = target?.matches('g.note') ? settings.notes?.find(x => x.id === id) : undefined;
       const ac = !d && !n && acId ? settings.arcCenterlines?.find(x => x.id === acId) : undefined;
@@ -1651,6 +1683,7 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
       const com = !d && !n && !ac && !cmg && !cl && !vs && comId ? settings.centerOfMass?.find(x => x.id === comId) : undefined;
       const ord = !d && !n && !ac && !cmg && !cl && !vs && !com && ordId ? settings.ordinateGroups?.find(x => x.id === ordId) : undefined;
       const ht = !d && !n && !ac && !cmg && !cl && !vs && !com && !ord && htId ? settings.holeTables?.find(x => x.id === htId) : undefined;
+      const rm = !d && !n && !ac && !cmg && !cl && !vs && !com && !ord && !ht && rmId ? settings.revisionMarkers?.find(x => x.id === rmId) : undefined;
       if (d && e.shiftKey) {
         if (activeDimensionGroup) {
           const pair = activeDimensionGroup.pair;
@@ -1679,12 +1712,13 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
         return;
       }
       clearDimensionGroup();
-      setSelected(d ? { kind: 'dimension', id: d.id } : n ? { kind: 'note', id: n.id } : ac ? { kind: 'arc-centerline', id: ac.id } : cmg ? { kind: 'center-mark-group', id: cmg.id } : cl ? { kind: 'bisector-centerline', id: cl.id } : vs ? { kind: 'virtual-sharp', id: vs.id } : com ? { kind: 'center-of-mass', id: com.id } : ord ? { kind: 'ordinate-group', id: ord.id } : ht ? { kind: 'hole-table', id: ht.id } : null);
+      setSelected(d ? { kind: 'dimension', id: d.id } : n ? { kind: 'note', id: n.id } : ac ? { kind: 'arc-centerline', id: ac.id } : cmg ? { kind: 'center-mark-group', id: cmg.id } : cl ? { kind: 'bisector-centerline', id: cl.id } : vs ? { kind: 'virtual-sharp', id: vs.id } : com ? { kind: 'center-of-mass', id: com.id } : ord ? { kind: 'ordinate-group', id: ord.id } : ht ? { kind: 'hole-table', id: ht.id } : rm ? { kind: 'revision-marker', id: rm.id } : null);
       setNoteDraft(null); setTolDraft({});
       if (n) setNoteDraft(n.text);
       if (d) setDrag({ id: d.id, place: d.place });
       else if (ord) setDrag({ ordinate: ord.id, lineCoord: ord.lineCoord });
       else if (n && qd) setDrag({ note: n.id, at: n.at, grab: [qd[0] - n.at[0], qd[1] - n.at[1]] });
+      else if (rm && qd) setDrag({ revisionMarker: rm.id, at: rm.at, grab: [qd[0] - rm.at[0], qd[1] - rm.at[1]] });
       else if (ac || cmg || cl || vs || com || ht) return;
       else setDrag({ pan: [e.clientX, e.clientY], box: [...viewBox] as [number, number, number, number] });
       (e.currentTarget as Element).setPointerCapture(e.pointerId);
@@ -1717,7 +1751,7 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
     if (drag && 'pan' in drag) {
       const k = mmPerPx(); setBox([drag.box[0] - (e.clientX - drag.pan[0]) * k, drag.box[1] - (e.clientY - drag.pan[1]) * k, drag.box[2], drag.box[3]]); return;
     }
-    if (drag && ('note' in drag || 'detail' in drag || 'removed' in drag)) {
+    if (drag && ('note' in drag || 'revisionMarker' in drag || 'detail' in drag || 'removed' in drag)) {
       const q = sheetPoint(e.clientX, e.clientY);
       if (q) setDrag({ ...drag, at: 'detail' in drag ? detailPaperDragAt(drag.initialAt, drag.initialPointer, q)
         : [Math.round((q[0] - drag.grab[0]) * 10) / 10, Math.round((q[1] - drag.grab[1]) * 10) / 10] });
@@ -1793,6 +1827,18 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
       if (drag.owner === live.owner && live.ready && currentModel.current === live.model) {
         const next = commitDetailPaperDrag(settings, drag.original, drag.initialAt, drag.at);
         if (next !== settings) onChange(next);
+      }
+      setDrag(null); return;
+    }
+    if (drag && 'revisionMarker' in drag) {
+      const rm = settings.revisionMarkers?.find(x => x.id === drag.revisionMarker);
+      if (rm && layout && (rm.at[0] !== drag.at[0] || rm.at[1] !== drag.at[1])) {
+        if (!borderZoneFor(settings.sheet, drag.at, layout.frame)) {
+          setMessage('Revision marker must stay inside the sheet frame.');
+        } else {
+          onChange({ ...settings, revisionMarkers: settings.revisionMarkers!.map(x => x.id === rm.id ? { ...x, at: drag.at } : x) });
+          setMessage(null);
+        }
       }
       setDrag(null); return;
     }
@@ -1978,8 +2024,43 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
     });
   };
 
+  const nudgeRevisionMarker = (id: string, dx: number, dy: number) => {
+    if (busy || !sourceCurrent || !layout) return;
+    const rm = settings.revisionMarkers?.find(x => x.id === id);
+    if (!rm) return;
+    const nextAt: XY = [Math.round((rm.at[0] + dx) * 10) / 10, Math.round((rm.at[1] + dy) * 10) / 10];
+    if (!borderZoneFor(settings.sheet, nextAt, layout.frame)) {
+      setMessage('Revision marker cannot move outside the sheet frame.');
+      return;
+    }
+    if (onChange({ ...settings, revisionMarkers: settings.revisionMarkers!.map(x => x.id === id ? { ...x, at: nextAt } : x) })) setMessage(null);
+  };
+
+  const toggleRevisionMarkerHidden = (id: string) => {
+    if (busy || !sourceCurrent) return;
+    if (settings.revisionMarkers?.filter(rm => rm.id === id).length !== 1) return;
+    onChange({
+      ...settings,
+      revisionMarkers: settings.revisionMarkers.map(rm => {
+        if (rm.id !== id) return rm;
+        if (rm.hidden) {
+          const { hidden: _h, ...rest } = rm; void _h;
+          return rest;
+        }
+        return { ...rm, hidden: true as const };
+      }),
+    });
+  };
+
   const removeAnnotation = ({ kind, id }: SheetAnnotationSelection) => {
-    if (kind === 'hole-table') {
+    if (kind === 'revision-marker') {
+      if (settings.revisionMarkers?.filter(rm => rm.id === id).length !== 1) return;
+      const kept = settings.revisionMarkers.filter(rm => rm.id !== id);
+      const next = { ...settings };
+      if (kept.length) next.revisionMarkers = kept;
+      else delete next.revisionMarkers;
+      if (!onChange(next)) return;
+    } else if (kind === 'hole-table') {
       if (settings.holeTables?.filter(ht => ht.id === id).length !== 1) return;
       const kept = settings.holeTables.filter(ht => ht.id !== id);
       const next = { ...settings };
@@ -2097,6 +2178,10 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
       const m = svg.current?.getScreenCTM(), at = layout && placementOf(layout, sheet ?? undefined, view); if (!m || !at) return null;
       const q = toSheet(at, [u, v]), p = new DOMPoint(q[0], q[1]).matrixTransform(m); return { x: p.x, y: p.y };
     };
+    w.__studioDrawingSheetAt = (x: number, y: number) => {
+      const m = svg.current?.getScreenCTM(); if (!m) return null;
+      const p = new DOMPoint(x, y).matrixTransform(m); return { x: p.x, y: p.y };
+    };
     w.__studioDrawing = () => sheet && { scale: layout?.scale, dimensions: sheet.dimensions.map(r => r.ok ? { id: r.dim.id, text: r.text, value: r.value } : { id: r.dim.id, lost: r.reason }),
       hidden: Object.fromEntries(VIEW_IDS.map(id => [id, views![id].edges.reduce((n, e) => n + e.pieces.filter(p => !p.visible).length, 0)])),
       section: cutA ? (cutA.result.ok ? { rings: cutA.result.rings.length, edges: cutA.result.projection.edges.length } : { error: cutA.result.error }) : null,
@@ -2115,10 +2200,11 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
       ...(sheet.centerOfMass ? { centerOfMass: sheet.centerOfMass.map(r => r.ok ? { id: r.item.id, view: r.item.view, bodyKey: r.item.bodyKey, hidden: !!r.item.hidden, diameter: r.geometry.diameter, point: r.geometry.point, centroid3: r.geometry.centroid3, massMethod: r.geometry.massMethod } : { id: r.item.id, view: r.item.view, bodyKey: r.item.bodyKey, hidden: !!r.item.hidden, lost: r.reason }) } : {}),
       ...(sheet.ordinateGroups ? { ordinateGroups: sheet.ordinateGroups.map(r => r.ok ? { id: r.group.id, view: r.group.view, axis: r.group.axis, lineCoord: r.group.lineCoord, origin: r.origin, originText: r.originText, members: r.members.map(m => m.ok ? { id: m.member.id, value: m.value, text: m.text, jog: m.jog } : { id: m.member.id, lost: m.reason }) } : { id: r.group.id, view: r.group.view, axis: r.group.axis, lost: r.reason }) } : {}),
       ...(sheet.holeTables ? { holeTables: sheet.holeTables.map(r => r.ok ? { id: r.table.id, view: r.table.view, origin: r.origin2, hasLostMember: r.hasLostMember, members: r.members.map(m => m.ok ? { id: m.member.id, tag: m.member.tag, owner: m.member.owner, x: m.x, y: m.y, diameter: m.diameter, xText: m.xText, yText: m.yText, sizeText: m.sizeText } : { id: m.member.id, tag: m.member.tag, owner: m.member.owner, lost: m.reason }) } : { id: r.table.id, view: r.table.view, lost: r.reason }) } : {}),
+      ...(sheet.revisionMarkers ? { revisionMarkers: sheet.revisionMarkers.map(r => r.ok ? { id: r.marker.id, revision: r.marker.revision, sheet: r.marker.sheet, sheetNumber: r.sheetNumber, zone: r.zone, at: r.marker.at, hidden: !!r.marker.hidden } : { id: r.marker.id, revision: r.marker.revision, sheet: r.marker.sheet, code: r.code, lost: r.reason }) } : {}),
       suggestions: suggestions.map(x => ({ id: x.id, kind: x.kind, estimate: x.estimate })) };
     // (G24: the drawing's annotations on the model, for the GPU lane's 3D display and the flow.)
     w.__studioAnnotations = () => sheet && layout && views ? modelAnnotations({ views, layout, settings, sheet, ...(weldJoints ? { welds: weldJoints } : {}) }) : null;
-    return () => { delete w.__studioDrawingAt; delete w.__studioDrawing; delete w.__studioAnnotations; };
+    return () => { delete w.__studioDrawingAt; delete w.__studioDrawingSheetAt; delete w.__studioDrawing; delete w.__studioAnnotations; };
   }, [layout, sheet, views, cutsMade, issues, suggestions, settings, weldJoints]);
 
   // (11 ④: the SVG and the DXF are of the sheet shown, named by its number when there are several; the PDF has every sheet.)
@@ -2563,6 +2649,7 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
     if ('detail' in drag) return sheetGroupsSvg(buildSheet(views, layout, { ...settings, details: (settings.details ?? []).map(d => d.id === drag.detail ? { ...d, at: drag.at } : d) }, { svgSectionTextClearance, title, date: today(), callout, threads, tableContent: tableContentOf, welds: weldJoints, bodyFaces, bodyMassSources, doc, ...(bom ? { bom } : {}) }, cuts), selected, selectedTarget);
     if ('removed' in drag) return sheetGroupsSvg(buildSheet(views, layout, withSections(settings, sectionsOf(settings).map(x => x.id === drag.removed && x.removed ? { ...x, removed: { ...x.removed, at: drag.at } } : x)), { svgSectionTextClearance, title, date: today(), callout, threads, tableContent: tableContentOf, welds: weldJoints, bodyFaces, bodyMassSources, doc, ...(bom ? { bom } : {}) }, cuts), selected, selectedTarget);
     if ('note' in drag) return sheetGroupsSvg(buildSheet(views, layout, { ...settings, notes: (settings.notes ?? []).map(n => n.id === drag.note ? { ...n, at: drag.at } : n) }, { svgSectionTextClearance, title, date: today(), callout, threads, tableContent: tableContentOf, welds: weldJoints, bodyFaces, bodyMassSources, doc, ...(bom ? { bom } : {}) }, cuts), selected, selectedTarget);
+    if ('revisionMarker' in drag) return sheetGroupsSvg(buildSheet(views, layout, { ...settings, revisionMarkers: (settings.revisionMarkers ?? []).map(rm => rm.id === drag.revisionMarker ? { ...rm, at: drag.at } : rm) }, { svgSectionTextClearance, title, date: today(), callout, threads, tableContent: tableContentOf, welds: weldJoints, bodyFaces, bodyMassSources, doc, ...(bom ? { bom } : {}) }, cuts), selected, selectedTarget);
     const dims = settings.dimensions.map(d => d.id === drag.id ? (d.kind === 'linear' ? { ...d, place: drag.place, orient: orientFor(pointIn(projectionOf(views, sheet ?? undefined, d.view)!, d.a, bodyMassSources), pointIn(projectionOf(views, sheet ?? undefined, d.view)!, d.b, bodyMassSources), drag.place) } : { ...d, place: drag.place }) : d);
     return sheetGroupsSvg(buildSheet(views, layout, { ...settings, dimensions: dims }, { svgSectionTextClearance, title, date: today(), callout, threads, tableContent: tableContentOf, welds: weldJoints, bodyFaces, bodyMassSources, doc, ...(bom ? { bom } : {}) }, cuts), selected, selectedTarget);
   }, [drag, views, layout, sheet, sheetMarkup, settings, title, selected, selectedTarget, weldJoints, bodyMassSources, bom, svgSectionTextClearance,
@@ -2983,6 +3070,26 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
                 <Button variant="ghost" size="xs" disabled={idx === 0} aria-label={`Move row ${m.member.id} up`} onClick={e => { e.stopPropagation(); moveHoleTableRow(r.table.id, m.member.id, -1); }}>↑</Button>
                 <Button variant="ghost" size="xs" disabled={idx === r.members.length - 1} aria-label={`Move row ${m.member.id} down`} onClick={e => { e.stopPropagation(); moveHoleTableRow(r.table.id, m.member.id, 1); }}>↓</Button>
               </div>)}
+            </div>)}
+          </div>
+        </div>}
+
+        {((settings.revisionMarkers?.length ?? 0) > 0 || tool === 'revision-marker') && <div role="group" aria-label="Revision markers">
+          <div className="card-title" style={{ marginTop: 8 }}>REVISION MARKERS <span className="muted">{settings.revisionMarkers?.length ?? 0}</span></div>
+          {tool === 'revision-marker' && (recordedRevisions.length > 0
+            ? <label className="field"><span>Revision</span><select aria-label="Revision marker revision" value={activeMarkerRevision} onChange={e => setRevMarkerChoice(e.target.value)}>
+              {recordedRevisions.map(r => <option key={r.revision} value={r.revision}>{r.revision} — {r.description}</option>)}
+            </select></label>
+            : <div className="empty">Record a revision in Revision history before placing markers.</div>)}
+          <div className="dw-dims">
+            {(sheet?.revisionMarkers ?? []).map(r => <div key={r.marker.id} className={'dw-dim' + (selected?.kind === 'revision-marker' && selected.id === r.marker.id ? ' sel' : '') + (r.ok ? '' : ' lost')} title={r.ok ? `Sheet ${r.sheetNumber} · Zone ${r.zone}` : r.reason}>
+              <button type="button" className="dw-annotation-select" aria-pressed={selected?.kind === 'revision-marker' && selected.id === r.marker.id}
+                onClick={() => { cancel(); setTool('select'); setSelected({ kind: 'revision-marker', id: r.marker.id }); setSelectedTarget(null); setSelectedFrame(null); }}>
+                <b>{r.ok ? `${r.marker.revision} · ${r.zone}` : `${r.marker.revision} · lost`}</b><span>{r.marker.id}{r.marker.hidden ? ' · hidden' : ''}</span>
+              </button>
+              {r.ok && <Button variant="ghost" size="xs" aria-label={`Move revision marker ${r.marker.id}`} onClick={e => { e.stopPropagation(); nudgeRevisionMarker(r.marker.id, 55, 0); }}>Move</Button>}
+              <Button variant="ghost" size="xs" aria-label={`${r.marker.hidden ? 'Show' : 'Hide'} revision marker ${r.marker.id}`} onClick={e => { e.stopPropagation(); toggleRevisionMarkerHidden(r.marker.id); }}>{r.marker.hidden ? 'Show' : 'Hide'}</Button>
+              <Button variant="ghost" size="xs" aria-label={`Remove revision marker ${r.marker.id}`} onClick={e => { e.stopPropagation(); removeAnnotation({ kind: 'revision-marker', id: r.marker.id }); }}><Icon name="close" small /></Button>
             </div>)}
           </div>
         </div>}

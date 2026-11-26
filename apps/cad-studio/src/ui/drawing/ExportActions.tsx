@@ -35,6 +35,7 @@ export function ExportActions({ canExportDimensionCsv, exportDimensionCsv, sheet
   const hasCenterOfMass = sheet?.centerOfMass?.some(r => r.ok && !r.item.hidden);
   const hasOrdinateGroup = sheet?.ordinateGroups?.some(r => r.ok);
   const hasHoleTable = sheet?.holeTables?.some(r => r.ok);
+  const hasRevisionMarker = sheet?.revisionMarkers?.some(r => r.ok && !r.marker.hidden);
   const confirmPanel = useRef<HTMLDivElement>(null);
   const pendingFormat = confirmation?.format;
   useEffect(() => {
@@ -71,6 +72,7 @@ export function ExportActions({ canExportDimensionCsv, exportDimensionCsv, sheet
         {hasCenterOfMass && <div className="empty" role="note" aria-label="DXF center of mass compatibility">DXF exports center-of-mass symbols as non-associative circle, crosshair lines, and filled quadrants on the THIN layer; linear dimensions to center of mass export as native DXF linear dimensions. Keep the .bcad in a Studio version with center-of-mass support.</div>}
         {hasOrdinateGroup && <div className="empty" role="note" aria-label="DXF ordinate compatibility">DXF exports ordinate dimension groups as non-associative witness lines, origin symbol, and text on the THIN and TEXT layers. Keep the .bcad in a Studio version with ordinate group support.</div>}
         {hasHoleTable && <div className="empty" role="note" aria-label="DXF hole table compatibility">DXF exports hole tables and tag bubbles as non-associative lines, circles, and text on the VISIBLE, THIN, and TEXT layers. Keep the .bcad in a Studio version with hole table support.</div>}
+        {hasRevisionMarker && <div className="empty" role="note" aria-label="DXF revision marker compatibility">DXF exports revision change markers as non-associative triangle polylines and text on the VISIBLE and TEXT layers. Keep the .bcad in a Studio version with revision marker support.</div>}
         {confirmation && <div ref={confirmPanel} tabIndex={-1} className="dw-export-confirm" role="group" aria-label="Confirm drawing export">
           <ul>{confirmation.messages.map((message, i) => <li key={i}>{message}</li>)}</ul>
           <div className="dw-actions">

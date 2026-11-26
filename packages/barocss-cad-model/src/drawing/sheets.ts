@@ -10,7 +10,8 @@
 // for what only a drawing set shows (SHEET n OF N, the sheet index, the cross-references). `mergeSheet` writes an edit made
 // on those settings back into the whole drawing's.
 import { problem, type Problem } from '../engine/refusal';
-import { VIEW_IDS, isDetailRef, isSectionRef, isViewId, nextSectionId, reservedDetailLetters, reservedSectionLetters, sectionLetter, sectionsOf, withSections, type DrawingDimension, type DrawingNote, type DrawingSection, type DrawingSettings, type DrawingTable, type ViewId } from './types';
+import { VIEW_IDS, isDetailRef, isSectionRef, isViewId, nextSectionId, reservedDetailLetters, reservedSectionLetters, sectionLetter, sectionsOf, withSections, type DrawingDimension, type DrawingNote, type DrawingRevisionMarker, type DrawingSection, type DrawingSettings, type DrawingTable, type ViewId } from './types';
+import { FIRST_SHEET_ID, type RevisionMarkerSheetEntry } from './revisionMarkers';
 import type { DrawingDetail } from './detail';
 
 /** A sheet after the first: its id (kept when it is renamed), an optional name, size and scale (absent: the drawing's `sheet`; the largest that fits), and the view ids drawn on it. */
@@ -46,6 +47,10 @@ export interface SheetContext {
   /** Section/detail letters and retained section references across the whole drawing. */
   sectionLetters?: readonly string[];
   datumLetters: string[]; datumFirst: Record<string, string>;
+  /** Ordered sheet identity and paper sizes across the whole drawing (for revision marker zone/sheet summary). */
+  sheetEntries?: readonly RevisionMarkerSheetEntry[];
+  /** Whole-drawing revision markers (for Sheet 1 revision table summary and cross-sheet ID allocation). */
+  allRevisionMarkers?: readonly DrawingRevisionMarker[];
 }
 
 export const MAX_SHEETS = 12;
@@ -188,6 +193,15 @@ export function forSheet(s: DrawingSettings, k: number): DrawingSettings {
   const tables = k === 0 ? [...(s.tables ?? []), ...index] : [];
   if (tables.length) out.tables = tables; else delete out.tables;
   if (k === 0 && s.holeTables?.length) out.holeTables = s.holeTables; else delete out.holeTables;
+  const thisSheetId = k === 0 ? FIRST_SHEET_ID : s.sheets[k - 1].id;
+  const sheetEntries: RevisionMarkerSheetEntry[] = Array.from({ length: n }, (_, j) => ({
+    id: j === 0 ? FIRST_SHEET_ID : s.sheets![j - 1].id,
+    number: j + 1,
+    size: sheetSize(s, j),
+  }));
+  const validSheetIds = new Set(sheetEntries.map(e => e.id));
+  const markersHere = (s.revisionMarkers ?? []).filter(m => m.sheet === thisSheetId || (k === 0 && !validSheetIds.has(m.sheet)));
+  if (markersHere.length) out.revisionMarkers = markersHere; else delete out.revisionMarkers;
   const where: Record<string, number> = {}; for (const [ref, j] of at) where[ref] = j + 1;
   out.sheetContext = {
     n: k + 1, of: n, sheets: Array.from({ length: n }, (_, j) => ({ name: sheetName(s, j), size: sheetSize(s, j) })), where, allViews: shown,
@@ -203,6 +217,8 @@ export function forSheet(s: DrawingSettings, k: number): DrawingSettings {
     frameIds: (s.frames ?? []).map(frame => frame.id),
     sectionLetters: [...new Set([...sectionsOf(s).map(x => x.id), ...(s.details ?? []).map(x => x.id), ...reservedSectionLetters(s)])],
     datumFirst: Object.fromEntries((s.datums ?? []).filter((d, j, all) => all.findIndex(o => o.letter === d.letter) === j).map(d => [d.letter, d.id])),
+    sheetEntries,
+    allRevisionMarkers: s.revisionMarkers ?? [],
   };
   return out;
 }
@@ -290,8 +306,18 @@ export function mergeSheet(whole: DrawingSettings, k: number, next: DrawingSetti
   set('ordinateGroups', splice(whole.ordinateGroups ?? [], next.ordinateGroups ?? [], x => here(x.view), x => x.id));
   const sections = splice<DrawingSection>(sectionsOf(whole), nextSections, inSheet, x => x.id);
   set('details', splice<DrawingDetail>(whole.details ?? [], nextDetails, detailHere, d => d.id));
+  const thisSheetId = k === 0 ? FIRST_SHEET_ID : whole.sheets[k - 1].id;
+  const validSheetIds = new Set([FIRST_SHEET_ID, ...whole.sheets.map(x => x.id)]);
+  const markerHere = (m: DrawingRevisionMarker) => m.sheet === thisSheetId || (k === 0 && !validSheetIds.has(m.sheet));
+  const knownMarkers = new Set((whole.revisionMarkers ?? []).map(m => m.id));
+  set('revisionMarkers', splice<DrawingRevisionMarker>(
+    whole.revisionMarkers ?? [],
+    (next.revisionMarkers ?? []).map(m => knownMarkers.has(m.id) ? m : { ...m, sheet: m.sheet || thisSheetId }),
+    markerHere,
+    m => m.id,
+  ));
   // Only the first sheet carries the tables (less the index made for it), the title block's fields and the notes without a leader.
-  if (k === 0) { set('tables', (next.tables ?? []).filter(t => t.id !== SHEET_INDEX)); set('holeTables', next.holeTables); } else { set('tables', whole.tables); set('holeTables', whole.holeTables); set('titleBlock', whole.titleBlock); }
+  if (k === 0) { set('tables', (next.tables ?? []).filter(t => t.id !== SHEET_INDEX)); set('holeTables', next.holeTables); } else { set('tables', whole.tables); set('holeTables', whole.holeTables); set('titleBlock', whole.titleBlock); set('revisions', whole.revisions); }
   return withSections(out, sections);
 }
 
@@ -306,9 +332,9 @@ export function moveToSheet(s: DrawingSettings, ref: string, to: number): Drawin
   const sheets = (s.sheets ?? []).map((x, k) => ({ ...x, views: x.views.filter(v => v !== ref).concat(k + 1 === to ? [ref] : []) }));
   return sheets;
 }
-/** A new empty sheet's id: S2, S3, … the first that no sheet and no note names (a note of a deleted sheet is not handed to a new one). */
-export function nextSheetId(s: Pick<DrawingSettings, 'sheets' | 'notes'>): string {
-  for (let k = 2; ; k++) { const id = `S${k}`; if (!(s.sheets ?? []).some(x => x.id === id) && !(s.notes ?? []).some(n => n.sheet === id)) return id; }
+/** A new empty sheet's id: S2, S3, … the first that no sheet, note, or revision marker names (an orphan marker of a deleted sheet is never silently reclaimed). */
+export function nextSheetId(s: Pick<DrawingSettings, 'sheets' | 'notes' | 'revisionMarkers'>): string {
+  for (let k = 2; ; k++) { const id = `S${k}`; if (!(s.sheets ?? []).some(x => x.id === id) && !(s.notes ?? []).some(n => n.sheet === id) && !(s.revisionMarkers ?? []).some(m => m.sheet === id)) return id; }
 }
 /** The sheets and notes after sheet `k` (from 1; not the first) is deleted: its views go back (a detail or section to its parent's sheet), its notes to the first sheet. */
 export function removeSheet(s: DrawingSettings, k: number): Pick<DrawingSettings, 'sheets' | 'notes'> {

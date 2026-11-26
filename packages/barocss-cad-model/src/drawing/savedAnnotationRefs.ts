@@ -88,5 +88,33 @@ export function checkSavedAnnotationRefs(raw: unknown): Problem[] {
       }
     }
   }
+  if (Object.hasOwn(raw, 'revisionMarkers') && raw.revisionMarkers !== undefined) {
+    if (!Array.isArray(raw.revisionMarkers)) {
+      return [problem('DRAWING_OPTIONS', 'Drawing revisionMarkers must be an array. The original drawing is unchanged.')];
+    }
+    const seenIds = new Set<string>();
+    for (let i = 0; i < raw.revisionMarkers.length; i++) {
+      const item = raw.revisionMarkers[i];
+      if (!isRecord(item)) {
+        return [problem('DRAWING_OPTIONS', `Drawing revisionMarkers[${i}] must be an object. The original drawing is unchanged.`)];
+      }
+      if (typeof item.id !== 'string' || !item.id.trim() || seenIds.has(item.id)) {
+        return [problem('DRAWING_OPTIONS', `Drawing revisionMarkers[${i}] needs a unique non-empty id. The original drawing is unchanged.`)];
+      }
+      seenIds.add(item.id);
+      if (typeof item.revision !== 'string' || !item.revision.trim() || item.revision.length > 6 || /[\r\n\t]/.test(item.revision)) {
+        return [problem('DRAWING_OPTIONS', `Drawing revisionMarkers[${i}] needs a valid revision label (1–6 single-line characters). The original drawing is unchanged.`)];
+      }
+      if (typeof item.sheet !== 'string' || !/^[A-Za-z0-9_-]{1,16}$/.test(item.sheet)) {
+        return [problem('DRAWING_OPTIONS', `Drawing revisionMarkers[${i}] needs a valid sheet id. The original drawing is unchanged.`)];
+      }
+      if (!Array.isArray(item.at) || item.at.length !== 2 || typeof item.at[0] !== 'number' || !Number.isFinite(item.at[0]) || typeof item.at[1] !== 'number' || !Number.isFinite(item.at[1])) {
+        return [problem('DRAWING_OPTIONS', `Drawing revisionMarkers[${i}] needs finite [x, y] sheet mm coordinates. The original drawing is unchanged.`)];
+      }
+      if (item.hidden !== undefined && item.hidden !== true) {
+        return [problem('DRAWING_OPTIONS', `Drawing revisionMarkers[${i}].hidden must be true when present. The original drawing is unchanged.`)];
+      }
+    }
+  }
   return [];
 }
