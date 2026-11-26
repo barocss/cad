@@ -59,6 +59,19 @@ Rows [26](../roadmap-rows/26.md), [28](../roadmap-rows/28.md), [29](../roadmap-r
 
 Close only the named file/profile/catalog/conflict case. New SDK/dependency/server adoption, outbound download and paid live service use retain their owner gates. Do not claim global customer-file or format coverage from one fixture.
 
+
+### PCB–enclosure mechanical fit (backlog)
+
+[Tracking plan #756](https://github.com/barocss/cad/issues/756). Start with an actual KiCad-exported PCB in CAD Studio, not a new EDA editor. The [Casual Studio sensor enclosure](../../../casual-studio/examples/sensor-enclosure/README.md) currently uses a simplified board, not an imported PCB. Reuse the existing exchange and measurement paths; no earlier roadmap priority or mechanical baseline acceptance changes.
+
+| Sequence | Acceptance before advancing |
+| --- | --- |
+| 1. [Import the reference board #757](https://github.com/barocss/cad/issues/757) | Pin a redistributable synthetic KiCad board and STEP export settings. Verify units, origin, board outline and thickness, mounting holes and known component poses/sizes through CAD Studio Save/Open. Report or mark unknown unrepresented components; do not infer completeness from STEP alone. |
+| 2. [Check enclosure fit #758](https://github.com/barocss/cad/issues/758) | Verify mounting-hole alignment, lid clearance, connector opening and the declared cable-plug envelope against pass/fail fixtures. Separate untested or missing geometry from a verified clear result. |
+| 3. [Compare and replace board revisions #759](https://github.com/barocss/cad/issues/759) | Compare A/B on the same datum, explicitly accept or cancel replacement, preserve Undo/Redo and Save/Open, and rerun fit checks without reusing stale results. |
+
+Schematic capture, routing, electrical-rule checks, fabrication output, raw `.kicad_pcb` parsing and automatic board/case rewrites are not required for this sequence. A read-only Casual example is a follow-on only after the desktop CAD Studio workflow passes.
+
 ## Separate parallel track — CAD React
 
 Rows 04/05/16/32. The private package uses ordinary ReactDOM components, the existing Model contract, an injected Worker port and the existing Viewer facade. It is not a custom renderer or a bundled general Worker SDK. [D509](../notes/cad-react-profile-composition-2026-11-04/README.md) records 19 logical elements, selected all-six Profile composition, preserved old lowerings and finite current Viewer/Studio proof. Its remaining readability/settled-color documentation limits stay explicit.
