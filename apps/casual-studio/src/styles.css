@@ -101,3 +101,45 @@ dialog h2{font-size:17px}dialog p{line-height:1.6}dialog div{display:flex;justif
 }
 
 #recipe-change{font-size:16px;font-weight:650;color:#2458a4;margin:10px 0 14px;font-variant-numeric:tabular-nums}
+
+#app:has(#sensor-workspace:not([hidden]))>header{display:none}
+.example+.example{margin-top:12px}
+.sensor-example-art{background:#e7f0ef}
+.sensor-desk{display:flex;min-height:560px}
+.sensor-editor{padding:18px;flex:1;min-width:0}
+.sensor-editor .recipe-work-head{margin-bottom:14px}
+.sensor-grid{display:grid;grid-template-columns:minmax(0,1fr) 245px;gap:12px;align-items:start}
+.sensor-stage{min-height:0;aspect-ratio:8/5}
+.sensor-stage svg{overflow:hidden}
+#sensor-state,#sensor-status{font-size:12px;color:#4c6681}
+#sensor-views{display:flex;gap:4px}
+#sensor-views button[aria-pressed=true]{background:#e2edff;border-color:#85a8dd;color:#1e508e}
+.sensor-context{min-width:0;padding:14px;background:#fff;border:1px solid #d9e3ef;border-radius:8px}
+.sensor-context label,.sensor-context h2{font-size:14px;font-weight:650}
+#sensor-range,#sensor-error,.sensor-context small{font-size:11.5px;color:#496178;line-height:1.45}
+#sensor-error{color:#963723}
+#sensor-error:empty,#sensor-status:empty{display:none}
+#sensor-preview,#sensor-apply,#sensor-export{background:#2458c5;border-color:#2458c5;color:#fff}
+#sensor-impact{padding-top:12px;margin-top:13px;border-top:1px solid #dbe5ef}
+#sensor-rows{margin:8px 0}
+.sensor-row{width:100%;border:0;background:transparent;text-align:left;padding:6px 3px;display:flex;justify-content:space-between;gap:5px;font-size:11.5px;color:#354f6a}
+button.sensor-row:hover,.sensor-row:focus-visible{background:#edf4fe}
+.sensor-row strong{white-space:nowrap;font-variant-numeric:tabular-nums;color:#234a80}
+#sensor-actions{justify-content:flex-end}
+#sensor-code-panel{width:min(32%,330px);flex:none;padding:16px;background:white;border-right:1px solid #dbe5ef}
+#sensor-code-panel label,#sensor-code-panel small{display:block;margin-bottom:8px}
+#sensor-code-panel small{color:#496178;line-height:1.5}
+#sensor-source{min-height:130px;white-space:pre}
+#sensor-title:focus{outline:none}
+
+@media(min-width:760px){
+  .start{max-width:890px;padding-top:44px}
+  .start-intro{margin-bottom:26px}
+  .examples{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+  .examples .example{grid-template-columns:1fr;grid-template-rows:116px 1fr;margin:0}
+  .examples .example-art{padding:8px}
+  .examples .example-art svg{height:100%;width:min(100%,225px)}
+  .examples .example-copy{display:flex;flex-direction:column;align-items:flex-start;padding:16px 18px}
+  .examples .example-copy p:not(.eyebrow){margin:8px 0}
+  .examples .example-copy button{margin-top:auto}
+}

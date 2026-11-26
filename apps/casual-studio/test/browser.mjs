@@ -29,6 +29,7 @@ try {
   const page = await ctx.newPage();
   page.setDefaultTimeout(7000);
   const requested = [], errors = [];
+  const desktopOnly = process.env.DESKTOP_ONLY === '1';
   page.on('request', r => requested.push(new URL(r.url()).pathname));
   page.on('pageerror', e => errors.push(e.message));
   const origin = 'http://127.0.0.1:' + server.address().port;
@@ -148,12 +149,12 @@ try {
   await page.getByRole('dialog').waitFor();
   await action('discard'); await control('구멍 A 지름 8 mm').waitFor();
   await action('home'); await control('이 예제로 시작').waitFor();
-  const fresh = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  const fresh = await browser.newContext({ viewport: desktopOnly ? { width: 1140, height: 750 } : { width: 390, height: 844 } });
   const reopen = await fresh.newPage();
   await reopen.goto(origin);
   await reopen.getByRole('button', { name:'이 예제로 시작' }).waitFor();
   assert.equal(await reopen.evaluate(() => document.documentElement.scrollWidth === innerWidth), true, 'mobile starter horizontal overflow');
-  await reopen.screenshot({ path: join(out, 'casual-start-mobile.png') });
+  if (!desktopOnly) await reopen.screenshot({ path: join(out, 'casual-start-mobile.png') });
   const chooser = reopen.waitForEvent('filechooser');
   await reopen.getByRole('button', { name:'내 CAD 파일 열기' }).click();
   await (await chooser).setFiles(done.path);
@@ -253,21 +254,23 @@ try {
   await starter.getByLabel('CAD 레시피').waitFor();
   assert.match(await st('source').inputValue(),/param guideDia = 8/);
 
-  const phone = await (await browser.newContext({ viewport:{width:390,height:844}, hasTouch:true })).newPage();
-  await phone.goto(origin);
-  await phone.getByRole('button',{name:'이 예제로 시작',exact:true}).tap();
-  await phone.getByRole('button',{name:'구멍 B · 장비 쪽',exact:true}).tap();
-  const mobile = id => phone.locator('#recipe-' + id);
-  assert.equal(await mobile('context').isVisible(),true);
-  assert.equal(await phone.evaluate(() => document.documentElement.scrollWidth === innerWidth),true);
-  assert.ok((await mobile('context').boundingBox()).y > (await mobile('scene').boundingBox()).y);
-  await mobile('diameter').fill('7'); await mobile('size').tap();
-  await phone.screenshot({path:join(out,'casual-context-mobile.png')});
-  await mobile('apply').tap();
-  assert.match(await mobile('selection').textContent(),/장비 쪽 · Ø7 mm/);
-  await mobile('toggle').tap();
-  assert.match(await mobile('source').inputValue(),/param mountDia = 7/);
-  assert.ok((await mobile('panel').boundingBox()).y > (await mobile('scene').boundingBox()).y);
+  if (!desktopOnly) {
+    const phone = await (await browser.newContext({ viewport:{width:390,height:844}, hasTouch:true })).newPage();
+    await phone.goto(origin);
+    await phone.getByRole('button',{name:'이 예제로 시작',exact:true}).tap();
+    await phone.getByRole('button',{name:'구멍 B · 장비 쪽',exact:true}).tap();
+    const mobile = id => phone.locator('#recipe-' + id);
+    assert.equal(await mobile('context').isVisible(),true);
+    assert.equal(await phone.evaluate(() => document.documentElement.scrollWidth === innerWidth),true);
+    assert.ok((await mobile('context').boundingBox()).y > (await mobile('scene').boundingBox()).y);
+    await mobile('diameter').fill('7'); await mobile('size').tap();
+    await phone.screenshot({path:join(out,'casual-context-mobile.png')});
+    await mobile('apply').tap();
+    assert.match(await mobile('selection').textContent(),/장비 쪽 · Ø7 mm/);
+    await mobile('toggle').tap();
+    assert.match(await mobile('source').inputValue(),/param mountDia = 7/);
+    assert.ok((await mobile('panel').boundingBox()).y > (await mobile('scene').boundingBox()).y);
+  }
 
   // A genuine blank project: no sample insertion and no preexisting template geometry.
   const recipeContext = await browser.newContext({ viewport:{ width:1140,height:750 }, acceptDownloads:true });
@@ -397,8 +400,85 @@ output fixture
     assert.deepEqual(doc.nodes.slice(2).map(n => n.radius),[3,4,2.5]);
     recipeHandoff = 'PASS';
   }
+  const sensor = await ctx.newPage();
+  sensor.on('pageerror', e => errors.push(e.message));
+  await sensor.goto(origin);
+  await sensor.getByRole('button', { name:'센서 케이스 열기', exact:true }).click();
+  const se = id => sensor.locator('#sensor-' + id);
+  const sensorState = async (width, pending) => assert.equal(await se('state').textContent(), '적용된 폭 ' + width + ' mm' + (pending ? ' · ' + pending + ' mm 미리보기' : ''));
+  await se('scene').waitFor();
+  assert.deepEqual(await se('scene').locator('[data-sensor-part]').evaluateAll(items => [...new Set(items.map(e => e.dataset.sensorPart))].sort()), ['board','body','left','lid','right']);
+  assert.equal(await se('code-panel').isHidden(),true);
+  await sensorState(56);
+  await se('views').getByRole('button',{name:'내부',exact:true}).click();
+  assert.equal(await se('scene').locator('[data-sensor-part=lid]').count(),0);
+  await se('views').getByRole('button',{name:'조립',exact:true}).click();
+  assert.ok(await se('scene').locator('[data-sensor-part=lid]').count() > 0);
+  await se('views').getByRole('button',{name:'분해',exact:true}).click();
+  await se('width').fill('65'); await se('preview').click();
+  assert.match(await se('error').textContent(), /56–64/);
+  assert.equal(await se('undo').isDisabled(),true);
+  await sensorState(56);
+  await se('width').fill('64'); await se('preview').click();
+  await sensorState(56, 64);
+  assert.match(await se('rows').textContent(), /64 mm → 72 mm/);
+  assert.match(await se('rows').textContent(), /54 mm → 62 mm/);
+  assert.match(await se('rows').textContent(), /10 × 6 mm 유지/);
+  assert.equal(await se('scene').locator('[data-sensor-part=left][data-highlighted]').count(),0);
+  await se('rows').getByRole('button', { name:/오른쪽 고정점/ }).focus();
+  assert.ok(await se('scene').locator('[data-sensor-part=right][data-highlighted]').count() > 0);
+  assert.equal(await se('scene').locator('[data-sensor-part=body][data-highlighted]').count(),0);
+  assert.equal(await se('scene').locator('[data-anchor=right]').count(),2);
+  await se('apply').focus();
+  await sensor.screenshot({ path:join(out, 'casual-sensor-preview.png') });
+  await se('cancel').click(); await sensorState(56);
+  assert.equal(await se('undo').isDisabled(),true);
+  await se('width').fill('64'); await se('preview').click();
+  await se('home').click(); await sensor.getByRole('dialog').waitFor();
+  assert.match(await sensor.locator('#switch-detail').textContent(),/적용하지 않은/);
+  await sensor.locator('#keep').click(); await sensorState(56,64);
+  await se('apply').click();
+  await sensorState(64);
+  await se('undo').click(); await sensorState(56);
+  await se('redo').click(); await sensorState(64);
+  await se('code').click();
+  assert.match(await se('source').inputValue(), /boardWidth=64/);
+  await se('source').fill('recipe 1\nunits mm\nsensor-enclosure boardWidth=60.5\n');
+  await se('code-preview').click(); await sensorState(64,60.5);
+  await se('cancel').click();
+  assert.match(await se('source').inputValue(), /boardWidth=64/);
+  const getSensorDownload = async (id, file) => {
+    const event = sensor.waitForEvent('download'); await se(id).click();
+    const dest = join(out,file); await (await event).saveAs(dest); return dest;
+  };
+  const sensorRecipe = await getSensorDownload('save', 'sensor-applied.cadrecipe');
+  assert.match(await readFile(sensorRecipe,'utf8'), /boardWidth=64/);
+  await se('home').click();
+  await sensor.getByRole('button',{ name:'센서 케이스 열기', exact:true }).waitFor();
+  await sensor.locator('#file').setInputFiles(sensorRecipe);
+  await se('scene').waitFor();
+  await sensorState(64);
+  const sensorCad = await getSensorDownload('export','sensor-applied.bcad');
+  const sensorDoc = JSON.parse(await readFile(sensorCad,'utf8'));
+  assert.equal(sensorDoc.variability.inputs[0].default,64);
+  assert.deepEqual(sensorDoc.parameters,{ caseWidth:72, interiorRight:70, boardRight:68, rightAnchorX:62 });
+  let sensorHandoff = 'NOT_RUN';
+  if (studioServer) {
+    const studio = await (await browser.newContext({ viewport:{width:1440,height:950} })).newPage();
+    studio.on('pageerror', e => errors.push(e.message));
+    await studio.goto('http://127.0.0.1:' + studioServer.address().port);
+    await studio.getByLabel('Model file',{exact:true}).setInputFiles(sensorCad);
+    await studio.getByText('Bounds 72 × 42 × 21',{exact:true}).waitFor({timeout:30000});
+    await studio.getByRole('button',{name:'Inspect',exact:true}).click();
+    await studio.getByRole('button',{name:'Variants',exact:true}).click();
+    const values = studio.getByRole('complementary',{name:'Variants panel'});
+    assert.equal(await values.getByRole('spinbutton',{name:'Value of boardWidth'}).inputValue(),'64');
+    await values.getByRole('button',{name:'Show 56 mm board'}).click();
+    await studio.getByText('Bounds 64 × 42 × 21',{exact:true}).waitFor();
+    sensorHandoff = 'PASS';
+  }
   assert.deepEqual(errors, []);
-  console.log(JSON.stringify({ result:'PASS', studioHandoff, recipeHandoff, requested:[...new Set(requested)], output:out }));
+  console.log(JSON.stringify({ result:'PASS', studioHandoff, recipeHandoff, sensorHandoff, desktopOnly, requested:[...new Set(requested)], output:out }));
 } finally {
   await browser?.close();
   server.close();

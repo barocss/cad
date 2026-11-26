@@ -1,6 +1,6 @@
 # Casual Studio
 
-A small, separate entry point for the first [#749](https://github.com/barocss/cad/issues/749) workflow: fit a cable-guide adapter without changing the equipment's existing hole.
+A small, separate entry point for the [#749](https://github.com/barocss/cad/issues/749) workflows: adapt a cable guide or fit a wider sensor board without moving its port.
 
 ```sh
 pnpm dev:casual
@@ -9,13 +9,15 @@ pnpm --filter @barocss/casual-studio-app type-check
 pnpm --filter @barocss/casual-studio-app test
 ```
 
-From the start screen, choose the cable-guide example or open a supported native file. The example opens the same recipe editor as the blank-code path, with the code panel closed. Pick hole A or B on the 60 × 40 × 5 mm plate, enter a diameter and preview before applying. Edits can be exported to `.bcad` or saved as a recipe. Resetting a diameter to its example default is also a preview, not an immediate change.
+From the start screen, choose the cable-guide or sensor enclosure example, start with code, or open a supported native file. The cable-guide example opens the same recipe editor as the blank-code path, with the code panel closed. Pick hole A or B on the 60 × 40 × 5 mm plate, enter a diameter and preview before applying. Edits can be exported to `.bcad` or saved as a recipe. Resetting a diameter to its example default is also a preview, not an immediate change.
+
+**Sensor board enclosure.** On the start screen, choose **센서 케이스 열기**. Preview 56–64 mm of board width in the assembled, interior, or exploded view. Hover or focus a change row to emphasize the corresponding geometry. Save the applied width as a sensor recipe or export a BCAD whose Variants input continues to drive all four dependent dimensions. [Preview and reproduction](examples/sensor-enclosure/README.md).
 
 **Existing native file:** the bounded native import editor keeps the original feature graph and opens the optional one-line diameter editor on request. It does not generate a recipe from the file.
 
 **Create from code:** choose **코드로 만들기** for a blank document. Enter a version 1 recipe, preview, then apply. A recipe defines one rectangle/extrusion and up to eight vertical through-holes. Open and save the executable text as `.cadrecipe`, or export the applied native features as `.bcad`. Radius derived from a recipe diameter is exported as its current value; the source relation remains in the recipe. See the [working syntax example](PRODUCT.md#코드는-모델-전체를-정의할-수-있어야-한다).
 
-**Deliberate limits.** Existing `.bcad` import still accepts the bounded two-hole shape, not every recipe export; keep the corresponding recipe to reopen the source in Casual. Unsupported native files are not rewritten and may be opened in CAD Studio. Recipe hole diameter declarations are editable from the canvas; fixed literals are not. Sensor enclosures and center-linked vise assemblies remain future work. Arbitrary code execution and general import remain out of scope. App-local undo is not carried by the native file. Uses two viewport presets, not a full camera controller.
+**Deliberate limits.** Existing `.bcad` import still accepts the bounded two-hole shape, not every recipe export; keep the corresponding recipe to reopen the source in Casual. Unsupported native files are not rewritten and may be opened in CAD Studio. Recipe hole diameter declarations are editable from the canvas; fixed literals are not. A center-linked vise remains future work. Arbitrary code execution and general import remain out of scope. App-local undo is not carried by the native file. Uses fixed viewport presets, not a full camera controller.
 
 See the [product plan](PRODUCT.md) and the [roadmap](ROADMAP.md) for the next use cases and their acceptance checks.
 
@@ -25,10 +27,10 @@ The core tests measure native rim samples independently of the editable fields, 
 
 ```sh
 cd apps/casual-studio
-PLAYWRIGHT_MODULE=/path/to/playwright CHROME_PATH=/path/to/chromium node test/browser.mjs
+DESKTOP_ONLY=1 PLAYWRIGHT_MODULE=/path/to/playwright CHROME_PATH=/path/to/chromium node test/browser.mjs
 ```
 
-Build Studio from the same checkout with `pnpm build` and set `CHECK_STUDIO=1` to also exercise the real Studio feature editor and round trip.
+Build Studio from the same checkout with `pnpm build` and set `CHECK_STUDIO=1` to also exercise the real Studio feature editor and round trip, including opening the applied 64 mm sensor export and rebuilding it to 56 mm in Studio.
 
 The landing page and first native import preview load no Studio shell, worker, WASM or recipe compiler in the tested build. The example and blank-code entry load the recipe compiler on demand. The shared evaluator and native format reader are still part of startup.
 

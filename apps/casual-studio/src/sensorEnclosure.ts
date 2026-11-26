@@ -1,3 +1,4 @@
+import { variantOf } from '@barocss/cad-model/assembly/variability';
 import { rootOf } from '@barocss/cad-model/app/lookKey';
 import { emptyDoc, type Dim, type ModelNode, type StudioDoc } from '@barocss/cad-model/engine/doc';
 
@@ -49,4 +50,26 @@ export function buildSensorEnclosure(): StudioDoc {
   output(pcb, 'Sensor board', '#438d79');
   doc.nextId = doc.nodes.length;
   return doc;
+}
+
+/** Saves the applied size as the new master, rather than serializing a transient Variants result. */
+export function sensorDocumentAt(width: number): StudioDoc {
+  const master = buildSensorEnclosure();
+  const { doc } = variantOf(master, { boardWidth: width });
+  const spec = master.variability!;
+  return { ...doc, variability: {
+    ...spec,
+    inputs: spec.inputs.map(input => ({ ...input, default: width })),
+    variants: [sensorWidth.min, sensorWidth.max].filter(value => value !== width)
+      .map(value => ({ name: `${value} mm board`, values: { boardWidth: value } })),
+  } };
+}
+
+export const sensorSource = (width: number) => `recipe 1\nunits mm\nsensor-enclosure boardWidth=${width}\n`;
+export function readSensorSource(text: string): number | null {
+  if (text.length > 256) return null;
+  const match = /^recipe 1\r?\nunits mm\r?\nsensor-enclosure boardWidth=(\d+(?:\.\d+)?)\r?\n?$/.exec(text);
+  if (!match) return null;
+  const width = Number(match[1]);
+  return Number.isFinite(width) && width >= sensorWidth.min && width <= sensorWidth.max ? width : null;
 }

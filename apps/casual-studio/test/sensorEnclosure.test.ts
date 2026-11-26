@@ -6,7 +6,7 @@ import { variantNamed, variantOf } from '@barocss/cad-model/assembly/variability
 import { encodeStudioFile, readStudioFile } from '@barocss/cad-model/engine/container';
 import { type StudioDoc } from '@barocss/cad-model/engine/doc';
 import { evaluateDoc, partBreps } from '@barocss/cad-model/engine/evaluate';
-import { buildSensorEnclosure } from '../src/sensorEnclosure';
+import { buildSensorEnclosure, readSensorSource, sensorDocumentAt, sensorSource } from '../src/sensorEnclosure';
 
 const near = (a: number, b: number) => assert.ok(Math.abs(a - b) < 1e-7, `${a} != ${b}`);
 const span = (solid: Brep, axis: number) => {
@@ -93,4 +93,15 @@ test('an editable BCAD file retains the shared input and rebuilds the named 64 m
   assert.deepEqual(read.doc.nodes, master.nodes);
   inspect(read.doc, 56);
   inspect(variantNamed(read.doc, '64 mm board').doc, 64);
+});
+
+test('applied 64 mm reopens as a coherent native master with a live 56 mm variant', async () => {
+  const applied = sensorDocumentAt(64);
+  const read = await readStudioFile(encodeStudioFile(applied));
+  if ('error' in read) assert.fail(read.error);
+  assert.equal(read.doc.variability?.inputs[0].default, 64);
+  inspect(variantOf(read.doc).doc, 64);
+  inspect(variantNamed(read.doc, '56 mm board').doc, 56);
+  for (const width of [56, 60.5, 64]) assert.equal(readSensorSource(sensorSource(width)), width);
+  for (const source of [sensorSource(65), sensorSource(64) + 'garbage', 'sensor-enclosure boardWidth=64']) assert.equal(readSensorSource(source), null);
 });

@@ -14,6 +14,7 @@ app.innerHTML = `
 <div class="start-intro"><p class="eyebrow">CASUAL STUDIO</p>
 <h1 id="start-title" tabindex="-1">있는 설계를 내 부품에 맞추세요</h1>
 <p>용도에 맞는 예제를 고르고, 필요한 치수만 바꿔 CAD 파일로 가져가세요.</p></div>
+<div class="examples">
 <article class="example" aria-labelledby="example-name">
 <div class="example-art" aria-hidden="true">
 <svg viewBox="0 0 280 152" focusable="false">
@@ -29,6 +30,18 @@ app.innerHTML = `
 <p class="editable-values">바꿀 수 있는 값: 구멍 A · B 지름</p>
 <button id="starter" type="button">이 예제로 시작</button></div>
 </article>
+<article class="example" aria-labelledby="sensor-example-name">
+<div class="example-art sensor-example-art" aria-hidden="true"><svg viewBox="0 0 280 152" focusable="false">
+<path fill="#9bb2c8" stroke="#557894" d="M47 99 147 67 234 103 134 135Z M47 99v13l87 33v-10Z M134 135v10l100-32v-10Z"/>
+<path fill="#80b3a3" stroke="#56877c" d="m64 76 84-26 70 27-84 27Z"/>
+<path fill="#bccfe2" stroke="#557894" d="m47 49 100-32 87 36-100 32Z M47 49v7l87 36v-7Z M134 85v7l100-32v-7Z"/>
+</svg></div>
+<div class="example-copy"><p class="eyebrow">조립 예제</p><h2 id="sensor-example-name">센서 보드 케이스</h2>
+<p>더 넓은 센서 보드를 넣어도 포트와 왼쪽 고정점은 그대로 유지해요.</p>
+<p class="editable-values">바꿀 수 있는 값: 보드 폭 56–64 mm</p>
+<button id="start-sensor" type="button">센서 케이스 열기</button></div>
+</article>
+</div>
 <div class="start-file"><button id="start-code" type="button">코드로 만들기</button>
 <small>빈 캔버스에서 판과 관통 구멍을 코드로 정의해요.</small></div>
 <div class="start-file"><button id="open-start" type="button">내 CAD 파일 열기</button>
@@ -48,6 +61,7 @@ app.innerHTML = `
 <p id="summary"></p><div><button id="cancel" type="button">취소</button><button id="apply" type="submit">적용</button></div></form>
 <p id="notice" role="status" aria-live="polite"></p></section></div>
 <section id="recipe-workspace" hidden aria-label="코드 모델링"></section>
+<section id="sensor-workspace" hidden aria-label="센서 케이스 모델링"></section>
 <dialog id="switch-dialog" aria-labelledby="switch-title" aria-describedby="switch-detail">
 <h2 id="switch-title">현재 편집을 버리고 이동할까요?</h2><p id="switch-detail"></p>
 <div><button id="keep" type="button" autofocus>계속 편집</button><button id="discard" type="button">버리고 이동</button></div></dialog>`;
@@ -55,6 +69,7 @@ const get = <T extends HTMLElement>(id: string) => document.getElementById(id) a
 let current: PlateDocument, saved: PlateDocument;
 let editing = false;
 let recipe: ReturnType<typeof import('./recipeWork')['mountRecipe']> | undefined;
+let sensor: ReturnType<typeof import('./sensorWork')['mountSensor']> | undefined;
 let fileName = 'cable-guide-adapter.bcad';
 let numberDraft = false, codeDraft = false;
 let pendingSwitch: (() => void) | undefined;
@@ -65,7 +80,7 @@ let fileRev = 0, editRev = 0;
 const past: PlateDocument[] = [], ahead: PlateDocument[] = [];
 const editor = get<HTMLFormElement>('editor'), diameter = get<HTMLInputElement>('diameter');
 const codePanel = get('code-panel'), script = get<HTMLTextAreaElement>('script');
-const notice = (t = '') => { if (recipe) recipe.notice(t); else get(editing ? 'notice' : 'start-notice').textContent = t; };
+const notice = (t = '') => { if (sensor) sensor.notice(t); else if (recipe) recipe.notice(t); else get(editing ? 'notice' : 'start-notice').textContent = t; };
 const activeHole = () => current.scene.holes.find(h => h.id === active);
 const scene = document.querySelector<SVGSVGElement>('#scene')!;
 function draw() {
@@ -162,12 +177,13 @@ window.addEventListener('keydown', e => {
 });
 const dialog = get<HTMLDialogElement>('switch-dialog');
 function confirmSwitch(action: () => void) {
-  const dirty = recipe ? recipe.hasUnsaved() : editing && current !== saved;
-  const pending = recipe ? recipe.hasDraft() : editing && (draft || numberDraft || codeDraft);
+  const activeRecipe = sensor ?? recipe;
+  const dirty = activeRecipe ? activeRecipe.hasUnsaved() : editing && current !== saved;
+  const pending = activeRecipe ? activeRecipe.hasDraft() : editing && (draft || numberDraft || codeDraft);
   if (!dirty && !pending) { action(); return; }
   const changes = [];
   if (pending) changes.push('아직 적용하지 않은 입력이 있어요.');
-  if (dirty) changes.push(recipe ? '적용했지만 레시피로 저장하지 않은 변경이 있어요.' : '적용했지만 CAD 파일로 저장하지 않은 변경이 있어요.');
+  if (dirty) changes.push(activeRecipe ? '적용했지만 레시피로 저장하지 않은 변경이 있어요.' : '적용했지만 CAD 파일로 저장하지 않은 변경이 있어요.');
   get('switch-detail').textContent = changes.join(' ');
   pendingSwitch = action;
   dialog.showModal();
@@ -180,10 +196,15 @@ get('discard').onclick = () => {
   const action = pendingSwitch;
   pendingSwitch = undefined; dialog.close(); action?.();
 };
+function clearWorkspaces() {
+  recipe = undefined; sensor = undefined;
+  for (const id of ['recipe-workspace','sensor-workspace']) {
+    const host = get(id);
+    host.hidden = true; host.onkeydown = null; host.replaceChildren();
+  }
+}
 function setEditing(value: boolean) {
-  recipe = undefined;
-  get('recipe-workspace').hidden = true;
-  get('recipe-workspace').replaceChildren();
+  clearWorkspaces();
   editing = value;
   get('start').hidden = value;
   get('workarea').hidden = get('tools').hidden = !value;
@@ -214,12 +235,29 @@ const download = (blob: Blob, name: string) => {
   const link = document.createElement('a'); link.href = url; link.download = name; link.click();
   setTimeout(() => URL.revokeObjectURL(url), 15_000);
 };
+const hooks = { touch: () => { ++editRev; }, download, home: goHome, open: pickFile };
+function showSensor(module: typeof import('./sensorWork'), width?: number, name?: string) {
+  clearWorkspaces();
+  ++editRev;
+  editing = false;
+  get('start').hidden = get('workarea').hidden = get('tools').hidden = true;
+  const host = get('sensor-workspace'); host.hidden = false;
+  sensor = module.mountSensor(host, hooks, width, name);
+}
+get('start-sensor').onclick = async () => {
+  const token = ++fileRev;
+  try {
+    const module = await import('./sensorWork');
+    if (token === fileRev) showSensor(module);
+  } catch { if (token === fileRev) { setEditing(false); notice('센서 케이스를 열지 못했어요.'); } }
+};
 function showRecipe(module: typeof import('./recipeWork'), loaded?: Parameters<typeof module.mountRecipe>[2]) {
+  clearWorkspaces();
   ++editRev;
   editing = false;
   get('start').hidden = get('workarea').hidden = get('tools').hidden = true;
   const host = get('recipe-workspace'); host.hidden = false;
-  recipe = module.mountRecipe(host, { touch: () => { ++editRev; }, download, home: goHome, open: pickFile }, loaded);
+  recipe = module.mountRecipe(host, hooks, loaded);
 }
 get('start-code').onclick = async () => {
   const token = ++fileRev;
@@ -241,6 +279,17 @@ get<HTMLInputElement>('file').onchange = async event => {
       if (file.size > module.RECIPE_LIMIT * 4) { if (token === fileRev && observed === editRev) notice('레시피 파일이 너무 커요.'); return; }
       const source = await file.text();
       if (token !== fileRev || observed !== editRev) return;
+      if (/^\s*sensor-enclosure\b/m.test(source)) {
+        const sensorModule = await import('./sensorWork');
+        if (token !== fileRev || observed !== editRev) return;
+        const width = sensorModule.readSensorSource(source);
+        if (width === null) { notice('센서 케이스 레시피는 보드 폭 56–64 mm를 사용해요.'); return; }
+        confirmSwitch(() => {
+          if (token !== fileRev || observed !== editRev) return;
+          showSensor(sensorModule, width, file.name); notice('센서 케이스 레시피를 열었어요.');
+        });
+        return;
+      }
       const result = module.compileCasualRecipe(source);
       if (!result.ok) { notice(result.line + '행: ' + result.reason); return; }
       confirmSwitch(() => {
