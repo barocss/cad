@@ -183,7 +183,7 @@ importers:
         specifier: 5.9.2
         version: 5.9.2
 
-  apps/casual-cad:
+  apps/casual-studio:
     dependencies:
       '@barocss/cad-model':
         specifier: workspace:*

@@ -1,6 +1,6 @@
 # BaroCSS CAD
 
-BaroCSS CAD is a TypeScript CAD system for designing editable parts, reviewing geometry, and working with AI agents. It includes a native B-rep and NURBS kernel, a browser-based Studio, a standalone Viewer, and libraries for embedding CAD in other applications.
+BaroCSS CAD is a TypeScript CAD system for designing editable parts, reviewing geometry, and working with AI agents. It includes a native B-rep and NURBS kernel, a browser-based Studio, a separate Casual Studio, a standalone Viewer, and libraries for embedding CAD in other applications.
 
 ## Run from source
 
@@ -13,7 +13,7 @@ pnpm install --frozen-lockfile
 pnpm dev
 ```
 
-Open [Studio](http://127.0.0.1:52020) to sketch and model parts, edit feature history, and save native `.bcad` documents. Use `pnpm dev:viewer` for the independent [Viewer](http://127.0.0.1:53032) or `pnpm dev:docs` for the documentation site.
+Open [Studio](http://127.0.0.1:52020) to sketch and model parts, edit feature history, and save native `.bcad` documents. Use `pnpm dev:casual` for [Casual Studio](apps/casual-studio), a separate workspace for fitting an existing design to your dimensions. Use `pnpm dev:viewer` for the independent [Viewer](http://127.0.0.1:53032) or `pnpm dev:docs` for the documentation site.
 
 ## Libraries
 
@@ -57,6 +57,7 @@ The [MCP and CLI guide](apps/library-docs/docs/agent/cli.md) covers tools, auton
 ```sh
 pnpm build
 pnpm build:viewer
+pnpm build:casual
 pnpm build:docs
 pnpm --filter @barocss/cad test:api-smoke
 ```

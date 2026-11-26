@@ -26,8 +26,8 @@ jobs:
       - run: pnpm build
       - run: pnpm build:viewer
       - run: pnpm build:casual
-      - run: pnpm --filter @barocss/casual-cad-app type-check
-      - run: pnpm --filter @barocss/casual-cad-app test
+      - run: pnpm --filter @barocss/casual-studio-app type-check
+      - run: pnpm --filter @barocss/casual-studio-app test
       - run: pnpm build:docs
       - run: pnpm --filter @barocss/cad test:api-smoke
       - run: pnpm --filter @barocss/cad-model test api-variable-fillet
