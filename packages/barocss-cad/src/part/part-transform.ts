@@ -203,11 +203,12 @@ export function transformOperation(f: CadPartFeature & Record<string, unknown>, 
       const source = f.source;
       const priorPlan = source === undefined ? undefined : priorCurveCutPlan(f.path, spacing, count, CadPartLimits.length, fail);
       const offsets = priorPlan ? priorPlan.offsets : curveCutOffsets(f.path, spacing, count, CadPartLimits.length, fail);
-      const { seed, tool, prior, priorCircular } = t.cutSource(f.target, source, 'path');
+      const pathPattern = priorPlan?.kind === 'straight' ? 'straight-path' : 'path';
+      const { seed, tool, prior, priorCircular } = t.cutSource(f.target, source, pathPattern);
       if (prior) certifyPriorCutPlacements(prior, offsets.slice(1), fail, 'path');
       if (priorCircular) {
         if (!priorPlan) fail('CAPABILITY', 'path feature pattern source with an original circular cut needs an admitted XY path');
-        certifyPriorCircularPlacements(priorCircular, offsets.slice(1), fail, 'path');
+        certifyPriorCircularPlacements(priorCircular, offsets.slice(1), fail, pathPattern);
       }
       const matrix: BrepAffine['matrix'] = [1, 0, 0, 0, 1, 0, 0, 0, 1];
       return () => {

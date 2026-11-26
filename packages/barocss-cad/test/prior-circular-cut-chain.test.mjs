@@ -164,8 +164,39 @@ test('Rectangular repeats only the original R2 on an XY grid after later rectang
     assert.throws(() => evaluated({ spacing }), e => e instanceof CadPartError && e.feature === 'repeat' && e.code === 'GEOMETRY');
   }
   assert.throws(() => evaluated({ axis2: 'z' }), e => e instanceof CadPartError && e.feature === 'repeat' && e.code === 'CAPABILITY');
-  const path = { kind: 'curve-feature-pattern', path: { degree: 1, knots: [0, 0, 1, 1], controlPoints: [[0, 0, 0], [0, 16, 0]], weights: [1, 1] } };
+  const path = { kind: 'curve-feature-pattern', path: { degree: 2, knots: [0, 0, 0, 1, 1, 1], controlPoints: [[0, 0, 0], [0, 16, 0], [16, 16, 0]], weights: [1, 1, 1] } };
   assert.throws(() => evaluated(path), e => e instanceof CadPartError && e.feature === 'repeat' && e.code === 'CAPABILITY');
   model.features[9] = { ...model.features[9], height: 8 };
   assert.throws(() => evaluated({}), e => e instanceof CadPartError && e.feature === 'repeat' && e.code === 'CAPABILITY');
+});
+
+
+test('straight XY Path repeats the earlier R2 past later R3 and rectangular cuts without changing original bore owners', () => {
+  const stock = chainBase();
+  stock.features[8] = { id: 'later2Sketch', kind: 'sketch', profile: 'circle', center: [38, 26], radius: 3, sideTags: { outer: ['laterRound'] } };
+  const walls = output => output.brep.faces.flatMap(face => {
+    const g = faceGeometry(face);
+    return g.kind === 'cylinder' ? [{ name: face.name, ...g }] : [];
+  });
+  const original = walls(evaluateCadPart(stock).outputs[0]);
+  const run = spacing => evaluateCadPart({ ...stock, features: [...stock.features, {
+    id: 'repeat', kind: 'curve-feature-pattern', target: 'third', source: 'first', spacing, count: 4,
+    path: { degree: 1, knots: [0, 0, 1, 2, 2], controlPoints: [[6, 5, 4], [6, 21, 4], [30, 21, 4]], weights: [1, 1, 1] },
+  }] });
+  for (const spacing of [12, 12.5]) {
+    const snapshot = run(spacing);
+    const out = verifyChain(snapshot, 5, 1, 80 + 50 * Math.PI);
+    const cutWalls = walls(out);
+    assert.deepEqual(cutWalls.filter(wall => original.some(old => old.name === wall.name)), original);
+    for (const [ordinal, center] of [[1, [10, 10 + spacing]], [2, [2 * spacing - 6, 26]], [3, [3 * spacing - 6, 26]]]) {
+      const copy = cutWalls.filter(wall => Math.hypot(wall.c[0] - center[0], wall.c[1] - center[1]) < 1e-8);
+      assert.equal(copy.length, 2);
+      assert.ok(copy.every(wall => wall.name.includes(`[round]@${ordinal}`) && Math.abs(wall.r - 2) < 1e-8 && wall.out === -1));
+    }
+    assert.deepEqual(loadCadPart(saveCadPart(snapshot)).outputs[0].brep, out.brep);
+  }
+  for (const spacing of [13, 13.125]) {
+    assert.throws(() => run(spacing), e => e instanceof CadPartError && e.feature === 'repeat'
+      && e.code === 'GEOMETRY' && /disjoint from the newer cuts/.test(e.message));
+  }
 });

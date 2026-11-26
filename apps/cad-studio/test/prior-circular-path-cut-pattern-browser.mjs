@@ -6,10 +6,12 @@ import { choosePriorCutSource, equivalent } from './prior-cut-pattern-browser-fi
 const baseline = process.argv.includes('--baseline');
 const quarter = process.argv.includes('--quarter');
 const quadratic = process.argv.includes('--quadratic');
-assert.ok(!quarter || !quadratic);
-const count = quarter ? 4 : 3;
-const spacing = quadratic ? 10 : quarter ? 8 : 16;
-const revisedSpacing = quadratic ? 12 : quarter ? 9 : 14;
+const mixed = process.argv.includes('--mixed');
+const entry = process.argv.includes('--history') ? 'History' : 'Browser';
+assert.ok([quarter, quadratic, mixed].filter(Boolean).length <= 1);
+const count = quarter || mixed ? 4 : 3;
+const spacing = quadratic ? 10 : quarter ? 8 : mixed ? 12.5 : 16;
+const revisedSpacing = quadratic ? 12 : quarter ? 9 : mixed ? 12 : 14;
 const centersOnQuarter = pitch => Array.from({ length: count }, (_, i) => {
   const a = i * pitch / 20;
   return [10 + 20 * Math.sin(a), 10 + 20 * (1 - Math.cos(a))];
@@ -27,6 +29,7 @@ const centersOnQuadratic = pitch => Array.from({ length: count }, (_, i) => {
   const t = (lower + upper) / 2;
   return [10 + 40 * t - 20 * t ** 2, 10 + 20 * t ** 2];
 });
+const centersOnMixedPath = pitch => [[10, 10], [10, 10 + pitch], [2 * pitch - 6, 26], [3 * pitch - 6, 26]];
 const placementTolerance = quadratic ? 1e-7 : 1e-8;
 const pins = ['apps/cad-studio/test/prior-circular-path-cut-pattern-browser.mjs', 'apps/cad-studio/test/prior-cut-pattern-browser-fixture.mjs',
   'apps/cad-studio/src/app/cutPatternSource.ts', 'packages/barocss-cad-model/src/engine/doc.ts',
@@ -36,8 +39,8 @@ const pins = ['apps/cad-studio/test/prior-circular-path-cut-pattern-browser.mjs'
   'packages/barocss-cad/src/part/part-prior-rectangular-cut.ts'];
 const f = await createFlow({
   name: 'prior-circular-path-cut-pattern', output: process.argv[2],
-  envFrozen: quadratic ? 'D1950_SOURCE_FROZEN' : quarter ? 'D1931_SOURCE_FROZEN' : 'D1911_SOURCE_FROZEN',
-  qualification: 'Repeat only the first original circular through-Subtract across one later rectangular through-Subtract.',
+  envFrozen: mixed ? 'D2034_SOURCE_FROZEN' : quadratic ? 'D1950_SOURCE_FROZEN' : quarter ? 'D1931_SOURCE_FROZEN' : 'D1911_SOURCE_FROZEN',
+  qualification: mixed ? `Repeat the selected original R2 after later R3 and rectangle through cuts via ${entry}.` : 'Repeat only the first original circular through-Subtract across one later rectangular through-Subtract.',
   limits: ['One upright rectangular stock, two original full-height cuts and fixed-orientation copies on a linked, level XY path.'],
   initialFiles: pins, requiredFrozen: pins,
   inspectorSource: `
@@ -92,33 +95,45 @@ const stock = {
   ],
   outputs: { b7: ref(7) },
 };
+if (mixed) {
+  stock.nodes.push(
+    { kind: 'sketch', profile: 'circle', center: [38, 26], radius: 3, id: 'n8' },
+    { kind: 'extrude', sketch: 8, height: 10, id: 'n9' },
+    { kind: 'difference', parent: ref(7), tool: ref(9), id: 'n10' },
+  );
+  stock.nextId = 11;
+  stock.outputs = { b10: ref(10) };
+}
+const parentIndex = stock.nodes.length - 1;
 const button = (name, scope = f.page) => scope.getByRole('button', { name, exact: true });
 const field = (panel, name) => panel.getByLabel(name, { exact: true });
 const panel = () => f.page.getByRole('dialog', { name: 'Path cut pattern', exact: true });
 const status = expected => panel().locator('.status').filter({ hasText: new RegExp(`^${expected}$`) }).waitFor();
 
 async function inspect(label, doc, centers, placed = false) {
+  const bores = centers.map(center => [...center, 2]);
+  if (mixed) bores.push([38, 26, 3]);
   const { check, caps, cylinders, mass } = await f.inspect(label, doc);
   assert.ok(check.valid, check.issues.join('\n'));
   assert.equal(check.topology.length, 1);
   assert.equal(check.topology[0].shells, 1);
-  assert.equal(check.topology[0].genus, centers.length + 1);
+  assert.equal(check.topology[0].genus, bores.length + 1);
   assert.equal(caps.length, 2);
-  assert.equal(cylinders.length, 2 * centers.length);
-  for (const [x, y] of centers) {
+  assert.equal(cylinders.length, 2 * bores.length);
+  for (const [x, y, r] of bores) {
     const walls = cylinders.filter(wall => Math.hypot(wall.c[0] - x, wall.c[1] - y) < placementTolerance);
     assert.equal(walls.length, 2);
     const position = centers.findIndex(center => center[0] === x && center[1] === y);
-    if (placed && position) for (const wall of walls) assert.ok(wall.name.includes(`@${position}`));
+    if (placed && position > 0) for (const wall of walls) assert.match(wall.name, new RegExp(`@${position}(?:[^0-9]|$)`));
     for (const wall of walls) {
-      equivalent(wall.r, 2);
+      equivalent(wall.r, r);
       equivalent(Math.abs(wall.a[2]), 1);
       assert.equal(wall.out, -1);
     }
   }
   for (const cap of caps) {
     assert.equal(cap.outer, 1);
-    assert.equal(cap.openings.length, centers.length + 1);
+    assert.equal(cap.openings.length, bores.length + 1);
     equivalent(cap.z, cap.outward < 0 ? 0 : 10);
     const rectangle = cap.openings.find(opening => opening.degree.length === 4 && opening.degree.every(degree => degree === 1));
     assert.ok(rectangle);
@@ -127,15 +142,16 @@ async function inspect(label, doc, centers, placed = false) {
       equivalent(Math.max(...rectangle.points.map(point => point[axis])), hi);
     }
     const circles = cap.openings.filter(opening => opening !== rectangle);
-    for (const [x, y] of centers) {
-      const rings = circles.filter(ring => ring.points.every(point => Math.abs(Math.hypot(point[0] - x, point[1] - y) - 2) < placementTolerance));
+    for (const [x, y, r] of bores) {
+      const rings = circles.filter(ring => ring.points.every(point => Math.abs(Math.hypot(point[0] - x, point[1] - y) - r) < placementTolerance));
       assert.equal(rings.length, 1);
       assert.deepEqual(rings[0].degree, [2, 2]);
     }
     for (const point of cap.openings.flatMap(opening => opening.points)) equivalent(point[2], cap.z);
   }
-  const removed = 40 * Math.PI, volume = 23920 - centers.length * removed;
-  const moment = [717920, 479280].map((value, axis) => value - removed * centers.reduce((sum, center) => sum + center[axis], 0));
+  const removed = r => 10 * Math.PI * r * r;
+  const volume = 23920 - bores.reduce((sum, bore) => sum + removed(bore[2]), 0);
+  const moment = [717920, 479280].map((value, axis) => value - bores.reduce((sum, bore) => sum + removed(bore[2]) * bore[axis], 0));
   equivalent(mass.volume, volume);
   for (let axis = 0; axis < 2; axis++) equivalent(mass.centroid[axis], moment[axis] / volume);
   equivalent(mass.centroid[2], 5);
@@ -229,19 +245,21 @@ await f.run(async () => {
     assert.deepEqual(path.controlPoints, [[6, 5, 0], [6, 13, 0], [6, 21, 0], [18, 21, 0], [30, 21, 0]]);
   }
   const original = await inspect('original-circle-and-later-rectangle', doc, [[10, 10]]);
-  await choosePriorCutSource(f, 'Browser');
+  await choosePriorCutSource(f, entry);
   await clickModelCommand(f.page, 'Pattern', 'Path cut pattern');
   await panel().getByText('Subtract 1 (n4)', { exact: true }).waitFor();
   await field(panel(), 'Path').selectOption(objectId);
   await field(panel(), 'Count').fill(String(count));
   await field(panel(), 'Spacing').fill(String(spacing));
   const history = await stackState();
+  f.report.observations.push({ entry, parent: ref(parentIndex), source: ref(4), path: { objectId } });
   if (baseline) {
     await refused(doc, history, '01-circular-path-refused', quarter || quadratic ? /exact straight spans/ : undefined);
     return;
   }
   await status('preview');
-  for (const [pitch, name, reason] of [[4, '02-source-touch-refused', /disjoint/], [quarter ? 11 : 21, '03-path-too-short', /exceeds.*path length/i]]) {
+  for (const [pitch, name, reason] of [[4, '02-source-touch-refused', /disjoint/], [quarter ? 11 : 21, '03-path-too-short', /exceeds.*path length/i],
+    ...(mixed ? [[13, '03a-later-r3-tangent-refused', /disjoint from the newer cuts/], [13.125, '03b-later-r3-overlap-refused', /disjoint from the newer cuts/]] : [])]) {
     await field(panel(), 'Spacing').fill(String(pitch));
     await refused(doc, history, name, reason);
     await field(panel(), 'Spacing').fill(String(spacing));
@@ -253,20 +271,23 @@ await f.run(async () => {
   assert.deepEqual(applied.nodes.slice(0, -1), doc.nodes);
   assert.deepEqual(applied.direct, doc.direct);
   assert.deepEqual([pattern.kind, pattern.parent, pattern.source, pattern.path, pattern.spacing, pattern.count],
-    ['curve-feature-pattern', ref(7), ref(4), { objectId }, spacing, count]);
-  const originalCenters = quadratic ? centersOnQuadratic(spacing) : quarter ? centersOnQuarter(spacing) : [[10, 10], [10, 26], [26, 26]];
+    ['curve-feature-pattern', ref(parentIndex), ref(4), { objectId }, spacing, count]);
+  const originalCenters = quadratic ? centersOnQuadratic(spacing) : quarter ? centersOnQuarter(spacing) : mixed ? centersOnMixedPath(spacing) : [[10, 10], [10, 26], [26, 26]];
   const accepted = await inspect('path-native', applied, originalCenters, true);
   assert.deepEqual(accepted.filter(wall => original.some(old => old.name === wall.name)), original);
-  await f.openFeatureEditor(8, 'Path source spacing');
+  await f.openFeatureEditor(stock.nodes.length, 'Path source spacing');
   await f.editor().getByText('Subtract 1 (n4)', { exact: true }).waitFor();
   await field(f.editor(), 'Spacing').fill(String(revisedSpacing));
   const edited = (await f.applyEditor(applied, '05-path-spacing-edited')).doc;
   assert.deepEqual(edited.nodes.at(-1), { ...pattern, spacing: revisedSpacing });
-  const centers = quadratic ? centersOnQuadratic(revisedSpacing) : quarter ? centersOnQuarter(revisedSpacing) : [[10, 10], [10, 24], [22, 26]];
-  await inspect('path-edited-native', edited, centers, true);
+  const centers = quadratic ? centersOnQuadratic(revisedSpacing) : quarter ? centersOnQuarter(revisedSpacing) : mixed ? centersOnMixedPath(revisedSpacing) : [[10, 10], [10, 24], [22, 26]];
+  const editedWalls = await inspect('path-edited-native', edited, centers, true);
+  assert.deepEqual(editedWalls.filter(wall => original.some(old => old.name === wall.name)), original);
   await f.undo(); await f.same(applied);
   await f.redo(); await f.same(edited);
   const saved = await f.save('circular-path-cut-pattern');
   const reopened = await f.freshOpen(saved.file, edited, '06-fresh-open-circular-path');
-  await inspect('path-reopened-native', reopened.doc, centers, true);
+  assert.deepEqual(reopened.doc.nodes.at(-1), { ...pattern, spacing: revisedSpacing });
+  const reopenedWalls = await inspect('path-reopened-native', reopened.doc, centers, true);
+  assert.deepEqual(reopenedWalls.filter(wall => original.some(old => old.name === wall.name)), original);
 });

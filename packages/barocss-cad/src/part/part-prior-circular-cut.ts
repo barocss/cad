@@ -12,10 +12,11 @@ export type PriorCircularCut = {
 };
 type Circle = { center: readonly [number, number]; radius: number; tag: string };
 type Rectangle = NonNullable<ReturnType<typeof priorCutRectangle>>;
-type Pattern = 'linear' | 'rectangular' | 'fill' | 'path';
-/** Signed Linear, Rectangular and captured Fill share the mixed through-cut certificate; Path does not. */
-export const allowsLaterCircularCut = (pattern: Pattern) => pattern === 'linear' || pattern === 'rectangular' || pattern === 'fill';
-const requirement = (pattern: Pattern) => `${pattern} feature pattern source needs one original circular through cut followed by original ${allowsLaterCircularCut(pattern) ? 'rectangular or circular' : 'rectangular'} through cuts on upright rectangular stock and ${pattern === 'linear' ? 'one XY line' : pattern === 'fill' ? 'selected XY placements' : pattern === 'path' ? 'an open XY path of exact straight spans, one polynomial quadratic or one canonical quarter arc' : 'an XY grid'}`;
+export type PriorCircularPattern = 'linear' | 'rectangular' | 'fill' | 'path' | 'straight-path';
+/** Admit mixed original through cuts on Path only when its placement plan consists of exact straight spans. */
+export const allowsLaterCircularCut = (pattern: PriorCircularPattern) => pattern === 'linear' || pattern === 'rectangular' || pattern === 'fill' || pattern === 'straight-path';
+const patternLabel = (pattern: PriorCircularPattern) => pattern === 'straight-path' ? 'path' : pattern;
+const requirement = (pattern: PriorCircularPattern) => `${patternLabel(pattern)} feature pattern source needs one original circular through cut followed by original ${allowsLaterCircularCut(pattern) ? 'rectangular or circular' : 'rectangular'} through cuts on upright rectangular stock and ${pattern === 'linear' ? 'one XY line' : pattern === 'fill' ? 'selected XY placements' : pattern === 'straight-path' ? 'an open XY path of exact straight spans' : pattern === 'path' ? 'an open XY path of exact straight spans, one polynomial quadratic or one canonical quarter arc' : 'an XY grid'}`;
 
 function profile(part: Part) {
   if (part.solid.kind !== 'upright' || part.solid.solid.slabs.length !== 1) return;
@@ -49,8 +50,8 @@ const sameRectangle = (a: readonly CurveSegment2[], b: readonly CurveSegment2[])
 };
 
 /** Certify each original native cavity along the Difference chain, then each explicit XY placement in order. */
-export function certifyPriorCircularPlacements(prior: PriorCircularCut, offsets: readonly Point[], fail: Tools['fail'], pattern: Pattern): void {
-  const label = `${pattern} feature pattern source`;
+export function certifyPriorCircularPlacements(prior: PriorCircularCut, offsets: readonly Point[], fail: Tools['fail'], pattern: PriorCircularPattern): void {
+  const label = `${patternLabel(pattern)} feature pattern source`;
   const stock = profile(prior.stock), first = profile(prior.first.cutter), firstResult = profile(prior.first.result);
   const box = stock && priorCutRectangle(stock.outer), source = first && circle(first.outer);
   if (!stock || stock.holes.length || !box || !first || first.holes.length || !source || !firstResult || !prior.later.length
