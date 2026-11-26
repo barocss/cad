@@ -2,7 +2,10 @@ import assert from 'node:assert/strict';
 import { createFlow } from './flow-helper.mjs';
 
 const baseline = process.argv.includes('--baseline');
-const multi = process.argv.includes('--multi');
+const three = process.argv.includes('--three');
+const multi = three || process.argv.includes('--multi');
+const companions = multi ? [{ key: 'b5', volume: 2304, pick: [82, -12, 6] }] : [];
+if (three) companions.push({ key: 'b7', volume: 1680, pick: [-39, -12, 5] });
 const n2Old = 'n1.side[e1]', n2New = 'n1.side[s1]';
 const n3Old = 'n1.side[e1]#3|n2.ceiling', n3New = 'n1.side[s1]#3|n2.ceiling';
 const ref = node => ({ node, side: 'solid' });
@@ -18,8 +21,13 @@ const seed = {
     { id: 'n1', kind: 'extrude', sketch: stockSketch, height: 12 },
     { id: 'n2', kind: 'shell', parent: ref(shellNode - 1), open: [n2Old], thickness: 2 },
     { id: 'n3', kind: 'chamfer', parent: ref(shellNode), edges: [n3Old], distance: 0.5 },
+    ...(three ? [
+      { id: 'n6', kind: 'sketch', profile: 'rectangle', min: [-46, -12], max: [-32, 0] },
+      { id: 'n7', kind: 'extrude', sketch: chamferNode + 1, height: 10 },
+    ] : []),
   ],
-  outputs: multi ? { b5: ref(1), b3: ref(chamferNode) } : { b3: ref(chamferNode) }, nextId: multi ? 6 : 4,
+  outputs: { ...(multi ? { b5: ref(1) } : {}), b3: ref(chamferNode), ...(three ? { b7: ref(chamferNode + 2) } : {}) },
+  nextId: three ? 8 : multi ? 6 : 4,
 };
 const uBlockSketch = {
   id: 'n0', kind: 'sketch', profile: 'polygon',
@@ -60,7 +68,7 @@ if (input.prepare) {
   doc = captureSignatures(doc, r2.bodies);
   console.log(JSON.stringify({ doc, native: inspect(doc) }));
 } else if (input.independent) {
-  console.log(JSON.stringify(partBreps(input.doc).find(body => body.key === 'b5')?.brep));
+  console.log(JSON.stringify(partBreps(input.doc).filter(body => input.independent.includes(body.key)).map(({ key, brep }) => ({ key, brep }))));
 } else if (input.previewFace) {
   const ev = evaluateDoc(input.doc, 1);
   if (!ev.ok) throw Error('Expected the current source bodies');
@@ -108,16 +116,18 @@ const shellExpected = 14656 - 16 * (4 - Math.PI);
 let chamferedExpected = null, independent = null;
 async function native(label, doc, state) {
   const models = await f.inspect(label, doc);
-  assert.equal(models.length, multi ? 2 : 1);
+  assert.equal(models.length, companions.length + 1);
   const model = models.find(body => body.key === 'b3');
   assert.ok(model);
   if (multi) {
-    const other = models.find(body => body.key === 'b5');
-    assert.ok(other?.valid);
-    near(other.volume, 2304);
     const heads = await f.bodies();
-    assert.ok(heads.bodies.some(body => body.key === 'b5'));
-    const current = await f.inspect(label + '-independent', { independent: true, doc });
+    for (const { key, volume } of companions) {
+      const other = models.find(body => body.key === key);
+      assert.ok(other?.valid);
+      near(other.volume, volume);
+      assert.ok(heads.bodies.some(body => body.key === key));
+    }
+    const current = await f.inspect(label + '-independent', { independent: companions.map(body => body.key), doc });
     if (!independent) independent = current;
     assert.deepEqual(current, independent);
   }
@@ -175,16 +185,17 @@ await f.run(async () => {
 
   if (multi) {
     await setView('Front');
-    await pick([82, -12, 6]);
-    await f.page.getByRole('alert').filter({ hasText: 'Face not selected' }).waitFor();
-    await f.same(bothHeld.doc);
-    assert.deepEqual(await history(), stack);
-    assert.equal(await applyFaceBtn.isDisabled(), true);
-    await f.snapshot('01-foreign-body-refused');
-  } else {
-    await setView('Top');
-    await pick([0, 15, 12]);
+    for (const companion of companions) {
+      await pick(companion.pick);
+      await f.page.getByRole('alert').filter({ hasText: 'Face not selected' }).waitFor();
+      await f.same(bothHeld.doc);
+      assert.deepEqual(await history(), stack);
+      assert.equal(await applyFaceBtn.isDisabled(), true);
+      await f.snapshot(companion.key === 'b5' ? '01-foreign-body-refused' : '01-second-foreign-body-refused');
+    }
   }
+  await setView('Top');
+  await pick([0, 15, 12]);
   await f.page.getByRole('alert').filter({ hasText: 'Face not selected' }).waitFor();
   await f.same(bothHeld.doc);
   assert.deepEqual(await history(), stack);

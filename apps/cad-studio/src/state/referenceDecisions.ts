@@ -132,7 +132,7 @@ interface ReferencePreviewRoute {
 /**
  * A held feature is a passthrough, not the source of replacement geometry.
  * Resolve one exact Shell/held-finish output, never by name across meshes or by slot order.
- * A second output is admitted only as an independent ordinary rectangular extrusion.
+ * Up to two companion outputs are admitted only as distinct independent rectangular extrusions.
  */
 export function heldShellCandidateFace(doc: StudioDoc, bodies: readonly BodyResult[], problem: Problem, name: string): Selection['faces'][number] | undefined {
   if (problem.node == null || doc.instances?.length || !problem.candidates.includes(name)) return;
@@ -142,7 +142,9 @@ export function heldShellCandidateFace(doc: StudioDoc, bodies: readonly BodyResu
   const reference = referencesOf(doc, true).refs[problem.index];
   if (!reference || reference.node !== shellIndex || reference.edge || reference.name !== problem.name || reference.where !== problem.where) return;
   const entries = Object.entries(doc.outputs);
-  if (!entries.length || entries.length > 2 || bodies.length !== entries.length || new Set(bodies.map(body => body.key)).size !== bodies.length) return;
+  if (!entries.length || entries.length > 3 || bodies.length !== entries.length
+    || new Set(entries.map(([, ref]) => ref.node)).size !== entries.length
+    || new Set(bodies.map(body => body.key)).size !== bodies.length) return;
 
   const followsShell = (tip: number) => {
     let index = tip;

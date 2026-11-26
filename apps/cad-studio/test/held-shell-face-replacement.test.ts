@@ -167,3 +167,48 @@ test('an independent box cannot supply, steal or invalidate the held Shell openi
   assert.equal(heldShellFaceProblem(followed, 2, problems, bodies), undefined);
   assert.deepEqual(together, before);
 });
+
+test('two independent boxes may surround the Shell viewport slot but cannot alias its or each other’s producer', () => {
+  const { doc, problems } = makeHeldFixture();
+  const together: StudioDoc = {
+    ...doc,
+    nextId: 8,
+    nodes: [...doc.nodes,
+      { id: 'n4', kind: 'sketch', profile: 'rectangle', min: [76, -12], max: [88, 4] },
+      { id: 'n5', kind: 'extrude', sketch: 4, height: 12 },
+      { id: 'n6', kind: 'sketch', profile: 'rectangle', min: [-46, -12], max: [-32, 0] },
+      { id: 'n7', kind: 'extrude', sketch: 6, height: 10 }],
+    outputs: { b5: ref(5), ...doc.outputs, b7: ref(7) },
+  };
+  const evaluated = evaluateDoc(together, 1);
+  assert.ok(evaluated.ok);
+  const owner = evaluated.bodies.find(b => b.key === 'b3')!;
+  const first = evaluated.bodies.find(b => b.key === 'b5')!;
+  const last = evaluated.bodies.find(b => b.key === 'b7')!;
+  const bodies = [first, owner, last];
+  const source = owner.mesh.faces.find(face => face.name === n2New)!;
+  const pick = (slot: number, face: number, mesh: typeof owner.mesh) => pickHeldShellFace(
+    together, 2, problems, bodies, { face: { body: slot, face }, faceMesh: mesh },
+  );
+  assert.equal(heldShellFaceProblem(together, 2, problems, bodies)?.bodyIndex, 1);
+  assert.equal(pick(0, first.mesh.faces[0].index, first.mesh).ok, false);
+  assert.equal(pick(2, last.mesh.faces[0].index, last.mesh).ok, false);
+  assert.equal(pick(1, source.index, last.mesh).ok, false);
+  assert.equal(pick(1, source.index, owner.mesh).ok, true);
+
+  const alias: StudioDoc = { ...together, outputs: { ...together.outputs, b7: ref(5) } };
+  assert.equal(heldShellFaceProblem(alias, 2, problems, [first, owner, { ...first, key: 'b7' }]), undefined);
+  const duplicateShell: StudioDoc = { ...together, outputs: { ...together.outputs, b7: ref(2) } };
+  assert.equal(heldShellFaceProblem(duplicateShell, 2, problems, [first, owner, { ...owner, key: 'b7', ref: ref(2) }]), undefined);
+  const extraBox: StudioDoc = {
+    ...together,
+    nextId: 10,
+    nodes: [...together.nodes,
+      { id: 'n8', kind: 'sketch', profile: 'rectangle', min: [110, 0], max: [120, 6] },
+      { id: 'n9', kind: 'extrude', sketch: 8, height: 5 }],
+    outputs: { ...together.outputs, b9: ref(9) },
+  };
+  const extra = evaluateDoc(extraBox, 1);
+  assert.ok(extra.ok);
+  assert.equal(heldShellFaceProblem(extraBox, 2, problems, extra.bodies), undefined);
+});
