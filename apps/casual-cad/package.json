@@ -1,0 +1,19 @@
+{
+  "name": "@barocss/casual-cad-app",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --port 5182 --strictPort",
+    "build": "vite build",
+    "preview": "vite preview --port 5182 --strictPort",
+    "type-check": "tsc --noEmit",
+    "test": "node test/run.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.4"
+  },
+  "dependencies": {
+    "@barocss/cad-model": "workspace:*"
+  }
+}

@@ -183,6 +183,16 @@ importers:
         specifier: 5.9.2
         version: 5.9.2
 
+  apps/casual-cad:
+    dependencies:
+      '@barocss/cad-model':
+        specifier: workspace:*
+        version: link:../../packages/barocss-cad-model
+    devDependencies:
+      '@types/node':
+        specifier: 26.6.4
+        version: 26.6.4
+
   apps/library-docs:
     devDependencies:
       vitepress:

@@ -7,9 +7,11 @@
   },
   "scripts": {
     "dev": "pnpm --filter @barocss/cad-studio-app dev",
+    "dev:casual": "pnpm --filter @barocss/casual-cad-app dev",
     "dev:viewer": "pnpm --filter @barocss/cad-viewer-app dev",
     "dev:docs": "pnpm --filter @barocss/library-docs dev",
     "build": "pnpm --filter @barocss/cad-studio-app build",
+    "build:casual": "pnpm --filter @barocss/casual-cad-app build",
     "build:viewer": "pnpm --filter @barocss/cad-viewer-app check:build",
     "build:docs": "pnpm --filter @barocss/library-docs build",
     "build:library": "pnpm -r run build:library",
