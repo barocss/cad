@@ -72,7 +72,7 @@ try {
   await control('구멍 A 지름 8 mm').waitFor();
   await control('구멍 B 지름 6 mm').waitFor();
   assert.equal(await page.locator('#undo').isDisabled(), true);
-  assert.ok(!requested.some(p => /\/code-|worker|\.wasm$/.test(p)), 'code/worker/WASM should not load for the first model or its preview');
+  assert.ok(!requested.some(p => /\/code-|recipeWork-|worker|\.wasm$/.test(p)), 'code/worker/WASM should not load for the first model or its preview');
   // Check the draft there, but not committed; use a fresh download before cancelling.
   async function download(name) {
     const slot = page.waitForEvent('download'); await action('save');
@@ -173,8 +173,93 @@ try {
     await reopen.getByRole('button', { name:'구멍 A 지름 9 mm' }).waitFor();
     studioHandoff = 'PASS';
   }
+  // A genuine blank project: no sample insertion and no preexisting template geometry.
+  const recipeContext = await browser.newContext({ viewport:{ width:1140,height:750 }, acceptDownloads:true });
+  const recipe = await recipeContext.newPage();
+  recipe.on('pageerror', e => errors.push(e.message));
+  await recipe.goto(origin);
+  await recipe.getByRole('button', { name:'코드로 만들기', exact:true }).click();
+  const editor = recipe.getByLabel('CAD 레시피');
+  const rb = id => recipe.locator('#recipe-' + id);
+  assert.equal(await editor.inputValue(), '');
+  assert.equal(await rb('scene').locator('polygon').count(),0);
+  const authored = `recipe 1
+units mm
+# My own fixture
+param guideDia = 6
+param w = 64
+plate fixture width=w depth=42 thickness=7
+hole near in=fixture at=(12, 12) diameter=guideDia
+hole far in=fixture at=(48, 16) diameter=8
+hole wire in=fixture at=(31, 29) diameter=4
+output fixture
+`;
+  await editor.fill(authored);
+  await rb('run').click();
+  assert.match(await rb('state').textContent(), /미리보기 · 관통 구멍 3개/);
+  assert.equal(new Set(await rb('scene').locator('polyline[data-hole]').evaluateAll(es => es.map(e => e.dataset.hole))).size,3);
+  assert.equal(await rb('export').isDisabled(),true);
+  // A newer input invalidates an older preview before Apply.
+  await editor.fill(authored.replace('diameter=8','diameter=0'));
+  assert.equal(await rb('apply').isDisabled(),true);
+  await rb('run').click();
+  assert.match(await rb('error').textContent(),/^8행:/);
+  await editor.fill(authored);
+  await rb('run').click(); await rb('apply').click();
+  await rb('undo').click(); assert.equal(await editor.inputValue(),'');
+  await rb('redo').click(); assert.equal(await editor.inputValue(),authored);
+  await editor.fill(authored.replace('at=(48, 16)','at=(12, 12)'));
+  await rb('run').click();
+  assert.match(await rb('error').textContent(),/겹쳐요/);
+  assert.match(await rb('state').textContent(), /마지막 적용 모델 · 관통 구멍 3개/);
+  await rb('cancel').click();
+  await recipe.screenshot({ path:join(out,'casual-recipe-chrome.png') });
+  const grab = async (id,name) => {
+    const slot = recipe.waitForEvent('download'); await rb(id).click();
+    const path = join(out,name); await (await slot).saveAs(path); return path;
+  };
+  const exported = await grab('export','authored.bcad');
+  assert.match(await rb('status').textContent(), /지름 연결은 현재 값/);
+  await rb('home').click();
+  await recipe.getByRole('dialog').waitFor();
+  assert.match(await recipe.locator('#switch-detail').textContent(), /레시피로 저장하지 않은/);
+  await recipe.locator('#keep').click();
+  const recipeFile = await grab('save','authored.cadrecipe');
+  assert.equal(await readFile(recipeFile,'utf8'),authored);
+  await rb('home').click();
+  await recipe.getByRole('button', { name:'코드로 만들기' }).waitFor();
+  await recipe.locator('#file').setInputFiles(recipeFile);
+  await editor.waitFor();
+  assert.equal(await editor.inputValue(),authored);
+  await editor.fill(authored.replace('param guideDia = 6','param guideDia = 7'));
+  await rb('run').click(); await rb('apply').click();
+  const edited = JSON.parse(await readFile(await grab('export','recipe-reopened.bcad'),'utf8'));
+  assert.deepEqual(edited.nodes.slice(2).map(n => n.radius),[3.5,4,2]);
+  let recipeHandoff = 'NOT_RUN';
+  if (studioServer) {
+    const studio = await (await browser.newContext({ acceptDownloads:true })).newPage();
+    studio.on('pageerror', e => errors.push(e.message));
+    await studio.goto('http://127.0.0.1:' + studioServer.address().port);
+    await studio.getByLabel('Model file', { exact:true }).setInputFiles(exported);
+    await studio.getByText(/Perspective · 1 solid/).waitFor({ timeout:30_000 });
+    await studio.getByText(/^Bounds 64 × 42 × 7$/).waitFor({ timeout:30_000 });
+    await studio.locator('.history .hs[data-node-index="4"]').click();
+    const fields = studio.locator('.node-editor');
+    const dia = fields.getByLabel('Diameter',{ exact:true });
+    assert.equal(await dia.inputValue(),'4');
+    await dia.fill('5');
+    await fields.getByRole('button',{ name:'Apply',exact:true }).click();
+    await studio.locator('[aria-label="Unsaved changes"]').waitFor({ state:'attached',timeout:15_000 });
+    const slot = studio.waitForEvent('download');
+    await studio.getByRole('button',{ name:'Save',exact:true }).click();
+    const path = join(out,'recipe-studio-edited.bcad');
+    await (await slot).saveAs(path);
+    const doc = JSON.parse(await readFile(path,'utf8'));
+    assert.deepEqual(doc.nodes.slice(2).map(n => n.radius),[3,4,2.5]);
+    recipeHandoff = 'PASS';
+  }
   assert.deepEqual(errors, []);
-  console.log(JSON.stringify({ result:'PASS', studioHandoff, requested:[...new Set(requested)], output:out }));
+  console.log(JSON.stringify({ result:'PASS', studioHandoff, recipeHandoff, requested:[...new Set(requested)], output:out }));
 } finally {
   await browser?.close();
   server.close();

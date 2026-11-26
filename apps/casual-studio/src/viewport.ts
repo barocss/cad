@@ -1,4 +1,4 @@
-import type { PlateScene } from '@barocss/cad-model/app/casualPlate';
+import type { CasualSolidScene } from '@barocss/cad-model/app/casualPlate';
 const ns = 'http://www.w3.org/2000/svg';
 const el = <K extends keyof SVGElementTagNameMap>(tag: K, attrs: Record<string, string | number>) => {
   const node = document.createElementNS(ns, tag);
@@ -6,7 +6,7 @@ const el = <K extends keyof SVGElementTagNameMap>(tag: K, attrs: Record<string, 
   return node;
 };
 
-export function viewport(svg: SVGSVGElement, scene: PlateScene, selected: string | null, top: boolean, before?: PlateScene) {
+export function viewport(svg: SVGSVGElement, scene: CasualSolidScene, selected: string | null, top: boolean, before?: CasualSolidScene) {
   const { positions, indices, faces, edges } = scene.mesh;
   const project = (x: number, y: number, z: number): [number, number, number] => top
     ? [x, -y, z] : [.91 * x + .42 * y, .19 * x - .42 * y - .88 * z, .37 * x - .80 * y + .49 * z];
@@ -34,7 +34,7 @@ export function viewport(svg: SVGSVGElement, scene: PlateScene, selected: string
   }
   tris.sort((a, b) => a.depth - b.depth);
   const contents: SVGElement[] = tris.map(t => t.node);
-  const outline = (edge: PlateScene['mesh']['edges'][number]) => {
+  const outline = (edge: CasualSolidScene['mesh']['edges'][number]) => {
     const list = [];
     for (let i = 0; i < edge.points.length; i += 3) list.push(project(edge.points[i], edge.points[i+1], edge.points[i+2]));
     return points(list);

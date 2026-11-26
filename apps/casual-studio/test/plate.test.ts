@@ -53,3 +53,59 @@ test('unsupported features are refused without altering the supplied document; n
   assert.deepEqual(parseDiameterCode('holeB.diameter = 8.5;'), { label: 'B', diameter: 8.5 });
   for (const bad of ['holeC.diameter = 8', 'holeA.diameter = 2*4', 'holeA.diameter = 8; alert(1)', 'holeA.diameter = 0', 'holeA.radius = 4']) assert.equal(parseDiameterCode(bad), null);
 });
+
+import { compileCasualRecipe } from '@barocss/cad-model/app/casualRecipe';
+const source = `recipe 1
+units mm
+param width = 64
+param rowY = 16
+param guideDia = 6
+plate bracket width=width depth=42 thickness=7
+hole far in=bracket at=(48, rowY) diameter=8
+hole near in=bracket at=(12, 12) diameter=guideDia
+hole wire in=bracket at=(31, 29) diameter=4
+output bracket
+`;
+
+test('blank-authorable recipe generates editable native plate with three qualified independent holes', async () => {
+  const result = ok(compileCasualRecipe(source));
+  assert.equal(result.source, source);
+  assert.deepEqual(result.doc.nodes.map(n => n.kind), ['sketch','extrude','hole','hole','hole']);
+  assert.deepEqual(result.holes.map(n => [n.name,n.x,n.y,n.diameter]), [['far',48,16,8],['near',12,12,6],['wire',31,29,4]]);
+  for (const h of result.holes) {
+    const rings = result.scene.mesh.edges.filter(e => result.scene.rimOwners.get(e.edgeId) === h.id);
+    const points = rings.flatMap(e => Array.from(e.points));
+    for (const [i, center] of [h.x,h.y].entries()) {
+      const span = points.filter((_, j) => j % 3 === i);
+      assert.ok(span.length > 8);
+      near(Math.max(...span) - Math.min(...span), h.diameter);
+      near((Math.max(...span) + Math.min(...span))/2, center);
+    }
+  }
+  const restored = await readStudioFile(encodeStudioFile(result.doc));
+  if ('error' in restored) assert.fail(restored.error);
+  assert.deepEqual(restored.doc.nodes, result.doc.nodes);
+  assert.deepEqual(restored.doc.parameters, { width:64,rowY:16,guideDia:6 });
+  assert.deepEqual(result.resolvedDiameters,['near']);
+  const a = source.split('\n');
+  [a[6],a[7]] = [a[7],a[6]];
+  const reordered = ok(compileCasualRecipe(a.join('\n')));
+  for (const h of result.holes) assert.equal(reordered.holes.find(p => p.name === h.name)?.id, h.id);
+});
+
+test('supports a hole-free plate; reports first invalid line and enforces bounded declarations', () => {
+  assert.equal(ok(compileCasualRecipe(source.split('\n').filter(l => !l.startsWith('hole ')).join('\n'))).holes.length,0);
+  for (const [text,line] of [
+    [source.replace('at=(48, rowY)','at=(0, rowY)'),7],
+    [source.replace('at=(48, rowY)','at=(12, 12)'),8],
+    [source.replace('diameter=8','diameter=unknown'),7],
+    [source.replace('diameter=8','diameter=2*4'),7],
+    [source + 'console.log("test")',11],
+    [source.replace('hole wire','hole near'),9],
+    ['x'.repeat(8193),1],
+  ] as const) {
+    const r = compileCasualRecipe(text);
+    if (r.ok) assert.fail('expected refusal');
+    assert.equal(r.line,line,r.reason);
+  }
+});

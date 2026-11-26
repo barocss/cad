@@ -6,7 +6,7 @@ import { viewport } from './viewport';
 const app = document.querySelector<HTMLElement>('#app')!;
 app.innerHTML = `
 <header><span class="brand" aria-hidden="true">◈</span><strong>Casual Studio</strong>
-<input id="file" type="file" accept=".bcad" hidden>
+<input id="file" type="file" accept=".bcad,.cadrecipe" hidden>
 <nav id="tools" aria-label="문서" hidden><button id="home" type="button">시작 화면</button><button id="undo" type="button" aria-label="실행 취소">↶</button><button id="redo" type="button" aria-label="다시 실행">↷</button>
 <button id="code" type="button" aria-expanded="false">&lt;/&gt; 코드</button><button id="open" type="button">열기</button>
 <button id="save" type="button">저장</button></nav></header>
@@ -29,8 +29,10 @@ app.innerHTML = `
 <p class="editable-values">바꿀 수 있는 값: 구멍 A · B 지름</p>
 <button id="starter" type="button">이 예제로 시작</button></div>
 </article>
+<div class="start-file"><button id="start-code" type="button">코드로 만들기</button>
+<small>빈 캔버스에서 판과 관통 구멍을 코드로 정의해요.</small></div>
 <div class="start-file"><button id="open-start" type="button">내 CAD 파일 열기</button>
-<small>지원하는 .bcad: 두 관통 구멍이 있는 직사각 판</small></div>
+<small>레시피(.cadrecipe) 또는 지원하는 .bcad(두 관통 구멍이 있는 직사각 판)</small></div>
 <p id="start-notice" role="status"></p></main>
 <div id="workarea" class="workarea" hidden><aside id="code-panel" hidden><label for="script">코드 · 지름 편집</label>
 <textarea id="script" spellcheck="false" aria-describedby="code-hint"></textarea><small id="code-hint">예: holeA.diameter = 8</small>
@@ -45,12 +47,14 @@ app.innerHTML = `
 <form id="editor" class="popover" hidden><h2 id="selection"></h2><label>지름 <input id="diameter" type="number" inputmode="decimal" step="any" aria-describedby="summary"> mm</label>
 <p id="summary"></p><div><button id="cancel" type="button">취소</button><button id="apply" type="submit">적용</button></div></form>
 <p id="notice" role="status" aria-live="polite"></p></section></div>
+<section id="recipe-workspace" hidden aria-label="코드 모델링"></section>
 <dialog id="switch-dialog" aria-labelledby="switch-title" aria-describedby="switch-detail">
 <h2 id="switch-title">현재 편집을 버리고 이동할까요?</h2><p id="switch-detail"></p>
 <div><button id="keep" type="button" autofocus>계속 편집</button><button id="discard" type="button">버리고 이동</button></div></dialog>`;
 const get = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 let current: PlateDocument, saved: PlateDocument;
 let editing = false;
+let recipe: ReturnType<typeof import('./recipeWork')['mountRecipe']> | undefined;
 let fileName = 'cable-guide-adapter.bcad';
 let numberDraft = false, codeDraft = false;
 let pendingSwitch: (() => void) | undefined;
@@ -61,7 +65,7 @@ let fileRev = 0, editRev = 0;
 const past: PlateDocument[] = [], ahead: PlateDocument[] = [];
 const editor = get<HTMLFormElement>('editor'), diameter = get<HTMLInputElement>('diameter');
 const codePanel = get('code-panel'), script = get<HTMLTextAreaElement>('script');
-const notice = (t = '') => { get(editing ? 'notice' : 'start-notice').textContent = t; };
+const notice = (t = '') => { if (recipe) recipe.notice(t); else get(editing ? 'notice' : 'start-notice').textContent = t; };
 const activeHole = () => current.scene.holes.find(h => h.id === active);
 const scene = document.querySelector<SVGSVGElement>('#scene')!;
 function draw() {
@@ -158,12 +162,12 @@ window.addEventListener('keydown', e => {
 });
 const dialog = get<HTMLDialogElement>('switch-dialog');
 function confirmSwitch(action: () => void) {
-  const dirty = editing && current !== saved;
-  const pending = editing && (draft || numberDraft || codeDraft);
+  const dirty = recipe ? recipe.hasUnsaved() : editing && current !== saved;
+  const pending = recipe ? recipe.hasDraft() : editing && (draft || numberDraft || codeDraft);
   if (!dirty && !pending) { action(); return; }
   const changes = [];
   if (pending) changes.push('아직 적용하지 않은 입력이 있어요.');
-  if (dirty) changes.push('적용했지만 CAD 파일로 저장하지 않은 변경이 있어요.');
+  if (dirty) changes.push(recipe ? '적용했지만 레시피로 저장하지 않은 변경이 있어요.' : '적용했지만 CAD 파일로 저장하지 않은 변경이 있어요.');
   get('switch-detail').textContent = changes.join(' ');
   pendingSwitch = action;
   dialog.showModal();
@@ -177,6 +181,9 @@ get('discard').onclick = () => {
   pendingSwitch = undefined; dialog.close(); action?.();
 };
 function setEditing(value: boolean) {
+  recipe = undefined;
+  get('recipe-workspace').hidden = true;
+  get('recipe-workspace').replaceChildren();
   editing = value;
   get('start').hidden = value;
   get('workarea').hidden = get('tools').hidden = !value;
@@ -198,16 +205,50 @@ get('starter').onclick = () => {
   if (!model.ok) { notice(model.reason); return; }
   openModel(model.value);
 };
-get('home').onclick = () => confirmSwitch(() => {
+const goHome = () => confirmSwitch(() => {
   ++fileRev; setEditing(false); notice();
 });
-get('open').onclick = get('open-start').onclick = () => get<HTMLInputElement>('file').click();
+const pickFile = () => get<HTMLInputElement>('file').click();
+const download = (blob: Blob, name: string) => {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a'); link.href = url; link.download = name; link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 15_000);
+};
+function showRecipe(module: typeof import('./recipeWork'), loaded?: Parameters<typeof module.mountRecipe>[2]) {
+  ++editRev;
+  editing = false;
+  get('start').hidden = get('workarea').hidden = get('tools').hidden = true;
+  const host = get('recipe-workspace'); host.hidden = false;
+  recipe = module.mountRecipe(host, { touch: () => { ++editRev; }, download, home: goHome, open: pickFile }, loaded);
+}
+get('start-code').onclick = async () => {
+  const token = ++fileRev;
+  try {
+    const module = await import('./recipeWork');
+    if (token === fileRev) showRecipe(module);
+  } catch { if (token === fileRev) notice('코드 편집기를 열지 못했어요.'); }
+};
+get('home').onclick = goHome;
+get('open').onclick = get('open-start').onclick = pickFile;
 get<HTMLInputElement>('file').onchange = async event => {
   const input = event.currentTarget as HTMLInputElement;
   const file = input.files?.[0]; input.value = '';
   if (!file) return;
   const token = ++fileRev, observed = editRev;
   try {
+    if (/\.cadrecipe$/i.test(file.name)) {
+      const module = await import('./recipeWork');
+      if (file.size > module.RECIPE_LIMIT * 4) { if (token === fileRev && observed === editRev) notice('레시피 파일이 너무 커요.'); return; }
+      const source = await file.text();
+      if (token !== fileRev || observed !== editRev) return;
+      const result = module.compileCasualRecipe(source);
+      if (!result.ok) { notice(result.line + '행: ' + result.reason); return; }
+      confirmSwitch(() => {
+        if (token !== fileRev || observed !== editRev) return;
+        showRecipe(module, { model:result.value, filename:file.name }); notice('레시피를 열었어요.');
+      });
+      return;
+    }
     if (file.size > 16 * 1024 * 1024) { notice('이 파일은 Casual에서 열 수 있는 크기를 넘었어요. Studio에서 열어주세요.'); return; }
     const result = await readStudioFile(new Uint8Array(await file.arrayBuffer()));
     if (token !== fileRev || observed !== editRev) return;
@@ -225,10 +266,8 @@ get<HTMLInputElement>('file').onchange = async event => {
 get('save').onclick = () => {
   try {
     const contents = encodeStudioFile(current.doc);
-    const url = URL.createObjectURL(new Blob([new Uint8Array(contents)], { type: 'application/octet-stream' }));
-    const a = document.createElement('a'); a.href = url; a.download = fileName; a.click();
+    download(new Blob([new Uint8Array(contents)], { type: 'application/octet-stream' }), fileName);
     saved = current;
-    setTimeout(() => URL.revokeObjectURL(url), 15_000);
     notice(draft ? '아직 적용하지 않은 미리보기를 제외하고 저장했어요.' : 'CAD 파일을 저장했어요.');
   } catch { notice('저장하지 못했어요. 현재 모델은 그대로예요.'); }
 };

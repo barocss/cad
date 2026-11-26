@@ -41,3 +41,17 @@ dialog::backdrop{background:#162c4966}
 dialog h2{font-size:17px}dialog p{line-height:1.6}dialog div{display:flex;justify-content:flex-end;gap:8px}
 #discard{color:#893c22;border-color:#ebc6b7}
 @media(max-width:550px){.start{padding:26px 15px 16px}.start-intro{margin-bottom:18px}.example{grid-template-columns:1fr}.example-art{padding:8px}.example-art svg{max-width:172px}.example-copy{padding:15px}}
+.recipe-bar{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:10px 16px;background:#fff;border-bottom:1px solid #e2e9f1}
+#recipe-panel{width:min(42%,450px);padding:16px;background:#fff;border-right:1px solid #cedcec}
+#recipe-panel label{display:block;font-weight:700;margin-bottom:9px}
+#recipe-source{min-height:260px;white-space:pre;tab-size:2}
+.recipe-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+#recipe-apply,#recipe-run{color:#fff;background:#285dd3;border-color:#285dd3}
+#recipe-error{color:#963723;line-height:1.5}
+#recipe-status,#recipe-selection{color:#466079;font-size:13px;line-height:1.5}
+.recipe-canvas{max-width:750px;display:grid;place-items:center}
+.recipe-canvas svg,.recipe-canvas p{grid-area:1/1}
+#recipe-empty{color:#496178;text-align:center;margin:12px;pointer-events:none}
+@media(max-width:710px){#recipe-panel{width:100%;order:2;border-right:0;border-top:1px solid #cedcec}#recipe-source{min-height:150px}.recipe-bar nav{margin-left:0}}
+
+#start-code{color:#fff;background:#285dd3;border-color:#285dd3;font-weight:700}

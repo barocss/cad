@@ -5,12 +5,12 @@ import { featureId } from '../engine/ids';
 
 type HoleNode = Extract<ModelNode, { kind: 'hole' }>;
 export type CasualHole = { id: string; index: number; label: 'A' | 'B'; diameter: number; x: number; y: number };
-export type PlateScene = {
-  holes: readonly [CasualHole, CasualHole];
+export type CasualSolidScene = {
   mesh: ReturnType<typeof tessellateBrep>;
   wallOwners: ReadonlyMap<string, string>;
   rimOwners: ReadonlyMap<string, string>;
 };
+export type PlateScene = CasualSolidScene & { holes: readonly [CasualHole, CasualHole] };
 export type PlateDocument = { doc: StudioDoc; scene: PlateScene };
 type Result<T> = { ok: true; value: T } | { ok: false; reason: string };
 const bad = (reason: string): { ok: false; reason: string } => ({ ok: false, reason });
@@ -58,6 +58,12 @@ export function inspectCasualPlate(doc: StudioDoc): Result<PlateDocument> {
       Math.hypot(holes[0].x - holes[1].x, holes[0].y - holes[1].y) - (holes[0].diameter + holes[1].diameter) / 2 < 1e-4) {
     return bad('구멍이 다른 구멍이나 판의 가장자리와 겹쳐요. 더 작은 지름을 입력해주세요.');
   }
+  const solid = evaluateCasualSolid(doc, featureId(doc.nodes, 1), holes);
+  return solid.ok ? { ok: true, value: { doc, scene: { holes, ...solid.value } } } : solid;
+}
+
+// A bounded plate generator supplies known feature IDs. Verify actual through-rim ownership.
+export function evaluateCasualSolid(doc: StudioDoc, source: string, holes: readonly { id: string }[]): Result<CasualSolidScene> {
   const rebuilt = brepsFor(doc);
   if ('error' in rebuilt) return bad(rebuilt.error);
   const [brep] = rebuilt.breps;
@@ -75,7 +81,6 @@ export function inspectCasualPlate(doc: StudioDoc): Result<PlateDocument> {
   const loops = new Map(brep.loops.map(l => [l.id, l]));
   const coedges = new Map(brep.coedges.map(c => [c.id, c.edge]));
   const edgesOf = (id: string) => (loops.get(id)?.coedges ?? []).map(c => coedges.get(c)!);
-  const source = featureId(doc.nodes, 1);
   for (const f of brep.faces) {
     const id = holes.find(h => f.name === h.id + '.side0' || f.name === h.id + '.side0#1' || f.name === h.id + '.side0#2')?.id;
     if (id) {
@@ -103,7 +108,7 @@ export function inspectCasualPlate(doc: StudioDoc): Result<PlateDocument> {
   if (holes.some(h => rimCount.get(h.id) !== 2 || ![...rimOwners.values()].includes(h.id))) {
     return bad('각 구멍의 관통 형상과 편집 대상을 확인할 수 없어요.');
   }
-  return { ok: true, value: { doc, scene: { holes, mesh: tessellateBrep(brep, { segmentsPerQuarter: 12 }), wallOwners, rimOwners } } };
+  return { ok: true, value: { mesh: tessellateBrep(brep, { segmentsPerQuarter: 12 }), wallOwners, rimOwners } };
 }
 
 export type DiameterPreview = { base: PlateDocument; target: string; next: PlateDocument };
