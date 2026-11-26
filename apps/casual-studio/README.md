@@ -11,7 +11,7 @@ pnpm --filter @barocss/casual-studio-app test
 
 From the start screen, choose the cable-guide, sensor enclosure, or vise example, start with code, or open a supported native file. The cable-guide example opens the same recipe editor as the blank-code path, with the code panel closed. Pick hole A or B on the 60 × 40 × 5 mm plate, enter a diameter and preview before applying. Edits can be exported to `.bcad` or saved as a recipe. Resetting a diameter to its example default is also a preview, not an immediate change.
 
-**Sensor board enclosure.** On the start screen, choose **센서 케이스 열기**. Preview 56–64 mm of board width in the assembled, interior, or exploded view. Hover or focus a change row to emphasize the corresponding geometry. Save the applied width as a sensor recipe or export a BCAD whose Variants input continues to drive all four dependent dimensions. [Preview and reproduction](examples/sensor-enclosure/README.md).
+**Sensor board enclosure.** On the start screen, choose **센서 케이스 열기**. Preview 56–64 mm of board width in the assembled, interior, or exploded view. Hover or focus a change row to emphasize the corresponding geometry. When the applied width differs from 56 mm, **기본값 56 mm로** previews the default without replacing an existing draft; applying it is one undoable edit. Save the applied width as a sensor recipe or export a BCAD whose Variants input continues to drive all four dependent dimensions. [Preview and reproduction](examples/sensor-enclosure/README.md).
 
 **Self-centering vise.** Pick a jaw to edit its grip height alone, or choose the gap to move both jaws around a fixed center. The base and its mounting holes are inspect-only in this example. [Desktop workflow and native file](examples/centering-vise/README.md).
 

@@ -2,7 +2,8 @@ import { variantOf } from '@barocss/cad-model/assembly/variability';
 import { rootOf } from '@barocss/cad-model/app/lookKey';
 import { emptyDoc, type Dim, type ModelNode, type StudioDoc } from '@barocss/cad-model/engine/doc';
 
-export const sensorWidth = { min: 56, max: 64, default: 56 } as const;
+import { isSensorWidth, sensorWidth } from './sensorWidth';
+
 const at = (node: number) => ({ node, side: 'solid' as const });
 const dim = (parameter: string): Dim => ({ parameter });
 const widthOffsets = { caseWidth: 8, interiorRight: 6, boardRight: 4, rightAnchorX: -2 };
@@ -71,5 +72,5 @@ export function readSensorSource(text: string): number | null {
   const match = /^recipe 1\r?\nunits mm\r?\nsensor-enclosure boardWidth=(\d+(?:\.\d+)?)\r?\n?$/.exec(text);
   if (!match) return null;
   const width = Number(match[1]);
-  return Number.isFinite(width) && width >= sensorWidth.min && width <= sensorWidth.max ? width : null;
+  return isSensorWidth(width) ? width : null;
 }

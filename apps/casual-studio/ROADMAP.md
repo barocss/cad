@@ -19,6 +19,7 @@
 1. **형상 완료.** [검증용 모델](examples/sensor-enclosure/README.md)에서 본체·뚜껑·보드와 고정점 네 개를 실제 CAD 솔리드로 만들었다. 56·60.5·64 mm를 측정했고 저장/재열기 이후에도 공유 입력이 유지된다.
 2. **편집 완료.** 범위 안의 보드 폭 하나만 미리 보고 적용한다. 잘못된 치수나 취소는 Undo를 만들지 않는다. 미리보기에서 전후 값을 보여주고, 각 행을 포커스하면 관련 부품 또는 고정점이 강조된다.
 3. **파일 검증 완료.** 데스크탑 Chrome에서 미리보기·적용·취소·Undo/Redo·레시피 재열기를 확인했다. 64 mm를 적용해 내보낸 CAD에서 72 mm 본체를 열고, 56 mm로 바꿔 64 mm 본체를 다시 계산했다. 시작 화면의 두 번째 예제로 제공한다.
+4. **기본값 복원.** 폭이 기본값과 다르면 편집 영역에서 56 mm 복원을 미리 볼 수 있다. 작성 중인 치수·코드 초안은 덮어쓰지 않는다. 적용할 때만 한 번의 Undo가 생기며, 재열기에서도 공유 치수 관계가 유지된다.
 
 **후속 백로그: 실제 PCB 연동.** 현재 예제의 단순화한 보드와 별개로, [CAD Studio의 PCB–케이스 연동 트랙](../cad-studio/handover/roadmap-tracks/03-platform-and-extensions.md#pcbenclosure-mechanical-fit-backlog)에서 KiCad 보드 가져오기 → 장착·뚜껑·포트 검사 → 개정 반영을 검증한다. [#756](https://github.com/barocss/cad/issues/756)이 통과한 뒤 Casual에서 실제 보드를 확인하는 예제를 검토한다. 지금 구현 순서는 바꾸지 않는다.
 
@@ -29,7 +30,7 @@
 
 ## 다른 CAD에서 가져올 것
 
-- **[OpenSCAD Customizer](https://en.wikibooks.org/wiki/OpenSCAD_User_Manual/Customizer#Syntax_support_for_generation_of_the_customization_form):** 선택한 값의 읽기 쉬운 이름·단위·허용 범위와 [기본값 복원](https://en.wikibooks.org/wiki/OpenSCAD_User_Manual/Customizer#GUI). 케이블 가이드의 복원은 반영했다. 치수 범위 표시를 센서 케이스에 확장하되 실제 형상에서 검증할 수 있는 제한만 보여준다. 복원도 검증·미리보기·적용을 거친다. 상시 설정 패널과 JSON 프리셋은 추가하지 않는다.
+- **[OpenSCAD Customizer](https://en.wikibooks.org/wiki/OpenSCAD_User_Manual/Customizer#Syntax_support_for_generation_of_the_customization_form):** 선택한 값의 읽기 쉬운 이름·단위·허용 범위와 [기본값 복원](https://en.wikibooks.org/wiki/OpenSCAD_User_Manual/Customizer#GUI). 케이블 가이드와 센서 케이스에서 실제 형상으로 확인한 범위를 보여준다. 기본값 복원도 검증·미리보기·적용을 거친다. 상시 설정 패널과 JSON 프리셋은 추가하지 않는다.
 - **[Onshape Modeling In-Context](https://cad.onshape.com/help/Content/Assembly/modeling_in_context.htm):** 영향을 받는 부품 목록과 모델 강조를 연결한다. 센서 케이스에서 변경량이 적힌 짧은 목록을 두고, 마우스나 키보드 포커스로 해당 부품 또는 고정점을 표시한다. 외부 문서 참조·조립 컨텍스트 스냅샷은 도입하지 않는다.
 
 각 단계에서 소스 테스트로 형상 치수와 고정값을 검증하고, 실제 데스크탑 브라우저에서 시작부터 저장까지 실행한다. 예제 사용자의 30초 목표는 직접 관찰하기 전까지 달성으로 표시하지 않는다.

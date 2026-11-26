@@ -2,6 +2,7 @@ import './styles.css';
 import { inspectCasualPlate, previewCasualDiameter, commitCasualPreview, type PlateDocument, type DiameterPreview } from '@barocss/cad-model/app/casualPlate';
 import { encodeStudioFile, readStudioFile } from '@barocss/cad-model/engine/container';
 import { viewport } from './viewport';
+import { sensorWidthRange } from './sensorWidth';
 
 const app = document.querySelector<HTMLElement>('#app')!;
 app.innerHTML = `
@@ -38,7 +39,7 @@ app.innerHTML = `
 </svg></div>
 <div class="example-copy"><p class="eyebrow">조립 예제</p><h2 id="sensor-example-name">센서 보드 케이스</h2>
 <p>더 넓은 센서 보드를 넣어도 포트와 왼쪽 고정점은 그대로 유지해요.</p>
-<p class="editable-values">바꿀 수 있는 값: 보드 폭 56–64 mm</p>
+<p class="editable-values">바꿀 수 있는 값: 보드 폭 ${sensorWidthRange}</p>
 <button id="start-sensor" type="button">센서 케이스 열기</button></div>
 </article>
 <article class="example" aria-labelledby="vise-example-name">
@@ -332,7 +333,7 @@ get<HTMLInputElement>('file').onchange = async event => {
         const sensorModule = await import('./sensorWork');
         if (token !== fileRev || observed !== editRev) return;
         const width = sensorModule.readSensorSource(source);
-        if (width === null) { notice('센서 케이스 레시피는 보드 폭 56–64 mm를 사용해요.'); return; }
+        if (width === null) { notice(`센서 케이스 레시피는 보드 폭 ${sensorWidthRange}를 사용해요.`); return; }
         confirmSwitch(() => {
           if (token !== fileRev || observed !== editRev) return;
           showSensor(sensorModule, width, file.name); notice('센서 케이스 레시피를 열었어요.');

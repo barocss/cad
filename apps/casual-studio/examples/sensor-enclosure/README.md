@@ -4,6 +4,10 @@ Casual Studio 시작 화면의 **센서 케이스 열기**에서 사용할 수 �
 
 [Casual Studio 실제 데스크탑 미리보기](04-casual-preview.png)
 
+적용된 폭이 기본값과 다르면 **기본값 56 mm로**가 나타난다. 이 버튼은 현재 모델을 바로 바꾸지 않고 복원 결과를 먼저 보여준다. 치수나 코드 초안이 있으면 초안을 덮어쓰지 않는다. 64 mm에서 복원하면 본체·뚜껑 폭은 72→64 mm, 오른쪽 고정점은 62→54 mm이며 왼쪽 고정점과 포트는 그대로다. 취소는 이력을 만들지 않고 적용은 Undo 한 번으로 복귀한다.
+
+![Casual Studio 데스크탑 Chrome의 56 mm 기본값 복원 미리보기](05-casual-default-preview.png)
+
 초기 형상만 확인하려면 CAD Studio에서 [sensor-enclosure.bcad](sensor-enclosure.bcad)를 **Open**으로 열고 **Inspect → Variants → Show 64 mm board**를 눌러 비교할 수 있다. 기본값으로 돌아가려면 **Show the master**를 누른다.
 
 | 실제 형상에서 잰 값 | 기본값 | 64 mm 보드 |
@@ -32,3 +36,5 @@ PLAYWRIGHT_MODULE=/path/to/playwright CHROME_PATH=/path/to/chromium node apps/ca
 ```
 
 형상 테스트는 56, 60.5, 64 mm에서 솔리드의 경계, PCB 보어, 고정점과 관통 포트를 확인한다. 브라우저 재현은 데스크탑 화면의 파일 열기와 56 ↔ 64 mm 전환을 확인한다.
+
+Casual의 복원 동작은 앱을 빌드한 뒤 같은 폴더에서 `DESKTOP_ONLY=1 PLAYWRIGHT_MODULE=/path/to/playwright CHROME_PATH=/path/to/chromium node test/browser.mjs`로 재현한다. 이 테스트는 취소·적용·실행 취소/다시 실행과 저장한 레시피의 재열기, 적용한 56 mm BCAD의 치수 관계를 확인한다. 실제 첫 사용자 수행 시간은 측정하지 않았다.

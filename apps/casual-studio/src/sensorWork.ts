@@ -2,7 +2,8 @@ import { lookOf } from '@barocss/cad-model/app/bodies';
 import { encodeStudioFile } from '@barocss/cad-model/engine/container';
 import { evaluateDoc } from '@barocss/cad-model/engine/evaluate';
 import { drawFixture, type FixtureBody, type FixturePart, type FixtureView } from './fixtureViewport';
-import { readSensorSource, sensorDocumentAt, sensorSource, sensorWidth } from './sensorEnclosure';
+import { readSensorSource, sensorDocumentAt, sensorSource } from './sensorEnclosure';
+import { isSensorWidth, sensorWidth, sensorWidthRange } from './sensorWidth';
 
 export { readSensorSource } from './sensorEnclosure';
 const name = '센서 보드 케이스';
@@ -47,7 +48,7 @@ export function mountSensor(root: HTMLElement, hooks: Hooks, width: number = sen
   </div>
   <div class="sensor-desk">
     <aside id="sensor-code-panel" hidden><label for="sensor-source">센서 케이스 코드</label>
-    <textarea id="sensor-source" spellcheck="false" aria-describedby="sensor-code-note"></textarea><small id="sensor-code-note">boardWidth에 56–64 mm를 입력하세요. 케이스와 고정점이 함께 바뀝니다.</small>
+    <textarea id="sensor-source" spellcheck="false" aria-describedby="sensor-code-note"></textarea><small id="sensor-code-note">boardWidth에 ${sensorWidthRange}를 입력하세요. 케이스와 고정점이 함께 바뀝니다.</small>
     <button id="sensor-code-preview" type="button">코드 미리보기</button></aside>
     <main class="sensor-editor">
       <div class="recipe-work-head"><div><p><strong>보드에 맞게 케이스를 넓혀 보세요</strong></p><p id="sensor-state">적용된 폭</p></div>
@@ -56,9 +57,10 @@ export function mountSensor(root: HTMLElement, hooks: Hooks, width: number = sen
       <div class="sensor-grid">
         <div class="recipe-stage sensor-stage"><svg id="sensor-scene" viewBox="0 0 800 500" role="img" aria-label="본체, 뚜껑, 보드와 고정점 네 개"></svg></div>
         <aside class="sensor-context" aria-label="보드 폭과 영향">
-          <form id="sensor-form"><label for="sensor-width">보드 폭</label><div class="recipe-value"><input id="sensor-width" type="number" min="56" max="64" step="any" required aria-describedby="sensor-range sensor-error"><span>mm</span></div>
-          <p id="sensor-range">56–64 mm · 왼쪽 기준</p><p id="sensor-error" role="alert"></p>
-          <button id="sensor-preview" type="submit">미리보기</button></form>
+          <form id="sensor-form"><label for="sensor-width">보드 폭</label><div class="recipe-value"><input id="sensor-width" type="number" min="${sensorWidth.min}" max="${sensorWidth.max}" step="any" required aria-describedby="sensor-range sensor-error"><span>mm</span></div>
+          <p id="sensor-range">${sensorWidthRange} · 왼쪽 기준</p><p id="sensor-error" role="alert"></p>
+          <div class="recipe-actions"><button id="sensor-preview" type="submit">미리보기</button>
+          <button id="sensor-reset" type="button" hidden>기본값 ${sensorWidth.default} mm로</button></div></form>
           <div id="sensor-impact" hidden><h2>치수 변화</h2><div id="sensor-rows"></div>
           <small>고정점 위치는 케이스 왼쪽에서 잰 X값입니다.</small></div>
           <div class="recipe-actions" id="sensor-actions" hidden><button id="sensor-cancel" type="button">취소</button><button id="sensor-apply" type="button">적용</button></div>
@@ -85,6 +87,8 @@ export function mountSensor(root: HTMLElement, hooks: Hooks, width: number = sen
     button('undo').disabled = !past.length; button('redo').disabled = !future.length;
     get('impact').hidden = get('actions').hidden = !next;
     button('apply').disabled = !next;
+    button('reset').hidden = current.width === sensorWidth.default;
+    button('reset').disabled = draftExists();
     get('state').textContent = `적용된 폭 ${fmt(current.width)} mm` + (next ? ` · ${fmt(next.width)} mm 미리보기` : '');
     root.querySelectorAll<HTMLButtonElement>('[data-view]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.view === view)));
     const display = next;
@@ -111,8 +115,8 @@ export function mountSensor(root: HTMLElement, hooks: Hooks, width: number = sen
   function clear() { next = undefined; focused = []; resetInput(); error(); render(); }
   function preview(value: number | null) {
     next = undefined; focused = []; status();
-    if (value === null || !Number.isFinite(value) || value < sensorWidth.min || value > sensorWidth.max) {
-      error('56–64 mm 사이의 보드 폭을 입력하세요.'); render(); return;
+    if (!isSensorWidth(value)) {
+      error(`${sensorWidthRange} 사이의 보드 폭을 입력하세요.`); render(); return;
     }
     if (value === current.width) { error(); status('변경 없음'); render(); return; }
     try { next = buildScene(value); error(); }
@@ -124,6 +128,14 @@ export function mountSensor(root: HTMLElement, hooks: Hooks, width: number = sen
   field.oninput = () => { hooks.touch(); next = undefined; focused = []; error(); status(); render(); };
   get<HTMLFormElement>('form').noValidate = true;
   get<HTMLFormElement>('form').onsubmit = event => { event.preventDefault(); hooks.touch(); preview(field.valueAsNumber); };
+  button('reset').onclick = () => {
+    if (current.width === sensorWidth.default || draftExists()) return;
+    hooks.touch();
+    field.value = String(sensorWidth.default);
+    preview(sensorWidth.default);
+    if (next) button('apply').focus();
+    else field.focus();
+  };
   button('cancel').onclick = () => { hooks.touch(); clear(); status('미리보기를 취소했어요.'); field.focus(); };
   button('apply').onclick = () => {
     if (!next) return;
