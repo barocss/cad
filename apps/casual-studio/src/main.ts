@@ -1,5 +1,5 @@
 import './styles.css';
-import { newCasualPlate, inspectCasualPlate, previewCasualDiameter, commitCasualPreview, type PlateDocument, type DiameterPreview } from '@barocss/cad-model/app/casualPlate';
+import { inspectCasualPlate, previewCasualDiameter, commitCasualPreview, type PlateDocument, type DiameterPreview } from '@barocss/cad-model/app/casualPlate';
 import { encodeStudioFile, readStudioFile } from '@barocss/cad-model/engine/container';
 import { viewport } from './viewport';
 
@@ -189,21 +189,21 @@ function setEditing(value: boolean) {
   get('workarea').hidden = get('tools').hidden = !value;
   get(value ? 'model-title' : 'start-title').focus();
 }
-function openModel(model: PlateDocument, name?: string) {
-  current = saved = model; fileName = name ?? 'cable-guide-adapter.bcad';
+function openModel(model: PlateDocument, name: string) {
+  current = saved = model; fileName = name;
   past.length = 0; ahead.length = 0; top = false;
   draft = undefined; codeDraft = false; script.value = '';
   ++codeRev; codePanel.hidden = true; get('code').setAttribute('aria-expanded', 'false');
-  const example = name === undefined;
-  get('model-title').textContent = name ?? '케이블 가이드 어댑터';
-  get('model-purpose').textContent = example ? '기존 고정 구멍으로 케이블 가이드를 옆에 달기' : '캔버스에서 지름을 바꿀 구멍을 선택하세요.';
+  get('model-title').textContent = name;
+  get('model-purpose').textContent = '캔버스에서 지름을 바꿀 구멍을 선택하세요.';
   setEditing(true); select(null);
 }
-get('starter').onclick = () => {
-  ++fileRev;
-  const model = inspectCasualPlate(newCasualPlate());
-  if (!model.ok) { notice(model.reason); return; }
-  openModel(model.value);
+get('starter').onclick = async () => {
+  const token = ++fileRev;
+  try {
+    const module = await import('./recipeWork');
+    if (token === fileRev) showRecipe(module, module.cableGuideStarter());
+  } catch { if (token === fileRev) notice('예제를 열지 못했어요. 다시 시도해주세요.'); }
 };
 const goHome = () => confirmSwitch(() => {
   ++fileRev; setEditing(false); notice();

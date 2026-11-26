@@ -49,7 +49,7 @@ dialog h2{font-size:17px}dialog p{line-height:1.6}dialog div{display:flex;justif
 #recipe-apply,#recipe-run{color:#fff;background:#285dd3;border-color:#285dd3}
 #recipe-error{color:#963723;line-height:1.5}
 #recipe-status,#recipe-selection{color:#466079;font-size:13px;line-height:1.5}
-.recipe-canvas{max-width:750px;display:grid;place-items:center}
+.recipe-canvas{width:min(100%,700px,max(280px,74svh));display:grid;place-items:center}
 .recipe-canvas svg,.recipe-canvas p{grid-area:1/1}
 #recipe-empty{color:#496178;text-align:center;margin:12px;pointer-events:none}
 @media(max-width:710px){#recipe-panel{width:100%;order:2;border-right:0;border-top:1px solid #cedcec}#recipe-source{min-height:150px}.recipe-bar nav{margin-left:0}}
@@ -60,3 +60,5 @@ dialog h2{font-size:17px}dialog p{line-height:1.6}dialog div{display:flex;justif
 #recipe-dimensions p{margin:8px 0 0;color:#466079;font-size:12px}
 #recipe-dimension-error:empty{display:none}
 #recipe-targets button[aria-pressed=true]{background:#e8f0ff;border-color:#8fb4f2;color:#2157b8}
+#recipe-purpose{font-weight:600;color:#1c3148;padding-bottom:4px}
+#recipe-purpose:focus,#recipe-title:focus{outline:none}

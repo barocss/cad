@@ -37,7 +37,22 @@ try {
   assert.equal(await page.locator('#scene polygon').count(), 0, 'starter should not generate scene geometry');
   assert.equal(await page.locator('#tools').isHidden(), true);
   await page.screenshot({ path: join(out, 'casual-start-desktop.png') });
-  await page.getByRole('button', { name:'이 예제로 시작' }).click();
+  // The native import editor remains bounded and unchanged. Test it independently of the starter.
+  const legacy = {
+    name:'legacy-plate.bcad',mimeType:'application/octet-stream',
+    buffer:Buffer.from(JSON.stringify({
+      format:'barocss-cad-model',schema:3,units:'mm',parameters:{},nextId:4,
+      nodes:[
+        { kind:'sketch',id:'n0',profile:'rectangle',min:[0,0],max:[60,40] },
+        { kind:'extrude',id:'n1',sketch:0,height:5 },
+        { kind:'hole',id:'n2',parent:{node:1,side:'solid'},center:[15,20],radius:3,axis:'z' },
+        { kind:'hole',id:'n3',parent:{node:2,side:'solid'},center:[45,20],radius:3,axis:'z' }
+      ],outputs:{ b3:{node:3,side:'solid'} }
+    }))
+  };
+  const loadLegacy = () => page.locator('#file').setInputFiles(legacy);
+  await loadLegacy();
+  await page.locator('#workarea').waitFor();
   assert.equal(await page.locator('#start').isHidden(), true);
   await page.getByRole('button', { name: '구멍 A 지름 6 mm' }).waitFor();
   const input = page.locator('#diameter');
@@ -125,7 +140,7 @@ try {
   assert.match(await page.locator('#switch-detail').textContent(), /저장하지 않은/);
   await action('discard');
   await control('이 예제로 시작').waitFor();
-  await action('starter'); await control('구멍 A 지름 6 mm').waitFor();
+  await loadLegacy(); await control('구멍 A 지름 6 mm').waitFor();
   assert.equal(await page.locator('#undo').isDisabled(), true);
   await control('구멍 A 지름 6 mm').click();
   await input.fill('7');
@@ -173,6 +188,58 @@ try {
     await reopen.getByRole('button', { name:'구멍 A 지름 9 mm' }).waitFor();
     studioHandoff = 'PASS';
   }
+  // The beginner and blank-code entries use the same recipe workspace, but start in different modes.
+  const starter = await ctx.newPage();
+  starter.on('pageerror', e => errors.push(e.message));
+  await starter.goto(origin);
+  await starter.getByRole('button',{name:'이 예제로 시작',exact:true}).click();
+  await starter.getByRole('heading',{name:'케이블 가이드 어댑터',exact:true}).waitFor();
+  const st = id => starter.locator('#recipe-' + id);
+  assert.equal(await st('panel').isHidden(),true);
+  assert.equal(await st('toggle').getAttribute('aria-expanded'),'false');
+  assert.match(await st('purpose').textContent(),/고정 구멍/);
+  // Pick the real geometry, without relying on a synthetic option or internal map.
+  const a = st('scene').locator('polyline[data-rim]').first();
+  const position = await a.evaluate(el => {
+    for (let i=1;i<15;i++) {
+      const p = el.getPointAtLength(el.getTotalLength()*i/15).matrixTransform(el.getScreenCTM());
+      if (document.elementFromPoint(p.x,p.y) === el) return { x:p.x,y:p.y };
+    }
+    return null;
+  });
+  assert.ok(position);
+  await starter.mouse.click(position.x,position.y);
+  assert.match(await st('selection').textContent(),/구멍 A · 가이드 쪽/);
+  assert.equal(await st('diameter').evaluate(e => e.getBoundingClientRect().bottom <= innerHeight),true,'selected diameter must be reachable without scrolling on desktop');
+  await st('diameter').fill('8');
+  await st('size').click(); await st('apply').click();
+  const exp = starter.waitForEvent('download'); await st('export').click();
+  const examplePath = join(out,'example.bcad'); await (await exp).saveAs(examplePath);
+  const example = JSON.parse(await readFile(examplePath,'utf8'));
+  assert.deepEqual(example.nodes.slice(2).map(n => [n.center,n.radius]),[[[15,20],4],[[45,20],3]]);
+  await starter.screenshot({path:join(out,'casual-shared-example-chrome.png')});
+  await st('reset').click();
+  assert.match(await st('selection').textContent(),/Ø6 mm/);
+  await st('cancel').click();
+  assert.match(await st('selection').textContent(),/Ø8 mm/);
+  await st('reset').click(); await st('apply').click();
+  assert.match(await st('selection').textContent(),/Ø6 mm/);
+  await st('undo').click();
+  assert.match(await st('selection').textContent(),/Ø8 mm/);
+  await st('toggle').click();
+  assert.match(await st('source').inputValue(),/param guideDia = 8/);
+  assert.match(await st('source').inputValue(),/param mountDia = 6/);
+  await st('undo').click();
+  assert.match(await st('source').inputValue(),/param guideDia = 6/);
+  await st('redo').click();
+  const rs = starter.waitForEvent('download'); await st('save').click();
+  const exampleRecipe = join(out,'example.cadrecipe'); await (await rs).saveAs(exampleRecipe);
+  await st('home').click();
+  await starter.getByRole('button',{name:'이 예제로 시작',exact:true}).waitFor();
+  await starter.locator('#file').setInputFiles(exampleRecipe);
+  await starter.getByLabel('CAD 레시피').waitFor();
+  assert.match(await st('source').inputValue(),/param guideDia = 8/);
+
   // A genuine blank project: no sample insertion and no preexisting template geometry.
   const recipeContext = await browser.newContext({ viewport:{ width:1140,height:750 }, acceptDownloads:true });
   const recipe = await recipeContext.newPage();
@@ -279,6 +346,10 @@ output fixture
     const studio = await (await browser.newContext({ acceptDownloads:true })).newPage();
     studio.on('pageerror', e => errors.push(e.message));
     await studio.goto('http://127.0.0.1:' + studioServer.address().port);
+    await studio.getByLabel('Model file',{exact:true}).setInputFiles(examplePath);
+    await studio.getByText(/^Bounds 60 × 40 × 5$/).waitFor({timeout:30_000});
+    await studio.locator('.history .hs[data-node-index="2"]').click();
+    assert.equal(await studio.locator('.node-editor').getByLabel('Diameter',{exact:true}).inputValue(),'8');
     await studio.getByLabel('Model file', { exact:true }).setInputFiles(exported);
     await studio.getByText(/Perspective · 1 solid/).waitFor({ timeout:30_000 });
     await studio.getByText(/^Bounds 64 × 42 × 7$/).waitFor({ timeout:30_000 });

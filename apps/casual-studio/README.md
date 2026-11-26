@@ -9,13 +9,13 @@ pnpm --filter @barocss/casual-studio-app type-check
 pnpm --filter @barocss/casual-studio-app test
 ```
 
-From the start screen, choose the cable-guide example or open a supported native file. The cable-guide example opens a 60 × 40 × 5 mm plate with two independent through holes. Click a native upper rim or oblique bore wall (keyboard users can focus its label), type a diameter, and check the preview before applying. Save downloads only the applied document as a native `.bcad`. A new session can reopen that file. For expert edits, open the downloaded file in CAD Studio.
+From the start screen, choose the cable-guide example or open a supported native file. The example opens the same recipe editor as the blank-code path, with the code panel closed. Pick hole A or B on the 60 × 40 × 5 mm plate, enter a diameter and preview before applying. Edits can be exported to `.bcad` or saved as a recipe. Resetting a diameter to its example default is also a preview, not an immediate change.
 
-**Optional code:** open the left panel (below canvas on a narrow screen). `holeA.diameter = 8` is a bounded numeric assignment, not JavaScript. It uses the same preview and apply path. The parser loads when the panel opens.
+**Existing native file:** the bounded native import editor keeps the original feature graph and opens the optional one-line diameter editor on request. It does not generate a recipe from the file.
 
 **Create from code:** choose **코드로 만들기** for a blank document. Enter a version 1 recipe, preview, then apply. A recipe defines one rectangle/extrusion and up to eight vertical through-holes. Open and save the executable text as `.cadrecipe`, or export the applied native features as `.bcad`. Radius derived from a recipe diameter is exported as its current value; the source relation remains in the recipe. See the [working syntax example](PRODUCT.md#코드는-모델-전체를-정의할-수-있어야-한다).
 
-**Deliberate limits.** Existing `.bcad` import still accepts the bounded two-hole shape, not every recipe export; keep the corresponding recipe to reopen the source in Casual. Unsupported native files are not rewritten and may be opened in CAD Studio. Recipe hole diameter declarations are editable from the canvas; fixed literals are not. Bringing the starter example onto that path, sensor enclosures, and center-linked vise assemblies remain future work. Arbitrary code execution and general import remain out of scope. App-local undo is not carried by the native file. Uses two viewport presets, not a full camera controller.
+**Deliberate limits.** Existing `.bcad` import still accepts the bounded two-hole shape, not every recipe export; keep the corresponding recipe to reopen the source in Casual. Unsupported native files are not rewritten and may be opened in CAD Studio. Recipe hole diameter declarations are editable from the canvas; fixed literals are not. Sensor enclosures and center-linked vise assemblies remain future work. Arbitrary code execution and general import remain out of scope. App-local undo is not carried by the native file. Uses two viewport presets, not a full camera controller.
 
 See the [product plan](PRODUCT.md) and the [roadmap](ROADMAP.md) for the next use cases and their acceptance checks.
 
@@ -30,9 +30,9 @@ PLAYWRIGHT_MODULE=/path/to/playwright CHROME_PATH=/path/to/chromium node test/br
 
 Build Studio from the same checkout with `pnpm build` and set `CHECK_STUDIO=1` to also exercise the real Studio feature editor and round trip.
 
-The first model/preview loads no Studio shell, worker, WASM, or code parser in the tested build. The shared evaluator and native format reader are still part of the startup bundle; the separate entry point is not a claim that the kernel payload has been optimized.
+The landing page and first native import preview load no Studio shell, worker, WASM or recipe compiler in the tested build. The example and blank-code entry load the recipe compiler on demand. The shared evaluator and native format reader are still part of startup.
 
-![Actual Chromium capture of the applied adapter edit](casual-plate-chrome.png)
+![Actual Chromium capture of the shared editor with the example opened and code collapsed](casual-shared-example-chrome.png)
 
 ![Actual Chromium capture of the Casual Studio start screen](casual-start-chrome.png)
 
