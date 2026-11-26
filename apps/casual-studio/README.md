@@ -13,7 +13,7 @@ From the start screen, choose the cable-guide example or open a supported native
 
 **Optional code:** open the left panel (below canvas on a narrow screen). `holeA.diameter = 8` is a bounded numeric assignment, not JavaScript. It uses the same preview and apply path. The parser loads when the panel opens.
 
-**Deliberate limits.** This increment edits two independent straight Z through holes in one rectangular extrusion. It refuses unsupported models without rewriting them and directs the user to open the original in Studio. It is not a general importer, template builder, arbitrary-code editor, or assembly workspace. Sensor enclosures, center-linked vise assemblies and more feature types remain follow-ups. App-local undo is not carried by the native file. Uses two viewport presets, not a full camera controller.
+**Deliberate limits.** This increment edits two independent straight Z through holes in one rectangular extrusion. It refuses unsupported models without rewriting them and directs the user to open the original in Studio. The existing code panel does not create new geometry from scratch. A blank code-first workflow, bidirectional parameter editing, sensor enclosures, and center-linked vise assemblies are planned in that order. Arbitrary code execution and general import remain out of scope. App-local undo is not carried by the native file. Uses two viewport presets, not a full camera controller.
 
 See the [product plan](PRODUCT.md) and the [roadmap](ROADMAP.md) for the next use cases and their acceptance checks.
 
