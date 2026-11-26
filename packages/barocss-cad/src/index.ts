@@ -481,8 +481,8 @@ export { writeDxf, dxfNumber, dxfText, dxfHatchLines, dxfWriteError, isDxfWriteE
 export type { DxfDocument, DxfEntity, DxfLayer, DxfLinetype, DxfTextStyle, DxfBlock, DxfHatchLoop, DxfHatchFill, DxfDimensionGeometry, DxfVersion, DxfUnits, DxfXY, DxfWriteOptions, DxfWriteReport, DxfWriteResult, DxfWriteErrorCode } from './io/dxf-writer.js';
 export { bendAllowance, outsideSetback, bendDeduction, contourFlangeSection, sheetMetalError, isSheetMetalError } from './frame-sheet/sheet-metal.js';
 export type { SheetReport, SheetBendReport, ContourSection, ContourBend } from './frame-sheet/sheet-metal.js';
-export { flatPattern, flatPatternDxf, flatPatternError, isFlatPatternError } from './frame-sheet/sheet-flat.js';
-export type { FlatPattern, FlatLoop, FlatSegment, FlatBend, FlatPatternOptions, FlatPatternErrorCode } from './frame-sheet/sheet-flat.js';
+export { flatPattern, flatPatternDxf, flatPatternError, includedBendAngle, isFlatPatternError } from './frame-sheet/sheet-flat.js';
+export type { FlatPattern, FlatLoop, FlatSegment, FlatBend, FlatPatternOptions, FlatPatternErrorCode, FlatPatternDxfProfile, FlatPatternDxfOptions } from './frame-sheet/sheet-flat.js';
 export { bendTableProblem, lookupBend, rowKFactor } from './frame-sheet/sheet-metal.js';
 export type { BendTable, BendTableRow, BendTableSource, BendTableUse } from './frame-sheet/sheet-metal.js';
 export { frameSection, anchorPoint, loopBox, frameSectionError, isFrameSectionError, FRAME_ANCHORS } from './frame-sheet/frame-section.js';

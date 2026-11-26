@@ -2,7 +2,7 @@
 // is R12's bend table: one row per bend of every sheet body with a flat pattern — its name, which way it folds in the
 // flat, angle, inner radius, K, and BA and BD by the kernel's own formulas (bendAllowance, bendDeduction) on its T —
 // and the bend-table rows its K came from. The kernel lane's FR4b cut list is one more entry ('cut-list').
-import { bendAllowance, bendDeduction } from '@barocss/cad';
+import { bendAllowance, bendDeduction, includedBendAngle } from '@barocss/cad';
 import type { StudioDoc } from '../engine/doc';
 import { evaluatePart, type BodyResult } from '../engine/evaluate';
 import type { DrawingTable } from './types';
@@ -18,24 +18,37 @@ export interface TableSourceContext { doc: StudioDoc; bodies?: readonly BodyResu
 export type TableSource = (ctx: TableSourceContext) => TableContent | { error: string };
 
 const label = (name: string, short: boolean) => (short ? name.slice(name.lastIndexOf('.') + 1) : name);
+export interface BendTableOptions {
+  /** When true, separates bend angle (rotated from flat) and included angle (180° − bend angle) into distinct columns. */
+  includeIncludedAngle?: boolean;
+}
+
 /** R12's bend table: every sheet body's bends, from its flat pattern. */
-export function bendTable(ctx: TableSourceContext): TableContent | { error: string } {
+export function bendTable(ctx: TableSourceContext, options?: BendTableOptions): TableContent | { error: string } {
   const e = ctx.bodies ? null : evaluatePart(ctx.doc, 0), bodies = ctx.bodies ?? (e?.ok ? e.bodies : []);
   const sheets = bodies.filter(b => b.flat && b.flat.bends.length);
   if (!sheets.length) return { error: 'no sheet-metal body with a flat pattern' + (bodies.some(b => b.flatRefused) ? ` (${bodies.find(b => b.flatRefused)!.flatRefused})` : '') };
+  const includeIncluded = options?.includeIncludedAngle === true;
   const rows: TableContent['rows'] = [], notes: string[] = [], many = sheets.length > 1;
   for (const b of sheets) {
     const f = b.flat!, T = f.thickness, feature = (n: string) => n.slice(0, Math.max(0, n.lastIndexOf('.'))), short = !many && f.bends.every(x => feature(x.name) === feature(f.bends[0].name));
     for (const x of f.bends) {
       const th = x.angle * Math.PI / 180, ba = bendAllowance(th, x.radius, T, x.kFactor), bd = bendDeduction(th, x.radius, T, x.kFactor);
-      rows.push([`${many ? `${b.key} ` : ''}${label(x.name, short)}`, x.direction === 'up' ? 'UP' : 'DOWN', x.angle, x.radius, x.kFactor, ba, bd, x.table ? `${x.table.table} ${x.table.how === 'exact' ? 'row' : 'rows'} ${x.table.rows.join(', ')}${x.table.how === 'interpolated' ? ', interpolated' : ''}${x.table.estimate ? ' (estimate)' : ''}` : null]);
+      const incl = typeof x.includedAngle === 'number' ? x.includedAngle : includedBendAngle(x.angle);
+      const tableText = x.table ? `${x.table.table} ${x.table.how === 'exact' ? 'row' : 'rows'} ${x.table.rows.join(', ')}${x.table.how === 'interpolated' ? ', interpolated' : ''}${x.table.estimate ? ' (estimate)' : ''}` : null;
+      rows.push(includeIncluded
+        ? [`${many ? `${b.key} ` : ''}${label(x.name, short)}`, x.direction === 'up' ? 'UP' : 'DOWN', x.angle, incl, x.radius, x.kFactor, ba, bd, tableText]
+        : [`${many ? `${b.key} ` : ''}${label(x.name, short)}`, x.direction === 'up' ? 'UP' : 'DOWN', x.angle, x.radius, x.kFactor, ba, bd, tableText]);
     }
     notes.push(`${many ? `${b.key}: ` : ''}T ${+T.toFixed(3)} mm; K ${f.kFactor !== undefined ? `${f.kFactor} for every bend${f.kFactor === 0.5 ? ' (an estimate: use your shop’s value)' : ''}` : 'from the bend table, by bend'}`);
   }
   return {
     title: 'BEND TABLE',
-    columns: [{ key: 'bend', label: 'BEND' }, { key: 'dir', label: 'DIR' }, { key: 'angle', label: 'ANGLE', unit: '°', digits: 1 }, { key: 'r', label: 'R', unit: 'mm', digits: 2 },
-      { key: 'k', label: 'K', digits: 3 }, { key: 'ba', label: 'BA', unit: 'mm', digits: 3 }, { key: 'bd', label: 'BD', unit: 'mm', digits: 3 }, { key: 'table', label: 'TABLE ROWS' }],
+    columns: includeIncluded
+      ? [{ key: 'bend', label: 'BEND' }, { key: 'dir', label: 'DIR' }, { key: 'angle', label: 'BEND ANGLE', unit: '°', digits: 1 }, { key: 'included', label: 'INCLUDED', unit: '°', digits: 1 }, { key: 'r', label: 'R', unit: 'mm', digits: 2 },
+        { key: 'k', label: 'K', digits: 3 }, { key: 'ba', label: 'BA', unit: 'mm', digits: 3 }, { key: 'bd', label: 'BD', unit: 'mm', digits: 3 }, { key: 'table', label: 'TABLE ROWS' }]
+      : [{ key: 'bend', label: 'BEND' }, { key: 'dir', label: 'DIR' }, { key: 'angle', label: 'ANGLE', unit: '°', digits: 1 }, { key: 'r', label: 'R', unit: 'mm', digits: 2 },
+        { key: 'k', label: 'K', digits: 3 }, { key: 'ba', label: 'BA', unit: 'mm', digits: 3 }, { key: 'bd', label: 'BD', unit: 'mm', digits: 3 }, { key: 'table', label: 'TABLE ROWS' }],
     rows, notes,
   };
 }

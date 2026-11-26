@@ -5,7 +5,7 @@ import { evaluateCurveD1, evaluateSurfaceD1 } from '../core/derivatives.js';
 import { faceGeometry, type FaceGeometry } from '../brep/analytic-boolean.js';
 import { tessellateBrep } from '../brep/brep-tessellate.js';
 import { brepMassProperties } from '../brep/solid-mass.js';
-import type { DxfDocument, DxfEntity } from '../io/dxf-writer.js';
+import type { DxfDocument, DxfEntity, DxfLayer } from '../io/dxf-writer.js';
 import { lookupBend, type BendTable, type BendTableUse } from './sheet-metal.js';
 import { add, cross, dot, len, scale as scl, sub } from '../core/vec3.js';
 import { isFrom, kernelRefusal, type KernelError } from '../core/barocss-error.js';
@@ -24,12 +24,21 @@ export type FlatSegment =
   | { readonly kind: 'spline'; readonly degree: number; readonly knots: readonly number[]; readonly control: readonly XY[]; readonly weights: readonly number[] };
 /** A closed loop of the outline; `outer` for the boundary, else a hole. `area`: signed (outer counter-clockwise). */
 export interface FlatLoop { readonly outer: boolean; readonly segments: readonly FlatSegment[]; readonly area: number }
+/** Included angle between folded flanges in degrees: 180° − bend angle (flat = 0° bend / 180° included). */
+export function includedBendAngle(bendAngleDeg: number): number {
+  return 180 - bendAngleDeg;
+}
+
 /** A bend in the flat: its strip between its tangent lines, its centre line, which way it folds, its data. */
 export interface FlatBend {
   readonly name: string;
   /** `up`: towards the viewer (the flat is seen from the fixed face's outside), `down`: away. */
   readonly direction: 'up' | 'down';
-  readonly angle: number; readonly radius: number; readonly kFactor: number;
+  /** Bend angle rotated from flat in degrees (0° = flat, 90° = right angle). */
+  readonly angle: number;
+  /** Included angle between flanges in degrees (180° − bend angle). */
+  readonly includedAngle: number;
+  readonly radius: number; readonly kFactor: number;
   /** The developed width θ(R + K·T). */
   readonly allowance: number;
   readonly centre: readonly [XY, XY]; readonly tangents: readonly [readonly [XY, XY], readonly [XY, XY]];
@@ -46,7 +55,7 @@ export interface FlatPattern {
   /** The flat's area (outer loop less holes) and its box (the flat is moved so its box starts at 0, 0). */
   readonly area: number; readonly box: { readonly min: XY; readonly max: XY };
 }
-export type FlatPatternErrorCode = 'NOT_A_SHEET' | 'NON_NORMAL_CUT' | 'BEND_NOT_CYLINDRICAL' | 'FLAT_OVERLAPS' | 'CUT_ACROSS_BEND' | 'BEND_TABLE_MISS';
+export type FlatPatternErrorCode = 'NOT_A_SHEET' | 'NON_NORMAL_CUT' | 'BEND_NOT_CYLINDRICAL' | 'FLAT_OVERLAPS' | 'CUT_ACROSS_BEND' | 'BEND_TABLE_MISS' | 'INVALID_INPUT';
 /** A refusal: its message starts with its `[CODE]`. */
 export const flatPatternError = (code: FlatPatternErrorCode, detail: string) => kernelRefusal('flat-pattern', code, `[${code}] ${detail}`.slice(0, 1024)) as KernelError & { readonly code: FlatPatternErrorCode };
 /** Whether something thrown is this module's refusal. */
@@ -476,7 +485,8 @@ function bendsOf(c: Ctx, skin: Set<string>, maps: Map<string, DevMap>, names: re
     const g = c.geo.get(faces[0])! as Extract<FaceGeometry, { kind: 'cylinder' }>;
     const named = names.find(b => b.faces.some(x => names_.includes(baseName(x))));
     k++;
-    out.push({ name: named?.name ?? `bend${k}`, direction: g.out === 1 ? 'down' : 'up', angle: theta * 180 / Math.PI, radius: inner, kFactor: m.k, ...(m.use ? { table: m.use } : {}), allowance: theta * m.rn,
+    const angle = theta * 180 / Math.PI;
+    out.push({ name: named?.name ?? `bend${k}`, direction: g.out === 1 ? 'down' : 'up', angle, includedAngle: includedBendAngle(angle), radius: inner, kFactor: m.k, ...(m.use ? { table: m.use } : {}), allowance: theta * m.rn,
       centre: [devAt(m, s0, (w0 + w1) / 2), devAt(m, s1, (w0 + w1) / 2)], tangents: [[devAt(m, s0, w0), devAt(m, s1, w0)], [devAt(m, s0, w1), devAt(m, s1, w1)]], faces: [...new Set(names_)].sort() });
   }
   return out;
@@ -579,32 +589,123 @@ function faceGreen(c: Ctx, fid: string, m: DevMap): number {
 }
 
 // ---- DXF ---------------------------------------------------------------------------------------------------------------
-/**
- * The flat as a DXF document for the writer (R11b): its outline on OUTLINE, each bend's centre line on BEND_UP or
- * BEND_DOWN (dashed), and a note at its middle on BEND_NOTES (`UP 90° R1.5`), in mm.
- */
-export function flatPatternDxf(flat: FlatPattern, options: { readonly textHeight?: number } = {}): DxfDocument {
-  const entities: DxfEntity[] = [], h = options.textHeight ?? 2.5;
-  for (const l of flat.loops) for (const s of l.segments) {
-    if (s.kind === 'line') entities.push({ type: 'line', a: s.a, b: s.b, layer: 'OUTLINE' });
+export type FlatPatternDxfProfile = 'default' | 'shop' | 'cut-only';
+
+export interface FlatPatternDxfOptions {
+  /**
+   * Output profile:
+   * - 'default' (omitted): exact legacy byte-for-byte output (OUTLINE + BEND_UP/BEND_DOWN + BEND_NOTES).
+   * - 'shop': separates OUTER_CUT and INNER_CUT (inner loops written before outer; note: DXF order is NOT a CAM toolpath guarantee),
+   *   dashed BEND_UP / BEND_DOWN centerlines, and BEND_NOTES showing both bend angle and included angle (180° − bend).
+   * - 'cut-only': strictly cut boundaries only (INNER_CUT + OUTER_CUT); zero bend centerlines and zero BEND_NOTES TEXT.
+   */
+  readonly profile?: FlatPatternDxfProfile;
+  /** Override whether bend centerlines are emitted (defaults: true for default/shop, false for cut-only). */
+  readonly includeBendLines?: boolean;
+  /** Override whether BEND_NOTES TEXT entities are emitted (defaults: true for default/shop, false for cut-only). */
+  readonly includeBendNotes?: boolean;
+  /** Override whether outer/inner loops separate into OUTER_CUT / INNER_CUT layers (defaults: false for default, true for shop/cut-only). */
+  readonly separateCutLayers?: boolean;
+  /** Override whether BEND_NOTES include both bend angle and included angle (180° − bend) (defaults: false for default, true for shop). */
+  readonly includeIncludedAngle?: boolean;
+  /** Bend note text height in mm (must be finite > 0; default 2.5). */
+  readonly textHeight?: number;
+}
+
+const ALLOWED_DXF_OPTION_KEYS = new Set<string>([
+  'profile', 'includeBendLines', 'includeBendNotes', 'separateCutLayers', 'includeIncludedAngle', 'textHeight',
+]);
+
+function pushLoopSegments(loop: FlatLoop, layer: string, entities: DxfEntity[]): void {
+  for (const s of loop.segments) {
+    if (s.kind === 'line') entities.push({ type: 'line', a: s.a, b: s.b, layer });
     else if (s.kind === 'arc') {
-      const deg = (p: XY) => Math.atan2(p[1] - s.center[1], p[0] - s.center[0]) * 180 / Math.PI, closed = Math.hypot(s.start[0] - s.end[0], s.start[1] - s.end[1]) === 0;
-      if (closed) entities.push({ type: 'circle', center: s.center, radius: s.radius, layer: 'OUTLINE' });
-      else { const [a, b] = s.ccw ? [s.start, s.end] : [s.end, s.start]; entities.push({ type: 'arc', center: s.center, radius: s.radius, start: norm360(deg(a)), end: norm360(deg(b)), layer: 'OUTLINE' }); }
-    } else entities.push({ type: 'spline', degree: s.degree, knots: s.knots, control: s.control, ...(s.weights.every(w => w === 1) ? {} : { weights: s.weights }), layer: 'OUTLINE' });
+      const deg = (p: XY) => Math.atan2(p[1] - s.center[1], p[0] - s.center[0]) * 180 / Math.PI;
+      const closed = Math.hypot(s.start[0] - s.end[0], s.start[1] - s.end[1]) === 0;
+      if (closed) entities.push({ type: 'circle', center: s.center, radius: s.radius, layer });
+      else {
+        const [a, b] = s.ccw ? [s.start, s.end] : [s.end, s.start];
+        entities.push({ type: 'arc', center: s.center, radius: s.radius, start: norm360(deg(a)), end: norm360(deg(b)), layer });
+      }
+    } else {
+      entities.push({
+        type: 'spline', degree: s.degree, knots: s.knots, control: s.control,
+        ...(s.weights.every(w => w === 1) ? {} : { weights: s.weights }),
+        layer,
+      });
+    }
   }
+}
+
+/**
+ * The flat as a DXF document for the writer (R11b), in mm.
+ * Without options (or with `profile: 'default'` and only `textHeight`), reproduces the legacy OUTLINE / BEND_UP /
+ * BEND_DOWN / BEND_NOTES output byte-for-byte. Explicit `shop` / `cut-only` profiles separate `OUTER_CUT` and
+ * `INNER_CUT` layers and optionally exclude bend centerlines/notes or label both bend and included angles.
+ */
+export function flatPatternDxf(flat: FlatPattern, options: FlatPatternDxfOptions = {}): DxfDocument {
+  if (!options || typeof options !== 'object' || Array.isArray(options)) {
+    throw flatPatternError('INVALID_INPUT', 'flatPatternDxf options must be an object');
+  }
+  for (const key of Object.keys(options)) {
+    if (!ALLOWED_DXF_OPTION_KEYS.has(key)) {
+      throw flatPatternError('INVALID_INPUT', `unsupported flatPatternDxf option "${key}"`);
+    }
+  }
+  const profile: FlatPatternDxfProfile = options.profile ?? 'default';
+  if (profile !== 'default' && profile !== 'shop' && profile !== 'cut-only') {
+    throw flatPatternError('INVALID_INPUT', `unsupported flatPatternDxf profile "${String(profile)}"`);
+  }
+  const h = options.textHeight ?? 2.5;
+  if (typeof h !== 'number' || !Number.isFinite(h) || h <= 0) {
+    throw flatPatternError('INVALID_INPUT', 'textHeight must be a finite positive number');
+  }
+  for (const flagKey of ['includeBendLines', 'includeBendNotes', 'separateCutLayers', 'includeIncludedAngle'] as const) {
+    const v = options[flagKey];
+    if (v !== undefined && typeof v !== 'boolean') {
+      throw flatPatternError('INVALID_INPUT', `${flagKey} must be a boolean`);
+    }
+  }
+  if (profile === 'cut-only' && (options.includeBendLines === true || options.includeBendNotes === true)) {
+    throw flatPatternError('INVALID_INPUT', 'cut-only profile cannot include bend lines or bend notes');
+  }
+  const includeBendLines = options.includeBendLines ?? (profile !== 'cut-only');
+  const includeBendNotes = options.includeBendNotes ?? (profile !== 'cut-only');
+  const separateCutLayers = options.separateCutLayers ?? (profile !== 'default');
+  const includeIncludedAngle = options.includeIncludedAngle ?? (profile === 'shop');
+
+  const entities: DxfEntity[] = [];
+  if (separateCutLayers) {
+    // Emit inner cutouts before the outer boundary; note that DXF entity order is not a CAM toolpath guarantee.
+    for (const l of flat.loops) if (!l.outer) pushLoopSegments(l, 'INNER_CUT', entities);
+    for (const l of flat.loops) if (l.outer) pushLoopSegments(l, 'OUTER_CUT', entities);
+  } else {
+    for (const l of flat.loops) pushLoopSegments(l, 'OUTLINE', entities);
+  }
+
   for (const b of flat.bends) {
     const layer = b.direction === 'up' ? 'BEND_UP' : 'BEND_DOWN', [p, q] = b.centre, mid: XY = [(p[0] + q[0]) / 2, (p[1] + q[1]) / 2];
-    entities.push({ type: 'line', a: p, b: q, layer });
-    let ang = Math.atan2(q[1] - p[1], q[0] - p[0]) * 180 / Math.PI;
-    if (ang > 90.000001 || ang <= -90) ang = ang > 0 ? ang - 180 : ang + 180;
-    entities.push({ type: 'text', at: mid, height: h, text: `${b.direction.toUpperCase()} ${+b.angle.toFixed(2)}° R${+b.radius.toFixed(3)}`, rotation: +ang.toFixed(9), align: 'center', layer: 'BEND_NOTES' });
+    if (includeBendLines) entities.push({ type: 'line', a: p, b: q, layer });
+    if (includeBendNotes) {
+      let ang = Math.atan2(q[1] - p[1], q[0] - p[0]) * 180 / Math.PI;
+      if (ang > 90.000001 || ang <= -90) ang = ang > 0 ? ang - 180 : ang + 180;
+      const incl = typeof b.includedAngle === 'number' ? b.includedAngle : includedBendAngle(b.angle);
+      const text = includeIncludedAngle
+        ? `${b.direction.toUpperCase()} BEND ${+b.angle.toFixed(2)}° (INCL ${+incl.toFixed(2)}°) R${+b.radius.toFixed(3)}`
+        : `${b.direction.toUpperCase()} ${+b.angle.toFixed(2)}° R${+b.radius.toFixed(3)}`;
+      entities.push({ type: 'text', at: mid, height: h, text, rotation: +ang.toFixed(9), align: 'center', layer: 'BEND_NOTES' });
+    }
   }
-  return {
-    units: 'mm',
-    layers: [{ name: 'OUTLINE', color: 7 }, { name: 'BEND_UP', color: 3, linetype: 'DASHED' }, { name: 'BEND_DOWN', color: 1, linetype: 'DASHED' }, { name: 'BEND_NOTES', color: 2 }],
-    linetypes: [{ name: 'DASHED', description: 'Dashed __ __ __', pattern: [5, -2.5] }],
-    entities,
-  };
+
+  const layers: DxfLayer[] = separateCutLayers
+    ? [{ name: 'INNER_CUT', color: 4 }, { name: 'OUTER_CUT', color: 7 }]
+    : [{ name: 'OUTLINE', color: 7 }];
+  if (includeBendLines) layers.push({ name: 'BEND_UP', color: 3, linetype: 'DASHED' }, { name: 'BEND_DOWN', color: 1, linetype: 'DASHED' });
+  if (includeBendNotes) layers.push({ name: 'BEND_NOTES', color: 2 });
+  const linetypes: DxfDocument['linetypes'] = includeBendLines
+    ? [{ name: 'DASHED', description: 'Dashed __ __ __', pattern: [5, -2.5] }]
+    : [];
+
+  return { units: 'mm', layers, linetypes, entities };
 }
 const norm360 = (d: number) => { const x = ((d % 360) + 360) % 360; return Math.abs(x - 360) < 1e-9 ? 0 : +x.toFixed(12); };
