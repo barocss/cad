@@ -1,0 +1,385 @@
+{
+  "format": "barocss-cad-model",
+  "schema": 3,
+  "units": "mm",
+  "parameters": {
+    "caseWidth": 64,
+    "interiorRight": 62,
+    "boardRight": 60,
+    "rightAnchorX": 54
+  },
+  "nodes": [
+    {
+      "kind": "sketch",
+      "profile": "rectangle",
+      "min": [
+        0,
+        0
+      ],
+      "max": [
+        {
+          "parameter": "caseWidth"
+        },
+        42
+      ],
+      "id": "n0"
+    },
+    {
+      "kind": "extrude",
+      "sketch": 0,
+      "from": 0,
+      "height": 18,
+      "id": "n1"
+    },
+    {
+      "kind": "sketch",
+      "profile": "rectangle",
+      "min": [
+        2,
+        2
+      ],
+      "max": [
+        {
+          "parameter": "interiorRight"
+        },
+        40
+      ],
+      "id": "n2"
+    },
+    {
+      "kind": "extrude",
+      "sketch": 2,
+      "from": 2,
+      "height": 18,
+      "id": "n3"
+    },
+    {
+      "kind": "difference",
+      "parent": {
+        "node": 1,
+        "side": "solid"
+      },
+      "tool": {
+        "node": 3,
+        "side": "solid"
+      },
+      "id": "n4"
+    },
+    {
+      "kind": "sketch",
+      "profile": "rectangle",
+      "min": [
+        20,
+        -1
+      ],
+      "max": [
+        30,
+        3
+      ],
+      "id": "n5"
+    },
+    {
+      "kind": "extrude",
+      "sketch": 5,
+      "from": 6,
+      "height": 6,
+      "id": "n6"
+    },
+    {
+      "kind": "difference",
+      "parent": {
+        "node": 4,
+        "side": "solid"
+      },
+      "tool": {
+        "node": 6,
+        "side": "solid"
+      },
+      "id": "n7"
+    },
+    {
+      "kind": "sketch",
+      "profile": "rectangle",
+      "min": [
+        0,
+        0
+      ],
+      "max": [
+        {
+          "parameter": "caseWidth"
+        },
+        42
+      ],
+      "id": "n8"
+    },
+    {
+      "kind": "extrude",
+      "sketch": 8,
+      "from": 18,
+      "height": 3,
+      "id": "n9"
+    },
+    {
+      "kind": "sketch",
+      "profile": "rectangle",
+      "min": [
+        4,
+        5
+      ],
+      "max": [
+        {
+          "parameter": "boardRight"
+        },
+        37
+      ],
+      "id": "n10"
+    },
+    {
+      "kind": "extrude",
+      "sketch": 10,
+      "from": 8,
+      "height": 1.6,
+      "id": "n11"
+    },
+    {
+      "kind": "sketch",
+      "profile": "circle",
+      "center": [
+        10,
+        11
+      ],
+      "radius": 3,
+      "id": "n12"
+    },
+    {
+      "kind": "extrude",
+      "sketch": 12,
+      "from": 2,
+      "height": 6,
+      "id": "n13"
+    },
+    {
+      "kind": "hole",
+      "parent": {
+        "node": 11,
+        "side": "solid"
+      },
+      "center": [
+        10,
+        11
+      ],
+      "radius": 1.25,
+      "axis": "z",
+      "id": "n14"
+    },
+    {
+      "kind": "sketch",
+      "profile": "circle",
+      "center": [
+        10,
+        31
+      ],
+      "radius": 3,
+      "id": "n15"
+    },
+    {
+      "kind": "extrude",
+      "sketch": 15,
+      "from": 2,
+      "height": 6,
+      "id": "n16"
+    },
+    {
+      "kind": "hole",
+      "parent": {
+        "node": 14,
+        "side": "solid"
+      },
+      "center": [
+        10,
+        31
+      ],
+      "radius": 1.25,
+      "axis": "z",
+      "id": "n17"
+    },
+    {
+      "kind": "sketch",
+      "profile": "circle",
+      "center": [
+        {
+          "parameter": "rightAnchorX"
+        },
+        11
+      ],
+      "radius": 3,
+      "id": "n18"
+    },
+    {
+      "kind": "extrude",
+      "sketch": 18,
+      "from": 2,
+      "height": 6,
+      "id": "n19"
+    },
+    {
+      "kind": "hole",
+      "parent": {
+        "node": 17,
+        "side": "solid"
+      },
+      "center": [
+        {
+          "parameter": "rightAnchorX"
+        },
+        11
+      ],
+      "radius": 1.25,
+      "axis": "z",
+      "id": "n20"
+    },
+    {
+      "kind": "sketch",
+      "profile": "circle",
+      "center": [
+        {
+          "parameter": "rightAnchorX"
+        },
+        31
+      ],
+      "radius": 3,
+      "id": "n21"
+    },
+    {
+      "kind": "extrude",
+      "sketch": 21,
+      "from": 2,
+      "height": 6,
+      "id": "n22"
+    },
+    {
+      "kind": "hole",
+      "parent": {
+        "node": 20,
+        "side": "solid"
+      },
+      "center": [
+        {
+          "parameter": "rightAnchorX"
+        },
+        31
+      ],
+      "radius": 1.25,
+      "axis": "z",
+      "id": "n23"
+    }
+  ],
+  "outputs": {
+    "b7": {
+      "node": 7,
+      "side": "solid"
+    },
+    "b9": {
+      "node": 9,
+      "side": "solid"
+    },
+    "b13": {
+      "node": 13,
+      "side": "solid"
+    },
+    "b16": {
+      "node": 16,
+      "side": "solid"
+    },
+    "b19": {
+      "node": 19,
+      "side": "solid"
+    },
+    "b22": {
+      "node": 22,
+      "side": "solid"
+    },
+    "b23": {
+      "node": 23,
+      "side": "solid"
+    }
+  },
+  "nextId": 24,
+  "variability": {
+    "version": 1,
+    "inputs": [
+      {
+        "name": "boardWidth",
+        "type": "number",
+        "unit": "mm",
+        "min": 56,
+        "max": 64,
+        "default": 56,
+        "bindings": [
+          {
+            "to": "parameter",
+            "part": "base",
+            "parameter": "caseWidth",
+            "offset": 8
+          },
+          {
+            "to": "parameter",
+            "part": "base",
+            "parameter": "interiorRight",
+            "offset": 6
+          },
+          {
+            "to": "parameter",
+            "part": "base",
+            "parameter": "boardRight",
+            "offset": 4
+          },
+          {
+            "to": "parameter",
+            "part": "base",
+            "parameter": "rightAnchorX",
+            "offset": -2
+          }
+        ]
+      }
+    ],
+    "variants": [
+      {
+        "name": "64 mm board",
+        "values": {
+          "boardWidth": 64
+        }
+      }
+    ]
+  },
+  "bodies": {
+    "b1": {
+      "name": "Case body",
+      "color": "#698ba3"
+    },
+    "b9": {
+      "name": "Lid",
+      "color": "#88a9c0"
+    },
+    "b13": {
+      "name": "Left front support",
+      "color": "#c39450"
+    },
+    "b16": {
+      "name": "Left rear support",
+      "color": "#c39450"
+    },
+    "b19": {
+      "name": "Right front support",
+      "color": "#c39450"
+    },
+    "b22": {
+      "name": "Right rear support",
+      "color": "#c39450"
+    },
+    "b11": {
+      "name": "Sensor board",
+      "color": "#438d79"
+    }
+  }
+}
