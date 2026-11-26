@@ -41,24 +41,63 @@ dialog::backdrop{background:#162c4966}
 dialog h2{font-size:17px}dialog p{line-height:1.6}dialog div{display:flex;justify-content:flex-end;gap:8px}
 #discard{color:#893c22;border-color:#ebc6b7}
 @media(max-width:550px){.start{padding:26px 15px 16px}.start-intro{margin-bottom:18px}.example{grid-template-columns:1fr}.example-art{padding:8px}.example-art svg{max-width:172px}.example-copy{padding:15px}}
-.recipe-bar{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:10px 16px;background:#fff;border-bottom:1px solid #e2e9f1}
-#recipe-panel{width:min(42%,450px);padding:16px;background:#fff;border-right:1px solid #cedcec}
+/* Shared example and code workspace: one drawing surface, contextual tools only. */
+#app:has(#recipe-workspace:not([hidden]))>header{display:none}
+#recipe-workspace{background:#f7f9fc}
+.recipe-bar{display:flex;flex-wrap:wrap;align-items:center;gap:12px;padding:12px 16px;background:#fff;border-bottom:1px solid #dce5ee}
+.recipe-identity{display:flex;align-items:center;gap:10px;min-width:0}
+.recipe-identity h1{font-size:16px;font-weight:700;line-height:1.25;overflow-wrap:anywhere}
+.recipe-brand{font-size:9px;letter-spacing:.15em;font-weight:700;color:#476480;margin-bottom:3px}
+.recipe-bar nav,.recipe-toolgroup{display:flex;gap:5px;flex-wrap:wrap;align-items:center}
+.recipe-toolgroup+.recipe-toolgroup{border-left:1px solid #e0e7ef;padding-left:7px}
+.recipe-bar button{min-height:34px}
+#recipe-undo,#recipe-redo{font:18px/1 sans-serif}
+#recipe-export,#recipe-apply,#recipe-run{background:#2458c5;border-color:#2458c5;color:#fff}
+#recipe-panel{width:min(38%,420px);flex:none;padding:18px;background:#fff;border-right:1px solid #dbe5ef}
 #recipe-panel label{display:block;font-weight:700;margin-bottom:9px}
 #recipe-source{min-height:260px;white-space:pre;tab-size:2}
-.recipe-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
-#recipe-apply,#recipe-run{color:#fff;background:#285dd3;border-color:#285dd3}
-#recipe-error{color:#963723;line-height:1.5}
-#recipe-status,#recipe-selection{color:#466079;font-size:13px;line-height:1.5}
-.recipe-canvas{width:min(100%,700px,max(280px,74svh));display:grid;place-items:center}
+.recipe-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+#recipe-error,#recipe-dimension-error{color:#963723;line-height:1.45}
+.recipe-workspace{container-type:inline-size;padding:16px}
+.recipe-work-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0 0 12px}
+.recipe-work-head p{margin:0;line-height:1.45}
+#recipe-purpose{font-weight:650;color:#20364e}
+#recipe-state,#recipe-status{color:#4c6681;font-size:12px}
+#recipe-state{margin-top:3px}
+#recipe-title:focus{outline:none}
+.recipe-desk{display:grid;align-items:start;gap:10px;min-width:0}
+.recipe-stage{min-width:0;min-height:124px;background-color:#edf3f8;background-image:radial-gradient(#d1deea 1px,transparent 1px);background-size:18px 18px;border:1px solid #d9e3ef;border-radius:8px}
+.recipe-canvas{width:min(100%,720px,max(260px,72svh));display:grid;place-items:center;isolation:isolate}
 .recipe-canvas svg,.recipe-canvas p{grid-area:1/1}
-#recipe-empty{color:#496178;text-align:center;margin:12px;pointer-events:none}
-@media(max-width:710px){#recipe-panel{width:100%;order:2;border-right:0;border-top:1px solid #cedcec}#recipe-source{min-height:150px}.recipe-bar nav{margin-left:0}}
-
+#recipe-empty{color:#3f5b78;background:#f3f7fc;padding:6px 10px;border-radius:4px;text-align:center;margin:12px;pointer-events:none}
+.recipe-targets{position:absolute;inset:0;pointer-events:none}
+.recipe-targets button{position:absolute;transform:translate(-50%,calc(-100% - 8px));pointer-events:auto;padding:4px 8px;white-space:nowrap;font-size:12px;font-weight:650;background:#f6fafe;border-color:#b5c9dd}
+.recipe-targets button[aria-pressed=true]{background:#dceaff;border-color:#6697e8;color:#194c9c}
+.recipe-targets button:focus-visible{z-index:1}
+#recipe-context{min-width:0;padding:14px;background:#fff;border:1px solid #d9e3ef;border-radius:8px}
+.recipe-context-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px}
+#recipe-context-caption{font-size:11px;font-weight:700;color:#315e93}
+#recipe-selection{color:#20364e;font-size:15px;line-height:1.4;overflow-wrap:anywhere}
+#recipe-dismiss{border:none;padding:3px 7px;font-size:18px;line-height:1}
+#recipe-dimensions{margin-top:12px}
+#recipe-dimensions label{font-size:12px;font-weight:650;color:#38536e}
+.recipe-value{display:flex;align-items:center;gap:8px;margin-top:4px}
+.recipe-value input{min-width:0;flex:1;padding:7px;border:1px solid #b8cde1;border-radius:5px;color:#2258bf}
+.recipe-value span{color:#506a85}
+#recipe-dimensions p{margin:8px 0 0;font-size:12px;line-height:1.45}
+#recipe-binding{color:#48627c}
+#recipe-dimension-error:empty,#recipe-status:empty{display:none}
+#recipe-transaction{border-top:1px solid #e2e9f1;padding-top:9px;justify-content:flex-end}
 #start-code{color:#fff;background:#285dd3;border-color:#285dd3;font-weight:700}
-#recipe-dimensions{background:#fff;border:1px solid #cedcec;border-radius:9px;padding:10px;max-width:430px}
-#recipe-dimensions input{width:86px;padding:5px;border:1px solid #cad8e7;border-radius:5px;color:#2258bf}
-#recipe-dimensions p{margin:8px 0 0;color:#466079;font-size:12px}
-#recipe-dimension-error:empty{display:none}
-#recipe-targets button[aria-pressed=true]{background:#e8f0ff;border-color:#8fb4f2;color:#2157b8}
-#recipe-purpose{font-weight:600;color:#1c3148;padding-bottom:4px}
-#recipe-purpose:focus,#recipe-title:focus{outline:none}
+@container (min-width:650px){.recipe-desk:has(#recipe-context:not([hidden])){grid-template-columns:minmax(0,1fr) 246px}}
+@media(max-width:710px){
+  .recipe-bar{padding:10px;gap:9px}
+  .recipe-bar nav{margin:0}
+  #recipe-panel{width:100%;order:2;border-right:0;border-top:1px solid #dbe5ef}
+  #recipe-source{min-height:150px}
+  .recipe-workspace{padding:10px}
+  #recipe-context{padding:12px}
+  .recipe-targets button{padding:5px 7px;font-size:11px}
+}
+
+#recipe-change{font-size:16px;font-weight:650;color:#2458a4;margin:10px 0 14px;font-variant-numeric:tabular-nums}

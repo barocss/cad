@@ -45,12 +45,12 @@ type Hooks = { touch(): void; home(): void; open(): void; download(blob: Blob, n
 export function mountRecipe(root: HTMLElement, hooks: Hooks, loaded?: Loaded) {
   root.innerHTML = `
   <div class="recipe-bar">
-    <h1 id="recipe-title" tabindex="-1">코드로 만드는 모델</h1>
+    <div class="recipe-identity"><span class="brand" aria-hidden="true">◈</span><div><div class="recipe-brand">CASUAL STUDIO</div><h1 id="recipe-title" tabindex="-1">코드로 만드는 모델</h1></div></div>
     <nav aria-label="레시피">
-      <button id="recipe-home" type="button">시작 화면</button><button id="recipe-open" type="button">열기</button>
-      <button id="recipe-undo" type="button">실행 취소</button><button id="recipe-redo" type="button">다시 실행</button>
-      <button id="recipe-toggle" type="button" aria-controls="recipe-panel" aria-expanded="true">코드</button>
-      <button id="recipe-save" type="button">레시피 저장</button><button id="recipe-export" type="button">CAD 내보내기</button>
+      <div class="recipe-toolgroup"><button id="recipe-home" type="button">시작</button><button id="recipe-open" type="button">열기</button></div>
+      <div class="recipe-toolgroup"><button id="recipe-undo" type="button" aria-label="실행 취소" title="실행 취소">↶</button><button id="recipe-redo" type="button" aria-label="다시 실행" title="다시 실행">↷</button>
+      <button id="recipe-toggle" type="button" aria-controls="recipe-panel" aria-expanded="true">코드</button></div>
+      <div class="recipe-toolgroup"><button id="recipe-save" type="button">레시피 저장</button><button id="recipe-export" type="button">CAD 내보내기</button></div>
     </nav>
   </div>
   <div class="workarea recipe-work">
@@ -60,21 +60,30 @@ export function mountRecipe(root: HTMLElement, hooks: Hooks, loaded?: Loaded) {
       <div class="recipe-actions"><button id="recipe-run" type="button">미리보기</button><button id="recipe-insert" type="button">샘플 코드 삽입</button></div>
       <p id="recipe-error" role="alert"></p>
     </aside>
-    <section class="workspace" aria-label="레시피 모델">
-      <div class="canvas-head"><div><p id="recipe-purpose" hidden></p><p id="recipe-state"></p></div><button id="recipe-view" type="button">위에서 보기</button></div>
-      <div class="canvas recipe-canvas">
-        <svg id="recipe-scene" viewBox="0 0 750 440" role="img" aria-label="레시피로 만든 판"></svg>
-        <p id="recipe-empty">코드를 입력하고 미리보기를 누르면 여기에 모델이 나와요.</p>
+    <section class="workspace recipe-workspace" aria-label="레시피 모델">
+      <div class="recipe-work-head"><div><p id="recipe-purpose" hidden></p><p id="recipe-state"></p></div><button id="recipe-view" type="button">위에서 보기</button></div>
+      <div class="recipe-desk">
+        <div class="recipe-stage">
+          <div class="canvas recipe-canvas">
+            <svg id="recipe-scene" viewBox="0 0 750 440" role="img" aria-label="레시피로 만든 판"></svg>
+            <div id="recipe-targets" class="recipe-targets" aria-label="구멍 선택"></div>
+            <p id="recipe-empty">코드를 입력하고 미리보기를 누르면 여기에 모델이 나와요.</p>
+          </div>
+        </div>
+        <aside id="recipe-context" aria-label="선택 및 미리보기" hidden>
+          <div class="recipe-context-head"><span id="recipe-context-caption">선택한 구멍</span><button id="recipe-dismiss" type="button" aria-label="선택 해제" title="선택 해제">×</button></div>
+          <h2 id="recipe-selection"></h2>
+          <p id="recipe-change" hidden></p>
+          <form id="recipe-dimensions" hidden>
+            <label for="recipe-diameter">지름</label>
+            <div class="recipe-value"><input id="recipe-diameter" type="number" step="any" min="0.01" max="10000" required inputmode="decimal"> <span>mm</span></div>
+            <p id="recipe-binding"></p><p id="recipe-dimension-error" role="alert"></p>
+            <div class="recipe-actions"><button id="recipe-size" type="submit">치수 미리보기</button>
+              <button id="recipe-reset" type="button" hidden>기본값 복원</button></div>
+          </form>
+          <div id="recipe-transaction" class="recipe-actions" hidden><button id="recipe-cancel" type="button">초안 취소</button><button id="recipe-apply" type="button">적용</button></div>
+        </aside>
       </div>
-      <div id="recipe-targets" class="recipe-actions" aria-label="구멍 선택"></div>
-      <p id="recipe-selection"></p>
-      <form id="recipe-dimensions" hidden>
-        <label>지름 <input id="recipe-diameter" type="number" step="any" min="0.01" max="10000" required inputmode="decimal"> mm</label>
-        <button id="recipe-size" type="submit">치수 미리보기</button>
-        <button id="recipe-reset" type="button" hidden>기본값 복원</button>
-        <p id="recipe-binding"></p><p id="recipe-dimension-error" role="alert"></p>
-      </form>
-      <div class="recipe-actions"><button id="recipe-cancel" type="button">초안 취소</button><button id="recipe-apply" type="button">적용</button></div>
       <p id="recipe-status" role="status"></p>
     </section>
   </div>`;
@@ -112,26 +121,46 @@ export function mountRecipe(root: HTMLElement, hooks: Hooks, loaded?: Loaded) {
       holes: new Set(preview.holes.filter(h => uses.has(h.name)).map(h => h.id)),
       plate: uses.has(preview.plateName),
     } : undefined;
-    if (showing) viewport(svg, showing.scene, selected, top, preview ? committed?.scene : undefined, impact);
-    else svg.replaceChildren();
+    const anchors = showing ? viewport(svg, showing.scene, selected, top, preview ? committed?.scene : undefined, impact) : undefined;
+    if (!showing) svg.replaceChildren();
     query<HTMLElement>('recipe-empty').hidden = Boolean(showing);
     const picked = showing?.holes.find(h => h.id === selected);
+    query<HTMLElement>('recipe-context').hidden = !picked && !hasDraft();
+    query<HTMLElement>('recipe-transaction').hidden = !hasDraft();
+    query('recipe-context-caption').textContent = preview ? '변경 미리보기' : picked ? '선택한 구멍' : '편집 초안';
+    button('dismiss').hidden = !picked;
     query('recipe-selection').textContent = picked ? holeLabel(picked.name) + ' · Ø' + picked.diameter + ' mm' +
-      (picked.diameterParam ? '' : ' · 지름은 코드에 직접 입력돼 있어요.') : '';
+      (picked.diameterParam ? '' : ' · 지름은 코드에 직접 입력돼 있어요.') : preview ? '형상을 확인하세요' : '미적용 변경';
     const targets = showing?.holes ?? [];
     const focused = (document.activeElement as HTMLElement | null)?.dataset.recipeHole;
     if (targetList.children.length !== targets.length || targets.some((h,i) => (targetList.children[i] as HTMLElement).dataset.recipeHole !== h.id)) {
       targetList.replaceChildren(...targets.map(h => {
         const b = document.createElement('button');
-        b.type = 'button'; b.dataset.recipeHole = h.id; b.textContent = holeLabel(h.name);
+        b.type = 'button'; b.dataset.recipeHole = h.id;
+        b.setAttribute('aria-label',holeLabel(h.name));
+        b.title = holeLabel(h.name);
         b.onclick = () => choose(h.id);
         return b;
       }));
       if (focused) targetList.querySelector<HTMLButtonElement>('[data-recipe-hole="' + focused + '"]')?.focus();
     }
-    for (const b of targetList.children) b.setAttribute('aria-pressed', String((b as HTMLElement).dataset.recipeHole === selected));
+    targets.forEach((hole,i) => {
+      const badge = targetList.children[i] as HTMLButtonElement;
+      const anchor = anchors?.get(hole.id);
+      badge.hidden = !anchor;
+      badge.textContent = hole.name + '  Ø' + Number(hole.diameter.toPrecision(6));
+      badge.setAttribute('aria-pressed',String(hole.id === selected));
+      if (anchor) {
+        badge.style.left = anchor[0] / 750 * 100 + '%';
+        badge.style.top = anchor[1] / 440 * 100 + '%';
+      }
+    });
     const binding = picked?.diameterParam;
-    dimensions.hidden = !binding;
+    dimensions.hidden = !binding || Boolean(preview);
+    const previous = committed?.holes.find(h => h.id === selected);
+    const change = query<HTMLElement>('recipe-change');
+    change.hidden = !(preview && picked && previous && picked.diameter !== previous.diameter);
+    change.textContent = change.hidden ? '' : 'Ø' + previous!.diameter + ' → Ø' + picked!.diameter + ' mm';
     if (binding && picked) {
       const value = rawDiameter ?? String(picked.diameter);
       if (diameter.value !== value) diameter.value = value;
@@ -142,11 +171,12 @@ export function mountRecipe(root: HTMLElement, hooks: Hooks, loaded?: Loaded) {
       reset.disabled = hasDraft();
       reset.textContent = defaultValue === undefined ? '기본값 복원' : '기본값 ' + defaultValue + ' mm로';
       const consumers = showing?.declarations.get(binding)?.uses;
-      query('recipe-binding').textContent = '코드의 ' + binding + ' 수정 · 연결된 피처: ' +
-        [...(consumers ?? [])].join(', ') + (hasCodeDraft() ? ' · 현재 초안을 먼저 적용하거나 취소하세요.' : '');
+      query('recipe-binding').textContent = presentation && consumers?.size === 1
+        ? '이 구멍의 지름만 바뀝니다.'
+        : '연결된 피처: ' + [...(consumers ?? [])].join(', ');
     }
-    query('recipe-state').textContent = preview ? '미리보기 · 관통 구멍 ' + preview.holes.length + '개'
-      : committed ? '마지막 적용 모델 · 관통 구멍 ' + committed.holes.length + '개' : '빈 프로젝트';
+    query('recipe-state').textContent = preview ? presentation ? '미리보기 · 아직 적용하지 않았어요.' : '미리보기 · 관통 구멍 ' + preview.holes.length + '개'
+      : committed ? presentation ? '구멍을 선택해 지름을 바꾸세요.' : '마지막 적용 모델 · 관통 구멍 ' + committed.holes.length + '개' : '빈 프로젝트';
     input.readOnly = rawDiameter !== undefined;
     button('run').disabled = !hasCodeDraft() || rawDiameter !== undefined;
     button('insert').disabled = input.value.length > 0;
@@ -199,6 +229,11 @@ export function mountRecipe(root: HTMLElement, hooks: Hooks, loaded?: Loaded) {
     rawDiameter = diameter.value === String(picked.diameter) ? undefined : diameter.value;
     hooks.touch(); dimensionError.textContent = ''; render();
   };
+  button('dismiss').onclick = () => {
+    const previous = selected;
+    choose(null);
+    if (!selected && previous) targetList.querySelector<HTMLButtonElement>('[data-recipe-hole="' + previous + '"]')?.focus();
+  };
   svg.addEventListener('click', event => choose((event.target as SVGElement).closest<SVGElement>('[data-hole]')?.dataset.hole ?? null));
   function proposeDiameter(value: number) {
     if (!committed || !selected || hasCodeDraft()) return;
@@ -209,7 +244,7 @@ export function mountRecipe(root: HTMLElement, hooks: Hooks, loaded?: Loaded) {
     diameterImpact = committed.holes.find(h => h.id === selected)?.diameterParam;
     dimensionError.textContent = ''; error.textContent = '';
     input.value = result.value.source; preview = result.value;
-    notice('연결된 곳을 확인한 뒤 적용하세요.'); render();
+    notice(''); render();
   }
   dimensions.onsubmit = event => { event.preventDefault(); proposeDiameter(diameter.valueAsNumber); };
   button('reset').onclick = () => {

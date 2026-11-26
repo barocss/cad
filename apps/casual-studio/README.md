@@ -32,7 +32,9 @@ Build Studio from the same checkout with `pnpm build` and set `CHECK_STUDIO=1` t
 
 The landing page and first native import preview load no Studio shell, worker, WASM or recipe compiler in the tested build. The example and blank-code entry load the recipe compiler on demand. The shared evaluator and native format reader are still part of startup.
 
-![Actual Chromium capture of the shared editor with the example opened and code collapsed](casual-shared-example-chrome.png)
+[Desktop selection and preview](casual-context-desktop.png) · [390 px touch selection and preview](casual-context-mobile.png)
+
+![Actual Chromium capture of the contextual diameter preview](casual-context-desktop.png)
 
 ![Actual Chromium capture of the Casual Studio start screen](casual-start-chrome.png)
 

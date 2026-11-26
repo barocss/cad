@@ -198,6 +198,8 @@ try {
   assert.equal(await st('panel').isHidden(),true);
   assert.equal(await st('toggle').getAttribute('aria-expanded'),'false');
   assert.match(await st('purpose').textContent(),/고정 구멍/);
+  assert.equal(await st('context').isHidden(),true);
+  assert.equal(await st('transaction').isHidden(),true);
   // Pick the real geometry, without relying on a synthetic option or internal map.
   const a = st('scene').locator('polyline[data-rim]').first();
   const position = await a.evaluate(el => {
@@ -212,7 +214,18 @@ try {
   assert.match(await st('selection').textContent(),/구멍 A · 가이드 쪽/);
   assert.equal(await st('diameter').evaluate(e => e.getBoundingClientRect().bottom <= innerHeight),true,'selected diameter must be reachable without scrolling on desktop');
   await st('diameter').fill('8');
-  await st('size').click(); await st('apply').click();
+  await st('size').click();
+  assert.match(await st('context-caption').textContent(),/변경 미리보기/);
+  assert.equal(await st('change').textContent(),'Ø6 → Ø8 mm');
+  assert.equal(await st('dimensions').isHidden(),true);
+  await starter.screenshot({path:join(out,'casual-context-desktop.png')});
+  await st('apply').click();
+  assert.equal(await st('transaction').isHidden(),true);
+  await st('dismiss').click();
+  assert.equal(await st('context').isHidden(),true);
+  assert.equal(await starter.getByRole('button',{name:'구멍 A · 가이드 쪽'}).evaluate(e => document.activeElement === e),true);
+  await starter.keyboard.press('Enter');
+  assert.match(await st('selection').textContent(),/Ø8 mm/);
   const exp = starter.waitForEvent('download'); await st('export').click();
   const examplePath = join(out,'example.bcad'); await (await exp).saveAs(examplePath);
   const example = JSON.parse(await readFile(examplePath,'utf8'));
@@ -239,6 +252,22 @@ try {
   await starter.locator('#file').setInputFiles(exampleRecipe);
   await starter.getByLabel('CAD 레시피').waitFor();
   assert.match(await st('source').inputValue(),/param guideDia = 8/);
+
+  const phone = await (await browser.newContext({ viewport:{width:390,height:844}, hasTouch:true })).newPage();
+  await phone.goto(origin);
+  await phone.getByRole('button',{name:'이 예제로 시작',exact:true}).tap();
+  await phone.getByRole('button',{name:'구멍 B · 장비 쪽',exact:true}).tap();
+  const mobile = id => phone.locator('#recipe-' + id);
+  assert.equal(await mobile('context').isVisible(),true);
+  assert.equal(await phone.evaluate(() => document.documentElement.scrollWidth === innerWidth),true);
+  assert.ok((await mobile('context').boundingBox()).y > (await mobile('scene').boundingBox()).y);
+  await mobile('diameter').fill('7'); await mobile('size').tap();
+  await phone.screenshot({path:join(out,'casual-context-mobile.png')});
+  await mobile('apply').tap();
+  assert.match(await mobile('selection').textContent(),/장비 쪽 · Ø7 mm/);
+  await mobile('toggle').tap();
+  assert.match(await mobile('source').inputValue(),/param mountDia = 7/);
+  assert.ok((await mobile('panel').boundingBox()).y > (await mobile('scene').boundingBox()).y);
 
   // A genuine blank project: no sample insertion and no preexisting template geometry.
   const recipeContext = await browser.newContext({ viewport:{ width:1140,height:750 }, acceptDownloads:true });
@@ -306,7 +335,7 @@ output fixture
   await recipe.getByRole('button',{ name:'far',exact:true }).click();
   assert.equal(await rb('dimensions').isHidden(),true);
   await recipe.getByRole('button',{ name:'near',exact:true }).click();
-  assert.match(await rb('binding').textContent(),/guideDia.*near/);
+  assert.match(await rb('binding').textContent(),/연결된 피처: near/);
   await rb('toggle').click();
   assert.equal(await editor.isHidden(),true);
   await rb('diameter').fill('9'); await rb('size').click();
