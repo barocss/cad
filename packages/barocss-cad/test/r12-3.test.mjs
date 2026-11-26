@@ -105,7 +105,8 @@ test('R12.3a refusals: flanges running into each other at a corner (FLANGES_COLL
 test('R12.3a sheet Translate keeps named bends, table provenance, a flat and a subsequent flange', () => {
   const bendTable = { id: 'test-table', sources: [{ id: 'coupon', label: 'Test coupon' }],
     rows: [{ thickness: T, radius: R, angle: 90, kFactor: K, source: 'coupon' }] };
-  const { kFactor: _, ...sheetBase } = plate[1];
+  const sheetBase = { ...plate[1] };
+  delete sheetBase.kFactor;
   const base = [plate[0], { ...sheetBase, bendTable }, flange()];
   const before = evaluateCadPart(D(base)), original = before.outputs[0], originalReport = structuredClone(original.sheet);
   const offset = [7, -3, 11], move = { id: 'm', kind: 'translate', target: 'fl', offset };
@@ -115,7 +116,8 @@ test('R12.3a sheet Translate keeps named bends, table provenance, a flat and a s
   assert.equal(checkOutput(translated).valid, true);
   assert.notEqual(translated.sheet, original.sheet);
   assert.notEqual(translated.sheet.bends[0].axis, original.sheet.bends[0].axis);
-  const bend = originalReport.bends[0];
+  const { authoredFlange, ...bend } = originalReport.bends[0];
+  assert.deepEqual(authoredFlange, { featureId: 'fl' });
   assert.deepEqual(bend.table, { table: 'test-table', rows: [0], how: 'exact', estimate: false });
   assert.deepEqual(translated.sheet, {
     ...originalReport, bends: [{ ...bend, axis: { ...bend.axis, origin: bend.axis.origin.map((x, i) => x + offset[i]) } }],
@@ -141,6 +143,87 @@ test('R12.3a sheet Translate keeps named bends, table provenance, a flat and a s
   assert.deepEqual(original.sheet, originalReport);
 });
 
+test('R12.3a single YZ reflection carries bend-table provenance, supports a subsequent flange, upstream thickness edit, and double reflection', () => {
+  const { input: { partDocument } } = JSON.parse(readFileSync(new URL('../conformance/r12/accept-l-bracket.json', import.meta.url), 'utf8'));
+  const bendTable = {
+    id: 'reflect-shop-table',
+    sources: [{ id: 'coupon', label: 'Reflected coupon' }],
+    rows: [
+      { thickness: 1.5, radius: 1.5, angle: 90, kFactor: 0.44, source: 'coupon' },
+      { thickness: 2.0, radius: 1.5, angle: 90, kFactor: 0.46, source: 'coupon' },
+    ],
+  };
+  const makeBase = (thickness, table = bendTable) => partDocument.features.map(feature => {
+    if (feature.id === 'n0') {
+      const rest = { ...feature };
+      delete rest.kFactor;
+      return { ...rest, thickness, bendTable: table };
+    }
+    return feature.id === 'n1' ? { ...feature, center: [25, 18] } : feature;
+  });
+
+  const base = makeBase(1.5);
+  const before = evaluateCadPart(D(base)), original = before.outputs[0], originalReport = structuredClone(original.sheet);
+  const mirror = { id: 'm', kind: 'mirror', target: 'n6', plane: 'yz', keep: false };
+  const afterMirror = reevaluate(before, { document: D([...base, mirror]) }), reflected = afterMirror.outputs[0];
+  assert.equal(checkOutput(reflected).valid, true);
+  assert.deepEqual(reflected.sheet.bendTable, bendTable);
+  assert.deepEqual(reflected.sheet.bends[0].table, { table: 'reflect-shop-table', rows: [0], how: 'exact', estimate: false });
+
+  // Double reflection restores coordinates, fixed skin normal, bend axis and table provenance.
+  const twice = reevaluate(afterMirror, { document: D([...base, mirror, { id: 'm2', kind: 'mirror', target: 'm', plane: 'yz', keep: false }]) }).outputs[0];
+  assert.equal(checkOutput(twice).valid, true);
+  assert.deepEqual(twice.sheet.bendTable, bendTable);
+  assert.deepEqual(twice.sheet.bends[0].table, { table: 'reflect-shop-table', rows: [0], how: 'exact', estimate: false });
+  twice.sheet.bends[0].axis.origin.forEach((value, i) => close(value, originalReport.bends[0].axis.origin[i], 1e-12, 'double-reflected origin'));
+  twice.sheet.bends[0].axis.direction.forEach((value, i) => close(value, originalReport.bends[0].axis.direction[i], 1e-12, 'double-reflected direction'));
+
+  // Subsequent 20 mm flange on the named reflected edge + upstream thickness edit (1.5 -> 2.0 mm).
+  const subsequent = { id: 'fl', kind: 'sheet-flange', target: 'm', edge: 'n0.end|n0.leg1.a', length: 20 };
+  const width = 30, bore = 2.75;
+  for (const [thickness, kVal, rowIndex] of [[1.5, 0.44, 0], [2.0, 0.46, 1]]) {
+    const flanged = reevaluate(afterMirror, { document: D([...makeBase(thickness), mirror, subsequent]) }).outputs[0];
+    assert.equal(checkOutput(flanged).valid, true, `thickness ${thickness}`);
+    assert.equal(flanged.bodyCount, 1);
+    assert.deepEqual(flanged.sheet.bendTable, bendTable);
+    assert.deepEqual(flanged.sheet.bends.map(b => b.name), ['n0.bend1', 'fl.bend']);
+    const expectedRow = { table: 'reflect-shop-table', rows: [rowIndex], how: 'exact', estimate: false };
+    assert.deepEqual(flanged.sheet.bends.map(b => b.table), [expectedRow, expectedRow]);
+    const s = R + thickness;
+    const expectedVolume = width * (thickness * (90 - 4 * s) + Math.PI / 2 * (s ** 2 - R ** 2)) - 2 * Math.PI * bore ** 2 * thickness;
+    close(massPropertiesOf(flanged).volume, expectedVolume, 1e-9, `reflected flange volume t=${thickness}`);
+    assert.ok(massPropertiesOf(flanged).centroid[0] < 0, 'reflected flange stays on -X side');
+    flanged.sheet.bends[1].axis.origin.forEach((value, i) => close(value, [-(40 - s), 30, -R][i], 1e-12, `reflected flange axis origin t=${thickness}`));
+    flanged.sheet.bends[1].axis.direction.forEach((value, i) => close(value, [0, -1, 0][i], 1e-12, `reflected flange axis direction t=${thickness}`));
+
+    const flat = flatPatternOf(flanged);
+    const allowance = Math.PI / 2 * (R + kVal * thickness), deduction = 2 * s - allowance, length = 90 - 2 * deduction;
+    assert.equal(flat.fixedFace, 'n0.leg0.a');
+    close(flat.box.max[0], width, 1e-12, `reflected flange flat width t=${thickness}`);
+    close(flat.box.max[1], length, 1e-12, `reflected flange flat length t=${thickness}`);
+    close(flat.area, width * length - 2 * Math.PI * bore ** 2, 1e-12, `reflected flange flat area t=${thickness}`);
+    assert.deepEqual(flat.bends.map(b => [b.name, b.direction, b.table]), [
+      ['n0.bend1', 'down', expectedRow],
+      ['fl.bend', 'up', expectedRow],
+    ]);
+    const holes = flat.loops.filter(loop => !loop.outer).map(loop => {
+      close(loop.area, -Math.PI * bore ** 2, 1e-12, 'clockwise reflected hole');
+      assert.equal(loop.segments[0].ccw, false);
+      return loop.segments[0].center;
+    }).sort((a, b) => a[1] - b[1]);
+    assert.equal(holes.length, 2);
+    close(holes[0][0], 18, 1e-12, 'asymmetric hole keeps mirrored X station');
+    close(holes[1][0], 15, 1e-12, 'vertical leg hole X station');
+  }
+
+  // Missing row in bend table refuses cleanly without mutating the prior accepted output.
+  assert.throws(
+    () => reevaluate(afterMirror, { document: D([...makeBase(3.0), mirror, subsequent]) }),
+    e => (e.details?.category ?? e.code) === 'PARAMETER' && /BEND_TABLE_MISS/.test(e.message),
+  );
+  assert.deepEqual(original.sheet, originalReport);
+});
+
 test('R12.3a sheet Rotate about a nonzero pivot carries the named bend and fixed skin', () => {
   const base = [...plate, flange()];
   const before = evaluateCadPart(D(base)), original = before.outputs[0], originalReport = structuredClone(original.sheet);
@@ -154,8 +237,9 @@ test('R12.3a sheet Rotate about a nonzero pivot carries the named bend and fixed
   assert.equal(checkOutput(rotated).valid, true);
   assert.notEqual(rotated.sheet, original.sheet);
   assert.notEqual(rotated.sheet.bends[0].axis, original.sheet.bends[0].axis);
-  const [bend] = rotated.sheet.bends, [originalBend] = originalReport.bends;
-  assert.deepEqual({ ...rotated.sheet, bends: [{ ...bend, axis: originalBend.axis }] }, originalReport);
+  const [bend] = rotated.sheet.bends, [{ authoredFlange, ...originalBend }] = originalReport.bends;
+  assert.deepEqual(authoredFlange, { featureId: 'fl' });
+  assert.deepEqual({ ...rotated.sheet, bends: [{ ...bend, axis: originalBend.axis }] }, { ...originalReport, bends: [originalBend] });
   const expectedOrigin = turnPoint(originalBend.axis.origin), expectedDirection = turn(originalBend.axis.direction);
   bend.axis.origin.forEach((value, i) => close(value, expectedOrigin[i], 1e-12, 'rotated bend axis origin'));
   bend.axis.direction.forEach((value, i) => close(value, expectedDirection[i], 1e-12, 'rotated bend axis direction'));
