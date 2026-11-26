@@ -1,6 +1,8 @@
 # 셀프센터링 바이스 · 실제 CAD 형상 검증
 
-Casual Studio 로드맵 5단계의 형상 검증용 예제다. [centering-vise.bcad](centering-vise.bcad)를 CAD Studio에서 열고 **Inspect → Variants → Show 60 mm opening**을 누른다. **Show the master**로 40 mm를 다시 표시한다.
+Casual Studio 시작 화면에서 **바이스 열기**를 선택한다. 캔버스에서 **조**를 클릭하면 그 조의 높이만 바꿀 수 있고, **물림 간격선**을 클릭하면 중심을 고정한 채 양쪽 조를 같이 움직인다. 베이스를 클릭하면 고정 치수와 홀 정보를 확인한다. [Casual 데스크탑 미리보기](03-casual-preview.png).
+
+초기 형상만 확인하려면 [centering-vise.bcad](centering-vise.bcad)를 CAD Studio에서 열고 **Inspect → Variants → Show 60 mm opening**을 누른다. **Show the master**로 40 mm를 다시 표시한다.
 
 | 실제 형상에서 잰 값 | 40 mm | 60 mm |
 | --- | --- | --- |
@@ -13,7 +15,7 @@ Casual Studio 로드맵 5단계의 형상 검증용 예제다. [centering-vise.b
 
 [40 mm 데스크탑 화면](01-40-mm.png) · [60 mm 데스크탑 화면](02-60-mm.png)
 
-다음은 Casual에서 간격과 개별 부품 선택을 분리하고, 미리보기·적용·Undo·내보내기를 검증하는 단계다. 이 파일은 아직 Casual 시작 화면에 노출하지 않는다.
+Casual에서 왼쪽 그립 15→17 mm를 적용한 뒤 간격 40→60 mm를 적용했다. Undo 한 번은 간격만 40 mm로 되돌리고 그립 17 mm를 유지하며, 두 번째 Undo가 그립을 15 mm로 되돌린다. 60 mm와 17 mm를 적용한 레시피를 다시 열고, 내보낸 .bcad를 CAD Studio에서 60→40 mm로 재계산해도 왼쪽 그립 17 mm가 유지된다.
 
 ```sh
 work=$(mktemp -d)

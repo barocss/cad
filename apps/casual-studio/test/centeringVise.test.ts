@@ -6,13 +6,13 @@ import { variantNamed, variantOf } from '@barocss/cad-model/assembly/variability
 import { encodeStudioFile, readStudioFile } from '@barocss/cad-model/engine/container';
 import { type StudioDoc } from '@barocss/cad-model/engine/doc';
 import { evaluateDoc, partBreps } from '@barocss/cad-model/engine/evaluate';
-import { buildCenteringVise } from '../src/centeringVise';
+import { buildCenteringVise, readViseSource, viseDocumentAt, viseSource } from '../src/centeringVise';
 
 function range(b: Brep, axis: number) {
   const v = b.vertices.map(p=>p.point[axis]);
   return [Math.min(...v), Math.max(...v)];
 }
-function inspect(doc: StudioDoc, opening: number) {
+function inspect(doc: StudioDoc, opening: number, leftGrip=15, rightGrip=15) {
   const evaluated = evaluateDoc(doc,0);
   if (!evaluated.ok) assert.fail(evaluated.error.title);
   const native = partBreps(doc);
@@ -32,10 +32,10 @@ function inspect(doc: StudioDoc, opening: number) {
   assert.deepEqual(rightX,[opening/2,opening/2+16]);
   assert.equal(rightX[0]-leftX[1],opening);
   assert.equal((rightX[0]+leftX[1])/2,0);
-  for(const jaw of [left,right]) {
-    assert.deepEqual(range(jaw,1),[-20,20]);
-    assert.deepEqual(range(jaw,2),[8,27]);
-  }
+  assert.deepEqual(range(left,1),[-20,20]);
+  assert.deepEqual(range(right,1),[-20,20]);
+  assert.deepEqual(range(left,2),[8,12+leftGrip]);
+  assert.deepEqual(range(right,2),[8,12+rightGrip]);
   assert.deepEqual(range(base,0),[-60,60]);
   assert.deepEqual(range(base,1),[-30,30]);
   assert.deepEqual(range(base,2),[0,8]);
@@ -74,4 +74,15 @@ test('vise native read/write retains its opening relation and both original jaw 
   assert.deepEqual(read.doc.variability,d.variability);
   inspect(read.doc,40);
   inspect(variantNamed(read.doc,'60 mm opening').doc,60);
+});
+
+test('left grip and gap can be applied independently, and the native alternate gap keeps the applied grip', async()=>{
+  const selected = {opening:60,leftGrip:17,rightGrip:15};
+  const file = await readStudioFile(encodeStudioFile(viseDocumentAt(selected)));
+  if ('error' in file) assert.fail(file.error);
+  inspect(variantOf(file.doc).doc,60,17,15);
+  inspect(variantNamed(file.doc,'40 mm opening').doc,40,17,15);
+  inspect(variantOf(file.doc,{rightGrip:18}).doc,60,17,18);
+  assert.deepEqual(readViseSource(viseSource(selected)),selected);
+  assert.equal(readViseSource(viseSource({...selected,rightGrip:99})),null);
 });

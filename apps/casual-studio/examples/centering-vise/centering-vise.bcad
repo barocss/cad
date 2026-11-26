@@ -6,7 +6,9 @@
     "leftOutside": -36,
     "leftFace": -20,
     "rightFace": 20,
-    "rightOutside": 36
+    "rightOutside": 36,
+    "rightGrip": 15,
+    "leftGrip": 15
   },
   "nodes": [
     {
@@ -130,7 +132,9 @@
       "kind": "extrude",
       "sketch": 8,
       "from": 12,
-      "height": 15,
+      "height": {
+        "parameter": "leftGrip"
+      },
       "id": "n9"
     },
     {
@@ -190,7 +194,9 @@
       "kind": "extrude",
       "sketch": 13,
       "from": 12,
-      "height": 15,
+      "height": {
+        "parameter": "rightGrip"
+      },
       "id": "n14"
     },
     {
@@ -259,6 +265,36 @@
             "offset": 16,
             "to": "parameter",
             "part": "base"
+          }
+        ]
+      },
+      {
+        "name": "leftGrip",
+        "type": "number",
+        "unit": "mm",
+        "min": 12,
+        "max": 20,
+        "default": 15,
+        "bindings": [
+          {
+            "to": "parameter",
+            "part": "base",
+            "parameter": "leftGrip"
+          }
+        ]
+      },
+      {
+        "name": "rightGrip",
+        "type": "number",
+        "unit": "mm",
+        "min": 12,
+        "max": 20,
+        "default": 15,
+        "bindings": [
+          {
+            "to": "parameter",
+            "part": "base",
+            "parameter": "rightGrip"
           }
         ]
       }

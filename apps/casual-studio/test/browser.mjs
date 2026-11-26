@@ -477,8 +477,92 @@ output fixture
     await studio.getByText('Bounds 64 × 42 × 21',{exact:true}).waitFor();
     sensorHandoff = 'PASS';
   }
+  const vise = await ctx.newPage();
+  vise.on('pageerror',e=>errors.push(e.message));
+  await vise.goto(origin);
+  await vise.getByRole('button',{name:'바이스 열기',exact:true}).click();
+  const vi=id=>vise.locator('#vise-'+id);
+  const chooseVise=key=>vi('targets').locator('[data-target='+key+']').click();
+  const viseState=()=>vi('state').textContent();
+  const changeVise=async value=>{await vi('value').fill(String(value));await vi('preview').click();};
+  await vi('scene').waitFor();
+  assert.match(await viseState(),/40 mm · 조 높이 15 \/ 15 mm/);
+  const layers=await vi('scene').locator('polygon[data-vise-part]').evaluateAll(nodes=>nodes.map(n=>n.dataset.visePart));
+  assert.ok(layers.includes('body') && layers.includes('left') && layers.includes('right'));
+  assert.ok(layers.lastIndexOf('body') < layers.findIndex(part=>part!=='body'), 'base must not overpaint the jaws');
+  // Physically visible polygon hit, not just the redundant keyboard target.
+  const leftHit = await vi('scene').locator('polygon[data-vise-part=left]').evaluateAll(polys => {
+    for (const p of polys) {
+      const q=p.points;
+      const xy=new DOMPoint((q[0].x+q[1].x+q[2].x)/3,(q[0].y+q[1].y+q[2].y)/3).matrixTransform(p.getScreenCTM());
+      if (document.elementFromPoint(xy.x,xy.y)===p) return [xy.x,xy.y];
+    }
+    return null;
+  });
+  assert.ok(leftHit);
+  await vise.mouse.click(...leftHit);
+  assert.equal(await vi('selection').textContent(),'왼쪽 조');
+  await changeVise(17);
+  assert.match(await vi('rows').textContent(),/15 → 17 mm/);
+  await vi('apply').click();
+  assert.match(await viseState(),/40 mm · 조 높이 17 \/ 15 mm/);
+  await chooseVise('body');
+  assert.equal(await vi('form').isHidden(),true);
+  const gap = vi('scene').locator('line[data-vise-part=gap]').last();
+  const gapHit=await gap.evaluate(e=> {
+    const p=e.getPointAtLength(e.getTotalLength()/2).matrixTransform(e.getScreenCTM());
+    return [p.x,p.y];
+  });
+  await vise.mouse.click(...gapHit);
+  assert.equal(await vi('selection').textContent(),'물림 간격');
+  await changeVise(65);
+  assert.match(await vi('error').textContent(),/40–60/);
+  await changeVise(60);
+  assert.match(await vi('rows').textContent(),/40 → 60 mm/);
+  assert.match(await vi('rows').textContent(),/왼쪽 조 이동-10 mm오른쪽 조 이동\+10 mm/);
+  await vise.screenshot({path:join(out,'casual-vise-preview.png')});
+  await vi('cancel').click();
+  assert.match(await viseState(),/40 mm · 조 높이 17 \/ 15 mm$/);
+  await changeVise(60); await vi('apply').click();
+  assert.match(await viseState(),/60 mm · 조 높이 17 \/ 15 mm$/);
+  await vi('undo').click();
+  assert.match(await viseState(),/40 mm · 조 높이 17 \/ 15 mm$/);
+  await vi('undo').click();
+  assert.match(await viseState(),/40 mm · 조 높이 15 \/ 15 mm$/);
+  await vi('redo').click(); await vi('redo').click();
+  const viseDownload=async(id,filename)=>{
+    const wait=vise.waitForEvent('download'); await vi(id).click();
+    const path=join(out,filename); await (await wait).saveAs(path); return path;
+  };
+  const viseRecipe=await viseDownload('save','vise-applied.cadrecipe');
+  await vi('home').click(); await vise.locator('#start-vise').waitFor();
+  await vise.locator('#file').setInputFiles(viseRecipe);
+  await vi('scene').waitFor();
+  assert.match(await viseState(),/60 mm · 조 높이 17 \/ 15 mm$/);
+  const viseCad=await viseDownload('export','vise-applied.bcad');
+  const viseDoc=JSON.parse(await readFile(viseCad,'utf8'));
+  assert.deepEqual(viseDoc.variability.inputs.map(i=>[i.name,i.default]),[['opening',60],['leftGrip',17],['rightGrip',15]]);
+  assert.deepEqual([viseDoc.parameters.leftFace,viseDoc.parameters.rightFace],[-30,30]);
+  let viseHandoff='NOT_RUN';
+  if (studioServer) {
+    const studio=await (await browser.newContext({viewport:{width:1440,height:950}})).newPage();
+    studio.on('pageerror',e=>errors.push(e.message));
+    await studio.goto('http://127.0.0.1:' + studioServer.address().port);
+    await studio.getByLabel('Model file',{exact:true}).setInputFiles(viseCad);
+    await studio.getByText('Bounds 120 × 60 × 29',{exact:true}).waitFor({timeout:30000});
+    await studio.getByRole('button',{name:'Inspect',exact:true}).click();
+    await studio.getByRole('button',{name:'Variants',exact:true}).click();
+    const variants=studio.getByRole('complementary',{name:'Variants panel'});
+    assert.equal(await variants.getByRole('spinbutton',{name:'Value of opening'}).inputValue(),'60');
+    assert.equal(await variants.getByRole('spinbutton',{name:'Value of leftGrip'}).inputValue(),'17');
+    await variants.getByRole('button',{name:'Show 40 mm opening'}).click();
+    assert.equal(await variants.getByRole('spinbutton',{name:'Value of opening'}).inputValue(),'40');
+    assert.equal(await variants.getByRole('spinbutton',{name:'Value of leftGrip'}).inputValue(),'17');
+    await studio.getByText('Bounds 120 × 60 × 29',{exact:true}).waitFor();
+    viseHandoff='PASS';
+  }
   assert.deepEqual(errors, []);
-  console.log(JSON.stringify({ result:'PASS', studioHandoff, recipeHandoff, sensorHandoff, desktopOnly, requested:[...new Set(requested)], output:out }));
+  console.log(JSON.stringify({ result:'PASS', studioHandoff, recipeHandoff, sensorHandoff, viseHandoff, desktopOnly, requested:[...new Set(requested)], output:out }));
 } finally {
   await browser?.close();
   server.close();

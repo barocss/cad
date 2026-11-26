@@ -143,3 +143,18 @@ button.sensor-row:hover,.sensor-row:focus-visible{background:#edf4fe}
   .examples .example-copy p:not(.eyebrow){margin:8px 0}
   .examples .example-copy button{margin-top:auto}
 }
+
+#app:has(#vise-workspace:not([hidden]))>header{display:none}
+.vise-example-art{background:#ecf1f6}
+#vise-title:focus{outline:none}
+#vise-state,#vise-detail,#vise-range,#vise-error,#vise-status{font-size:12px;color:#4c6681;line-height:1.5}
+#vise-targets{display:flex;gap:4px;flex-wrap:wrap}
+#vise-targets button[aria-pressed=true]{background:#e2edff;border-color:#85a8dd;color:#1e508e}
+#vise-preview,#vise-apply,#vise-export{background:#2458c5;border-color:#2458c5;color:#fff}
+#vise-error{color:#963723}
+#vise-error:empty,#vise-status:empty{display:none}
+#vise-impact{padding-top:12px;margin-top:13px;border-top:1px solid #dbe5ef}
+#vise-rows{margin:8px 0}
+#vise-actions{justify-content:flex-end}
+#vise-scene [data-vise-part]{cursor:pointer}
+@media(min-width:940px){.examples{grid-template-columns:repeat(3,minmax(0,1fr))}}

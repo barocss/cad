@@ -41,6 +41,16 @@ app.innerHTML = `
 <p class="editable-values">바꿀 수 있는 값: 보드 폭 56–64 mm</p>
 <button id="start-sensor" type="button">센서 케이스 열기</button></div>
 </article>
+<article class="example" aria-labelledby="vise-example-name">
+<div class="example-art vise-example-art" aria-hidden="true"><svg viewBox="0 0 280 152" focusable="false">
+<path fill="#abc2d4" stroke="#65839e" d="M41 83 117 51 237 98 161 130Z M41 83v13l120 47v-13Z M161 130v13l76-32V98Z"/>
+<path fill="#d5e2ec" stroke="#65839e" d="m67 52 44-21 38 15-44 21Z m0 0v34l38 15V67Z m38 15v34l44-21V46Z M162 86l44-21 24 10-44 21Z m0 0v23l24 10V96Z m24 10v23l44-21V75Z"/>
+</svg></div>
+<div class="example-copy"><p class="eyebrow">조립 예제</p><h2 id="vise-example-name">셀프센터링 바이스</h2>
+<p>작업물 폭에 맞춰 양쪽 조를 벌리고, 한쪽 높이만 따로 바꿔요.</p>
+<p class="editable-values">바꿀 수 있는 값: 물림 간격 · 조 높이</p>
+<button id="start-vise" type="button">바이스 열기</button></div>
+</article>
 </div>
 <div class="start-file"><button id="start-code" type="button">코드로 만들기</button>
 <small>빈 캔버스에서 판과 관통 구멍을 코드로 정의해요.</small></div>
@@ -62,6 +72,7 @@ app.innerHTML = `
 <p id="notice" role="status" aria-live="polite"></p></section></div>
 <section id="recipe-workspace" hidden aria-label="코드 모델링"></section>
 <section id="sensor-workspace" hidden aria-label="센서 케이스 모델링"></section>
+<section id="vise-workspace" hidden aria-label="바이스 모델링"></section>
 <dialog id="switch-dialog" aria-labelledby="switch-title" aria-describedby="switch-detail">
 <h2 id="switch-title">현재 편집을 버리고 이동할까요?</h2><p id="switch-detail"></p>
 <div><button id="keep" type="button" autofocus>계속 편집</button><button id="discard" type="button">버리고 이동</button></div></dialog>`;
@@ -70,6 +81,7 @@ let current: PlateDocument, saved: PlateDocument;
 let editing = false;
 let recipe: ReturnType<typeof import('./recipeWork')['mountRecipe']> | undefined;
 let sensor: ReturnType<typeof import('./sensorWork')['mountSensor']> | undefined;
+let vise: ReturnType<typeof import('./viseWork')['mountVise']> | undefined;
 let fileName = 'cable-guide-adapter.bcad';
 let numberDraft = false, codeDraft = false;
 let pendingSwitch: (() => void) | undefined;
@@ -80,7 +92,7 @@ let fileRev = 0, editRev = 0;
 const past: PlateDocument[] = [], ahead: PlateDocument[] = [];
 const editor = get<HTMLFormElement>('editor'), diameter = get<HTMLInputElement>('diameter');
 const codePanel = get('code-panel'), script = get<HTMLTextAreaElement>('script');
-const notice = (t = '') => { if (sensor) sensor.notice(t); else if (recipe) recipe.notice(t); else get(editing ? 'notice' : 'start-notice').textContent = t; };
+const notice = (t = '') => { if (vise) vise.notice(t); else if (sensor) sensor.notice(t); else if (recipe) recipe.notice(t); else get(editing ? 'notice' : 'start-notice').textContent = t; };
 const activeHole = () => current.scene.holes.find(h => h.id === active);
 const scene = document.querySelector<SVGSVGElement>('#scene')!;
 function draw() {
@@ -177,7 +189,7 @@ window.addEventListener('keydown', e => {
 });
 const dialog = get<HTMLDialogElement>('switch-dialog');
 function confirmSwitch(action: () => void) {
-  const activeRecipe = sensor ?? recipe;
+  const activeRecipe = vise ?? sensor ?? recipe;
   const dirty = activeRecipe ? activeRecipe.hasUnsaved() : editing && current !== saved;
   const pending = activeRecipe ? activeRecipe.hasDraft() : editing && (draft || numberDraft || codeDraft);
   if (!dirty && !pending) { action(); return; }
@@ -197,8 +209,8 @@ get('discard').onclick = () => {
   pendingSwitch = undefined; dialog.close(); action?.();
 };
 function clearWorkspaces() {
-  recipe = undefined; sensor = undefined;
-  for (const id of ['recipe-workspace','sensor-workspace']) {
+  recipe = undefined; sensor = undefined; vise = undefined;
+  for (const id of ['recipe-workspace','sensor-workspace','vise-workspace']) {
     const host = get(id);
     host.hidden = true; host.onkeydown = null; host.replaceChildren();
   }
@@ -244,6 +256,21 @@ function showSensor(module: typeof import('./sensorWork'), width?: number, name?
   const host = get('sensor-workspace'); host.hidden = false;
   sensor = module.mountSensor(host, hooks, width, name);
 }
+function showVise(module: typeof import('./viseWork'), values?: Parameters<typeof module.mountVise>[2], name?: string) {
+  clearWorkspaces();
+  ++editRev;
+  editing = false;
+  get('start').hidden = get('workarea').hidden = get('tools').hidden = true;
+  const host = get('vise-workspace'); host.hidden = false;
+  vise = module.mountVise(host,hooks,values,name);
+}
+get('start-vise').onclick = async () => {
+  const token=++fileRev;
+  try {
+    const module=await import('./viseWork');
+    if (token===fileRev) showVise(module);
+  } catch { if (token===fileRev) { setEditing(false); notice('바이스를 열지 못했어요.'); } }
+};
 get('start-sensor').onclick = async () => {
   const token = ++fileRev;
   try {
@@ -287,6 +314,17 @@ get<HTMLInputElement>('file').onchange = async event => {
         confirmSwitch(() => {
           if (token !== fileRev || observed !== editRev) return;
           showSensor(sensorModule, width, file.name); notice('센서 케이스 레시피를 열었어요.');
+        });
+        return;
+      }
+      if (/^\s*centering-vise\b/m.test(source)) {
+        const viseModule=await import('./viseWork');
+        if (token!==fileRev || observed!==editRev) return;
+        const values=viseModule.readViseSource(source);
+        if (!values) {notice('바이스 레시피의 간격과 조 높이 범위를 확인해주세요.');return;}
+        confirmSwitch(()=>{
+          if (token!==fileRev || observed!==editRev) return;
+          showVise(viseModule,values,file.name); notice('바이스 레시피를 열었어요.');
         });
         return;
       }

@@ -1,13 +1,13 @@
 import { lookOf } from '@barocss/cad-model/app/bodies';
 import { encodeStudioFile } from '@barocss/cad-model/engine/container';
 import { evaluateDoc } from '@barocss/cad-model/engine/evaluate';
-import { drawSensor, type SensorBody, type SensorPart, type SensorView } from './sensorViewport';
+import { drawFixture, type FixtureBody, type FixturePart, type FixtureView } from './fixtureViewport';
 import { readSensorSource, sensorDocumentAt, sensorSource, sensorWidth } from './sensorEnclosure';
 
 export { readSensorSource } from './sensorEnclosure';
 const name = '센서 보드 케이스';
 const fmt = (n: number) => String(Number(n.toPrecision(10)));
-const roles: Record<string, SensorPart> = {
+const roles: Record<string, FixturePart> = {
   'Lid':'lid', 'Case body':'body', 'Sensor board':'board',
   'Left front support':'left', 'Left rear support':'left', 'Right front support':'right', 'Right rear support':'right',
 };
@@ -15,13 +15,13 @@ const roles: Record<string, SensorPart> = {
 function buildScene(width: number) {
   const doc = sensorDocumentAt(width), result = evaluateDoc(doc, 0, 8);
   if (!result.ok || result.bodies.length !== 7) throw new Error('케이스 형상을 계산하지 못했어요.');
-  const bodies: SensorBody[] = result.bodies.map(b => {
+  const bodies: FixtureBody[] = result.bodies.map(b => {
     const part = roles[lookOf(doc, b).name ?? ''];
     if (!part) throw new Error('Unknown sensor part');
     return { mesh:b.mesh, part };
   });
-  const boards = (part: SensorPart) => bodies.filter(b => b.part === part).map(b => b.mesh.bounds);
-  const span = (part: SensorPart) => { const b = boards(part)[0]; return b.max[0] - b.min[0]; };
+  const boards = (part: FixturePart) => bodies.filter(b => b.part === part).map(b => b.mesh.bounds);
+  const span = (part: FixturePart) => { const b = boards(part)[0]; return b.max[0] - b.min[0]; };
   const anchors = (part: 'left' | 'right') => boards(part).map(b => (b.min[0] + b.max[0]) / 2);
   const body = span('body'), lid = span('lid'), left = anchors('left'), right = anchors('right');
   if (body !== lid || left.length !== 2 || right.length !== 2 || left[0] !== left[1] || right[0] !== right[1]) {
@@ -34,7 +34,7 @@ type Hooks = { touch(): void; home(): void; open(): void; download(blob: Blob, n
 
 export function mountSensor(root: HTMLElement, hooks: Hooks, width: number = sensorWidth.default, filename = 'sensor-enclosure.cadrecipe') {
   let current = buildScene(width), saved = width, next: Scene | undefined;
-  let view: SensorView = 'exploded', focused: SensorPart[] = [], code = false, codeDirty = false;
+  let view: FixtureView = 'exploded', focused: FixturePart[] = [], code = false, codeDirty = false;
   const past: Scene[] = [], future: Scene[] = [];
   root.innerHTML = `
   <div class="recipe-bar">
@@ -73,7 +73,7 @@ export function mountSensor(root: HTMLElement, hooks: Hooks, width: number = sen
   const svg = root.querySelector<SVGSVGElement>('#sensor-scene')!;
   const status = (message = '') => { get('status').textContent = message; };
   const error = (message = '') => { get('error').textContent = message; field.toggleAttribute('aria-invalid', !!message); };
-  const renderCanvas = () => drawSensor(svg, (next ?? current).bodies, view, new Set(focused.length ? focused : next ? ['board','body','lid','right'] : []), !!focused.length);
+  const renderCanvas = () => drawFixture(svg, (next ?? current).bodies, view, new Set(focused.length ? focused : next ? ['board','body','lid','right'] : []), !!focused.length);
   const rows = [
     { label:'보드 폭', parts:['board'], value:(s: Scene) => fmt(s.board) + ' mm' },
     { label:'본체 · 뚜껑 폭', parts:['body','lid'], value:(s: Scene) => fmt(s.body) + ' mm' },
@@ -154,7 +154,7 @@ export function mountSensor(root: HTMLElement, hooks: Hooks, width: number = sen
     preview(value);
     if (value === null) status('예제 형식에 맞춰 boardWidth만 바꿀 수 있어요.');
   };
-  root.querySelectorAll<HTMLButtonElement>('[data-view]').forEach(b => b.onclick = () => { view = b.dataset.view as SensorView; focused = []; render(); });
+  root.querySelectorAll<HTMLButtonElement>('[data-view]').forEach(b => b.onclick = () => { view = b.dataset.view as FixtureView; focused = []; render(); });
   button('save').onclick = () => {
     hooks.download(new Blob([sensorSource(current.width)], {type:'text/plain'}), filename);
     saved = current.width; status(draftExists() ? '미적용 입력은 빼고 레시피를 저장했어요.' : '레시피를 저장했어요.');
