@@ -2,18 +2,24 @@ import assert from 'node:assert/strict';
 import { createFlow } from './flow-helper.mjs';
 
 const baseline = process.argv.includes('--baseline');
+const multi = process.argv.includes('--multi');
 const n2Old = 'n1.side[e1]', n2New = 'n1.side[s1]';
 const n3Old = 'n1.side[e1]#3|n2.ceiling', n3New = 'n1.side[s1]#3|n2.ceiling';
 const ref = node => ({ node, side: 'solid' });
+const stockSketch = multi ? 2 : 0, shellNode = stockSketch + 2, chamferNode = stockSketch + 3;
 const seed = {
   format: 'barocss-cad-model', schema: 3, units: 'mm', parameters: {},
   nodes: [
+    ...(multi ? [
+      { id: 'n4', kind: 'sketch', profile: 'rectangle', min: [76, -12], max: [88, 4] },
+      { id: 'n5', kind: 'extrude', sketch: 0, height: 12 },
+    ] : []),
     { id: 'n0', kind: 'sketch', profile: 'rectangle', min: [-20, -20], max: [60, 20], sideTags: { outer: ['e1', 'e2', 'e3', 'e4'] } },
-    { id: 'n1', kind: 'extrude', sketch: 0, height: 12 },
-    { id: 'n2', kind: 'shell', parent: ref(1), open: [n2Old], thickness: 2 },
-    { id: 'n3', kind: 'chamfer', parent: ref(2), edges: [n3Old], distance: 0.5 },
+    { id: 'n1', kind: 'extrude', sketch: stockSketch, height: 12 },
+    { id: 'n2', kind: 'shell', parent: ref(shellNode - 1), open: [n2Old], thickness: 2 },
+    { id: 'n3', kind: 'chamfer', parent: ref(shellNode), edges: [n3Old], distance: 0.5 },
   ],
-  outputs: { b3: ref(3) }, nextId: 4,
+  outputs: multi ? { b5: ref(1), b3: ref(chamferNode) } : { b3: ref(chamferNode) }, nextId: multi ? 6 : 4,
 };
 const uBlockSketch = {
   id: 'n0', kind: 'sketch', profile: 'polygon',
@@ -41,24 +47,28 @@ import { checkBrep, brepMassProperties } from '@barocss/cad';
 import { partBreps, evaluateDoc } from '@barocss/cad-model/engine/evaluate';
 import { captureSignatures } from '@barocss/cad-model/engine/references';
 const input = JSON.parse(readFileSync(process.argv[2], 'utf8'));
-const inspect = doc => partBreps(doc).map(({ brep }) => {
+const inspect = doc => partBreps(doc).map(({ key, brep }) => {
   const check = checkBrep(brep, { strict: true });
-  return { valid: check.valid, topology: check.topology, ...brepMassProperties(brep, 1) };
+  return { key, valid: check.valid, topology: check.topology, ...brepMassProperties(brep, 1) };
 });
 if (input.prepare) {
-  const r1 = evaluateDoc({ ...input.doc, nodes: input.doc.nodes.slice(0, 2), outputs: { b1: { node: 1, side: 'solid' } } }, 1);
+  const r1 = evaluateDoc({ ...input.doc, nodes: input.doc.nodes.slice(0, input.shellNode), outputs: { b1: { node: input.shellNode - 1, side: 'solid' } } }, 1);
   if (!r1.ok) throw new Error(JSON.stringify(r1));
   let doc = captureSignatures(input.doc, r1.bodies);
-  const r2 = evaluateDoc({ ...doc, nodes: doc.nodes.slice(0, 3), outputs: { b2: { node: 2, side: 'solid' } } }, 1);
+  const r2 = evaluateDoc({ ...doc, nodes: doc.nodes.slice(0, input.shellNode + 1), outputs: { b2: { node: input.shellNode, side: 'solid' } } }, 1);
   if (!r2.ok) throw new Error(JSON.stringify(r2));
   doc = captureSignatures(doc, r2.bodies);
   console.log(JSON.stringify({ doc, native: inspect(doc) }));
+} else if (input.independent) {
+  console.log(JSON.stringify(partBreps(input.doc).find(body => body.key === 'b5')?.brep));
 } else if (input.previewFace) {
   const ev = evaluateDoc(input.doc, 1);
-  if (!ev.ok || ev.bodies.length !== 1) throw Error('Expected one current source body');
-  const faces = ev.bodies[0].mesh.faces.filter(face => face.name === input.previewFace);
+  if (!ev.ok) throw Error('Expected the current source bodies');
+  const slot = ev.bodies.findIndex(body => body.key === 'b3');
+  if (slot < 0) throw Error('Expected Shell owner b3');
+  const faces = ev.bodies[slot].mesh.faces.filter(face => face.name === input.previewFace);
   if (faces.length !== 1 || faces[0].kind !== 'plane') throw Error('Expected one native planar candidate');
-  console.log(JSON.stringify({ key: ev.bodies[0].key, index: faces[0].index, name: faces[0].name, area: faces[0].area }));
+  console.log(JSON.stringify({ key: ev.bodies[slot].key, slot, index: faces[0].index, name: faces[0].name, area: faces[0].area }));
 } else console.log(JSON.stringify(inspect(input)));
 `,
 });
@@ -95,9 +105,22 @@ async function open(name, bytes) {
   await f.ready();
 }
 const shellExpected = 14656 - 16 * (4 - Math.PI);
-let chamferedExpected = null;
+let chamferedExpected = null, independent = null;
 async function native(label, doc, state) {
-  const [model] = await f.inspect(label, doc);
+  const models = await f.inspect(label, doc);
+  assert.equal(models.length, multi ? 2 : 1);
+  const model = models.find(body => body.key === 'b3');
+  assert.ok(model);
+  if (multi) {
+    const other = models.find(body => body.key === 'b5');
+    assert.ok(other?.valid);
+    near(other.volume, 2304);
+    const heads = await f.bodies();
+    assert.ok(heads.bodies.some(body => body.key === 'b5'));
+    const current = await f.inspect(label + '-independent', { independent: true, doc });
+    if (!independent) independent = current;
+    assert.deepEqual(current, independent);
+  }
   assert.ok(model.valid);
   assert.equal(model.topology.length, 1);
   assert.equal(model.topology[0].genus, 0);
@@ -113,9 +136,9 @@ async function native(label, doc, state) {
 
 await f.run(async () => {
   f.phase = 'prepare exact signed U-block Shell + Chamfer chain';
-  const { doc } = await f.inspect('native-authored', { prepare: true, doc: seed });
+  const { doc } = await f.inspect('native-authored', { prepare: true, doc: seed, shellNode });
   const edited = structuredClone(doc);
-  edited.nodes[0] = uBlockSketch;
+  edited.nodes[stockSketch] = uBlockSketch;
 
   await f.newPage();
   f.phase = 'open edited U-block holding both Shell (n2) and Chamfer (n3)';
@@ -123,12 +146,12 @@ await f.run(async () => {
   const heldRows = refs().getByText('Choose a reference · Feature held', { exact: true });
   await heldRows.nth(1).waitFor();
   const bothHeld = await f.snapshot('00-both-held');
-  assert.equal(bothHeld.doc.nodes[2].suppressed, true);
-  assert.equal(bothHeld.doc.nodes[3].suppressed, true);
+  assert.equal(bothHeld.doc.nodes[shellNode].suppressed, true);
+  assert.equal(bothHeld.doc.nodes[chamferNode].suppressed, true);
   await native('both-held', bothHeld.doc, 'held');
 
   f.phase = 'open History editor on held Shell (n2)';
-  await f.openFeatureEditor(2);
+  await f.openFeatureEditor(shellNode);
   const replaceFaceBtn = button('Replace face', f.editor());
   if (baseline) {
     assert.equal(await replaceFaceBtn.count(), 0, 'Previous Studio has no Replace face button on held Shell');
@@ -140,6 +163,8 @@ await f.run(async () => {
   const expectedFace = await f.inspect('native-candidate-face', { doc: bothHeld.doc, previewFace: n2New });
   assert.equal(expectedFace.key, 'b3');
   assert.equal(expectedFace.area, 360);
+  if (multi) assert.equal(expectedFace.slot, 1, 'Shell is not the first current body');
+
 
   f.phase = 'start Replace face, verify wrong face (n1.top) is refused without changing doc or history';
   await replaceFaceBtn.click();
@@ -148,8 +173,18 @@ await f.run(async () => {
   await applyFaceBtn.waitFor();
   assert.equal(await applyFaceBtn.isDisabled(), true, 'Apply face must be disabled before valid pick');
 
-  await setView('Top');
-  await pick([0, 15, 12]);
+  if (multi) {
+    await setView('Front');
+    await pick([82, -12, 6]);
+    await f.page.getByRole('alert').filter({ hasText: 'Face not selected' }).waitFor();
+    await f.same(bothHeld.doc);
+    assert.deepEqual(await history(), stack);
+    assert.equal(await applyFaceBtn.isDisabled(), true);
+    await f.snapshot('01-foreign-body-refused');
+  } else {
+    await setView('Top');
+    await pick([0, 15, 12]);
+  }
   await f.page.getByRole('alert').filter({ hasText: 'Face not selected' }).waitFor();
   await f.same(bothHeld.doc);
   assert.deepEqual(await history(), stack);
@@ -167,8 +202,8 @@ await f.run(async () => {
   assert.deepEqual(await history(), stack);
   const picked = await f.snapshot('01b-picked-shell-face-preview');
   assert.equal(picked.notices.length, 0, 'Prior refusal notice must retire once valid face is picked');
-  assert.equal(picked.doc.nodes[2].suppressed, true);
-  assert.equal(picked.doc.nodes[3].suppressed, true);
+  assert.equal(picked.doc.nodes[shellNode].suppressed, true);
+  assert.equal(picked.doc.nodes[chamferNode].suppressed, true);
   assert.ok((await f.editor().textContent()).includes(n2New));
 
   f.phase = 'cancel face replacement and verify original doc and history remain unchanged';
@@ -191,11 +226,11 @@ await f.run(async () => {
   await setView('Iso');
   assert.equal(await heldRows.count(), 1, 'Only downstream Chamfer should remain held');
   const shellApplied = await f.snapshot('02-shell-applied-chamfer-refreshed');
-  assert.deepEqual(shellApplied.doc.nodes[2].open, [n2New]);
-  assert.equal(shellApplied.doc.nodes[2].suppressed, undefined);
-  assert.equal(shellApplied.doc.nodes[2].held, undefined);
-  assert.equal(shellApplied.doc.nodes[3].suppressed, true, 'Downstream Chamfer must NOT auto-apply');
-  assert.deepEqual(shellApplied.doc.nodes[3].edges, [n3Old]);
+  assert.deepEqual(shellApplied.doc.nodes[shellNode].open, [n2New]);
+  assert.equal(shellApplied.doc.nodes[shellNode].suppressed, undefined);
+  assert.equal(shellApplied.doc.nodes[shellNode].held, undefined);
+  assert.equal(shellApplied.doc.nodes[chamferNode].suppressed, true, 'Downstream Chamfer must NOT auto-apply');
+  assert.deepEqual(shellApplied.doc.nodes[chamferNode].edges, [n3Old]);
   assert.ok((await refs().innerHTML()).includes(n3New), 'Downstream Chamfer candidate must refresh to n1.side[s1]#3|n2.ceiling');
   await native('shell-applied', shellApplied.doc, 'shell');
 
@@ -204,9 +239,9 @@ await f.run(async () => {
   await refs().waitFor({ state: 'hidden' });
   await f.ready();
   const bothRestored = await f.snapshot('03-both-restored');
-  assert.deepEqual(bothRestored.doc.nodes[2].open, [n2New]);
-  assert.deepEqual(bothRestored.doc.nodes[3].edges, [n3New]);
-  assert.equal(bothRestored.doc.nodes[3].suppressed, undefined);
+  assert.deepEqual(bothRestored.doc.nodes[shellNode].open, [n2New]);
+  assert.deepEqual(bothRestored.doc.nodes[chamferNode].edges, [n3New]);
+  assert.equal(bothRestored.doc.nodes[chamferNode].suppressed, undefined);
   await native('both-restored', bothRestored.doc, 'both');
 
   f.phase = 'verify two-step Undo/Redo, native Save and fresh Open';

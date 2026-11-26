@@ -131,3 +131,39 @@ test('replaceHeldShellFace releases Shell only, leaves downstream Chamfer held, 
   const verified = await verifyReferences(next, rebuilt.bodies, async d => evaluateDoc(d, 1));
   assert.ok(verified.problems.some(p => p.node === 3 && p.candidates.includes(n3New)));
 });
+
+test('an independent box cannot supply, steal or invalidate the held Shell opening pick', () => {
+  const { doc, problems } = makeHeldFixture();
+  const together: StudioDoc = {
+    ...doc,
+    nextId: 6,
+    nodes: [...doc.nodes, { id: 'n4', kind: 'sketch', profile: 'rectangle', min: [76, -12], max: [88, 4] },
+      { id: 'n5', kind: 'extrude', sketch: 4, height: 12 }],
+    outputs: { b5: ref(5), ...doc.outputs },
+  };
+  const ev = evaluateDoc(together, 1);
+  assert.ok(ev.ok);
+  const foreign = ev.bodies.find(body => body.key === 'b5')!;
+  const owner = ev.bodies.find(body => body.key === 'b3')!;
+  assert.ok(foreign && owner);
+  // Test both viewport orders explicitly, including colliding display names on the foreign mesh.
+  const source = owner.mesh.faces.find(face => face.name === n2New)!;
+  const alien = { ...foreign, mesh: { ...foreign.mesh, faces: foreign.mesh.faces.map((face, i) => i ? face : { ...face, name: n2New }) } };
+  const before = structuredClone(together);
+  const bodies = [alien, owner];
+  assert.equal(pickHeldShellFace(together, 2, problems, bodies,
+    { face: { body: 0, face: alien.mesh.faces[0].index }, faceMesh: alien.mesh }).ok, false);
+  assert.equal(pickHeldShellFace(together, 2, problems, bodies,
+    { face: { body: 1, face: source.index }, faceMesh: alien.mesh }).ok, false);
+  const picked = pickHeldShellFace(together, 2, problems, bodies, { face: { body: 1, face: source.index }, faceMesh: owner.mesh });
+  assert.ok(picked.ok);
+  assert.equal(picked.target.bodyIndex, 1);
+  assert.equal(heldShellFaceProblem(together, 2, problems, [owner, alien])?.bodyIndex, 0);
+  assert.equal(heldShellFaceProblem(together, 2, problems, [owner, owner]), undefined);
+  assert.equal(heldShellFaceProblem(withLook(together, owner, { hidden: true }), 2, problems, bodies), undefined);
+  const otherLineage: StudioDoc = { ...together, outputs: { ...together.outputs, b2: ref(2) } };
+  assert.equal(heldShellFaceProblem(otherLineage, 2, problems, [...bodies, { ...owner, key: 'b2', ref: ref(2) }]), undefined);
+  const followed: StudioDoc = { ...together, nodes: together.nodes.map((node, i) => i === 5 ? { id: 'n5', kind: 'shell', parent: ref(2), open: ['n1.top'], thickness: 1 } : node) };
+  assert.equal(heldShellFaceProblem(followed, 2, problems, bodies), undefined);
+  assert.deepEqual(together, before);
+});

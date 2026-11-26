@@ -15,12 +15,14 @@ export interface HeldShellFaceHit {
 export interface HeldShellFaceProblem {
   problem: Problem;
   body: BodyResult;
+  bodyIndex: number;
   allowedNames: ReadonlySet<string>;
 }
 
 export interface HeldShellFaceTarget {
   problem: Problem;
   body: BodyResult;
+  bodyIndex: number;
   faceIndex: number;
   name: string;
   signature: Sig;
@@ -40,7 +42,7 @@ export function heldShellFaceProblem(
   problems: readonly Problem[],
   bodies: readonly BodyResult[],
 ): HeldShellFaceProblem | undefined {
-  if (index < 0 || index >= doc.nodes.length || bodies.length !== 1) return undefined;
+  if (index < 0 || index >= doc.nodes.length) return undefined;
   const node = doc.nodes[index];
   if (node?.kind !== 'shell' || !node.held || node.suppressed !== true || node.parent.side !== 'solid' || node.open.length !== 1) {
     return undefined;
@@ -48,9 +50,17 @@ export function heldShellFaceProblem(
   const matches = problems.filter(problem => problem.node === index && problem.name === node.open[0]);
   if (matches.length !== 1) return undefined;
   const [problem] = matches;
-  const verified = problem.candidates.filter(name => heldShellCandidateFace(doc, bodies, problem, name) !== undefined);
-  if (!verified.length) return undefined;
-  return { problem, body: bodies[0], allowedNames: new Set(verified) };
+  const verified = new Set<string>();
+  let bodyIndex: number | undefined;
+  for (const name of problem.candidates) {
+    const candidate = heldShellCandidateFace(doc, bodies, problem, name);
+    if (!candidate) continue;
+    if (bodyIndex !== undefined && bodyIndex !== candidate.body) return undefined;
+    bodyIndex = candidate.body;
+    verified.add(name);
+  }
+  if (bodyIndex === undefined) return undefined;
+  return { problem, body: bodies[bodyIndex], bodyIndex, allowedNames: verified };
 }
 
 export function pickHeldShellFace(
@@ -65,7 +75,7 @@ export function pickHeldShellFace(
     return { ok: false, reason: 'Shell opening face replacement is unavailable for this feature.' };
   }
   const wrongFace = 'Select a verified planar candidate opening face on this feature’s body.';
-  if (!hit.face || hit.instance !== undefined || hit.face.body !== 0 || hit.faceMesh !== scope.body.mesh) {
+  if (!hit.face || hit.instance !== undefined || hit.face.body !== scope.bodyIndex || hit.faceMesh !== scope.body.mesh) {
     return { ok: false, reason: wrongFace };
   }
   const face = scope.body.mesh.faces[hit.face.face];
@@ -73,7 +83,7 @@ export function pickHeldShellFace(
     return { ok: false, reason: wrongFace };
   }
   const resolved = heldShellCandidateFace(doc, bodies, scope.problem, face.name);
-  if (!resolved || resolved.body !== 0 || resolved.face !== face.index) {
+  if (!resolved || resolved.body !== scope.bodyIndex || resolved.face !== face.index) {
     return { ok: false, reason: wrongFace };
   }
   const signature = signaturesOf(scope.body, 'plane').faces.get(face.name);
@@ -85,6 +95,7 @@ export function pickHeldShellFace(
     target: {
       problem: scope.problem,
       body: scope.body,
+      bodyIndex: scope.bodyIndex,
       faceIndex: face.index,
       name: face.name,
       signature: toSig(signature),

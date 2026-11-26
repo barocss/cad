@@ -131,31 +131,52 @@ interface ReferencePreviewRoute {
 
 /**
  * A held feature is a passthrough, not the source of replacement geometry.
- * Only one present, visible solid with the exact held Shell/finish lineage may preview that parent's opening.
+ * Resolve one exact Shell/held-finish output, never by name across meshes or by slot order.
+ * A second output is admitted only as an independent ordinary rectangular extrusion.
  */
 export function heldShellCandidateFace(doc: StudioDoc, bodies: readonly BodyResult[], problem: Problem, name: string): Selection['faces'][number] | undefined {
-  if (problem.node == null || bodies.length !== 1 || doc.instances?.length || !problem.candidates.includes(name)) return;
-  const shell = doc.nodes[problem.node];
+  if (problem.node == null || doc.instances?.length || !problem.candidates.includes(name)) return;
+  const shellIndex = problem.node;
+  const shell = doc.nodes[shellIndex];
   if (shell?.kind !== 'shell' || !shell.held || shell.suppressed !== true || shell.parent.side !== 'solid' || shell.open.length !== 1 || shell.open[0] !== problem.name) return;
   const reference = referencesOf(doc, true).refs[problem.index];
-  if (!reference || reference.node !== problem.node || reference.edge || reference.name !== problem.name || reference.where !== problem.where) return;
+  if (!reference || reference.node !== shellIndex || reference.edge || reference.name !== problem.name || reference.where !== problem.where) return;
   const entries = Object.entries(doc.outputs);
-  if (entries.length !== 1) return;
-  const [[key, ref]] = entries;
-  const [body] = bodies;
-  if (body.key !== key || body.ref?.node !== ref.node || body.ref.side !== 'solid' || ref.side !== 'solid'
-    || lookOf(doc, body).hidden || (body.pieces ?? 1) !== 1) return;
-  let index = ref.node;
-  while (index > problem.node) {
-    const next = doc.nodes[index];
-    if ((next?.kind !== 'chamfer' && next?.kind !== 'fillet') || !next.held || next.suppressed !== true
-      || next.parent.side !== 'solid' || next.parent.node >= index) return;
-    index = next.parent.node;
+  if (!entries.length || entries.length > 2 || bodies.length !== entries.length || new Set(bodies.map(body => body.key)).size !== bodies.length) return;
+
+  const followsShell = (tip: number) => {
+    let index = tip;
+    while (index > shellIndex) {
+      const next = doc.nodes[index];
+      if ((next?.kind !== 'chamfer' && next?.kind !== 'fillet') || !next.held || next.suppressed !== true
+        || next.parent.side !== 'solid' || next.parent.node >= index) return false;
+      index = next.parent.node;
+    }
+    return index === shellIndex;
+  };
+  const independentBox = (tip: number) => {
+    const node = doc.nodes[tip];
+    if (node?.kind !== 'extrude' || node.cutDepth || node.suppressed || node.draft || node.sketch >= tip) return false;
+    const sketch = doc.nodes[node.sketch];
+    return sketch?.kind === 'sketch' && sketch.profile === 'rectangle' && !sketch.on && !sketch.association
+      && !sketch.suppressed && !sketch.regions?.length && !sketch.holes?.length;
+  };
+
+  let owner: Selection['faces'][number] | undefined;
+  for (const [key, ref] of entries) {
+    const slot = bodies.findIndex(body => body.key === key);
+    const body = bodies[slot];
+    if (!body || body.ref?.node !== ref.node || body.ref.side !== 'solid' || ref.side !== 'solid' || (body.pieces ?? 1) !== 1) return;
+    if (!followsShell(ref.node)) {
+      if (!independentBox(ref.node)) return;
+      continue;
+    }
+    if (owner || lookOf(doc, body).hidden) return;
+    const faces = body.mesh.faces.filter(face => face.name === name);
+    if (faces.length !== 1 || faces[0].kind !== 'plane' || faces[0].facet) return;
+    owner = { body: slot, face: faces[0].index };
   }
-  if (index !== problem.node) return;
-  const faces = body.mesh.faces.filter(face => face.name === name);
-  if (faces.length !== 1 || faces[0].kind !== 'plane' || faces[0].facet) return;
-  return { body: 0, face: faces[0].index };
+  return owner;
 }
 
 export function createReferencePreview({ model, owner, changes }: ReferencePreviewRoute) {

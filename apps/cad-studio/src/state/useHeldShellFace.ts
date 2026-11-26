@@ -16,7 +16,6 @@ export interface HeldShellFaceDraft {
   doc: StudioDoc;
   index: number;
   name: string | null;
-  faceIndex: number | null;
   target?: HeldShellFaceTarget;
   error?: string;
   pending?: boolean;
@@ -67,7 +66,7 @@ export function useHeldShellFace({
     setDraft(null);
     clearFailure();
     return () => { ticket.current = null; };
-  }, [doc, index, scope?.body, scope?.problem, enabled, clearFailure]);
+  }, [doc, index, scope?.body, scope?.bodyIndex, scope?.problem, enabled, clearFailure]);
 
   const current = enabled && draft?.doc === doc && draft.index === index && scope ? draft : null;
 
@@ -80,7 +79,7 @@ export function useHeldShellFace({
   const start = useCallback(() => {
     if (!enabled || !scope || index === null) return;
     clearFailure();
-    setDraft({ doc, index, name: null, faceIndex: null });
+    setDraft({ doc, index, name: null });
   }, [enabled, scope, index, doc, clearFailure]);
 
   const pick = useCallback((hit: HeldShellFaceHit) => {
@@ -93,11 +92,10 @@ export function useHeldShellFace({
         doc,
         index,
         name: picked.target.name,
-        faceIndex: picked.target.faceIndex,
         target: picked.target,
       });
     } else {
-      setDraft({ doc, index, name: null, faceIndex: null, error: picked.reason });
+      setDraft({ doc, index, name: null, error: picked.reason });
       reportFailure({ title: 'Face not selected', hint: picked.reason, detail: '' });
     }
   }, [current, scope, index, doc, problems, bodies, clearFailure, reportFailure]);
@@ -133,7 +131,7 @@ export function useHeldShellFace({
   }, [current, scope, doc, problems, ownsSource, evaluate, refreshProblems, accept, cancel, reportFailure]);
 
   const previewSelection: Selection | undefined = current
-    ? { faces: current.faceIndex === null ? [] : [{ body: 0, face: current.faceIndex }], edges: [], bodies: [] }
+    ? { faces: current.target ? [{ body: current.target.bodyIndex, face: current.target.faceIndex }] : [], edges: [], bodies: [] }
     : undefined;
 
   return {
