@@ -153,7 +153,9 @@ export async function createFlow(options) {
   /** Open a fresh 1440 x 1000 desktop context and wait for the WebGPU viewport. */
   f.newPage = async ({ deviceScaleFactor = 1, backend = 'webgpu' } = {}) => {
     if (f.context) { await f.context.close(); report.cleanup.push('CONTEXT_CLOSED'); }
-    f.context = await f.browser.newContext({ viewport: { width: 1440, height: 1000 }, deviceScaleFactor }); const page = f.page = await f.context.newPage();
+    const contextOptions = { viewport: { width: 1440, height: 1000 }, deviceScaleFactor };
+    f.context = options.createContext ? await options.createContext(contextOptions) : await f.browser.newContext(contextOptions);
+    const page = f.page = await f.context.newPage();
     page.on('pageerror', e => report.errors.push(e.stack ?? String(e))); page.on('console', m => { if (m.type() === 'error') report.consoleErrors.push(m.text()); });
     page.on('download', d => report.downloads.push({ phase: f.phase, suggestedFilename: d.suggestedFilename() })); page.on('dialog', d => d.accept());
     await page.goto(f.server.resolvedUrls.local[0]); await page.waitForSelector(`.viewport[data-renderer="${backend}"]`, { timeout: 30000 }); await f.ready();
@@ -292,7 +294,10 @@ export async function createFlow(options) {
     f.server = await createServer({ root: app, configFile: join(app, 'vite.config.ts'), cacheDir: join(output, 'vite-cache'), ...(options.viteAliases ? { resolve: { alias: options.viteAliases } } : {}), server: { host: '127.0.0.1', port: 0, strictPort: false }, logLevel: 'error' });
     f.server.watcher.on('all', (event, file) => { if (['change', 'add', 'unlink'].includes(event)) report.changes.push({ event, file }); }); await f.server.listen();
     const { chromium } = createRequire(join(process.env.PW_DIR, 'package.json'))('playwright');
-    f.browser = await chromium.launch({ executablePath: process.env.CHROME, headless: options.headless ?? true, args: ['--enable-unsafe-webgpu'] }); report.chromeProcessesLaunched = 1;
+    if (!options.createContext) {
+      f.browser = await chromium.launch({ executablePath: process.env.CHROME, headless: options.headless ?? true, args: ['--enable-unsafe-webgpu'] });
+      report.chromeProcessesLaunched = 1;
+    }
   };
 
   /** Run `body(flow)` after start(); then assert no page / console errors and no file changes and that the source capsule is unchanged (PASS); on any failure record FAIL and a 'failure' snapshot; always close context / browser / server, re-check the capsule after cleanup, write the receipt and print the one-line result. */
