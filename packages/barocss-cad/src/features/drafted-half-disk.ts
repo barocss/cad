@@ -23,7 +23,7 @@ export function draftHalfDisk(profile: readonly ProfileSegment[], names: readonl
   // Do not snap a nearly semicircular profile or an off-centre chord into this family.
   if (!(dx === 0 || dy === 0) || (dx === 0 && dy === 0) || bx - cx !== -dx || by - cy !== -dy) return undefined;
   const h = z1 - z0, d = h * slope, gap = r - 2 * d;
-  if (!(d > 0 && r - d < r)) fail('the angle is too small to move the half-disk walls');
+  if (!(d < 0 ? r - d > r : d > 0 && r - d < r)) fail('the angle is too small to move the half-disk walls');
   // At the top, the chord is at d and the arc apex at r - d. The remaining sag must exceed the linear tolerance.
   const size = Math.max(r, h, Math.abs(cx), Math.abs(cy), Math.abs(z0), Math.abs(z1));
   if (!(gap > linearToleranceMM(size))) fail('the draft closes the half-disk at or before the top (steeper than the profile allows)');
@@ -58,15 +58,24 @@ export function draftHalfDisk(profile: readonly ProfileSegment[], names: readonl
   }
   edge('s1', 'b1', 't1', right, left);
 
-  // Both sections of a support share the same fixed angular chart. The top trim occupies only part of it.
-  const cone = (key: string, sector: readonly (readonly [number, number])[]): Surface => ({
-    kind: 'surface', id: key, degreeU: 2, degreeV: 1, knotsU: QUADRATIC, knotsV: LINE,
-    controlPoints: sector.map(([x, y]) => [[x * r, y * r, 0], [x * rt, y * rt, h]]),
-    weights: [[1, 1], [Math.SQRT1_2, Math.SQRT1_2], [1, 1]],
-  });
+  // Both sections share one fixed angular chart. An outward top arc exceeds a semicircle overall,
+  // so each cone chart extends from its top intersection to the common apex-angle ruling.
+  const cone = (key: string, sector: readonly (readonly [number, number])[]): Surface => {
+    const angular = d < 0 ? key === 'right'
+      ? [[q / rt, d / rt], [q / r, 1], [0, 1]]
+      : [[0, 1], [-q / r, 1], [-q / rt, d / rt]] : sector;
+    const weight = d < 0 ? Math.sqrt(r / (2 * rt)) : Math.SQRT1_2;
+    return {
+      kind: 'surface', id: key, degreeU: 2, degreeV: 1, knotsU: QUADRATIC, knotsV: LINE,
+      controlPoints: angular.map(([x, y]) => [[x * r, y * r, 0], [x * rt, y * rt, h]]),
+      weights: [[1, 1], [weight, weight], [1, 1]],
+    };
+  };
+  // q(z) is concave for outward draft; a trapezoid joining r to q(top) would miss the seams.
+  const wallRadius = d < 0 ? q : r, capRadius = d < 0 ? rt : q;
   const flat: Surface = {
     kind: 'surface', id: 'wall', degreeU: 1, degreeV: 1, knotsU: LINE, knotsV: LINE,
-    controlPoints: [[[-r, 0, 0], [-r, d, h]], [[r, 0, 0], [r, d, h]]], weights: [[1, 1], [1, 1]],
+    controlPoints: [[[-wallRadius, 0, 0], [-wallRadius, d, h]], [[wallRadius, 0, 0], [wallRadius, d, h]]], weights: [[1, 1], [1, 1]],
   };
   const rise = (edge: string): Use => ({ edge, sense: 'forward' });
   const fall = (edge: string): Use => ({ edge, sense: 'reversed' });
@@ -75,7 +84,7 @@ export function draftHalfDisk(profile: readonly ProfileSegment[], names: readonl
   });
   const faces = [
     face(bottom, capSurface({ min: [-r, 0], max: [r, r] }, 0, 'bottom', false), [fall('b20'), fall('b12'), fall('b01')]),
-    face(top, capSurface({ min: [-q, d], max: [q, rt] }, h, 'top', true), [rise('t01'), rise('t12'), rise('t20')]),
+    face(top, capSurface({ min: [-capRadius, d], max: [capRadius, rt] }, h, 'top', true), [rise('t01'), rise('t12'), rise('t20')]),
     face(wall, flat, [rise('b20'), rise('s0'), fall('t20'), fall('s2')]),
     face(right, cone('right', [[1, 0], [1, 1], [0, 1]]), [rise('b01'), rise('s1'), fall('t01'), fall('s0')]),
     face(left, cone('left', [[0, 1], [-1, 1], [-1, 0]]), [rise('b12'), rise('s2'), fall('t12'), fall('s1')]),

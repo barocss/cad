@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D2102: [Draft a half-disk extrusion outward](notes/outward-half-disk-draft-2026-11-28/README.md), #14. Verify full cone charts, exact seams, range refusal, signed History and native desktop reopen.
 - D2101: [Reverse an Offset on the same original rectangular wall](notes/reverse-native-box-wall-offset-2026-11-28/README.md), #17. Verify two native features, exact original geometry, seeded independent rays and desktop reopen. Reconcile the original issue acceptance.
 - D2100: [Offset an original rectangular extrusion wall](notes/native-box-wall-offset-2026-11-28/README.md), #17. Keep original native incidence in one signed operation and verify rollback, legacy History and desktop reopen.
 - D2099: [Open any two original box faces in per-face Shell](notes/all-box-shell-opening-pairs-2026-11-28/README.md), #13. Verify all ten additional pairs, exact world cavities, downstream Split and native Studio reopen.

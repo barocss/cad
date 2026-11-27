@@ -2,7 +2,7 @@
 // wall leans into the material by the draft angle (the section shrinks by (z1 − z0)·tan θ, a hole
 // grows). A straight wall becomes a sloping plane, an arc a cone patch about the arc's centre. Tangent
 // joints stay tangent; two straight walls meet in a sloping edge through their offset lines' meeting
-// point. An inward half-disk has two exact parabolic joints. Other non-tangent curved joints and
+// point. A half-disk has two exact parabolic joints for inward or outward draft. Other non-tangent curved joints and
 // drafts steep enough to collapse a wall are refused.
 import { BrepError, buildBrep, loopVectorArea, surfaceNormalAtCentre, type Brep } from '../brep/brep-core.js';
 import { sideName } from '../document/side-names.js';
@@ -62,7 +62,7 @@ export function draftedExtrusion(input: DraftedExtrusionInput): Brep {
   if (!(Math.abs(input.draft) < 89)) fail('the draft angle must be below 89°');
   if (!(z1 > z0)) fail('the extrusion needs a positive height');
   const loop0 = buildProfileLoop(input.profile, { maximumSegments: 1024 }), built = loop0.segments;
-  if (theta > 0 && built.length === 2) {
+  if (theta !== 0 && built.length === 2) {
     const names = built.map((_, i) => input.sideTags ? sideName(tag, loop0.reversed ? 1 - i : i, input.sideTags) : `${tag}.side${i}`);
     const halfDisk = draftHalfDisk(built, names, z0, z1, Math.tan(theta), id, tag, fail);
     if (halfDisk) return halfDisk;

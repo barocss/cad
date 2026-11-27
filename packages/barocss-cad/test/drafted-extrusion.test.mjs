@@ -85,7 +85,6 @@ test('inward half-disk Draft uses the sketch frame and refuses collapse or nearb
   // The second case leaves a positive 0.00000005 mm sag, below the native 0.0000001 mm linear floor.
   for (const angle of [Math.atan(.5) * 180 / pi, Math.atan((10 - 5e-8) / 20) * 180 / pi, 30])
     assert.throws(() => evaluateCadPart(halfDiskDoc(angle)), e => e.code === 'PARAMETER' && /closes the half-disk/.test(e.message));
-  assert.throws(() => evaluateCadPart(halfDiskDoc(-10)), e => e.code === 'CAPABILITY' && /not tangent/.test(e.message));
   const nearHalf = [{ ...halfDisk[0] }, { ...halfDisk[1], center: [0, -.01] }];
   assert.throws(() => draftedExtrusion({ profile: nearHalf, z0: 0, z1: 10, draft: 10, tag: 'e' }), /not tangent/);
 });
