@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D2081: [Verify STEP from the approved four-part reference draft](notes/two-view-draft-step-2026-11-27/README.md), #747. Verify the real output's four solids, active units, placement and axis.
 - D2080: [Propose a four-part native draft from two reference views](notes/two-view-native-draft-2026-11-27/README.md), #747. Save the proposal and verify approval, independent edits and native reopening in Studio.
 - D2079: [Calibrate visible part envelopes from two attached views](notes/two-view-reference-scale-2026-11-27/README.md), #747. Verify one measured diameter, paired outlines, explicit unknown depth and mismatched view refusal through Studio and local MCP.
 - D2078: [Review a face-attached Rib from the local Agent](notes/attached-rib-agent-2026-11-27/README.md), #324. Share the Studio command, pin native image review, and match the explicitly approved file and thickness edit.
