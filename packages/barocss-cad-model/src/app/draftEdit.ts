@@ -3,10 +3,11 @@ import { draftBodyEnd, draftInputs, draftNeutral, draftNeutralDefault, draftNeut
 import { prefixDoc, type StudioDoc } from '../engine/doc';
 import type { BodyResult } from '../engine/evaluate';
 import { bodyKeyFor } from '../engine/ids';
+import { followsRotatedPivotStock, pivotStockMode } from '../engine/pivotStock';
 import { toSig } from '../engine/references';
 import { refusal } from '../engine/refusal';
 import { signaturesOf } from '../engine/rematch';
-import { isPivotStock, pivotAngle, pivotFaceCommand, pivotStockHinge } from './pivotFaceCommand';
+import { pivotAngle, pivotFaceCommand, pivotStockHinge } from './pivotFaceCommand';
 
 export const DRAFT_EDIT = 'draft-history-edit';
 
@@ -19,7 +20,7 @@ function editableDraft(doc: StudioDoc, index: number) {
 export function savedPivotStock(doc: StudioDoc, index: number) {
   const node = editableDraft(doc, index);
   if (!node || node.hingeEdge === undefined || node.faces.length !== 1 || node.parent.side !== 'solid'
-    || node.parent.node >= index || !isPivotStock(doc.nodes, node.parent.node)) return null;
+    || node.parent.node >= index || !pivotStockMode(doc.nodes, node.parent.node)) return null;
   return node.parent;
 }
 
@@ -29,22 +30,23 @@ export function editSavedPivotFaceCommand(doc: StudioDoc, index: number, stock: 
   if (!parent || !node || stock.ref?.node !== parent.node || stock.ref.side !== parent.side
     || stock.key !== bodyKeyFor(doc.nodes, parent.node, parent.side)) return null;
   const original = node.hingeEdge!, face = node.faces[0];
+  const followStock = followsRotatedPivotStock(doc.nodes, node);
   const faceIndex = stock.mesh.faces.findIndex(candidate => candidate.nativePlaneName === face);
   const sigs = signaturesOf(stock, 'plane');
   const faceSig = sigs.faces.get(face);
   if (!faceSig) return null;
   const choices = stock.mesh.edges.flatMap((_edge, edgeIndex) => {
-    const hinge = pivotStockHinge(stock, faceIndex, edgeIndex);
+    const hinge = pivotStockHinge(stock, faceIndex, edgeIndex, followStock);
     const sig = hinge && sigs.edges.get(hinge.edge);
     return hinge && sig ? [{ ...hinge, sig }] : [];
   });
-  if (!choices.some(choice => choice.edge === original && choice.pull === (node.pull ?? 'z'))) return null;
+  if (!choices.some(choice => choice.edge === original && choice.pull === node.pull)) return null;
   return {
     ...pivotFaceCommand, id: DRAFT_EDIT, label: 'Edit Pivot face',
     available: ctx => ctx.doc === doc ? { ok: true } : { ok: false, reason: 'Open the current Pivot face in History again.' },
     fields: ctx => [
-      { key: 'hingeEdge', label: 'Fixed edge', kind: 'choice', options: choices.map(({ edge, support }) => ({
-        value: edge, label: `${support.axis.toUpperCase()} ${support.sign === -1 ? 'min' : 'max'}`,
+      { key: 'hingeEdge', label: 'Fixed edge', kind: 'choice', options: choices.map(({ edge, label }) => ({
+        value: edge, label,
       })) },
       ...pivotFaceCommand.fields!(ctx),
     ],
@@ -60,7 +62,8 @@ export function editSavedPivotFaceCommand(doc: StudioDoc, index: number, stock: 
       const next = { ...node, angle };
       if (replacesEdge) {
         next.hingeEdge = hinge.edge;
-        next.pull = hinge.pull;
+        if (hinge.pull === undefined) delete next.pull;
+        else next.pull = hinge.pull;
         next.sigs = { ...node.sigs, [face]: node.sigs?.[face] ?? toSig(faceSig), [hinge.edge]: toSig(hinge.sig) };
         delete next.sigs[original];
       }

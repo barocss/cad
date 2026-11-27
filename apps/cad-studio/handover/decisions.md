@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D2088: [Pivot a face after the original stock rotates](notes/rotated-pivot-face-2026-11-28/README.md), #629. Follow the exact native hinge through an upstream Rotate edit and fresh Open, and stage a local Agent proposal.
 - D2087: [Propose a saved Pivot face hinge replacement](notes/agent-pivot-fixed-edge-2026-11-28/README.md), #629. Discover the exact source edge on a pinned revision and verify explicit Studio approval and native Open.
 - D2086: [Replace a Pivot face fixed edge in History](notes/pivot-fixed-edge-history-2026-11-28/README.md), #629. Bind the new edge to the original stock and verify preview, Cancel, Apply, Undo, Redo and native Open.
 - D2085: [Keep a Pivot face hinge on translated stock](notes/translated-pivot-face-2026-11-28/README.md), #629. Follow the original edge through a height and Move edit, native reopen and local Agent proposal.

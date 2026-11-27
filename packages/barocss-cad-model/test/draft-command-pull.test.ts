@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { evaluateDoc, type BodyResult } from '../src/engine/evaluate';
-import { rectanglePart, type StudioDoc } from '../src/engine/doc';
+import { rectanglePart, withNode, type StudioDoc } from '../src/engine/doc';
+import { verifyReferences } from '../src/engine/references';
 import { commands, patchValues, type Ctx } from '../src/app/commands';
 import { editSavedDraftCommand, editSavedPivotFaceCommand } from '../src/app/draftEdit';
 import { pivotFaceCommand } from '../src/app/pivotFaceCommand';
@@ -44,6 +45,38 @@ test('Pivot face History only accepts exact edges on its original face and ignor
     assert.deepEqual(Object.keys(pivot.sigs ?? {}).sort(), ['n1.side0', choice].sort());
     assert.equal(bodiesOf(changed)[0].topology?.kind, 'solid');
   }
+});
+
+test('Pivot face follows the exact original joint through a Rotate edit and refuses a nonadjacent name on reopen', async () => {
+  const original = rectanglePart(40, 20, 12);
+  const turned = withNode(original, { kind: 'rotate', parent: { node: 1, side: 'solid' }, axis: 'x', angle: 31, pivot: [9, 3, 5] });
+  const bodies = bodiesOf(turned), [body] = bodies;
+  const face = 'n1.side0', upper = 'n1.side0|n1.top', lower = 'n1.bottom|n1.side0';
+  const ctx: Ctx = { doc: turned, bodies, selection: { bodies: [], faces: [{ body: 0,
+    face: body.mesh.faces.findIndex(f => f.nativePlaneName === face) }], edges: [{ body: 0,
+    edge: body.mesh.edges.findIndex(e => e.names.includes(upper)) }] } };
+  const doc = pivotFaceCommand.build!(ctx, { deg: 12 }), index = 3;
+  const pivot = doc.nodes[index];
+  assert.ok(pivot.kind === 'draft' && pivot.sigs);
+  assert.equal(Object.hasOwn(pivot, 'pull'), false);
+  const edit = editSavedPivotFaceCommand(doc, index, body);
+  assert.ok(edit?.defaults && edit.build);
+  const editCtx = { ...ctx, doc };
+  const rebound: StudioDoc = edit.build(editCtx, { ...edit.defaults(editCtx), hingeEdge: lower });
+  const hinge = rebound.nodes[index];
+  assert.ok(hinge.kind === 'draft' && hinge.sigs);
+  assert.equal(Object.hasOwn(hinge, 'pull'), false);
+  const retuned: StudioDoc = { ...rebound, nodes: rebound.nodes.map(node => node.kind === 'rotate' ? { ...node, angle: 43 } : node) };
+  const rebuilt = bodiesOf(retuned);
+  const evaluate = async (prefix: StudioDoc) => evaluateDoc(prefix, 3);
+  const verified = await verifyReferences(retuned, rebuilt, evaluate);
+  assert.deepEqual([verified.problems, verified.changes], [[], []]);
+  const rear = 'n1.side2|n1.top';
+  const savedSig = hinge.sigs[lower];
+  const broken = { ...retuned, nodes: retuned.nodes.map((node, i) => i === index ?
+    { ...hinge, hingeEdge: rear, sigs: { ...hinge.sigs, [rear]: savedSig } } : node) };
+  const held = await verifyReferences(broken, [], evaluate);
+  assert.ok(held.problems.some(problem => problem.name === rear && problem.candidates.length === 0));
 });
 
 test('Studio draft: +Z is the default for a side face and builds the old node, without a pull', () => {

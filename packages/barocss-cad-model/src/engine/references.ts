@@ -29,6 +29,7 @@ import { joinedBossFillets } from './joinedBossPattern';
 import type { BodyResult, EvalResult } from './evaluate';
 import { hasSplitShellCapAmbiguity, isSplitCapFace, matchSignature, rankAlike, signaturesOf, type Signature } from './rematch';
 import type { DisplayEdge, Vec3 } from './mesh';
+import { followsRotatedPivotStock, hasRotatedPivotBinding } from './pivotStock';
 
 /** A stored signature (rounded: positions to 1e-6 mm, directions to 1e-9, sizes to 1e-6). */
 /** `n`: the kernel names its display face or edge carried together, when more than one (Signature's `shared`). */
@@ -435,10 +436,14 @@ export async function verifyReferences(doc: StudioDoc, finals: readonly BodyResu
     const splitCap = ref.nativeFace !== 'plane' && ref.node !== null && !ref.edge && isSplitCapFace(out.nodes, ref.name);
     const parent = splitCap && ref.parent ? parents.get(parentKey(ref.node!, ref.parent)) : undefined;
     const ambiguous = parent !== undefined && hasSplitShellCapAmbiguity(out.nodes, out.nodes[ref.node!], parent, ref.name);
+    const node = ref.node === null ? undefined : out.nodes[ref.node];
     let m: string | string[];
     if (ref.exactName) {
       const live = cands.get(ref.name);
-      m = live && rankAlike(fromSig(ref.sig), new Map([[ref.name, live]]), ref.edge).length ? ref.name : [];
+      if (node?.kind === 'draft' && node.hingeEdge !== undefined && ref.node !== null && followsRotatedPivotStock(out.nodes, node)) {
+        const stock = parents.get(parentKey(ref.node, node.parent));
+        m = live?.kind === ref.sig.k && stock && hasRotatedPivotBinding(stock, node.faces[0], node.hingeEdge) ? ref.name : [];
+      } else m = live && rankAlike(fromSig(ref.sig), new Map([[ref.name, live]]), ref.edge).length ? ref.name : [];
     } else if (fixedBossEdge) {
       // Side tags and the cap name still identify the same rim after a dimension changes its position.
       // Require one live native line with that exact name, and never rank a replacement for these rims.
@@ -448,7 +453,6 @@ export async function verifyReferences(doc: StudioDoc, finals: readonly BodyResu
     } else {
       m = splitCap ? (cands.has(ref.name) && !ambiguous ? ref.name : []) : matchSignature(fromSig(ref.sig), cands, ref.edge);
     }
-    const node = ref.node === null ? undefined : out.nodes[ref.node];
     // The bounded wrap and offset use their original named faces.
     if ((node?.kind === 'cylindrical-wrap' || node?.kind === 'offset-face' || node?.kind === 'replace-face' || node?.kind === 'delete-face') && m !== ref.name) m = [];
     const finish = ref.edge && (node?.kind === 'fillet' || node?.kind === 'chamfer') ? node : undefined;

@@ -7,6 +7,7 @@ import { fillPatternDocumentProblem } from './fillFeaturePattern';
 import { circularPatternSpanProblem } from './circularPatternSpan';
 import { alignFeatures } from './alignPlacement';
 import { resolveAttachedRib } from './attachedRib';
+import { followsRotatedPivotStock } from './pivotStock';
 import { alignDocumentProblem } from './alignRecipe';
 import { faceEndExtrudeHeight, faceEndExtrudeProblem } from './faceEndExtrude';
 import { throughCutHeight, throughCutProblem } from './throughCut';
@@ -359,7 +360,9 @@ export function featureOf(node: ModelNode, index: number, nodes?: readonly Model
     case 'draft': return { ...at, kind: 'draft', target: ref(node.parent), faces: node.faces, angle: node.angle,
       ...(Object.hasOwn(node, 'pull') ? { pull: structuredClone(node.pull) } : {}),
       ...(Object.hasOwn(node, 'hingeEdge') ? { hingeEdge: node.hingeEdge } : {}),
-      ...(Object.hasOwn(node, 'neutral') ? { neutral: structuredClone(node.neutral) } : {}), ...expectOf(node, node.faces) };
+      ...(Object.hasOwn(node, 'neutral') ? { neutral: structuredClone(node.neutral) } : {}),
+      // A rigid stock move can change world normals. The support-relative route proves the exact original binding.
+      ...(followsRotatedPivotStock(nodes ?? current, node) ? {} : expectOf(node, node.faces)) };
     case 'face-thread': return { ...at, kind: 'face-thread', target: ref(node.parent), face: node.face, pitch: node.pitch, ...(node.diameter !== undefined ? { diameter: node.diameter } : {}),
       ...(node.length !== undefined ? { length: node.length } : {}), ...(node.end ? { end: node.end } : {}), ...(node.relief !== undefined ? { relief: node.relief } : {}), ...(node.clearance !== undefined ? { clearance: node.clearance } : {}), ...(node.hand ? { hand: node.hand } : {}) };
     case 'face-fillet': return { ...at, kind: 'face-fillet', target: ref(node.parent), faces: [node.faces[0], node.faces[1]], radius: node.radius, ...expectOf(node, node.faces) };

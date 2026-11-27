@@ -1478,7 +1478,7 @@ type ModelNodeBase = DrivenSketchNode | RoundedRectangleInsetNode | SketchNode |
   | { kind: 'sew'; names: string[]; surfaces: { degreeU: number; degreeV: number; knotsU: number[]; knotsV: number[]; controlPoints: [number, number, number][][]; weights: number[][] }[]; tolerance?: number }
   /** Draft on named side faces: angle in degrees, signed principal pull (default +Z), neutral world coordinate in mm (default the body's minimum for positive pull, maximum for negative pull). */
   | { kind: 'draft'; parent: BodyRef; faces: string[]; angle: number; pull?: Axis | '-x' | '-y' | '-z'; neutral?: Dim;
-    /** An original straight edge shared by the one moving face and the signed pull-start face. */
+    /** An original straight edge shared by the moving face and its start support. On rotated rectangular stock an omitted pull follows that support. */
     hingeEdge?: string }
   /** Full round (a face fillet) of named flat +Z rectangular tops: each a half cylinder across its width, along `along` (default its longer side). */
   | { kind: 'full-round'; parent: BodyRef; faces: string[]; along?: 'x' | 'y' }

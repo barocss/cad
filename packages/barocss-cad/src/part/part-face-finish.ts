@@ -12,6 +12,7 @@ import type { ProfileSegmentInput } from '../features/extruded-profile-solid.js'
 import type { CadPartDim, CadPartFeature, Part, Result, Solid } from './part-types.js';
 import type { Tools } from './part-model.js';
 import { draftBoxCorner, draftBoxHinge } from './part-box-draft.js';
+import { draftRotatedBoxHinge, type RotatedBoxStock } from './part-rotated-box-draft.js';
 
 // Private structural contract. Original functions retain their caches, profiling and closure state.
 interface FaceFinishHelpers {
@@ -19,6 +20,7 @@ interface FaceFinishHelpers {
   readonly brepOf: (part: Part, id: string) => Brep;
   readonly namedFaceTargetBrep: (t: Tools, target: unknown, part: Part) => Brep;
   readonly originalRectangularPrism: (target: unknown, part: Part, t: Tools, label: string) => boolean;
+  readonly rotatedRectangularPrism: (target: unknown, part: Part, t: Tools, label: string) => RotatedBoxStock | undefined;
   readonly bounds: (solid: Solid) => { min: Point; max: Point };
   readonly boxSolid: (min: Point, max: Point, tag: string) => Solid;
   readonly boolean: (a: Solid, b: Solid, op: 'union' | 'difference' | 'intersection', at: string, edgeFitTolerance?: number) => Solid;
@@ -182,10 +184,14 @@ export function faceFinishOperation(f: CadPartFeature & Record<string, unknown>,
       const names = requested as string[];
       if (typeof angle !== 'number' || !Number.isFinite(angle) || angle === 0 || Math.abs(angle) >= 45) fail('INPUT', 'angle must be a number of degrees, not 0, below 45 in size');
       if (target.length !== 1) fail('REFERENCE', 'draft one part at a time (name it as id/k)');
+      let rotatedStock: RotatedBoxStock | undefined;
       if (hinge !== undefined) {
-        if (typeof hinge !== 'string' || hinge.length === 0 || names.length !== 1 || f.pull === undefined || f.neutral !== undefined)
+        if (typeof hinge !== 'string' || hinge.length === 0 || names.length !== 1 || f.neutral !== undefined)
           fail('INPUT', 'Draft about an edge needs one edge name, one face name and an explicit pull from the edge.');
-        if (!k.originalRectangularPrism(f.target, target[0], t, 'Draft edge target'))
+        if (f.pull === undefined) {
+          rotatedStock = k.rotatedRectangularPrism(f.target, target[0], t, 'Draft edge target');
+          if (!rotatedStock) fail('INPUT', 'Draft about an edge needs one edge name, one face name and an explicit pull from the edge.');
+        } else if (!k.originalRectangularPrism(f.target, target[0], t, 'Draft edge target'))
           fail('CAPABILITY', 'Draft about an edge needs an original rectangular extrusion.');
       }
       const neutral = f.neutral === undefined ? undefined : dim(f.neutral as CadPartDim, 'neutral');
@@ -193,6 +199,9 @@ export function faceFinishOperation(f: CadPartFeature & Record<string, unknown>,
       if (pull !== 'x' && pull !== 'y' && pull !== 'z' && pull !== '-x' && pull !== '-y' && pull !== '-z') fail('INPUT', 'pull must be x, y or z (a positive coordinate axis), or -x, -y or -z');
       return () => {
         if (target[0].solid.kind === 'brep' && target[0].solid.brep.faces.some(isFacetFace)) fail('CAPABILITY', 'draft on mesh faces is not supported yet (general draft and offset arrive with R11)');
+        if (typeof hinge === 'string' && rotatedStock) return one({ kind: 'brep',
+          brep: draftRotatedBoxHinge(k.namedFaceTargetBrep(t, f.target, target[0]), rotatedStock, names[0], hinge,
+            (angle as number) * Math.PI / 180, at, fail) });
         // Signed permutations put the pull on local Z with determinant +1 and no trigonometric rotation.
         const negativePull = pull === '-x' || pull === '-y' || pull === '-z';
         const toZ: BrepAffine['matrix'] | null = pull === 'x' ? [0, 1, 0, 0, 0, 1, 1, 0, 0] : pull === 'y' ? [0, 0, 1, 1, 0, 0, 0, 1, 0] : pull === '-x' ? [0, 1, 0, 0, 0, -1, -1, 0, 0] : pull === '-y' ? [0, 0, 1, -1, 0, 0, 0, -1, 0] : pull === '-z' ? [1, 0, 0, 0, -1, 0, 0, 0, -1] : null;

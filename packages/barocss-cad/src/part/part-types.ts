@@ -205,7 +205,9 @@ export type CadPartFeature = Base & (
    */
   | { readonly kind: 'draft'; readonly target: string; readonly faces: readonly string[]; readonly angle: number;
     readonly pull?: CadPartAxis | '-x' | '-y' | '-z'; readonly neutral?: CadPartDim;
-    /** Original edge shared by the one drafted face and the start face of an explicit pull. */
+    /** Original edge shared by the moving face and pull-start face. Explicit pull stays a world axis.
+     * With pull omitted, an original rectangular stock's authored Move/Rotate chain (at least one Rotate)
+     * derives the pull from that edge's other original stock support. */
     readonly hingeEdge?: string; readonly expect?: Readonly<Record<string, CadPartNameSignature>> }
   /** Move a named end cap of a rectangular taper in its outward direction and continue its original side planes. */
   | { readonly kind: 'offset-face'; readonly target: string; readonly face: string; readonly distance: number; readonly expect?: Readonly<Record<string, CadPartNameSignature>> }
