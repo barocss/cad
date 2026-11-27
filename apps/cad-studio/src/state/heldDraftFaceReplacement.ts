@@ -16,7 +16,7 @@ type Owner = {
 };
 type Hit = { face: { body: number; face: number } | null; faceMesh?: BodyResult['mesh']; instance?: string };
 type Pick = { owner: Owner; draft: Draft; problem: Problem; prefix: StudioDoc; display: BodyResult;
-  name: string; signature: ReturnType<typeof toSig>; parentKey: string; siblingKey: string; displayKey: string; companion?: BodyResult };
+  name: string; signature: ReturnType<typeof toSig>; parentKey: string; siblingKey: string; displayKey: string; companion?: { body: BodyResult; profile: 'rectangle' | 'circle' } };
 
 const plane = (b: BodyResult, name: string) => {
   if (b.mesh.faces.filter(f => f.name === name && f.kind === 'plane').length !== 1) return;
@@ -27,23 +27,25 @@ const samePlane = (a: ReturnType<typeof toSig>, b: ReturnType<typeof toSig>) =>
   a.k === 'plane' && b.k === 'plane' && a.s === b.s &&
   a.p.every((v, i) => v === b.p[i]) && a.d?.length === 3 && b.d?.length === 3 && a.d.every((v, i) => v === b.d![i]);
 
-/** Only a trailing literal, unattached box whose output maps to its own unique CAD producer. */
-function independentCompanion(doc: StudioDoc, bodies: readonly BodyResult[]): BodyResult | undefined {
+/** Only a trailing literal, unattached box or cylinder with its own unique producer. */
+function independentCompanion(doc: StudioDoc, bodies: readonly BodyResult[]): Pick['companion'] {
   const sketch = doc.nodes[4], extrude = doc.nodes[5];
-  if (sketch?.kind !== 'sketch' || sketch.profile !== 'rectangle' || sketch.suppressed || sketch.held
+  if (sketch?.kind !== 'sketch' || (sketch.profile !== 'rectangle' && sketch.profile !== 'circle') || sketch.suppressed || sketch.held
     || sketch.on || sketch.plane || sketch.association || sketch.pocketFloor || sketch.outline
     || sketch.regions?.length || sketch.holes?.length || sketch.holeOutlines?.length
     || extrude?.kind !== 'extrude' || extrude.sketch !== 4 || extrude.suppressed || extrude.held
     || extrude.draft !== undefined || extrude.from !== undefined || extrude.cutDepth !== undefined
-    || typeof extrude.height !== 'number' || !Number.isFinite(extrude.height) || extrude.height <= 0
-    || ![...sketch.min, ...sketch.max].every(n => typeof n === 'number' && Number.isFinite(n))) return;
+    || typeof extrude.height !== 'number' || !Number.isFinite(extrude.height) || extrude.height <= 0) return;
+  const dimensions = sketch.profile === 'rectangle' ? [...sketch.min, ...sketch.max] : [...sketch.center, sketch.radius];
+  if (!dimensions.every(n => typeof n === 'number' && Number.isFinite(n))
+    || (sketch.profile === 'circle' && !(Number(sketch.radius) > 0))) return;
   const key = bodyKeyFor(doc.nodes, 5, 'solid'), ref = doc.outputs[key];
   if (ref?.node !== 5 || ref.side !== 'solid') return;
   const match = bodies.filter(body => body.key === key && body.ref?.node === 5 && body.ref.side === 'solid' && (body.pieces ?? 1) === 1);
-  if (match.length === 1) return match[0];
+  if (match.length === 1) return { body: match[0], profile: sketch.profile };
 }
 
-/** Only the single negative-side rectangular Split Draft with no offered candidate, plus one optional trailing box. */
+/** Only the single negative-side rectangular Split Draft with no offered candidate, plus one optional trailing box or cylinder. */
 export function pickHeldDraftFace(owner: Owner, hit: Hit): Pick | null {
   const { doc, index, problems, bodies } = owner;
   if (!owner.isCurrent() || doc.format !== 'barocss-cad-model' || doc.schema !== 3 || doc.units !== 'mm' ||
@@ -76,7 +78,7 @@ export function pickHeldDraftFace(owner: Owner, hit: Hit): Pick | null {
   const displayKey = bodyKeyFor(doc.nodes,index,'solid'), parentKey = bodyKeyFor(doc.nodes,2,'negative'), siblingKey = bodyKeyFor(doc.nodes,2,'positive');
   const companion = doc.nodes.length === 6 ? independentCompanion(doc, bodies) : undefined;
   if (doc.nodes.length === 6 && !companion) return null;
-  const splitBodies = companion ? bodies.filter(body => body !== companion) : bodies;
+  const splitBodies = companion ? bodies.filter(body => body !== companion.body) : bodies;
   const display = bodies[hit.face.body], face = display?.mesh.faces[hit.face.face];
   if (Object.keys(doc.outputs).length !== (companion ? 3 : 2) || doc.outputs[displayKey]?.node !== index || doc.outputs[displayKey].side !== 'solid' ||
       doc.outputs[siblingKey]?.node !== 2 || doc.outputs[siblingKey].side !== 'positive' || !bodyPair(splitBodies,displayKey,siblingKey) ||
@@ -131,13 +133,35 @@ function sameBox(before: BodyResult, after: BodyResult): boolean {
   });
 }
 
+// For the literal circle Extrude, preserve both oriented cap supports and the
+// named exact wall, including radius, axis and measured trim. No nearest face match.
+function sameCylinder(before: BodyResult, after: BodyResult): boolean {
+  const evidence = (body: BodyResult) => {
+    const { faces } = body.mesh;
+    if (faces.length !== 3 || new Set(faces.map(face => face.name)).size !== 3) return;
+    const caps = signaturesOf(body, 'plane').faces;
+    const wall = faces.filter(face => face.exact?.kind === 'cylinder');
+    if (caps.size !== 2 || wall.length !== 1 || wall[0].exact?.kind !== 'cylinder') return;
+    return { caps, wall: wall[0], exact: wall[0].exact };
+  };
+  const a = evidence(before), b = evidence(after);
+  if (!a || !b || a.wall.name !== b.wall.name || a.wall.area !== b.wall.area || a.exact.r !== b.exact.r
+    || !a.exact.a.every((v, i) => v === b.exact.a[i]) || !a.exact.c.every((v, i) => v === b.exact.c[i])) return false;
+  return [...a.caps].every(([name, old]) => {
+    const current = b.caps.get(name);
+    return !!current && samePlane(toSig(old), toSig(current));
+  });
+}
+
 export function readyHeldDraftReplacement(plan: Plan, reply: EvalResult, revision: number): StudioDoc | null {
   const { pick, next, sibling } = plan;
   if (!pick.owner.isCurrent() || !reply.ok || reply.revision !== revision || reply === plan.prefixReply || reply.revision === plan.prefixReply.revision ||
-      !bodyPair(reply.bodies.filter(body => body.key !== pick.companion?.key),pick.displayKey,pick.siblingKey)) return null;
+      !bodyPair(reply.bodies.filter(body => body.key !== pick.companion?.body.key),pick.displayKey,pick.siblingKey)) return null;
   if (pick.companion) {
     const companion = independentCompanion(next, reply.bodies);
-    if (reply.bodies.length !== 3 || !companion || !sameBox(pick.companion, companion)) return null;
+    if (reply.bodies.length !== 3 || !companion || companion.profile !== pick.companion.profile) return null;
+    const before = pick.companion.body, after = companion.body;
+    if (!(companion.profile === 'rectangle' ? sameBox(before, after) : sameCylinder(before, after))) return null;
   }
   const s = reply.bodies.find(b=>b.key===pick.siblingKey)!;
   if (!sameBox(sibling, s)) return null;

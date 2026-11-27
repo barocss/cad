@@ -1,0 +1,33 @@
+{
+  "status": "PASS",
+  "phase": "fresh Open 04-fresh-open",
+  "errors": [],
+  "consoleErrors": [],
+  "changes": [],
+  "observations": [
+    {
+      "label": "native-held",
+      "volumes": {
+        "b2_positive": 9000,
+        "b3": 9000,
+        "b5": 1152
+      }
+    },
+    {
+      "label": "native-applied",
+      "volumes": {
+        "b2_positive": 9000,
+        "b3": 8735.509528937302,
+        "b5": 1152
+      }
+    },
+    {
+      "label": "native-reopened",
+      "volumes": {
+        "b2_positive": 9000,
+        "b3": 8735.509528937302,
+        "b5": 1152
+      }
+    }
+  ]
+}

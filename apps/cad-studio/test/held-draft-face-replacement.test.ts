@@ -266,3 +266,34 @@ test('one independent trailing rectangular Extrude does not block held Draft rep
     ? { ...node, on: { node: 2, side: 'negative' as const } } : node) };
   assert.equal(heldDraftFaceAvailable({ ...owner, doc: linked }), false);
 });
+
+test('circular companion preserves its own caps and exact wall; altered placement or radius refuses Draft apply', async () => {
+  const three: StudioDoc = {
+    ...doc, nextId: 6,
+    nodes: [...doc.nodes,
+      { id: 'n4', kind: 'sketch', profile: 'circle', center: [80, 6], radius: 6 },
+      { id: 'n5', kind: 'extrude', sketch: 4, height: 8 }],
+    outputs: { ...doc.outputs, b5: { node: 5, side: 'solid' } },
+  };
+  const { owner, hit } = await fixture(three);
+  assert.ok(heldDraftFaceAvailable(owner));
+  const companionIndex = owner.bodies.findIndex(body => body.key === 'b5');
+  const companion = owner.bodies[companionIndex];
+  assert.ok(Math.abs(companion.volume! - 288 * Math.PI) < 1e-8);
+  for (const face of companion.mesh.faces) {
+    assert.equal(pickHeldDraftFace(owner, { face: { body: companionIndex, face: face.index }, faceMesh: companion.mesh }), null);
+  }
+  const picked = pickHeldDraftFace(owner, hit);
+  assert.ok(picked);
+  const sender = new MeshSender(), receiver = new MeshReceiver();
+  const wire = (ev: ReturnType<typeof evaluatePart>) => receiver.unpack('refs', sender.pack('refs', ev).result);
+  const plan = planHeldDraftReplacement(picked, wire(evaluatePart(picked.prefix, 90, 8, 'refs')), 90);
+  assert.ok(plan);
+  const ready = readyHeldDraftReplacement(plan, wire(evaluatePart(plan.next, 91, 8, 'refs')), 91);
+  assert.equal(ready, plan.next);
+  for (const patch of [{ center: [81, 6] as [number, number] }, { radius: 7 }]) {
+    const altered = { ...plan.next, nodes: plan.next.nodes.map((n, i) => i === 4 && n.kind === 'sketch'
+      && n.profile === 'circle' ? { ...n, ...patch } : n) };
+    assert.equal(readyHeldDraftReplacement(plan, wire(evaluatePart(altered, 91, 8, 'refs')), 91), null);
+  }
+});

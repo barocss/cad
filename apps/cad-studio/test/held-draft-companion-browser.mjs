@@ -4,13 +4,14 @@ import { createFlow } from './flow-helper.mjs';
 const flags = new Set(process.argv.slice(3));
 const companion = !flags.has('--single');
 const baseline = flags.has('--baseline');
+const circle = companion && flags.has('--circle');
 const pins = ['apps/cad-studio/test/held-draft-companion-browser.mjs', 'apps/cad-studio/src/state/heldDraftFaceReplacement.ts',
   'apps/cad-studio/src/state/heldDraftFaceSession.ts', 'apps/cad-studio/src/state/useHeldDraftFace.ts',
   'apps/cad-studio/src/App.tsx', 'apps/cad-studio/src/ui/NodeEditor.tsx'];
 const f = await createFlow({
   name: 'held-draft-companion', output: process.argv[2], envFrozen: 'D2037_SOURCE_FROZEN', initialFiles: pins, requiredFrozen: pins,
   qualification: 'Explicit Draft cap repair keeps the companion and the untouched Split half unchanged through history and fresh Open.',
-  limits: ['Single fixed-neutral Draft on a reversed X Split, with one optional trailing independent rectangular extrusion.'],
+  limits: ['Single fixed-neutral Draft on a reversed X Split, with one optional trailing independent rectangular or circular extrusion.'],
   inspectorSource: `
 import { readFileSync } from 'node:fs';
 import { brepMassProperties, checkBrep } from '@barocss/cad';
@@ -32,7 +33,9 @@ const seed = {
     { id: 'n3', kind: 'draft', parent: ref(2, 'negative'), faces: [cap], angle: 10, pull: 'z', neutral: 0,
       sigs: { [cap]: { k: 'plane', p: [24, 15, 5], d: [1, 0, 0], s: 300 } } },
     ...(companion ? [
-      { id: 'n4', kind: 'sketch', profile: 'rectangle', min: [74, 0], max: [86, 12] },
+      circle
+        ? { id: 'n4', kind: 'sketch', profile: 'circle', center: [80, 6], radius: 6 }
+        : { id: 'n4', kind: 'sketch', profile: 'rectangle', min: [74, 0], max: [86, 12] },
       { id: 'n5', kind: 'extrude', sketch: 4, height: 8 },
     ] : []),
   ],
@@ -66,7 +69,7 @@ const check = async (label, doc, active, originals) => {
   const all = await f.inspect(label, doc);
   assert.equal(all.length, companion ? 3 : 2);
   assert.ok(all.every(body => body.valid));
-  const expected = { b2_positive: 9000, b3: active ? 30 * (300 - 50 * Math.tan(Math.PI / 18)) : 9000, ...(companion ? { b5: 1152 } : {}) };
+  const expected = { b2_positive: 9000, b3: active ? 30 * (300 - 50 * Math.tan(Math.PI / 18)) : 9000, ...(companion ? { b5: circle ? 288 * Math.PI : 1152 } : {}) };
   for (const body of all) {
     assert.ok(Math.abs(body.volume - expected[body.key]) < 1e-7, JSON.stringify({ key: body.key, volume: body.volume }));
     if (body.key !== 'b3' && originals) assert.deepEqual(body.brep, originals.find(v => v.key === body.key).brep);

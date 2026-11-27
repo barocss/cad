@@ -1,0 +1,17 @@
+{
+  "status": "PASS",
+  "phase": "open feature editor 3",
+  "errors": [],
+  "consoleErrors": [],
+  "changes": [],
+  "observations": [
+    {
+      "label": "native-held",
+      "volumes": {
+        "b2_positive": 9000,
+        "b3": 9000,
+        "b5": 904.778684233859
+      }
+    }
+  ]
+}
