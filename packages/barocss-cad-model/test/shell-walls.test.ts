@@ -21,6 +21,7 @@ test('Shell saves and edits all original box-wall names and refuses absent or ch
   const node = created.nodes[2];
   assert.ok(node.kind === 'shell-walls');
   assert.equal(node.walls['n1.bottom'], 4);
+  assert.equal(Object.hasOwn(node, 'secondOpening'), false);
   assert.deepEqual(Object.keys(node.sigs).sort(), [node.opening, ...Object.keys(node.walls)].sort());
   const read = readStudioDoc(JSON.stringify(created));
   assert.ok('doc' in read);
@@ -45,6 +46,48 @@ test('Shell saves and edits all original box-wall names and refuses absent or ch
   const failed = evaluateDoc(swapped, 5);
   assert.ok(!failed.ok);
   assert.match(failed.error.detail, /REFERENCE_MOVED|no longer the face/);
+});
+
+test('top and vertical per-face Shell stores both openings and keeps only four editable thicknesses', () => {
+  const doc = rectanglePart(40, 30, 20);
+  const stock = evaluateDoc(doc, 1);
+  assert.ok(stock.ok);
+  const shell = commandById('shell')!;
+  const pick = (name: string) => {
+    const face = stock.bodies[0].mesh.faces.findIndex(candidate => candidate.nativePlaneName === name);
+    assert.ok(face >= 0);
+    return { body: 0, face };
+  };
+  const context = { doc, bodies: stock.bodies, selection: { bodies: [], edges: [], faces: [pick('n1.side0'), pick('n1.top')] } };
+  const values = { ...shell.defaults!(context), wallMode: 'per-face', leftWall: 3, rightWall: 5, backWall: 4, bottomWall: 2 };
+  const expectedFields = ['bottomWall', 'rightWall', 'backWall', 'leftWall'];
+  assert.deepEqual(shell.fields!(context, values).map(field => field.key), ['wallMode', ...expectedFields]);
+  const built = shell.build!(context, values), node = built.nodes[2];
+  assert.ok(node.kind === 'shell-walls');
+  assert.deepEqual([node.opening, node.secondOpening, node.walls], ['n1.top', 'n1.side0', {
+    'n1.side3': 3, 'n1.side1': 5, 'n1.side2': 4, 'n1.bottom': 2,
+  }]);
+  const opened = readStudioDoc(JSON.stringify(built));
+  assert.ok('doc' in opened);
+  assert.deepEqual(opened.doc, built);
+  const result = evaluateDoc(opened.doc, 2);
+  assert.ok(result.ok && Math.abs(result.bodies[0].volume! - 9024) < 1e-7);
+  const fields = editFields(opened.doc.nodes, 2);
+  assert.deepEqual(fields.map(field => field.key), expectedFields);
+  const bottom = fields.find(field => field.key === 'bottomWall');
+  assert.ok(bottom?.kind === 'number');
+  const edited = evaluateDoc({ ...opened.doc, nodes: bottom.set(opened.doc.nodes, 6) }, 3);
+  assert.ok(edited.ok && Math.abs(edited.bodies[0].volume! - 12352) < 1e-7);
+
+  const missingWall = { ...node, walls: { 'n1.side1': 5, 'n1.side2': 4, 'n1.bottom': 2 } };
+  const duplicate = { ...node, secondOpening: node.opening };
+  for (const [invalid, message] of [[missingWall, /four kept walls/], [duplicate, /distinct second original opening/]] as const) {
+    const loaded = readStudioDoc(JSON.stringify({ ...built, nodes: [...built.nodes.slice(0, 2), invalid] }));
+    assert.ok('error' in loaded);
+    assert.match(loaded.error, message);
+  }
+  const opposed = { ...context, selection: { ...context.selection, faces: [pick('n1.top'), pick('n1.bottom')] } };
+  assert.deepEqual(shell.fields!(opposed, values).map(field => field.key), ['t']);
 });
 
 test('a lateral per-face Shell exposes its five retained walls and keeps the top wall editable after Open', () => {

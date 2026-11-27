@@ -153,7 +153,7 @@ export const COMMAND_DOCS: Record<string, { selection: string; values: Record<st
   decimate: { selection: 'bodies: [one mesh body] (an imported STL, OBJ or scan: facet faces)', values: { keep: 'per cent of the triangles to keep (1–99)', maxError: 'mm: no collapse past it (0: none)', crease: 'degrees: also keep edges sharper than this (0: only the regions\u2019 boundaries and open edges)' } },
   shell: { selection: 'faces to open on one body, or one body for a closed hollow', values: {
     t: 'uniform wall thickness in mm',
-    wallMode: 'uniform | per-face. For per-face, give expectedRevision from query.rebuild, one exact original face of an upright rectangular extrusion, and all five kept wall values. Omit the wall at the opening.',
+    wallMode: 'uniform | per-face. For per-face, give expectedRevision from query.rebuild and exact original faces of an upright rectangular extrusion. Choose one opening, or choose the top and one vertical face. Give a thickness for every kept wall.',
     bottomWall: 'bottom thickness in mm', frontWall: 'front thickness in mm', rightWall: 'right thickness in mm',
     backWall: 'back thickness in mm', leftWall: 'left thickness in mm', topWall: 'top thickness in mm',
   } },
@@ -356,15 +356,16 @@ async function runCommandTool(state: ChatState, args: Record<string, unknown>, e
   if (perFaceShell) {
     if (args.expectedRevision === undefined)
       return fail(state, 'Per-face Shell needs expectedRevision from query.rebuild for the same part.', { code: 'COMMAND_INPUT' });
-    const name = sel.names.faces[0];
-    if (!Array.isArray(args.faces) || args.faces.length !== 1 || selection.faces.length !== 1
-      || selection.edges.length || selection.bodies.length || args.point !== undefined
-      || state.bodies[sourceFace.body]?.mesh.faces[sourceFace.face]?.nativePlaneName !== name
-      || state.bodies.flatMap(body => body.mesh.faces.filter(face => face.nativePlaneName === name)).length !== 1)
-      return fail(state, 'Per-face Shell needs one exact original native face as its opening.', { code: 'COMMAND_INPUT' });
+    const names = sel.names.faces;
+    const selected = selection.faces.map(pick => state.bodies[pick.body]?.mesh.faces[pick.face]?.nativePlaneName);
+    if (!Array.isArray(args.faces) || names.length < 1 || names.length > 2 || args.faces.length !== names.length
+      || selection.faces.length !== names.length || selection.edges.length || selection.bodies.length || args.point !== undefined
+      || names.some(name => !selected.includes(name)
+        || state.bodies.flatMap(body => body.mesh.faces.filter(face => face.nativePlaneName === name)).length !== 1))
+      return fail(state, 'Per-face Shell needs exact original native face names for its openings.', { code: 'COMMAND_INPUT' });
     const box = boxShellSelection(ctx);
     if (!box)
-      return fail(state, 'Per-face Shell needs an original face of one upright rectangular extrusion.', { code: 'COMMAND_INPUT' });
+      return fail(state, 'Use one original box face, or use its original top and one vertical face.', { code: 'COMMAND_INPUT' });
     const invalid = box.walls.filter(({ key }) => !Object.hasOwn(given, key) || !Number.isFinite(given[key]));
     if (invalid.length)
       return fail(state, `Give a finite thickness in mm for each kept wall: ${invalid.map(({ key }) => key).join(', ')}.`, { code: 'COMMAND_INPUT' });

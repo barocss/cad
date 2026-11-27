@@ -14,23 +14,33 @@ export function sameWallNormal(value: unknown, direction: readonly number[]): bo
   return isVec3(value) && direction.every((coordinate, i) => coordinate === value[i]);
 }
 
-/** Return the five opposite and adjacent walls for the chosen original opening. */
-export function boxShellOpeningWalls(normal: unknown) {
+/** Return the kept walls of one cardinal opening or a top and vertical opening pair. */
+export function boxShellOpeningWalls(normal: unknown, secondNormal?: unknown) {
   const opening = boxShellWalls.find(side => sameWallNormal(normal, side.normal));
-  if (opening) return boxShellWalls.filter(side => side !== opening);
+  if (!opening) return;
+  if (secondNormal === undefined) return boxShellWalls.filter(side => side !== opening);
+  const second = boxShellWalls.find(side => sameWallNormal(secondNormal, side.normal));
+  if (!second || opening.key === 'bottomWall' || second.key === 'bottomWall'
+    || (opening.key === 'topWall') === (second.key === 'topWall')) return;
+  return boxShellWalls.filter(side => side !== opening && side !== second);
 }
 
-/** Preserve the stored ownership of all five kept faces and the opening. */
+/** Preserve the stored ownership of the kept faces and every original opening. */
 export function shellWallFieldsProblem(node: Record<string, unknown>): string | null {
-  const allowed = new Set(['kind', 'parent', 'opening', 'walls', ...NODE_EXTRA_FIELDS]);
+  const allowed = new Set(['kind', 'parent', 'opening', 'secondOpening', 'walls', ...NODE_EXTRA_FIELDS]);
   if (Object.keys(node).some(key => !allowed.has(key))) return 'Per-face Shell has an unsupported field.';
-  const { parent, opening, walls, sigs } = node;
+  const { parent, opening, secondOpening, walls, sigs } = node;
   if (!isObj(parent) || !Number.isInteger(parent.node) || Number(parent.node) < 0 || parent.side !== 'solid' ||
-    Object.keys(parent).length !== 2 || typeof opening !== 'string' || !opening || opening.includes('+') ||
-    !isObj(walls) || Object.keys(walls).length !== 5 || Object.hasOwn(walls, opening) ||
-    !Object.values(walls).every(value => typeof value === 'number' && Number.isFinite(value) && value > 0))
-    return 'Per-face Shell needs one opening and five positive wall thicknesses on its original solid.';
-  const names = [opening, ...Object.keys(walls)];
+    Object.keys(parent).length !== 2 || typeof opening !== 'string' || !opening || opening.includes('+'))
+    return 'Per-face Shell needs an exact original opening on its solid.';
+  if (secondOpening !== undefined && (typeof secondOpening !== 'string' || !secondOpening || secondOpening.includes('+') || secondOpening === opening))
+    return 'Per-face Shell needs a distinct second original opening.';
+  const openings = secondOpening === undefined ? [opening] : [opening, secondOpening];
+  if (!isObj(walls) || Object.keys(walls).length !== 6 - openings.length || openings.some(name => Object.hasOwn(walls, name))
+    || !Object.values(walls).every(value => typeof value === 'number' && Number.isFinite(value) && value > 0))
+    return secondOpening === undefined ? 'Per-face Shell needs one opening and five positive wall thicknesses on its original solid.'
+      : 'Per-face Shell needs one positive thickness for each of the four kept walls.';
+  const names = [...openings, ...Object.keys(walls)];
   if (!isObj(sigs) || Object.keys(sigs).length !== 6 || names.some(name => !name || name.includes('+') || !Object.hasOwn(sigs, name)))
     return 'Per-face Shell needs all six original face signatures.';
   for (const name of names) {
@@ -40,8 +50,9 @@ export function shellWallFieldsProblem(node: Record<string, unknown>): string | 
       return 'Per-face Shell needs one exact planar signature per original face.';
   }
   const signatureDirection = (name: string) => (sigs[name] as { d: readonly number[] }).d;
-  const kept = boxShellOpeningWalls(signatureDirection(opening));
+  const kept = boxShellOpeningWalls(signatureDirection(opening), secondOpening === undefined ? undefined : signatureDirection(secondOpening));
   if (!kept || !kept.every(side => Object.keys(walls).some(name => sameWallNormal(signatureDirection(name), side.normal))))
-    return 'Per-face Shell needs an original cardinal opening and its five cardinal walls.';
+    return secondOpening === undefined ? 'Per-face Shell needs an original cardinal opening and its five cardinal walls.'
+      : 'Per-face Shell needs the original top and one vertical opening with their four cardinal walls.';
   return null;
 }

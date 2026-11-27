@@ -14,7 +14,7 @@ import { transformBrep } from '../brep/brep-transform.js';
 import { unsupportedNativeMass } from '../internal/native-si-mass-state.js';
 import { withCavities } from '../brep/brep-glue.js';
 import { generalShell } from '../blend/general-shell.js';
-import { boxShellWallLimit, boxShellWithWalls } from './part-box-shell.js';
+import { adjacentBoxShellWithWalls, boxShellWallLimit, boxShellWithWalls } from './part-box-shell.js';
 import { openRevolvedCapsuleShell } from './part-capsule-shell.js';
 import { offsetCavity, offsetShell, smoothOffsetBody } from '../blend/offset-cavity.js';
 import { regionShell } from '../blend/region-shell.js';
@@ -86,9 +86,19 @@ export function shellOperation(f: CadPartFeature & Record<string, unknown>, t: T
       const target = solids(f.target, 'target'), part = target[0];
       if (target.length !== 1 || t.featureKind(f.target) !== 'extrude' || part.solid.kind !== 'upright')
         return fail('CAPABILITY', 'Per-face Shell needs one original upright box extrusion.');
-      const { opening, walls } = f;
+      const { opening, secondOpening, walls } = f;
       if (typeof opening !== 'string' || !opening || !isRecord(walls))
         return fail('INPUT', 'Per-face Shell needs an opening name and a map of wall thicknesses.');
+      if (secondOpening !== undefined) {
+        if (typeof secondOpening !== 'string' || !secondOpening || secondOpening === opening)
+          return fail('INPUT', 'Per-face Shell needs two distinct original opening names.');
+        const parent = t.ref(f.target, 'Per-face Shell stock').author;
+        const sketch = parent?.kind === 'extrude' ? t.ref(parent.sketch, 'Per-face Shell sketch') : undefined;
+        if (parent?.kind !== 'extrude' || (parent.draft !== undefined && parent.draft !== 0)
+          || sketch?.author?.kind !== 'sketch' || sketch.author.profile !== 'rectangle'
+          || sketch.result.kind !== 'sketch' || sketch.result.holes?.length || sketch.result.regions?.length)
+          return fail('CAPABILITY', 'Two-opening per-face Shell needs one original zero-draft rectangular extrusion.');
+      }
       const stock = part.solid.solid, expect = expectOf(f, fail);
       return () => {
         const original = brepOf(part, f.target);
@@ -96,7 +106,8 @@ export function shellOperation(f: CadPartFeature & Record<string, unknown>, t: T
           if (expect.size !== 6) fail('REFERENCE', 'Per-face Shell needs all six original face signatures.');
           checkExpected(original, expect, false, 'shell-walls', fail);
         }
-        const { solid, brep } = boxShellWithWalls(stock, original, opening, walls, at, fail);
+        const { solid, brep } = secondOpening === undefined ? boxShellWithWalls(stock, original, opening, walls, at, fail)
+          : adjacentBoxShellWithWalls(stock, original, [opening, secondOpening as string], walls, at, fail);
         return { kind: 'solid', parts: [{ solid: { kind: 'upright', solid }, brep }] };
       };
     }

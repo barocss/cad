@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D2095: [Shell an original box with its top and one side open](notes/adjacent-open-per-face-box-shell-2026-11-28/README.md), #13. Qualify four independent wall thicknesses, connected native rims, collapse refusal and explicit Studio Agent approval.
 - D2094: [Keep a Shell opening on its original face through Split edits](notes/split-original-shell-face-2026-11-28/README.md), #4. Use actual native lineage on the selected output and verify live refusal, cold rebuild and two-cap ambiguity.
 - D2093: [Read native topology evolution of a coordinate-plane Split](notes/split-topology-evolution-2026-11-28/README.md), #3. Map original face and edge images and generated cut boundaries. Verify refusal and native Studio reopen.
 - D2092: [Pivot a convex polygon wall after Rotate](notes/rotated-polygon-pivot-face-2026-11-28/README.md), #629 and #14. Keep the exact world cap, hinge, native IDs and trim owners through signed edits and an upstream Rotate.
