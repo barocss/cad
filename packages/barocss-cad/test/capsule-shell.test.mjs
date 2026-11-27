@@ -88,3 +88,44 @@ test('an open capsule refuses an axis collapse or a partial native chart selecti
   const distinctArc = { ...sketch, segments: [{ ...sketch.segments[0], center: [1, -1] }, ...sketch.segments.slice(1)] };
   assert.throws(() => evaluate(distinctArc, revolve, shell(1)), error => error.code === 'CAPABILITY' && /straight walls/.test(error.message));
 });
+
+test('opening the two original capsule hemispheres retains the exact barrel as a through Shell', () => {
+  const source = evaluate(sketch, revolve).brep;
+  const barrelCurves = brep => {
+    const barrelLoops = new Set(brep.faces.filter(face => face.name.startsWith('n1.side1#')).flatMap(face => face.loops));
+    const uses = new Set(brep.loops.filter(loop => barrelLoops.has(loop.id)).flatMap(loop => loop.coedges));
+    const edges = new Set(brep.coedges.filter(use => uses.has(use.id)).map(use => use.edge));
+    return brep.edges.filter(edge => edges.has(edge.id)).map(edge => {
+      const { id, ...curve } = edge.curve;
+      assert.ok(id);
+      return JSON.stringify(curve);
+    }).sort();
+  };
+  const ends = ['n1.side0', 'n1.side2'];
+  let first;
+  for (const open of [ends, [...ends].reverse()]) {
+    const output = evaluate(sketch, revolve, shell(1.2, open)), { brep } = output;
+    if (first) assert.deepEqual(brep, first);
+    first = brep;
+    const report = checkBrep(brep, { strict: true });
+    assert.ok(report.valid, report.issues.join('\n'));
+    assert.deepEqual(report.counts, { bodies: 1, shells: 1, faces: 8, loops: 8, coedges: 32, edges: 16, vertices: 8 });
+    assert.equal(report.topology[0].genus, 1);
+    assert.deepEqual(barrelCurves(brep), barrelCurves(source));
+    assert.deepEqual(brep.faces.map(face => face.name).sort(), [
+      'n1.side1#1', 'n1.side1#2', 'sh.in.n1.side1#1', 'sh.in.n1.side1#2',
+      'sh.rim.lower#1', 'sh.rim.lower#2', 'sh.rim.upper#1', 'sh.rim.upper#2',
+    ]);
+    const volume = Math.PI * 40 * (100 - 8.8 ** 2);
+    const exact = massPropertiesOf(output, 1);
+    assert.equal(exact.method, 'closed-form');
+    for (const mass of [exact, brepMassProperties(brep, 1)]) {
+      close(mass.volume, volume);
+      mass.centroid.forEach((value, axis) => close(value, [0, 20, 0][axis]));
+    }
+  }
+  assert.throws(() => evaluate(sketch, revolve, shell(10, ends)), error => error.code === 'PARAMETER');
+  for (const open of [['n1.side0', 'n1.side2#1'], ['n1.side0', 'n1.side1'], ['n1.side0', 'n1.side0']]) {
+    assert.throws(() => evaluate(sketch, revolve, shell(1, open)), error => error.code === 'CAPABILITY');
+  }
+});
