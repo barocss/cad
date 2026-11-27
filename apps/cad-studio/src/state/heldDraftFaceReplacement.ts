@@ -16,7 +16,7 @@ type Owner = {
 };
 type Hit = { face: { body: number; face: number } | null; faceMesh?: BodyResult['mesh']; instance?: string };
 type Pick = { owner: Owner; draft: Draft; problem: Problem; prefix: StudioDoc; display: BodyResult;
-  name: string; signature: ReturnType<typeof toSig>; parentKey: string; siblingKey: string; displayKey: string };
+  name: string; signature: ReturnType<typeof toSig>; parentKey: string; siblingKey: string; displayKey: string; companion?: BodyResult };
 
 const plane = (b: BodyResult, name: string) => {
   if (b.mesh.faces.filter(f => f.name === name && f.kind === 'plane').length !== 1) return;
@@ -27,12 +27,28 @@ const samePlane = (a: ReturnType<typeof toSig>, b: ReturnType<typeof toSig>) =>
   a.k === 'plane' && b.k === 'plane' && a.s === b.s &&
   a.p.every((v, i) => v === b.p[i]) && a.d?.length === 3 && b.d?.length === 3 && a.d.every((v, i) => v === b.d![i]);
 
-/** Deliberately only the single negative-side rectangular Split Draft with no offered candidate. */
+/** Only a trailing literal, unattached box whose output maps to its own unique CAD producer. */
+function independentCompanion(doc: StudioDoc, bodies: readonly BodyResult[]): BodyResult | undefined {
+  const sketch = doc.nodes[4], extrude = doc.nodes[5];
+  if (sketch?.kind !== 'sketch' || sketch.profile !== 'rectangle' || sketch.suppressed || sketch.held
+    || sketch.on || sketch.plane || sketch.association || sketch.pocketFloor || sketch.outline
+    || sketch.regions?.length || sketch.holes?.length || sketch.holeOutlines?.length
+    || extrude?.kind !== 'extrude' || extrude.sketch !== 4 || extrude.suppressed || extrude.held
+    || extrude.draft !== undefined || extrude.from !== undefined || extrude.cutDepth !== undefined
+    || typeof extrude.height !== 'number' || !Number.isFinite(extrude.height) || extrude.height <= 0
+    || ![...sketch.min, ...sketch.max].every(n => typeof n === 'number' && Number.isFinite(n))) return;
+  const key = bodyKeyFor(doc.nodes, 5, 'solid'), ref = doc.outputs[key];
+  if (ref?.node !== 5 || ref.side !== 'solid') return;
+  const match = bodies.filter(body => body.key === key && body.ref?.node === 5 && body.ref.side === 'solid' && (body.pieces ?? 1) === 1);
+  if (match.length === 1) return match[0];
+}
+
+/** Only the single negative-side rectangular Split Draft with no offered candidate, plus one optional trailing box. */
 export function pickHeldDraftFace(owner: Owner, hit: Hit): Pick | null {
   const { doc, index, problems, bodies } = owner;
   if (!owner.isCurrent() || doc.format !== 'barocss-cad-model' || doc.schema !== 3 || doc.units !== 'mm' ||
       Object.hasOwn(doc,'routeBundles') || Object.hasOwn(doc,'routeBundleMember') ||
-      doc.nodes.some(n=>Object.hasOwn(n,'routeBundleMember')) || index !== 3 || doc.nodes.length !== 4 || doc.direct !== undefined ||
+      doc.nodes.some(n=>Object.hasOwn(n,'routeBundleMember')) || index !== 3 || (doc.nodes.length !== 4 && doc.nodes.length !== 6) || doc.direct !== undefined ||
       doc.instances?.length || doc.configurations !== undefined || doc.variability !== undefined || !hit.face || hit.instance !== undefined) return null;
   const [sketch, extrude, split, draft] = doc.nodes;
   if (sketch.kind !== 'sketch' || sketch.profile !== 'rectangle' || sketch.plane !== undefined || sketch.suppressed ||
@@ -58,15 +74,18 @@ export function pickHeldDraftFace(owner: Owner, hit: Hit): Pick | null {
       problems[0].candidates.length !== 0 || problems[0].reason !== undefined) return null;
 
   const displayKey = bodyKeyFor(doc.nodes,index,'solid'), parentKey = bodyKeyFor(doc.nodes,2,'negative'), siblingKey = bodyKeyFor(doc.nodes,2,'positive');
+  const companion = doc.nodes.length === 6 ? independentCompanion(doc, bodies) : undefined;
+  if (doc.nodes.length === 6 && !companion) return null;
+  const splitBodies = companion ? bodies.filter(body => body !== companion) : bodies;
   const display = bodies[hit.face.body], face = display?.mesh.faces[hit.face.face];
-  if (Object.keys(doc.outputs).length !== 2 || doc.outputs[displayKey]?.node !== index || doc.outputs[displayKey].side !== 'solid' ||
-      doc.outputs[siblingKey]?.node !== 2 || doc.outputs[siblingKey].side !== 'positive' || !bodyPair(bodies,displayKey,siblingKey) ||
+  if (Object.keys(doc.outputs).length !== (companion ? 3 : 2) || doc.outputs[displayKey]?.node !== index || doc.outputs[displayKey].side !== 'solid' ||
+      doc.outputs[siblingKey]?.node !== 2 || doc.outputs[siblingKey].side !== 'positive' || !bodyPair(splitBodies,displayKey,siblingKey) ||
       display?.key !== displayKey || hit.faceMesh !== display.mesh || face?.name !== featureId(doc.nodes, 2) + '.cut.side3') return null;
   const name = face.name, signature = plane(display,name);
   if (!signature || !isSplitCapFace(doc.nodes,name) || signature.d?.join(',') !== '-1,0,0' ||
       !samePlane(signature,toSig({ kind:'plane',at:[x,(ymin+ymax)/2,extrude.height/2],dir:[-1,0,0],size:(ymax-ymin)*extrude.height }))) return null;
   try {
-    return { owner, draft, problem:problems[0], prefix:prefixDoc(doc,index), display, name, signature,parentKey,siblingKey,displayKey };
+    return { owner, draft, problem:problems[0], prefix:prefixDoc(doc,index), display, name, signature,parentKey,siblingKey,displayKey,companion };
   } catch { return null; }
 
 }
@@ -98,22 +117,30 @@ export function planHeldDraftReplacement(pick: Pick, reply: EvalResult, revision
     delete original.held;
     delete original.suppressed;
     const doc=pick.owner.doc;
-    const next: StudioDoc = {...doc, nodes:[...doc.nodes.slice(0,pick.owner.index),{...original,faces:node.faces,sigs:{[pick.name]:sig}}]};
+    const next: StudioDoc = {...doc, nodes:doc.nodes.map((value, i) => i === pick.owner.index ? {...original,faces:node.faces,sigs:{[pick.name]:sig}} : value)};
     return pick.owner.isCurrent() ? {pick,next,prefixReply:reply,sibling} : null;
   } catch { return null; }
+}
+
+// Refs packets keep geometry, not mass: all six finite box face signatures must match.
+function sameBox(before: BodyResult, after: BodyResult): boolean {
+  const oldFaces = signaturesOf(before,'plane').faces, newFaces = signaturesOf(after,'plane').faces;
+  return oldFaces.size === 6 && newFaces.size === oldFaces.size && [...oldFaces].every(([name, old]) => {
+    const current = newFaces.get(name);
+    return !!current && samePlane(toSig(old),toSig(current));
+  });
 }
 
 export function readyHeldDraftReplacement(plan: Plan, reply: EvalResult, revision: number): StudioDoc | null {
   const { pick, next, sibling } = plan;
   if (!pick.owner.isCurrent() || !reply.ok || reply.revision !== revision || reply === plan.prefixReply || reply.revision === plan.prefixReply.revision ||
-      !bodyPair(reply.bodies,pick.displayKey,pick.siblingKey)) return null;
+      !bodyPair(reply.bodies.filter(body => body.key !== pick.companion?.key),pick.displayKey,pick.siblingKey)) return null;
+  if (pick.companion) {
+    const companion = independentCompanion(next, reply.bodies);
+    if (reply.bodies.length !== 3 || !companion || !sameBox(pick.companion, companion)) return null;
+  }
   const s = reply.bodies.find(b=>b.key===pick.siblingKey)!;
-  // Refs packets keep geometry, not mass: compare all canonical planar faces of the untouched box half.
-  const oldFaces = signaturesOf(sibling,'plane').faces, newFaces=signaturesOf(s,'plane').faces;
-  if (oldFaces.size !== 6 || newFaces.size !== oldFaces.size || [...oldFaces].some(([name, old])=>{
-    const other=newFaces.get(name);
-    return !other || !samePlane(toSig(old),toSig(other));
-  })) return null;
+  if (!sameBox(sibling, s)) return null;
   const pickedOutput=reply.bodies.find(b=>b.key===pick.displayKey)!;
   const outputFaces=signaturesOf(pickedOutput,'plane').faces;
   const drafted=outputFaces.get(featureId(next.nodes,pick.owner.index)+'.draft.bottom');

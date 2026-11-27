@@ -1,0 +1,56 @@
+{
+  "status": "PASS",
+  "observations": [
+    {
+      "label": "native-held",
+      "volumes": {
+        "b2_positive": 9000,
+        "b3": 9000,
+        "b5": 1152
+      }
+    },
+    {
+      "label": "native-applied",
+      "volumes": {
+        "b2_positive": 9000,
+        "b3": 8735.509528937302,
+        "b5": 1152
+      }
+    },
+    {
+      "label": "native-reopened",
+      "volumes": {
+        "b2_positive": 9000,
+        "b3": 8735.509528937302,
+        "b5": 1152
+      }
+    }
+  ],
+  "states": [
+    {
+      "label": "00-held"
+    },
+    {
+      "label": "01-companion-refused"
+    },
+    {
+      "label": "02-preview-no-document-change"
+    },
+    {
+      "label": "03-explicit-apply"
+    },
+    {
+      "label": "04-fresh-open"
+    }
+  ],
+  "errors": [],
+  "consoleErrors": [],
+  "changes": [],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "sourceCount": 1244
+}

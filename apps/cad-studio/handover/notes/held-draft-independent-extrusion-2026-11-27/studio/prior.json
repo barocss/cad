@@ -1,0 +1,30 @@
+{
+  "status": "PASS",
+  "observations": [
+    {
+      "label": "native-held",
+      "volumes": {
+        "b2_positive": 9000,
+        "b3": 9000,
+        "b5": 1152
+      }
+    }
+  ],
+  "states": [
+    {
+      "label": "00-held"
+    },
+    {
+      "label": "00-prior-no-replace"
+    }
+  ],
+  "errors": [],
+  "consoleErrors": [],
+  "changes": [],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "sourceCount": 1244
+}

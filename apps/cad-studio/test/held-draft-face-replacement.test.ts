@@ -18,8 +18,8 @@ const doc:StudioDoc={format:'barocss-cad-model',schema:3,units:'mm',parameters:{
   {id:'n3',kind:'draft',parent:{node:2,side:'negative'},faces:[cap],angle:10,pull:'z',neutral:0,
     sigs:{[cap]:{k:'plane',p:[24,15,5],d:[1,0,0],s:300}}},
 ],outputs:{b2_positive:{node:2,side:'positive'},b3:{node:3,side:'solid'}},nextId:4};
-async function fixture() {
-  const checked=await verifyReferences(doc,[],async d=>evaluatePart(d,10,8,'refs'));
+async function fixture(source = doc) {
+  const checked=await verifyReferences(source,[],async d=>evaluatePart(d,10,8,'refs'));
   assert.deepEqual(checked.problems.map(p=>[p.name,p.candidates]),[[cap,[]]]);
   const ev=evaluateDoc(checked.doc,11);assert.ok(ev.ok,JSON.stringify(ev));
   let live=true;
@@ -226,4 +226,43 @@ test('the normal Browser eye hide/show retains held recovery without transferrin
     {...hidden,references:{version:1 as const,references:[],datums:[],keepouts:[]}},
   ]) assert.equal(isBodyEyeVisibilityOnly(looks,changed),false);
   assert.equal(isBodyEyeVisibilityOnly(looks,looks),false);
+});
+
+test('one independent trailing rectangular Extrude does not block held Draft repair or change the companion solid', async () => {
+  const three: StudioDoc = {
+    ...doc, nextId: 6,
+    nodes: [...doc.nodes,
+      { id: 'n4', kind: 'sketch', profile: 'rectangle', min: [74, 0], max: [86, 12] },
+      { id: 'n5', kind: 'extrude', sketch: 4, height: 8 }],
+    outputs: { ...doc.outputs, b5: { node: 5, side: 'solid' } },
+  };
+  const { owner, hit } = await fixture(three);
+  assert.ok(heldDraftFaceAvailable(owner));
+  const companionIndex = owner.bodies.findIndex(body => body.key === 'b5');
+  const companion = owner.bodies[companionIndex];
+  assert.ok(Math.abs(companion.volume! - 1152) < 1e-9);
+  assert.equal(pickHeldDraftFace(owner, { face: { body: companionIndex, face: 0 }, faceMesh: companion.mesh }), null);
+  const selected = pickHeldDraftFace(owner, hit);
+  assert.ok(selected);
+  assert.deepEqual(Object.keys(selected.prefix.outputs).sort(), ['b2_negative', 'b2_positive']);
+  const prefix = evaluatePart(selected.prefix, 90, 8, 'refs');
+  const plan = planHeldDraftReplacement(selected, prefix, 90);
+  assert.ok(plan);
+  assert.deepEqual(plan.next.nodes.slice(4), three.nodes.slice(4));
+  assert.deepEqual(plan.next.outputs, three.outputs);
+  const preview = evaluatePart(plan.next, 91, 8, 'refs');
+  assert.ok(preview.ok);
+  const accepted = readyHeldDraftReplacement(plan, preview, 91);
+  assert.ok(accepted);
+  const rebuilt = evaluateDoc(accepted, 92);
+  assert.ok(rebuilt.ok);
+  const persistedCompanion = rebuilt.bodies.find(body => body.key === 'b5')!;
+  assert.deepEqual(persistedCompanion.mesh, companion.mesh);
+  assert.equal(persistedCompanion.volume, companion.volume);
+  assert.equal(readyHeldDraftReplacement(plan, { ...preview, bodies: preview.bodies.filter(body => body.key !== 'b5') }, 91), null);
+  const altered = { ...plan.next, nodes: plan.next.nodes.map((node, i) => i === 5 && node.kind === 'extrude' ? { ...node, height: 9 } : node) };
+  assert.equal(readyHeldDraftReplacement(plan, evaluatePart(altered, 91, 8, 'refs'), 91), null);
+  const linked = { ...owner.doc, nodes: owner.doc.nodes.map((node, i) => i === 4 && node.kind === 'sketch'
+    ? { ...node, on: { node: 2, side: 'negative' as const } } : node) };
+  assert.equal(heldDraftFaceAvailable({ ...owner, doc: linked }), false);
 });
