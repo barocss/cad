@@ -5,13 +5,14 @@ const flags = new Set(process.argv.slice(3));
 const companion = !flags.has('--single');
 const baseline = flags.has('--baseline');
 const circle = companion && flags.has('--circle');
+const mixed = companion && !circle && flags.has('--mixed');
 const pins = ['apps/cad-studio/test/held-draft-companion-browser.mjs', 'apps/cad-studio/src/state/heldDraftFaceReplacement.ts',
   'apps/cad-studio/src/state/heldDraftFaceSession.ts', 'apps/cad-studio/src/state/useHeldDraftFace.ts',
   'apps/cad-studio/src/App.tsx', 'apps/cad-studio/src/ui/NodeEditor.tsx'];
 const f = await createFlow({
   name: 'held-draft-companion', output: process.argv[2], envFrozen: 'D2037_SOURCE_FROZEN', initialFiles: pins, requiredFrozen: pins,
-  qualification: 'Explicit Draft cap repair keeps the companion and the untouched Split half unchanged through history and fresh Open.',
-  limits: ['Single fixed-neutral Draft on a reversed X Split, with one optional trailing independent rectangular or circular extrusion.'],
+  qualification: 'Explicit Draft cap repair keeps the companions and the untouched Split half unchanged through history and fresh Open.',
+  limits: ['Single fixed-neutral Draft on a reversed X Split, with up to two trailing independent rectangular or circular extrusions.'],
   inspectorSource: `
 import { readFileSync } from 'node:fs';
 import { brepMassProperties, checkBrep } from '@barocss/cad';
@@ -25,7 +26,7 @@ console.log(JSON.stringify(partBreps(doc).map(({ key, brep }) => ({
 const ref = (node, side = 'solid') => ({ node, side });
 const cap = 'n2.cut.side1', replacement = 'n2.cut.side3';
 const seed = {
-  format: 'barocss-cad-model', schema: 3, units: 'mm', parameters: {}, nextId: companion ? 6 : 4,
+  format: 'barocss-cad-model', schema: 3, units: 'mm', parameters: {}, nextId: mixed ? 8 : companion ? 6 : 4,
   nodes: [
     { id: 'n0', kind: 'sketch', profile: 'rectangle', min: [0, 0], max: [60, 30] },
     { id: 'n1', kind: 'extrude', sketch: 0, height: 10 },
@@ -38,8 +39,12 @@ const seed = {
         : { id: 'n4', kind: 'sketch', profile: 'rectangle', min: [74, 0], max: [86, 12] },
       { id: 'n5', kind: 'extrude', sketch: 4, height: 8 },
     ] : []),
+    ...(mixed ? [
+      { id: 'n6', kind: 'sketch', profile: 'circle', center: [100, 6], radius: 5 },
+      { id: 'n7', kind: 'extrude', sketch: 6, height: 7 },
+    ] : []),
   ],
-  outputs: { b2_positive: ref(2, 'positive'), b3: ref(3), ...(companion ? { b5: ref(5) } : {}) },
+  outputs: { b2_positive: ref(2, 'positive'), b3: ref(3), ...(companion ? { b5: ref(5) } : {}), ...(mixed ? { b7: ref(7) } : {}) },
 };
 const button = (name, parent = f.page) => parent.getByRole('button', { name, exact: true });
 const history = () => Promise.all(['Undo', 'Redo'].map(name => button(name).isEnabled()));
@@ -67,9 +72,9 @@ async function pick(point) {
 }
 const check = async (label, doc, active, originals) => {
   const all = await f.inspect(label, doc);
-  assert.equal(all.length, companion ? 3 : 2);
+  assert.equal(all.length, mixed ? 4 : companion ? 3 : 2);
   assert.ok(all.every(body => body.valid));
-  const expected = { b2_positive: 9000, b3: active ? 30 * (300 - 50 * Math.tan(Math.PI / 18)) : 9000, ...(companion ? { b5: circle ? 288 * Math.PI : 1152 } : {}) };
+  const expected = { b2_positive: 9000, b3: active ? 30 * (300 - 50 * Math.tan(Math.PI / 18)) : 9000, ...(companion ? { b5: circle ? 288 * Math.PI : 1152 } : {}), ...(mixed ? { b7: 175 * Math.PI } : {}) };
   for (const body of all) {
     assert.ok(Math.abs(body.volume - expected[body.key]) < 1e-7, JSON.stringify({ key: body.key, volume: body.volume }));
     if (body.key !== 'b3' && originals) assert.deepEqual(body.brep, originals.find(v => v.key === body.key).brep);
@@ -118,6 +123,14 @@ await f.run(async () => {
     await f.same(before);
     assert.deepEqual(await history(), stack);
     await f.snapshot('01-companion-refused');
+    if (mixed) {
+      await pick([100, 1, 3.5]);
+      await f.editor().getByRole('status').filter({ hasText: 'not the other Split half' }).waitFor();
+      assert.equal(await apply.isDisabled(), true);
+      await f.same(before);
+      assert.deepEqual(await history(), stack);
+      await f.snapshot('01b-second-companion-refused');
+    }
   }
   await pickCorrect();
   assert.equal(await apply.isEnabled(), true);

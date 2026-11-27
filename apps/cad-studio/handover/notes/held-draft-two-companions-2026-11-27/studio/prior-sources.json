@@ -1,0 +1,12 @@
+{
+  "count": 7,
+  "hashes": {
+    "apps/cad-studio/src/App.tsx": "597b9dce577c8e92aa22e90f7b0fbc26c212bbd01c62981785d0d52be8381c99",
+    "apps/cad-studio/src/state/heldDraftFaceReplacement.ts": "15a1ef5fa8e9d18a7d7312f2cf9f73019243c20d83a8d7bf9e7a11622ddba515",
+    "apps/cad-studio/src/state/heldDraftFaceSession.ts": "dd37286a3138b665f70268cc19d1575776c2eacf57a94e24e8c48854f54b4bd8",
+    "apps/cad-studio/src/state/useHeldDraftFace.ts": "9c1c7aebe9df86dd0e37f9eed413a07fe089d2d366237c4da665ce8a7b8216e2",
+    "apps/cad-studio/src/ui/NodeEditor.tsx": "2e82c044b085055ed07bbde0252a17f4c2560c54e230332d33ad993e75a42c66",
+    "apps/cad-studio/test/flow-helper.mjs": "64d394e06006d87104979bdeb01c5bbcdf919a829c266ebc8dcbacbf621d315b",
+    "apps/cad-studio/test/held-draft-companion-browser.mjs": "37c9a86c2d0c3d4bd1fd59a88df3b480406e50c38005493b7f584792e0ff7e34"
+  }
+}

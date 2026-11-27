@@ -301,3 +301,41 @@ test('circular companion preserves its own caps and exact wall; altered placemen
     assert.equal(readyHeldDraftReplacement(plan, wire(evaluatePart(altered, 91, 8, 'refs')), 91), null);
   }
 });
+
+test('two independent companion producers each protect their own geometry during Draft recovery', async () => {
+  const mixed: StudioDoc = {
+    ...doc, nextId: 8,
+    nodes: [...doc.nodes,
+      { id: 'n4', kind: 'sketch', profile: 'rectangle', min: [74, 0], max: [86, 12] },
+      { id: 'n5', kind: 'extrude', sketch: 4, height: 8 },
+      { id: 'n6', kind: 'sketch', profile: 'circle', center: [100, 6], radius: 5 },
+      { id: 'n7', kind: 'extrude', sketch: 6, height: 7 }],
+    outputs: { ...doc.outputs, b5: { node: 5, side: 'solid' }, b7: { node: 7, side: 'solid' } },
+  };
+  const { owner, hit } = await fixture(mixed);
+  const picked = pickHeldDraftFace(owner, hit);
+  assert.ok(picked);
+  for (const key of ['b5', 'b7']) {
+    const body = owner.bodies.findIndex(candidate => candidate.key === key);
+    assert.notEqual(body, -1);
+    assert.equal(pickHeldDraftFace(owner, { face: { body, face: 0 }, faceMesh: owner.bodies[body].mesh }), null);
+  }
+  const plan = planHeldDraftReplacement(picked, evaluatePart(picked.prefix, 90, 8, 'refs'), 90);
+  assert.ok(plan);
+  assert.deepEqual(plan.next.nodes.slice(4), mixed.nodes.slice(4));
+  assert.deepEqual(plan.next.outputs, mixed.outputs);
+  const reply = evaluatePart(plan.next, 91, 8, 'refs');
+  assert.ok(reply.ok);
+  assert.equal(readyHeldDraftReplacement(plan, { ...reply, bodies: [...reply.bodies].reverse() }, 91), plan.next);
+  const b5 = reply.bodies.find(candidate => candidate.key === 'b5');
+  assert.ok(b5);
+  assert.equal(readyHeldDraftReplacement(plan, { ...reply, bodies: reply.bodies.map(body => body.key === 'b7' ? b5 : body) }, 91), null);
+  for (const index of [5,7]) {
+    const altered: StudioDoc = {
+      ...plan.next,
+      nodes: plan.next.nodes.map((node, i): StudioDoc['nodes'][number] =>
+        i === index && node.kind === 'extrude' ? { ...node, height: 9 } : node),
+    };
+    assert.equal(readyHeldDraftReplacement(plan, evaluatePart(altered, 91, 8, 'refs'), 91), null);
+  }
+});

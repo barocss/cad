@@ -15,8 +15,9 @@ type Owner = {
   isCurrent(): boolean;
 };
 type Hit = { face: { body: number; face: number } | null; faceMesh?: BodyResult['mesh']; instance?: string };
+type Companion = { body: BodyResult; profile: 'rectangle' | 'circle' };
 type Pick = { owner: Owner; draft: Draft; problem: Problem; prefix: StudioDoc; display: BodyResult;
-  name: string; signature: ReturnType<typeof toSig>; parentKey: string; siblingKey: string; displayKey: string; companion?: { body: BodyResult; profile: 'rectangle' | 'circle' } };
+  name: string; signature: ReturnType<typeof toSig>; parentKey: string; siblingKey: string; displayKey: string; companions: Companion[] };
 
 const plane = (b: BodyResult, name: string) => {
   if (b.mesh.faces.filter(f => f.name === name && f.kind === 'plane').length !== 1) return;
@@ -28,29 +29,40 @@ const samePlane = (a: ReturnType<typeof toSig>, b: ReturnType<typeof toSig>) =>
   a.p.every((v, i) => v === b.p[i]) && a.d?.length === 3 && b.d?.length === 3 && a.d.every((v, i) => v === b.d![i]);
 
 /** Only a trailing literal, unattached box or cylinder with its own unique producer. */
-function independentCompanion(doc: StudioDoc, bodies: readonly BodyResult[]): Pick['companion'] {
-  const sketch = doc.nodes[4], extrude = doc.nodes[5];
+function independentCompanion(doc: StudioDoc, bodies: readonly BodyResult[], sketchIndex: number): Companion | undefined {
+  const extrudeIndex = sketchIndex + 1;
+  const sketch = doc.nodes[sketchIndex], extrude = doc.nodes[extrudeIndex];
   if (sketch?.kind !== 'sketch' || (sketch.profile !== 'rectangle' && sketch.profile !== 'circle') || sketch.suppressed || sketch.held
     || sketch.on || sketch.plane || sketch.association || sketch.pocketFloor || sketch.outline
     || sketch.regions?.length || sketch.holes?.length || sketch.holeOutlines?.length
-    || extrude?.kind !== 'extrude' || extrude.sketch !== 4 || extrude.suppressed || extrude.held
+    || extrude?.kind !== 'extrude' || extrude.sketch !== sketchIndex || extrude.suppressed || extrude.held
     || extrude.draft !== undefined || extrude.from !== undefined || extrude.cutDepth !== undefined
     || typeof extrude.height !== 'number' || !Number.isFinite(extrude.height) || extrude.height <= 0) return;
   const dimensions = sketch.profile === 'rectangle' ? [...sketch.min, ...sketch.max] : [...sketch.center, sketch.radius];
   if (!dimensions.every(n => typeof n === 'number' && Number.isFinite(n))
     || (sketch.profile === 'circle' && !(Number(sketch.radius) > 0))) return;
-  const key = bodyKeyFor(doc.nodes, 5, 'solid'), ref = doc.outputs[key];
-  if (ref?.node !== 5 || ref.side !== 'solid') return;
-  const match = bodies.filter(body => body.key === key && body.ref?.node === 5 && body.ref.side === 'solid' && (body.pieces ?? 1) === 1);
+  const key = bodyKeyFor(doc.nodes, extrudeIndex, 'solid'), ref = doc.outputs[key];
+  if (ref?.node !== extrudeIndex || ref.side !== 'solid') return;
+  const match = bodies.filter(body => body.key === key && body.ref?.node === extrudeIndex && body.ref.side === 'solid' && (body.pieces ?? 1) === 1);
   if (match.length === 1) return { body: match[0], profile: sketch.profile };
 }
 
-/** Only the single negative-side rectangular Split Draft with no offered candidate, plus one optional trailing box or cylinder. */
+function independentCompanions(doc: StudioDoc, bodies: readonly BodyResult[]): Companion[] | undefined {
+  const companions: Companion[] = [];
+  for (let index = 4; index < doc.nodes.length; index += 2) {
+    const companion = independentCompanion(doc, bodies, index);
+    if (!companion || companions.some(previous => previous.body.key === companion.body.key)) return;
+    companions.push(companion);
+  }
+  return companions;
+}
+
+/** Only the single negative-side rectangular Split Draft with no offered candidate, plus up to two independent companions. */
 export function pickHeldDraftFace(owner: Owner, hit: Hit): Pick | null {
   const { doc, index, problems, bodies } = owner;
   if (!owner.isCurrent() || doc.format !== 'barocss-cad-model' || doc.schema !== 3 || doc.units !== 'mm' ||
       Object.hasOwn(doc,'routeBundles') || Object.hasOwn(doc,'routeBundleMember') ||
-      doc.nodes.some(n=>Object.hasOwn(n,'routeBundleMember')) || index !== 3 || (doc.nodes.length !== 4 && doc.nodes.length !== 6) || doc.direct !== undefined ||
+      doc.nodes.some(n=>Object.hasOwn(n,'routeBundleMember')) || index !== 3 || ![4, 6, 8].includes(doc.nodes.length) || doc.direct !== undefined ||
       doc.instances?.length || doc.configurations !== undefined || doc.variability !== undefined || !hit.face || hit.instance !== undefined) return null;
   const [sketch, extrude, split, draft] = doc.nodes;
   if (sketch.kind !== 'sketch' || sketch.profile !== 'rectangle' || sketch.plane !== undefined || sketch.suppressed ||
@@ -76,18 +88,18 @@ export function pickHeldDraftFace(owner: Owner, hit: Hit): Pick | null {
       problems[0].candidates.length !== 0 || problems[0].reason !== undefined) return null;
 
   const displayKey = bodyKeyFor(doc.nodes,index,'solid'), parentKey = bodyKeyFor(doc.nodes,2,'negative'), siblingKey = bodyKeyFor(doc.nodes,2,'positive');
-  const companion = doc.nodes.length === 6 ? independentCompanion(doc, bodies) : undefined;
-  if (doc.nodes.length === 6 && !companion) return null;
-  const splitBodies = companion ? bodies.filter(body => body !== companion.body) : bodies;
+  const companions = independentCompanions(doc, bodies);
+  if (!companions) return null;
+  const splitBodies = bodies.filter(body => !companions.some(companion => companion.body === body));
   const display = bodies[hit.face.body], face = display?.mesh.faces[hit.face.face];
-  if (Object.keys(doc.outputs).length !== (companion ? 3 : 2) || doc.outputs[displayKey]?.node !== index || doc.outputs[displayKey].side !== 'solid' ||
+  if (Object.keys(doc.outputs).length !== 2 + companions.length || doc.outputs[displayKey]?.node !== index || doc.outputs[displayKey].side !== 'solid' ||
       doc.outputs[siblingKey]?.node !== 2 || doc.outputs[siblingKey].side !== 'positive' || !bodyPair(splitBodies,displayKey,siblingKey) ||
       display?.key !== displayKey || hit.faceMesh !== display.mesh || face?.name !== featureId(doc.nodes, 2) + '.cut.side3') return null;
   const name = face.name, signature = plane(display,name);
   if (!signature || !isSplitCapFace(doc.nodes,name) || signature.d?.join(',') !== '-1,0,0' ||
       !samePlane(signature,toSig({ kind:'plane',at:[x,(ymin+ymax)/2,extrude.height/2],dir:[-1,0,0],size:(ymax-ymin)*extrude.height }))) return null;
   try {
-    return { owner, draft, problem:problems[0], prefix:prefixDoc(doc,index), display, name, signature,parentKey,siblingKey,displayKey,companion };
+    return { owner, draft, problem:problems[0], prefix:prefixDoc(doc,index), display, name, signature,parentKey,siblingKey,displayKey,companions };
   } catch { return null; }
 
 }
@@ -156,12 +168,13 @@ function sameCylinder(before: BodyResult, after: BodyResult): boolean {
 export function readyHeldDraftReplacement(plan: Plan, reply: EvalResult, revision: number): StudioDoc | null {
   const { pick, next, sibling } = plan;
   if (!pick.owner.isCurrent() || !reply.ok || reply.revision !== revision || reply === plan.prefixReply || reply.revision === plan.prefixReply.revision ||
-      !bodyPair(reply.bodies.filter(body => body.key !== pick.companion?.body.key),pick.displayKey,pick.siblingKey)) return null;
-  if (pick.companion) {
-    const companion = independentCompanion(next, reply.bodies);
-    if (reply.bodies.length !== 3 || !companion || companion.profile !== pick.companion.profile) return null;
-    const before = pick.companion.body, after = companion.body;
-    if (!(companion.profile === 'rectangle' ? sameBox(before, after) : sameCylinder(before, after))) return null;
+      reply.bodies.length !== 2 + pick.companions.length) return null;
+  const companions = independentCompanions(next, reply.bodies);
+  if (!companions || companions.length !== pick.companions.length ||
+      !bodyPair(reply.bodies.filter(body => !companions.some(companion => companion.body === body)),pick.displayKey,pick.siblingKey)) return null;
+  for (const { body: before, profile } of pick.companions) {
+    const companion = companions.find(candidate => candidate.body.key === before.key && candidate.profile === profile);
+    if (!companion || !(profile === 'rectangle' ? sameBox(before, companion.body) : sameCylinder(before, companion.body))) return null;
   }
   const s = reply.bodies.find(b=>b.key===pick.siblingKey)!;
   if (!sameBox(sibling, s)) return null;
