@@ -81,7 +81,8 @@ export async function openModel(path: string, missing: 'new' | 'refuse' = 'refus
   return 'error' in read ? read : { doc: read.doc, isNew: read.isNew };
 }
 
-const STORAGE_CHANGED = '[STORAGE_CHANGED] The model file changed since this session last read or saved it. Reopen the file in a new cad-mcp session.';
+const STORAGE_CHANGED_MESSAGE = 'The model file changed since this session last read or saved it. Reopen the file in a new cad-mcp session.';
+const STORAGE_CHANGED = `[STORAGE_CHANGED] ${STORAGE_CHANGED_MESSAGE}`;
 const STORAGE_BUSY = '[STORAGE_BUSY] A cad-mcp save lock is present for this file. Retry when the other save has finished.';
 
 function takeSaveLock(path: string): boolean {
@@ -104,6 +105,15 @@ export function docStore(path: string): McpStore {
       return { doc: read.doc, changed: false, version: 0 };
     },
     unsavedNotice: () => unsaved,
+    reviewProblem() {
+      try {
+        if (!conflicted && sameStamp(expected, readDisk(path)?.stamp ?? null)) return null;
+        conflicted = true;
+        return { code: 'STORAGE_CHANGED', error: STORAGE_CHANGED_MESSAGE };
+      } catch {
+        return { code: 'STORAGE_UNAVAILABLE', error: 'Could not verify the saved model file for this review. Check that the file is readable and retry.' };
+      }
+    },
     save(s, why) {
       if (why !== 'change') return null;
       if (conflicted) return refuse(STORAGE_CHANGED);

@@ -51,6 +51,7 @@ export interface McpStore {
   open(): Promise<{ doc: StudioDoc; approvalRequired?: true; taskFinding?: TaskRunFindingSelection; selection?: ChatState['selection']; images?: ImageTrace[]; turns?: string[]; changed: boolean; version: number; rowFiles?: PersonRowFiles; versions?: VersionLog; selectedApproval?: ApprovalAttachmentPayload; selectedFaceDiagnosis?: FaceDiagnosisSelection }>;
   save(s: { doc: StudioDoc; selection?: ChatState['selection']; changed: boolean; version: number; ops?: TurnOp[]; versions?: VersionLog; versionsChanged?: boolean; versionsWanted?: string[] }, why: 'change' | 'select' | 'versions'): string | null;
   unsavedNotice?(): string | null;
+  reviewProblem?(): { code: 'STORAGE_CHANGED' | 'STORAGE_UNAVAILABLE'; error: string } | null;
 }
 /** The chat server's state file: {doc, selection?, changed, version}, its blobs read from the files it names. */
 export function stateFileStore(statePath: string): McpStore {
@@ -126,9 +127,19 @@ export async function serveMcp(source: string | McpStore, input: NodeJS.Readable
         const repair = name === SELECTED_FOLLOW_UP_REPAIR ? approval?.repair : undefined;
         if (!repair && !(name in GROUPS)) return error(msg.id, -32602, `Unknown tool: ${name}. The tools are ${Object.keys(GROUPS).join(', ')}.`);
         const handler = v1Name(name, args);
+        const review = handler === 'render_views' || handler === 'inspect';
+        const refuseReview = () => {
+          const problem = review && store.reviewProblem?.();
+          if (!problem) return false;
+          reply(msg.id, { content: [{ type: 'text', text: JSON.stringify(problem) }], isError: true });
+          return true;
+        };
+        if (refuseReview()) return;
         const out = repair
           ? await (await import('./selectedFollowUpRepair')).prepareSelectedFollowUpRepair(state, args, repair, evaluate)
           : await runTool(saved.approvalRequired ? { ...state, approvalRequired: true } : state, name, args ?? {}, evaluate);
+        // A different program can complete a save while the image or native inspection is computing.
+        if (refuseReview()) return;
         if (out.changed) {
           const v1 = v1Call(name, args ?? {});
           ops.push(captureOp(before, out.state.doc, v1 && !('error' in v1) ? v1.name : name, v1 && !('error' in v1) ? v1.args : repair && isObj(args) ? args : {}));

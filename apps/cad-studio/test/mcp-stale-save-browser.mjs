@@ -1,25 +1,35 @@
 // D708 / #2426. Studio and external stdio MCP use the same disposable local native file.
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
-import { once } from 'node:events';
 import { lstat, mkdir, readdir, readFile, rename, rmdir, unlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { createInterface } from 'node:readline';
 import { createFlow, sha256 } from './flow-helper.mjs';
+import { withMcpSession } from './mcp-browser-session.mjs';
 
 const output = process.argv[2];
+const visual = process.argv.includes('--visual-review');
+const baseline = process.argv.includes('--baseline');
+assert.ok(!baseline || visual);
 const file = 'Guarded plate.bcad', folder = 'D708 owned folder';
 const root = join(output, 'project'), target = join(root, file);
 const pins = ['apps/cad-studio/test/mcp-stale-save-browser.mjs', 'apps/cad-studio/server/cadDoc.ts',
   'apps/cad-studio/server/cadMcp.ts', 'apps/cad-studio/scripts/cad-mcp.mjs', 'apps/cad-studio/src/storage/handleStore.ts',
-  'apps/cad-studio/src/storage/useProject.ts', 'packages/barocss-cad-model/src/engine/container.ts'];
+  'apps/cad-studio/src/storage/useProject.ts', 'apps/cad-studio/test/mcp-browser-session.mjs',
+  'packages/barocss-cad-model/src/engine/container.ts'];
 const f = await createFlow({
-  name: 'mcp-stale-save', envFrozen: 'D708_SOURCE_FROZEN', output, initialFiles: pins, requiredFrozen: pins,
-  qualification: 'D708 protects a newer Studio save from an external MCP session',
+  name: visual ? 'mcp-stale-visual-review' : 'mcp-stale-save', envFrozen: visual ? 'D2065_SOURCE_FROZEN' : 'D708_SOURCE_FROZEN',
+  output, initialFiles: pins, requiredFrozen: pins,
+  qualification: visual ? 'A Studio save invalidates accepted and pending visual reviews in an old file-backed MCP session.'
+    : 'D708 protects a newer Studio save from an external MCP session',
   limits: ['Only the native folder-picker boundary is replaced with a test directory handle. It reads and writes the same local disk file as the real MCP child. The Studio project store, controls, edits and Save/Open are real.'],
   inspectorSource: `
-import { rectanglePart } from '@barocss/cad-model/engine/doc';
-console.log(JSON.stringify(rectanglePart(80, 40, 8)));
+import { emptyDoc, rectanglePart, withNode } from '@barocss/cad-model/engine/doc';
+import { profileOf } from '@barocss/cad-model/sketch/loops';
+if (${visual}) {
+  const profile = profileOf([{ kind: 'polygon', closed: true, points: [[0,0],[80,0],[80,40],[0,40]],
+    ids: ['e1','e2','e3','e4'], hv: { h: [0,2], v: [1,3] } }]);
+  if (!('node' in profile)) throw new Error(profile.error);
+  console.log(JSON.stringify(withNode(withNode(emptyDoc(), profile.node), { kind:'extrude', sketch:0, height:8 })));
+} else console.log(JSON.stringify(rectanglePart(80, 40, 8)));
 `,
   oracleSource: String.raw`
 import hashlib, json, math, sys
@@ -31,11 +41,16 @@ for name, height, volume in [('initial', 8, 25600), ('newer', 9, 28800), ('fresh
     assert hashlib.sha256(raw).hexdigest() == witness['sha256']
     model = json.loads(raw)
     sketch, extrusion = model['nodes']
-    assert sketch['id'] == 'n0' and sketch['kind'] == 'sketch' and sketch['profile'] == 'rectangle'
-    assert sketch['min'] == [0, 0] and sketch['max'] == [80, 40]
+    assert sketch['id'] == 'n0' and sketch['kind'] == 'sketch'
+    if d.get('visual'):
+        assert sketch['outline']['points'] == [[0,0],[80,0],[80,40],[0,40]]
+        assert sketch['sideTags']['outer'] == ['e1','e2','e3','e4']
+    else:
+        assert sketch['profile'] == 'rectangle'
+        assert sketch['min'] == [0, 0] and sketch['max'] == [80, 40]
     assert extrusion['id'] == 'n1' and extrusion['kind'] == 'extrude' and extrusion['height'] == height
     assert model['outputs'] == {'b1': {'node': 1, 'side': 'solid'}}
-    assert (sketch['max'][0] - sketch['min'][0]) * (sketch['max'][1] - sketch['min'][1]) * extrusion['height'] == volume
+    assert 80 * 40 * extrusion['height'] == volume
     assert math.isclose(witness['volume'], volume, rel_tol=0, abs_tol=1e-7)
 print(json.dumps({'status': 'PASS', 'nativeVolumesMm3': [25600, 28800, 32000]}))
 `,
@@ -118,42 +133,88 @@ async function folderRequest({ op, path, create, bytes }) {
   return {};
 }
 
-async function withMcp(run) {
-  const child = spawn(process.execPath, [join(f.app, 'scripts/cad-mcp.mjs'), '--doc', target], { stdio: ['pipe', 'pipe', 'inherit'] });
-  const closed = once(child, 'close');
-  const lines = createInterface({ input: child.stdout }), replies = lines[Symbol.asyncIterator]();
-  let id = 0;
-  async function request(method, params) {
-    child.stdin.write(JSON.stringify({ jsonrpc: '2.0', id: ++id, method, params }) + '\n');
-    let timer;
-    try {
-      const reply = await Promise.race([replies.next(), new Promise((_, reject) => {
-        timer = setTimeout(() => reject(new Error('MCP reply timed out')), 15000);
-      })]);
-      assert.equal(reply.done, false);
-      const data = JSON.parse(reply.value);
-      assert.equal(data.id, id);
-      assert.equal(data.error, undefined);
-      return data.result;
-    } finally { clearTimeout(timer); }
-  }
-  try {
-    const init = await request('initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'D708', version: '0' } });
-    assert.equal(init.serverInfo.version, 'barocss-cad-tools-v2');
-    return await run((name, args) => request('tools/call', { name, arguments: args }));
-  } finally {
-    child.stdin.end();
-    lines.close();
-    let timer;
-    try {
-      const [code] = await Promise.race([closed, new Promise((_, reject) => {
-        timer = setTimeout(() => { child.kill('SIGTERM'); reject(new Error('Owned MCP session did not exit')); }, 5000);
-      })]);
-      assert.equal(code, 0);
-    } finally { clearTimeout(timer); }
-  }
+const session = { app: f.app, output: f.output, clientName: visual ? 'D2065' : 'D708', autonomy: visual ? 1 : 2 };
+const withMcp = (label, run) => withMcpSession(session, target, label, (_, request) =>
+  run((name, args) => request('tools/call', { name, arguments: args })));
+
+const contentOf = reply => JSON.parse(reply.content[0].text);
+const summary = async call => contentOf(await call('query', { action: 'summary' })).facts.volume;
+const revisionOf = async call => contentOf(await call('query', { action: 'rebuild' })).revision;
+async function imageOf(reply, label) {
+  assert.equal(reply.isError, false, JSON.stringify(reply.content[0]));
+  const [image] = reply.content.filter(item => item.type === 'image');
+  const bytes = Buffer.from(image.data, 'base64'), meta = contentOf(reply);
+  assert.equal(bytes.subarray(0, 8).toString('hex'), '89504e470d0a1a0a');
+  assert.equal(meta.imageSha256, sha256(bytes));
+  assert.equal(Object.keys(meta.views).length, 4);
+  await writeFile(join(output, label + '.png'), bytes, { flag: 'wx' });
+  return meta;
 }
-const summary = async call => JSON.parse((await call('query', { action: 'summary' })).content[0].text).facts.volume;
+
+function staleReview(reply) {
+  assert.equal(reply.isError, true);
+  assert.equal(contentOf(reply).code, 'STORAGE_CHANGED');
+  assert.match(contentOf(reply).error, /Reopen.*new cad-mcp session/);
+  assert.deepEqual(reply.content.map(item => item.type), ['text']);
+  assert.equal(reply.structuredContent, undefined);
+}
+
+async function stageReview() {
+  await withMcp('stage-visual-proposal', async call => {
+    const fields = contentOf(await call('query', { action: 'edit_fields', index: 0, includeSketchCorners: true }));
+    const corners = fields.sketchCorners.filter(({ point }) => (point[0] === 80 && point[1] === 0) ||
+      (point[0] === 0 && point[1] === 40)).map(item => item.sides);
+    assert.deepEqual(corners, [['e1', 'e2'], ['e3', 'e4']]);
+    const op = { action: 'edit', index: 0, expectedRevision: fields.revision,
+      sketchRound: { sketch: fields.id, corners, radius: 4 } };
+    const proposed = await call('proposals', { action: 'propose', title: 'Round two plate corners', ops: [{ tool: 'features', args: op }] });
+    assert.equal(proposed.isError, false, JSON.stringify(proposed));
+    assert.equal(contentOf(proposed).proposal, 'P1');
+    assert.equal(contentOf(proposed).applied, false);
+  });
+  return JSON.parse(await readFile(target, 'utf8'));
+}
+
+async function compareVisualReview(call, saveNewer) {
+  const baseRevision = await revisionOf(call);
+  const list = contentOf(await call('proposals', { action: 'list' })).proposals;
+  const { id, modelReviewRevision } = list[0];
+  assert.equal(id, 'P1');
+  assert.match(modelReviewRevision, /^[a-f0-9]{64}$/);
+  const base = { action: 'render', expectedRevision: baseRevision };
+  const candidate = { ...base, proposal: id, expectedProposalRevision: modelReviewRevision };
+  const accepted = await imageOf(await call('query', base), 'mcp-current-accepted');
+  const pending = await imageOf(await call('query', candidate), 'mcp-current-pending');
+  assert.notEqual(accepted.imageSha256, pending.imageSha256);
+  assert.equal(accepted.revision, baseRevision);
+  assert.equal(pending.candidate.baseRevision, baseRevision);
+  assert.notEqual(pending.revision, accepted.revision);
+  const faces = pending.cornerBatch.faces.map(face => face.name);
+  const inspect = { ...candidate, action: 'inspect', faces, expectedReviewRevision: pending.candidate.reviewRevision };
+  const prior = await call('query', inspect);
+  assert.equal(prior.isError, false);
+  assert.equal(contentOf(prior).imageSha256, pending.imageSha256);
+  assert.deepEqual(contentOf(prior).candidate, pending.candidate);
+  for (const { geometry } of contentOf(prior).faces) assert.ok(Math.abs(geometry.radius - 4) < 1e-8);
+  const newer = await saveNewer();
+  f.phase = 'Request accepted and pending review after a same-path Studio Save';
+  const replies = [];
+  for (const args of [base, candidate, inspect, { action: 'render' }]) replies.push(await call('query', args));
+  if (baseline) {
+    const oldAccepted = await imageOf(replies[0], 'mcp-stale-accepted');
+    const oldPending = await imageOf(replies[1], 'mcp-stale-pending');
+    assert.deepEqual(oldAccepted, accepted);
+    assert.deepEqual(oldPending, pending);
+    assert.equal(replies[2].isError, false);
+    assert.deepEqual(contentOf(replies[2]), contentOf(prior));
+    assert.equal(contentOf(replies[3]).imageSha256, accepted.imageSha256);
+  } else for (const reply of replies) staleReview(reply);
+  assert.deepEqual(await readFile(target), newer.bytes);
+  f.report.observations.push({ label: 'external-review', baseline, accepted, pending,
+    afterStudioSave: replies.map(reply => ({ error: reply.isError, contentKinds: reply.content.map(item => item.type), result: contentOf(reply) })) });
+  return { base, candidate, accepted, pending };
+}
+
 
 await f.run(async () => {
   await mkdir(root);
@@ -184,6 +245,15 @@ await f.run(async () => {
     await versions.getByRole('button', { name: 'Open folder', exact: true }).click();
     await versions.getByLabel('Project', { exact: true }).waitFor();
   };
+  const reopenProjectDocument = async doc => {
+    await versions.getByRole('button', { name: 'Close project', exact: true }).click();
+    await page.reload();
+    await page.waitForSelector('.viewport[data-renderer="webgpu"]');
+    await f.ready();
+    await openFolder();
+    await versions.getByRole('button', { name: 'Open ' + file, exact: true }).click();
+    await f.same(doc);
+  };
   const save = async label => {
     await button('Save').click();
     await versions.getByRole('list', { name: 'Project documents', exact: true }).getByText(file, { exact: true }).waitFor();
@@ -210,13 +280,34 @@ await f.run(async () => {
   await openFolder();
   const initial = await save('initial');
   const protocol = {};
-  let newer, newerDoc;
-  await withMcp(async call => {
-    initial.volume = await summary(call);
-    assert.equal(initial.volume, 25600);
+  let newer, newerDoc, visualResult;
+  const card = page.getByRole('listitem', { name: 'Proposal P1', exact: true });
+  if (visual) {
+    const staged = await stageReview();
+    await reopenProjectDocument(staged);
+    if (!(await card.isVisible())) await page.getByRole('button', { name: 'Chat', exact: true }).first().click();
+    await card.getByRole('button', { name: 'Preview', exact: true }).click();
+    await card.getByRole('button', { name: 'Hide', exact: true }).waitFor();
+    await f.same(staged);
+    await f.snapshot('Studio-current-pending-preview');
+    await card.getByRole('button', { name: 'Hide', exact: true }).click();
+  }
+  const saveNewer = async () => {
     newerDoc = await edit(9, 'Studio-edit-9');
     newer = await save('newer');
     assert.notEqual(newer.sha256, initial.sha256);
+    if (visual) {
+      await card.getByRole('button', { name: 'Rebase & preview', exact: true }).waitFor();
+      assert.equal(await card.getByRole('button', { name: 'Preview', exact: true }).isDisabled(), true);
+      await f.snapshot('Studio-stale-pending-after-save');
+    }
+    return newer;
+  };
+  await withMcp('original-session', async call => {
+    initial.volume = await summary(call);
+    assert.equal(initial.volume, 25600);
+    if (visual) { visualResult = await compareVisualReview(call, saveNewer); return; }
+    await saveNewer();
     f.phase = 'Refuse the stale external MCP edit after Studio has saved';
     const rejected = await call('features', { action: 'edit', index: 1, values: { h: 7 } });
     protocol.rejected = rejected;
@@ -227,26 +318,38 @@ await f.run(async () => {
     assert.match(protocol.unsaved.content.at(-1).text, /^Unsaved session model:/);
     assert.deepEqual(await readFile(target), newer.bytes);
   });
-  newer.volume = await withMcp(summary);
+  newer.volume = await withMcp('newer-session', async call => {
+    if (visual) {
+      const revision = await revisionOf(call), { accepted, base, candidate } = visualResult;
+      assert.notEqual(revision, base.expectedRevision);
+      const current = await imageOf(await call('query', { ...base, expectedRevision: revision }), 'mcp-reopened-accepted');
+      assert.equal(current.revision, revision);
+      assert.notEqual(current.imageSha256, accepted.imageSha256);
+      const staleBase = await call('query', candidate);
+      const staleProposal = await call('query', { ...candidate, expectedRevision: revision });
+      for (const [reply, code] of [[staleBase, 'MODEL_REVIEW_BASE_STALE'], [staleProposal, 'MODEL_REVIEW_PROPOSAL_STALE']]) {
+        assert.equal(reply.isError, true);
+        assert.equal(contentOf(reply).code, code);
+        assert.deepEqual(reply.content.map(item => item.type), ['text']);
+      }
+      assert.deepEqual(await readFile(target), newer.bytes);
+      f.report.observations.push({ label: 'fresh-file-review', current, staleBase: contentOf(staleBase), staleProposal: contentOf(staleProposal) });
+    }
+    return summary(call);
+  });
   assert.equal(newer.volume, 28800);
   await writeFile(join(output, 'mcp-replies.json'), JSON.stringify(protocol));
   await f.same(newerDoc);
   await f.snapshot('Studio-newer-file-protected');
 
   f.phase = 'Reopen the protected file and make a normal Studio edit';
-  await versions.getByRole('button', { name: 'Close project', exact: true }).click();
-  await page.reload();
-  await page.waitForSelector('.viewport[data-renderer="webgpu"]');
-  await f.ready();
-  await openFolder();
-  await versions.getByRole('button', { name: 'Open ' + file, exact: true }).click();
-  await f.same(newerDoc);
+  await reopenProjectDocument(newerDoc);
   await f.snapshot('Studio-reopens-9');
   await edit(10, 'Studio-edit-10');
   const fresh = await save('fresh');
-  fresh.volume = await withMcp(summary);
+  fresh.volume = await withMcp('fresh-session', summary);
   assert.equal(fresh.volume, 32000);
-  await f.runOracle({ initial, newer, fresh }, 'native-file-and-volume');
+  await f.runOracle({ initial, newer, fresh, visual }, 'native-file-and-volume');
   assert.deepEqual(f.report.downloads, []);
   assert.equal((await readdir(root)).some(name => name.endsWith('.tmp') || name.endsWith('.lock') || name.endsWith('.crswap')), false);
 });

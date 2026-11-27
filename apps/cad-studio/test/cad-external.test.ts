@@ -170,6 +170,59 @@ const plateBytes = (height: number) => Buffer.from(encodeStudioFile(rectanglePar
 const summary = { action: 'summary' };
 const heightEdit = (h: number) => ({ action: 'edit', index: 1, values: { h } });
 
+test('external visual review detects an equal-size, equal-time overwrite before returning old geometry', async () => {
+  const part = join(dir(), 'part.bcad'), initial = plateBytes(8), newer = plateBytes(9);
+  const time = new Date('2026-11-11T01:02:03Z');
+  writeFileSync(part, initial); utimesSync(part, time, time);
+  const before = statSync(part), session = client(['--doc', part]);
+  try {
+    await session.request('initialize', {});
+    const first = await session.call('query', { action: 'render' });
+    assert.equal(first.isError, false);
+    assert.equal(first.content.length, 2);
+    writeFileSync(part, newer); utimesSync(part, time, time);
+    const after = statSync(part);
+    assert.deepEqual([after.ino, after.size, after.mtimeMs], [before.ino, before.size, before.mtimeMs]);
+    for (const args of [{ action: 'render' }, { action: 'inspect', faces: ['n1.top'] }]) {
+      const reply = await session.call('query', args);
+      assert.equal(reply.isError, true);
+      assert.equal(JSON.parse(reply.content[0].text).code, 'STORAGE_CHANGED');
+      assert.equal(reply.content.length, 1);
+      assert.equal(reply.structuredContent, undefined);
+    }
+    assert.deepEqual(readFileSync(part), newer);
+    assert.equal(facts(await session.call('query', summary)).volume, 25600, 'session-only inspection is still available');
+  } finally { assert.equal(await session.close(), 0); }
+});
+
+test('external visual review suppresses a completed render if the file changes after admission', async () => {
+  const part = join(dir(), 'part.bcad'), initial = plateBytes(8), newer = plateBytes(9);
+  writeFileSync(part, initial);
+  const store = docStore(part), reviewProblem = store.reviewProblem!;
+  let checks = 0;
+  store.reviewProblem = () => {
+    const result = reviewProblem();
+    if (++checks === 1) writeFileSync(part, newer);
+    return result;
+  };
+  const input = new PassThrough(), output = new PassThrough();
+  const lines = createInterface({ input: output });
+  const replies: Record<string, any>[] = [];
+  lines.on('line', line => replies.push(JSON.parse(line)));
+  const served = serveMcp(store, input, output);
+  input.end(JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'query', arguments: { action: 'render' } } }) + '\n');
+  try {
+    await served;
+    assert.equal(checks, 2);
+    const reply = replies[0].result;
+    assert.equal(reply.isError, true);
+    assert.equal(JSON.parse(reply.content[0].text).code, 'STORAGE_CHANGED');
+    assert.equal(reply.content.length, 1);
+    assert.equal(reply.structuredContent, undefined);
+    assert.deepEqual(readFileSync(part), newer);
+  } finally { lines.close(); }
+});
+
 test('D708 external MCP rejects equal-size, equal-time changes and labels the retained unsaved model', async () => {
   const d = dir(), part = join(d, 'part.bcad'), initial = plateBytes(8), newer = plateBytes(9);
   const time = new Date('2026-11-11T01:02:03Z');
