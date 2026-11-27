@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D2053: [Keep two confirmed Flange references on fresh Open](notes/two-flange-reference-reopen-2026-11-27/README.md), #20. Verify both recovery orders in desktop Studio and reconcile the original issue criteria.
 - D2052: [Report held Fillet edges beside an independent box to the local Agent](notes/agent-held-fillet-box-companion-2026-11-27/README.md), #20. Match current native MCP choices to actual Studio review and retire the diagnostic on the repaired revision.
 - D2051: [Recover two held Fillet edges beside an independent box](notes/held-fillet-box-companion-2026-11-27/README.md), #20. Verify exact producer ownership, explicit full-document repair and desktop native Save and fresh Open.
 - D2050: [Retire a duplicate-edge notice after a valid Fillet pick](notes/held-fillet-duplicate-pick-notice-2026-11-27/README.md), #20. Verify both staged picks, real native Apply refusal, and desktop Save and fresh Open.
