@@ -117,7 +117,7 @@ test('invalid earlier sources and unsupported producer chains refuse without cha
   refused(doc => { doc.features.find(feature => feature.id === 'olderTool').height = 5; }, 'CAPABILITY');
   refused(doc => { doc.features.find(feature => feature.id === 'newerTool').height = 5; }, 'CAPABILITY');
   refused(doc => {
-    Object.assign(doc.features.find(feature => feature.id === 'olderSketch'), { profile: 'circle', center: [10, 9], radius: 1, sideTags: { outer: ['a'] } });
+    // The original rectangular-source certificate still does not accept a later circular cutter.
     Object.assign(doc.features.find(feature => feature.id === 'newerSketch'), { profile: 'circle', center: [11, 27], radius: 1, sideTags: { outer: ['p'] } });
   }, 'CAPABILITY');
   refused(doc => { doc.features.splice(4, 0, { id: 'movedTool', kind: 'translate', target: 'olderTool', offset: [0, 0, 0] }); doc.features.find(feature => feature.id === 'first').tool = 'movedTool'; }, 'CAPABILITY');

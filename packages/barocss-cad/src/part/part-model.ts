@@ -25,7 +25,7 @@ import { retainSweepCircularJoinBindings } from '../brep/sweep-circular-join-bin
 import { cylindricalWrapFeature } from '../features/cylindrical-wrap-feature.js';
 import { transformOperation } from './part-transform.js';
 import { priorCutRectangle, type PriorRectangularCut } from './part-prior-rectangular-cut.js';
-import { allowsLaterCircularCut, type PriorCircularCut, type PriorCircularPattern } from './part-prior-circular-cut.js';
+import type { PriorCircularCut, PriorCircularPattern } from './part-prior-circular-cut.js';
 import { blindDrillHoleOperation } from './part-blind-drill-hole.js';
 import { prismaticDetailOperation } from './part-prismatic-detail.js';
 import { profileSolidOperation } from './part-profile-solid.js';
@@ -370,7 +370,7 @@ function evaluateWith(input: CadPartDocument, previous: Cache | undefined, optio
       const selectedBrep = brepOf({ solid: selected.result.parts[0].solid }, selected.id);
       if (selectedBrep.bodies.length !== 1 || selectedBrep.bodies[0].kind !== 'solid') return fail('REFERENCE', 'feature pattern target must be one nonempty solid');
       if (source !== undefined) {
-        const label = `${pattern === 'straight-path' ? 'path' : pattern} feature pattern source`;
+        const label = `${pattern} feature pattern source`;
         const previous = ref(source, label), prototype = previous.author;
         const invalidChain = () => fail('REFERENCE', `${label} must be an earlier unsuppressed difference in the current target's direct Difference chain`);
         if (selected.part !== null || previous.part !== null || source !== previous.id || selected.id === previous.id
@@ -399,12 +399,11 @@ function evaluateWith(input: CadPartDocument, previous: Cache | undefined, optio
           link = parent;
         }
         links.reverse();
-        if (pattern === 'linear' || pattern === 'rectangular' || pattern === 'fill' || pattern === 'path' || pattern === 'straight-path') {
+        if (pattern === 'linear' || pattern === 'rectangular' || pattern === 'fill' || pattern === 'path') {
           const sourceTool = ref(prototype.tool, `${label} original cutter`);
           const sourceSketch = sourceTool.author?.kind === 'extrude' ? ref(sourceTool.author.sketch, `${label} original sketch`).author : undefined;
           if (sourceSketch?.kind === 'sketch' && sourceSketch.profile === 'circle') {
-            const allowedLater = allowsLaterCircularCut(pattern) ? 'rectangular or circular' : 'rectangular';
-            const requirement = `${label} needs one original circular extrusion followed by original ${allowedLater} extrusions on upright rectangular stock`;
+            const requirement = `${label} needs one original circular extrusion followed by original rectangular or circular extrusions on upright rectangular stock`;
             if (links.length < 2) return fail('CAPABILITY', requirement);
             const exactOriginal = (reference: unknown, profiles: readonly ('circle' | 'rectangle')[], what: string): Part => {
               const producer = ref(reference, what);
@@ -419,8 +418,7 @@ function evaluateWith(input: CadPartDocument, previous: Cache | undefined, optio
             };
             const stock = exactOriginal(prototype.target, ['rectangle'], 'source stock');
             const first = { result: links[0].result, cutter: exactOriginal(links[0].cutterRef, ['circle'], 'source circular cutter') };
-            const laterProfiles = allowsLaterCircularCut(pattern) ? ['rectangle', 'circle'] as const : ['rectangle'] as const;
-            const later = links.slice(1).map((link, i) => ({ result: link.result, cutter: exactOriginal(link.cutterRef, laterProfiles, `source later cutter ${i + 1}`) }));
+            const later = links.slice(1).map((link, i) => ({ result: link.result, cutter: exactOriginal(link.cutterRef, ['rectangle', 'circle'], `source later cutter ${i + 1}`) }));
             return { seed: solids(r, 'target')[0], tool: [first.cutter], priorCircular: { stock, first, later } };
           }
         }

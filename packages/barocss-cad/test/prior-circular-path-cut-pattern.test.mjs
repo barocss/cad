@@ -213,12 +213,7 @@ test('other curved circular-source Paths and old reference/value guards stay ref
   refused(doc => { doc.features.at(-1).source = 'first/0'; });
   refused(doc => { doc.features.splice(4, 0, { id: 'movedTool', kind: 'translate', target: 'circleTool', offset: [0, 0, 0] }); doc.features.find(f => f.id === 'first').tool = 'movedTool'; });
   refused(doc => { doc.features[2].holes = [[{ kind: 'arc', center: [10, 10], start: [11, 10], direction: 'ccw' }]]; doc.features[2].sideTags.holes = [['island']]; });
-  for (const rail of [quadratic(), quarter()]) refused(doc => {
-    doc.features.splice(-1, 0, { id: 'extraSketch', kind: 'sketch', profile: 'circle', center: [42, 22], radius: 2 },
-      { id: 'extraTool', kind: 'extrude', sketch: 'extraSketch', height: 10 },
-      { id: 'third', kind: 'difference', target: 'second', tool: 'extraTool' });
-    Object.assign(doc.features.at(-1), { target: 'third', path: rail, count: 2 });
-  }, ['CAPABILITY']);
+
 });
 
 test('omitted source keeps the existing current-rectangle Path recipe', () => {
@@ -230,3 +225,75 @@ test('omitted source keeps the existing current-rectangle Path recipe', () => {
   for (const k of [1, 2]) assert.ok(output.brep.faces.some(face => face.name === `laterTool.side[a]@${k}`));
   assert.ok(!output.brep.faces.some(face => face.name?.startsWith('circleTool.side[round]@')));
 });
+
+for (const { name, rail, pointAt, pitches, obstacle } of [
+  {
+    name: 'polynomial quadratic', rail: quadratic(), obstacle: [25, 20],
+    pitches: [14, 15, 10 + 5 * Math.SQRT2 * Math.asinh(1), 17],
+    pointAt(pitch) {
+      const primitive = x => 5 * Math.SQRT2 * (x * Math.hypot(1, x) + Math.asinh(x));
+      let lo = 0, hi = 1;
+      for (let i = 0; i < 55; i++) {
+        const t = (lo + hi) / 2;
+        if (primitive(2 * t - 1) - primitive(-1) < pitch) lo = t; else hi = t;
+      }
+      const t = (lo + hi) / 2;
+      return [10 + 40 * t - 20 * t * t, 10 + 20 * t * t];
+    },
+  }, {
+    name: 'canonical quarter arc', rail: quarter(), obstacle: [10 + 10 * Math.sqrt(3), 25],
+    pitches: [19, 20, 20 * Math.PI / 3, 22],
+    pointAt: pitch => [10 + 20 * Math.sin(pitch / 20), 10 + 20 * (1 - Math.cos(pitch / 20))],
+  },
+]) {
+  test(`mixed cuts on a ${name} preserve source ownership and refuse touching a newer bore`, () => {
+    const [startPitch, editPitch, tangent, overlap] = pitches;
+    const input = document(rail), repeat = input.features.pop();
+    input.parameters.pitch = startPitch;
+    input.features.push(
+      { id: 'newSketch', kind: 'sketch', profile: 'circle', center: obstacle, radius: 3, sideTags: { outer: ['newRound'] } },
+      { id: 'newTool', kind: 'extrude', sketch: 'newSketch', height: 10 },
+      { id: 'third', kind: 'difference', target: 'second', tool: 'newTool' });
+    const walls = brep => brep.faces.flatMap(face => {
+      const g = faceGeometry(face);
+      return g.kind === 'cylinder' ? [{ name: face.name, ...g }] : [];
+    });
+    const current = evaluateCadPart(input).outputs[0].brep, originals = walls(current);
+    input.features.push({ ...repeat, target: 'third', count: 2 });
+    const initial = evaluateCadPart(input), saved = saveCadPart(initial);
+    const edited = reevaluate(initial, { parameters: { pitch: editPitch } });
+    for (const [model, pitch] of [[initial, startPitch], [edited, editPitch]]) {
+      const brep = model.outputs[0].brep, report = checkBrep(brep, { strict: true });
+      assert.ok(report.valid, report.issues.join('\n'));
+      assert.equal(report.topology.length, 1);
+      assert.equal(report.topology[0].shells, 1);
+      assert.equal(report.topology[0].genus, 4);
+      const [x, y] = pointAt(pitch);
+      const volume = 23920 - 170 * Math.PI;
+      const mass = brepMassProperties(brep, 1);
+      near(mass.volume, volume);
+      near(mass.centroid[0], (717920 - Math.PI * (40 * (10 + x) + 90 * obstacle[0])) / volume);
+      near(mass.centroid[1], (479280 - Math.PI * (40 * (10 + y) + 90 * obstacle[1])) / volume);
+      const actual = walls(brep);
+      assert.equal(actual.length, 6);
+      assert.deepEqual(actual.filter(wall => originals.some(old => old.name === wall.name)), originals);
+      assert.deepEqual(laterWalls(brep), laterWalls(current));
+      assert.equal(actual.filter(wall => wall.name.includes('[round]@1') && wall.out === -1
+        && Math.abs(wall.r - 2) < 1e-8 && Math.hypot(wall.c[0] - x, wall.c[1] - y) < 1e-7).length, 2);
+      assert.deepEqual(loadCadPart(saveCadPart(model)).outputs[0].brep, brep);
+    }
+    for (const pitch of [tangent, overlap]) assert.throws(() => reevaluate(initial, { parameters: { pitch } }),
+      e => e instanceof CadPartError && e.feature === 'repeat' && e.code === 'GEOMETRY' && /disjoint from the newer cuts/.test(e.message));
+    assert.throws(() => reevaluate(initial, { parameters: { pitch: 33 } }),
+      e => e instanceof CadPartError && e.feature === 'repeat' && e.code === 'PARAMETER' && /path length/.test(e.message));
+    for (const variant of ['blind', 'nonlevel', 'uncertified']) {
+      const unsupported = structuredClone(input);
+      if (variant === 'blind') unsupported.features.find(f => f.id === 'newTool').height = 8;
+      else if (variant === 'nonlevel') unsupported.features.at(-1).path.controlPoints[1][2] = 1e-12;
+      else unsupported.features.at(-1).path.weights[1] = 0.75;
+      assert.throws(() => evaluateCadPart(unsupported),
+        e => e instanceof CadPartError && e.feature === 'repeat' && e.code === 'CAPABILITY');
+    }
+    assert.equal(saveCadPart(initial), saved);
+  });
+}

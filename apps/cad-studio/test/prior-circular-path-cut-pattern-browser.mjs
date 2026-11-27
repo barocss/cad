@@ -8,10 +8,11 @@ const quarter = process.argv.includes('--quarter');
 const quadratic = process.argv.includes('--quadratic');
 const mixed = process.argv.includes('--mixed');
 const entry = process.argv.includes('--history') ? 'History' : 'Browser';
-assert.ok([quarter, quadratic, mixed].filter(Boolean).length <= 1);
-const count = quarter || mixed ? 4 : 3;
-const spacing = quadratic ? 10 : quarter ? 8 : mixed ? 12.5 : 16;
-const revisedSpacing = quadratic ? 12 : quarter ? 9 : mixed ? 12 : 14;
+assert.ok(!(quarter && quadratic));
+const mixedCurved = mixed && (quarter || quadratic);
+const count = mixedCurved ? 2 : quarter || mixed ? 4 : 3;
+const spacing = mixedCurved ? (quadratic ? 14 : 19) : quadratic ? 10 : quarter ? 8 : mixed ? 12.5 : 16;
+const revisedSpacing = mixedCurved ? (quadratic ? 15 : 20) : quadratic ? 12 : quarter ? 9 : mixed ? 12 : 14;
 const centersOnQuarter = pitch => Array.from({ length: count }, (_, i) => {
   const a = i * pitch / 20;
   return [10 + 20 * Math.sin(a), 10 + 20 * (1 - Math.cos(a))];
@@ -30,6 +31,9 @@ const centersOnQuadratic = pitch => Array.from({ length: count }, (_, i) => {
   return [10 + 40 * t - 20 * t ** 2, 10 + 20 * t ** 2];
 });
 const centersOnMixedPath = pitch => [[10, 10], [10, 10 + pitch], [2 * pitch - 6, 26], [3 * pitch - 6, 26]];
+const laterCircle = mixedCurved ? (quadratic ? [25, 20] : [10 + 10 * Math.sqrt(3), 25]) : [38, 26];
+const tangentPitch = mixedCurved ? (quadratic ? 10 + 5 * Math.SQRT2 * Math.asinh(1) : 20 * Math.PI / 3) : 13;
+const overlapPitch = mixedCurved ? (quadratic ? 17 : 22) : 13.125;
 const placementTolerance = quadratic ? 1e-7 : 1e-8;
 const pins = ['apps/cad-studio/test/prior-circular-path-cut-pattern-browser.mjs', 'apps/cad-studio/test/prior-cut-pattern-browser-fixture.mjs',
   'apps/cad-studio/src/app/cutPatternSource.ts', 'packages/barocss-cad-model/src/engine/doc.ts',
@@ -39,9 +43,9 @@ const pins = ['apps/cad-studio/test/prior-circular-path-cut-pattern-browser.mjs'
   'packages/barocss-cad/src/part/part-prior-rectangular-cut.ts'];
 const f = await createFlow({
   name: 'prior-circular-path-cut-pattern', output: process.argv[2],
-  envFrozen: mixed ? 'D2034_SOURCE_FROZEN' : quadratic ? 'D1950_SOURCE_FROZEN' : quarter ? 'D1931_SOURCE_FROZEN' : 'D1911_SOURCE_FROZEN',
+  envFrozen: mixedCurved ? 'D2035_SOURCE_FROZEN' : mixed ? 'D2034_SOURCE_FROZEN' : quadratic ? 'D1950_SOURCE_FROZEN' : quarter ? 'D1931_SOURCE_FROZEN' : 'D1911_SOURCE_FROZEN',
   qualification: mixed ? `Repeat the selected original R2 after later R3 and rectangle through cuts via ${entry}.` : 'Repeat only the first original circular through-Subtract across one later rectangular through-Subtract.',
-  limits: ['One upright rectangular stock, two original full-height cuts and fixed-orientation copies on a linked, level XY path.'],
+  limits: ['One upright rectangular stock, only original full-height cuts and fixed-orientation copies on a linked, level XY path.'],
   initialFiles: pins, requiredFrozen: pins,
   inspectorSource: `
 import { readFileSync } from 'node:fs';
@@ -97,7 +101,7 @@ const stock = {
 };
 if (mixed) {
   stock.nodes.push(
-    { kind: 'sketch', profile: 'circle', center: [38, 26], radius: 3, id: 'n8' },
+    { kind: 'sketch', profile: 'circle', center: laterCircle, radius: 3, id: 'n8' },
     { kind: 'extrude', sketch: 8, height: 10, id: 'n9' },
     { kind: 'difference', parent: ref(7), tool: ref(9), id: 'n10' },
   );
@@ -112,7 +116,7 @@ const status = expected => panel().locator('.status').filter({ hasText: new RegE
 
 async function inspect(label, doc, centers, placed = false) {
   const bores = centers.map(center => [...center, 2]);
-  if (mixed) bores.push([38, 26, 3]);
+  if (mixed) bores.push([...laterCircle, 3]);
   const { check, caps, cylinders, mass } = await f.inspect(label, doc);
   assert.ok(check.valid, check.issues.join('\n'));
   assert.equal(check.topology.length, 1);
@@ -254,12 +258,12 @@ await f.run(async () => {
   const history = await stackState();
   f.report.observations.push({ entry, parent: ref(parentIndex), source: ref(4), path: { objectId } });
   if (baseline) {
-    await refused(doc, history, '01-circular-path-refused', quarter || quadratic ? /exact straight spans/ : undefined);
+    await refused(doc, history, '01-circular-path-refused', undefined);
     return;
   }
   await status('preview');
-  for (const [pitch, name, reason] of [[4, '02-source-touch-refused', /disjoint/], [quarter ? 11 : 21, '03-path-too-short', /exceeds.*path length/i],
-    ...(mixed ? [[13, '03a-later-r3-tangent-refused', /disjoint from the newer cuts/], [13.125, '03b-later-r3-overlap-refused', /disjoint from the newer cuts/]] : [])]) {
+  for (const [pitch, name, reason] of [[4, '02-source-touch-refused', /disjoint/], [mixedCurved ? 33 : quarter ? 11 : 21, '03-path-too-short', /exceeds.*path length/i],
+    ...(mixed ? [[tangentPitch, '03a-later-r3-tangent-refused', /disjoint from the newer cuts/], [overlapPitch, '03b-later-r3-overlap-refused', /disjoint from the newer cuts/]] : [])]) {
     await field(panel(), 'Spacing').fill(String(pitch));
     await refused(doc, history, name, reason);
     await field(panel(), 'Spacing').fill(String(spacing));

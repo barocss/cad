@@ -1,0 +1,200 @@
+{
+  "status": "PASS",
+  "qualification": "Repeat the selected original R2 after later R3 and rectangle through cuts via Browser.",
+  "observations": [
+    {
+      "label": "framing",
+      "tries": [
+        {
+          "canvas": [
+            0,
+            0,
+            1140,
+            1000
+          ],
+          "px": [
+            [
+              286.6695063157652,
+              444.44500458760115
+            ],
+            [
+              286.6553260456014,
+              722.2311034294453
+            ],
+            [
+              564.4445001238386,
+              444.44500458760115
+            ]
+          ],
+          "pxPerMm": 13.889583832292175,
+          "allOnCanvas": true
+        }
+      ]
+    },
+    {
+      "label": "tool-Centre arc",
+      "buttons": 1
+    },
+    {
+      "label": "original-circle-and-later-rectangle",
+      "centers": [
+        [
+          10,
+          10
+        ]
+      ],
+      "volume": 23511.592955033328,
+      "centroid": [
+        30.152728172130605,
+        20.030747400599488,
+        5
+      ],
+      "topology": {
+        "bodies": 1,
+        "shells": 1,
+        "faces": 14,
+        "loops": 20,
+        "coedges": 72,
+        "edges": 36,
+        "vertices": 24
+      }
+    },
+    {
+      "entry": "Browser",
+      "parent": {
+        "node": 10,
+        "side": "solid"
+      },
+      "source": {
+        "node": 4,
+        "side": "solid"
+      },
+      "path": {
+        "objectId": "obj_1"
+      }
+    },
+    {
+      "label": "path-native",
+      "centers": [
+        [
+          10,
+          10
+        ],
+        [
+          26.268310095787474,
+          18.36633821072233
+        ]
+      ],
+      "volume": 23385.929248889734,
+      "centroid": [
+        30.173600995548885,
+        20.039691061769133,
+        5
+      ],
+      "topology": {
+        "bodies": 1,
+        "shells": 1,
+        "faces": 16,
+        "loops": 24,
+        "coedges": 84,
+        "edges": 42,
+        "vertices": 28
+      }
+    },
+    {
+      "label": "path-edited-native",
+      "centers": [
+        [
+          10,
+          10
+        ],
+        [
+          26.82941969615793,
+          19.193953882637203
+        ]
+      ],
+      "volume": 23385.929248889734,
+      "centroid": [
+        30.170585887139687,
+        20.03524388964745,
+        5
+      ],
+      "topology": {
+        "bodies": 1,
+        "shells": 1,
+        "faces": 16,
+        "loops": 24,
+        "coedges": 84,
+        "edges": 42,
+        "vertices": 28
+      }
+    },
+    {
+      "label": "path-reopened-native",
+      "centers": [
+        [
+          10,
+          10
+        ],
+        [
+          26.82941969615793,
+          19.193953882637203
+        ]
+      ],
+      "volume": 23385.929248889734,
+      "centroid": [
+        30.170585887139687,
+        20.03524388964745,
+        5
+      ],
+      "topology": {
+        "bodies": 1,
+        "shells": 1,
+        "faces": 16,
+        "loops": 24,
+        "coedges": 84,
+        "edges": 42,
+        "vertices": 28
+      }
+    }
+  ],
+  "states": [
+    {
+      "label": "00-path-made-in-studio"
+    },
+    {
+      "label": "02-source-touch-refused"
+    },
+    {
+      "label": "03-path-too-short"
+    },
+    {
+      "label": "03a-later-r3-tangent-refused"
+    },
+    {
+      "label": "03b-later-r3-overlap-refused"
+    },
+    {
+      "label": "04-circular-path-applied"
+    },
+    {
+      "label": "05-path-spacing-edited"
+    },
+    {
+      "label": "06-fresh-open-circular-path"
+    }
+  ],
+  "errors": [],
+  "consoleErrors": [],
+  "changes": [],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "sourceCount": 1245,
+  "limits": [
+    "One upright rectangular stock, only original full-height cuts and fixed-orientation copies on a linked, level XY path."
+  ]
+}
