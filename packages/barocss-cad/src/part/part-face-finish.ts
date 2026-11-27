@@ -21,7 +21,7 @@ interface FaceFinishHelpers {
   readonly brepOf: (part: Part, id: string) => Brep;
   readonly namedFaceTargetBrep: (t: Tools, target: unknown, part: Part) => Brep;
   readonly originalRectangularPrism: (target: unknown, part: Part, t: Tools, label: string) => boolean;
-  readonly originalHexagonalPrism: (target: unknown, part: Part, t: Tools, label: string) => boolean;
+  readonly originalPolygonPrism: (target: unknown, part: Part, t: Tools, label: string) => boolean;
   readonly rotatedRectangularPrism: (target: unknown, part: Part, t: Tools, label: string) => RotatedBoxStock | undefined;
   readonly bounds: (solid: Solid) => { min: Point; max: Point };
   readonly boxSolid: (min: Point, max: Point, tag: string) => Solid;
@@ -187,7 +187,7 @@ export function faceFinishOperation(f: CadPartFeature & Record<string, unknown>,
       if (typeof angle !== 'number' || !Number.isFinite(angle) || angle === 0 || Math.abs(angle) >= 45) fail('INPUT', 'angle must be a number of degrees, not 0, below 45 in size');
       if (target.length !== 1) fail('REFERENCE', 'draft one part at a time (name it as id/k)');
       let rotatedStock: RotatedBoxStock | undefined;
-      let hexagonalStock = false;
+      let polygonStock = false;
       if (hinge !== undefined) {
         if (typeof hinge !== 'string' || hinge.length === 0 || names.length !== 1 || f.neutral !== undefined)
           fail('INPUT', 'Draft about an edge needs one edge name, one face name and an explicit pull from the edge.');
@@ -195,8 +195,8 @@ export function faceFinishOperation(f: CadPartFeature & Record<string, unknown>,
           rotatedStock = k.rotatedRectangularPrism(f.target, target[0], t, 'Draft edge target');
           if (!rotatedStock) fail('INPUT', 'Draft about an edge needs one edge name, one face name and an explicit pull from the edge.');
         } else if (!k.originalRectangularPrism(f.target, target[0], t, 'Draft edge target')) {
-          hexagonalStock = k.originalHexagonalPrism(f.target, target[0], t, 'Draft edge target');
-          if (!hexagonalStock) fail('CAPABILITY', 'Draft about an edge needs an original rectangular extrusion. An original upright convex hexagonal extrusion also supports one side about its cap edge with signed Z pull.');
+          polygonStock = k.originalPolygonPrism(f.target, target[0], t, 'Draft edge target');
+          if (!polygonStock) fail('CAPABILITY', 'Draft about an edge needs an original rectangular extrusion. An original upright convex polygon extrusion also supports one side about its cap edge with signed Z pull.');
         }
       }
       const neutral = f.neutral === undefined ? undefined : dim(f.neutral as CadPartDim, 'neutral');
@@ -207,8 +207,8 @@ export function faceFinishOperation(f: CadPartFeature & Record<string, unknown>,
         if (typeof hinge === 'string' && rotatedStock) return one({ kind: 'brep',
           brep: draftRotatedBoxHinge(k.namedFaceTargetBrep(t, f.target, target[0]), rotatedStock, names[0], hinge,
             (angle as number) * Math.PI / 180, at, fail) });
-        if (typeof hinge === 'string' && hexagonalStock) {
-          if (pull !== 'z' && pull !== '-z') return fail('SELECTION', 'Pivot face on a hexagonal extrusion needs a signed world Z pull.');
+        if (typeof hinge === 'string' && polygonStock) {
+          if (pull !== 'z' && pull !== '-z') return fail('SELECTION', 'Pivot face on a polygon extrusion needs a signed world Z pull.');
           return one({ kind: 'brep', brep: pivotPrismWall(k.namedFaceTargetBrep(t, f.target, target[0]), names[0], hinge,
             (angle as number) * Math.PI / 180, pull, fail) });
         }

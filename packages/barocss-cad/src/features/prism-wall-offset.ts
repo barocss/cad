@@ -80,7 +80,7 @@ function keepsSection(points: readonly Point[], walls: readonly Wall[], selected
 }
 
 /** Prove both straight cap rings and their matching wall loops from native incidence. */
-function admittedPrism(brep: Brep): Prism | undefined {
+function admittedPrism(brep: Brep, includeRectangles = false): Prism | undefined {
   const { bodies, shells, faces, loops, coedges, edges, vertices } = brep;
   const count = faces.length - 2;
   if (!supportsPrismSides(count) || bodies.length !== 1 || bodies[0].kind !== 'solid' || shells.length !== 1 || bodies[0].shells.length !== 1
@@ -169,8 +169,8 @@ function admittedPrism(brep: Brep): Prism | undefined {
     if (!face.chart.surface.controlPoints.flat().every(point => Math.abs(dot(sub(point, origin), normal)) <= roundoff)) return undefined;
     walls.push({ face, origin, normal });
   }
-  // Four right angles identify a rectangle, which has its own replacement path.
-  if (count === 4 && walls.every(({ normal }, i) => Math.abs(dot(normal, walls[next(i, count)].normal)) <= allowance(1))) return undefined;
+  // Replacement retains its separate rectangular path. Pivot alone also admits rectangular polygon stock.
+  if (!includeRectangles && count === 4 && walls.every(({ normal }, i) => Math.abs(dot(normal, walls[next(i, count)].normal)) <= allowance(1))) return undefined;
   if (!keepsSection(upper.map(vertex => vertex.point), walls, -1, 0, extent)
     || !checkBrep(brep, { strict: true }).valid) return undefined;
   return { caps: [caps[0], caps[1]], walls, lower, upper, extent };
@@ -195,9 +195,9 @@ function namedPrismFace(brep: Brep, name: string, kind: 'cap' | 'wall'): boolean
   return (Math.abs(z) > Math.hypot(x, y)) === (kind === 'cap');
 }
 
-function admittedWallPrism(brep: Brep, faceName: string): WallPrism | undefined {
+function admittedWallPrism(brep: Brep, faceName: string, includeRectangles = false): WallPrism | undefined {
   if (!namedPrismFace(brep, faceName, 'wall')) return undefined;
-  const prism = admittedPrism(brep);
+  const prism = admittedPrism(brep, includeRectangles);
   if (!prism) return undefined;
   const selected = prism.walls.findIndex(wall => wall.face.original.name === faceName);
   if (selected < 0) return undefined;
@@ -440,15 +440,15 @@ export function replacePrismWallIfAdmitted(brep: Brep, faceName: string, plane: 
 
 type PivotFailure = (code: 'INPUT' | 'CAPABILITY' | 'REFERENCE' | 'SELECTION' | 'GEOMETRY', detail: string) => never;
 
-/** Turn one original hexagonal wall about its exact shared edge with the signed world-Z start cap. */
+/** Turn one original convex polygon wall about its exact shared edge with the signed world-Z start cap. */
 export function pivotPrismWall(brep: Brep, faceName: string, edgeName: string, angle: number, pull: 'z' | '-z', refuse: PivotFailure): Brep {
   if (!Number.isFinite(angle) || angle === 0 || Math.abs(angle) >= Math.PI / 4)
     return refuse('INPUT', 'Pivot face needs a nonzero angle below 45 degrees in size.');
   const faces = brep.faces.filter(face => face.name === faceName), edges = brep.edges.filter(edge => edge.name === edgeName);
   if (faces.length !== 1 || edges.length !== 1)
     return refuse('REFERENCE', 'The original Pivot face or edge is missing or ambiguous.');
-  const prism = brep.faces.length === HEXAGON_SIDE_COUNT + 2 && admittedWallPrism(brep, faceName);
-  if (!prism) return refuse('CAPABILITY', 'Pivot face needs an original upright wall of one straight convex hexagonal extrusion.');
+  const prism = admittedWallPrism(brep, faceName, true);
+  if (!prism) return refuse('CAPABILITY', 'Pivot face needs an original upright wall of one straight convex polygon extrusion.');
   const wall = prism.walls[prism.selected], [edge] = edges;
   const uses = brep.coedges.filter(use => use.edge === edge.id);
   const incident = uses.map(use => brep.loops.find(loop => loop.id === use.loop)?.face);

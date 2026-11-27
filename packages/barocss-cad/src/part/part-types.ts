@@ -206,7 +206,7 @@ export type CadPartFeature = Base & (
   | { readonly kind: 'draft'; readonly target: string; readonly faces: readonly string[]; readonly angle: number;
     readonly pull?: CadPartAxis | '-x' | '-y' | '-z'; readonly neutral?: CadPartDim;
     /** Original edge shared by the moving face and pull-start face. Explicit pull stays a world axis.
-     * An original upright convex hexagonal extrusion admits one side and an original cap edge with z/-z pull.
+     * An original upright convex polygon extrusion admits one side and an original cap edge with z/-z pull.
      * With pull omitted, an original rectangular stock's authored Move/Rotate chain (at least one Rotate)
      * derives the pull from that edge's other original stock support. */
     readonly hingeEdge?: string; readonly expect?: Readonly<Record<string, CadPartNameSignature>> }

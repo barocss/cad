@@ -696,8 +696,8 @@ function originalRectangularPrism(reference: unknown, part: Part, t: Tools, labe
   return name !== undefined && !!boxFaceReplacementFrame(brep, name);
 }
 
-/** An authored six-point straight polygon, with only owned single-part Move wrappers. Native admission proves convexity. */
-function originalHexagonalPrism(reference: unknown, part: Part, t: Tools, label: string): boolean {
+/** An authored straight polygon, with only owned single-part Move wrappers. Native admission proves convexity. */
+function originalPolygonPrism(reference: unknown, part: Part, t: Tools, label: string): boolean {
   let current = t.ref(reference, label), owner = part;
   const seen = new Set<string>();
   for (;;) {
@@ -711,12 +711,13 @@ function originalHexagonalPrism(reference: unknown, part: Part, t: Tools, label:
   }
   if (current.author?.kind !== 'extrude' || (current.author.draft !== undefined && current.author.draft !== 0)) return false;
   const sketch = t.ref(current.author.sketch, `${label} sketch`);
-  if (sketch.author?.kind !== 'sketch' || sketch.author.profile !== 'polygon' || sketch.author.points.length !== 6
+  if (sketch.author?.kind !== 'sketch' || sketch.author.profile !== 'polygon'
+    || sketch.author.points.length < 3 || sketch.author.points.length > CadPartLimits.points
     || sketch.result.kind !== 'sketch' || sketch.result.regions?.length || sketch.result.holes?.length) return false;
   if (part.solid.kind !== 'upright') return false;
   const slabs = part.solid.solid.slabs, section = slabs[0]?.regions[0];
   return slabs.length === 1 && slabs[0].regions.length === 1 && !!section && section.holes.length === 0
-    && section.outer.length === 6 && section.outer.every(segment => segment.kind === 'line');
+    && section.outer.length === sketch.author.points.length && section.outer.every(segment => segment.kind === 'line');
 }
 
 /** The original stock and its authored rigid placements, not an inverse-transformed approximation. */
@@ -1409,4 +1410,4 @@ const PRISMATIC_DETAIL_HELPERS = Object.freeze({ CadPartLimits, lineOnly, brepOf
 const PROFILE_SOLID_HELPERS = Object.freeze({ isRecord, CadPartLimits, placed, sweepBrep, guideInFrame });
 
 // Captured only after this module's constants initialize; original functions retain their shared runtime state.
-const FACE_FINISH_HELPERS = Object.freeze({ CadPartLimits, brepOf, namedFaceTargetBrep, originalRectangularPrism, originalHexagonalPrism, rotatedRectangularPrism, bounds, boxSolid, boolean, empty, exactVolume, faceVertices, affine, draftWedge });
+const FACE_FINISH_HELPERS = Object.freeze({ CadPartLimits, brepOf, namedFaceTargetBrep, originalRectangularPrism, originalPolygonPrism, rotatedRectangularPrism, bounds, boxSolid, boolean, empty, exactVolume, faceVertices, affine, draftWedge });

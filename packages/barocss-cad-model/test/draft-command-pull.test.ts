@@ -17,6 +17,13 @@ const ctxOn = (doc: StudioDoc, normals: [number, number, number][]): Ctx => {
   const bodies = bodiesOf(doc); return { doc, bodies, selection: { faces: normals.map(n => ({ body: 0, face: facing(bodies[0], n) })), edges: [], bodies: [] } };
 };
 const volume = (doc: StudioDoc) => { const v = bodiesOf(doc)[0].volume; assert.ok(v !== null); return v; };
+const pivotContext = (doc: StudioDoc, face: string, edge: string): Ctx => {
+  const bodies = bodiesOf(doc), [body] = bodies;
+  return { doc, bodies, selection: { bodies: [],
+    faces: [{ body: 0, face: body.mesh.faces.findIndex(member => member.nativePlaneName === face) }],
+    edges: [{ body: 0, edge: body.mesh.edges.findIndex(member => member.names.includes(edge)) }],
+  } };
+};
 
 test('Pivot face History only accepts exact edges on its original face and ignores a no-op', () => {
   const stock = rectanglePart(40, 20, 12), pick = ctxOn(stock, [[0, -1, 0]]);
@@ -87,15 +94,8 @@ test('hexagonal Pivot face accepts both cap edges of the original wall and keeps
   ] };
   const moved = withNode(stock, { kind: 'translate', parent: { node: 1, side: 'solid' }, offset: [5, 2, 3] });
   const face = 'n1.side1', lower = 'n1.bottom|n1.side1', upper = 'n1.side1|n1.top';
-  const ctxFor = (doc: StudioDoc, pickedFace: string, name: string): Ctx => {
-    const bodies = bodiesOf(doc), [body] = bodies;
-    return { doc, bodies, selection: { bodies: [],
-      faces: [{ body: 0, face: body.mesh.faces.findIndex(member => member.nativePlaneName === pickedFace) }],
-      edges: [{ body: 0, edge: body.mesh.edges.findIndex(edge => edge.names.includes(name)) }],
-    } };
-  };
   const deg = Math.atan(1 / 5) * 180 / Math.PI;
-  const ctx = ctxFor(moved, face, lower);
+  const ctx = pivotContext(moved, face, lower);
   assert.ok(pivotFaceCommand.available(ctx).ok);
   const command = pivotFaceCommand.build!;
   const accepted = command(ctx, { deg }), index = 3, pivot = accepted.nodes[index];
@@ -116,9 +116,33 @@ test('hexagonal Pivot face accepts both cap edges of the original wall and keeps
   assert.ok(Math.abs(volume(changed) - expected) < 1e-7);
 
   const rotated = withNode(stock, { kind: 'rotate', parent: { node: 1, side: 'solid' }, axis: 'x', angle: 19 });
-  for (const wrong of [ctxFor(moved, face, 'n1.side0|n1.side1'), ctxFor(moved, 'n1.bottom', lower), ctxFor(rotated, face, lower)]) {
+  for (const wrong of [pivotContext(moved, face, 'n1.side0|n1.side1'), pivotContext(moved, 'n1.bottom', lower), pivotContext(rotated, face, lower)]) {
     assert.equal(pivotFaceCommand.available(wrong).ok, false);
     assert.throws(() => command(wrong, { deg }), /original cap edge/);
+  }
+});
+
+test('triangular and octagonal Pivot faces keep cap-edge choices and the original angle handle', () => {
+  const shapes = [
+    { points: [[0, 0], [24, 0], [6, 16]], expected: 1690 },
+    { points: [[4, 0], [16, 0], [20, 4], [20, 12], [16, 16], [4, 16], [0, 12], [0, 4]], expected: 8240 / 3 },
+  ] satisfies { points: [number, number][]; expected: number }[];
+  const lower = 'n1.bottom|n1.side0', upper = 'n1.side0|n1.top', deg = Math.atan(1 / 5) * 180 / Math.PI;
+  for (const { points, expected } of shapes) {
+    const box = rectanglePart(24, 16, 10);
+    const stock: StudioDoc = { ...box, nodes: [{ kind: 'sketch', id: 'n0', profile: 'polygon', points }, box.nodes[1]] };
+    const ctx = pivotContext(stock, 'n1.side0', lower);
+    assert.ok(pivotFaceCommand.available(ctx).ok);
+    assert.equal(pivotFaceCommand.handles!(ctx, { deg })[0].arc?.worldPlane, true);
+    const first = pivotFaceCommand.build!(ctx, { deg }), edit = editSavedPivotFaceCommand(first, 2, ctx.bodies[0]);
+    assert.ok(edit?.build && edit.defaults && edit.handles);
+    const history = { ...ctx, doc: first }, values = { ...edit.defaults(history), hingeEdge: upper };
+    const revised: StudioDoc = edit.build(history, values);
+    const node = revised.nodes[2];
+    assert.ok(node.kind === 'draft');
+    assert.deepEqual([node.hingeEdge, node.pull, node.angle], [upper, '-z', deg]);
+    assert.equal(edit.handles(history, values)[0].arc?.worldPlane, true);
+    assert.ok(Math.abs(volume(first) - expected) < 1e-7 && Math.abs(volume(revised) - expected) < 1e-7);
   }
 });
 

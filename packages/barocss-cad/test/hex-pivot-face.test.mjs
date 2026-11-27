@@ -122,14 +122,14 @@ test('hexagonal Pivot refuses wrong native ownership, pull, collapse and coordin
   check(document({ angle: -theta, moves: [[9975, 0, 0]] }), 'GEOMETRY', /modeling coordinate range/);
 });
 
-test('hexagonal Pivot admits only an original six-point convex straight stock and Move wrappers', () => {
+test('hexagonal Pivot admits only an original convex straight stock and Move wrappers', () => {
   const check = input => {
     const before = structuredClone(input);
     assert.throws(() => evaluateCadPart(input), error => error.code === 'CAPABILITY'); assert.deepEqual(input, before);
   };
   const drafted = document(); drafted.features[1].draft = 2; check(drafted);
   const concave = document(); concave.features[0] = { ...concave.features[0], points: [[0, 0], [18, 0], [10, 7], [18, 16], [0, 16], [-6, 8]] }; check(concave);
-  const pentagon = document(); pentagon.features[0] = { ...pentagon.features[0], points: footprint.slice(0, 5) }; check(pentagon);
+  const redundant = document(); redundant.features[0] = { ...redundant.features[0], points: [[0, 0], [9, 0], ...footprint.slice(1)] }; check(redundant);
   const holed = document(); holed.features[0] = { ...holed.features[0], holes: [[{ kind: 'arc', start: [5, 4], center: [4, 4], direction: 'ccw' }]] }; check(holed);
   for (const feature of [
     { kind: 'rotate', axis: 'z', angle: 0 }, { kind: 'scale', factor: 1 },

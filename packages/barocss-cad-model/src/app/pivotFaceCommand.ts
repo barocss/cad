@@ -10,7 +10,7 @@ import { pivotFaceAngleHandle } from './pivotFaceHandle';
 
 export const PIVOT_FACE = 'pivot-face';
 
-const selectionReason = 'Select a face and Shift-select its straight edge on rectangular stock, or select an upright hexagonal wall and its original cap edge.';
+const selectionReason = 'Select a face and Shift-select its straight edge on rectangular stock, or select an upright convex polygon wall and its original cap edge.';
 const angleField = { key: 'deg', label: 'Angle', kind: 'deg', min: -45, max: 45, step: 1 } as const;
 
 export function pivotStockHinge(body: BodyResult, faceIndex: number, edgeIndex: number, mode: PivotStockMode) {
@@ -22,7 +22,7 @@ export function pivotStockHinge(body: BodyResult, faceIndex: number, edgeIndex: 
     const label = supportName.endsWith('.top') ? 'Original top' : supportName.endsWith('.bottom') ? 'Original bottom' : supportName;
     return { ...names, pull: undefined, label };
   }
-  if (mode === 'hexagonal') {
+  if (mode === 'polygon') {
     if (other.nativeAxisPlane?.axis !== 'z' || other.exact?.kind !== 'plane' || face.exact?.kind !== 'plane'
       || Math.abs(face.exact.n[2]) > 1e-9 || Math.abs(other.exact.n[2]) < 1 - 1e-9) return;
     const bottom = other.exact.n[2] < 0;
