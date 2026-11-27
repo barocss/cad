@@ -966,8 +966,7 @@ export function directFaceDocumentProblem(input: unknown): string | null {
       if (parent.kind === 'draft' || parent.kind === 'offset-face') continue;
       if (parent.kind === 'extrude') {
         if (typeof parent.draft === 'number' && Number.isFinite(parent.draft) && parent.draft !== 0) continue;
-        if (isStraightHexagonalExtrusion(value.nodes, parent)) continue;
-        if (node.target === undefined && isStraightPolygonOffsetSource(value.nodes, parent)) continue;
+        if (isStraightHexagonalExtrusion(value.nodes, parent) || isStraightPolygonOffsetSource(value.nodes, parent)) continue;
       }
       return 'Offset face: the parent must be Draft, a drafted extrusion, a box, a supported straight polygon extrusion, a supported through-hole plate, or a previous face offset.';
     }

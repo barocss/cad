@@ -478,7 +478,7 @@ export function resolveDirectOffsetFace(ctx: Ctx): {
   const frame = boredPlate ? boredCapOffsetFrame(brep, display.name) ?? boredPlateWallOffsetFrame(brep, display.name)
     : boxCap ? boxCapOffsetFrame(brep, display.name)
       : draftedFaceOffsetFrame(brep, display.name) ?? prismWallOffsetFrame(brep, display.name, polygonWall);
-  return frame ? { parent: ref, face: display.name, ...frame, allowsPlane: !boredPlate && !boxCap && !polygonWall } : undefined;
+  return frame ? { parent: ref, face: display.name, ...frame, allowsPlane: !boredPlate && !boxCap } : undefined;
 }
 
 /** Current native semantic identity is resolved before qualification; every returned snapshot is owned. */

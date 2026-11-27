@@ -145,3 +145,26 @@ test('reference loss, synthetic recipes, tilt and collapse refuse atomically', a
   assert.ok(bad.isError && !bad.changed, bad.content);
   assert.match(bad.content, /parallel/i);
 });
+
+test('an original triangular wall binds to a donor through the same revision-pinned local tool', async () => {
+  let doc = withNode(emptyDoc(), { kind: 'sketch', profile: 'polygon', points: [[0, 0], [24, 0], [6, 16]] });
+  doc = withNode(doc, { kind: 'extrude', sketch: 0, height: 10 });
+  doc = withNode(doc, { kind: 'sketch', profile: 'rectangle', min: [4, -3], max: [14, -2] });
+  doc = withNode(doc, { kind: 'extrude', sketch: 2, from: 30, height: 10 });
+  doc = withNode(doc, { kind: 'translate', parent: { node: 3, side: 'solid' }, offset: [0, 0, 0] });
+  const state = { doc, bodies: evaluated(doc) };
+  const evaluate = async (candidate: StudioDoc) => evaluateDoc(candidate, 0);
+  const current = await dispatchTool(state, 'query', { action: 'rebuild' }, evaluate);
+  assert.ok(!current.isError, current.content);
+  const result = await dispatchTool(state, 'features', { action: 'command', command: 'offset-face',
+    expectedRevision: JSON.parse(current.content).revision, faces: ['n1.side0', 'n3.side2'], values: { offsetMode: 'to-plane' } }, evaluate);
+  assert.ok(result.changed && !result.isError, result.content);
+  const applied = result.state.doc, feature = applied.nodes[5];
+  assert.ok(feature.kind === 'offset-face' && feature.target && feature.distance === undefined);
+  assert.deepEqual([feature.faces, feature.target.feature, feature.target.face], [['n1.side0'], 'n4', 'n3.side2']);
+  assert.equal(offsetFaceDocumentProblem(applied), null);
+  assert.equal(result.state.bodies.find(body => body.key === 'b5')?.volume, 2430);
+  const moved = moveReference(applied, 0, 4);
+  assert.equal(moved.nodes[5], feature);
+  assert.equal(evaluated(moved).find(body => body.key === 'b5')?.volume, 1470);
+});

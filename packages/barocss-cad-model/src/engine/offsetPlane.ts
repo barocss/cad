@@ -7,7 +7,7 @@ import { annularCapReplacementFrame, boredCapReplacementFrame, circularCapReplac
 import { exactSemicylinderCapOffsetFrame, exactSemicylinderCapReplacementAfterWallFrame, exactSemicylinderCapReplacementFrame } from '@barocss/cad/internal/exact-cylinder-cap-offset';
 import { exactPairedElbowOutletOffsetFrame, exactPerpendicularAnnularInletOffsetFrame, exactPerpendicularAnnularOutletOffsetFrame } from '@barocss/cad/internal/exact-paired-elbow-offset';
 import { prismCapReplacementFrame, prismWallOffsetFrame, prismWallReplacementFrame } from '@barocss/cad/internal/prism-wall-offset';
-import { exactSemicylinderCapAfterWall, exactSemicylinderCapSource, isPairedFiveSpanCapPlaneSource, pairedFiveSpanOppositeReplacementSourceIndex, sweepOffsetPlaneSource, type OffsetFaceNode, type OffsetPlaneRef, type ReplaceFaceNode, type StudioDoc } from './doc';
+import { exactSemicylinderCapAfterWall, exactSemicylinderCapSource, isPairedFiveSpanCapPlaneSource, isStraightPolygonOffsetSource, pairedFiveSpanOppositeReplacementSourceIndex, sweepOffsetPlaneSource, type OffsetFaceNode, type OffsetPlaneRef, type ReplaceFaceNode, type StudioDoc } from './doc';
 import { featureId } from './ids';
 import { refusal } from './refusal';
 import { cross, dot, len, sub, type Vec3 } from './vec3';
@@ -97,7 +97,8 @@ export function resolveOffsetPlaneDistance(doc: StudioDoc, binding: OffsetPlaneR
       id: cap.id, surface: { ...owner.surface, kind: 'surface', id: 'surface' }, thickness: cap.thickness, side: owner.side,
     });
   } else {
-    frame = draftedFaceOffsetFrame(source, face) ?? prismWallOffsetFrame(source, face);
+    frame = draftedFaceOffsetFrame(source, face)
+      ?? prismWallOffsetFrame(source, face, isStraightPolygonOffsetSource(doc.nodes, owner));
   }
   if (!frame) throw missing('the original face no longer supports this direct edit.');
   const plane = checkedPlane(target, binding, missing);

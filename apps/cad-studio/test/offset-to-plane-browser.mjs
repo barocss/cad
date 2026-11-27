@@ -4,8 +4,17 @@ import { createFlow } from './flow-helper.mjs';
 
 const output = process.argv[2];
 assert.ok(output && relative(resolve(import.meta.dirname, '../../..'), resolve(output)).startsWith('../'));
-const axisAligned = process.argv[3] === 'axis';
-const fixture = axisAligned ? {
+const axisAligned = process.argv.includes('axis');
+const octagon = process.argv.includes('octagon');
+const baselineRun = process.argv.includes('--baseline');
+const fixture = octagon ? {
+  sourceSketch: [[4, 0], [16, 0], [20, 4], [20, 12], [16, 16], [4, 16], [0, 12], [0, 4]],
+  sketch: { profile: 'rectangle', min: [4, -3], max: [14, -2] },
+  sourceFace: 'n1.side0', sourceView: 'Front', sourcePoint: [10, 0, 5], sourceNormal: '0, -1, 0',
+  topPoint: [9, -2.5, 40], referenceView: 'Back', referencePoint: [9, -2, 35], referenceFace: 'n3.side2',
+  move: [0, 4], retargetView: 'Front', retargetPoint: [9, 1, 35], retargetFace: 'n3.side0',
+  supports: [-2, 2, 1], collapse: [0, -4, 0],
+} : axisAligned ? {
   sketch: { profile: 'rectangle', min: [4, -1], max: [14, 4] },
   sourceFace: 'n1.side0', sourceView: 'Front', sourcePoint: [9, 0, 5], sourceNormal: '0, -1, 0',
   topPoint: [9, 1.5, 40], referenceView: 'Front', referencePoint: [9, -1, 35], referenceFace: 'n3.side0',
@@ -29,7 +38,7 @@ const pins = [
 const f = await createFlow({
   name: 'offset-to-plane', envFrozen: 'D1265_SOURCE_FROZEN', output, initialFiles: pins, requiredFrozen: pins,
   qualification: 'Pick and edit a live native reference plane for Offset face in desktop Studio.',
-  limits: ['One upright convex hexagonal source, one disconnected planar-sided reference solid and two selected parallel walls.'],
+  limits: [`One upright convex ${octagon ? 'octagonal' : 'hexagonal'} source, one disconnected planar-sided reference solid and two selected parallel walls.`],
   inspectorSource: `
 import { readFileSync } from 'node:fs';
 import { brepMassProperties, checkBrep, faceGeometry } from '@barocss/cad';
@@ -59,7 +68,11 @@ import json,math,sys
 from fractions import Fraction as F
 r=json.load(sys.stdin)
 support=F(r['support'])
-if r['axisAligned']:
+if r['octagon']:
+    d=-support
+    p=[(4-support,support),(16+support,support),(20,4),(20,12),(16,16),(4,16),(0,12),(0,4)]
+    signed_residual=lambda x,y: y-float(support)
+elif r['axisAligned']:
     d=-support
     p=[(3*d/4,-d),(18-3*d/4,-d),(24,8),(18,16),(0,16),(-6,8)]
     signed_residual=lambda x,y: y-float(support)
@@ -70,7 +83,9 @@ else:
 volume=float(10*abs(sum(a[0]*b[1]-a[1]*b[0] for a,b in zip(p,p[1:]+p[:1])))/2)
 n=r['source']
 assert n['check']['valid'] and r['target']['check']['valid']
-assert n['check']['counts']=={'bodies':1,'shells':1,'faces':8,'loops':8,'coedges':36,'edges':18,'vertices':12}
+count=len(p)
+assert n['check']['counts']=={'bodies':1,'shells':1,'faces':count+2,'loops':count+2,
+    'coedges':6*count,'edges':3*count,'vertices':2*count}
 points=[(float(x),float(y),z) for z in (0,10) for x,y in p]
 assert len(points)==len(n['vertices'])
 assert all(sum(math.dist(p,q)<1e-9 for q in n['vertices'])==1 for p in points)
@@ -87,7 +102,7 @@ print(json.dumps({'status':'PASS','support':float(support),'distanceMM':float(d)
 const source = {
   format: 'barocss-cad-model', schema: 3, units: 'mm', parameters: {},
   nodes: [
-    { id: 'n0', kind: 'sketch', profile: 'polygon', points: [[0, 0], [18, 0], [24, 8], [18, 16], [0, 16], [-6, 8]] },
+    { id: 'n0', kind: 'sketch', profile: 'polygon', points: fixture.sourceSketch ?? [[0, 0], [18, 0], [24, 8], [18, 16], [0, 16], [-6, 8]] },
     { id: 'n1', kind: 'extrude', sketch: 0, height: 10 },
     { id: 'n2', kind: 'sketch', ...fixture.sketch },
     { id: 'n3', kind: 'extrude', sketch: 2, height: 10, from: 30 },
@@ -129,7 +144,7 @@ async function measure(label, doc, support, face, baseline) {
   assert.deepEqual(read.map(body => body.key).sort(), ['b4', key].sort());
   if (baseline) assert.equal(part.incidence, baseline.part.incidence);
   await f.runOracle({ source: part, target: reference, workerVolume: worker.find(body => body.key === key).volume,
-    support, face, axisAligned, sourceFace: fixture.sourceFace }, label);
+    support, face, axisAligned, octagon, sourceFace: fixture.sourceFace }, label);
   f.report.observations.push({ label, bodyHash: part.hash, referenceHash: reference.hash, incidenceHash: part.incidence });
   return { part, reference };
 }
@@ -171,6 +186,14 @@ await f.run(async () => {
   await f.page.evaluate(() => document.activeElement?.blur());
   await f.command('Offset face');
   const panel = hud('Offset face');
+  if (baselineRun) {
+    assert.ok(octagon);
+    await status(panel, 'preview');
+    assert.equal(await panel.getByLabel('Mode', { exact: true }).count(), 0);
+    await f.same(source);
+    await f.snapshot('octagon-distance-only-baseline');
+    return;
+  }
   await panel.getByLabel('Mode', { exact: true }).selectOption('to-plane');
   await panel.getByText('Pick a parallel face on another solid', { exact: true }).waitFor();
   assert.ok(await button('Apply', panel).isDisabled());
@@ -240,4 +263,14 @@ await f.run(async () => {
   await f.waitToast(/Offset face:.*(?:collapse|cross).*Your part is unchanged/i);
   await f.same(retargeted);
   await f.snapshot('collapse-file-refused');
+
+  if (octagon) {
+    f.phase = 'Reject a changed donor support with the same native face name';
+    const changedDonor = { ...outward, nodes: outward.nodes.map((node, index) => index === 2
+      ? { ...node, max: [14, -1] } : node) };
+    await open(changedDonor, 'stale-reference-plane.bcad');
+    await f.waitToast(/saved reference plane has changed.*your current model is unchanged/i);
+    await f.same(retargeted);
+    await f.snapshot('changed-reference-refused');
+  }
 });

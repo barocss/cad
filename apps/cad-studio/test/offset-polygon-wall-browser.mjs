@@ -96,7 +96,7 @@ await f.run(async () => {
     await status(dialog, 'preview');
     await f.same(stock);
     await f.snapshot(example.id + '-outward-preview');
-    assert.equal(await dialog.getByText('To plane', { exact: true }).count(), 0);
+    assert.equal(await dialog.getByLabel('Mode', { exact: true }).inputValue(), 'distance');
     await button('Cancel', dialog).click();
     await f.same(stock);
     await f.command('Offset face');
@@ -110,7 +110,7 @@ await f.run(async () => {
     await f.openFeatureEditor(2, example.id + ' original side Offset');
     await button('Edit offset', f.editor()).click();
     const history = hud('Edit Offset face');
-    assert.equal(await history.getByText('To plane', { exact: true }).count(), 0);
+    assert.equal(await history.getByLabel('Mode', { exact: true }).inputValue(), 'distance');
     for (const refused of example.refused) {
       await offset(history).fill(String(refused));
       await status(history, 'refused');

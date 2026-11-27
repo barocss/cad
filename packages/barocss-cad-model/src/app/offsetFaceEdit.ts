@@ -1,5 +1,5 @@
 import { draftedFaceOffsetFrame } from '@barocss/cad/internal/drafted-cap-offset';
-import { exactSemicylinderCapSource, exactSemicylinderSecondOffset, isAnnularCapOffsetSource, isAnnularReplacementSource, isBoredPlateHole, isBoredPlateOffsetSource, isBoxCapOffsetSource, isExactCylinderOffsetChain, isStraightHexagonalExtrusion, isStraightPolygonOffsetSource, sweepOffsetPlaneSource, offsetFaceGroup, prefixDoc, usesOf, type BodyRef, type ModelNode, type StudioDoc } from '../engine/doc';
+import { exactSemicylinderCapSource, exactSemicylinderSecondOffset, isAnnularCapOffsetSource, isAnnularReplacementSource, isBoredPlateHole, isBoredPlateOffsetSource, isBoxCapOffsetSource, isExactCylinderOffsetChain, sweepOffsetPlaneSource, offsetFaceGroup, prefixDoc, usesOf, type BodyRef, type ModelNode, type StudioDoc } from '../engine/doc';
 import { evaluateDoc, partBreps } from '../engine/evaluate';
 import { bodyKeyFor, featureId } from '../engine/ids';
 import type { DisplayFace } from '../engine/mesh';
@@ -171,9 +171,7 @@ export function editSavedOffsetFaceCommand(doc: StudioDoc, index: number): Comma
     && exactSemicylinderCapSource(doc.nodes, direct.parent.node, doc.parameters)?.upperFace === direct.faces[0]
     && doc.nodes.some((node, slot) => slot > index && node.kind === 'offset-face' && node.parent.node === index
       && node.target === undefined && exactSemicylinderSecondOffset(doc.nodes, index, doc.parameters, node.faces[0])?.mixed);
-  const stock = direct && doc.nodes[direct.parent.node];
-  const distanceOnlyPolygon = isStraightPolygonOffsetSource(doc.nodes, stock) && !isStraightHexagonalExtrusion(doc.nodes, stock);
-  const allowPlane = !!direct && !radial && !pairedCap && !distanceOnlyPolygon && !isExactCylinderOffsetChain(doc.nodes, direct.parent.node)
+  const allowPlane = !!direct && !radial && !pairedCap && !isExactCylinderOffsetChain(doc.nodes, direct.parent.node)
     && (doc.nodes[direct.parent.node]?.kind !== 'sweep-curve'
       || !!sweepOffsetPlaneSource(doc.nodes, direct.parent.node, direct.faces[0]))
     && !isBoredPlateOffsetSource(doc.nodes, direct.parent.node) && !isBoxCapOffsetSource(doc.nodes, direct.parent.node)
