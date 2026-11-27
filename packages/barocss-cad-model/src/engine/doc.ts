@@ -1237,7 +1237,7 @@ type ModelNodeBase = DrivenSketchNode | RoundedRectangleInsetNode | SketchNode |
   | { kind: 'rectangular-feature-pattern'; parent: BodyRef; source?: BodyRef; axis: Axis; spacing: Dim; count: number; axis2: Axis; spacing2: Dim; count2: number }
   /** About `axis` through `pivot` (default the origin). */
   | { kind: 'circular-pattern'; parent: BodyRef; axis: Axis; angle: number; count: number; pivot?: [Dim, Dim, Dim]; /** Authored Z spread; absent on legacy patterns. */ span?: number }
-  | { kind: 'union'; left: BodyRef; right: BodyRef; made?: Made }
+  | { kind: 'union'; left: BodyRef; right: BodyRef; made?: Made; bossPattern?: true }
   | { kind: 'intersect'; left: BodyRef; right: BodyRef }
   | { kind: 'difference'; parent: BodyRef; tool: BodyRef; made?: Made }
   /** Axis-aligned rectangular rib; the Kernel requires positive overlap and positive added material on one line-only upright solid. */
@@ -2079,7 +2079,7 @@ export function featureLabel(node: ModelNode, index: number, nodes: readonly Mod
     case 'sew': return `Sew ${node.names.length} surfaces`;
     case 'fillet': return (node.radii ? `Fillet R${n(node.radii[0].radius)}→${n(node.radii[node.radii.length - 1].radius)}` : `Fillet R${n(node.radius)}`) + (node.section?.kind === 'conic' ? ` conic ρ${fmt(node.section.rho)}` : node.section?.kind === 'g2' ? ' G2' : '');
     case 'align': return 'Align';
-    case 'union': return 'Union';
+    case 'union': return node.bossPattern ? 'Joined boss pattern' : 'Union';
     case 'intersect': return 'Intersect';
     case 'difference': return 'Subtract';
     case 'rib': return 'Rib';

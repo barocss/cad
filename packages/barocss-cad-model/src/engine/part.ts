@@ -11,6 +11,7 @@ import { faceEndExtrudeHeight, faceEndExtrudeProblem } from './faceEndExtrude';
 import { throughCutHeight, throughCutProblem } from './throughCut';
 import { regionExtrudeProblem, resolveExtrudeRegion } from './regionExtrude';
 import { linearSpanPatternInput, linearSpanPatternProblem } from './linearSpanPattern';
+import { assertJoinedBossPattern } from './joinedBossPattern';
 import { curvePatternDocumentProblem, resolveCurveFeaturePatternPath } from './curveFeaturePattern';
 import { resolveShopTree } from './shopRows';
 // The studio document as a kernel part document: a node is the feature of its stable id (`n<k>`, see ids.ts),
@@ -737,6 +738,7 @@ function buildPartDocument(doc: StudioDoc, before?: number): CadPartDocument {
       return;
     }
     const makes = node.kind === 'text' || node.kind === 'extrude' || node.kind === 'revolve' || node.kind === 'sweep' || node.kind === 'loft' || node.kind === 'import' || node.kind === 'mesh' || node.kind === 'subd' || node.kind === 'gear' || node.kind === 'internal-gear' || node.kind === 'bevel-gear' || node.kind === 'worm' || node.kind === 'worm-wheel' || node.kind === 'spring' || node.kind === 'cam' || node.kind === 'sprocket' || node.kind === 'pulley' || node.kind === 'belt' || node.kind === 'coupling' || node.kind === 'connector-body' || node.kind === 'gusset' || node.kind === 'end-cap' || node.kind === 'shaft' || node.kind === 'key' || node.kind === 'retaining-ring' || node.kind === 'pin' || node.kind === 'bearing' || node.kind === 'oring' || node.kind === 'rack' || node.kind === 'library' || node.kind === 'thread' || node.kind === 'sweep-curve' || node.kind === 'thicken' || node.kind === 'band-surface' || node.kind === 'sew' || node.kind === 'sheet-base' || node.kind === 'sheet-contour' || node.kind === 'frame-member' || node.kind === 'frame';
+    if (node.kind === 'union' && node.bossPattern !== undefined && !node.suppressed) assertJoinedBossPattern(doc, node);
     const two = node.kind === 'union' || node.kind === 'intersect' ? [node.left, node.right] : node.kind === 'difference' ? [node.parent, node.tool] : null;
     if (two) {
       const [a, b] = two, ga = gone.has(a.node), gb = gone.has(b.node);

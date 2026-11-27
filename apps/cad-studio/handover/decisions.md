@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D2057: [Pattern one rounded rectangular boss onto its original plate](notes/joined-rectangular-boss-pattern-2026-11-27/README.md), #761. Rebuild three linked bosses as one strict solid, refuse invalid placements and verify native Save and fresh Open.
 - D2056: [Anchor a shared History radius to three original vertical edges](notes/parallel-fillet-history-radius-2026-11-27/README.md), #214. Match all three exact rounds and verify one end-on grip through desktop History and native Open.
 - D2055: [Discover and review a mixed through-cut Path proposal](notes/agent-mixed-path-approval-2026-11-27/README.md), #324. Align MCP discovery and refusal with the existing geometry and verify user approval in Studio.
 - D2054: [Qualify mixed quadratic Path relinking and equal-radius cut ownership](notes/mixed-quadratic-path-closeout-2026-11-27/README.md), #760. Verify desktop History relink, clearance refusal, distinct native owners and fresh Open.

@@ -22,6 +22,7 @@ import { featureId } from '@barocss/cad-model/engine/ids';
 import { detachFaceEndExtrude } from '@barocss/cad-model/engine/faceEndExtrude';
 import type { FaceEndDistanceReply } from '../engine/client';
 import { convertLinearPatternDistance, type LinearPatternDistanceMode } from '@barocss/cad-model/engine/linearSpanPattern';
+import { isJoinedBossPatternSource } from '@barocss/cad-model/engine/joinedBossPattern';
 import type { BearingAssemblyInput } from '@barocss/cad-model/engine/bearingContext';
 import { editFields, isSketchAnchoredCut, type BindableField } from '@barocss/cad-model/app/editFields';
 import { smoothLoftHeightKey } from '@barocss/cad-model/app/smoothLoftHeight';
@@ -132,7 +133,8 @@ export function NodeEditor({ onFilletStations, filletEndpoints, nodes, index, on
   const guideGapError = current?.error?.feature === originalLoft?.id
     && current?.error?.detail.includes('loft: two guides require guide 2 to stay to the right');
   const cutSource = node ? savedCutPatternSource(node, draft) : null;
-  const linearPattern = node?.kind === 'linear-pattern' || node?.kind === 'linear-span-pattern' ? node : null;
+  const linearPattern = (node?.kind === 'linear-pattern' || node?.kind === 'linear-span-pattern') &&
+    !isJoinedBossPatternSource(draft, index) ? node : null;
   const changeDistanceMode = (mode: LinearPatternDistanceMode) => {
     if (!linearPattern) return;
     retireEvaluation();

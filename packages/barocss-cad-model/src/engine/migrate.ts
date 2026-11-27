@@ -13,6 +13,7 @@ import { faceEndExtrudeProblem } from './faceEndExtrude';
 import { throughCutProblem } from './throughCut';
 import { regionExtrudeProblem } from './regionExtrude';
 import { linearSpanPatternProblem } from './linearSpanPattern';
+import { assertJoinedBossPattern } from './joinedBossPattern';
 import { curvePatternDocumentProblem } from './curveFeaturePattern';
 import { documentConnectorError } from '../assembly/connectors';
 // Reading a saved .bcad file: its format and schema checked, what was filled in said, one from an older
@@ -132,6 +133,9 @@ export function readStudioDoc(text: string): { doc: StudioDoc; notes: string[] }
     assertRouteBundleDocument(doc);
     assertPocketFloorBindings(doc);
     assertRevolveAxisBindings(doc);
+    for (const node of doc.nodes) {
+      if (node.kind === 'union' && node.bossPattern !== undefined && !node.suppressed) assertJoinedBossPattern(doc, node);
+    }
   }
   catch (cause) { return { error: cause instanceof Error ? cause.message : String(cause) }; }
   return { doc: { ...doc, outputs: prefixDoc(doc, doc.nodes.length).outputs }, notes };

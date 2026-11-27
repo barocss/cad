@@ -511,6 +511,8 @@ export function friendly(message: string, kind?: string): FriendlyError {
       hint: `${location}The end does not fully meet material on the through member. For a T-joint, try T-joints → Cope; otherwise change this joint or section. Check the resulting preview before applying.`,
       detail, ...extra };
   }
+  const bossPattern = /^(?:\[VALUE\] )?Joined boss pattern: (.+)$/.exec(detail);
+  if (bossPattern) return { title: 'Joined boss pattern not changed', hint: bossPattern[1], detail, ...extra };
   if (code === 'GEOMETRY' && /^path feature pattern source cells must stay disjoint from the newer cuts? and every other cell$/.test(detail))
     return { title: 'Path cut pattern copies touch or overlap',
       hint: 'Choose a path or spacing that keeps each copy clear of the newer cuts and the other copies.',

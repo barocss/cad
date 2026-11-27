@@ -25,6 +25,7 @@ import { checkDrawingBodyOwner } from '../drawing/scope';
 import { bodyKeyFor, featureId } from './ids';
 import { prefixDoc, type ModelNode, type StudioDoc } from './doc';
 import { rememberedEvaluate } from './evalMemo';
+import { joinedBossFillets } from './joinedBossPattern';
 import type { BodyResult, EvalResult } from './evaluate';
 import { hasSplitShellCapAmbiguity, isSplitCapFace, matchSignature, rankAlike, signaturesOf, type Signature } from './rematch';
 import type { DisplayEdge, Vec3 } from './mesh';
@@ -394,6 +395,7 @@ export async function verifyReferences(doc: StudioDoc, finals: readonly BodyResu
   const { doc: out, refs } = referencesOf(doc);
   if (!refs.some(r => r.sig || r.datumTarget || r.noteTarget)) return { doc, changes: [], problems: [] };
   const memoEvaluate = rememberedEvaluate(evaluate);
+  const fixedBossFillets = joinedBossFillets(doc);
   const parents = new Map<string, BodyResult | undefined>();
   const ensureParent = async (ref: Ref) => {
     if (ref.node === null || !ref.parent) return;
@@ -414,11 +416,22 @@ export async function verifyReferences(doc: StudioDoc, finals: readonly BodyResu
     }
     if (!ref.sig) continue;
     await ensureParent(ref);
-    const cands = candidatesOf(ref, finals, parents, tables); if (!cands) continue;
+    const fixedBossEdge = ref.edge && ref.node !== null && fixedBossFillets.has(ref.node);
+    const cands = candidatesOf(ref, finals, parents, tables) ?? (fixedBossEdge ? new Map<string, Signature>() : null);
+    if (!cands) continue;
     const splitCap = ref.nativeFace !== 'plane' && ref.node !== null && !ref.edge && isSplitCapFace(out.nodes, ref.name);
     const parent = splitCap && ref.parent ? parents.get(parentKey(ref.node!, ref.parent)) : undefined;
     const ambiguous = parent !== undefined && hasSplitShellCapAmbiguity(out.nodes, out.nodes[ref.node!], parent, ref.name);
-    let m = splitCap ? (cands.has(ref.name) && !ambiguous ? ref.name : []) : matchSignature(fromSig(ref.sig), cands, ref.edge);
+    let m: string | string[];
+    if (fixedBossEdge) {
+      // Side tags and the cap name still identify the same rim after a dimension changes its position.
+      // Require one live native line with that exact name, and never rank a replacement for these rims.
+      const live = ref.node !== null && ref.parent ? parents.get(parentKey(ref.node, ref.parent)) : undefined;
+      const edges = live?.mesh.edges.filter(edge => edge.nativeLine && edge.names.length === 1 && edge.names[0] === ref.name);
+      m = edges?.length === 1 ? ref.name : [];
+    } else {
+      m = splitCap ? (cands.has(ref.name) && !ambiguous ? ref.name : []) : matchSignature(fromSig(ref.sig), cands, ref.edge);
+    }
     const node = ref.node === null ? undefined : out.nodes[ref.node];
     // The bounded wrap and offset use their original named faces.
     if ((node?.kind === 'cylindrical-wrap' || node?.kind === 'offset-face' || node?.kind === 'replace-face' || node?.kind === 'delete-face') && m !== ref.name) m = [];

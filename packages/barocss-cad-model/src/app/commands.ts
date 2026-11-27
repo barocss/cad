@@ -1,6 +1,7 @@
 import { splitNormalProblem } from './splitPlaneInput';
 import { eligibleFillPatternRegions, fillFeaturePatternProblem, fillRegionSnapshot } from '../engine/fillFeaturePattern';
 import { appendMirrorRecipe } from './mirrorRecipe';
+import { bodyPatternCommands } from './bodyPatternCommands';
 import { splitOutputSide } from '../engine/splitOutput';
 import { blindDrillPointHeight } from '@barocss/cad';
 import type { FillFeaturePatternRegion } from '@barocss/cad/api';
@@ -33,16 +34,13 @@ import { mountCommand } from './mounts';
 import { fastenerSizesOf, NO_SIZES, noSizeRow } from '../engine/fastenerSizeRows';
 import { duplicateBody } from '../chat/features';
 import { HOLE_PLANE, leafBodies, planeText, rectangularFeaturePatternSourceProblem, withNode, type Axis, type BodyRef, type FilletSection, type HolePattern, type ModelNode, type StudioDoc } from '../engine/doc';
-import { linearSpanPatternInput } from '../engine/linearSpanPattern';
-import { circularPatternCountRange, circularPatternStep } from '../engine/circularPatternSpan';
-import { linearSpanHandles } from './linearSpanHandles';
 import type { BodyResult } from '../engine/evaluate';
 import { circularFilletPair, closedCircularFilletPair } from './circularFilletPair';
 import { closedFilletDragLimit } from '../engine/nativeFilletTorus';
 import { boxShellSelection, buildBoxWallShell } from './boxShellSelection';
 import type { BearingAssemblyInput } from '../engine/bearingContext';
 import type { DisplayEdge } from '../engine/mesh';
-import { refOf } from './bodyRef';
+import { centreOf, oneBody, refOf, selectedBodies } from './bodyRef';
 import { ELLIPSE_SIDE_EDGE_REFUSAL, ellipseSideEdge } from '../sketch/ellipse';
 import { roundFaceAxis } from './measure';
 import { planBedSplit } from '../print/splitBed';
@@ -134,7 +132,7 @@ export interface HandleSpec {
   pair?: { key: string; dir: [number, number, number] };
 }
 
-export { refOf };
+export { centreOf, refOf, selectedBodies };
 
 /**
  * A selection carried onto newly evaluated bodies: each face, edge and body to the one of the same body
@@ -165,20 +163,10 @@ export function carrySelection(sel: Selection, from: readonly BodyResult[], to: 
   return JSON.stringify(out) === JSON.stringify(sel) ? sel : out;
 }
 
-export function selectedBodies(sel: Selection): number[] {
-  const set = new Set<number>(sel.bodies);
-  sel.faces.forEach(f => set.add(f.body)); sel.edges.forEach(e => set.add(e.body));
-  return [...set];
-}
 
 const ok = { ok: true } as const;
 const no = (reason: string) => ({ ok: false as const, reason });
 const r1 = (v: number) => Math.round(v);
-
-function oneBody(ctx: Ctx) {
-  const list = selectedBodies(ctx.selection);
-  return list.length === 1 ? ctx.bodies[list[0]] : null;
-}
 
 /** A cut pattern follows the active difference producer, never an older body or direct geometry. */
 function linearCutProblem(ctx: Ctx) {
@@ -209,21 +197,11 @@ function priorRectangularCutProblem(ctx: Ctx, label: string) {
 export function cornerOf(b: BodyResult | null | undefined): [number, number, number] {
   return b ? [...b.mesh.bounds.min] as [number, number, number] : [0, 0, 0];
 }
-/** A body's box centre, to 0.001 mm (the origin when there is none). */
-export function centreOf(b: BodyResult | null | undefined): [number, number, number] {
-  if (!b) return [0, 0, 0];
-  const { min, max } = b.mesh.bounds; return [0, 1, 2].map(k => Math.round((min[k] + max[k]) / 2 * 1000) / 1000) as [number, number, number];
-}
-
 /** The hole axis and entry side of a face normal along ±X, ±Y or ±Z. */
 function holeAxis(n: readonly number[]): { axis: Axis; side: 'min' | 'max' } | null {
   const k = [0, 1, 2].find(i => Math.abs(Math.abs(n[i]) - 1) < 1e-6);
   return k === undefined ? null : { axis: (['x', 'y', 'z'] as const)[k], side: n[k] > 0 ? 'max' : 'min' };
 }
-/** A pattern's copies: joined into one body (the kernel's pattern), or each a body of its own. */
-const RESULT: Field = { key: 'result', label: 'Result', kind: 'choice', options: [{ value: 'one', label: 'One body' }, { value: 'separate', label: 'Separate bodies' }] };
-const LINEAR_PATTERN_COUNT = { min: 2, max: 24 };
-const usesLinearSpan = (values: Values) => values.result !== 'separate' && values.distanceMode === 'span';
 /** The axis a mirror plane is across. */
 const MIRROR_AXIS: Record<string, 0 | 1 | 2> = { yz: 0, xz: 1, xy: 2 };
 /** The selected edges, when they all belong to one body. */
@@ -1044,101 +1022,7 @@ const allCommands: Command[] = [
       return withNode(ctx.doc, { kind: 'rectangular-feature-pattern', parent, ...(source ? { source: { ...source } } : {}), axis, spacing, count, axis2, spacing2, count2 });
     },
   },
-  {
-    id: 'linear-pattern', label: 'Linear pattern', icon: 'cad-pattern-linear', hint: 'Copies of a body in a row', shortcut: 'P', group: 'pattern', keywords: 'array repeat copy',
-    available: ctx => oneBody(ctx) ? ok : no('Select one body to pattern.'),
-    fields: (_ctx, v) => [{ key: 'axis', label: 'Direction', kind: 'choice', options: [{ value: 'x', label: 'X' }, { value: 'y', label: 'Y' }, { value: 'z', label: 'Z' }] },
-      { key: 'distanceMode', label: 'Distance mode', kind: 'choice', options: [{ value: 'spacing', label: 'Spacing' }, { value: 'span', label: 'Total span' }], when: values => values.result !== 'separate' },
-      { key: 'spacing', label: 'Spacing', kind: 'mm', min: v?.result === 'separate' ? undefined : 1, when: values => !usesLinearSpan(values) },
-      { key: 'span', label: 'Total span', kind: 'mm', when: usesLinearSpan },
-      { key: 'count', label: 'Count', kind: 'count', ...LINEAR_PATTERN_COUNT }, RESULT],
-    defaults: ctx => { const b = oneBody(ctx); return { axis: 'x', distanceMode: 'spacing', spacing: b ? r1(b.mesh.bounds.max[0] - b.mesh.bounds.min[0] + 8) : 20, count: 3, result: 'one' }; },
-    derive: (_ctx, v, changed) => {
-      const intervals = Number(v.count) - 1;
-      if (changed.includes('distanceMode') && usesLinearSpan(v) && !changed.includes('span')) {
-        return { ...v, span: intervals > 0 ? Number(v.spacing) * intervals : '' };
-      }
-      const leavingSpan = changed.includes('result') && v.result === 'separate' && v.distanceMode === 'span';
-      if (leavingSpan || (changed.includes('distanceMode') && v.distanceMode === 'spacing' && v.span !== undefined)) {
-        return { ...v, distanceMode: 'spacing', spacing: changed.includes('spacing') ? v.spacing : intervals > 0 ? Number(v.span) / intervals : '' };
-      }
-      return v;
-    },
-    // Spacing: an arrow at the second copy; count: one past the last (each spacing dragged adds a copy).
-    handles: (ctx, v) => {
-      const b = oneBody(ctx); if (!b) return [];
-      if (usesLinearSpan(v)) return linearSpanHandles(b.mesh.bounds, v.axis as Axis, Number(v.span), Number(v.count), LINEAR_PATTERN_COUNT.max);
-      const k = 'xyz'.indexOf(String(v.axis)), s = Number(v.spacing), n = Number(v.count), { min, max } = b.mesh.bounds, c = centreOf(b);
-      const dir: [number, number, number] = [0, 0, 0]; dir[k] = 1;
-      const at = (d: number): [number, number, number] => { const p = [...c] as [number, number, number]; p[k] = d; return p; };
-      if (!(max[k] > min[k] - 1)) return [];
-      const separate = v.result === 'separate';
-      const spacing: HandleSpec = { key: 'spacing', at: at(c[k] + s), dir, ...(separate ? {} : { min: 1 }) };
-      if (separate && s === 0) return [spacing];
-      const countDir: HandleSpec['dir'] = [...dir];
-      const countEnd = separate && s < 0 ? min[k] : max[k];
-      if (separate && s < 0) countDir[k] = -1;
-      const interval = separate ? Math.abs(s) : Math.max(1, s);
-      return [spacing, { key: 'count', at: at(countEnd + s * (n - 1)), dir: countDir,
-        scale: 1 / interval, ...LINEAR_PATTERN_COUNT, unit: '' }];
-    },
-    build: (ctx, v) => {
-      const body = refOf(oneBody(ctx)!), k = 'xyz'.indexOf(String(v.axis)), s = Number(v.spacing), n = Number(v.count);
-      if (v.distanceMode === 'span') {
-        if (v.result === 'separate') throw refusal('VALUE', 'Total span requires One body.');
-        const node = { kind: 'linear-span-pattern', parent: body, axis: v.axis as Axis, span: Number(v.span), count: n } as const;
-        const input = linearSpanPatternInput(node, ctx.doc.nodes.length, LINEAR_PATTERN_COUNT.max);
-        if ('code' in input) throw refusal(input.code, input.message);
-        return withNode(ctx.doc, node);
-      }
-      if (v.result !== 'separate') return withNode(ctx.doc, { kind: 'linear-pattern', parent: body, axis: v.axis as Axis, spacing: s, count: n });
-      const { min, max } = LINEAR_PATTERN_COUNT;
-      if (!Number.isInteger(n) || n < min || n > max) {
-        throw refusal('VALUE', `Separate linear patterns use a whole-number Count from ${min} to ${max}, including the original.`);
-      }
-      if (!Number.isFinite(s) || s === 0) throw refusal('VALUE', 'Spacing must be a finite nonzero distance.');
-      let doc = ctx.doc;
-      for (let c = 1; c < n; c++) { const o: [number, number, number] = [0, 0, 0]; o[k] = s * c; doc = duplicateBody(doc, body, o).doc; }
-      return doc;
-    },
-  },
-  {
-    id: 'circular-pattern', label: 'Circular pattern', icon: 'cad-pattern-circular', hint: 'Copies of a body round an axis', group: 'pattern', keywords: 'polar array',
-    available: ctx => oneBody(ctx) ? ok : no('Select one body to pattern.'),
-    fields: (_ctx, v) => [{ key: 'axis', label: 'Axis', kind: 'choice', options: [{ value: 'z', label: 'Z' }, { value: 'x', label: 'X' }, { value: 'y', label: 'Y' }] },
-      { key: 'count', label: 'Count', kind: 'count', ...circularPatternCountRange(String(v?.axis ?? 'z')) },
-      { key: 'span', label: 'Spread over', kind: 'deg', min: 1, max: 360, step: 5, when: v => v.axis === 'z' },
-      { key: 'px', label: 'Axis at X', kind: 'mm', when: v => v.axis === 'z' }, { key: 'py', label: 'Axis at Y', kind: 'mm', when: v => v.axis === 'z' }, RESULT],
-    defaults: () => ({ axis: 'z', count: 4, span: 360, px: 0, py: 0, result: 'one' }),
-    // About Z: a puck moves the axis, an arc spreads the copies (a full turn shares it evenly; less, from
-    // the first copy to the last). About X or Y the kernel steps by quarter turns.
-    handles: (ctx, v) => {
-      const b = oneBody(ctx); if (!b || v.axis !== 'z') return [];
-      const c = centreOf(b), centre: [number, number, number] = [Number(v.px), Number(v.py), c[2]];
-      const out: HandleSpec[] = [{ key: 'px', at: centre, dir: [1, 0, 0], pair: { key: 'py', dir: [0, 1, 0] } }];
-      if (Math.hypot(c[0] - centre[0], c[1] - centre[1]) > 1) out.push({ key: 'span', at: c, dir: [0, 0, 1], min: 1, max: 360, step: 5, arc: { centre, axis: [0, 0, 1], from: c } });
-      return out;
-    },
-    build: (ctx, v) => {
-      const n = Number(v.count), z = v.axis === 'z', { min, max } = circularPatternCountRange(String(v.axis));
-      if (!Number.isInteger(n) || n < min || n > max) {
-        const axisRule = z ? 'Z circular patterns' : 'X/Y circular patterns with 90° steps';
-        throw refusal('VALUE', `${axisRule} use a whole-number Count from ${min} to ${max}, including the original.`);
-      }
-      const span = Number(v.span ?? 360), pivot: [number, number, number] = [Number(v.px ?? 0), Number(v.py ?? 0), 0];
-      if (v.result === 'separate') {
-        // Each copy stores an independent Rotate angle: preserve the authored share without display rounding.
-        // One-body span metadata keeps its separate, legacy rounded-step reader contract.
-        const body = refOf(oneBody(ctx)!), step = z ? (span >= 360 ? 360 / n : span / (n - 1)) : 90;
-        let doc = ctx.doc;
-        for (let c = 1; c < n; c++) doc = duplicateBody(doc, body, copy => ({ kind: 'rotate', parent: copy, axis: v.axis as Axis, angle: step * c, ...(z && (pivot[0] || pivot[1]) ? { pivot } : {}) })).doc;
-        return doc;
-      }
-      return withNode(ctx.doc, z
-        ? { kind: 'circular-pattern', parent: refOf(oneBody(ctx)!), axis: 'z', angle: circularPatternStep(span, n), count: n, span: span >= 360 ? 360 : span, ...(pivot[0] || pivot[1] ? { pivot } : {}) }
-        : { kind: 'circular-pattern', parent: refOf(oneBody(ctx)!), axis: v.axis as Axis, angle: 90, count: n });
-    },
-  },
+  ...bodyPatternCommands,
   {
     id: 'split', label: 'Split', icon: 'cad-split', hint: 'Cut a body in two along a plane: across X, Y or Z, or any plane (a mitre: normal 1, 1, 0)', group: 'modify', keywords: 'cut plane divide mitre miter oblique tilted angled diagonal',
     available: ctx => oneBody(ctx) ? ok : no('Select one body to split.'),
