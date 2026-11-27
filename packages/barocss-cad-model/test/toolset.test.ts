@@ -102,6 +102,10 @@ test('describe: the tools, a tool\'s actions, an action\'s handler schema, a com
   assert.deepEqual([m.description, m.input], [TOOLS.find(t => t.name === 'measure')!.description, TOOLS.find(t => t.name === 'measure')!.input_schema]);
   const hole = await d({ command: 'hole' });
   assert.ok(hole.selection && /d:/.test(Object.entries(hole.values).map(([k, v]) => `${k}: ${v}`).join('; ')), JSON.stringify(hole));
+  const pathPattern = (await d({ command: 'curve-feature-pattern' })).values;
+  assert.match(pathPattern.source, /circular through-cut followed by one or more original rectangular or circular through-cuts/);
+  assert.match(pathPattern.source, /expectedRevision from query.rebuild/);
+  assert.match(pathPattern.path, /query.summary.*level XY path.*polynomial quadratic.*canonical axis-aligned quarter arc/);
   assert.equal((await d({ command: 'linear_pattern' })).command, 'linear-pattern');
   const ex = await d({ feature: 'extrude' });
   assert.ok(ex.nodes.some((l: string) => l.includes('"kind":"extrude"')));

@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict';
+import { readFile, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { createFlow } from './flow-helper.mjs';
+import { currentPartRevision, withMcpSession } from './mcp-browser-session.mjs';
 import { clickModelCommand, modelRail } from './model-rail-helper.mjs';
 import { choosePriorCutSource, equivalent } from './prior-cut-pattern-browser-fixture.mjs';
 
@@ -8,11 +11,13 @@ const quarter = process.argv.includes('--quarter');
 const quadratic = process.argv.includes('--quadratic');
 const mixed = process.argv.includes('--mixed');
 const relink = process.argv.includes('--relink');
+const agent = process.argv.includes('--agent');
 const beforeRelink = process.argv.includes('--prior-relink');
 const entry = process.argv.includes('--history') ? 'History' : 'Browser';
 assert.ok(!(quarter && quadratic));
 const mixedCurved = mixed && (quarter || quadratic);
 assert.ok(!relink || mixedCurved, 'Relink requires a mixed through-cut plate with a curved source path');
+assert.ok(!agent || (mixedCurved && quadratic && !relink && !baseline), 'Agent review uses the mixed quadratic fixture');
 const count = mixedCurved ? 2 : quarter || mixed ? 4 : 3;
 const spacing = mixedCurved ? (quadratic ? 14 : 19) : quadratic ? 10 : quarter ? 8 : mixed ? 12.5 : 16;
 const revisedSpacing = mixedCurved ? (quadratic ? 15 : 20) : quadratic ? 12 : quarter ? 9 : mixed ? 12 : 14;
@@ -45,10 +50,12 @@ const pins = ['apps/cad-studio/test/prior-circular-path-cut-pattern-browser.mjs'
   'packages/barocss-cad/src/part/part-transform.ts', 'packages/barocss-cad/src/part/part-prior-circular-cut.ts',
   'packages/barocss-cad/src/part/part-prior-rectangular-cut.ts'];
 if (relink) pins.push('apps/cad-studio/src/app/directCurveCandidate.ts', 'apps/cad-studio/src/state/historyFeatureApply.ts');
+if (agent) pins.push('apps/cad-studio/test/mcp-browser-session.mjs', 'apps/cad-studio/server/cadMcp.ts',
+  'packages/barocss-cad-model/src/chat/part/features.ts', 'packages/barocss-cad-model/src/engine/errors.ts');
 const f = await createFlow({
   name: 'prior-circular-path-cut-pattern', output: process.argv[2],
-  envFrozen: mixedCurved ? 'D2035_SOURCE_FROZEN' : mixed ? 'D2034_SOURCE_FROZEN' : quadratic ? 'D1950_SOURCE_FROZEN' : quarter ? 'D1931_SOURCE_FROZEN' : 'D1911_SOURCE_FROZEN',
-  qualification: mixed ? `Repeat the selected original R2 after later R3 and rectangle through cuts via ${entry}.` : 'Repeat only the first original circular through-Subtract across one later rectangular through-Subtract.',
+  envFrozen: agent ? 'D2055_SOURCE_FROZEN' : mixedCurved ? 'D2035_SOURCE_FROZEN' : mixed ? 'D2034_SOURCE_FROZEN' : quadratic ? 'D1950_SOURCE_FROZEN' : quarter ? 'D1931_SOURCE_FROZEN' : 'D1911_SOURCE_FROZEN',
+  qualification: agent ? 'Discover, propose and approve the mixed quadratic cut pattern in local MCP and Studio.' : mixed ? `Repeat the selected original R2 after later R3 and rectangle through cuts via ${entry}.` : 'Repeat only the first original circular through-Subtract across one later rectangular through-Subtract.',
   limits: ['One upright rectangular stock, only original full-height cuts and fixed-orientation copies on a linked, level XY path.'],
   initialFiles: pins, requiredFrozen: pins,
   inspectorSource: `
@@ -235,6 +242,95 @@ async function refused(doc, history, label, reason) {
   assert.deepEqual(await stackState(), history);
   await f.snapshot(label);
 }
+async function approveAgentPattern(doc, originalWalls, pathId) {
+  const file = join(f.output, 'agent-proposal.bcad');
+  const original = Buffer.from(JSON.stringify(doc));
+  await writeFile(file, original, { flag: 'wx' });
+  f.phase = 'Discover, dry-run and propose the mixed quadratic pattern in local MCP';
+  const session = { app: f.app, output: f.output, clientName: 'barocss-mixed-path-review' };
+  const command = 'curve-feature-pattern', title = 'Repeat the original circular through-cut along the quadratic';
+  const initialCenters = centersOnQuadratic(spacing), removed = -40 * Math.PI;
+  await withMcpSession(session, file, 'mixed-path', async (call, request) => {
+    const tools = (await request('tools/list', {})).tools.map(tool => tool.name);
+    for (const name of ['describe', 'query', 'features', 'proposals']) assert.ok(tools.includes(name));
+    const description = await call('describe', { command });
+    assert.match(description.values.source, /circular through-cut followed by one or more original rectangular or circular through-cuts/);
+    assert.match(description.values.source, /expectedRevision from query.rebuild/);
+    assert.match(description.values.path, /query.summary.*level XY path.*polynomial quadratic.*canonical axis-aligned quarter arc/);
+
+    const summary = await call('query', { action: 'summary', response_format: 'detailed' });
+    const source = summary.features.find(feature => feature.index === 4).node;
+    const target = summary.bodies[0].key;
+    const [curve] = summary.direct_curves;
+    assert.deepEqual([source.kind, source.id, target, curve.id], ['difference', 'n4', 'b10', pathId]);
+    const expectedRevision = await currentPartRevision(call);
+    const values = { source: source.id, path: curve.id, spacing, count };
+    const op = { tool: 'features', args: { action: 'command', command, bodies: [target], expectedRevision, values } };
+    const dryRun = (args, error = false) =>
+      call('features', { action: 'batch', dryRun: true, ops: [{ ...op, args: { ...op.args, ...args } }] }, error);
+    const candidate = await dryRun();
+    assert.equal(candidate.dryRun, true);
+    assert.ok(Math.abs(candidate.change.volume - removed) < 0.0005);
+    assert.match((await dryRun({ expectedRevision: '0000000000000000' }, true)).error, /part changed/i);
+    const overlap = await dryRun({ values: { ...values, spacing: overlapPitch } }, true);
+    assert.deepEqual([overlap.failed_op, overlap.kept], [0, 'nothing was applied']);
+    assert.match(overlap.error, /copies touch or overlap.*choose a path or spacing.*newer cuts/i);
+    assert.doesNotMatch(overlap.error, /undo the last change/i);
+    assert.deepEqual(await readFile(file), original);
+
+    const staged = await call('proposals', { action: 'propose', title, ops: [op] });
+    assert.deepEqual([staged.proposal, staged.applied], ['P1', false]);
+    const bytes = await readFile(file);
+    assert.match((await call('proposals', { action: 'accept', id: 'P1' }, true)).error, /user accepts.*Studio/i);
+    assert.deepEqual(await readFile(file), bytes);
+    assert.equal(await currentPartRevision(call), expectedRevision);
+    f.report.observations.push({ label: 'mcp-proposal', expectedRevision, target, ...values, volumeChange: candidate.change.volume });
+  });
+
+  f.phase = 'Preview, hide and approve the proposal in Studio';
+  const pending = JSON.parse(await readFile(file));
+  assert.deepEqual(pending.nodes, doc.nodes);
+  assert.deepEqual(pending.direct, doc.direct);
+  await f.freshOpen(file, pending, 'agent-01-pending');
+  await button('Top', f.page.locator('.views')).click();
+  await f.page.getByTitle('Frame all (F)', { exact: true }).click();
+  await button('Chat').first().click();
+  const card = f.page.getByRole('listitem', { name: 'Proposal P1', exact: true });
+  await card.getByText(title, { exact: false }).waitFor();
+  const show = async key => {
+    await f.page.waitForFunction(key => window.__studioSection?.().shownKeys.includes(key), key);
+  };
+  await button('Preview', card).click();
+  await button('Hide', card).waitFor();
+  await show('b11');
+  await f.same(pending);
+  assert.deepEqual(await inspect('agent-pending-original', pending, [[10, 10]]), originalWalls);
+  await f.snapshot('agent-02-preview');
+  await button('Hide', card).click();
+  await show('b10');
+  await f.same(pending);
+  await button('Accept', card).click();
+  await f.changed(pending);
+  const { doc: approved } = await f.snapshot('agent-03-approved');
+  assert.deepEqual(approved.nodes.slice(0, -1), doc.nodes);
+  assert.deepEqual(approved.direct, doc.direct);
+  const node = approved.nodes.at(-1);
+  assert.deepEqual([node.kind, node.parent, node.source, node.path, node.spacing, node.count],
+    [command, ref(10), ref(4), { objectId: pathId }, spacing, count]);
+  assert.deepEqual(approved.proposals.map(proposal => proposal.status), ['accepted']);
+  const { kind, proposal, by } = approved.history.at(-1);
+  assert.deepEqual([kind, proposal, by.agent], ['accept', 'P1', 'user']);
+  const walls = await inspect('agent-approved-native', approved, initialCenters, true);
+  assert.deepEqual(walls.filter(wall => originalWalls.some(old => old.name === wall.name)), originalWalls);
+  await f.undo();
+  await f.same(pending);
+  await f.redo();
+  await f.same(approved);
+  const saved = await f.save('agent-approved-mixed-path');
+  const reopened = await f.freshOpen(saved.file, approved, 'agent-04-fresh-open');
+  assert.deepEqual(await inspect('agent-reopened-native', reopened.doc, initialCenters, true), walls);
+}
+
 await f.run(async () => {
   await f.newPage();
   await openModel(stock, 'circle-path-source.bcad');
@@ -267,6 +363,10 @@ await f.run(async () => {
     assert.deepEqual(path.controlPoints, [[6, 5, 0], [6, 13, 0], [6, 21, 0], [18, 21, 0], [30, 21, 0]]);
   }
   const original = await inspect('original-circle-and-later-rectangle', doc, [[10, 10]]);
+  if (agent) {
+    await approveAgentPattern(doc, original, objectId);
+    return;
+  }
   await choosePriorCutSource(f, entry);
   await clickModelCommand(f.page, 'Pattern', 'Path cut pattern');
   await panel().getByText('Subtract 1 (n4)', { exact: true }).waitFor();
