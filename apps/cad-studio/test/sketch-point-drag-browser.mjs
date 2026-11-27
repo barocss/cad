@@ -23,6 +23,8 @@ const pins = [
   'apps/cad-studio/src/viewport/viewportPointerInput.ts',
   'apps/cad-studio/src/viewport/Viewport.tsx',
   'apps/cad-studio/src/viewport/SceneViewport.tsx',
+  'apps/cad-studio/src/ui/SketchMobility.tsx',
+  'apps/cad-studio/src/ui/SketchPanel.tsx',
   'apps/cad-studio/src/sketch/useSketchDraftHistory.ts',
   'packages/barocss-cad-model/src/sketch/pointDrag.ts',
 ];
@@ -64,6 +66,42 @@ const cursor = () => f.page.locator('.vp-canvas').evaluate(canvas => canvas.styl
 const selected = index => f.page.locator(`.sk-pick-point.on[data-sketch-entity="point:${index}"]`);
 const keyboard = process.platform === 'darwin' ? 'Meta' : 'Control';
 const near = (a, b) => assert.ok(Math.abs(a - b) < 1e-7, `${a} != ${b}`);
+async function checkFilletPointDirection(index, points, expected, doc) {
+  const panel = f.sketchPanel(), mobility = panel.locator('details.sk-mobility');
+  await mobility.locator('summary').click();
+  const point = mobility.getByRole('listitem', { name: `Locally movable point ${index + 1}`, exact: true });
+  assert.equal(await point.getAttribute('aria-description'), 'Along ±(0, 1)');
+  await point.focus();
+  await f.page.locator(`.vp-overlay .inspected[data-sketch-entity="point:${index}"]`).waitFor();
+  await f.snapshot('fillet-existing-vertical-direction');
+
+  const blocked = panel.getByLabel(`Point ${index + 1} X`, { exact: true });
+  const undo = f.page.getByRole('button', { name: 'Undo', exact: true });
+  const redo = f.page.getByRole('button', { name: 'Redo', exact: true });
+  const history = [await undo.isDisabled(), await redo.isDisabled()];
+  await blocked.fill('40');
+  await panel.getByRole('alert').getByText(`Could not set point ${index + 1} X to 40 mm with the current constraints.`, { exact: true }).waitFor();
+  await expectPoints(points);
+  await f.same(doc);
+  assert.deepEqual([await undo.isDisabled(), await redo.isDisabled()], history);
+  await f.snapshot('fillet-typed-horizontal-refusal');
+
+  const field = panel.getByLabel(`Point ${index + 1} Y`, { exact: true });
+  await field.fill(String(expected[index][1]));
+  // The active constraints, not the field event, set the other tangent point and the top edge.
+  await expectPoints(expected);
+  assert.equal(await panel.getByRole('alert').count(), 0);
+  await f.same(doc);
+  await f.snapshot('fillet-typed-vertical-point');
+  await field.blur();
+  await f.page.keyboard.press(`${keyboard}+z`);
+  await expectPoints(points);
+  await f.page.keyboard.press(`${keyboard}+Shift+z`);
+  await expectPoints(expected);
+  await f.page.keyboard.press(`${keyboard}+z`);
+  await expectPoints(points);
+  f.report.observations.push({ label: 'fillet-point-direction', index, direction: [0, 1], requestedY: expected[index][1], typed: expected[index] });
+}
 async function expectPoints(points) {
   await f.page.waitForFunction(expected => {
     const fields = [...document.querySelectorAll('.sk-panel input[aria-label^="Point "]')];
@@ -409,6 +447,7 @@ await f.run(async () => {
     await f.freshOpen(file, seed, `${label}-opened`);
     await edit([...original, target, escape]);
     await expectPoints(original);
+    if (shape.radii) await checkFilletPointDirection(index, original, expected, seed);
     f.phase = `Click and Shift-click ${label} points without moving them`;
     await f.worldClick(start);
     await selected(index).waitFor();

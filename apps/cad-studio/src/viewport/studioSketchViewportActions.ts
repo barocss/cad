@@ -7,8 +7,10 @@ import { commitDimension, commitInlineDimension, dimensionLabel, dimensionValue,
 import { sketchClick } from '@barocss/cad-model/sketch/select';
 import type { SketchShape, SketchState } from '@barocss/cad-model/sketch/types';
 import { circleAxisPairConflict, circleDistanceConflict, edgeCircleDistanceConflict, fixedArcRadiusConflict, fixedPointDistanceConflict, opposingLengthConflict } from '../sketch/constraintList';
+import type { CoordinateIntent } from '../sketch/coordinateFeedback';
 import { matchesStoredTriangle } from '../sketch/fixedTriangleEditor';
 import type { SceneSketchActions } from './SceneViewport';
+import { resolveFilletPointCoordinate } from './sketchPointDrag';
 
 const outlinePickIssues = {
   dimension: 'Pick two points on the same outline to add a distance constraint.',
@@ -54,7 +56,10 @@ function canRecoverLength(sketch: SketchState | null, opened: ReopenedSketchSour
 }
 
 /** Viewport gestures use Studio's existing sketch state and shape history. */
-export function studioSketchViewportActions({ liveShape, sketch, currentSketchSource, setSketch, setSketchError, offerEllipseAxes, clearOutlinePickIssue, updateCircleDiameter, setConstraintConflict, updateShape, trimSketch }: SketchViewportInputs): SceneSketchActions & { recoverPanelDimension(source: Polygon, field: 'lengths' | 'radii', edge: number, value: number): boolean } {
+export function studioSketchViewportActions({ liveShape, sketch, currentSketchSource, setSketch, setSketchError, offerEllipseAxes, clearOutlinePickIssue, updateCircleDiameter, setConstraintConflict, updateShape, trimSketch }: SketchViewportInputs): SceneSketchActions & {
+  recoverPanelDimension(source: Polygon, field: 'lengths' | 'radii', edge: number, value: number): boolean;
+  recoverPanelCoordinate(intent: CoordinateIntent): boolean;
+} {
   const reportArcConflict = (source: Polygon, key: string, value: number, conflict: NonNullable<ReturnType<typeof fixedArcRadiusConflict>>) => {
     const [a, b] = conflict.points, chord = Number(conflict.chord.toPrecision(12));
     const minimum = Number((conflict.chord / 2).toPrecision(12));
@@ -91,6 +96,14 @@ export function studioSketchViewportActions({ liveShape, sketch, currentSketchSo
     updateShape(result.shape);
   };
   return {
+    recoverPanelCoordinate(intent) {
+      if (liveShape.current !== intent.source) return true;
+      const next = resolveFilletPointCoordinate(sketch, intent);
+      if (next === undefined) return false;
+      if (next === null) setSketchError(`Could not set point ${intent.point + 1} ${'XY'[intent.axis]} to ${intent.requested} mm with the current constraints.`);
+      else if (next !== intent.source) updateShape(next);
+      return true;
+    },
     recoverPanelDimension(source: Polygon, field: 'lengths' | 'radii', edge: number, value: number): boolean {
       if (liveShape.current !== source || sketch?.shape !== source) return true;
       if (field === 'radii') {

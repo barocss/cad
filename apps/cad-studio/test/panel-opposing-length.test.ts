@@ -141,3 +141,22 @@ test('panel identifies both fixed arc endpoints and retains the fallback for oth
   assert.equal(harness(source, draft(source), { ...source }).actions.recoverPanelDimension(source, 'radii', 1, 9), true);
   assert.deepEqual({ shapes: state.shapes, errors: state.errors }, { shapes: [], errors: [] });
 });
+
+test('panel tangent Fillet endpoint coordinates share the finite drag solve', () => {
+  const source: Polygon = {
+    kind: 'polygon', closed: true, points: [[0, 0], [40, 0], [40, 24], [34, 30], [0, 30]],
+    bulges: [0, 0, Math.tan(Math.PI / 8), 0, 0], hv: { h: [0, 3], v: [1, 4] },
+    radii: { 2: 6 }, lengths: { 0: 40 }, tangents: [2, 3], rules: [{ kind: 'fix', point: 0, at: [0, 0] }],
+  };
+  const state = harness(source);
+  assert.equal(state.actions.recoverPanelCoordinate({ source, point: 3, axis: 0, requested: 40 }), true);
+  assert.equal(state.shapes.length, 0);
+  assert.deepEqual(state.errors, ['Could not set point 4 X to 40 mm with the current constraints.']);
+  assert.equal(state.actions.recoverPanelCoordinate({ source, point: 3, axis: 1, requested: 40 }), true);
+  const [edited] = state.shapes;
+  assert.ok(edited?.kind === 'polygon');
+  assert.deepEqual(edited.points, [[0, 0], [40, 0], [40, 34], [34, 40], [0, 40]]);
+  assert.deepEqual([edited.radii, edited.lengths, edited.tangents, edited.rules], [source.radii, source.lengths, source.tangents, source.rules]);
+  assert.equal(state.actions.recoverPanelCoordinate({ source, point: 4, axis: 1, requested: 40 }), false);
+  assert.equal(harness(source, draft(source), { ...source }).actions.recoverPanelCoordinate({ source, point: 3, axis: 1, requested: 40 }), true);
+});

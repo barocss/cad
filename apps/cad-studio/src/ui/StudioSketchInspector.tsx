@@ -3,7 +3,7 @@ import type { StudioDoc } from '@barocss/cad-model/engine/doc';
 import type { SketchState } from '@barocss/cad-model/sketch/types';
 import { activateDraftBezier, activateDraftOutline, draftShapeOrder, sketchCutInputs, TOOLS } from '../app/sketchControls';
 import { CircleChordControls } from '../sketch/CircleChordControls';
-import { currentCoordinateFeedback } from '../sketch/coordinateFeedback';
+import { currentCoordinateFeedback, type CoordinateIntent } from '../sketch/coordinateFeedback';
 import { ownsEllipseAxesRecovery } from '../sketch/ellipseAxesRecovery';
 import { toggleObjectSnapKind, type ObjectSnapKinds } from '../sketch/objectSnapKinds';
 import { commitOutlineRotation } from '../sketch/outlineRotationCommit';
@@ -43,6 +43,7 @@ interface Props {
     place: Panel['onPlace'];
     band: Panel['onBand'];
     recoverDimension: NonNullable<Panel['onDrivingDimension']>;
+    recoverCoordinate(intent: CoordinateIntent): boolean;
   };
 }
 
@@ -52,6 +53,8 @@ export function StudioSketchInspector({ sketch, document, draft, constraints, to
   const { coordinateFeedback, sketchIssue, renderedSketch, liveShape, generation, pickerGeneration,
     updateShape, setActiveOutline, setSketch, finishError } = draft;
   const { twoPoint, circle, extension, objectKinds, gap, scan, openEnds } = tools;
+  const ownsPanelEdit = () => ownsPanelDrivingDimension(doc, document.live.current, sketch,
+    renderedSketch.current.draft, pickerGeneration, generation.current);
   const ellipse = sketchIssue?.ellipse;
   const conflict = sketchIssue?.conflict;
   const canEditAxes = ownsEllipseAxesRecovery(ellipse, doc, sketch);
@@ -97,10 +100,10 @@ export function StudioSketchInspector({ sketch, document, draft, constraints, to
     }, shape => updateShape(shape, false, 'panel'))}
     onShape={(shape, coordinate, origin) => {
       if (origin && (origin.doc !== document.live.current || origin.source !== liveShape.current)) return;
+      if (coordinate && (!ownsPanelEdit() || edit.recoverCoordinate(coordinate))) return;
       updateShape(shape, false, origin?.kind ?? 'panel', coordinate);
     }}
-    onDrivingDimension={(source, field, edge, value) => !ownsPanelDrivingDimension(doc, document.live.current, sketch,
-      renderedSketch.current.draft, pickerGeneration, generation.current) || edit.recoverDimension(source, field, edge, value)}
+    onDrivingDimension={(source, field, edge, value) => !ownsPanelEdit() || edit.recoverDimension(source, field, edge, value)}
     onPlace={sketch.editNode === undefined ? edit.place : undefined}
     onUi={patch => setSketch(current => current && { ...current, ...patch })} onBand={edit.band}
     outlineTools={<SketchOutlineTools sketch={sketch} onOffset={edit.onOffset} onToCurves={edit.onToCurves}

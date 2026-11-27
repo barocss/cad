@@ -2151,6 +2151,7 @@ export function App() {
           placedRotationLimited: placedSketchSnaps?.sources.some(({ instance }) => !supportsPlacedBoxSnapRotation(instance.rotation)),
           closeDimension: () => sketchViewportActions.onDimEdit?.(null), gap: pathGap, scan: overlaidLines, openEnds }}
         edit={{ place: placeSketch, recoverDimension: sketchViewportActions.recoverPanelDimension,
+          recoverCoordinate: sketchViewportActions.recoverPanelCoordinate,
           onOffset: offsetSketch, onLinkedInset: linkSketchInset, onToCurves: sketchToCurves, onUseOutline: useFaceOutline,
           band: { make: makeSketchBand, edit: editSketchBand, remove: removeSketchBand } }} />}
       {bomOpen && !libraryOpen && !paramsOpen && !rendering && !drawing && !sketch && !active && <BomPanel doc={doc} name={fileName} evaluate={d => engine.part(d, revision.current++, 'read')} onCommit={next => commit(next, false)} onClose={() => setBomOpen(false)} onError={(title, hint) => setToast({ title, hint, detail: '', documentSource: { doc, name: fileName } })} />}
