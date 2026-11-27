@@ -12,23 +12,35 @@ export const isDraftPull = (value: unknown): value is DraftPull => pulls.some(pu
 export const readDraftPull = (value: unknown): DraftPull => isDraftPull(value) ? value : 'z';
 export const draftPulls = pulls;
 
-/** A pick of the complete native wall on an original upright circle extrusion. */
+function exactAxis(vector: readonly number[]): number {
+  const axis = vector.findIndex(value => Math.abs(value) === 1);
+  return vector.length === 3 && axis >= 0 && vector.every((value, i) => i === axis || value === 0) ? axis : -1;
+}
+
+/** A pick of the complete native wall on an original cardinal circle extrusion. */
 export function originalCylinderDraftSelection(ctx: Ctx, pull: DraftPull): { faces: string[]; end: number } | undefined {
-  if ((pull !== 'z' && pull !== '-z') || ctx.selection.faces.length !== 1) return;
+  if (ctx.selection.faces.length !== 1) return;
+  const direction = pull.slice(-1), axis = 'xyz'.indexOf(direction);
   const pick = ctx.selection.faces[0], body = ctx.bodies[pick.body], ref = body?.ref;
   if (!ref || ref.side !== 'solid' || body.mesh.faces.length !== 3 || body.topology?.bodyCount !== 1) return;
   const extrusion = ctx.doc.nodes[ref.node];
   if (extrusion?.kind !== 'extrude' || extrusion.cutDepth !== undefined || (extrusion.draft !== undefined && extrusion.draft !== 0)) return;
   const sketch = ctx.doc.nodes[extrusion.sketch];
-  if (sketch?.kind !== 'sketch' || sketch.profile !== 'circle' || sketch.plane || sketch.on || sketch.association
+  if (sketch?.kind !== 'sketch' || sketch.profile !== 'circle' || sketch.on || sketch.association
     || sketch.pocketFloor || sketch.holes?.length || sketch.regions?.length) return;
+  const plane = sketch.plane;
+  if (plane) {
+    const x = exactAxis(plane.xAxis);
+    if (axis === 2 || exactAxis(plane.normal) !== axis || x < 0 || x === axis || !plane.origin.every(Number.isFinite)) return;
+  } else if (axis !== 2) return;
   const face = body.mesh.faces[pick.face], name = featureId(ctx.doc.nodes, ref.node);
   if (!face?.name.startsWith(name + '.side') || face.exact?.kind !== 'cylinder'
-    || face.exact.a[0] !== 0 || face.exact.a[1] !== 0 || Math.abs(face.exact.a[2]) !== 1 || face.nativeFaces?.length !== 2) return;
+    || exactAxis(face.exact.a) !== axis || face.nativeFaces?.length !== 2) return;
   const faces = face.nativeFaces.map(member => member.name).sort();
   if (faces[0] !== face.name + '#1' || faces[1] !== face.name + '#2') return;
-  const cap = body.mesh.faces.find(candidate => candidate.nativePlaneName === name + (pull === 'z' ? '.bottom' : '.top'))?.nativeAxisPlane;
-  if (cap?.axis === 'z') return { faces, end: cap.at };
+  const [bottom, top] = ['bottom', 'top'].map(cap => body.mesh.faces.find(candidate => candidate.nativePlaneName === name + '.' + cap)?.nativeAxisPlane);
+  if (bottom?.axis !== direction || top?.axis !== direction) return;
+  return { faces, end: pull.startsWith('-') ? Math.max(bottom.at, top.at) : Math.min(bottom.at, top.at) };
 }
 
 export const draftInputs = (): Field[] => [

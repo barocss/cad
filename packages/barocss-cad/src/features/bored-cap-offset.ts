@@ -40,9 +40,12 @@ function line(curve: Curve): boolean {
   return curve.degree === 1 && curve.controlPoints.length === 2 && same(curve.knots, lineKnots) && same(curve.weights, [1, 1]);
 }
 
-function matchingPcurve(uv: Curve, edge: Curve, map: (point: Point) => Point): boolean {
+function matchingPcurve(uv: Curve, edge: Curve, map: (point: Point) => Point, roundoff = 0): boolean {
   return uv.degree === edge.degree && same(uv.knots, edge.knots)
-    && same(uv.weights, edge.weights) && samePoles(uv.controlPoints, edge.controlPoints.map(map));
+    && same(uv.weights, edge.weights) && (roundoff === 0 ? samePoles(uv.controlPoints, edge.controlPoints.map(map))
+      : uv.controlPoints.length === edge.controlPoints.length && uv.controlPoints.every((point, i) => {
+        const projected = map(edge.controlPoints[i]); return point.every((value, axis) => Math.abs(value - projected[axis]) <= roundoff);
+      }));
 }
 
 function capProjection(min: XY, max: XY, up: boolean): (point: Point) => Point {
@@ -103,7 +106,7 @@ function nativeLoopReader(brep: Brep) {
 }
 
 /** Prove the native cap and wall charts before continuing an axial stock. */
-function admittedAxialStock(brep: Brep, kind: StockKind): AxialStock | undefined {
+function admittedAxialStock(brep: Brep, kind: StockKind, retainedCardinalTrims = false): AxialStock | undefined {
   const { bodies, shells, faces, loops, coedges, edges, vertices } = brep;
   const [body] = bodies, [shell] = shells;
   const rectangular = isRectangular(kind), annular = kind === 'annular', twoBore = kind === 'two-bore', capLoops = capLoopCount(kind);
@@ -187,7 +190,8 @@ function admittedAxialStock(brep: Brep, kind: StockKind): AxialStock | undefined
       }
       if (twoBore) boreRims.set(z, innerRims.map(rim => rim.map(use => use.neighbor)));
       const uv = capProjection(min, max, up);
-      if ([...outer, ...innerRims.flat()].some(({ edge, pcurve }) => !level(edge, z) || !matchingPcurve(pcurve, edge.curve, uv))) return undefined;
+      if ([...outer, ...innerRims.flat()].some(({ edge, pcurve }) => !level(edge, z)
+        || !matchingPcurve(pcurve, edge.curve, uv, retainedCardinalTrims ? 64 * Number.EPSILON : 0))) return undefined;
       caps.set(z, face);
       continue;
     }
@@ -323,12 +327,12 @@ export function circularCapReplacementFrame(brep: Brep, faceName: string): { anc
   return cap && { anchor: cap.point, normal: [0, 0, cap.sign] };
 }
 
-function admittedCircularWall(brep: Brep, faceName: string) {
+function admittedCircularWall(brep: Brep, faceName: string, retainedCardinalTrims = false) {
   if (brep.source.family !== 'prismatic-solid') return;
   const matches = brep.faces.filter(face => face.name === faceName);
   if (matches.length !== 1) return;
   const annular = brep.faces.length === stockCounts.annular[0];
-  const stock = admittedAxialStock(brep, annular ? 'annular' : 'circular');
+  const stock = admittedAxialStock(brep, annular ? 'annular' : 'circular', retainedCardinalTrims);
   if (!stock) return;
   let bore: BoreDisk | undefined;
   if (annular) {
@@ -363,9 +367,12 @@ export function circularWallOffsetFrame(brep: Brep, faceName: string): { anchor:
 }
 
 /** Turn both original circular walls into one cone without changing any native trim parameter or owner. */
-export function draftCircularWallIfAdmitted(brep: Brep, faceNames: readonly string[], angle: number, pull: 'z' | '-z', neutral?: number): Brep | undefined {
+export function draftCircularWallIfAdmitted(brep: Brep, faceNames: readonly string[], angle: number, pull: 'z' | '-z', neutral?: number,
+  retainedCardinalTrims = false): Brep | undefined {
   if (faceNames.length !== 2 || new Set(faceNames).size !== 2 || brep.faces.length !== stockCounts.circular[0]) return undefined;
-  const admitted = admittedCircularWall(brep, faceNames[0]);
+  // Only the caller's proved authored cardinal placement may retain cap UV arithmetic from before its origin was added.
+  // Offset and the incumbent unplaced Draft readers keep exact coefficient comparisons.
+  const admitted = admittedCircularWall(brep, faceNames[0], retainedCardinalTrims);
   if (!admitted || admitted.bore || !admitted.faces.every(name => faceNames.includes(name))) return undefined;
   const { stock, walls } = admitted, sign = pull === 'z' ? 1 : -1, zN = neutral ?? (sign === 1 ? stock.lo : stock.hi);
   if ((pull !== 'z' && pull !== '-z') || !Number.isFinite(angle) || angle === 0 || Math.abs(angle) >= Math.PI / 4 || !Number.isFinite(zN) || zN < stock.lo || zN > stock.hi)

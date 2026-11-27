@@ -1,5 +1,5 @@
 // Native-face finishing cases moved unchanged from part-model.ts. Runtime helpers stay with their original owner.
-import { isFacetFace, type Brep } from '../brep/brep-core.js';
+import { checkBrep, isFacetFace, type Brep } from '../brep/brep-core.js';
 import { faceGeometry } from '../brep/analytic-boolean.js';
 import { prismaticFromProfile, type PrismaticSolid } from '../features/prismatic-solid.js';
 import { isMeshBrepError } from '../mesh/mesh-brep.js';
@@ -46,6 +46,63 @@ function originalCircularDraftStock(reference: unknown, part: Part, t: Tools): b
     || sketch.result.kind !== 'sketch' || sketch.result.frame || sketch.result.holes?.length || sketch.result.regions?.length) return false;
   const slabs = part.solid.solid.slabs;
   return slabs.length === 1 && slabs[0].regions.length === 1 && slabs[0].regions[0].holes.length === 0;
+}
+
+interface CardinalCircularStock { readonly matrix: BrepAffine['matrix']; readonly axis: 0 | 1; readonly sign: 1 | -1 }
+
+/** Prove the authored non-XY placement, including its raw axes before frameOf's near-axis snapping. */
+function cardinalCircularDraftStock(reference: unknown, part: Part, t: Tools): CardinalCircularStock | undefined {
+  const owner = t.ref(reference, 'Cardinal circular Draft stock'), author = owner.author;
+  if (author?.kind !== 'extrude' || owner.result.kind !== 'solid' || owner.result.parts.length !== 1 || owner.result.parts[0] !== part
+    || (author.draft !== undefined && author.draft !== 0)) return undefined;
+  const sketch = t.ref(author.sketch, 'Cardinal circular Draft sketch'), source = sketch.author;
+  if (source?.kind !== 'sketch' || source.profile !== 'circle' || source.plane === undefined || source.holes?.length || source.regions?.length
+    || sketch.result.kind !== 'sketch' || !sketch.result.frame || sketch.result.holes?.length || sketch.result.regions?.length) return undefined;
+  const frame = sketch.result.frame;
+  // Explicit XY placements retain their previous path; this lane admits only world X/Y cylinder axes.
+  if (frame.m[8] === 1 || frame.m[8] === -1) return undefined;
+  const reject = (): never => t.fail('CAPABILITY', 'Circular wall Draft needs an original exact cardinal non-XY sketch frame.');
+  const cardinal = (vector: readonly number[]): Point | undefined => {
+    if (vector.length !== 3 || vector.some(v => !Number.isFinite(v)) || vector.filter(v => v !== 0).length !== 1) return undefined;
+    const axis = vector.findIndex(v => v !== 0);
+    if (!(Math.abs(vector[axis]) > 1e-12)) return undefined;
+    return vector.map(v => v === 0 ? 0 : Math.sign(v)) as Point;
+  };
+  const n = cardinal(source.plane.normal), x = cardinal(source.plane.xAxis);
+  if (!n || !x || dot(n, x) !== 0 || n[2] !== 0) return reject();
+  const y = cross(n, x), expected = [x[0], y[0], n[0], x[1], y[1], n[1], x[2], y[2], n[2]];
+  const placement = part.moved;
+  if (part.solid.kind !== 'brep' || !placement || placement.from.solid.kind !== 'upright' || placement.from.history || placement.from.moved
+    || !frame.m.every((v, i) => v === expected[i] && v === placement.m[i]) || !frame.o.every((v, i) => v === placement.o[i])) return reject();
+  const slabs = placement.from.solid.solid.slabs;
+  if (slabs.length !== 1 || slabs[0].regions.length !== 1 || slabs[0].regions[0].holes.length) return reject();
+  const axis = n[0] !== 0 ? 0 : 1;
+  return { matrix: frame.m, axis, sign: n[axis] as 1 | -1 };
+}
+
+/** Permute the actual world stock without subtracting origin; transfer changed geometry by the original IDs. */
+function draftCardinalCircularWalls(world: Brep, stock: CardinalCircularStock, names: readonly string[], angle: number,
+  positivePull: boolean, neutral: number, fail: Tools['fail']): Brep {
+  const m = stock.matrix, transpose: BrepAffine['matrix'] = [m[0], m[3], m[6], m[1], m[4], m[7], m[2], m[5], m[8]];
+  const local = transformBrep(world, { matrix: transpose });
+  const pull = (positivePull ? 1 : -1) * stock.sign === 1 ? 'z' : '-z';
+  const made = draftCircularWallIfAdmitted(local, names, angle, pull, stock.sign * neutral, true);
+  if (!made) return fail('CAPABILITY', 'Circular wall Draft needs both distinct original native halves with their complete cardinal-plane trims.');
+  const placed = transformBrep(made, { matrix: m });
+  // The producer preserves order and IDs. Return unchanged world records directly, including signed zeros.
+  const result: Brep = { ...world,
+    vertices: world.vertices.map((vertex, i) => made.vertices[i] === local.vertices[i] ? vertex : { ...vertex, point: placed.vertices[i].point }),
+    edges: world.edges.map((edge, i) => made.edges[i] === local.edges[i] ? edge : { ...edge, curve: { ...edge.curve, controlPoints: placed.edges[i].curve.controlPoints } }),
+    faces: world.faces.map((face, i) => {
+      if (made.faces[i] === local.faces[i]) return face;
+      const surface = placed.faces[i].surface;
+      if (face.surface.kind !== 'surface' || surface.kind !== 'surface') return fail('GEOMETRY', 'Circular wall Draft lost an original native surface.');
+      return { ...face, surface: { ...face.surface, controlPoints: surface.controlPoints } };
+    }),
+  };
+  const report = checkBrep(result, { strict: true });
+  if (!report.valid) return fail('GEOMETRY', `The cardinal circular Draft is invalid: ${report.issues[0]}`);
+  return result;
 }
 
 /** Resolve the original inputs and return the original deferred finish closure. */
@@ -216,6 +273,7 @@ export function faceFinishOperation(f: CadPartFeature & Record<string, unknown>,
       const pull = f.pull === undefined ? 'z' : f.pull as unknown;
       if (pull !== 'x' && pull !== 'y' && pull !== 'z' && pull !== '-x' && pull !== '-y' && pull !== '-z') fail('INPUT', 'pull must be x, y or z (a positive coordinate axis), or -x, -y or -z');
       const circularStock = hinge === undefined && originalCircularDraftStock(f.target, target[0], t);
+      const cardinalCircle = hinge === undefined && !circularStock ? cardinalCircularDraftStock(f.target, target[0], t) : undefined;
       return () => {
         if (target[0].solid.kind === 'brep' && target[0].solid.brep.faces.some(isFacetFace)) fail('CAPABILITY', 'draft on mesh faces is not supported yet (general draft and offset arrive with R11)');
         if (circularStock) {
@@ -225,6 +283,15 @@ export function faceFinishOperation(f: CadPartFeature & Record<string, unknown>,
           const brep = draftCircularWallIfAdmitted(k.namedFaceTargetBrep(t, f.target, target[0]), names, (angle as number) * Math.PI / 180, pull, zN);
           if (!brep) return fail('CAPABILITY', 'Circular wall Draft needs both distinct original native halves of one circular extrusion.');
           return one({ kind: 'brep', brep });
+        }
+        if (cardinalCircle) {
+          const axisName = cardinalCircle.axis === 0 ? 'x' : 'y';
+          if (pull !== axisName && pull !== `-${axisName}`) return fail('SELECTION', `Circular wall Draft needs a signed world ${axisName.toUpperCase()} pull along the original cylinder.`);
+          const box = bounds(target[0].solid), positive = pull === axisName;
+          const station = neutral ?? (positive ? box.min[cardinalCircle.axis] : box.max[cardinalCircle.axis]);
+          if (station < box.min[cardinalCircle.axis] || station > box.max[cardinalCircle.axis]) return fail('SELECTION', 'Circular wall Draft neutral must lie within the original caps.');
+          return one({ kind: 'brep', brep: draftCardinalCircularWalls(k.namedFaceTargetBrep(t, f.target, target[0]), cardinalCircle,
+            names, (angle as number) * Math.PI / 180, positive, station, fail) });
         }
         if (typeof hinge === 'string' && rotatedStock) {
           const original = k.namedFaceTargetBrep(t, f.target, target[0]), a = (angle as number) * Math.PI / 180;

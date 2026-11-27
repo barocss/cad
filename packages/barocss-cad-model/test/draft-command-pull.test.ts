@@ -257,6 +257,32 @@ test('Studio Draft binds both native halves of the original cylindrical wall', (
   assert.ok(Math.abs(volume(made) - Math.PI * 20 / 3 * (bottom ** 2 + bottom * top + top ** 2)) < 1e-7);
 });
 
+test('Studio Draft keeps the world neutral coordinate for an original YZ cylinder', () => {
+  const source = cylinderPart(10, 20), sketch = source.nodes[0], extrusion = source.nodes[1];
+  assert.ok(sketch.kind === 'sketch' && sketch.profile === 'circle' && extrusion.kind === 'extrude');
+  const doc: StudioDoc = { ...source, nodes: [
+    { ...sketch, center: [12, -7], plane: { origin: [10, 20, 30], normal: [1, 0, 0], xAxis: [0, 1, 0] } },
+    { ...extrusion, from: 3 },
+  ] };
+  const bodies = bodiesOf(doc), face = bodies[0].mesh.faces.findIndex(candidate => candidate.exact?.kind === 'cylinder');
+  assert.ok(face >= 0);
+  const ctx: Ctx = { doc, bodies, selection: { bodies: [], edges: [], faces: [{ body: 0, face }] } };
+  assert.ok(draft.available(ctx).ok);
+  const auto = draft.defaults!(ctx);
+  assert.equal(auto.pull, 'x');
+  const fixed = patchValues(draft, ctx, auto, { neutralMode: 'fixed' });
+  assert.equal(fixed.neutral, 13);
+  assert.equal(patchValues(draft, ctx, { ...auto, pull: '-x' }, { neutralMode: 'fixed' }).neutral, 33);
+  assert.throws(() => draft.build!(ctx, { ...auto, pull: 'z', deg: 10 }), /flat side faces/);
+  const made = draft.build!(ctx, { ...fixed, neutral: 21, deg: 10 });
+  const node = made.nodes[2];
+  assert.ok(node.kind === 'draft');
+  assert.equal(node.pull, 'x');
+  assert.equal(node.neutral, 21);
+  assert.deepEqual(node.faces, ['n1.side0#1', 'n1.side0#2']);
+  assert.ok(Math.abs(volume(made) - 5912.958606927207) < 1e-7);
+});
+
 test('Studio Draft retains three selected box sides through its editable History command', () => {
   const source = rectanglePart(40, 30, 40), ctx = ctxOn(source, [[1, 0, 0], [0, -1, 0], [0, 1, 0]]);
   const created = draft.build!(ctx, { ...draft.defaults!(ctx), deg: 10, pull: 'z' });
