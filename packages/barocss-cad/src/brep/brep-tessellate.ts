@@ -170,7 +170,16 @@ function grownBox(a: XY, b: XY, c: XY, eps: number): [number, number, number, nu
 }
 /** The largest x among a ring's points (Math.max of them). */
 function maxRight(pts: readonly (readonly number[])[], ring: readonly number[]): number { let r = -Infinity; for (const i of ring) { const x = pts[i][0]; if (x !== x) return NaN; if (x > r || (x === 0 && r === 0 && Object.is(r, -0))) r = x; } return r; }
-export function triangulatePolygonWithHoles(outer: readonly XY[], holes: readonly (readonly XY[])[], earCost?: (a: XY, b: XY, c: XY) => number): [number, number, number][] {
+type Triangle = [number, number, number];
+type EarCost = (a: XY, b: XY, c: XY) => number;
+
+export function triangulatePolygonWithHoles(outer: readonly XY[], holes: readonly (readonly XY[])[], earCost?: EarCost): Triangle[] {
+  const triangles = triangulatePolygon(outer, holes, earCost);
+  if (!triangles) throw new BrepError('GEOMETRY', 'Planar face could not be triangulated');
+  return triangles;
+}
+
+function triangulatePolygon(outer: readonly XY[], holes: readonly (readonly XY[])[], earCost?: EarCost, rightwardBridge = false): Triangle[] | null {
   const pts: XY[] = [...outer, ...holes.flat()];
   let ring = outer.map((_, i) => i), offset = outer.length;
   const holeRings = holes.map(h => { const r = h.map((_, i) => offset + i); offset += h.length; return r; });
@@ -218,6 +227,7 @@ export function triangulatePolygonWithHoles(outer: readonly XY[], holes: readonl
     for (const k of order) {
       if (dist[k] === 0) continue;
       const V = pts[ring[k]], A = pts[ring[(k - 1 + ring.length) % ring.length]], B = pts[ring[(k + 1) % ring.length]];
+      if (rightwardBridge && V[0] < M[0]) continue;
       // The bridge must leave M into the material (left of the clockwise hole) and enter V's interior wedge.
       if (!inWedge(A, V, B, M) || !inWedge(MA, M, MB, V)) continue;
       let blocked = false;
@@ -226,7 +236,10 @@ export function triangulatePolygonWithHoles(outer: readonly XY[], holes: readonl
       for (const other of pending) for (let e = 0; e < other.length && !blocked; e++) blocked = crosses(M, V, pts[other[e]], pts[other[(e + 1) % other.length]]);
       if (!blocked) { chosen = k; break; }
     }
-    if (chosen < 0) throw new BrepError('GEOMETRY', 'A hole is not inside its face boundary');
+    if (chosen < 0) {
+      if (rightwardBridge) return null;
+      throw new BrepError('GEOMETRY', 'A hole is not inside its face boundary');
+    }
     const rotated = rotate(at);
     ring = [...ring.slice(0, chosen + 1), ...rotated, mi, ...ring.slice(chosen)];
     for (const v of hole) onRing.add(`${pts[v][0]},${pts[v][1]}`);
@@ -260,11 +273,56 @@ export function triangulatePolygonWithHoles(outer: readonly XY[], holes: readonl
     if (clipped) { despike(); continue; }
     // Degenerate leftovers: cut off a (near) zero-area vertex as a degenerate triangle, or give up.
     const k = ring.findIndex((ib, k2) => Math.abs(cr(pts[ring[(k2 - 1 + ring.length) % ring.length]], pts[ib], pts[ring[(k2 + 1) % ring.length]])) <= eps);
-    if (k < 0) throw new BrepError('GEOMETRY', 'Planar face could not be triangulated');
+    if (k < 0) return null;
     tris.push([ring[(k - 1 + ring.length) % ring.length], ring[k], ring[(k + 1) % ring.length]]); gridRemove(grid, pts, ring[k]); ring.splice(k, 1);
   }
   if (ring.length === 3 && !same(pts[ring[0]], pts[ring[1]]) && !same(pts[ring[1]], pts[ring[2]]) && !same(pts[ring[2]], pts[ring[0]])) tris.push([ring[0], ring[1], ring[2]]);
   return tris;
+}
+
+/** The retry is limited to simple, separate boundaries. The visible bridge also checks the interior wedges. */
+function hasDisjointSimpleRings(outer: readonly XY[], hole: readonly XY[]): boolean {
+  const segments = (ring: readonly XY[]) => ring.map((p, i) => [p, ring[(i + 1) % ring.length]] as const);
+  const overlaps = (a: XY, b: XY, c: XY, d: XY) =>
+    samePoint(a, c) || samePoint(a, d) || samePoint(b, c) || samePoint(b, d) ||
+    crosses(a, b, c, d) || crosses(c, d, a, b);
+  const rims = [segments(outer), segments(hole)];
+  for (const rim of rims) {
+    for (let i = 0; i < rim.length; i++) {
+      const [a, b] = rim[i], [, c] = rim[(i + 1) % rim.length];
+      if (samePoint(a, b) || onSegment(a, b, c) || onSegment(b, c, a)) return false;
+      for (let j = i + 2; j < rim.length; j++) {
+        if (i === 0 && j === rim.length - 1) continue;
+        if (overlaps(a, b, ...rim[j])) return false;
+      }
+    }
+  }
+  return rims[0].every(([a, b]) => rims[1].every(([c, d]) => !overlaps(a, b, c, d)));
+}
+
+/** A retry must use every original segment once and each interior segment twice in opposite directions. */
+function matchesPolygonBoundary(outer: readonly XY[], hole: readonly XY[], tris: readonly Triangle[]): boolean {
+  const points = [...outer, ...hole], boundary = new Set<string>();
+  const addRing = (first: number, length: number) => {
+    for (let i = 0; i < length; i++) boundary.add(`${first + i}:${first + (i + 1) % length}`);
+  };
+  addRing(0, outer.length);
+  addRing(outer.length, hole.length);
+  const edges = new Set<string>();
+  for (const [a, b, c] of tris) {
+    if (turn(points[a], points[b], points[c]) < 0) return false;
+    for (const [from, to] of [[a, b], [b, c], [c, a]]) {
+      const edge = `${from}:${to}`;
+      if (edges.has(edge)) return false;
+      edges.add(edge);
+    }
+  }
+  for (const edge of boundary) if (!edges.delete(edge)) return false;
+  for (const edge of edges) {
+    const [a, b] = edge.split(':');
+    if (!edges.has(`${b}:${a}`)) return false;
+  }
+  return true;
 }
 
 /** A flat bilinear patch's frame (its normal along ∂S/∂u × ∂S/∂v), or null when the surface is not one. */
@@ -1046,7 +1104,15 @@ function surfaceTriangles(face: Brep['faces'][number], rings: Point[][], step: n
   const flip = area < 0, mirror = (q: XY): XY => flip ? [-q[0], q[1]] : q;
   let off = 0; const ringsUV = rings.map(r => { const out = uv.slice(off, off + r.length).map(q => mirror(flat(q))); off += r.length; return out; });
   const size = (a: XY, b: XY, c: XY) => Math.max(Math.hypot(a[0] - b[0], a[1] - b[1]), Math.hypot(b[0] - c[0], b[1] - c[1]), Math.hypot(c[0] - a[0], c[1] - a[1]));
-  const tris = triangulatePolygonWithHoles(ringsUV[0], ringsUV.slice(1), size).map(t => [...t] as [number, number, number]);
+  const outer = ringsUV[0], holes = ringsUV.slice(1);
+  let tris = triangulatePolygon(outer, holes, size);
+  // A nearest bridge can turn back along a genuine hole boundary and leave no ear.
+  // Retry from the rightmost hole vertex toward a visible vertex to its right.
+  if (!tris && holes.length === 1 && hasDisjointSimpleRings(outer, holes[0])) {
+    const retry = triangulatePolygon(outer, holes, size, true);
+    if (retry && matchesPolygonBoundary(outer, holes[0], retry)) tris = retry;
+  }
+  if (!tris) throw new BrepError('GEOMETRY', 'Planar face could not be triangulated');
   // One-sided differences stepping inward, signed so the normal is always along Su × Sv.
   // (The point between its two neighbours: each shares a parameter with the call before, whose basis the evaluator keeps.
   // K13, D244.)
