@@ -1,5 +1,6 @@
 import { buildBrep, checkBrep, lineCurve, type Brep, type BrepFaceInput, type BrepLoopInput } from '../brep/brep-core.js';
 import { transformBrep } from '../brep/brep-transform.js';
+import { binary64Dyadic } from '../core/dyadic.js';
 import { CadNumericPolicy, linearToleranceMM } from '../numeric-policy.js';
 import { capSurface, segmentCurve, type ProfileSegment } from './extruded-profile-solid.js';
 import type { Curve, Point, Surface } from '../types.js';
@@ -7,7 +8,8 @@ import type { Curve, Point, Surface } from '../types.js';
 const LINE = [0, 0, 1, 1], QUADRATIC = [0, 0, 0, 1, 1, 1];
 type Use = BrepLoopInput['uses'][number];
 type Edge = { id: string; name: string; curve: Curve; vertices: [string, string] };
-type SegmentSource = { radius: number; halfWidth: number; chord: number; center: readonly [number, number]; xAxis: readonly [number, number]; arcIndex: number };
+type SegmentSource = { radius: number; halfWidth: number; chord: number; center: readonly [number, number]; xAxis: readonly [number, number]; arcIndex: number;
+  baseEndpoints?: readonly [readonly [number, number], readonly [number, number]] };
 
 function withinModelingRange(point: Point): boolean {
   return point.every(value => Math.abs(value) <= CadNumericPolicy.coordinateAbs);
@@ -42,6 +44,46 @@ export function draftCardinalCircularSegment(profile: readonly ProfileSegment[],
   if (!(c !== 0 && Math.abs(c) < arc.radius)) return undefined;
   return buildDraftedSegment({ radius: arc.radius, halfWidth: q0, chord: c, center: [cx, cy], xAxis: [x, y], arcIndex: index },
     names, z0, z1, slope, id, tag, fail);
+}
+
+/** A noncardinal chord requires equal radii in the original stored binary64 coordinates, not a circle fit. */
+export function draftObliqueCircularSegment(profile: readonly ProfileSegment[], names: readonly string[], z0: number, z1: number,
+  slope: number, id: string, tag: string, fail: (detail: string) => never): Brep | undefined {
+  const index = profile.findIndex(segment => segment.kind === 'arc'), arc = profile[index], chord = profile[1 - index];
+  if (arc?.kind !== 'arc' || chord?.kind !== 'line' || !(arc.sweep > 0 && arc.sweep < 2 * Math.PI)) return undefined;
+  // Exact differences precede all rounded subtraction. buildProfileLoop deliberately admits a looser radius mismatch.
+  const dyadics = [...arc.start, ...arc.end, ...arc.center].map(binary64Dyadic), exponent = Math.max(...dyadics.map(v => v.k));
+  const values = dyadics.map(v => v.m << BigInt(exponent - v.k));
+  const [ax, ay, bx, by] = [values[0] - values[4], values[1] - values[5], values[2] - values[4], values[3] - values[5]];
+  if (ax * ax + ay * ay !== bx * bx + by * by || ax === bx && ay === by) return undefined;
+  const cross = ax * by - ay * bx, diameter = cross === 0n;
+  const dx = arc.start[0] - arc.end[0], dy = arc.start[1] - arc.end[1], length = Math.hypot(dx, dy);
+  if (dx === 0 || dy === 0) return undefined; // The established cardinal paths keep their own admission.
+  const x = dx / length, y = dy / length, q0 = diameter ? arc.radius : length / 2;
+  const mx = (arc.start[0] - arc.center[0] + arc.end[0] - arc.center[0]) / 2;
+  const my = (arc.start[1] - arc.center[1] + arc.end[1] - arc.center[1]) / 2;
+  const c = diameter ? 0 : -mx * y + my * x;
+  const size = Math.max(1, arc.radius, ...arc.start.map(Math.abs), ...arc.end.map(Math.abs), ...arc.center.map(Math.abs));
+  const tolerance = linearToleranceMM(size), roundoff = 64 * Number.EPSILON * size;
+  if (![x, y, q0, c].every(Number.isFinite) || !(q0 > tolerance && arc.radius - Math.abs(c) > tolerance)
+    || Math.abs(x * x + y * y - 1) > 16 * Number.EPSILON
+    || !diameter && (c === 0 || (c > 0) !== (cross > 0n))
+    || Math.abs(Math.hypot(q0, c) - arc.radius) > roundoff
+    || [arc.start, arc.end].some((point, i) => Math.hypot(
+      arc.center[0] + (i === 0 ? q0 : -q0) * x - c * y - point[0],
+      arc.center[1] + (i === 0 ? q0 : -q0) * y + c * x - point[1]) > roundoff))
+    fail('the circular segment does not have a stable chord frame');
+  return buildDraftedSegment({ radius: arc.radius, halfWidth: q0, chord: c, center: arc.center, xAxis: [x, y], arcIndex: index,
+    baseEndpoints: [arc.start, arc.end] }, names, z0, z1, slope, id, tag, fail);
+}
+
+/** Preserve the admitted authored endpoints and every incident curve end, without a frame round trip. */
+function retainBaseEndpoints(brep: Brep, endpoints: NonNullable<SegmentSource['baseEndpoints']>, z0: number): Brep {
+  const fixed = new Map<string, Point>([['b0', [endpoints[0][0], endpoints[0][1], z0]], ['b2', [endpoints[1][0], endpoints[1][1], z0]]]);
+  return { ...brep, vertices: brep.vertices.map(vertex => fixed.has(vertex.id) ? { ...vertex, point: fixed.get(vertex.id)! } : vertex),
+    edges: brep.edges.map(edge => ({ ...edge, curve: { ...edge.curve, controlPoints: edge.curve.controlPoints.map((point, i, points) =>
+      i === 0 && fixed.has(edge.vertices[0]) ? fixed.get(edge.vertices[0])!
+        : i === points.length - 1 && fixed.has(edge.vertices[1]) ? fixed.get(edge.vertices[1])! : point) } })) };
 }
 
 /** Shared exact cone/plane producer; c=0 retains the original half-disk arithmetic and native bytes. */
@@ -120,7 +162,8 @@ function buildDraftedSegment(source: SegmentSource, names: readonly string[], z0
   ];
   const local = buildBrep({ source: { family: 'drafted-extrusion', id }, vertices: Object.entries(points).map(([key, point]) => ({ id: key, point })),
     edges, bodies: [{ id: id + '_body', kind: 'solid', shells: [{ id: 's', closed: true, faces }] }] });
-  const brep = transformBrep(local, { matrix: [x, -y, 0, y, x, 0, 0, 0, 1], offset: [cx, cy, z0] });
+  const placed = transformBrep(local, { matrix: [x, -y, 0, y, x, 0, 0, 0, 1], offset: [cx, cy, z0] });
+  const brep = source.baseEndpoints ? retainBaseEndpoints(placed, source.baseEndpoints, z0) : placed;
   if (!brep.vertices.every(vertex => withinModelingRange(vertex.point))
     || !brep.edges.every(({ curve }) => curve.controlPoints.every(withinModelingRange))
     || !brep.faces.every(({ surface }) => surface.kind === 'surface' && surface.controlPoints.every(row => row.every(withinModelingRange))))

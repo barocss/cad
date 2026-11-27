@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { createFlow } from './flow-helper.mjs';
 
-const major = process.argv.includes('major');
+const oblique = process.argv.includes('oblique');
+const major = oblique || process.argv.includes('major');
 const segment = major || process.argv.includes('segment');
 const outward = process.argv.includes('outward');
 const baseline = process.argv.includes('--baseline');
@@ -9,8 +10,8 @@ const firstAngle = major ? 10 : segment ? 6 : outward ? -10 : 10;
 const secondAngle = segment ? -10 : outward ? -14 : 14;
 const collapseAngle = major ? '40' : segment ? '12' : '35';
 const profileName = segment ? 'circular segment' : 'half-disk';
-const sketchName = major ? 'major circular segment' : profileName;
-const fileStem = major ? 'major-circular-segment' : segment ? 'circular-segment' : 'half-disk';
+const sketchName = oblique ? 'oblique major circular segment' : major ? 'major circular segment' : profileName;
+const fileStem = sketchName.replaceAll(' ', '-');
 
 const pins = [
   'apps/cad-studio/src/App.tsx',
@@ -26,9 +27,9 @@ const pins = [
 const f = await createFlow({
   name: 'half-disk-draft-extrude', output: process.argv[2], envFrozen: 'D1253_SOURCE_FROZEN',
   initialFiles: pins, requiredFrozen: pins,
-  qualification: segment ? `Draft a ${sketchName} with an off-centre cardinal chord and reopen the native file.`
+  qualification: segment ? `Draft an original ${sketchName} and reopen the native file.`
     : `Create an ${outward ? 'outward' : 'inward'} half-disk Draft Extrude, edit its angle and reopen the native file.`,
-  limits: ['One original XY sketch with a radius-10 circular arc and one cardinal chord, positive extrusion distance.'],
+  limits: [`One original XY sketch with one circular arc and one ${oblique ? 'oblique' : 'cardinal'} chord, positive extrusion distance.`],
   inspectorSource: `
 import { readFileSync } from 'node:fs';
 import { checkBrep, curveDomain, evaluateCurve, evaluateSurface, faceGeometry, massPropertiesOf, surfaceDomain } from '@barocss/cad';
@@ -45,21 +46,29 @@ const curvedSupports = brep.faces.filter(face => faceGeometry(face).kind !== 'pl
   return [0.2, 0.5, 0.8].flatMap(a => [0.2, 0.5, 0.8].map(b =>
     evaluateSurface(surface, u[0] + a * (u[1] - u[0]), v[0] + b * (v[1] - v[0]))));
 });
+const baseChord = brep.edges.filter(({ curve }) => curve.degree === 1 && curve.controlPoints.every(point => point[2] === 0))
+  .map(({ curve }) => curve.controlPoints);
 console.log(JSON.stringify({ outputs: outputs.length, check: checkBrep(brep, { strict: true }), seams,
-  kinds: brep.faces.map(face => faceGeometry(face).kind), curvedSupports, mass }));
+  kinds: brep.faces.map(face => faceGeometry(face).kind), curvedSupports, baseChord, mass }));
 `,
 });
-const radius = 10, height = 10, chord = major ? -6 : segment ? 6 : 0, halfChord = segment ? 8 : radius;
+const scale = oblique ? 5 : 1;
+const radius = 10 * scale, height = 10 * scale;
+const chord = (major ? -6 : segment ? 6 : 0) * scale, halfChord = segment ? 8 * scale : radius;
+const lineStart = oblique ? [0, -50] : [-halfChord, chord];
+const arcStart = oblique ? [48, 14] : [halfChord, chord];
+const chordLocal = ([x, y, z]) => oblique ? [(3 * x + 4 * y) / 5, (3 * y - 4 * x) / 5, z] : [x, y, z];
 const seed = {
   format: 'barocss-cad-model', schema: 3, units: 'mm', parameters: {}, nextId: 1,
   nodes: [{ id: 'n0', kind: 'sketch', profile: 'loop', segments: [
-    { kind: 'line', start: [-halfChord, chord] },
-    { kind: 'arc', start: [halfChord, chord], center: [0, 0], direction: 'ccw' },
+    { kind: 'line', start: lineStart },
+    { kind: 'arc', start: arcStart, center: [0, 0], direction: 'ccw' },
   ] }], outputs: {},
 };
 const button = (name, scope = f.page) => scope.getByRole('button', { name, exact: true });
 const field = (name, scope) => scope.getByLabel(name, { exact: true });
 const tolerance = 1e-7;
+const volumeTolerance = tolerance * scale ** 3;
 const near = (a, b, tol = tolerance) => Number.isFinite(a) && Math.abs(a - b) <= tol;
 
 function integral(slope, intervals) {
@@ -76,18 +85,24 @@ function integral(slope, intervals) {
 async function check(label, doc, angle) {
   const read = await f.inspect(label, doc);
   const slope = Math.tan(angle * Math.PI / 180), volume = integral(slope, 4096);
-  assert.ok(near(volume, integral(slope, 2048), 1e-9));
+  assert.ok(near(volume, integral(slope, 2048), volumeTolerance / 100));
   assert.equal(read.outputs, 1);
   assert.equal(read.check.valid, true, read.check.issues.join('\n'));
   assert.deepEqual(read.check.counts, { bodies: 1, shells: 1, faces: 5, loops: 5, coedges: 18, edges: 9, vertices: 6 });
   assert.equal(read.check.topology[0].genus, 0);
   assert.equal(read.kinds.filter(kind => kind === 'plane').length, 3);
+  if (oblique) {
+    assert.equal(read.baseChord.length, 1);
+    const endpoints = read.baseChord[0].map(point => point.slice(0, 2));
+    assert.deepEqual(endpoints.sort((a, b) => a[0] - b[0]), [lineStart, arcStart]);
+  }
   assert.equal(read.curvedSupports.length, 2);
   for (const support of read.curvedSupports) for (const [x, y, z] of support)
     assert.ok(near(Math.hypot(x, y), radius - z * slope));
   assert.equal(read.seams.length, 2);
-  assert.notEqual(Math.sign(read.seams[0].points[0][0]), Math.sign(read.seams[1].points[0][0]));
-  for (const seam of read.seams) {
+  const localSeams = read.seams.map(seam => ({ ...seam, points: seam.points.map(chordLocal) }));
+  assert.notEqual(Math.sign(localSeams[0].points[0][0]), Math.sign(localSeams[1].points[0][0]));
+  for (const seam of localSeams) {
     for (const [x, y, z] of seam.points) {
       assert.ok(near(y, chord + z * slope) && near(Math.hypot(x, y), radius - z * slope), JSON.stringify({ label, seam }));
     }
@@ -95,12 +110,12 @@ async function check(label, doc, angle) {
     assert.ok([0, height].every(z => seam.points.some(point => near(point[2], z))));
   }
   assert.equal(read.mass.method, 'quadrature');
-  assert.ok(near(read.mass.volume, volume), JSON.stringify({ label, actual: read.mass.volume, volume }));
+  assert.ok(near(read.mass.volume, volume, volumeTolerance), JSON.stringify({ label, actual: read.mass.volume, volume }));
   const worker = (await f.bodies()).bodies;
   assert.equal(worker.length, 1);
-  assert.ok(near(worker[0].volume, volume), JSON.stringify({ label, workerVolume: worker[0].volume, volume }));
+  assert.ok(near(worker[0].volume, volume, volumeTolerance), JSON.stringify({ label, workerVolume: worker[0].volume, volume }));
   f.report.observations.push({ label, angle, volume, nativeVolume: read.mass.volume, workerVolume: worker[0].volume,
-    method: read.mass.method, seams: read.seams, counts: read.check.counts, gap: read.check.maximumEdgeSurfaceGap });
+    method: read.mass.method, seams: read.seams, baseChord: read.baseChord, counts: read.check.counts, gap: read.check.maximumEdgeSurfaceGap });
 }
 
 await f.run(async () => {

@@ -85,8 +85,8 @@ test('inward half-disk Draft uses the sketch frame and refuses collapse or nearb
   // The second case leaves a positive 0.00000005 mm sag, below the native 0.0000001 mm linear floor.
   for (const angle of [Math.atan(.5) * 180 / pi, Math.atan((10 - 5e-8) / 20) * 180 / pi, 30])
     assert.throws(() => evaluateCadPart(halfDiskDoc(angle)), e => e.code === 'PARAMETER' && /closes the half-disk/.test(e.message));
-  const a = 10 * Math.SQRT1_2, obliqueHalf = [{ kind: 'line', start: [-a, -a] }, { kind: 'arc', start: [a, a], center: [0, 0], direction: 'ccw' }];
-  assert.throws(() => draftedExtrusion({ profile: obliqueHalf, z0: 0, z1: 10, draft: 10, tag: 'e' }), /not tangent/);
+  const a = 10 * Math.SQRT1_2, offCircle = [{ kind: 'line', start: [-a, -a] }, { kind: 'arc', start: [a, a + 1e-10], center: [0, 0], direction: 'ccw' }];
+  assert.throws(() => draftedExtrusion({ profile: offCircle, z0: 0, z1: 10, draft: 10, tag: 'e' }), /not tangent/);
 });
 
 test('half-disk Draft keeps authored tags for a reversed loop in a translated cardinal orientation', () => {

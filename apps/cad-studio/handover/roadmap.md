@@ -1,13 +1,13 @@
 # CAD roadmap — current status and execution order
 
-Updated 2026-11-28 · Priority authority: D520 · Latest delivery: D2105 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
+Updated 2026-11-28 · Priority authority: D520 · Latest delivery: D2106 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
 
 This is the only current status index. Detailed tracks define acceptance; the 34 stable row pages retain scope and issue navigation. Immutable decision notes retain results. Do not append chronological status paragraphs here. [D520 decision](notes/cad-roadmap-replan-2026-11-04/README.md) supersedes D445 execution order and historical next-item text, while retaining its safeguards and bounded proofs.
 
 ## Now and next
 
-- **Current position:** [D2105](notes/major-circular-segment-draft-2026-11-28/README.md), P5 rows 07 and 30. Draft Extrude supports both angle signs for a major original circular segment with a cardinal chord. Studio verifies preview cancellation, exact seams, collapse refusal and native reopen ([#14](https://github.com/barocss/cad/issues/14)).
-- **Next MAIN:** D2106, P5 rows 07 and 30. Reproduce the noncardinal single-chord Draft refusal and test exact orientation-independent geometry with an independent oracle ([#14](https://github.com/barocss/cad/issues/14)).
+- **Current position:** [D2106](notes/oblique-circular-segment-draft-2026-11-28/README.md), P5 rows 07 and 30. Draft Extrude supports both angle signs for an original circular segment with an oblique chord after exact source admission. Studio verifies both original endpoints and native reopen ([#14](https://github.com/barocss/cad/issues/14)).
+- **Next MAIN:** D2107, P5 rows 07 and 30. Qualify an explicit Sharp or Round uniform Shell corner for one closed concave prism while preserving the result of older files ([#13](https://github.com/barocss/cad/issues/13)).
 - **Separate follow-ups:** Continue Studio App extraction in cohesive parts with affected desktop checks. [#608 Rendering](https://github.com/barocss/cad/issues/608) stays on HOLD. API inventory drift remains open. The issue tracker records [#126](https://github.com/barocss/cad/issues/126), [#613](https://github.com/barocss/cad/issues/613), [#152](https://github.com/barocss/cad/issues/152) and [#22](https://github.com/barocss/cad/issues/22) as closed.
 - **Active repository:** [barocss/cad](https://github.com/barocss/cad), based on `origin/main`. Fetch before work and preserve unexpected changes. The [migration record](../../../docs/migration/README.md) maps the former `local/cad-dev` history and issue numbers.
 - **Evidence correction:** D482 records2167 PASS/0 FAIL/2 existing SKIP in a later full-kernel run than D433. Neither result is a new full-suite PASS at this audit HEAD. [D482 record](notes/vertical-contact-refusal-2026-11-04/README.md).

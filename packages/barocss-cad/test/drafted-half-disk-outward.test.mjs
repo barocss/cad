@@ -97,8 +97,8 @@ test('outward half-disk keeps exact source/angle/range refusals and checks the e
   assert.throws(() => make(0, 1800, -80), /modeling coordinate range/);
   assert.throws(() => make(0, 10, -89), /below 89/);
   assert.throws(() => make(0, 10, -Number.EPSILON), /too small/);
-  const a = 10 * Math.SQRT1_2, obliqueHalf = [{ kind: 'line', start: [-a, -a] }, { kind: 'arc', start: [a, a], center: [0, 0], direction: 'ccw' }];
-  assert.throws(() => draftedExtrusion({ profile: obliqueHalf, z0: 0, z1: 10, draft: -10, tag: 'e' }), /not tangent/);
+  const a = 10 * Math.SQRT1_2, offCircle = [{ kind: 'line', start: [-a, -a] }, { kind: 'arc', start: [a, a + 1e-10], center: [0, 0], direction: 'ccw' }];
+  assert.throws(() => draftedExtrusion({ profile: offCircle, z0: 0, z1: 10, draft: -10, tag: 'e' }), /not tangent/);
 });
 
 test('inward half-disk native bytes stay unchanged, including translated reversed tags', () => {
