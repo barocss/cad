@@ -117,3 +117,94 @@ test('incumbent unplaced world-Z circular Draft native bytes remain unchanged', 
     assert.equal(createHash('sha256').update(JSON.stringify(brep)).digest('hex'), hashes[i]);
   }
 });
+
+const xyPlanes = [
+  { name: 'explicit identity at zero', origin: [0, 0, 0], normal: [0, 0, 1], xAxis: [1, 0, 0] },
+  { name: 'translated positive Z', origin, normal: [0, 0, 1], xAxis: [1, 0, 0] },
+  { name: 'reflected negative Z with signed in-plane basis', origin, normal: [0, 0, -1], xAxis: [0, -1, 0] },
+];
+const xyDoc = (plane, angle = 10, pull = 'z', neutral = plane.origin[2] + plane.normal[2] * 11) => {
+  const input = doc(angle, pull, neutral); const { name: _name, ...frame } = plane;
+  input.features[0].plane = frame; return input;
+};
+const xyBounds = plane => {
+  const a = plane.origin[2] + plane.normal[2] * 3, b = plane.origin[2] + plane.normal[2] * 23;
+  return [Math.min(a, b), Math.max(a, b)];
+};
+const xyCentre = plane => {
+  const x = plane.xAxis, y = cross(plane.normal, x);
+  return plane.origin.map((o, i) => o + x[i] * 12 - y[i] * 7);
+};
+
+for (const plane of xyPlanes) test(`${plane.name}: original complete wall Draft keeps exact XY charts and neutral records`, () => {
+  const base = xyDoc(plane), source = evaluateCadPart({ ...base, features: base.features.slice(0, 2) }).outputs[0].brep;
+  const [lo, hi] = xyBounds(plane), interior = plane.origin[2] + plane.normal[2] * 11, centre = xyCentre(plane);
+  for (const angle of [10, -10]) for (const neutral of [lo, interior, hi]) {
+    const input = xyDoc(plane, angle, 'z', neutral), before = structuredClone(input), snapshot = evaluateCadPart(input), output = snapshot.outputs[0], brep = output.brep;
+    const ref = frustum(angle, 1, lo, hi, neutral);
+    assert.deepEqual(input, before); strict(brep); bindings(brep); watertight(brep); assert.deepEqual(ownership(brep), ownership(source));
+    const mass = massPropertiesOf(output); close(mass.volume, ref.volume, 'independent XY frustum volume', 1e-7);
+    mass.centroid.forEach((v, i) => close(v, [centre[0], centre[1], ref.station][i], 'independent XY world centroid', 1e-7));
+    for (const face of brep.faces.filter(f => halves.includes(f.name))) for (const u of [0, .2, .5, .8, 1]) for (const v of [0, .3, .7, 1]) {
+      const p = evaluateSurface(face.surface, u, v); close(Math.hypot(p[0] - centre[0], p[1] - centre[1]), 10 - ref.k * (p[2] - neutral), 'actual native XY conical support');
+    }
+    if (neutral === interior) {
+      assert.deepEqual(loadCadPart(saveCadPart(snapshot)).outputs[0].brep, brep);
+      const reversed = structuredClone(input); reversed.features.at(-1).faces.reverse(); assert.deepEqual(evaluateCadPart(reversed).outputs[0].brep, brep);
+    } else {
+      const cap = source.faces.find(f => f.surface.controlPoints.every(row => row.every(p => p[2] === neutral)));
+      assert.ok(cap); assert.deepEqual(brep.faces.find(f => f.id === cap.id), cap, 'the original neutral cap record is unchanged');
+      for (const edge of source.edges.filter(e => e.curve.controlPoints.every(p => p[2] === neutral))) assert.deepEqual(brep.edges.find(e => e.id === edge.id), edge);
+      for (const vertex of source.vertices.filter(v => v.point[2] === neutral)) assert.deepEqual(brep.vertices.find(v => v.id === vertex.id), vertex);
+    }
+  }
+});
+
+test('all eight original XY source bases support both signed pulls and angles with world-coordinate neutral semantics', () => {
+  let count = 0;
+  for (const normalSign of [1, -1]) for (const inPlaneAxis of [0, 1]) for (const inPlaneSign of [1, -1]) for (const pullSign of [1, -1]) for (const angle of [10, -10]) {
+    const xAxis = [0, 0, 0]; xAxis[inPlaneAxis] = inPlaneSign;
+    const plane = { origin, normal: [0, 0, normalSign], xAxis }, neutral = 30 + normalSign * 11, [lo, hi] = xyBounds(plane), centre = xyCentre(plane);
+    const input = xyDoc(plane, angle, pullSign === 1 ? 'z' : '-z', neutral), source = evaluateCadPart({ ...input, features: input.features.slice(0, 2) }).outputs[0].brep;
+    const output = evaluateCadPart(input).outputs[0], ref = frustum(angle, pullSign, lo, hi, neutral);
+    strict(output.brep); bindings(output.brep); assert.deepEqual(ownership(output.brep), ownership(source));
+    close(massPropertiesOf(output).volume, ref.volume, 'eight-basis independent volume', 1e-7);
+    massPropertiesOf(output).centroid.forEach((v, i) => close(v, [centre[0], centre[1], ref.station][i], 'eight-basis independent centroid', 1e-7)); count++;
+  }
+  assert.equal(count, 32);
+});
+
+test('placed XY Draft admits the exact world-Z charts and keeps partial, snapped, derived and cone Offset refusals', () => {
+  for (const plane of xyPlanes) {
+    const input = xyDoc(plane), source = evaluateCadPart({ ...input, features: input.features.slice(0, 2) }).outputs[0].brep;
+    // XY materialization has fresh exact world-Z cap projections; no placement arithmetic opt-in is needed.
+    assert.ok(draftCircularWallIfAdmitted(source, halves, Math.PI / 18, 'z', input.features.at(-1).neutral));
+    const absentPull = xyDoc(plane); delete absentPull.features.at(-1).pull;
+    assert.deepEqual(evaluateCadPart(absentPull).outputs[0].brep, evaluateCadPart(input).outputs[0].brep);
+    const [lo, hi] = xyBounds(plane);
+    for (const pull of ['z', '-z']) {
+      const absentNeutral = xyDoc(plane, 10, pull); delete absentNeutral.features.at(-1).neutral;
+      assert.deepEqual(evaluateCadPart(absentNeutral).outputs[0].brep, evaluateCadPart(xyDoc(plane, 10, pull, pull === 'z' ? lo : hi)).outputs[0].brep);
+    }
+    for (const pull of ['x', '-x', 'y', '-y']) assert.throws(() => evaluateCadPart(xyDoc(plane, 10, pull)), e => e.code === 'SELECTION' && /world Z pull/.test(e.message));
+    for (const faces of [[halves[0]], ['e.side0'], [halves[0], halves[0]], [halves[0], 'e.top']]) {
+      const partial = xyDoc(plane); partial.features.at(-1).faces = faces;
+      assert.throws(() => evaluateCadPart(partial), e => e.code === 'CAPABILITY' && /both distinct original native halves/.test(e.message));
+    }
+    const cone = evaluateCadPart(input).outputs[0].brep;
+    assert.equal(circularWallOffsetFrame(cone, halves[0]), undefined, 'already drafted cones do not gain radial Offset');
+  }
+  for (const [normal, xAxis] of [[[1e-13, 0, 1], [0, 1, 0]], [[0, 0, 1], [1, 1e-13, 0]], [[0, 0, -1], [.6, -.8, 0]]]) {
+    const input = xyDoc(xyPlanes[1]); input.features[0].plane = { origin, normal, xAxis };
+    assert.throws(() => evaluateCadPart(input), e => e.code === 'CAPABILITY' && /exact cardinal XY sketch frame/.test(e.message));
+  }
+  const moved = xyDoc(xyPlanes[1]); moved.features.splice(2, 0, { id: 'm', kind: 'translate', target: 'e', offset: [1, 2, 3] }); moved.features.at(-1).target = 'm'; delete moved.features.at(-1).neutral;
+  assert.throws(() => evaluateCadPart(moved), e => e.code === 'CAPABILITY' && /meet along an edge/.test(e.message));
+  assert.throws(() => evaluateCadPart(xyDoc(xyPlanes[1], 44)), e => e.code === 'GEOMETRY' && /cylinder axis/.test(e.message));
+});
+
+test('incumbent non-XY native Draft bytes remain unchanged', () => {
+  const hashes = ['83fa52e251b3324beafbd87af2dd575c9acffd390e6123ef16f97277743fc212', '7beaf5cc9c07e2823b4d281aefad05a3925380110559bdf8c4a2e8cbd927ae24'];
+  for (const [i, angle] of [10, -10].entries())
+    assert.equal(createHash('sha256').update(JSON.stringify(evaluateCadPart(doc(angle)).outputs[0].brep)).digest('hex'), hashes[i]);
+});

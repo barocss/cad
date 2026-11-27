@@ -6,10 +6,14 @@ import { openModelGroup } from './model-rail-helper.mjs';
 
 const baseline = process.argv.includes('--baseline');
 const axialX = process.argv.includes('axial-x');
+const placedZ = process.argv.includes('placed-z');
 const historyBaseline = process.argv.includes('--history-neutral-baseline');
 const historyNeutral = historyBaseline || process.argv.includes('--history-neutral');
-const worldPoint = ([x, y, z]) => axialX ? [10 + z, 20 + x, 30 + y] : [x, y, z];
-const cylinderPoint = ([x, y, z]) => axialX ? [y - 20, z - 30, x - 10] : [x, y, z];
+const plane = axialX
+  ? { origin: [10, 20, 30], normal: [1, 0, 0], xAxis: [0, 1, 0] }
+  : placedZ ? { origin: [10, 20, 30], normal: [0, 0, 1], xAxis: [1, 0, 0] } : undefined;
+const worldPoint = ([x, y, z]) => axialX ? [10 + z, 20 + x, 30 + y] : placedZ ? [10 + x, 20 + y, 30 + z] : [x, y, z];
+const cylinderPoint = ([x, y, z]) => axialX ? [y - 20, z - 30, x - 10] : placedZ ? [x - 10, y - 20, z - 30] : [x, y, z];
 const pins = [
   'packages/barocss-cad-model/src/app/commands.ts',
   'packages/barocss-cad-model/src/app/draftInputs.ts',
@@ -22,7 +26,7 @@ const f = await createFlow({
   initialFiles: pins, requiredFrozen: pins,
   qualification: 'Pick the original cylindrical wall in Studio and use a fixed neutral coordinate.',
   limits: [axialX ? 'One original YZ circular extrusion without a bore, +X pull and fixed neutral coordinate.'
-    : 'One original XY circular extrusion without a bore or placement, +Z pull and fixed neutral coordinate.'],
+    : `One original ${placedZ ? 'translated' : 'default'} XY circular extrusion without a bore, +Z pull and fixed neutral coordinate.`],
   inspectorSource: `
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
@@ -47,7 +51,7 @@ const stock = {
   format: 'barocss-cad-model', schema: 3, units: 'mm', parameters: {}, nextId: 2,
   nodes: [
     { id: 'n0', kind: 'sketch', profile: 'circle', center: [12, -7], radius: 10,
-      ...(axialX ? { plane: { origin: [10, 20, 30], normal: [1, 0, 0], xAxis: [0, 1, 0] } } : {}) },
+      ...(plane ? { plane } : {}) },
     { id: 'n1', kind: 'extrude', sketch: 0, from: 3, height: 20 },
   ],
   outputs: { b1: { node: 1, side: 'solid' } },
@@ -57,7 +61,8 @@ const hud = () => f.page.getByRole('dialog', { name: 'Draft', exact: true });
 const historyHud = () => f.page.getByRole('dialog', { name: 'Edit Draft', exact: true });
 const field = (name, scope = hud()) => scope.getByLabel(name, { exact: true });
 const near = (a, b, tolerance = 1e-8) => assert.ok(Number.isFinite(a) && Math.abs(a - b) < tolerance, `${a} vs ${b}`);
-const neutral = axialX ? 21 : 11;
+const originAt = axialX ? 10 : placedZ ? 30 : 0;
+const neutral = originAt + 11, capStart = originAt + 3;
 
 async function verify(label, doc, angle, original) {
   const n = await f.inspect(label, doc), slope = Math.tan(angle * Math.PI / 180);
@@ -102,7 +107,7 @@ async function switchHistoryNeutral(draft, original) {
   }
   const edit = await openHistory();
   await field('Neutral plane', edit).selectOption('fixed');
-  assert.equal(await field('Neutral coordinate', edit).inputValue(), historyBaseline ? '' : axialX ? '13' : '3');
+  assert.equal(await field('Neutral coordinate', edit).inputValue(), historyBaseline ? '' : String(capStart));
   await f.same(automatic);
   await f.snapshot('history-fixed-coordinate-default');
   if (historyBaseline) return;
@@ -168,7 +173,7 @@ await f.run(async () => {
     await draft.click();
     assert.equal(await field('Pull').inputValue(), axialX ? 'x' : 'z');
     await field('Neutral plane').selectOption('fixed');
-    assert.equal(await field('Neutral coordinate').inputValue(), axialX ? '13' : '3');
+    assert.equal(await field('Neutral coordinate').inputValue(), String(capStart));
     await field('Neutral coordinate').fill(String(neutral));
     await field('Angle').fill('10');
     await hud().locator('.status').getByText('preview', { exact: true }).waitFor();

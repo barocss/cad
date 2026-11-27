@@ -299,6 +299,37 @@ test('Studio Draft keeps the world neutral coordinate for an original YZ cylinde
   assert.equal(patchValues(partialEdit, partialCtx, partialEdit.defaults(partialCtx), { neutralMode: 'fixed' }).neutral, '');
 });
 
+test('Studio Draft on a translated XY cylinder derives signed world caps for new and saved Draft', () => {
+  const source = cylinderPart(10, 20), [sketch, extrusion] = source.nodes;
+  assert.ok(sketch.kind === 'sketch' && sketch.profile === 'circle' && extrusion.kind === 'extrude');
+  const doc: StudioDoc = { ...source, nodes: [
+    { ...sketch, center: [12, -7], plane: { origin: [10, 20, 30], normal: [0, 0, 1], xAxis: [1, 0, 0] } },
+    { ...extrusion, from: 3 },
+  ] };
+  const bodies = bodiesOf(doc), face = bodies[0].mesh.faces.findIndex(candidate => candidate.exact?.kind === 'cylinder');
+  assert.ok(face >= 0);
+  const ctx: Ctx = { doc, bodies, selection: { bodies: [], edges: [], faces: [{ body: 0, face }] } };
+  assert.ok(draft.available(ctx).ok);
+  for (const pull of ['z', '-z'] as const) {
+    const auto = { ...draft.defaults!(ctx), pull };
+    const fixed = patchValues(draft, ctx, auto, { neutralMode: 'fixed' });
+    const cap = pull === 'z' ? 33 : 53;
+    assert.equal(fixed.neutral, cap);
+    const made = draft.build!(ctx, { ...auto, deg: 10 });
+    const node = made.nodes[2];
+    assert.ok(node.kind === 'draft');
+    assert.deepEqual(node.faces, ['n1.side0#1', 'n1.side0#2']);
+    assert.equal(node.pull, pull === 'z' ? undefined : '-z');
+    const history = editSavedDraftCommand(made, 2), editCtx = { ...ctx, doc: made, bodies: bodiesOf(made) };
+    assert.ok(history?.defaults && history.build);
+    const savedFixed = patchValues(history, editCtx, history.defaults(editCtx), { neutralMode: 'fixed' });
+    assert.equal(savedFixed.neutral, cap);
+    const interior = history.build(editCtx, { ...savedFixed, neutral: 41 });
+    const expectedVolume = pull === 'z' ? 5912.958606927207 : 6799.274682484619;
+    assert.ok(Math.abs(volume(interior) - expectedVolume) < 1e-7);
+  }
+});
+
 test('Studio Draft retains three selected box sides through its editable History command', () => {
   const source = rectanglePart(40, 30, 40), ctx = ctxOn(source, [[1, 0, 0], [0, -1, 0], [0, 1, 0]]);
   const created = draft.build!(ctx, { ...draft.defaults!(ctx), deg: 10, pull: 'z' });

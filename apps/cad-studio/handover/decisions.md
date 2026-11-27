@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D2115: [Draft an original cylinder on an explicit XY plane](notes/placed-xy-cylinder-draft-2026-11-28/README.md), #14. Verify signed axial Draft, original native trim records and the History cap default on translated stock.
+
 - D2114: [Extract Studio assembly document edits from App](notes/studio-assembly-commits-2026-11-28/README.md). Match actual desktop pattern, cut, linked revision and batch fixation states.
 
 - D2113: [Restore the original cap when editing cylindrical Draft](notes/cylindrical-draft-history-neutral-2026-11-28/README.md), #14. Resolve signed cap defaults from historical native stock and verify actual Studio Undo/Redo and fresh Open.

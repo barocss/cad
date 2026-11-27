@@ -28,7 +28,7 @@ function originalCylinderDraftSource(doc: StudioDoc, ref: BodyRef, axis: number)
   const plane = sketch.plane;
   if (plane) {
     const x = exactAxis(plane.xAxis);
-    if (axis === 2 || exactAxis(plane.normal) !== axis || x < 0 || x === axis || !plane.origin.every(Number.isFinite)) return;
+    if (exactAxis(plane.normal) !== axis || x < 0 || x === axis || !plane.origin.every(Number.isFinite)) return;
   } else if (axis !== 2) return;
   return featureId(doc.nodes, ref.node);
 }
