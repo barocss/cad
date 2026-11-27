@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D2085: [Keep a Pivot face hinge on translated stock](notes/translated-pivot-face-2026-11-28/README.md), #629. Follow the original edge through a height and Move edit, native reopen and local Agent proposal.
 - D2084: [Pivot a stock face about its original straight edge](notes/pivot-face-edge-2026-11-28/README.md), #629. Verify signed face tilt, unchanged native hinge, History, reopen and explicit Agent approval.
 - D2083: [Adopt a static assembly review manifest](notes/repeated-assembly-presentation-2026-11-28/README.md), #278. Distinguish same-definition placements, hold a missing reference, and compare native requirements and exact STEP geometry through the desktop review.
 - D2082: [Read a saved static assembly presentation from the local Agent](notes/saved-assembly-presentation-2026-11-28/README.md), #278. Pin the synthetic reference checklist to exact occurrence IDs, camera and explode scale, and verify the submitted Studio view after reopening.

@@ -1,4 +1,4 @@
-import { isBoxReplacementSource, withNode } from '../engine/doc';
+import { isBoxReplacementSource, withNode, type ModelNode } from '../engine/doc';
 import { captureSignatures } from '../engine/references';
 import { refusal } from '../engine/refusal';
 import type { Command, Ctx } from './commands';
@@ -6,15 +6,27 @@ import type { DraftPull } from './draftInputs';
 
 export const PIVOT_FACE = 'pivot-face';
 
-const selectionReason = 'Select one planar face of an original rectangular extrusion and Shift-select one straight edge on that face.';
+const selectionReason = 'Select one planar face of a rectangular extrusion, with or without Move features, and Shift-select one straight edge on that face.';
 const angleField = { key: 'deg', label: 'Angle', kind: 'deg', min: -45, max: 45, step: 1 } as const;
+
+function isPivotStock(nodes: readonly ModelNode[], index: number): boolean {
+  let at = index;
+  for (;;) {
+    const node = nodes[at];
+    if (!node || node.suppressed || node.held) return false;
+    if (node.kind !== 'translate') return isBoxReplacementSource(nodes, at);
+    const { side, node: parent } = node.parent;
+    if (side !== 'solid' || !Number.isSafeInteger(parent) || parent < 0 || parent >= at) return false;
+    at = parent;
+  }
+}
 
 function pivotSelection(ctx: Ctx) {
   const { faces, edges, bodies, sketches, vertices, profileRegions } = ctx.selection;
   if (faces.length !== 1 || edges.length !== 1 || bodies.length || sketches?.length || vertices?.length
     || profileRegions || ctx.direct?.length || faces[0].body !== edges[0].body) return;
   const body = ctx.bodies[faces[0].body], parent = body?.ref;
-  if (!parent || parent.side !== 'solid' || !isBoxReplacementSource(ctx.doc.nodes, parent.node)
+  if (!parent || parent.side !== 'solid' || !isPivotStock(ctx.doc.nodes, parent.node)
     || body.topology?.kind !== 'solid' || body.topology.bodyCount !== 1) return;
   const faceIndex = faces[0].face, face = body.mesh.faces[faceIndex], edge = body.mesh.edges[edges[0].edge];
   if (!face?.nativePlaneName || !face.nativeAxisPlane || !edge?.nativeLine || !edge.nativeJoint
