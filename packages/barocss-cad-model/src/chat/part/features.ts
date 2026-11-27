@@ -2,6 +2,7 @@
 // commands, raw nodes, edits and deletes, materials, and the person's rows (stock, frame stock, sections, welds).
 import { commandById, commands, givenValues, shownFields, type Ctx, type Values } from '../../app/commands';
 import { boxShellSelection } from '../../app/boxShellSelection';
+import { canSetClosedShellCorner } from '../../app/shellCorner';
 import { PIVOT_FACE } from '../../app/pivotFaceCommand';
 import { updateBoxFootprint } from '../../app/editCommand';
 import { editFields, type BindableField } from '../../app/editFields';
@@ -153,7 +154,7 @@ export const COMMAND_DOCS: Record<string, { selection: string; values: Record<st
   decimate: { selection: 'bodies: [one mesh body] (an imported STL, OBJ or scan: facet faces)', values: { keep: 'per cent of the triangles to keep (1–99)', maxError: 'mm: no collapse past it (0: none)', crease: 'degrees: also keep edges sharper than this (0: only the regions\u2019 boundaries and open edges)' } },
   shell: { selection: 'faces to open on one body, or one body for a closed hollow', values: {
     t: 'uniform wall thickness in mm',
-    join: 'default | sharp | arc. An explicit Sharp or Round inner corner needs a closed Shell on one original upright orthogonal L-shaped extrusion.',
+    join: 'default | sharp | arc. For Sharp or Round, pass expectedRevision from query.rebuild and one exact original body ID for a closed upright orthogonal L extrusion.',
     wallMode: 'uniform | per-face. For per-face, give expectedRevision from query.rebuild and exact original faces of an upright rectangular extrusion. Choose one or two distinct original faces as openings. Give a thickness for every kept wall.',
     bottomWall: 'bottom thickness in mm', frontWall: 'front thickness in mm', rightWall: 'right thickness in mm',
     backWall: 'back thickness in mm', leftWall: 'left thickness in mm', topWall: 'top thickness in mm',
@@ -301,6 +302,15 @@ async function runCommandTool(state: ChatState, args: Record<string, unknown>, e
   const point = Array.isArray(args.point) && args.point.length === 3 ? args.point.map(Number) as [number, number, number] : undefined;
   let given = isObj(args.values) ? args.values : {};
   const perFaceShell = cmd.id === 'shell' && given.wallMode === 'per-face';
+  if (cmd.id === 'shell' && (given.join === 'sharp' || given.join === 'arc')) {
+    if (args.expectedRevision === undefined)
+      return fail(state, 'An explicit Shell inner corner needs expectedRevision from query.rebuild for the same part.', { code: 'COMMAND_INPUT' });
+    const body = state.bodies[selection.bodies[0]], target = body?.ref;
+    if (state.partOf || !Array.isArray(args.bodies) || args.bodies.length !== 1 || args.bodies[0] !== body?.key
+      || selection.bodies.length !== 1 || selection.faces.length || selection.edges.length || args.point !== undefined
+      || !target || !canSetClosedShellCorner(state.doc.nodes, target))
+      return fail(state, 'An explicit Shell inner corner needs one exact original body ID for a closed upright L extrusion.', { code: 'COMMAND_INPUT' });
+  }
   const toPlane = isReferencePlaneEdit(cmd.id, { offsetMode: typeof given.offsetMode === 'string' ? given.offsetMode : '' });
   const [sourceFace, referenceFace] = selection.faces;
   if (toPlane && (sel.names.faces.length !== 2 || selection.faces.length !== 2 ||

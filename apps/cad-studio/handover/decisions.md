@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D2109: [Bind an Agent Shell corner proposal to its original body](notes/agent-closed-l-shell-corner-2026-11-28/README.md), #324. Reject missing and stale revisions, then verify explicit Studio approval and exact reopened geometry.
 - D2108: [Extract Studio worker recovery from App](notes/studio-worker-recovery-2026-11-28/README.md). Match Stop, Retry engine, native Worker lifetime and Undo/Redo across 16 desktop states.
 - D2107: [Choose the inner corner of a closed L Shell](notes/closed-l-shell-corner-2026-11-28/README.md), #13. Verify explicit Sharp and Round, the strict wall limit, old Default and native desktop reopen.
 - D2106: [Draft a circular segment with a noncardinal chord](notes/oblique-circular-segment-draft-2026-11-28/README.md), #14. Verify exact source admission, both signed drafts, original endpoints and native desktop reopen.
