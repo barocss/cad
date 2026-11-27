@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D2083: [Adopt a static assembly review manifest](notes/repeated-assembly-presentation-2026-11-28/README.md), #278. Distinguish same-definition placements, hold a missing reference, and compare native requirements and exact STEP geometry through the desktop review.
 - D2082: [Read a saved static assembly presentation from the local Agent](notes/saved-assembly-presentation-2026-11-28/README.md), #278. Pin the synthetic reference checklist to exact occurrence IDs, camera and explode scale, and verify the submitted Studio view after reopening.
 - D2081: [Verify STEP from the approved four-part reference draft](notes/two-view-draft-step-2026-11-27/README.md), #747. Verify the real output's four solids, active units, placement and axis.
 - D2080: [Propose a four-part native draft from two reference views](notes/two-view-native-draft-2026-11-27/README.md), #747. Save the proposal and verify approval, independent edits and native reopening in Studio.
