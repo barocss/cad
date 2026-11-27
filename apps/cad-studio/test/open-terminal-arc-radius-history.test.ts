@@ -27,7 +27,7 @@ test('event proof rejects no-op, branch/sign changes, invalid bulges and any oth
  for(const bad of variants)assert.equal(change(s,bad),false);
  const major=shape(2);assert.equal(change(major,radiusEdit(major,.5)),false);
 });
-test('only completed unconstrained four-point two-Line plus terminal Arc is newly admitted',()=>{
+test('draft safety guards are preserved for the four-point terminal Arc',()=>{
  const s=shape();const variants:Partial<Polygon>[]=[{pending:true},{closed:true},{points:[[0,0],[1,1]]},{points:[...s.points,[0,10]],bulges:[0,0,0,.5,0]},
  {points:[[10,10],[10,10],[30,30],[10,30]]},{points:[[10,10],[30,10],[30,10],[10,30]]},{points:[[10,10],[30,10],[30,30],[30,30]]},
  {points:[[10,10],[30,10],[30,30],[10,10]]},{points:[[10,10],[30,10],[30,30],[10,10.00005]]},
@@ -131,8 +131,21 @@ test('a four-point line–arc–line draft records only the original interior ar
  assert.equal(change(s,{...s,bulges:[0,-.4,0,0]}),false);
  assert.equal(change(s,{...s,bulges:[0,2,0,0]}),false);
  assert.equal(change(s,{...next,points:[...s.points]}),false);
- assert.equal(allowed(draft({...s,bulges:[.1,0,0,0]})),false);
  assert.equal(allowed(draft({...s,points:s.points.slice(0,3),bulges:[.5,0,0]})),false);
+});
+
+test('a four-point Arc–Line–Line draft records only the leading owner radius', () => {
+ const s: Polygon = {...shape(),bulges:[.5,0,0,0]};
+ const next: Polygon = {...s,bulges:[.4,0,0,0]};
+ assert.ok(allowed(draft(s)));
+ assert.ok(change(s,next));
+ assert.equal(change(s,{...s,bulges:[-.4,0,0,0]}),false);
+ assert.equal(change(s,{...s,bulges:[0,.4,0,0]}),false);
+ assert.equal(change(s,{...next,points:[...s.points]}),false);
+ assert.equal(allowed(draft({...s,bulges:[0,0,0,.5]})),false);
+ assert.equal(allowed(draft({...s,bulges:[.5,0,.3,0]})),false);
+ assert.equal(allowed(draft({...s,pending:true})),false);
+ assert.equal(allowed({...draft(s),editNode:0}),false);
 });
 
 test('Line–Arc–Line–Arc records either indexed radius, never multiple, moved, or substituted arcs', () => {

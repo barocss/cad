@@ -12,12 +12,13 @@ function completedLineArc(shape:SketchShape|null):shape is Polygon {
  if (shape.construction !== undefined && shape.construction !== true) return false;
  if (shape.ids !== undefined && (!Array.isArray(shape.ids) || Array.from(shape.ids).some(id => typeof id !== 'string' || !id) || new Set(shape.ids).size !== shape.ids.length)) return false;
  const count = shape.points.length, b = shape.bulges;
- // Exactly Line+Arc, Line+Line+Arc, Line+Arc+Line or Line+Arc+Line+Arc.
+ // One arc in the second slot of a three-point chain or any real slot of a four-point chain,
+ // or exactly Line+Arc+Line+Arc with five points.
  // Array.from visits sparse entries: missing bulges are not authored zeros.
  if (!Array.isArray(b) || b.length !== count || Array.from(b).some(v => typeof v !== 'number' || !Number.isFinite(v))) return false;
  const arcSlots = b.flatMap((v, i) => v !== 0 ? [i] : []);
  if (count === 5 ? arcSlots.length !== 2 || arcSlots[0] !== 1 || arcSlots[1] !== 3
-   : arcSlots.length !== 1 || (arcSlots[0] !== count - 2 && !(count === 4 && arcSlots[0] === 1))) return false;
+   : arcSlots.length !== 1 || (count === 3 ? arcSlots[0] !== 1 : arcSlots[0] >= count - 1)) return false;
  for (const k of ['lengths','radii'] as const) if (shape[k] !== undefined && !emptyRecord(shape[k])) return false;
  for (const k of ['rules','tangents','equalRadii','concentric','circles','circleIds'] as const) if (shape[k] !== undefined && (!Array.isArray(shape[k]) || shape[k]!.length !== 0)) return false;
  if (shape.hv !== undefined && (!shape.hv || Object.keys(shape.hv).some(k => k !== 'h' && k !== 'v') || !Array.isArray(shape.hv.h) || !Array.isArray(shape.hv.v) || shape.hv.h.length || shape.hv.v.length)) return false;
