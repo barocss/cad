@@ -1,0 +1,13 @@
+{
+  "status": "PASS",
+  "phase": "actual Studio start",
+  "errors": [],
+  "consoleErrors": [],
+  "observations": [
+    {
+      "label": "prior numeric Undo missing",
+      "undo": false,
+      "actual": 10
+    }
+  ]
+}

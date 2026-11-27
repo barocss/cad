@@ -1,0 +1,58 @@
+{
+  "status": "PASS",
+  "phase": "fresh Open 05-fresh-open",
+  "errors": [],
+  "consoleErrors": [],
+  "observations": [
+    {
+      "label": "native-applied",
+      "valid": true,
+      "bodies": [
+        "solid"
+      ],
+      "volume": 1671.238898038469,
+      "cylinders": [
+        {
+          "kind": "cylinder",
+          "c": [
+            20,
+            30,
+            0
+          ],
+          "a": [
+            0,
+            0,
+            1
+          ],
+          "r": 10.000000000000002,
+          "out": 1
+        }
+      ]
+    },
+    {
+      "label": "native-reopened",
+      "valid": true,
+      "bodies": [
+        "solid"
+      ],
+      "volume": 1671.238898038469,
+      "cylinders": [
+        {
+          "kind": "cylinder",
+          "c": [
+            20,
+            30,
+            0
+          ],
+          "a": [
+            0,
+            0,
+            1
+          ],
+          "r": 10.000000000000002,
+          "out": 1
+        }
+      ]
+    }
+  ]
+}

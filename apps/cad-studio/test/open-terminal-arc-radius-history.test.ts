@@ -150,3 +150,21 @@ test('Line–Arc–Line–Arc records either indexed radius, never multiple, mov
  assert.equal(allowed(draft({...s,points:[...s.points,[0,0]],bulges:[0,.5,0,.5,0,0]})),false);
  assert.equal(allowed({...draft(s),done:[shape()]}),false);
 });
+
+test('major-arc radius can reach exactly a semicircle, without direct branch or direction flips', () => {
+ for (const sign of [1,-1]) {
+  const s=shape(2*sign), half=radiusEdit(s,sign);
+  assert.equal(radiusToBulge(s.points[2],s.points[3],10,sign), sign);
+  assert.equal(radiusToBulge(s.points[2],s.points[3],9,sign), null);
+  assert.ok(change(s,half));
+  assert.equal(change(s,radiusEdit(s,-sign)),false);
+  assert.equal(change(s,radiusEdit(s,.99*sign)),false);
+  assert.equal(change(half,s),false,'Redo replays the saved draft; a new radius edit from a semicircle does not choose major');
+  const doc=emptyDoc(), before=draft(s), after=draft(half), history=createDraftHistory();
+  history.push(draftHistoryState(doc,before),draftHistoryState(doc,after));
+  const undone=history.undo(draftHistoryState(doc,after));assert.ok(undone);
+  assert.equal(restoreDraftHistory(after,undone).shape,s);
+  const redone=history.redo(draftHistoryState(doc,before));assert.ok(redone);
+  assert.equal(restoreDraftHistory(before,redone).shape,half);
+ }
+});

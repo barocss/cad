@@ -36,7 +36,10 @@ export function isOpenArcRadiusChange(before:SketchShape|null, after:SketchShape
  for (let i=0;i<before.points.length;i++) {
   const a=before.bulges![i], b=after.bulges![i];
   if (Object.is(a,b)) continue;
-  if (changed || a === 0 || b === 0 || Math.sign(a) !== Math.sign(b) || (Math.abs(a)>1) !== (Math.abs(b)>1)) return false;
+  if (changed || a === 0 || b === 0 || Math.sign(a) !== Math.sign(b)) return false;
+  // Both branches meet at the exact half-chord radius. The panel can shrink a
+  // major arc to that semicircle without flipping its direction or endpoints.
+  if ((Math.abs(a)>1) !== (Math.abs(b)>1) && Math.abs(b) !== 1) return false;
   changed = true;
  }
  if (!changed) return false;

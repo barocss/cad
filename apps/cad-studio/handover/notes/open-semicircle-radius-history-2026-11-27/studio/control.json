@@ -1,0 +1,128 @@
+{
+  "status": "PASS",
+  "phase": "fresh Open 11-reopened",
+  "errors": [],
+  "consoleErrors": [],
+  "observations": [
+    {
+      "label": "radius-draft-undo-classification",
+      "undoResult": "restored-radius14",
+      "numericEditUndo": "SUPPORTED_OBSERVED",
+      "contract": "Exact four-point terminal Arc bounded history",
+      "radius14Fields": [
+        {
+          "label": "Point 1 X",
+          "value": "10"
+        },
+        {
+          "label": "Point 1 Y",
+          "value": "10"
+        },
+        {
+          "label": "Point 2 X",
+          "value": "30"
+        },
+        {
+          "label": "Point 2 Y",
+          "value": "10"
+        },
+        {
+          "label": "Point 3 X",
+          "value": "30"
+        },
+        {
+          "label": "Point 3 Y",
+          "value": "30"
+        },
+        {
+          "label": "Arc 3 radius",
+          "value": "14"
+        },
+        {
+          "label": "Point 4 X",
+          "value": "10"
+        },
+        {
+          "label": "Point 4 Y",
+          "value": "30"
+        }
+      ],
+      "radius16Fields": [
+        {
+          "label": "Point 1 X",
+          "value": "10"
+        },
+        {
+          "label": "Point 1 Y",
+          "value": "10"
+        },
+        {
+          "label": "Point 2 X",
+          "value": "30"
+        },
+        {
+          "label": "Point 2 Y",
+          "value": "10"
+        },
+        {
+          "label": "Point 3 X",
+          "value": "30"
+        },
+        {
+          "label": "Point 3 Y",
+          "value": "30"
+        },
+        {
+          "label": "Arc 3 radius",
+          "value": "16"
+        },
+        {
+          "label": "Point 4 X",
+          "value": "10"
+        },
+        {
+          "label": "Point 4 Y",
+          "value": "30"
+        }
+      ],
+      "afterFields": [
+        {
+          "label": "Point 1 X",
+          "value": "10"
+        },
+        {
+          "label": "Point 1 Y",
+          "value": "10"
+        },
+        {
+          "label": "Point 2 X",
+          "value": "30"
+        },
+        {
+          "label": "Point 2 Y",
+          "value": "10"
+        },
+        {
+          "label": "Point 3 X",
+          "value": "30"
+        },
+        {
+          "label": "Point 3 Y",
+          "value": "30"
+        },
+        {
+          "label": "Arc 3 radius",
+          "value": "16"
+        },
+        {
+          "label": "Point 4 X",
+          "value": "10"
+        },
+        {
+          "label": "Point 4 Y",
+          "value": "30"
+        }
+      ]
+    }
+  ]
+}
