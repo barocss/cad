@@ -1,0 +1,18 @@
+{
+  "status": "PASS",
+  "phase": "open radius arithmetic overflow and cancellation",
+  "errors": [],
+  "consoleErrors": [],
+  "changes": [],
+  "observations": [
+    {
+      "label": "00-overflow-became-line",
+      "undo": false,
+      "redo": false,
+      "undoResult": null,
+      "volume": null,
+      "expectedVolume": null,
+      "native": null
+    }
+  ]
+}

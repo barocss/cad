@@ -37,9 +37,14 @@ export function arcOf(a: P2, b: P2, bulge: number): Arc {
   return { center, radius: Math.hypot(a[0] - center[0], a[1] - center[1]), start: Math.atan2(a[1] - center[1], a[0] - center[0]), sweep: 4 * Math.atan(bulge) };
 }
 export function radiusToBulge(a: P2, b: P2, radius: number, sign: number): number | null {
-  const c = Math.hypot(b[0] - a[0], b[1] - a[1]); if (radius < c / 2 - 1e-9) return null;
-  const s = radius - Math.sqrt(Math.max(0, radius * radius - c * c / 4)); // minor-arc sagitta
-  return (sign < 0 ? -1 : 1) * 2 * s / c;
+  const halfChord = Math.hypot(b[0] - a[0], b[1] - a[1]) / 2;
+  if (!Number.isFinite(halfChord) || halfChord <= 0 || !Number.isFinite(radius)
+    || radius <= 0 || radius < halfChord - 1e-9) return null;
+  const sagitta = radius - Math.sqrt(Math.max(0, radius * radius - halfChord * halfChord));
+  const magnitude = sagitta / halfChord;
+  // A cancelled sagitta is not a line edit. Never return zero or non-finite arc data.
+  if (!(magnitude > 0 && magnitude <= 1)) return null;
+  return sign < 0 ? -magnitude : magnitude;
 }
 
 /** Points along one segment, excluding its end point. */

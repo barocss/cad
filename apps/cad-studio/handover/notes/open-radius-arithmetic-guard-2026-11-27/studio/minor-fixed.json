@@ -1,0 +1,249 @@
+{
+  "status": "PASS",
+  "phase": "fresh Open 11-reopened",
+  "errors": [],
+  "consoleErrors": [],
+  "changes": [],
+  "observations": [
+    {
+      "label": "01-overflow-refused-arc-and-redo-kept",
+      "undo": true,
+      "redo": true,
+      "undoResult": null,
+      "volume": null,
+      "expectedVolume": null,
+      "native": null
+    },
+    {
+      "label": "radius-draft-undo-classification",
+      "undo": null,
+      "redo": null,
+      "undoResult": "restored-radius14",
+      "volume": null,
+      "expectedVolume": null,
+      "native": null
+    },
+    {
+      "label": "09-native",
+      "undo": null,
+      "redo": null,
+      "undoResult": null,
+      "volume": null,
+      "expectedVolume": 1409.669633438256,
+      "native": {
+        "bodyKinds": [
+          "solid"
+        ],
+        "valid": true,
+        "volume": 1409.6696334382564,
+        "vertices": [
+          [
+            10,
+            10,
+            0
+          ],
+          [
+            30,
+            10,
+            0
+          ],
+          [
+            30,
+            10,
+            3
+          ],
+          [
+            10,
+            10,
+            3
+          ],
+          [
+            30,
+            30,
+            0
+          ],
+          [
+            30,
+            30,
+            3
+          ],
+          [
+            10,
+            30,
+            0
+          ],
+          [
+            10,
+            30,
+            3
+          ]
+        ],
+        "cylinders": [
+          {
+            "kind": "cylinder",
+            "c": [
+              20,
+              22.5,
+              0
+            ],
+            "a": [
+              0,
+              0,
+              1
+            ],
+            "r": 12.5,
+            "out": 1
+          }
+        ]
+      }
+    },
+    {
+      "label": "10-redo-native",
+      "undo": null,
+      "redo": null,
+      "undoResult": null,
+      "volume": null,
+      "expectedVolume": 1409.669633438256,
+      "native": {
+        "bodyKinds": [
+          "solid"
+        ],
+        "valid": true,
+        "volume": 1409.6696334382564,
+        "vertices": [
+          [
+            10,
+            10,
+            0
+          ],
+          [
+            30,
+            10,
+            0
+          ],
+          [
+            30,
+            10,
+            3
+          ],
+          [
+            10,
+            10,
+            3
+          ],
+          [
+            30,
+            30,
+            0
+          ],
+          [
+            30,
+            30,
+            3
+          ],
+          [
+            10,
+            30,
+            0
+          ],
+          [
+            10,
+            30,
+            3
+          ]
+        ],
+        "cylinders": [
+          {
+            "kind": "cylinder",
+            "c": [
+              20,
+              22.5,
+              0
+            ],
+            "a": [
+              0,
+              0,
+              1
+            ],
+            "r": 12.5,
+            "out": 1
+          }
+        ]
+      }
+    },
+    {
+      "label": "12-reopened-native",
+      "undo": null,
+      "redo": null,
+      "undoResult": null,
+      "volume": null,
+      "expectedVolume": 1409.669633438256,
+      "native": {
+        "bodyKinds": [
+          "solid"
+        ],
+        "valid": true,
+        "volume": 1409.6696334382564,
+        "vertices": [
+          [
+            10,
+            10,
+            0
+          ],
+          [
+            30,
+            10,
+            0
+          ],
+          [
+            30,
+            10,
+            3
+          ],
+          [
+            10,
+            10,
+            3
+          ],
+          [
+            30,
+            30,
+            0
+          ],
+          [
+            30,
+            30,
+            3
+          ],
+          [
+            10,
+            30,
+            0
+          ],
+          [
+            10,
+            30,
+            3
+          ]
+        ],
+        "cylinders": [
+          {
+            "kind": "cylinder",
+            "c": [
+              20,
+              22.5,
+              0
+            ],
+            "a": [
+              0,
+              0,
+              1
+            ],
+            "r": 12.5,
+            "out": 1
+          }
+        ]
+      }
+    }
+  ]
+}

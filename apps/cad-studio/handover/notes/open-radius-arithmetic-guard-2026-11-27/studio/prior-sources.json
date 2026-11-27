@@ -1,0 +1,15 @@
+{
+  "count": 10,
+  "hashes": {
+    "apps/cad-studio/src/App.tsx": "597b9dce577c8e92aa22e90f7b0fbc26c212bbd01c62981785d0d52be8381c99",
+    "apps/cad-studio/src/app/sketchControls.ts": "9c97ac853e52f55d99c42bb4501f5d699772f8168d95063b2a6ee8d8aca4d61a",
+    "apps/cad-studio/src/sketch/draftHistory.ts": "d968bdb3799095f6d240b8aa931a2161eef00e459b99ffc74992f23091abfd7b",
+    "apps/cad-studio/src/sketch/openArcRadiusHistory.ts": "7f2fdec0f40228af0ea8590239fa059741d9f9b42817da83edc79d5caab7e7df",
+    "apps/cad-studio/src/ui/SketchPanel.tsx": "181da9ce8b2e73157573cbf90021f6aca972ae889c594f9fec8d67d6503f6b8d",
+    "apps/cad-studio/src/viewport/viewportPointerInput.ts": "14b154222ee4267f28ebc2624905629dd11208276dc081b215bbd561ac92ab8c",
+    "apps/cad-studio/test/flow-helper.mjs": "64d394e06006d87104979bdeb01c5bbcdf919a829c266ebc8dcbacbf621d315b",
+    "apps/cad-studio/test/open-terminal-arc-radius-history-browser.mjs": "14cdd54aa4ab7942d3d8fbca4f2e2e64dda1ef3bc822a40df9e417311c253945",
+    "packages/barocss-cad-model/src/sketch/loops.ts": "d70c6ec645d244c2a0f2a23842484fd92d67401e7b110cdd793f80f25dd96b2e",
+    "packages/barocss-cad-model/src/sketch/profile.ts": "3438949014fbdf3017c698d4af0332371932e9b3004266f485e1b5b477099d5f"
+  }
+}

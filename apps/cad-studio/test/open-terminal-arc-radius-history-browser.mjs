@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import {createFlow} from './flow-helper.mjs';
 const baseline=process.argv.includes('--baseline');
 const interior=process.argv.includes('--interior');
+const overflow=process.argv.includes('--radius-overflow');
+const priorOverflow=process.argv.includes('--prior-overflow');
 const arcIndex=interior?1:2;
 const arcLabel=`Arc ${arcIndex+1} radius`;
 const pins=['apps/cad-studio/test/flow-helper.mjs','apps/cad-studio/test/open-terminal-arc-radius-history-browser.mjs','apps/cad-studio/src/App.tsx','apps/cad-studio/src/viewport/viewportPointerInput.ts','apps/cad-studio/src/sketch/draftHistory.ts','apps/cad-studio/src/app/sketchControls.ts','apps/cad-studio/src/ui/SketchPanel.tsx','packages/barocss-cad-model/src/sketch/profile.ts','packages/barocss-cad-model/src/sketch/loops.ts'];
@@ -36,6 +38,25 @@ await f.run(async()=>{
  const originalEndpoints=await endpointFields();
  async function setRadius(value,label){await radius().fill(String(value));await radius().blur();assert.ok(Math.abs(Number(await radius().inputValue())-value)<1e-4);assert.deepEqual(await endpointFields(),originalEndpoints);await f.same(empty);return observe(label);}
  await setRadius(14,'02-radius14');const fourteen=await authored();await setRadius(16,'03-radius16');const sixteen=await authored();
+ if(overflow){
+  f.phase='open radius arithmetic overflow and cancellation';
+  await button('Undo').click();assert.deepEqual(await authored(),fourteen);
+  assert.equal(await button('Redo').isEnabled(),true);
+  await radius().fill('1e16');
+  if(priorOverflow){
+   await f.sketchPanel().getByRole('spinbutton',{name:'Edge 3 length',exact:true}).waitFor();
+   assert.equal(await radius().count(),0);
+   assert.deepEqual(await endpointFields(),originalEndpoints);
+   await f.same(empty);
+   await observe('00-overflow-became-line');
+   return;
+  }
+  await radius().blur();assert.deepEqual(await authored(),fourteen);
+  await radius().fill('1e308');await radius().blur();assert.deepEqual(await authored(),fourteen);
+  assert.equal(await button('Redo').isEnabled(),true);await f.same(empty);
+  await observe('01-overflow-refused-arc-and-redo-kept');
+  await button('Redo').click();assert.deepEqual(await authored(),sixteen);await f.same(empty);
+ }
  let undoResult='disabled';
  if(await button('Undo').isEnabled()){
   await button('Undo').click();const observed=await observe('04-observed-draft-undo');

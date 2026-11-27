@@ -101,7 +101,9 @@ export function SketchPanel({ sketch, constraintInspection, constraintDocument, 
     const n = poly.points.length, bulges = [...(poly.bulges ?? poly.points.map(() => 0))];
     const b = radiusToBulge(poly.points[i] as P2, poly.points[(i + 1) % n] as P2, r, Math.sign(bulges[i]));
     if (b === null) return;
-    bulges[i] = Math.abs(bulges[i]) > 1 ? 1 / b : b; // keep a major arc major
+    const nextBulge = Math.abs(bulges[i]) > 1 ? 1 / b : b; // keep a major arc major
+    if (!Number.isFinite(nextBulge)) return;
+    bulges[i] = nextBulge;
     const next = { ...poly, bulges };
     if (sketch.shape === poly && canRecordOpenArcRadiusDraft(sketch)) {
       if (poly.bulges?.[i] === bulges[i]) return;

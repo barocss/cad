@@ -4,6 +4,7 @@ import { createFlow } from './flow-helper.mjs';
 const baseline = process.argv.includes('--baseline');
 const pins = ['test/open-semicircle-radius-history-browser.mjs', 'test/flow-helper.mjs', 'src/sketch/openArcRadiusHistory.ts',
   'src/sketch/useSketchDraftHistory.ts', 'src/ui/SketchPanel.tsx'].map(p => 'apps/cad-studio/' + p);
+pins.push('packages/barocss-cad-model/src/sketch/profile.ts');
 const f = await createFlow({
   name: 'open-semicircle-radius-history', output: process.argv[2], envFrozen: 'D2040_SOURCE_FROZEN', initialFiles: pins, requiredFrozen: pins,
   qualification: 'Changing a major arc to the exact half-chord radius has its own draft history step.',
@@ -83,6 +84,11 @@ await f.run(async () => {
   await f.snapshot('01-undo-restores-major');
   assert.equal(await button('Redo').isEnabled(), true);
   await edit(9); await draft(12.5);
+  for (const impossible of [1e16, 1e308]) {
+    await edit(impossible); await draft(12.5);
+    assert.deepEqual(await curve(), authoredMajor);
+    assert.equal(await button('Redo').isEnabled(), true);
+  }
   assert.equal(await button('Redo').isEnabled(), true);
   await button('Redo').click(); await draft(10);
   assert.deepEqual(await curve(), half);

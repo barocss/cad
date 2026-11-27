@@ -1,0 +1,27 @@
+{
+  "status": "PASS",
+  "phase": "fresh Open 05-fresh-open",
+  "errors": [],
+  "consoleErrors": [],
+  "changes": [],
+  "observations": [
+    {
+      "label": "native-applied",
+      "undo": null,
+      "redo": null,
+      "undoResult": null,
+      "volume": 1671.238898038469,
+      "expectedVolume": null,
+      "native": null
+    },
+    {
+      "label": "native-reopened",
+      "undo": null,
+      "redo": null,
+      "undoResult": null,
+      "volume": 1671.238898038469,
+      "expectedVolume": null,
+      "native": null
+    }
+  ]
+}

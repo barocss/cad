@@ -1,0 +1,11 @@
+{
+  "count": 6,
+  "hashes": {
+    "apps/cad-studio/src/sketch/openArcRadiusHistory.ts": "7f2fdec0f40228af0ea8590239fa059741d9f9b42817da83edc79d5caab7e7df",
+    "apps/cad-studio/src/sketch/useSketchDraftHistory.ts": "9428ac5aff342ddf1d6c2793e8c0126d681bc0757e91750026768abaf69273e6",
+    "apps/cad-studio/src/ui/SketchPanel.tsx": "123e193a0e5d8f74705f58b98a6fa3468f8d1cfb7079be86923b16b32261880e",
+    "apps/cad-studio/test/flow-helper.mjs": "64d394e06006d87104979bdeb01c5bbcdf919a829c266ebc8dcbacbf621d315b",
+    "apps/cad-studio/test/open-semicircle-radius-history-browser.mjs": "38a0b52fb9a7b715aa240878c7959143ae085935cdf759295fa9c4ac1a38ca38",
+    "packages/barocss-cad-model/src/sketch/profile.ts": "d302479f98a667e2dda9cbc0d03024ff56c7d6e41cf2fdedbee35d9f2e10cfd2"
+  }
+}

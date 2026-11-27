@@ -168,3 +168,16 @@ test('major-arc radius can reach exactly a semicircle, without direct branch or 
   assert.equal(restoreDraftHistory(before,redone).shape,half);
  }
 });
+
+test('unsafe radius conversion does not return a zero or non-finite bulge', () => {
+ const a = shape().points[2], b = shape().points[3];
+ for (const sign of [1, -1]) {
+  for (const r of [1e16, 1e308, Infinity, NaN, -1, 0, 9]) {
+   assert.equal(radiusToBulge(a,b,r,sign),null);
+  }
+  assert.equal(radiusToBulge(a,a,14,sign),null);
+  assert.equal(radiusToBulge(a,[Infinity,0],14,sign),null);
+  assert.equal(radiusToBulge(a,b,10,sign),sign);
+  assert.equal(radiusToBulge(a,b,12.5,sign),.5*sign);
+ }
+});
