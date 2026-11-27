@@ -8,8 +8,8 @@ import { reviewPendingPlate } from './locked-plate-review-mcp.mjs';
 
 const f = await createFlow({
   name: 'locked-plate-bore', output: process.argv[2], envFrozen: 'LOCKED_PLATE_BORE_FROZEN',
-  qualification: 'Pin the pending and accepted native plate to the same through-bore proof and locked mesh.',
-  limits: ['Synthetic XY plate, known mm frame, no live provider. No final-only vs stepwise comparison.'],
+  qualification: 'Stage the qualified fixed-budget study result and match the pending and accepted native plate.',
+  limits: ['Synthetic XY plate in a declared mm frame. Deterministic selection only. No live provider.'],
   initialFiles: [
     'apps/cad-studio/test/locked-plate-bore-browser.mjs',
     'apps/cad-studio/test/locked-plate-review-mcp.mjs',
@@ -22,12 +22,15 @@ const f = await createFlow({
   ],
   inspectorSource: `
 import { readFileSync } from 'node:fs';
-import { checkBrep, brepMassProperties, tessellateBrep, faceGeometry } from '@barocss/cad';
+import { checkBrep, brepMassProperties, faceGeometry } from '@barocss/cad';
 import { partBreps } from '@barocss/cad-model/engine/evaluate';
 import { readStudioFile } from '@barocss/cad-model/engine/container';
 import { digestOf } from '@barocss/cad-model/util/digest';
+import { runLockedPlateStudy } from './test/locked-plate-study';
 const [file, mode = '"native"', input = 'null'] = process.argv.slice(2);
-if (JSON.parse(mode) === 'decode') {
+if (JSON.parse(mode) === 'study') {
+  console.log(JSON.stringify(runLockedPlateStudy()));
+} else if (JSON.parse(mode) === 'decode') {
   const opened = await readStudioFile(readFileSync(JSON.parse(input)));
   if (!('doc' in opened)) throw new Error(JSON.stringify(opened));
   console.log(JSON.stringify(opened.doc));
@@ -40,10 +43,6 @@ if (JSON.parse(mode) === 'decode') {
       const g = faceGeometry(face);
       return g.kind === 'cylinder' && g.out === -1;
     }).map(face => face.name ?? face.id) };
-  if (JSON.parse(mode) === 'mesh') {
-    const mesh = tessellateBrep(brep);
-    Object.assign(value, { mesh: { positions: [...mesh.positions], indices: [...mesh.indices] } });
-  }
   console.log(JSON.stringify(value));
 }
 `,
@@ -106,15 +105,25 @@ async function check(label, file, doc, left, right, expectedVolume, through) {
 }
 
 await f.run(async () => {
+  f.phase = 'evaluate the same candidate catalog under both feedback policies';
+  const study = await f.inspect('fixed-budget-plate-study', {}, 'study');
+  const { mesh, winner } = study;
+  assert.deepEqual(winner.features, nodes());
+  assert.deepEqual(winner.evidence.issues, []);
+  assert.equal(study.runs[7].finalOnly.passing, undefined);
+  assert.deepEqual(study.runs[7].perFeature.passing, winner.evidence);
+  f.report.observations.push({ label: 'fixed-budget-study', budget: study.budget, meshTriangleCount: study.triangleCount,
+    runs: study.runs.map(({ order, finalOnly, perFeature }) => [order,
+      [finalOnly.observations.length, !!finalOnly.passing], [perFeature.observations.length, !!perFeature.passing]]),
+    controls: study.controls, refusedReferences: study.refusedReferences, witness: study.witness });
   f.phase = 'lock the reference and stage an editable native candidate over MCP';
-  const { mesh } = await f.inspect('reference-mesh', plate(nodes()), 'mesh');
   const path = join(f.output, 'pending-plate.bcad');
   await writeFile(path, JSON.stringify(empty));
   await mcp(path, 'proposal', async call => {
     await call('requirements', { action: 'reference', name: referenceName, mesh });
     const { references } = await call('requirements', { action: 'references' });
     assert.deepEqual(references.map(({ id, kind, name }) => [id, kind, name]), [['ref1', 'mesh', referenceName]]);
-    const ops = [{ tool: 'features', args: { action: 'add', features: nodes() } }];
+    const ops = [{ tool: 'features', args: { action: 'add', features: winner.features } }];
     await call('features', ops[0].args, true);
     const staged = await call('proposals', { action: 'propose', title: 'Build an editable two-hole plate', ops });
     assert.deepEqual([staged.proposal, staged.applied], ['P1', false]);
@@ -127,6 +136,9 @@ await f.run(async () => {
   const beforeReview = await readFile(path);
   const reviewed = await mcp(path, 'pending-review', (call, request) => reviewPendingPlate(call, request, f.output, 'pending'));
   assert.deepEqual(await readFile(path), beforeReview);
+  assert.equal(reviewed.candidate.bodySha256, winner.evidence.bodySha256);
+  assert.equal(reviewed.revision, winner.evidence.revision);
+  assert.equal(reviewed.lockedPlateReference.sha256, study.referenceSha256);
   const [target] = reviewed.throughBorePlates;
   assert.deepEqual(target.bores.map(bore => [bore.center, bore.diameter]).sort((a, b) => a[0][0] - b[0][0]),
     [[[15, 20], 6], [[45, 20], 8]]);
@@ -206,6 +218,13 @@ await f.run(async () => {
     });
     assert.deepEqual(await readFile(controlProposal), before);
   }
+  const shiftedNodes = nodes();
+  shiftedNodes[2].center = [18, 20];
+  const shifted = { ...plate(shiftedNodes), references: locked };
+  const shiftedFile = join(f.output, '09-wrong-centre.bcad');
+  await writeFile(shiftedFile, JSON.stringify(shifted));
+  assert.equal((await f.inspect('wrong-centre', shifted)).bodySha256, study.controls.wrongCentre.bodySha256);
+  await f.freshOpen(shiftedFile, shifted, '09-wrong-centre');
   f.phase = 'edit one independent diameter and verify native Save and Open';
   await f.freshOpen(approvedFile, approved, '06-approved-before-edit');
   await f.openFeatureEditor(2, 'first Hole');
