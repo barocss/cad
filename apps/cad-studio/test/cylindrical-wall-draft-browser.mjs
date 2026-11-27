@@ -6,11 +6,14 @@ import { openModelGroup } from './model-rail-helper.mjs';
 
 const baseline = process.argv.includes('--baseline');
 const axialX = process.argv.includes('axial-x');
+const historyBaseline = process.argv.includes('--history-neutral-baseline');
+const historyNeutral = historyBaseline || process.argv.includes('--history-neutral');
 const worldPoint = ([x, y, z]) => axialX ? [10 + z, 20 + x, 30 + y] : [x, y, z];
 const cylinderPoint = ([x, y, z]) => axialX ? [y - 20, z - 30, x - 10] : [x, y, z];
 const pins = [
   'packages/barocss-cad-model/src/app/commands.ts',
   'packages/barocss-cad-model/src/app/draftInputs.ts',
+  'packages/barocss-cad-model/src/app/draftEdit.ts',
   'packages/barocss-cad/src/part/part-face-finish.ts',
   'packages/barocss-cad/src/features/bored-cap-offset.ts',
 ];
@@ -51,6 +54,7 @@ const stock = {
 };
 const button = (name, scope = f.page) => scope.getByRole('button', { name, exact: true });
 const hud = () => f.page.getByRole('dialog', { name: 'Draft', exact: true });
+const historyHud = () => f.page.getByRole('dialog', { name: 'Edit Draft', exact: true });
 const field = (name, scope = hud()) => scope.getByLabel(name, { exact: true });
 const near = (a, b, tolerance = 1e-8) => assert.ok(Number.isFinite(a) && Math.abs(a - b) < tolerance, `${a} vs ${b}`);
 const neutral = axialX ? 21 : 11;
@@ -82,6 +86,52 @@ async function verify(label, doc, angle, original) {
   return n;
 }
 
+async function switchHistoryNeutral(draft, original) {
+  await draft.click();
+  assert.equal(await field('Neutral plane').inputValue(), 'auto');
+  await field('Angle').fill('10');
+  await hud().locator('.status').getByText('preview', { exact: true }).waitFor();
+  await button('Apply', hud()).click();
+  await f.changed(stock);
+  const automatic = await f.doc();
+  assert.equal(automatic.nodes[2].neutral, undefined);
+  async function openHistory() {
+    await f.openFeatureEditor(2, 'cylinder Draft neutral');
+    await button('Edit draft', f.editor()).click();
+    return historyHud();
+  }
+  const edit = await openHistory();
+  await field('Neutral plane', edit).selectOption('fixed');
+  assert.equal(await field('Neutral coordinate', edit).inputValue(), historyBaseline ? '' : axialX ? '13' : '3');
+  await f.same(automatic);
+  await f.snapshot('history-fixed-coordinate-default');
+  if (historyBaseline) return;
+
+  await field('Neutral coordinate', edit).fill(String(neutral));
+  await edit.locator('.status').getByText('preview', { exact: true }).waitFor();
+  await button('Cancel', edit).click();
+  await f.same(automatic);
+  await openHistory();
+  await field('Neutral plane', edit).selectOption('fixed');
+  await field('Neutral coordinate', edit).fill(String(neutral));
+  await edit.locator('.status').getByText('preview', { exact: true }).waitFor();
+  await button('Apply', edit).click();
+  await f.changed(automatic);
+  const edited = await f.doc();
+  assert.deepEqual(edited.nodes[2], { ...automatic.nodes[2], neutral });
+  const accepted = await verify('history-neutral-native', edited, 10, original);
+  await f.undo(); await f.same(automatic);
+  await f.redo(); await f.same(edited);
+  const saved = await f.save('cylinder-draft-history-neutral');
+  const opened = (await f.freshOpen(saved.file, edited, 'history-neutral-reopened')).doc;
+  assert.equal((await verify('history-neutral-reopened-native', opened, 10, original)).digest, accepted.digest);
+  const reopenedEdit = await openHistory();
+  assert.equal(await field('Neutral plane', reopenedEdit).inputValue(), 'fixed');
+  assert.equal(await field('Neutral coordinate', reopenedEdit).inputValue(), String(neutral));
+  await button('Cancel', reopenedEdit).click();
+  await f.same(edited);
+}
+
 await f.run(async () => {
   const seed = join(f.output, 'cylindrical-draft-stock.bcad');
   await writeFile(seed, JSON.stringify(stock));
@@ -110,6 +160,10 @@ await f.run(async () => {
   }
   assert.equal(await draft.getAttribute('data-tip-off'), '');
   const original = await f.inspect('original-native', stock);
+  if (historyNeutral) {
+    await switchHistoryNeutral(draft, original);
+    return;
+  }
   const openPreview = async () => {
     await draft.click();
     assert.equal(await field('Pull').inputValue(), axialX ? 'x' : 'z');
@@ -162,7 +216,7 @@ await f.run(async () => {
   assert.equal(await field('Neutral coordinate', f.editor()).inputValue(), String(neutral));
   assert.equal(await field('Angle', f.editor()).inputValue(), '-10');
   await button('Edit draft', f.editor()).click();
-  const fullEditor = f.page.getByRole('dialog', { name: 'Edit Draft', exact: true });
+  const fullEditor = historyHud();
   assert.equal(await field('Pull', fullEditor).inputValue(), axialX ? 'x' : 'z');
   await button('Cancel', fullEditor).click();
   await f.same(edited);

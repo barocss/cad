@@ -92,7 +92,7 @@ export function editSavedDraftCommand(doc: StudioDoc, index: number): Command | 
     if (!ends.has(axis)) {
       const key = bodyKeyFor(doc.nodes, node.parent.node, node.parent.side);
       let end: number | undefined;
-      try { end = draftBodyEnd(prefix ??= prefixDoc(doc, index), key, axis); } catch { /* Historical prefix cannot be evaluated. */ }
+      try { end = draftBodyEnd(prefix ??= prefixDoc(doc, index), key, axis, node); } catch { /* Historical prefix cannot be evaluated. */ }
       ends.set(axis, end);
     }
     return ends.get(axis);

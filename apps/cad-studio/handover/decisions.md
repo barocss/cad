@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D2113: [Restore the original cap when editing cylindrical Draft](notes/cylindrical-draft-history-neutral-2026-11-28/README.md), #14. Resolve signed cap defaults from historical native stock and verify actual Studio Undo/Redo and fresh Open.
+
 - D2112: [Measure the current local MCP review contract](notes/local-mcp-review-evidence-2026-11-28/README.md), #324. Record wire cost and refusal diagnostics, decode both revision-bound images, and verify native Studio Open.
 
 - D2111: [Draft an original cylinder on a cardinal sketch plane](notes/cardinal-cylindrical-wall-draft-2026-11-28/README.md), #14. Verify signed axial pull, original world trim records and native desktop reopen.

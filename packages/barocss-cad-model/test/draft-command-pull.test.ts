@@ -281,6 +281,22 @@ test('Studio Draft keeps the world neutral coordinate for an original YZ cylinde
   assert.equal(node.neutral, 21);
   assert.deepEqual(node.faces, ['n1.side0#1', 'n1.side0#2']);
   assert.ok(Math.abs(volume(made) - 5912.958606927207) < 1e-7);
+
+  const automatic = draft.build!(ctx, { ...auto, deg: 10 });
+  const history = editSavedDraftCommand(automatic, 2), editCtx = { ...ctx, doc: automatic, bodies: bodiesOf(automatic) };
+  assert.ok(history?.defaults && history.build);
+  const savedAuto = history.defaults(editCtx);
+  assert.equal(savedAuto.neutralMode, 'auto');
+  const fixedAtCap = patchValues(history, editCtx, savedAuto, { neutralMode: 'fixed' });
+  assert.equal(fixedAtCap.neutral, 13);
+  assert.equal(volume(history.build(editCtx, fixedAtCap)), volume(automatic));
+  assert.equal(patchValues(history, editCtx, { ...savedAuto, pull: '-x' }, { neutralMode: 'fixed' }).neutral, 33);
+  assert.equal(patchValues(history, editCtx, { ...savedAuto, pull: 'z' }, { neutralMode: 'fixed' }).neutral, '');
+
+  const incomplete: StudioDoc = { ...automatic, nodes: [...automatic.nodes.slice(0, 2), { ...node, neutral: undefined, faces: [node.faces[0]] }] };
+  const partialEdit = editSavedDraftCommand(incomplete, 2), partialCtx = { ...editCtx, doc: incomplete };
+  assert.ok(partialEdit?.defaults);
+  assert.equal(patchValues(partialEdit, partialCtx, partialEdit.defaults(partialCtx), { neutralMode: 'fixed' }).neutral, '');
 });
 
 test('Studio Draft retains three selected box sides through its editable History command', () => {
