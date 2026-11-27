@@ -1,12 +1,15 @@
 import { faceGeometry } from '../brep/analytic-boolean.js';
 import { checkBrep, type Brep } from '../brep/brep-core.js';
 import { transformBrep, type BrepAffine } from '../brep/brep-transform.js';
+import { cross } from '../core/vec3.js';
 import type { CurveSegment2, XY } from '../brep/curved-arrangement.js';
 import { ExtrudedProfileLimits } from '../features/extruded-profile-solid.js';
 import { booleanPrismatic, brepFromPrismatic, prismaticExtrude, type PrismaticSolid } from '../features/prismatic-solid.js';
 import type { Tools } from './part-model.js';
+import type { Point } from '../types.js';
 
 interface BoxSide { readonly axis: 0 | 1 | 2; readonly side: 0 | 1 }
+type NamedBoxSide = BoxSide & { readonly name: string };
 interface CardinalBox {
   readonly ranges: readonly (readonly number[])[];
   readonly sides: ReadonlyMap<string, BoxSide>;
@@ -151,7 +154,7 @@ function checkNamedBoxStock(stock: PrismaticSolid, box: CardinalBox, names: read
     return fail('CAPABILITY', 'Per-face Shell needs the same exact named upright box in its native and slab representations.');
 }
 
-/** Exact top-and-side rims or top-and-bottom rings, using the existing prism converter. */
+/** Exact rims or rings of two original cardinal openings, using the existing top-pair converter. */
 export function twoOpeningBoxShellWithWalls(stock: PrismaticSolid, source: Brep, openings: readonly [string, string],
   walls: Readonly<Record<string, unknown>>, id: string, fail: Tools['fail']): { solid: PrismaticSolid; brep: Brep } {
   const box = cardinalBoxOf(source);
@@ -166,8 +169,6 @@ export function twoOpeningBoxShellWithWalls(stock: PrismaticSolid, source: Brep,
   const sides = selected.map(face => box.sides.get(face!.id)!);
   const top = sides.findIndex(side => side.axis === 2 && side.side === 1), vertical = sides.findIndex(side => side.axis !== 2);
   const tube = top >= 0 && sides.some(side => side.axis === 2 && side.side === 0);
-  if (top < 0 || (vertical < 0 && !tube))
-    return fail('CAPABILITY', 'Two-opening per-face Shell needs the original top and one original vertical face or the original bottom.');
   if (Object.keys(walls).length !== 4 || openings.some(name => Object.hasOwn(walls, name))
     || names.some(name => !openings.includes(name) && !Object.hasOwn(walls, name)))
     return fail('REFERENCE', 'Two-opening per-face Shell needs one thickness for each of the four kept faces.');
@@ -186,9 +187,22 @@ export function twoOpeningBoxShellWithWalls(stock: PrismaticSolid, source: Brep,
   if (cavity.some(([low, high]) => !(high - low >= minimum)))
     return fail('PARAMETER', 'The wall thicknesses leave no cavity in this box.');
   checkNamedBoxStock(stock, box, supports, fail);
+  // Keep every previously admitted top pair on its original producer, including its native bytes.
+  if (top < 0)
+    return reorientedTwoOpeningBoxShell(stock, source, box, supports, cavity, openings,
+      openings.map((name, i) => ({ name, ...sides[i] })), walls, id, fail);
   const innerNames = supports.map(pair => pair.map(name => `${id}.in.${name}`));
   const solid = booleanPrismatic(stock, namedBoxPrism(cavity, innerNames), 'difference');
-  const brep = brepFromPrismatic(solid, { id }), report = checkBrep(brep, { strict: true });
+  const brep = brepFromPrismatic(solid, { id });
+  checkTwoOpeningBoxShell(brep, source, box, cavity, openings, { primary: openings[top], secondary: openings[vertical], tube }, id, fail);
+  return { solid, brep };
+}
+
+/** Validate exact world supports and canonical rim roles after either direct construction or signed placement. */
+function checkTwoOpeningBoxShell(brep: Brep, source: Brep, box: CardinalBox, cavity: readonly (readonly number[])[],
+  openings: readonly [string, string], rim: { readonly primary: string; readonly secondary?: string; readonly tube: boolean },
+  id: string, fail: Tools['fail']): void {
+  const { tube } = rim, report = checkBrep(brep, { strict: true });
   const counts = report.counts;
   if (!report.valid || counts.bodies !== 1 || counts.shells !== 1 || counts.faces !== (tube ? 10 : 12) || counts.loops !== 12
     || counts.coedges !== (tube ? 48 : 56) || counts.edges !== (tube ? 24 : 28) || counts.vertices !== (tube ? 16 : 18)
@@ -207,7 +221,7 @@ export function twoOpeningBoxShellWithWalls(stock: PrismaticSolid, source: Brep,
   for (const original of source.faces) {
     const name = original.name!, { axis, side } = box.sides.get(original.id)!;
     const outer = brep.faces.filter(face => face.name === name || face.name?.replace(/#\d+$/, '') === name);
-    const pieces = !tube && name === openings[vertical] ? 3 : 1;
+    const pieces = !tube && name === rim.secondary ? 3 : 1;
     if (outer.length !== pieces || outer.some(face => face.loops.length !== (tube && openings.includes(name) ? 2 : 1)))
       return fail('GEOMETRY', 'Two-opening per-face Shell lost an original face or its rim patches.');
     for (const face of outer) checkSupport(face, axis, box.ranges[axis][side], side === 1 ? 1 : -1);
@@ -221,7 +235,7 @@ export function twoOpeningBoxShellWithWalls(stock: PrismaticSolid, source: Brep,
         continue;
       }
       const loopLengths = loops.map(loop => loop.coedges.length).sort((a, b) => a - b);
-      const expected = name === openings[top] ? [8] : [4, 5, 5];
+      const expected = name === rim.primary ? [8] : [4, 5, 5];
       if (inner || JSON.stringify(loopLengths) !== JSON.stringify(expected))
         return fail('GEOMETRY', 'Two-opening per-face Shell could not retain the exact open rim trims.');
     } else {
@@ -232,6 +246,41 @@ export function twoOpeningBoxShellWithWalls(stock: PrismaticSolid, source: Brep,
       checkSupport(inner, axis, cavity[axis][side], side === 1 ? -1 : 1);
     }
   }
+}
+
+/** A signed basis maps a new pair to an existing top pair without rounding world coordinates. */
+function reorientedTwoOpeningBoxShell(stock: PrismaticSolid, source: Brep, box: CardinalBox,
+  names: readonly (readonly string[])[], cavity: readonly (readonly number[])[], openings: readonly [string, string],
+  selections: readonly NamedBoxSide[], walls: Readonly<Record<string, unknown>>, id: string, fail: Tools['fail']): { solid: PrismaticSolid; brep: Brep } {
+  const selected = [...selections].sort((a, b) => a.axis - b.axis || a.side - b.side);
+  const [first, second] = selected, tube = first.axis === second.axis;
+  const outward = ({ axis, side }: BoxSide): Point => [0, 1, 2].map(k => k === axis ? side === 1 ? 1 : -1 : 0) as Point;
+  const w = outward(first);
+  let u: Point, v: Point;
+  if (tube) {
+    u = [0, 1, 2].map(k => k === (first.axis === 0 ? 1 : 0) ? 1 : 0) as Point;
+    v = cross(w, u);
+  } else {
+    v = outward(second).map(value => -value) as Point;
+    u = cross(v, w);
+  }
+  const basis = [u, v, w], axes = basis.map(direction => {
+    const axis = direction.findIndex(value => value !== 0);
+    return { axis, sign: direction[axis] };
+  });
+  if (new Set(axes.map(({ axis }) => axis)).size !== 3 || axes.some(({ sign }) => Math.abs(sign) !== 1)
+    || !cross(u, v).every((value, k) => value === w[k]))
+    return fail('GEOMETRY', 'Two-opening per-face Shell could not establish an exact cardinal basis.');
+  const localRanges = axes.map(({ axis, sign }) => sign === 1 ? [...box.ranges[axis]] : [-box.ranges[axis][1], -box.ranges[axis][0]]);
+  const localNames = axes.map(({ axis, sign }) => sign === 1 ? [...names[axis]] : [names[axis][1], names[axis][0]]);
+  const localStock = namedBoxPrism(localRanges, localNames), localSource = brepFromPrismatic(localStock, { id: `${id}_box` });
+  const local = twoOpeningBoxShellWithWalls(localStock, localSource, openings, walls, id, fail);
+  const matrix: [number, number, number, number, number, number, number, number, number] = [0, 0, 0, 0, 0, 0, 0, 0, 0];
+  basis.forEach((direction, column) => direction.forEach((value, row) => { matrix[3 * row + column] = value; }));
+  const brep = transformBrep(local.brep, { matrix });
+  // The world operand, rather than the local slab direction, remains the downstream Boolean and mass authority.
+  const solid = booleanPrismatic(stock, namedBoxPrism(cavity, names.map(pair => pair.map(name => `${id}.in.${name}`))), 'difference');
+  checkTwoOpeningBoxShell(brep, source, box, cavity, openings, { primary: first.name, secondary: second.name, tube }, id, fail);
   return { solid, brep };
 }
 

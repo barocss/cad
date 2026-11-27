@@ -41,7 +41,7 @@ export function boxShellSelection(ctx: Ctx) {
 
 export function buildBoxWallShell(ctx: Ctx, values: Values) {
   const target = boxShellSelection(ctx);
-  if (!target) throw refusal('BAD_REFERENCE', 'Select one original box face, or select its original top and one other original face.');
+  if (!target) throw refusal('BAD_REFERENCE', 'Select one or two distinct original faces on the same box.');
   const { parent, opening, secondOpening, sigs } = target;
   const walls = Object.fromEntries(target.walls.map(face => [face.name, Number(values[face.key])]));
   return withNode(ctx.doc, { kind: 'shell-walls', parent, opening, ...(secondOpening === undefined ? {} : { secondOpening }), walls, sigs });

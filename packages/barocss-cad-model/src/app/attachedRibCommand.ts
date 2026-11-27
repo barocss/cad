@@ -14,6 +14,7 @@ export function ribAttachment(ctx: Ctx) {
   if (!box) return;
   const { parent, opening, sigs } = box;
   const source = ctx.doc.nodes[parent.node], signature = sigs[opening], sign = signature.d?.[2];
+  if (box.secondOpening && sign !== 1) return;
   if (source?.kind !== 'extrude' || source.draft || source.from !== undefined || (sign !== 1 && sign !== -1)) return;
   const sketch = ctx.doc.nodes[source.sketch];
   if (sketch?.kind !== 'sketch' || sketch.profile !== 'rectangle') return;

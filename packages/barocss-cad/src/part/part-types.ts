@@ -532,7 +532,7 @@ export type CadPartFeature = Base & (
   | { readonly kind: 'sheet-flange'; readonly target: string; readonly edge: string; readonly length: CadPartDim; readonly angle?: number; readonly bendRadius?: CadPartDim; readonly measure?: 'outer' | 'inner' | 'tangent'; readonly position?: 'material-inside' | 'material-outside' | 'bend-outside'; readonly offsets?: readonly [CadPartDim, CadPartDim]; readonly relief?: { readonly kind: 'rectangular' | 'obround'; readonly width: CadPartDim; readonly depth: CadPartDim } | { readonly kind: 'none' } }
   /** Hollowed to walls `thickness` thick; `open` names the faces removed (the top of a box, a side). */
   | { readonly kind: 'shell'; readonly target: string; readonly thickness: CadPartDim; readonly open?: readonly string[]; readonly expect?: Readonly<Record<string, CadPartNameSignature>> }
-  /** Independent walls of an original cardinal box. A second opening admits its original top with one vertical face or its bottom. */
+  /** Independent walls of an original cardinal box. The optional second opening names a distinct original face. */
   | { readonly kind: 'shell-walls'; readonly target: string; readonly opening: string; readonly secondOpening?: string; readonly walls: Readonly<Record<string, number>>; readonly expect?: Readonly<Record<string, CadPartNameSignature>> }
   | { readonly kind: 'chamfer'; readonly target: string; readonly edges: readonly string[]; readonly distance: CadPartDim; readonly expect?: Readonly<Record<string, CadPartNameSignature>> }
   /** Vertical edges of upright bodies. */

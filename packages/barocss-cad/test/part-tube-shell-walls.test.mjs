@@ -84,13 +84,11 @@ test('cap role order and shifted original stock preserve exact tube rings', () =
   verify(evaluateCadPart(doc(reversed, source, extrude)), [[-7, 33], [11, 41], [-5, 15]], walls);
 });
 
-test('tube thickness collapse and other opposite opening pairs refuse without changing accepted output', () => {
+test('tube thickness collapse and invalid opening references refuse without changing accepted output', () => {
   const snapshot = evaluateCadPart(doc()), accepted = saveCadPart(snapshot);
   const reject = (feature, code) => assert.throws(() => reevaluate(snapshot, { document: doc(feature) }), error => error.code === code);
   for (const [name, value] of [['box.side3', 35], ['box.side1', 37], ['box.side0', 26], ['box.side2', 28], ['box.side3', 35 - 0.00005]])
     reject({ ...shell, walls: { ...walls, [name]: value } }, 'PARAMETER');
-  for (const [opening, secondOpening] of [['box.side3', 'box.side1'], ['box.side0', 'box.side2']])
-    reject({ ...shell, opening, secondOpening }, 'CAPABILITY');
   const { 'box.side0': omitted, ...missing } = walls; assert.equal(omitted, 2);
   reject({ ...shell, walls: missing }, 'REFERENCE');
   reject({ ...shell, walls: { ...walls, 'box.bottom': 2 } }, 'REFERENCE');

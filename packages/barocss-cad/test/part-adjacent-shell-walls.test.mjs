@@ -87,8 +87,6 @@ test('two explicit openings require exactly four finite kept walls and refuse co
   reject({ ...shell, walls: { ...walls, 'box.top': 2 } }, 'REFERENCE');
   for (const secondOpening of ['', null, ['box.side0'], 'box.top']) reject({ ...shell, secondOpening }, 'INPUT');
   reject({ ...shell, secondOpening: 'absent' }, 'SELECTION');
-  for (const secondOpening of ['box.bottom', 'box.side1'])
-    reject({ ...shell, opening: 'box.side0', secondOpening }, 'CAPABILITY');
   for (const value of [0, -1, 0.00001, NaN, Infinity, '2']) reject({ ...shell, walls: { ...walls, 'box.bottom': value } }, 'PARAMETER');
   for (const [name, value] of [['box.bottom', 20], ['box.side3', 35], ['box.side2', 30], ['box.side3', 35 - 0.00005]])
     reject({ ...shell, walls: { ...walls, [name]: value } }, 'PARAMETER');

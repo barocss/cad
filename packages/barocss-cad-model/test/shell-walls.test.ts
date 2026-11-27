@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { commandById } from '../src/app/commands';
 import { editFields } from '../src/app/editFields';
-import { rectanglePart } from '../src/engine/doc';
+import { rectanglePart, type StudioDoc } from '../src/engine/doc';
+import { dispatchTool } from '../src/chat/tools';
 import { evaluateDoc } from '../src/engine/evaluate';
 import { readStudioDoc } from '../src/engine/migrate';
 
@@ -87,7 +88,9 @@ test('top and vertical per-face Shell stores both openings and keeps only four e
     assert.match(loaded.error, message);
   }
   const twoSides = { ...context, selection: { ...context.selection, faces: [pick('n1.side0'), pick('n1.side1')] } };
-  assert.deepEqual(shell.fields!(twoSides, values).map(field => field.key), ['t']);
+  assert.deepEqual(shell.fields!(twoSides, values).map(field => field.key), ['wallMode', 'bottomWall', 'backWall', 'leftWall', 'topWall']);
+  const bottomAndSide = { ...context, selection: { ...context.selection, faces: [pick('n1.bottom'), pick('n1.side1')] } };
+  assert.equal(commandById('rib')?.available(bottomAndSide).ok, false);
 });
 
 test('opposite caps form a through Shell with four independent side walls', () => {
@@ -166,4 +169,26 @@ test('a lateral per-face Shell exposes its five retained walls and keeps the top
   assert.ok(!Object.hasOwn(bottomFeature.walls, 'n1.bottom'));
   const bottomResult = evaluateDoc(opened.doc, 4);
   assert.ok(bottomResult.ok && Math.abs(bottomResult.bodies[0].volume! - 13248) < 1e-7);
+});
+
+test('the revision-pinned local Shell tool keeps both original lateral openings and requires four named walls', async () => {
+  const doc = rectanglePart(40, 30, 20), original = evaluateDoc(doc, 1);
+  assert.ok(original.ok);
+  const state = { doc, bodies: original.bodies };
+  const evaluate = async (candidate: StudioDoc) => evaluateDoc(candidate, 1);
+  const current = await dispatchTool(state, 'query', { action: 'rebuild' }, evaluate);
+  assert.ok(!current.isError, current.content);
+  const args = { action: 'command', command: 'shell', expectedRevision: JSON.parse(current.content).revision,
+    faces: ['n1.side1', 'n1.side3'], values: { wallMode: 'per-face', bottomWall: 2, frontWall: 3, backWall: 4, topWall: 5 } };
+  const result = await dispatchTool(state, 'features', args, evaluate);
+  assert.ok(result.changed && !result.isError, result.content);
+  const feature = result.state.doc.nodes[2];
+  assert.ok(feature.kind === 'shell-walls');
+  assert.deepEqual([feature.opening, feature.secondOpening].sort(), ['n1.side1', 'n1.side3']);
+  assert.ok(Math.abs(result.state.bodies[0].volume! - 12040) < 1e-7);
+  const duplicate = await dispatchTool(state, 'features', { ...args, faces: ['n1.side3', 'n1.side3'] }, evaluate);
+  assert.ok(duplicate.isError && !duplicate.changed && duplicate.state.doc === doc, duplicate.content);
+  const collapse = await dispatchTool(state, 'features', { ...args, values: { ...args.values, topWall: 18 } }, evaluate);
+  assert.ok(collapse.isError && !collapse.changed && collapse.state.doc === doc, collapse.content);
+  assert.match(collapse.content, /leave no cavity/i);
 });
