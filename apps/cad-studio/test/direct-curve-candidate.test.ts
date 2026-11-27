@@ -5,7 +5,7 @@ import { curvesSource } from '@barocss/cad-model/engine/curveSource';
 import { directOps, importSource } from '@barocss/cad-model/engine/direct';
 import { prefixDoc } from '@barocss/cad-model/engine/doc';
 import { eligibleCurvePatternPaths } from '@barocss/cad-model/engine/curveFeaturePattern';
-import { curvePatternInputKey, directCommandDocument, insertedCurvePartProblem, prepareDirectCurveCandidate } from '../src/app/directCurveCandidate';
+import { curvePatternInputKey, directCommandDocument, insertedCurvePartProblem, prepareDirectCurveCandidate, preparePatternNodeCandidate } from '../src/app/directCurveCandidate';
 
 function fixture() {
   const seed = part('Path candidate').box({ w: 60, d: 40, h: 10 })
@@ -85,4 +85,26 @@ test('consumers outside the displayed history and suppressed consumers do not in
   const nodes = doc.nodes.map(node => node.kind === 'curve-feature-pattern' ? { ...node, suppressed: true as const } : node);
   assert.equal(curvePatternInputKey({ ...doc, nodes }), curvePatternInputKey({ ...moved, nodes }));
   assert.throws(() => curvePatternInputKey({ ...doc, direct: { ...doc.direct!, objects: [] } }), /missing/);
+});
+
+
+test('a History Path relink has a feature-specific refusal without mutating accepted owners', () => {
+  const { doc, id } = fixture(), before = structuredClone(doc), index = doc.nodes.length - 1;
+  const direct = importSource(doc.direct!, curvesSource('other', [
+    { degree: 1, knots: [0, 0, 1, 1], points: [[0, 0, 0], [40, 0, 0]], weights: [1, 1] },
+  ]), 'Other path');
+  const accepted = { ...doc, direct }, objectId = direct.objects.at(-1)!.id;
+  assert.notEqual(id, objectId);
+  const node = accepted.nodes[index];
+  assert.equal(node.kind, 'curve-feature-pattern');
+  const nodes = [...accepted.nodes];
+  nodes[index] = { ...node, path: { objectId } };
+  const next = { ...accepted, nodes };
+  const candidate = preparePatternNodeCandidate(accepted, next, index);
+  assert.ok(candidate);
+  assert.equal(candidate.failureTitle, 'Path cut pattern not changed');
+  assert.equal(candidate.next, next);
+  assert.deepEqual(candidate.input, prefixDoc(next, next.nodes.length));
+  assert.deepEqual(accepted.nodes, before.nodes);
+  assert.deepEqual(doc, before);
 });

@@ -7,8 +7,11 @@ const baseline = process.argv.includes('--baseline');
 const quarter = process.argv.includes('--quarter');
 const quadratic = process.argv.includes('--quadratic');
 const mixed = process.argv.includes('--mixed');
+const relink = process.argv.includes('--relink');
+const beforeRelink = process.argv.includes('--prior-relink');
 const entry = process.argv.includes('--history') ? 'History' : 'Browser';
 assert.ok(!(quarter && quadratic));
+assert.ok(!relink || (quarter && mixed), 'Relink fixture starts from the mixed quarter-arc recipe');
 const mixedCurved = mixed && (quarter || quadratic);
 const count = mixedCurved ? 2 : quarter || mixed ? 4 : 3;
 const spacing = mixedCurved ? (quadratic ? 14 : 19) : quadratic ? 10 : quarter ? 8 : mixed ? 12.5 : 16;
@@ -41,6 +44,7 @@ const pins = ['apps/cad-studio/test/prior-circular-path-cut-pattern-browser.mjs'
   'packages/barocss-cad/src/features/curve-cut-pattern.ts', 'packages/barocss-cad/src/part/part-model.ts',
   'packages/barocss-cad/src/part/part-transform.ts', 'packages/barocss-cad/src/part/part-prior-circular-cut.ts',
   'packages/barocss-cad/src/part/part-prior-rectangular-cut.ts'];
+if (relink) pins.push('apps/cad-studio/src/app/directCurveCandidate.ts', 'apps/cad-studio/src/state/historyFeatureApply.ts');
 const f = await createFlow({
   name: 'prior-circular-path-cut-pattern', output: process.argv[2],
   envFrozen: mixedCurved ? 'D2035_SOURCE_FROZEN' : mixed ? 'D2034_SOURCE_FROZEN' : quadratic ? 'D1950_SOURCE_FROZEN' : quarter ? 'D1931_SOURCE_FROZEN' : 'D1911_SOURCE_FROZEN',
@@ -171,7 +175,8 @@ async function openModel(doc, name) {
   });
   await f.same(doc);
   const browser = f.page.getByRole('complementary', { name: 'Browser', exact: true });
-  await button('Show its features', browser).click();
+  const expand = button('Show its features', browser);
+  if (await expand.count()) await expand.click();
   await button('Top', f.page.locator('.views')).click();
   await f.page.getByTitle('Frame all (F)', { exact: true }).click();
 }
@@ -234,7 +239,18 @@ await f.run(async () => {
   await f.newPage();
   await openModel(stock, 'circle-path-source.bcad');
   f.phase = 'Author a linked XY path and choose the earlier circular Subtract';
-  const doc = await createPath();
+  let doc = await createPath();
+  if (relink) {
+    // Add two named world-mm curves to the document being opened, without
+    // changing the authored quarter arc or the downstream source cut.
+    for (const [id, name, end] of [['clear_relink', 'Clear vertical path', [0, 24, 0]],
+      ['hit_relink', 'Path across later bore', [10 * Math.sqrt(3), 15, 0]]]) {
+      doc.direct.sources[id] = `@model ${id} { version: 0; length-unit: mm;
+        @curve #${id} { type: nurbs; degree: 1; knots: [0,0,1,1]; control-points: [[0,0,0],${JSON.stringify(end)}]; weights: [1,1]; } }`;
+      doc.direct.objects.push({ id, name, source: id, geometry: id });
+    }
+    await openModel(doc, 'circle-path-relink.bcad');
+  }
   assert.deepEqual(doc.nodes, stock.nodes);
   const objectId = doc.direct.objects[0].id;
   const path = await f.inspect('authored-level-path', { direct: doc.direct, checkPath: objectId });
@@ -289,6 +305,41 @@ await f.run(async () => {
   assert.deepEqual(editedWalls.filter(wall => original.some(old => old.name === wall.name)), original);
   await f.undo(); await f.same(applied);
   await f.redo(); await f.same(edited);
+  if (relink) {
+    // Refuse the wrong path while Redo is available so the proof checks more
+    // than matching booleans on a history stack that was already at its tip.
+    await f.undo(); await f.same(applied);
+    const historyBefore = await stackState();
+    assert.equal(historyBefore[1], true);
+    await f.openFeatureEditor(stock.nodes.length, 'Relink path');
+    await field(f.editor(), 'Path').selectOption('hit_relink');
+    await button('Apply', f.editor()).click();
+    const refusal = f.page.locator('.toast').filter({ hasText: /disjoint from the newer cuts/ });
+    await refusal.waitFor();
+    const title = beforeRelink ? 'Direct geometry not changed' : 'Path cut pattern not changed';
+    assert.match(await refusal.innerText(), new RegExp(title));
+    await f.same(applied);
+    assert.deepEqual(await stackState(), historyBefore);
+    assert.deepEqual(await inspect('after-refused-relink', applied, originalCenters, true), accepted);
+    await f.snapshot('07-colliding-relink-refused');
+    if (beforeRelink) return;
+    await f.closeEditor();
+    await f.redo(); await f.same(edited);
+    await f.openFeatureEditor(stock.nodes.length, 'Compatible relink');
+    await field(f.editor(), 'Path').selectOption('clear_relink');
+    const linked = (await f.applyEditor(edited, '08-compatible-relink')).doc;
+    assert.deepEqual(linked, {...edited, nodes: [...edited.nodes.slice(0, -1), {...edited.nodes.at(-1), path: { objectId: 'clear_relink' }}]});
+    const linkedCenters = [[10, 10], [10, 10 + revisedSpacing]];
+    const moved = await inspect('relinked-native', linked, linkedCenters, true);
+    assert.deepEqual(moved.filter(wall => original.some(old => old.name === wall.name)), original);
+    await f.undo(); await f.same(edited);
+    assert.deepEqual(await inspect('relink-undone-native', edited, centers, true), editedWalls);
+    await f.redo(); await f.same(linked);
+    const file = await f.save('relinked-cut-pattern');
+    const reopened = await f.freshOpen(file.file, linked, '09-relink-fresh-open');
+    assert.deepEqual(await inspect('relink-reopened-native', reopened.doc, linkedCenters, true), moved);
+    return;
+  }
   const saved = await f.save('circular-path-cut-pattern');
   const reopened = await f.freshOpen(saved.file, edited, '06-fresh-open-circular-path');
   assert.deepEqual(reopened.doc.nodes.at(-1), { ...pattern, spacing: revisedSpacing });

@@ -56,7 +56,7 @@ export function preparePatternNodeCandidate(before: StudioDoc, next: StudioDoc, 
   const oldKind = before.nodes[index]?.kind, nextKind = next.nodes[index]?.kind;
   const fill = oldKind === 'fill-feature-pattern' || nextKind === 'fill-feature-pattern';
   if (!fill && oldKind !== 'curve-feature-pattern' && nextKind !== 'curve-feature-pattern') return null;
-  return { next, input: prefixDoc(next, next.nodes.length), ...(fill ? { failureTitle: 'Fill cut pattern not changed' } : {}) };
+  return { next, input: prefixDoc(next, next.nodes.length), failureTitle: fill ? 'Fill cut pattern not changed' : 'Path cut pattern not changed' };
 }
 
 /** Part insertion must check the placed context before its direct geometry is stripped. */

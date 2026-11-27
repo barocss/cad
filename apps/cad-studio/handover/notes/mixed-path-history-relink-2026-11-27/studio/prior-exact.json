@@ -1,0 +1,131 @@
+{
+  "status": "PASS",
+  "phase": "open feature editor Relink path",
+  "errors": [],
+  "consoleErrors": [],
+  "changes": [],
+  "observations": [
+    {
+      "label": "original-circle-and-later-rectangle",
+      "centers": [
+        [
+          10,
+          10
+        ]
+      ],
+      "volume": 23511.592955033328,
+      "centroid": [
+        30.152728172130605,
+        20.030747400599488,
+        5
+      ],
+      "topology": {
+        "bodies": 1,
+        "shells": 1,
+        "faces": 14,
+        "loops": 20,
+        "coedges": 72,
+        "edges": 36,
+        "vertices": 24
+      }
+    },
+    {
+      "entry": "Browser",
+      "parent": {
+        "node": 10,
+        "side": "solid"
+      },
+      "source": {
+        "node": 4,
+        "side": "solid"
+      },
+      "path": {
+        "objectId": "obj_1"
+      }
+    },
+    {
+      "label": "path-native",
+      "centers": [
+        [
+          10,
+          10
+        ],
+        [
+          26.268310095787474,
+          18.36633821072233
+        ]
+      ],
+      "volume": 23385.929248889734,
+      "centroid": [
+        30.173600995548885,
+        20.039691061769133,
+        5
+      ],
+      "topology": {
+        "bodies": 1,
+        "shells": 1,
+        "faces": 16,
+        "loops": 24,
+        "coedges": 84,
+        "edges": 42,
+        "vertices": 28
+      }
+    },
+    {
+      "label": "path-edited-native",
+      "centers": [
+        [
+          10,
+          10
+        ],
+        [
+          26.82941969615793,
+          19.193953882637203
+        ]
+      ],
+      "volume": 23385.929248889734,
+      "centroid": [
+        30.170585887139687,
+        20.03524388964745,
+        5
+      ],
+      "topology": {
+        "bodies": 1,
+        "shells": 1,
+        "faces": 16,
+        "loops": 24,
+        "coedges": 84,
+        "edges": 42,
+        "vertices": 28
+      }
+    },
+    {
+      "label": "after-refused-relink",
+      "centers": [
+        [
+          10,
+          10
+        ],
+        [
+          26.268310095787474,
+          18.36633821072233
+        ]
+      ],
+      "volume": 23385.929248889734,
+      "centroid": [
+        30.173600995548885,
+        20.039691061769133,
+        5
+      ],
+      "topology": {
+        "bodies": 1,
+        "shells": 1,
+        "faces": 16,
+        "loops": 24,
+        "coedges": 84,
+        "edges": 42,
+        "vertices": 28
+      }
+    }
+  ]
+}

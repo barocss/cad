@@ -1,0 +1,16 @@
+{
+  "count": 11,
+  "hashes": {
+    "apps/cad-studio/src/app/cutPatternSource.ts": "fcb09b26ab07e70bcf38ec06a555f7da5ce6c036d75c971a374752bbfb05b818",
+    "apps/cad-studio/test/flow-helper.mjs": "64d394e06006d87104979bdeb01c5bbcdf919a829c266ebc8dcbacbf621d315b",
+    "apps/cad-studio/test/prior-circular-path-cut-pattern-browser.mjs": "e0dd47796f221c78e4e0e7eb32b1cba58a7673187bfc8d19658995bc1c37f8f6",
+    "apps/cad-studio/test/prior-cut-pattern-browser-fixture.mjs": "f39a2d08d2785a13b40414742431d9e85fb43d111599e5ae43bdb854b7c67324",
+    "packages/barocss-cad-model/src/engine/curveFeaturePattern.ts": "eca486165940e3c6df93b10b8086ea83c0a1f052a8f3e2aa9719dd11c5d9033a",
+    "packages/barocss-cad-model/src/engine/doc.ts": "cbbdf3a707bf48f28ddfffa95df9f293a3e28f860937f52ab06f19f8aa59e69a",
+    "packages/barocss-cad/src/features/curve-cut-pattern.ts": "d990575d6f375070ab280095fbf6aa67a9375a24b34cc6f6f4ab378f6770ea28",
+    "packages/barocss-cad/src/part/part-model.ts": "aed13259744310bae93f94c30385afb359eec5c697cfe6d0638f3fe0f23c3483",
+    "packages/barocss-cad/src/part/part-prior-circular-cut.ts": "01f460cb6517285d689bddaa8ac2ef007fecc4e55319933b86b45c25966bbe22",
+    "packages/barocss-cad/src/part/part-prior-rectangular-cut.ts": "4e5130eb7ed7c19a82703470fc0850aa5ee35607ca348f8b1f2940c241fa1f14",
+    "packages/barocss-cad/src/part/part-transform.ts": "77429191bdac9eadd1dc8adde056dff93c4ea8c429f1ed16916d9db44636d97f"
+  }
+}
