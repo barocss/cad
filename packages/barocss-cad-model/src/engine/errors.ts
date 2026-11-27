@@ -526,6 +526,9 @@ export function friendly(message: string, kind?: string): FriendlyError {
     return { ...DRAFT_ANGLE_HELP, detail, ...extra };
   if (code === 'PARAMETER' && detail === 'The wall thicknesses leave no cavity in this box.')
     return { title: 'Wall thicknesses leave no cavity', hint: 'Reduce the thickness of one or more walls.', detail, ...extra };
+  const shellCornerLimit = code === 'PARAMETER' ? /^Shell join wall thickness must be less than (\d+(?:\.\d+)?(?:e[+-]?\d+)?) mm to keep both L arms and the closed height\.$/i.exec(detail) : null;
+  if (shellCornerLimit && Number.isFinite(Number(shellCornerLimit[1])) && Number(shellCornerLimit[1]) > 0)
+    return { title: 'The wall is too thick', hint: `Enter Wall less than ${shellCornerLimit[1]} mm to keep the cavity open inside the L shape.`, detail, ...extra };
   // Preserve the measured strict limit; rounded guidance can recommend a refused wall.
   const shellLimit = code === 'PARAMETER' ? /^a wall of (\d+(?:\.\d+)?(?:e[+-]?\d+)?) mm leaves no hollow at ([^\r\n;]+); use a wall less than (\d+(?:\.\d+)?(?:e[+-]?\d+)?) mm$/i.exec(detail) : null;
   if (shellLimit && [shellLimit[1], shellLimit[3]].every(value => Number.isFinite(Number(value)) && Number(value) > 0)

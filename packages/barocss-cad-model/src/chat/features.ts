@@ -54,7 +54,7 @@ const SPECS: Record<string, Spec> = {
   split: { parent: 'ref', at: 'dim', axis: 'enum:x|y|z' },
   sew: { names: 'any', surfaces: 'any', 'tolerance?': 'num' },
   thicken: { name: 'text', surface: 'any', thickness: 'dim', 'side?': 'enum:normal|reverse|both', 'mode?': 'enum:sampled|exact-planar|exact-cylinder' },
-  shell: { parent: 'ref', thickness: 'dim', open: 'names' },
+  shell: { parent: 'ref', thickness: 'dim', open: 'names', 'join?': 'enum:sharp|arc' },
   draft: { parent: 'ref', faces: 'names1', angle: 'num', 'pull?': 'enum:x|y|z|-x|-y|-z', 'neutral?': 'dim', 'hingeEdge?': 'text' },
   'full-round': { parent: 'ref', faces: 'names1', 'along?': 'enum:x|y' },
   'face-fillet': { parent: 'ref', faces: 'names1', radius: 'dim' },

@@ -1,7 +1,7 @@
 // R5.3 (D225): the part model's shell and thicken features, moved out of part-model.ts's operation() as they were
 // there. Since D361 the shell helpers (`shellOf` and the rest) live here too and reach part-model.ts's values through a
 // function-level import. The dispatcher calls `shellOperation` for those kinds.
-import { BrepError, isFacetFace, mergeBreps, type Brep } from '../brep/brep-core.js';
+import { BrepError, checkBrep, isFacetFace, mergeBreps, type Brep } from '../brep/brep-core.js';
 import { isMeshBrepError } from '../mesh/mesh-brep.js';
 import { booleanPrismatic, prismaticExtrude, type PrismaticSolid } from '../features/prismatic-solid.js';
 import { erodeSection } from '../features/section-offset.js';
@@ -14,6 +14,7 @@ import { transformBrep } from '../brep/brep-transform.js';
 import { unsupportedNativeMass } from '../internal/native-si-mass-state.js';
 import { withCavities } from '../brep/brep-glue.js';
 import { generalShell } from '../blend/general-shell.js';
+import { closedLShellWallLimit } from '../features/closed-l-shell-profile.js';
 import { twoOpeningBoxShellWithWalls, boxShellWallLimit, boxShellWithWalls } from './part-box-shell.js';
 import { openRevolvedCapsuleShell } from './part-capsule-shell.js';
 import { offsetCavity, offsetShell, smoothOffsetBody } from '../blend/offset-cavity.js';
@@ -66,6 +67,13 @@ export function shellOperation(f: CadPartFeature & Record<string, unknown>, t: T
       if (!Array.isArray(open) || open.length > CadPartLimits.edges || !open.every(x => typeof x === 'string')) fail('INPUT', 'open must list up to 64 face names');
       if (target.length !== 1) fail('REFERENCE', 'shell one part at a time (name it as id/k)');
       const names = open as string[], part = target[0], expect = expectOf(f, fail);
+      const join = f.join;
+      if (join !== undefined && join !== 'sharp' && join !== 'arc') fail('INPUT', 'Shell join must be sharp or arc.');
+      const limit = join === undefined ? undefined : originalClosedLShellLimit(f.target, part, t);
+      if (join !== undefined && (names.length || limit === undefined))
+        fail('CAPABILITY', 'Explicit Shell join needs one original closed zero-draft upright orthogonal L extrusion.');
+      if (limit !== undefined && thickness >= limit)
+        fail('PARAMETER', `Shell join wall thickness must be less than ${limit} mm to keep both L arms and the closed height.`);
       const [targetId, output] = f.target.split('/'), capPrefix = `${targetId}.cut.`;
       const caps = names.length && output !== undefined && t.featureKind(targetId) === 'split'
         ? names.filter(name => name.startsWith(capPrefix) && /^(?:side[0-3]|top|bottom)$/.test(name.slice(capPrefix.length))) : [];
@@ -78,6 +86,21 @@ export function shellOperation(f: CadPartFeature & Record<string, unknown>, t: T
             if (count > 1) fail('REFERENCE', `Split cap "${cap}" is ambiguous on this output (${count} native faces).`);
           }
           if (expect) checkExpected(brep, expect, false, 'shell', fail);
+        }
+        if (join !== undefined) {
+          const original = brepOf(part, f.target), input = checkBrep(original, { strict: true });
+          if (!input.valid || original.bodies.length !== 1 || original.shells.length !== 1 || original.faces.length !== 8)
+            fail('CAPABILITY', 'Explicit Shell join needs one strict original L prism.');
+          try {
+            const brep = generalShell(original, thickness, new Set(), at, join), report = checkBrep(brep, { strict: true });
+            if (!report.valid || brep.bodies.length !== 1 || brep.shells.length !== 2)
+              fail('CAPABILITY', `[SHELL_NOT_CLOSED] the explicit L join did not produce one strict body with one cavity: ${report.issues[0] ?? 'unexpected topology'}`);
+            return one({ kind: 'brep', brep });
+          } catch (cause) {
+            const message = cause instanceof BrepError ? /CAPABILITY: shell: (.*)$/s.exec(cause.message) : null;
+            if (message) fail('CAPABILITY', message[1]);
+            throw cause;
+          }
         }
         return { kind: 'solid', parts: [shellOf(part, thickness, names, at, fail)] };
       };
@@ -113,6 +136,29 @@ export function shellOperation(f: CadPartFeature & Record<string, unknown>, t: T
     }
   }
   throw new Error(`shellOperation: ${f.kind} is not one of its features`);
+}
+
+/** Authored ownership and the evaluated straight section must describe the same unplaced original L. */
+function originalClosedLShellLimit(reference: string, part: Part, t: Tools): number | undefined {
+  const owner = t.ref(reference, 'Shell join stock'), author = owner.author;
+  if (author?.kind !== 'extrude' || owner.result.kind !== 'solid' || owner.result.parts.length !== 1 || owner.result.parts[0] !== part
+    || (author.draft !== undefined && author.draft !== 0) || part.solid.kind !== 'upright') return undefined;
+  const sketch = t.ref(author.sketch, 'Shell join sketch'), source = sketch.author;
+  if (source?.kind !== 'sketch' || (source.profile !== 'polygon' && source.profile !== 'loop') || source.plane !== undefined
+    || source.holes?.length || source.regions?.length || sketch.result.kind !== 'sketch' || sketch.result.frame
+    || sketch.result.holes?.length || sketch.result.regions?.length) return undefined;
+  const raw = source.profile === 'polygon' ? source.points : source.segments.every(s => s.kind === 'line') ? source.segments.map(s => s.start) : [];
+  if (raw.some(p => p.some(v => typeof v !== 'number'))) return undefined;
+  const points = raw.map(p => [p[0] as number, p[1] as number] as XY), height = t.dim(author.height, 'Shell join stock height'), from = t.dim(author.from ?? 0, 'Shell join stock from');
+  const limit = closedLShellWallLimit(points, height), slabs = part.solid.solid.slabs, slab = slabs[0];
+  if (limit === undefined || slabs.length !== 1 || slab.z0 !== from || slab.z1 !== from + height
+    || slab.regions.length !== 1 || slab.regions[0].holes.length) return undefined;
+  const outer = slab.regions[0].outer;
+  const lines = outer.filter((g): g is Extract<CurveSegment2, { kind: 'line' }> => g.kind === 'line');
+  if (lines.length !== outer.length || closedLShellWallLimit(lines.map(g => g.a), height) !== limit) return undefined;
+  if (!lines.every((g, i) => points.some(p => p[0] === g.a[0] && p[1] === g.a[1])
+    && g.b[0] === lines[(i + 1) % lines.length].a[0] && g.b[1] === lines[(i + 1) % lines.length].a[1])) return undefined;
+  return limit;
 }
 
 // Shell helpers moved from part-model.ts (3b, D361).

@@ -77,6 +77,9 @@ export function readStudioDoc(text: string): { doc: StudioDoc; notes: string[] }
   const unknown = [...new Set((o.nodes as Record<string, unknown>[]).map(n => String(n?.kind)).filter(k => !KINDS.has(k)))];
   if (unknown.length) return { error: `This model has features this cad-studio does not know: ${unknown.join(', ')}.` };
   for (const node of o.nodes) {
+    if (record(node) && node.kind === 'shell' && Object.hasOwn(node, 'join') && node.join !== 'sharp' && node.join !== 'arc') {
+      return { error: 'A Shell inner corner must be Sharp or Round.' };
+    }
     if (record(node) && node.kind === 'shell-walls') {
       const problem = shellWallFieldsProblem(node);
       if (problem) return { error: problem };

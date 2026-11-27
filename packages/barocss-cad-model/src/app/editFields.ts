@@ -19,6 +19,7 @@ import { hasLineArcScrewSections, hasLineArcTurnSections } from './lineArcScrew'
 import { copyLoftGuide } from './loftGuides';
 import { add, dot, scale, sub } from '../engine/vec3';
 import { boxShellWalls, sameWallNormal } from '../engine/shellWalls';
+import { canSetClosedShellCorner, shellCornerOptions } from './shellCorner';
 import { rectangularShellFaces, rectangularShellOpening } from '../engine/rectangularShellOpening';
 import { SEW_TOLERANCE_LABEL, sewTolerance } from '../engine/sew';
 import { circularPatternCountRange, circularPatternStep } from '../engine/circularPatternSpan';
@@ -70,6 +71,23 @@ function shellOpeningField(index: number): EditField {
       if (!mode || node?.kind !== 'shell' || (!face && value !== 'closed') || mode === value) return [...nodes];
       // Keep old signatures until the unchanged native parent is proved at Apply.
       return nodes.map((n, i) => i === index ? { ...node, open: face ? [`${featureId(nodes, 1)}.${face.suffix}`] : [] } : n);
+    },
+  };
+}
+
+function shellCornerField(index: number): EditField {
+  return { kind: 'choice', key: 'join', label: 'Inner corner', options: shellCornerOptions,
+    get: nodes => {
+      const node = nodes[index];
+      return node?.kind === 'shell' ? node.join ?? 'default' : 'default';
+    },
+    set: (nodes, value) => {
+      const node = nodes[index];
+      if (node?.kind !== 'shell' || (value !== 'default' && value !== 'sharp' && value !== 'arc')) return [...nodes];
+      const next = { ...node };
+      if (value === 'default') delete next.join;
+      else next.join = value;
+      return nodes.map((n, i) => i === index ? next : n);
     },
   };
 }
@@ -1109,7 +1127,11 @@ function editFieldsRaw(nodes: Nodes, i: number, bearingAssembly?: BearingAssembl
       number('crease', 'Crease angle', '°', n => (n as D).featureAngle ?? 0, (n, v) => v > 0 ? { ...(n as D), featureAngle: v } : without(n as D, 'featureAngle'));
       break;
     }
-    case 'shell': if (scope?.doc?.direct === undefined && !scope?.doc?.instances?.length && shellOpening(nodes,i)) out.push(shellOpeningField(i)); number('t', 'Wall', 'mm', n => num((n as typeof node).thickness), (n, v) => ({ ...(n as typeof node), thickness: v })); break;
+    case 'shell':
+      if (scope?.doc?.direct === undefined && !scope?.doc?.instances?.length && shellOpening(nodes, i)) out.push(shellOpeningField(i));
+      number('t', 'Wall', 'mm', n => num((n as typeof node).thickness), (n, v) => ({ ...(n as typeof node), thickness: v }));
+      if (node.join !== undefined || (!node.open.length && canSetClosedShellCorner(nodes, node.parent))) out.push(shellCornerField(i));
+      break;
     case 'shell-walls':
       for (const side of boxShellWalls) {
         const face = Object.keys(node.walls).find(name => sameWallNormal(node.sigs[name]?.d, side.normal));

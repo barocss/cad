@@ -153,6 +153,7 @@ export const COMMAND_DOCS: Record<string, { selection: string; values: Record<st
   decimate: { selection: 'bodies: [one mesh body] (an imported STL, OBJ or scan: facet faces)', values: { keep: 'per cent of the triangles to keep (1–99)', maxError: 'mm: no collapse past it (0: none)', crease: 'degrees: also keep edges sharper than this (0: only the regions\u2019 boundaries and open edges)' } },
   shell: { selection: 'faces to open on one body, or one body for a closed hollow', values: {
     t: 'uniform wall thickness in mm',
+    join: 'default | sharp | arc. An explicit Sharp or Round inner corner needs a closed Shell on one original upright orthogonal L-shaped extrusion.',
     wallMode: 'uniform | per-face. For per-face, give expectedRevision from query.rebuild and exact original faces of an upright rectangular extrusion. Choose one or two distinct original faces as openings. Give a thickness for every kept wall.',
     bottomWall: 'bottom thickness in mm', frontWall: 'front thickness in mm', rightWall: 'right thickness in mm',
     backWall: 'back thickness in mm', leftWall: 'left thickness in mm', topWall: 'top thickness in mm',
