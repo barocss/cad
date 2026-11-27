@@ -19,7 +19,7 @@ import { hasLineArcScrewSections, hasLineArcTurnSections } from './lineArcScrew'
 import { copyLoftGuide } from './loftGuides';
 import { add, dot, scale, sub } from '../engine/vec3';
 import { boxShellWalls, sameWallNormal } from '../engine/shellWalls';
-import { canSetClosedShellCorner, shellCornerOptions } from './shellCorner';
+import { canSetShellCorner, shellCornerOptions } from './shellCorner';
 import { rectangularShellFaces, rectangularShellOpening } from '../engine/rectangularShellOpening';
 import { SEW_TOLERANCE_LABEL, sewTolerance } from '../engine/sew';
 import { circularPatternCountRange, circularPatternStep } from '../engine/circularPatternSpan';
@@ -1130,7 +1130,7 @@ function editFieldsRaw(nodes: Nodes, i: number, bearingAssembly?: BearingAssembl
     case 'shell':
       if (scope?.doc?.direct === undefined && !scope?.doc?.instances?.length && shellOpening(nodes, i)) out.push(shellOpeningField(i));
       number('t', 'Wall', 'mm', n => num((n as typeof node).thickness), (n, v) => ({ ...(n as typeof node), thickness: v }));
-      if (node.join !== undefined || (!node.open.length && canSetClosedShellCorner(nodes, node.parent))) out.push(shellCornerField(i));
+      if (node.join !== undefined || canSetShellCorner(nodes, node.parent, node.open)) out.push(shellCornerField(i));
       break;
     case 'shell-walls':
       for (const side of boxShellWalls) {

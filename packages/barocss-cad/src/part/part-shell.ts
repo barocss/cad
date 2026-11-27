@@ -70,11 +70,12 @@ export function shellOperation(f: CadPartFeature & Record<string, unknown>, t: T
       const join = f.join;
       if (join !== undefined && join !== 'sharp' && join !== 'arc') fail('INPUT', 'Shell join must be sharp or arc.');
       const limit = join === undefined ? undefined : originalClosedLShellLimit(f.target, part, t);
-      if (join !== undefined && (names.length || limit === undefined))
-        fail('CAPABILITY', 'Explicit Shell join needs one original closed zero-draft upright orthogonal L extrusion.');
+      const [targetId, output] = f.target.split('/'), capPrefix = `${targetId}.cut.`;
+      const topOpening = names.length === 1 && names[0] === `${targetId}.top`;
+      if (join !== undefined && (names.length > 0 && !topOpening || limit === undefined))
+        fail('CAPABILITY', 'Explicit Shell join needs one original closed zero-draft upright orthogonal L extrusion, or its single exact original top cap.');
       if (limit !== undefined && thickness >= limit)
         fail('PARAMETER', `Shell join wall thickness must be less than ${limit} mm to keep both L arms and the closed height.`);
-      const [targetId, output] = f.target.split('/'), capPrefix = `${targetId}.cut.`;
       const caps = names.length && output !== undefined && t.featureKind(targetId) === 'split'
         ? names.filter(name => name.startsWith(capPrefix) && /^(?:side[0-3]|top|bottom)$/.test(name.slice(capPrefix.length))) : [];
       return () => {
@@ -91,10 +92,17 @@ export function shellOperation(f: CadPartFeature & Record<string, unknown>, t: T
           const original = brepOf(part, f.target), input = checkBrep(original, { strict: true });
           if (!input.valid || original.bodies.length !== 1 || original.shells.length !== 1 || original.faces.length !== 8)
             fail('CAPABILITY', 'Explicit Shell join needs one strict original L prism.');
+          if (topOpening) {
+            const caps = original.faces.filter(face => face.name === names[0]), cap = caps[0], support = cap && faceGeometry(cap);
+            const top = Math.max(...original.vertices.map(vertex => vertex.point[2]));
+            if (caps.length !== 1 || cap.loops.length !== 1 || support?.kind !== 'plane' || support.n[2] !== 1 || support.o[2] !== top)
+              fail('REFERENCE', 'Explicit Shell join needs one unambiguous original top cap.');
+          }
           try {
-            const brep = generalShell(original, thickness, new Set(), at, join), report = checkBrep(brep, { strict: true });
-            if (!report.valid || brep.bodies.length !== 1 || brep.shells.length !== 2)
-              fail('CAPABILITY', `[SHELL_NOT_CLOSED] the explicit L join did not produce one strict body with one cavity: ${report.issues[0] ?? 'unexpected topology'}`);
+            const brep = generalShell(original, thickness, new Set(names), at, join), report = checkBrep(brep, { strict: true });
+            if (!report.valid || brep.bodies.length !== 1 || brep.shells.length !== (topOpening ? 1 : 2)
+              || topOpening && (brep.bodies[0].kind !== 'solid' || !brep.shells[0].closed || report.topology[0]?.genus !== 0 || !singleLTopOpening(brep, original, names[0], thickness)))
+              fail('CAPABILITY', `[SHELL_NOT_CLOSED] the explicit L join did not produce one strict body with ${topOpening ? 'one connected top opening' : 'one cavity'}: ${report.issues[0] ?? 'unexpected topology'}`);
             return one({ kind: 'brep', brep });
           } catch (cause) {
             const message = cause instanceof BrepError ? /CAPABILITY: shell: (.*)$/s.exec(cause.message) : null;
@@ -136,6 +144,25 @@ export function shellOperation(f: CadPartFeature & Record<string, unknown>, t: T
     }
   }
   throw new Error(`shellOperation: ${f.kind} is not one of its features`);
+}
+
+/** An opened L has one top annulus, an intact bottom, and one upward cavity floor at the wall depth. */
+function singleLTopOpening(brep: Brep, original: Brep, topName: string, thickness: number): boolean {
+  const levels = [...new Set(original.vertices.map(v => v.point[2]))].sort((a, b) => a - b), [lo, hi] = levels;
+  if (levels.length !== 2) return false;
+  const roundoff = 128 * Number.EPSILON * Math.max(1, Math.abs(lo), Math.abs(hi), thickness);
+  const horizontal = brep.faces.map(face => ({ face, support: faceGeometry(face) })).filter(item => item.support.kind === 'plane' && Math.abs(item.support.n[2]) === 1);
+  const at = (z: number, sign: number) => horizontal.filter(item => item.support.kind === 'plane' && item.support.n[2] === sign && Math.abs(item.support.o[2] - z) <= roundoff);
+  const rim = at(hi, 1), bottom = at(lo, -1), floor = at(lo + thickness, 1), top = rim[0]?.face;
+  if (horizontal.length !== 3 || rim.length !== 1 || bottom.length !== 1 || floor.length !== 1 || top?.name !== topName
+    || bottom[0].face.loops.length !== 1 || floor[0].face.loops.length !== 1 || top.loops.length !== 2) return false;
+  const loops = top.loops.map(id => brep.loops.find(loop => loop.id === id));
+  if (loops.filter(loop => loop?.kind === 'outer').length !== 1 || loops.filter(loop => loop?.kind === 'inner').length !== 1) return false;
+  const coedges = new Map(brep.coedges.map(use => [use.id, use])), edges = new Map(brep.edges.map(edge => [edge.id, edge]));
+  return loops.every(loop => loop && loop.coedges.every(id => {
+    const use = coedges.get(id), edge = use && edges.get(use.edge);
+    return edge && edge.curve.controlPoints.every(point => Math.abs(point[2] - hi) <= roundoff);
+  }));
 }
 
 /** Authored ownership and the evaluated straight section must describe the same unplaced original L. */

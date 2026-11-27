@@ -1,11 +1,25 @@
 import { closedLShellWallLimit } from '@barocss/cad/internal/closed-l-shell-profile';
 import type { BodyRef, Dim, ModelNode } from '../engine/doc';
+import type { BodyResult } from '../engine/evaluate';
+import { featureId } from '../engine/ids';
+import type { Ctx } from './commands';
 
 export const shellCornerOptions = [
   { value: 'default', label: 'Default' },
   { value: 'sharp', label: 'Sharp' },
   { value: 'arc', label: 'Round' },
 ];
+
+export function shellOpenFaces(ctx: Ctx, body: BodyResult): string[] {
+  const index = ctx.bodies.indexOf(body);
+  return [...new Set(ctx.selection.faces.filter(face => face.body === index)
+    .flatMap(face => body.mesh.faces[face.face].name.split('+')))];
+}
+
+export function canSetShellCorner(nodes: readonly ModelNode[], parent: BodyRef, open: readonly string[]): boolean {
+  const top = featureId(nodes, parent.node) + '.top';
+  return (open.length === 0 || open.length === 1 && open[0] === top) && canSetClosedShellCorner(nodes, parent);
+}
 
 export function canSetClosedShellCorner(nodes: readonly ModelNode[], parent: BodyRef): boolean {
   const source = nodes[parent.node];

@@ -41,15 +41,37 @@ test('closed L Shell carries explicit corner values through History and native r
   assert.match((readStudioDoc(JSON.stringify(invalid)) as { error?: string }).error ?? '', /Inner corner|inner corner/);
 });
 
-test('an open face selection keeps the old uniform path and rejects an explicit corner value', () => {
+test('the original L top opening admits explicit corners and retains the default path', () => {
   const evaluated = evaluateDoc(doc, 1);
   assert.ok(evaluated.ok);
-  const top = evaluated.bodies[0].mesh.faces.findIndex(face => face.nativePlaneName === 'n1.top');
-  assert.ok(top >= 0);
+  const faces = evaluated.bodies[0].mesh.faces;
+  const top = faces.findIndex(face => face.nativePlaneName === 'n1.top');
+  const bottom = faces.findIndex(face => face.nativePlaneName === 'n1.bottom');
+  const side = faces.findIndex(face => face.nativePlaneName === 'n1.side0');
+  assert.ok(top >= 0 && bottom >= 0 && side >= 0);
   const ctx = { doc, bodies: evaluated.bodies, selection: { bodies: [], faces: [{ body: 0, face: top }], edges: [] } };
-  assert.equal(shell.fields!(ctx).some(field => field.key === 'join'), false);
-  const opening = shell.build!(ctx, { t: 2 }).nodes[2];
+  const defaults = shell.defaults!(ctx);
+  assert.equal(defaults.join, 'default');
+  assert.equal(shell.fields!(ctx).some(field => field.key === 'join'), true);
+  const legacy = shell.build!(ctx, defaults), opening = legacy.nodes[2];
   assert.ok(opening.kind === 'shell');
   assert.deepEqual(opening.open, ['n1.top']);
-  assert.throws(() => shell.build!(ctx, { t: 2, join: 'arc' }), /closed Shell/);
+  assert.equal(Object.hasOwn(opening, 'join'), false);
+  const field = editFields(legacy.nodes, 2).find(field => field.key === 'join');
+  assert.ok(field?.kind === 'choice');
+  for (const join of ['sharp', 'arc'] as const) {
+    const made = shell.build!(ctx, { ...defaults, join });
+    assert.deepEqual(made.nodes[2], { ...opening, join });
+    assert.deepEqual(field.set(legacy.nodes, join), made.nodes);
+    const read = readStudioDoc(JSON.stringify(made));
+    assert.ok('doc' in read);
+    const result = evaluateDoc(read.doc, 2);
+    const volume = join === 'sharp' ? 5952 : 5952 - 18 * (4 - Math.PI);
+    assert.ok(result.ok && Math.abs(result.bodies[0].volume! - volume) < 1e-7);
+  }
+  for (const refused of [[bottom], [side], [top, bottom]]) {
+    const unsupported = { ...ctx, selection: { ...ctx.selection, faces: refused.map(face => ({ body: 0, face })) } };
+    assert.equal(shell.fields!(unsupported).some(field => field.key === 'join'), false);
+    assert.throws(() => shell.build!(unsupported, { t: 2, join: 'arc' }), /only its top face open/);
+  }
 });
