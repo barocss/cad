@@ -118,6 +118,7 @@ import { createStudioChatTurnActions } from './app/studioChatTurnActions';
 import { createStudioParameterActions } from './app/studioParameterActions';
 import { createStudioAssemblyCommits, createStudioAssemblyFeatureActions } from './app/studioAssemblyChanges';
 import { activeKey, type Active } from './app/commandState';
+import { useStudioShapePlacement } from './app/useStudioShapePlacement';
 import { emptySel, NO_INSTANCES, BROWSER_PLACEMENT, PALETTE_EXTRA } from './app/studioConstants';
 import { routeMessage } from './app/routeSession';
 import { CursorReadout } from './ui/CursorReadout';
@@ -145,12 +146,12 @@ import { captureSignatures, type Problem as RefProblem } from '@barocss/cad-mode
 import type { BodyResult } from '@barocss/cad-model/engine/evaluate';
 import type { FriendlyError } from '@barocss/cad-model/engine/errors';
 import type { Vec3 } from '@barocss/cad-model/engine/mesh';
-import { commands, patchValues, refOf, selectedBodies, subdNodeOf, type Command, type Ctx, type Selection, type Values } from '@barocss/cad-model/app/commands';
+import { commands, refOf, selectedBodies, subdNodeOf, type Command, type Ctx, type Selection, type Values } from '@barocss/cad-model/app/commands';
 import type { MeasurePick } from '@barocss/cad-model/app/measure';
 import { captureMeasureTarget, type PlacedMeasureSource } from './app/measureTargets';
 import { hostsOf, nestedCard, renderKeysOf, singleNested, singleTop, viewportInstanceSelection } from './assembly/nestedSelection';
 import { NestedPartPanel } from './ui/NestedPartPanel';
-import { DRAG_TYPE, snapshotInstanceIsolation, type Spot, type SketchState, type ViewportHandle } from './viewport/Viewport';
+import { snapshotInstanceIsolation, type SketchState, type ViewportHandle } from './viewport/Viewport';
 import { countRender, onBlockRender } from './devRenders';
 import { AssemblyCutHud } from './ui/AssemblyCutHud';
 import { nextInstanceId } from '@barocss/cad-model/assembly/takenIds';
@@ -1212,28 +1213,10 @@ export function App() {
 
   // Shift-Enter: once the part has its new bodies (and the selection followed them), the command again.
   useEffect(() => { if (restart && !active) { setRestart(null); start(commands.find(c => c.id === restart.id) ?? restart); } }, [restart, active, start]);
-  // Placing a new shape: it follows the pointer over the ground and upward faces; a click or a drop sets
-  // it there. Dragging a shape's button from the rail onto the viewport starts it as the drag comes in.
-  const dragCmd = useRef<string | null>(null);
+  const { dragCmd, toolDragStart, toolDragEnd, onSpot } = useStudioShapePlacement(ctx, setActive, setPreviewBodies);
   const editInstanceRow = useCallback((id: string, index: number) => {
     setBomOpen(false); setLibraryOpen(false); setParamsOpen(false); setSelection(emptySel); setDirectSel([]); setEditNode(null); setInstanceSel([id]); setInstanceEdit({ owner: id, index });
   }, []);
-  const onSpot = useCallback((spot: Spot | null, done: boolean) => {
-    const dragged = dragCmd.current ? commands.find(c => c.id === dragCmd.current) : undefined;
-    if (done) dragCmd.current = null;
-    setActive(a => {
-      let cur = a;
-      if (!cur?.placing) {
-        if (cur || !dragged?.place || !dragged.available(ctx).ok) return a;
-        cur = { cmd: dragged, values: dragged.defaults?.(ctx) ?? {}, preview: 'busy', ctx: { ...ctx }, placing: true };
-      }
-      if (!spot || !cur.cmd.place) return done ? { ...cur, placing: false } : cur;
-      const placed = cur.cmd.place(cur.values, spot.point, spot.normal, spot.hole), same = Object.keys(placed).every(k => placed[k] === cur.values[k]);
-      if (same) return done ? { ...cur, placing: false } : cur;
-      return { ...cur, values: patchValues(cur.cmd, cur.ctx, cur.values, placed), preview: 'busy', ...(done ? { placing: false } : {}) };
-    });
-  }, [ctx]);
-
   useEffect(() => {
     if (sketch && sketchOffsetTarget(sketch)) setToast(current => current?.title === 'Nothing to offset' ? null : current);
   }, [sketch]);
@@ -1670,10 +1653,6 @@ export function App() {
   // (R1c: the buttons memoised, their handlers stable — `start` through a ref to the latest.)
   const startRef = useRef(start); startRef.current = start;
   const startTool = useCallback((c: Command) => startRef.current(c), []);
-  const toolDragStart = useCallback((c: Command, e: React.DragEvent) => { e.dataTransfer.setData(DRAG_TYPE, c.id); e.dataTransfer.effectAllowed = 'copy'; dragCmd.current = c.id; }, []);
-  const toolDragEnd = useCallback((c: Command, e: React.DragEvent) => {
-    if (dragCmd.current && e.dataTransfer.dropEffect === 'none') { dragCmd.current = null; setActive(x => x?.placing && x.cmd.id === c.id ? null : x); setPreviewBodies(null); }
-  }, []);
   activeRef.current = active;
   /** The viewport selection by name, for the chat's context chips (A4.3). */
   const chatContext = useMemo(() => [

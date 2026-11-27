@@ -1,13 +1,13 @@
 # CAD roadmap — current status and execution order
 
-Updated 2026-11-28 · Priority authority: D520 · Latest delivery: D2130 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
+Updated 2026-11-28 · Priority authority: D520 · Latest delivery: D2131 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
 
 This is the only current status index. Detailed tracks define acceptance; the 34 stable row pages retain scope and issue navigation. Immutable decision notes retain results. Do not append chronological status paragraphs here. [D520 decision](notes/cad-roadmap-replan-2026-11-04/README.md) supersedes D445 execution order and historical next-item text, while retaining its safeguards and bounded proofs.
 
 ## Now and next
 
-- **Current position:** [D2130](notes/rotated-quarter-disk-draft-2026-11-28/README.md), P5 rows 07 and 30. Signed Draft Extrude accepts an exact quarter disk rotated within its sketch plane and preserves its original endpoints. Studio verifies both signs and fresh Open. [D2129](notes/reviewed-draft-extrude-agent-2026-11-28/README.md) binds the local Agent command to one reviewed sketch and revision.
-- **Next MAIN:** D2131, P4 rows 15 and 22. Move shape placement and drag cancellation out of Studio App. Compare click placement, drag placement and cancelled drag in desktop Studio.
+- **Current position:** [D2131](notes/studio-shape-placement-2026-11-28/README.md), P4 rows 15 and 22. Studio shape placement and drag cancellation leave App. Desktop click, drag cancellation, drop, Undo, Redo and reopen match the baseline.
+- **Next MAIN:** D2132, P1 rows 09 and 16. Check diagnostic ownership for a Horizontal or Vertical edit blocked by explicit fixed sketch points. Reuse current constraints and verify the first reproducible diagnostic gap in Studio ([#183](https://github.com/barocss/cad/issues/183)).
 - **Separate follow-ups:** Continue Studio App extraction in cohesive parts with affected desktop checks. [#608 Rendering](https://github.com/barocss/cad/issues/608) stays on HOLD. API inventory drift remains open. The issue tracker records [#126](https://github.com/barocss/cad/issues/126), [#613](https://github.com/barocss/cad/issues/613), [#152](https://github.com/barocss/cad/issues/152) and [#22](https://github.com/barocss/cad/issues/22) as closed.
 - **Active repository:** [barocss/cad](https://github.com/barocss/cad), based on `origin/main`. Fetch before work and preserve unexpected changes. The [migration record](../../../docs/migration/README.md) maps the former `local/cad-dev` history and issue numbers.
 - **Evidence correction:** D482 records2167 PASS/0 FAIL/2 existing SKIP in a later full-kernel run than D433. Neither result is a new full-suite PASS at this audit HEAD. [D482 record](notes/vertical-contact-refusal-2026-11-04/README.md).
