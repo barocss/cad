@@ -9,6 +9,7 @@ import { keptAt, projectLoop, trimmedMesh, type TrimLoop } from './trim';
 import { nextFreeId } from '../util/ids';
 import { refusal } from './refusal';
 import { measureCurveCurvature } from './edgeCurvature';
+import { buildPlanarTangentFill } from './planarTangentFill';
 
 export interface DirectObject {
   id: string; name: string; source: string; geometry: string; hidden?: boolean;
@@ -493,21 +494,10 @@ export const directOps = {
    */
   fill(d: DirectGeometry, ids: string[]) {
     if (ids.length !== 4) throw refusal('DIRECT_LOOP', 'Pick four curves that meet end to end in a loop.');
-    const cs = ids.map(id => curveOf(d, id)), at = (c: Curve, s: number) => { const [a, b] = curveDomain(c); return evaluateCurve(c, a + (b - a) * s); };
-    const end = (c: Curve, k: 0 | 1) => at(c, k), gap = (p: readonly number[], q: readonly number[]) => Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]);
-    const size = Math.max(...cs.flatMap(c => [0, 0.5, 1].map(s => gap(at(c, s), end(cs[0], 0))))), tol = 1e-4 * Math.max(1, size);
-    // Chain them: each next curve starts (or, reversed, ends) where the last one ended.
-    const loop: { c: Curve; flip: boolean }[] = [{ c: cs[0], flip: false }], left = cs.slice(1);
-    while (left.length) {
-      const last = loop[loop.length - 1], tip = end(last.c, last.flip ? 0 : 1);
-      const k = left.findIndex(c => gap(end(c, 0), tip) < tol || gap(end(c, 1), tip) < tol);
-      if (k < 0) throw refusal('DIRECT_LOOP', 'The four curves do not meet end to end: each must start where another ends.');
-      const c = left.splice(k, 1)[0]; loop.push({ c, flip: gap(end(c, 0), tip) >= tol });
-    }
-    if (gap(end(loop[3].c, loop[3].flip ? 0 : 1), end(loop[0].c, 0)) >= tol) throw refusal('DIRECT_LOOP', 'The curves do not close into a loop.');
+    const loop = chainFillLoop(ids.map(id => curveOf(d, id)));
     const exact = exactFill(d, loop);
     if (exact) return exact;
-    const side = (k: number) => (s: number) => at(loop[k].c, loop[k].flip ? 1 - s : s);
+    const side = (k: number) => (s: number) => atFillFraction(loop[k].c, loop[k].flip ? 1 - s : s);
     // Bottom C0(u) = side 0, right D1(v) = side 1, top C2(u) = side 2 backwards, left D0(v) = side 3 backwards.
     const C0 = side(0), D1 = side(1), C2 = (u: number) => side(2)(1 - u), D0 = (v: number) => side(3)(1 - v);
     // (16 × 16 samples: the most poles a surface of the source language takes each way.)
@@ -518,6 +508,21 @@ export const directOps = {
     }));
     const fit = interpolateSurfacePlain(grid);
     return add(d, [], surfacesSource('fill', [fit]), [{ geometry: 's1', name: 'Filled surface' }]);
+  },
+  /** Keep all inputs and add an exact patch with G1 at the selected planar seam. */
+  fillTangent(d: DirectGeometry, ids: readonly string[], seamId: string, donorId: string): DirectGeometry {
+    if (ids.length !== 4 || !ids.includes(seamId) || new Set([...ids, donorId]).size !== 5)
+      throw refusal('DIRECT_PICK', 'Select four different boundary curves, one seam and one adjacent surface.');
+    for (const id of [...ids, donorId]) {
+      const matches = d.objects.filter(item => item.id === id);
+      if (matches.length !== 1 || matches[0].hidden)
+        throw refusal('DIRECT_PICK', 'Select visible original boundary curves and one visible adjacent surface.');
+    }
+    const donor = wholeSurfaceOf(d, donorId, 'Tangent Fill');
+    const ordered = [seamId, ...ids.filter(id => id !== seamId)];
+    const boundaries = exactFillBoundaries(chainFillLoop(ordered.map(id => curveOf(d, id)), true));
+    const made = buildPlanarTangentFill(boundaries, donor, fresh(usedIds(d), 'tangent_fill'));
+    return add(d, [], made.source, [{ geometry: made.surface.id, name: 'Tangent Fill' }]);
   },
   /**
    * The surface run on past one of its edges along its tangent there by `distance` mm (re-fitted as a bicubic B-spline).
@@ -724,20 +729,51 @@ export function surfaceIntersection(d: DirectGeometry, a: string, b: string): { 
   return { direct, count: curves.length };
 }
 
+type FillSide = { c: Curve; flip: boolean };
+
+function atFillFraction(curve: Curve, fraction: number) {
+  const [a, b] = curveDomain(curve);
+  return evaluateCurve(curve, a + (b - a) * fraction);
+}
+
+/** Chain each next curve from the previous end. Exact consumers certify corners after the shared ordering step. */
+function chainFillLoop(curves: Curve[], exact = false): FillSide[] {
+  const gap = (a: readonly number[], b: readonly number[]) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+  const start = atFillFraction(curves[0], 0);
+  const size = Math.max(...curves.flatMap(curve => [0, 0.5, 1].map(t => gap(atFillFraction(curve, t), start))));
+  const tolerance = 1e-4 * Math.max(1, size);
+  const connects = (a: readonly number[], b: readonly number[]) => exact ? gap(a, b) === 0 : gap(a, b) < tolerance;
+  const loop: FillSide[] = [{ c: curves[0], flip: false }], left = curves.slice(1);
+  while (left.length) {
+    const last = loop[loop.length - 1], tip = atFillFraction(last.c, last.flip ? 0 : 1);
+    const k = left.findIndex(curve => connects(atFillFraction(curve, 0), tip) || connects(atFillFraction(curve, 1), tip));
+    if (k < 0) throw refusal('DIRECT_LOOP', 'The four curves do not meet end to end: each must start where another ends.');
+    const curve = left.splice(k, 1)[0];
+    loop.push({ c: curve, flip: !connects(atFillFraction(curve, 0), tip) });
+  }
+  const last = loop[3];
+  if (!connects(atFillFraction(last.c, last.flip ? 0 : 1), start))
+    throw refusal('DIRECT_LOOP', 'The curves do not close into a loop.');
+  return loop;
+}
+
 /** A Bezier side as the loop runs it: reversed, its poles (and weights) in the other order; its [0,1] knots are symmetric. */
 function runAs(c: Curve, flip: boolean): Curve {
   return flip ? { ...c, controlPoints: [...c.controlPoints].reverse(), weights: [...c.weights].reverse() } : c;
+}
+function exactFillBoundaries(loop: readonly FillSide[]) {
+  return { bottom: runAs(loop[0].c, loop[0].flip), right: runAs(loop[1].c, loop[1].flip),
+    top: runAs(loop[2].c, !loop[2].flip), left: runAs(loop[3].c, !loop[3].flip) };
 }
 /**
  * The exact Coons patch of a chained loop when all four sides are polynomial Bezier spans the kernel admits, or null
  * (then the caller samples). Bottom = side 0, right = side 1, top = side 2 and left = side 3, the last two run backwards.
  */
-function exactFill(d: DirectGeometry, loop: readonly { c: Curve; flip: boolean }[]): DirectGeometry | null {
+function exactFill(d: DirectGeometry, loop: readonly FillSide[]): DirectGeometry | null {
   const used = usedIds(d), surfaceId = fresh(used, 'fill');
   let made: ReturnType<typeof buildBezierCoonsSurface>;
   try {
-    made = buildBezierCoonsSurface({ bottom: runAs(loop[0].c, loop[0].flip), right: runAs(loop[1].c, loop[1].flip),
-      top: runAs(loop[2].c, !loop[2].flip), left: runAs(loop[3].c, !loop[3].flip) }, { surfaceId });
+    made = buildBezierCoonsSurface(exactFillBoundaries(loop), { surfaceId });
   } catch { return null; }
   return add(d, [], made.source, [{ geometry: made.surface.id, name: 'Filled surface' }]);
 }

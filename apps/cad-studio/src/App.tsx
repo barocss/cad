@@ -53,6 +53,8 @@ import { useCommandPreview } from './state/useCommandPreview';
 import { DirectInspector } from './ui/DirectInspector';
 import { BridgeCurvePanel } from './ui/BridgeCurvePanel';
 import { useBridgeCurve } from './app/useBridgeCurve';
+import { TangentFillPanel } from './ui/TangentFillPanel';
+import { useTangentFill } from './app/useTangentFill';
 import { ModelTools } from './ui/ModelTools';
 import { useStudioHistoryHandles } from './viewport/useStudioHistoryHandles';
 import { useModelAppearance } from './viewport/useModelAppearance';
@@ -1838,17 +1840,20 @@ export function App() {
   const ghostExtra = useMemo(() => inPlace ? [...refShown, ...inPlace.context] : refShown, [refShown, inPlace?.context]);
   const viewBodies = useMemo(() => (ghostExtra.length ? [...shownBodies, ...ghostExtra] : shownBodies), [shownBodies, ghostExtra]);
   const sewCandidateShown = !!previewBodies?.length && shownBodies === previewBodies && !cageEd.session;
-  const bridge = useBridgeCurve({ model: { doc, evaluated, bodies, selection, directSelection: directSel,
-    ready: placedMeasureContext && !section && !measure && !bodyDrag && !exploded && !jointTree && editNode === null
-      && !instanceSel.length && !workingComparison && !candidateReview?.shown
-      && !ghost && !previewBodies && !variants.showing && shownDoc === doc && fresh && !busy && !workerFailure
-      && viewBodies === drawnBodies && sameMeshes(drawnBodies, bodies) },
-    engine, current: () => placedMeasureContextReady() && ownsEvaluatedSource() && !parameterEditNow.current && !project.opening(),
+  const directDraftReady = placedMeasureContext && !section && !measure && !bodyDrag && !exploded && !jointTree && editNode === null
+    && !instanceSel.length && !workingComparison && !candidateReview?.shown
+    && !ghost && !previewBodies && !variants.showing && shownDoc === doc && fresh && !busy && !workerFailure
+    && viewBodies === drawnBodies && sameMeshes(drawnBodies, bodies);
+  const ownsDirectDraft = () => placedMeasureContextReady() && ownsEvaluatedSource() && !parameterEditNow.current && !project.opening();
+  const bridge = useBridgeCurve({ model: { doc, evaluated, bodies, selection, directSelection: directSel, ready: directDraftReady },
+    engine, current: ownsDirectDraft,
     commit: (next, id) => { if (!commitDirect(next, [id])) return false; setSelection(emptySel); return true; } });
+  const tangentFill = useTangentFill({ doc, selected: directSel, ready: directDraftReady && directReady,
+    current: ownsDirectDraft, commit: (next, id) => commitDirect(next, [id]) });
   const viewportDirect = useMemo(() => {
     const items = sewPreviewDirect(directShown, active?.cmd.id, active?.ctx, sewCandidateShown);
-    return bridge.preview.length ? [...items, ...bridge.preview] : items;
-  }, [directShown, active?.cmd.id, active?.ctx, sewCandidateShown, bridge.preview]);
+    return bridge.preview.length || tangentFill.preview.length ? [...items, ...bridge.preview, ...tangentFill.preview] : items;
+  }, [directShown, active?.cmd.id, active?.ctx, sewCandidateShown, bridge.preview, tangentFill.preview]);
   viewBodiesRef.current = viewBodies;
   sectionPickRef.current = viewportSelection.sectionPick;
   const sectionVertex = useStudioSectionVertex({
@@ -2220,6 +2225,7 @@ export function App() {
       {!rendering && !sketch && !measure && !!doc.instances?.length && (assembly.draft || !!singleTop(instanceSel)) && <MatePanel assembly={assembly} instances={doc.instances} instance={singleTop(instanceSel)}
         onRefused={why => setToast({ title: 'The mate was refused', hint: why, detail: '' })} />}
       <BridgeCurvePanel bridge={bridge} />
+      <TangentFillPanel tool={tangentFill} />
       {!rendering && !active && !sketch && !measure && !instanceSel.length && directSel.length > 0 && doc.direct && <DirectInspector doc={doc} directSel={directSel} onSelect={setDirectSel} poleControls={poleEditor.controls}
         curveCurvature={directCurveVisible ? directCurvature : undefined}
         changes={{ commitDirect }} onThicken={(id, t, side) => {
