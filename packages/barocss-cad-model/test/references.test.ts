@@ -186,6 +186,41 @@ test('a stored Split cap survives a same-side edit and cannot be rematched to a 
   assert.deepEqual((await bodiesOf(cold.doc)).map(body => body.key).sort(), ['b2_positive', 'b3']);
 });
 
+test('a Shell opening follows the original stock face on its Split side and rejects a replacement cap', async () => {
+  const split = withNode(rectanglePart(24, 16, 10), { kind: 'split', parent: { node: 1, side: 'solid' }, axis: 'x', at: 9 });
+  const opening = 'n1.bottom', generated = 'n2.cut.bottom';
+  const doc = captureSignatures(withNode(split, {
+    kind: 'shell', parent: { node: 2, side: 'positive' }, thickness: 2, open: [opening],
+  }), await bodiesOf(split));
+  const initial = { doc, bodies: await bodiesOf(doc) };
+  const moved = await runTool(initial, 'edit_feature', { index: 2, values: { at: 12 } }, evaluate);
+  assert.ok(!moved.isError, moved.content);
+  assert.deepEqual(await verifyReferences(moved.state.doc, moved.state.bodies, evaluate), {
+    doc: moved.state.doc, changes: [], problems: [],
+  });
+  const turned = await runTool(moved.state, 'edit_feature', { index: 2, values: { axis: 'z', at: 4 } }, evaluate);
+  assert.ok(turned.isError);
+  assert.match(turned.content, /original face.*n1\.bottom.*unavailable/);
+  assert.equal(turned.state.doc, moved.state.doc);
+
+  const stale = structuredClone(moved.state.doc), parent = stale.nodes[2], shell = stale.nodes[3];
+  assert.ok(parent.kind === 'split' && shell.kind === 'shell');
+  parent.axis = 'z';
+  parent.at = 4;
+  const sig = shell.sigs?.[opening];
+  assert.ok(sig);
+  const oldRematch: StudioDoc = { ...stale, nodes: stale.nodes.map((node, i) =>
+    i === 3 ? { ...shell, open: [generated], sigs: { [generated]: sig }, rematched: { [generated]: opening } } : node) };
+  for (const saved of [stale, oldRematch]) {
+    const verified = await verifyReferences(saved, [], evaluate);
+    assert.deepEqual(verified.problems.map(problem => [problem.node, problem.name, problem.candidates]), [[3, opening, []]]);
+    const held = verified.doc.nodes[3];
+    assert.ok(held.kind === 'shell');
+    assert.deepEqual([held.open, held.rematched, held.suppressed, held.sigs?.[opening]], [[opening], undefined, true, sig]);
+    assert.equal((await bodiesOf(verified.doc)).reduce((sum, body) => sum + (body.volume ?? 0), 0), 3840);
+  }
+});
+
 test('direct Split Fillet and Chamfer stay held until their different edge is confirmed', async () => {
   const source = withNode(rectanglePart(60, 30, 10), { kind: 'split', parent: { node: 1, side: 'solid' }, axis: 'x', normal: [1, 0, 0], at: 24 });
   const edge = 'n1.side0|n2.cut.side1', replacement = 'n1.side0|n2.cut.side3';

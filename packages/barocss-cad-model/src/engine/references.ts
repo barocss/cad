@@ -30,6 +30,7 @@ import type { BodyResult, EvalResult } from './evaluate';
 import { hasSplitShellCapAmbiguity, isSplitCapFace, matchSignature, rankAlike, signaturesOf, type Signature } from './rematch';
 import type { DisplayEdge, Vec3 } from './mesh';
 import { hasRotatedPivotBinding, rotatedPivotStockMode } from './pivotStock';
+import { splitShellFaceChecker } from './splitShellFace';
 
 /** A stored signature (rounded: positions to 1e-6 mm, directions to 1e-9, sizes to 1e-6). */
 /** `n`: the kernel names its display face or edge carried together, when more than one (Signature's `shared`). */
@@ -420,6 +421,7 @@ export async function verifyReferences(doc: StudioDoc, finals: readonly BodyResu
     parents.set(key, r?.ok ? r.bodies.find(b => b.key === bodyKeyFor(out.nodes, ref.parent!.node, ref.parent!.side)) : undefined);
   };
   const changes: Verified[] = [], problems: Problem[] = [];
+  const checkSplitShellFace = splitShellFaceChecker();
   for (let index = 0; index < refs.length; index++) {
     const ref = refs[index];
     if (ref.datumTarget || ref.noteTarget) {
@@ -437,8 +439,18 @@ export async function verifyReferences(doc: StudioDoc, finals: readonly BodyResu
     const parent = splitCap && ref.parent ? parents.get(parentKey(ref.node!, ref.parent)) : undefined;
     const ambiguous = parent !== undefined && hasSplitShellCapAmbiguity(out.nodes, out.nodes[ref.node!], parent, ref.name);
     const node = ref.node === null ? undefined : out.nodes[ref.node];
+    const authored = ref.was ?? ref.name;
+    const splitOpening = checkSplitShellFace(out, node, authored);
     let m: string | string[];
-    if (ref.exactName) {
+    if (splitOpening !== undefined) {
+      if (ref.name !== authored) {
+        changes.push({ where: ref.where, was: ref.name, now: authored });
+        ref.clear();
+        ref.rename(authored, false);
+        ref.name = authored;
+      }
+      m = splitOpening && cands.has(authored) ? authored : [];
+    } else if (ref.exactName) {
       const live = cands.get(ref.name);
       const rotatedMode = node && rotatedPivotStockMode(out.nodes, node);
       if (rotatedMode && node?.kind === 'draft' && node.hingeEdge !== undefined && ref.node !== null) {

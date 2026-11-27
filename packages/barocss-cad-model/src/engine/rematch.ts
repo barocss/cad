@@ -12,6 +12,7 @@ import { bodyKeyFor, featureId, nodeIndexOf } from './ids';
 import { prefixDoc, type ModelNode, type StudioDoc } from './doc';
 import type { BodyResult, EvalResult } from './evaluate';
 import type { Vec3 } from './mesh';
+import { splitShellFaceChecker } from './splitShellFace';
 
 /** What a stored name looked like: a face's kind, normal and centroid, or an edge's straightness, direction and midpoint. */
 /**
@@ -116,6 +117,7 @@ export async function rematchNames(prev: StudioDoc, next: StudioDoc, evaluate: (
   let first = 0;
   while (first < next.nodes.length && first < prev.nodes.length && JSON.stringify(next.nodes[first]) === JSON.stringify(prev.nodes[first])) first++;
   const changes: Rematch[] = [], nodes = [...next.nodes];
+  const checkSplitShellFace = splitShellFaceChecker();
   for (let k = first; k < nodes.length; k++) {
     const node = nodes[k], what = named(node), was = node.id ? nodeIndexOf(prev.nodes, node.id) : -1;
     // A band surface's names are strict (B2, D-c) as the wrap's: each side is matched on its own parent body, and a name that is
@@ -161,6 +163,16 @@ export async function rematchNames(prev: StudioDoc, next: StudioDoc, evaluate: (
     const stableNames = sameNames(old, now, what.edge);
     const list = (node as Record<string, unknown>)[what.key] as string[], out: string[] = [], rematched: Record<string, string> = { ...(node as { rematched?: Record<string, string> }).rematched };
     for (const name of list) {
+      const authored = rematched[name] ?? name;
+      const splitOpening = checkSplitShellFace(next, node, authored);
+      if (splitOpening !== undefined) {
+        if (!splitOpening || !now.has(authored))
+          return { error: `[BAD_REFERENCE] Shell: the original face "${authored}" is unavailable on the selected Split output.` };
+        if (name !== authored)
+          return { error: `[BAD_REFERENCE] Shell: confirm the opening on the original face "${authored}" before editing the Split.` };
+        out.push(name);
+        continue;
+      }
       if (node.kind === 'offset-face' || node.kind === 'replace-face' || node.kind === 'delete-face') {
         const sig = old.get(name);
         if (!sig || matchSignature(sig, now, false) !== name) {

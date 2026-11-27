@@ -1,13 +1,13 @@
 # CAD roadmap — current status and execution order
 
-Updated 2026-11-28 · Priority authority: D520 · Latest delivery: D2093 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
+Updated 2026-11-28 · Priority authority: D520 · Latest delivery: D2094 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
 
 This is the only current status index. Detailed tracks define acceptance; the 34 stable row pages retain scope and issue navigation. Immutable decision notes retain results. Do not append chronological status paragraphs here. [D520 decision](notes/cad-roadmap-replan-2026-11-04/README.md) supersedes D445 execution order and historical next-item text, while retaining its safeguards and bounded proofs.
 
 ## Now and next
 
-- **Current position:** [D2093](notes/split-topology-evolution-2026-11-28/README.md), P5 rows 16 and 30. The kernel reports native face and edge lineage for a coordinate-plane Split of an original rectangular extrusion. Studio verifies signed-side ownership, an edited plane and native reopen against the original [#3](https://github.com/barocss/cad/issues/3) scope.
-- **Next MAIN:** D2094, P1/P5 rows 16 and 30. Check the original [#4](https://github.com/barocss/cad/issues/4) feature output-role reference contract. Verify a valid edit, atomic refusal of an ambiguous Split reference and cold file rebuild. Use exact lineage for the first reproduced gap within the declared scope.
+- **Current position:** [D2094](notes/split-original-shell-face-2026-11-28/README.md), P1/P5 rows 16 and 30. A Shell opening on an original rectangular Split face follows its exact native role. Studio and the local Agent refuse the lost role, and desktop cold Open holds it. The actual two-cap ambiguity regression passes ([#4](https://github.com/barocss/cad/issues/4)).
+- **Next MAIN:** D2095, P5 rows 07 and 30. Qualify two adjacent original openings with independent remaining wall thicknesses on an original cardinal box Shell. Reuse the existing Shell fields and verify the native cavity, thickness edits, refusal and Studio reopen ([#13](https://github.com/barocss/cad/issues/13)).
 - **Separate follow-ups:** Continue Studio App extraction in cohesive parts with affected desktop checks. [#608 Rendering](https://github.com/barocss/cad/issues/608) stays on HOLD. API inventory drift remains open. The issue tracker records [#126](https://github.com/barocss/cad/issues/126), [#613](https://github.com/barocss/cad/issues/613), [#152](https://github.com/barocss/cad/issues/152) and [#22](https://github.com/barocss/cad/issues/22) as closed.
 - **Active repository:** [barocss/cad](https://github.com/barocss/cad), based on `origin/main`. Fetch before work and preserve unexpected changes. The [migration record](../../../docs/migration/README.md) maps the former `local/cad-dev` history and issue numbers.
 - **Evidence correction:** D482 records2167 PASS/0 FAIL/2 existing SKIP in a later full-kernel run than D433. Neither result is a new full-suite PASS at this audit HEAD. [D482 record](notes/vertical-contact-refusal-2026-11-04/README.md).
