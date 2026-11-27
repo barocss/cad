@@ -1,11 +1,5 @@
 [
   {
-    "case": "corpus/oracle/cylinder-box-graze-x45-in0_00001-difference.json",
-    "stage": "evaluate",
-    "status": "WRONG",
-    "note": "D25 (RB5): a box edge 10 nm (10 tolerances) into the wall: refused as non-manifold (a typed error, not a wrong body). The sliver is thinner than the stitch's vertex merge radius (20 tolerances); X- and Y-turned boxes refuse from about 3 to 30 tolerances. Needs tolerant stitching of grazing contacts. K9 (D187 notes, open): typed. The right result needs a lens thinner than the 20·tol merge radius recognised and dropped (the wall's lens hole filled, the box's sliver piece dropped); the same would build D186's 1 nm case. Medium–large, at the tolerance scale."
-  },
-  {
     "case": "corpus/oracle/gear-helical-pair-crossing-intersect.json",
     "stage": "evaluate",
     "status": "WRONG",
