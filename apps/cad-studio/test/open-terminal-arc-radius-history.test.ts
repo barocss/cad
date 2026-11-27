@@ -118,3 +118,19 @@ test('same numeric radius is not admitted as a draft change while Redo is availa
  checkNative(JSON.parse(JSON.stringify(after)),14);
  checkNative(solidDoc(c.shape),16);
 });
+
+test('a four-point line–arc–line draft records only the original interior arc radius', () => {
+ const s: Polygon = { ...shape(), bulges:[0,.5,0,0] };
+ const next = { ...s, bulges:[0,.4,0,0] };
+ assert.ok(allowed(draft(s)));
+ assert.ok(change(s,next));
+ assert.equal(next.points,s.points);
+ assert.equal(change(s,{...s,bulges:[0,.5,0,0]}),false);
+ assert.equal(change(s,{...s,bulges:[0,0,.4,0]}),false);
+ assert.equal(change(s,{...s,bulges:[0,.4,.1,0]}),false);
+ assert.equal(change(s,{...s,bulges:[0,-.4,0,0]}),false);
+ assert.equal(change(s,{...s,bulges:[0,2,0,0]}),false);
+ assert.equal(change(s,{...next,points:[...s.points]}),false);
+ assert.equal(allowed(draft({...s,bulges:[.1,0,0,0]})),false);
+ assert.equal(allowed(draft({...s,points:s.points.slice(0,3),bulges:[.5,0,0]})),false);
+});

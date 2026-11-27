@@ -1,0 +1,268 @@
+{
+  "status": "PASS",
+  "observations": [
+    {
+      "label": "radius-draft-undo-classification",
+      "undoResult": "restored-radius14",
+      "numericEditUndo": "SUPPORTED_OBSERVED",
+      "contract": "Exact four-point interior Arc bounded history",
+      "radius14Fields": [
+        {
+          "label": "Point 1 X",
+          "value": "10"
+        },
+        {
+          "label": "Point 1 Y",
+          "value": "10"
+        },
+        {
+          "label": "Point 2 X",
+          "value": "30"
+        },
+        {
+          "label": "Point 2 Y",
+          "value": "10"
+        },
+        {
+          "label": "Arc 2 radius",
+          "value": "14"
+        },
+        {
+          "label": "Point 3 X",
+          "value": "30"
+        },
+        {
+          "label": "Point 3 Y",
+          "value": "30"
+        },
+        {
+          "label": "Point 4 X",
+          "value": "10"
+        },
+        {
+          "label": "Point 4 Y",
+          "value": "30"
+        }
+      ],
+      "radius16Fields": [
+        {
+          "label": "Point 1 X",
+          "value": "10"
+        },
+        {
+          "label": "Point 1 Y",
+          "value": "10"
+        },
+        {
+          "label": "Point 2 X",
+          "value": "30"
+        },
+        {
+          "label": "Point 2 Y",
+          "value": "10"
+        },
+        {
+          "label": "Arc 2 radius",
+          "value": "16"
+        },
+        {
+          "label": "Point 3 X",
+          "value": "30"
+        },
+        {
+          "label": "Point 3 Y",
+          "value": "30"
+        },
+        {
+          "label": "Point 4 X",
+          "value": "10"
+        },
+        {
+          "label": "Point 4 Y",
+          "value": "30"
+        }
+      ],
+      "afterFields": [
+        {
+          "label": "Point 1 X",
+          "value": "10"
+        },
+        {
+          "label": "Point 1 Y",
+          "value": "10"
+        },
+        {
+          "label": "Point 2 X",
+          "value": "30"
+        },
+        {
+          "label": "Point 2 Y",
+          "value": "10"
+        },
+        {
+          "label": "Arc 2 radius",
+          "value": "16"
+        },
+        {
+          "label": "Point 3 X",
+          "value": "30"
+        },
+        {
+          "label": "Point 3 Y",
+          "value": "30"
+        },
+        {
+          "label": "Point 4 X",
+          "value": "10"
+        },
+        {
+          "label": "Point 4 Y",
+          "value": "30"
+        }
+      ]
+    },
+    {
+      "label": "saved-loop-contract",
+      "points": [
+        [
+          10,
+          10
+        ],
+        [
+          30,
+          10
+        ],
+        [
+          30,
+          30
+        ],
+        [
+          10,
+          30
+        ]
+      ],
+      "segments": [
+        {
+          "kind": "line",
+          "start": [
+            10,
+            10
+          ]
+        },
+        {
+          "kind": "arc",
+          "start": [
+            30,
+            10
+          ],
+          "center": [
+            22.5,
+            20
+          ],
+          "direction": "ccw"
+        },
+        {
+          "kind": "line",
+          "start": [
+            30,
+            30
+          ]
+        },
+        {
+          "kind": "line",
+          "start": [
+            10,
+            30
+          ]
+        }
+      ],
+      "outlinePresent": true,
+      "bulges": [
+        0,
+        0.49999999999999994,
+        0,
+        0
+      ],
+      "expectedBulge": 0.5
+    },
+    {
+      "label": "12-reopened-native",
+      "expectedVolume": 1409.669633438256,
+      "native": {
+        "bodyKinds": [
+          "solid"
+        ],
+        "valid": true,
+        "volume": 1409.669633438255,
+        "cylinders": [
+          {
+            "kind": "cylinder",
+            "c": [
+              22.5,
+              20,
+              0
+            ],
+            "a": [
+              0,
+              0,
+              1
+            ],
+            "r": 12.5,
+            "out": 1
+          }
+        ]
+      }
+    }
+  ],
+  "states": [
+    {
+      "label": "01-completed-radius12.5"
+    },
+    {
+      "label": "02-radius14"
+    },
+    {
+      "label": "03-radius16"
+    },
+    {
+      "label": "04-observed-draft-undo"
+    },
+    {
+      "label": "05-observed-draft-redo"
+    },
+    {
+      "label": "05b-radius-and-placement-history"
+    },
+    {
+      "label": "05c-impossible-radius-preserved"
+    },
+    {
+      "label": "05d-impossible-radius-history-unchanged"
+    },
+    {
+      "label": "06-explicit-radius12.5-for-closure"
+    },
+    {
+      "label": "07-finished-outline"
+    },
+    {
+      "label": "08-extruded-extruded"
+    },
+    {
+      "label": "11-reopened"
+    },
+    {
+      "label": "13-final"
+    }
+  ],
+  "errors": [],
+  "consoleErrors": [],
+  "changes": [],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "sourceCount": 1244
+}

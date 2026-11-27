@@ -1,0 +1,145 @@
+{
+  "status": "PASS",
+  "observations": [
+    {
+      "label": "radius-draft-undo-classification",
+      "undoResult": "disabled",
+      "numericEditUndo": "NOT_OBSERVED_IN_EXCLUDED_RECIPE",
+      "contract": "Four-point open outline is outside the baseline three-point history implementation; not a regression assertion",
+      "radius14Fields": [
+        {
+          "label": "Point 1 X",
+          "value": "10"
+        },
+        {
+          "label": "Point 1 Y",
+          "value": "10"
+        },
+        {
+          "label": "Point 2 X",
+          "value": "30"
+        },
+        {
+          "label": "Point 2 Y",
+          "value": "10"
+        },
+        {
+          "label": "Arc 2 radius",
+          "value": "14"
+        },
+        {
+          "label": "Point 3 X",
+          "value": "30"
+        },
+        {
+          "label": "Point 3 Y",
+          "value": "30"
+        },
+        {
+          "label": "Point 4 X",
+          "value": "10"
+        },
+        {
+          "label": "Point 4 Y",
+          "value": "30"
+        }
+      ],
+      "radius16Fields": [
+        {
+          "label": "Point 1 X",
+          "value": "10"
+        },
+        {
+          "label": "Point 1 Y",
+          "value": "10"
+        },
+        {
+          "label": "Point 2 X",
+          "value": "30"
+        },
+        {
+          "label": "Point 2 Y",
+          "value": "10"
+        },
+        {
+          "label": "Arc 2 radius",
+          "value": "16"
+        },
+        {
+          "label": "Point 3 X",
+          "value": "30"
+        },
+        {
+          "label": "Point 3 Y",
+          "value": "30"
+        },
+        {
+          "label": "Point 4 X",
+          "value": "10"
+        },
+        {
+          "label": "Point 4 Y",
+          "value": "30"
+        }
+      ],
+      "afterFields": [
+        {
+          "label": "Point 1 X",
+          "value": "10"
+        },
+        {
+          "label": "Point 1 Y",
+          "value": "10"
+        },
+        {
+          "label": "Point 2 X",
+          "value": "30"
+        },
+        {
+          "label": "Point 2 Y",
+          "value": "10"
+        },
+        {
+          "label": "Arc 2 radius",
+          "value": "16"
+        },
+        {
+          "label": "Point 3 X",
+          "value": "30"
+        },
+        {
+          "label": "Point 3 Y",
+          "value": "30"
+        },
+        {
+          "label": "Point 4 X",
+          "value": "10"
+        },
+        {
+          "label": "Point 4 Y",
+          "value": "30"
+        }
+      ]
+    }
+  ],
+  "states": [
+    {
+      "label": "01-completed-radius12.5"
+    },
+    {
+      "label": "02-radius14"
+    },
+    {
+      "label": "03-radius16"
+    }
+  ],
+  "errors": [],
+  "consoleErrors": [],
+  "changes": [],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "sourceCount": 1244
+}

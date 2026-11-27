@@ -11,11 +11,12 @@ function completedLineArc(shape:SketchShape|null):shape is Polygon {
  if (Object.entries(shape).some(([k,v]) => v !== undefined && !allowed.includes(k))) return false;
  if (shape.construction !== undefined && shape.construction !== true) return false;
  if (shape.ids !== undefined && (!Array.isArray(shape.ids) || Array.from(shape.ids).some(id => typeof id !== 'string' || !id) || new Set(shape.ids).size !== shape.ids.length)) return false;
- const count = shape.points.length, terminal = count - 2, b = shape.bulges;
- // Exactly Line+Arc or Line+Line+Arc, never a general open chain.
- // Array.from also visits sparse entries: missing bulges are not authored zeros.
- if (!Array.isArray(b) || b.length !== count || Array.from(b).some((v,i) =>
-  typeof v !== 'number' || !Number.isFinite(v) || (i === terminal ? v === 0 : v !== 0))) return false;
+ const count = shape.points.length, b = shape.bulges;
+ // Exactly Line+Arc, Line+Line+Arc or Line+Arc+Line, not a general open chain.
+ // Array.from visits sparse entries: missing bulges are not authored zeros.
+ if (!Array.isArray(b) || b.length !== count || Array.from(b).some(v => typeof v !== 'number' || !Number.isFinite(v))) return false;
+ const arc = b.findIndex(v => v !== 0);
+ if ((arc !== count - 2 && !(count === 4 && arc === 1)) || b.some((v,i) => i !== arc && v !== 0)) return false;
  for (const k of ['lengths','radii'] as const) if (shape[k] !== undefined && !emptyRecord(shape[k])) return false;
  for (const k of ['rules','tangents','equalRadii','concentric','circles','circleIds'] as const) if (shape[k] !== undefined && (!Array.isArray(shape[k]) || shape[k]!.length !== 0)) return false;
  if (shape.hv !== undefined && (!shape.hv || Object.keys(shape.hv).some(k => k !== 'h' && k !== 'v') || !Array.isArray(shape.hv.h) || !Array.isArray(shape.hv.v) || shape.hv.h.length || shape.hv.v.length)) return false;
@@ -30,9 +31,9 @@ export function canRecordOpenArcRadiusDraft(sketch:SketchState|null):boolean {
 export function isOpenArcRadiusChange(before:SketchShape|null, after:SketchShape|null):boolean {
  if (!completedLineArc(before) || !completedLineArc(after)) return false;
  if (before.points.length !== after.points.length) return false;
- const terminal = before.points.length - 2;
- for (let i=0;i<before.points.length;i++) if (i !== terminal && !Object.is(before.bulges![i],after.bulges![i])) return false;
- const a=before.bulges![terminal], b=after.bulges![terminal];
+ const arc = before.bulges!.findIndex(v => v !== 0);
+ for (let i=0;i<before.points.length;i++) if (i !== arc && !Object.is(before.bulges![i],after.bulges![i])) return false;
+ const a=before.bulges![arc], b=after.bulges![arc];
  if (a === b || Math.sign(a) !== Math.sign(b) || (Math.abs(a)>1) !== (Math.abs(b)>1)) return false;
  const keys = new Set([...Object.keys(before),...Object.keys(after)]);
  for (const key of keys) if (key !== 'bulges' && !Object.is(Reflect.get(before,key),Reflect.get(after,key))) return false;
