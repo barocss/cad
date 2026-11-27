@@ -2,6 +2,7 @@ import { useCallback, useRef, type RefObject } from 'react';
 import { alignFaceBinding } from '@barocss/cad-model/app/alignCommand';
 import { bodyName, lookOf } from '@barocss/cad-model/app/bodies';
 import { refOf, type Ctx } from '@barocss/cad-model/app/commands';
+import { editSavedPivotFaceCommand, savedPivotStock } from '@barocss/cad-model/app/draftEdit';
 import { editSavedRevolveAxisCommand, joinedRevolveStock } from '@barocss/cad-model/app/revolveAxisEdit';
 import { prefixDoc, type StudioDoc } from '@barocss/cad-model/engine/doc';
 import type { FriendlyError } from '@barocss/cad-model/engine/errors';
@@ -53,7 +54,9 @@ export function useHistoryReferenceActions({ model, owner, worker, command, noti
   }, [doc, editNode, engine, marker, ownsEvaluatedSource, revision, scope, shownVariant]);
 
   const replaceRevolveAxis = editNode === null ? null : editSavedRevolveAxisCommand(commandDoc, editNode);
+  const pivotStock = editNode === null ? null : savedPivotStock(commandDoc, editNode);
   const axisReplacementRequest = useRef(0);
+  const pivotEditRequest = useRef(0);
   const startRevolveAxisReplacement = async () => {
     if (editNode === null || !replaceRevolveAxis || !ownsEvaluatedSource() || markerNow.current !== null || shownVariant.current
       || !fresh || busy || !canChangeDocument()) {
@@ -85,5 +88,28 @@ export function useHistoryReferenceActions({ model, owner, worker, command, noti
       ...(joined && stock ? { joinedRevolvePick: { union: joined.union, stock } } : {}), values: {}, preview: 'busy' });
   };
 
-  return { readAlignHistoryTargets, replaceRevolveAxis, startRevolveAxisReplacement };
+  const editPivotFace = pivotStock && editNode !== null ? async () => {
+    const source = scope.current, open = openIntent.current, request = ++pivotEditRequest.current;
+    const ownsSource = () => open === openIntent.current && ownsEvaluatedSource()
+      && markerNow.current === null && !shownVariant.current;
+    const current = () => ownsSource() && source === scope.current && request === pivotEditRequest.current && !hasDraft();
+    if (!fresh || busy || ctx.doc !== commandDoc || !current() || !canChangeDocument()) return;
+    try {
+      const result = await engine.part(prefixDoc(commandDoc, editNode), revision.current++, 'refs');
+      if (!current() || !canChangeDocument()) return;
+      if (!result.ok) throw new Error(result.error.hint);
+      const key = bodyKeyFor(commandDoc.nodes, pivotStock.node, pivotStock.side);
+      const matches = result.bodies.filter(body => body.key === key && body.ref?.node === pivotStock.node
+        && body.ref.side === pivotStock.side);
+      const cmd = matches.length === 1 ? editSavedPivotFaceCommand(commandDoc, editNode, matches[0]) : null;
+      if (!cmd || !cmd.available(ctx).ok) throw new Error('The saved face and fixed edge must resolve on one original stock body.');
+      command.discardDraft();
+      command.closeEditor();
+      command.activate({ cmd, ctx, values: cmd.defaults?.(ctx) ?? {}, preview: 'busy', ownsSource });
+    } catch (error) {
+      if (current()) notice({ title: 'Pivot face edit not started', hint: 'The original fixed edge is unavailable.', detail: String(error) });
+    }
+  } : undefined;
+
+  return { readAlignHistoryTargets, replaceRevolveAxis, startRevolveAxisReplacement, editPivotFace };
 }

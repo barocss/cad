@@ -1,4 +1,5 @@
 import { isBoxReplacementSource, withNode, type ModelNode } from '../engine/doc';
+import type { BodyResult } from '../engine/evaluate';
 import { captureSignatures } from '../engine/references';
 import { refusal } from '../engine/refusal';
 import type { Command, Ctx } from './commands';
@@ -9,7 +10,7 @@ export const PIVOT_FACE = 'pivot-face';
 const selectionReason = 'Select one planar face of a rectangular extrusion, with or without Move features, and Shift-select one straight edge on that face.';
 const angleField = { key: 'deg', label: 'Angle', kind: 'deg', min: -45, max: 45, step: 1 } as const;
 
-function isPivotStock(nodes: readonly ModelNode[], index: number): boolean {
+export function isPivotStock(nodes: readonly ModelNode[], index: number): boolean {
   let at = index;
   for (;;) {
     const node = nodes[at];
@@ -21,14 +22,9 @@ function isPivotStock(nodes: readonly ModelNode[], index: number): boolean {
   }
 }
 
-function pivotSelection(ctx: Ctx) {
-  const { faces, edges, bodies, sketches, vertices, profileRegions } = ctx.selection;
-  if (faces.length !== 1 || edges.length !== 1 || bodies.length || sketches?.length || vertices?.length
-    || profileRegions || ctx.direct?.length || faces[0].body !== edges[0].body) return;
-  const body = ctx.bodies[faces[0].body], parent = body?.ref;
-  if (!parent || parent.side !== 'solid' || !isPivotStock(ctx.doc.nodes, parent.node)
-    || body.topology?.kind !== 'solid' || body.topology.bodyCount !== 1) return;
-  const faceIndex = faces[0].face, face = body.mesh.faces[faceIndex], edge = body.mesh.edges[edges[0].edge];
+export function pivotStockHinge(body: BodyResult, faceIndex: number, edgeIndex: number) {
+  if (body.topology?.kind !== 'solid' || body.topology.bodyCount !== 1) return;
+  const face = body.mesh.faces[faceIndex], edge = body.mesh.edges[edgeIndex];
   if (!face?.nativePlaneName || !face.nativeAxisPlane || !edge?.nativeLine || !edge.nativeJoint
     || !edge.axis || edge.names.length !== 1 || !edge.faces.includes(faceIndex)) return;
   const otherIndex = edge.faces.find(index => index !== faceIndex);
@@ -36,7 +32,17 @@ function pivotSelection(ctx: Ctx) {
   const start = other?.nativeAlignFace;
   if (!start || !other?.nativePlaneName || start.axis === face.nativeAxisPlane.axis || start.axis === edge.axis) return;
   const pull: DraftPull = start.sign === -1 ? start.axis : `-${start.axis}`;
-  return { parent, face: face.nativePlaneName, edge: edge.names[0], pull };
+  return { face: face.nativePlaneName, edge: edge.names[0], pull, support: start };
+}
+
+function pivotSelection(ctx: Ctx) {
+  const { faces, edges, bodies, sketches, vertices, profileRegions } = ctx.selection;
+  if (faces.length !== 1 || edges.length !== 1 || bodies.length || sketches?.length || vertices?.length
+    || profileRegions || ctx.direct?.length || faces[0].body !== edges[0].body) return;
+  const body = ctx.bodies[faces[0].body], parent = body?.ref;
+  if (!parent || parent.side !== 'solid' || !isPivotStock(ctx.doc.nodes, parent.node)) return;
+  const hinge = pivotStockHinge(body, faces[0].face, edges[0].edge);
+  return hinge && { parent, ...hinge };
 }
 
 export function pivotAngle(value: unknown): number {

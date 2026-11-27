@@ -1318,7 +1318,7 @@ export function App() {
       clearQueuedApply: commandApply.clear },
     selection: { setSelection, setDirectSel }, onNotice: setToast,
   });
-  const { readAlignHistoryTargets, replaceRevolveAxis, startRevolveAxisReplacement } = useHistoryReferenceActions({
+  const { readAlignHistoryTargets, replaceRevolveAxis, startRevolveAxisReplacement, editPivotFace } = useHistoryReferenceActions({
     model: { doc, commandDoc, editNode, marker, fresh, busy, bodies, ctx },
     owner: { scope: bearingEditScope, openIntent, markerNow, shownVariant, ownsEvaluatedSource, canChangeDocument,
       hasDraft: () => !!activeStore.get() || !!nodeEditorDraft.current },
@@ -2248,7 +2248,8 @@ export function App() {
             variant: () => shownVariant.current, worker: () => workerSessionNow.current, hasDraft: () => !!nodeEditorDraft.current,
             bodies: () => bodiesRef.current, open: () => openIntent.current, scope: () => bearingEditScope.current, ownsEvaluatedSource }}
           commands={{ ctx, discardFeatureDraft, closeForCommand: () => setEditNode(null), setActive, editSketch,
-            replaceAxis: replaceRevolveAxis ? () => void startRevolveAxisReplacement() : undefined }}
+            replaceAxis: replaceRevolveAxis ? () => void startRevolveAxisReplacement() : undefined,
+            editPivotFace: editPivotFace ? () => void editPivotFace() : undefined }}
           inset={{ roundedPending: !!parameterEdit?.roundedInset, detach: applyRoundedInsetEdit, problem: insetSource.problem,
             relink: insetSource.start ? { start: insetSource.start, cancel: insetRelink.cancel, reviewing: !!insetReview } : undefined }}
           worker={{ engine, nextRevision: () => revision.current++ }} onNotice={setToast}

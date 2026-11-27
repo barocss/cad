@@ -35,7 +35,7 @@ interface Props {
   model: ApplyOptions['model'] & { commandDoc: StudioDoc; workerSession: number };
   owner: ApplyOptions['owner'] & { hasDraft(): boolean; ownsEvaluatedSource(): boolean; bodies(): Ctx['bodies'] };
   commands: { ctx: Ctx; discardFeatureDraft(): void; closeForCommand(): void;
-    setActive: Dispatch<SetStateAction<Active | null>>; editSketch(index: number): void; replaceAxis?(): void };
+    setActive: Dispatch<SetStateAction<Active | null>>; editSketch(index: number): void; replaceAxis?(): void; editPivotFace?(): void };
   inset: { roundedPending: boolean; detach: ApplyOptions['changes']['applyRoundedInsetEdit'];
     problem?: string; relink: Editor['onRelinkInset'] };
   editor: Pick<Editor, 'onFilletStations' | 'filletEndpoints' | 'alignPreview' | 'oppositeRadiusPreview' | 'readAlignTargets' |
@@ -48,7 +48,7 @@ interface Props {
 export function HistoryFeatureEditor({ model, owner, commands, inset, editor, worker,
   changes, onNotice: setToast }: Props) {
   const { doc, evaluated, commandDoc, editNode, fresh, busy, workerSession } = model;
-  const { ctx, discardFeatureDraft, closeForCommand, setActive, editSketch, replaceAxis } = commands;
+  const { ctx, discardFeatureDraft, closeForCommand, setActive, editSketch, replaceAxis, editPivotFace } = commands;
   const { ownsEvaluatedSource } = owner;
   const { canChangeDocument } = changes;
   const savedCommand = () => fastenerHistoryEdit(editNode, commandDoc.nodes, commandDoc)?.command ?? mountHistoryEdit(commandDoc, editNode) ?? connectorHistoryEdit(commandDoc, editNode) ?? subdPrimitiveHistoryEdit(commandDoc, editNode) ?? mirrorHistoryEdit(commandDoc, editNode) ?? sweepHistoryEdit(commandDoc, editNode) ?? loftSectionHistoryEdit(commandDoc, editNode) ?? subtractHistoryEdit(commandDoc, editNode) ?? booleanHistoryEdit(commandDoc, editNode) ?? sheetReliefCornerHistoryEdit(commandDoc, editNode) ?? editSavedReplaceFaceCommand(commandDoc, editNode);
@@ -90,14 +90,14 @@ export function HistoryFeatureEditor({ model, owner, commands, inset, editor, wo
     savedPathEdit={savedPath ? { label: savedPath.label, start: () => startSavedFeature(() => sweepPathHistoryEdit(commandDoc, editNode)) } : undefined}
     savedPartialRadiusSourceEdit={savedPartialRadiusSource ? { label: savedPartialRadiusSource.label, start: () => startSavedFeature(() => savedPartialRadiusSource) } : undefined}
     savedReliefShapeEdit={savedReliefShape ? { label: savedReliefShape.label, start: () => startSavedFeature(() => savedReliefShape) } : undefined}
-    onEditDraft={editSavedDraftCommand(commandDoc, editNode) ? () => {
+    onEditDraft={editPivotFace ?? (editSavedDraftCommand(commandDoc, editNode) ? () => {
       if (!ownsEvaluatedSource() || owner.marker() !== null || owner.variant() || !fresh || busy || !canChangeDocument()) return;
       const cmd = editSavedDraftCommand(commandDoc, editNode);
       if (!cmd) return;
       discardFeatureDraft();
       closeForCommand();
       setActive({ cmd, ctx, values: cmd.defaults?.(ctx) ?? {}, preview: 'busy' });
-    } : undefined}
+    } : undefined)}
     onEditSharedHoleLayout={sharedHoleLayoutPair(doc.nodes, editNode) ? () => {
       if (owner.document() !== doc || !ownsEvaluatedSource() || owner.marker() !== null || owner.variant() || !fresh || busy || owner.hasDraft() || !canChangeDocument()) return;
       const pair = sharedHoleLayoutPair(doc.nodes, editNode);

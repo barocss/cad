@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import { evaluateDoc, type BodyResult } from '../src/engine/evaluate';
 import { rectanglePart, type StudioDoc } from '../src/engine/doc';
 import { commands, patchValues, type Ctx } from '../src/app/commands';
-import { editSavedDraftCommand } from '../src/app/draftEdit';
+import { editSavedDraftCommand, editSavedPivotFaceCommand } from '../src/app/draftEdit';
+import { pivotFaceCommand } from '../src/app/pivotFaceCommand';
 import { part, type BodyQuery } from '../src/api';
 
 // The Studio Draft command's Pull choice (K05 in Studio). +Z keeps the old command's documents byte for byte;
@@ -15,6 +16,35 @@ const ctxOn = (doc: StudioDoc, normals: [number, number, number][]): Ctx => {
   const bodies = bodiesOf(doc); return { doc, bodies, selection: { faces: normals.map(n => ({ body: 0, face: facing(bodies[0], n) })), edges: [], bodies: [] } };
 };
 const volume = (doc: StudioDoc) => { const v = bodiesOf(doc)[0].volume; assert.ok(v !== null); return v; };
+
+test('Pivot face History only accepts exact edges on its original face and ignores a no-op', () => {
+  const stock = rectanglePart(40, 20, 12), pick = ctxOn(stock, [[0, -1, 0]]);
+  const [body] = pick.bodies;
+  const upper = 'n1.side0|n1.top', lower = 'n1.bottom|n1.side0';
+  const rear = 'n1.side2|n1.top';
+  const edge = body.mesh.edges.findIndex(candidate => candidate.names.includes(upper));
+  assert.ok(edge >= 0 && body.mesh.edges.some(candidate => candidate.names.includes(rear)));
+  pick.selection.edges = [{ body: 0, edge }];
+  const doc = pivotFaceCommand.build!(pick, { deg: 12 });
+  const ctx = ctxOn(doc, []);
+  const serial = JSON.stringify(doc);
+  assert.equal(editSavedPivotFaceCommand(doc, 2, ctx.bodies[0]), null, 'A later body cannot stand in for the stock.');
+  const command = editSavedPivotFaceCommand(doc, 2, body);
+  assert.ok(command?.defaults && command.build);
+  const values = command.defaults(ctx);
+  assert.equal(command.build(ctx, values), doc);
+  assert.throws(() => command.build!(ctx, { ...values, hingeEdge: rear }), /BAD_REFERENCE.*original Pivot face/);
+  assert.throws(() => command.build!({ ...ctx, doc: { ...doc } }, values), /BAD_REFERENCE.*History again/);
+  assert.equal(JSON.stringify(doc), serial);
+  for (const [choice, pull] of [[lower, 'z'], ['n1.side0|n1.side1', '-x'], ['n1.side0|n1.side3', 'x']]) {
+    const changed: StudioDoc = command.build(ctx, { ...values, hingeEdge: choice });
+    const pivot = changed.nodes[2];
+    assert.ok(pivot.kind === 'draft');
+    assert.deepEqual([pivot.hingeEdge, pivot.pull, pivot.angle], [choice, pull, 12]);
+    assert.deepEqual(Object.keys(pivot.sigs ?? {}).sort(), ['n1.side0', choice].sort());
+    assert.equal(bodiesOf(changed)[0].topology?.kind, 'solid');
+  }
+});
 
 test('Studio draft: +Z is the default for a side face and builds the old node, without a pull', () => {
   const doc = rectanglePart(40, 30, 10), ctx = ctxOn(doc, [[0, -1, 0]]);
