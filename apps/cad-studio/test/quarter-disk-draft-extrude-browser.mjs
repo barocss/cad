@@ -2,10 +2,11 @@ import assert from 'node:assert/strict';
 import { createFlow } from './flow-helper.mjs';
 
 const baseline = process.argv.includes('--baseline');
+const rotated = process.argv.includes('--rotated');
 const pins = [
   'apps/cad-studio/test/quarter-disk-draft-extrude-browser.mjs',
   'packages/barocss-cad/src/features/drafted-extrusion.ts',
-  ...(baseline ? [] : ['packages/barocss-cad/src/features/drafted-quarter-disk.ts']),
+  ...(!baseline || rotated ? ['packages/barocss-cad/src/features/drafted-quarter-disk.ts'] : []),
   'packages/barocss-cad/src/part/part-profile-solid.ts',
 ];
 const f = await createFlow({
@@ -22,6 +23,11 @@ const { brep } = output;
 console.log(JSON.stringify({
   report: checkBrep(brep, { strict: true }), mass: massPropertiesOf(output),
   digest: createHash('sha256').update(JSON.stringify(brep)).digest('hex'),
+  baseVertices: brep.vertices.filter(vertex => vertex.point[2] === 0).map(vertex => vertex.point),
+  edgesOwnEnds: brep.edges.every(({ curve, vertices }) => vertices.every((id, end) => {
+    const point = curve.controlPoints[end === 0 ? 0 : curve.controlPoints.length - 1];
+    return brep.vertices.find(vertex => vertex.id === id).point.every((coordinate, axis) => coordinate === point[axis]);
+  })),
   seams: brep.edges.filter(edge => edge.curve.controlPoints[0][2] !== edge.curve.controlPoints.at(-1)[2]).map(edge => {
     const { curve } = edge, [a, b] = curveDomain(curve);
     const points = Array.from({length: 9}, (_, i) => evaluateCurve(curve, a + i * (b-a)/8));
@@ -36,12 +42,14 @@ console.log(JSON.stringify({
 `,
 });
 const radius = 10, height = 10;
+const arcStart = rotated ? [8, 6] : [10, 0], arcEnd = rotated ? [-6, 8] : [0, 10];
+const inSketchFrame = ([x, y, z]) => rotated ? [(4 * x + 3 * y) / 5, (-3 * x + 4 * y) / 5, z] : [x, y, z];
 const seed = {
   format: 'barocss-cad-model', schema: 3, units: 'mm', parameters: {}, nextId: 1,
   nodes: [{ id: 'n0', kind: 'sketch', profile: 'loop', segments: [
     { kind: 'line', start: [0, 0] },
-    { kind: 'arc', start: [10, 0], center: [0, 0], direction: 'ccw' },
-    { kind: 'line', start: [0, 10] },
+    { kind: 'arc', start: arcStart, center: [0, 0], direction: 'ccw' },
+    { kind: 'line', start: arcEnd },
   ] }], outputs: {},
 };
 const button = (name, scope = f.page) => scope.getByRole('button', { name, exact: true });
@@ -66,6 +74,10 @@ async function check(label, doc, angle) {
   assert.ok(result.report.valid, result.report.issues.join('\n'));
   assert.deepEqual(result.report.counts, { bodies: 1, shells: 1, faces: 6, loops: 6, coedges: 24, edges: 12, vertices: 8 });
   assert.equal(result.report.topology[0].genus, 0);
+  for (const [x, y] of [[0, 0], arcStart, arcEnd]) {
+    assert.ok(result.baseVertices.some(point => point[0] === x && point[1] === y), `Missing authored vertex (${x}, ${y})`);
+  }
+  assert.equal(result.edgesOwnEnds, true);
   assert.equal(result.faces.filter(face => face.kind === 'plane').length, 4);
   const cone = result.faces.filter(face => face.kind !== 'plane');
   assert.equal(cone.length, 2);
@@ -74,14 +86,14 @@ async function check(label, doc, angle) {
   assert.equal(joins.length, 2);
   for (const seam of joins) {
     const alongY = seam.name.includes('n1.side0');
-    for (const [x, y, z] of seam.points) {
+    for (const [x, y, z] of seam.points.map(inSketchFrame)) {
       near(alongY ? y : x, slope * z);
       near(Math.hypot(x, y), radius - slope * z);
     }
   }
   const corner = result.seams.find(seam => seam.name === 'n1.side0|n1.side2');
   assert.equal(corner.degree, 1);
-  for (const [x, y, z] of corner.points) { near(x, slope * z); near(y, slope * z); }
+  for (const [x, y, z] of corner.points.map(inSketchFrame)) { near(x, slope * z); near(y, slope * z); }
   const { bodies } = await f.bodies();
   assert.equal(bodies.length, 1);
   near(result.mass.volume, volume, 1e-6);

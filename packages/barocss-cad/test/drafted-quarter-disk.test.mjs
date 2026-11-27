@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import test from 'node:test';
 import { brepMassProperties, checkBrep, draftedExtrusion, evaluateCurve, tessellateBrep } from '../dist/index.js';
 import { openEdgesByBody } from '../scripts/rb/stages.mjs';
@@ -88,4 +89,88 @@ test('quarter disk Draft refuses either collapse and keeps off-circle geometry o
   assert.throws(() => make(-Number.EPSILON), /too small/);
   const offCircle = [...profile.slice(0, 2), { kind: 'line', start: [0, 10 + 1e-10] }];
   assert.throws(() => make(10, { profile: offCircle }), /not tangent/);
+});
+
+function quadrant(center, start, end, direction = 'ccw') {
+  return [
+    { kind: 'line', start: center },
+    { kind: 'arc', start, center, direction },
+    { kind: 'line', start: end },
+  ];
+}
+
+test('both signed Drafts on a noncardinal quarter disk match rotated native supports and mass', () => {
+  const center = [21, -3], start = [29, 3], end = [15, 5];
+  const selected = quadrant(center, start, end), axis = ([x, y, z]) => {
+    const u = x - center[0], v = y - center[1];
+    return [(4 * u + 3 * v) / 5, (-3 * u + 4 * v) / 5, z - 2];
+  };
+  const reversed = [{ ...selected[1], start: end, direction: 'cw' }, { ...selected[0], start }, selected[0]];
+  const tags = ['first', 'arc', 'last'];
+  for (const draft of [10, -10]) {
+    for (const [segments, sideTags] of [
+      [selected, tags], [selected.slice(1).concat(selected[0]), ['arc', 'last', 'first']], [reversed, ['arc', 'first', 'last']],
+    ]) {
+      const brep = make(draft, { profile: segments, sideTags, z0: 2, z1: 12 });
+      const report = checkBrep(brep, { strict: true });
+      assert.ok(report.valid, report.issues.join('\n'));
+      assert.deepEqual(report.counts, { bodies: 1, shells: 1, faces: 6, loops: 6, coedges: 24, edges: 12, vertices: 8 });
+      const slope = Math.tan(draft * Math.PI / 180);
+      const [volume, moment, axialMoment] = sectionIntegral(slope, 4096);
+      const mass = brepMassProperties(brep, 1);
+      near(mass.volume, volume, 1e-7);
+      axis(mass.centroid).forEach((value, i) => near(value, [moment / volume, moment / volume, axialMoment / volume][i], 1e-7));
+      for (const [name, fixed] of [['e.side[arc]#1|e.side[first]', 1], ['e.side[arc]#2|e.side[last]', 0]]) {
+        const { curve } = brep.edges.find(edge => edge.name === name);
+        for (let i = 0; i <= 24; i++) {
+          const point = axis(evaluateCurve(curve, i / 24)), d = slope * point[2];
+          near(point[fixed], d);
+          near(point[1 - fixed] ** 2, 100 - 20 * d);
+        }
+      }
+      for (const density of [4, 8, 16])
+        assert.equal(openEdgesByBody(brep, tessellateBrep(brep, { segmentsPerQuarter: density })), 0);
+    }
+  }
+});
+
+test('restoring the original ends keeps the exact coordinates lost by the rotated frame round trip', () => {
+  const source = quadrant([0, 0], [1, 12], [-12, 1]);
+  const radius = Math.hypot(1, 12);
+  assert.notEqual(1 / radius * radius, 1);
+  for (const draft of [10, -10]) {
+    const brep = make(draft, { profile: source });
+    const original = new Map(source.map(({ start }, i) => ['b' + [0, 1, 3][i], [...start, 0]]));
+    for (const { id, point } of brep.vertices) if (original.has(id)) assert.deepEqual(point, original.get(id));
+    for (const edge of brep.edges) for (const [end, vertex] of edge.vertices.entries()) {
+      if (!original.has(vertex)) continue;
+      assert.deepEqual(edge.curve.controlPoints.at(end ? -1 : 0), original.get(vertex));
+    }
+  }
+});
+
+test('rotated quarter admission refuses a one-ULP mismatch, major arcs and both collapse directions', () => {
+  const center = [0, 0], start = [8, 6], end = [-6, 8];
+  const nearRight = [-6 + 4 * Number.EPSILON, 8];
+  assert.equal(Math.hypot(...nearRight), Math.hypot(...start));
+  for (const profile of [quadrant(center, start, nearRight), quadrant(center, start, end, 'cw')])
+    assert.throws(() => make(10, { profile }), /not tangent/);
+  for (const draft of [30, -70])
+    assert.throws(() => make(draft, { profile: quadrant(center, start, end) }), /closes the quarter-disk/);
+});
+
+test('the cardinal quarter and established oblique chord retain their exact native geometry', () => {
+  const chord = [
+    { kind: 'arc', start: [0, -50], center: [0, 0], direction: 'ccw' },
+    { kind: 'line', start: [48, 14] },
+  ];
+  const nativeHash = brep => createHash('sha256').update(JSON.stringify(brep)).digest('hex');
+  const expected = [
+    [10, '87d945fbac0de808b35d31194eb97e09ef1fcd4ce10bd3da864b9d32d5c27eee', 'f9d72a3fcf9f77c7f99acc279f36ba68b14a0a74f41a3c32349a9cfe7e1115a0'],
+    [-10, '769b99eda39190e96a910c5ba9bdf14245a5649d0ed6a369580bea6d9e39046d', 'a0705afeb197cb7570a8fc4488d86b6ec077068f78cdee328bb461c129ac0966'],
+  ];
+  for (const [draft, quarterHash, chordHash] of expected) {
+    assert.equal(nativeHash(make(draft)), quarterHash);
+    assert.equal(nativeHash(make(draft, { profile: chord, z1: 50 })), chordHash);
+  }
 });

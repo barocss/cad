@@ -1,6 +1,8 @@
 import { buildBrep, checkBrep, lineCurve, type Brep, type BrepFaceInput, type BrepLoopInput } from '../brep/brep-core.js';
 import { transformBrep } from '../brep/brep-transform.js';
+import { binary64Dyadic } from '../core/dyadic.js';
 import { CadNumericPolicy, linearToleranceMM } from '../numeric-policy.js';
+import { retainDraftBaseEndpoints } from './draft-base-endpoints.js';
 import { capSurface, segmentCurve, type ProfileSegment } from './extruded-profile-solid.js';
 import type { Curve, Point, Surface } from '../types.js';
 
@@ -10,19 +12,42 @@ type Edge = { id: string; name: string; curve: Curve; vertices: [string, string]
 const use = (edge: string, sense: Use['sense'] = 'forward'): Use => ({ edge, sense });
 const reverse = (edge: string): Use => use(edge, 'reversed');
 
-/** The two exact radial lines and the original cardinal quadrant of one circle. */
+type Arc = Extract<ProfileSegment, { kind: 'arc' }>;
+
+/** Prove the original endpoint vectors are an exact positive quarter turn apart. */
+function exactQuarterTurn(arc: Arc): boolean {
+  const dyadics = [...arc.start, ...arc.end, ...arc.center].map(binary64Dyadic);
+  const exponent = Math.max(...dyadics.map(value => value.k));
+  const [ax, ay, bx, by, cx, cy] = dyadics.map(value => value.m << BigInt(exponent - value.k));
+  return bx - cx === cy - ay && by - cy === ax - cx;
+}
+
+/** The two exact radial lines and the original quadrant of one circle. */
 export function draftQuarterDisk(profile: readonly ProfileSegment[], names: readonly string[], z0: number, z1: number,
   slope: number, id: string, tag: string, fail: (detail: string) => never): Brep | undefined {
   if (profile.length !== 3) return;
   const i = profile.findIndex(segment => segment.kind === 'arc'), arc = profile[i];
   const startWall = profile[(i + 2) % 3], endWall = profile[(i + 1) % 3];
-  if (arc?.kind !== 'arc' || startWall.kind !== 'line' || endWall.kind !== 'line' || arc.sweep !== Math.PI / 2) return;
+  if (arc?.kind !== 'arc' || startWall.kind !== 'line' || endWall.kind !== 'line') return;
   const [cx, cy] = arc.center, [ax, ay] = arc.start, [bx, by] = arc.end;
   const dx = ax - cx, dy = ay - cy, radius = arc.radius;
-  if (startWall.start[0] !== cx || startWall.start[1] !== cy || endWall.end[0] !== cx || endWall.end[1] !== cy
-    || !((dx === 0 && Math.abs(dy) === radius) || (dy === 0 && Math.abs(dx) === radius))
-    || cx + dx !== ax || cy + dy !== ay || cx - dy !== bx || cy + dx !== by
-    || bx - cx !== -dy || by - cy !== dx) return;
+  if (startWall.start[0] !== cx || startWall.start[1] !== cy || endWall.end[0] !== cx || endWall.end[1] !== cy) return;
+  const cardinal = dx === 0 || dy === 0;
+  const x = dx / radius, y = dy / radius;
+  if (cardinal) {
+    if (arc.sweep !== Math.PI / 2
+      || !((dx === 0 && Math.abs(dy) === radius) || (dy === 0 && Math.abs(dx) === radius))
+      || cx + dx !== ax || cy + dy !== ay || cx - dy !== bx || cy + dx !== by
+      || bx - cx !== -dy || by - cy !== dx) return;
+  } else {
+    if (!(arc.sweep > 0 && arc.sweep < Math.PI) || !exactQuarterTurn(arc)) return;
+    const size = Math.max(1, radius, Math.abs(ax), Math.abs(ay), Math.abs(bx), Math.abs(by), Math.abs(cx), Math.abs(cy));
+    const roundoff = 64 * Number.EPSILON * size;
+    if (!Number.isFinite(x) || !Number.isFinite(y) || Math.abs(x * x + y * y - 1) > 16 * Number.EPSILON
+      || Math.hypot(cx + radius * x - ax, cy + radius * y - ay) > roundoff
+      || Math.hypot(cx - radius * y - bx, cy + radius * x - by) > roundoff)
+      fail('the quarter disk does not have a stable radial frame');
+  }
 
   const h = z1 - z0, d = slope * h, r = radius - d;
   if (!(d < 0 ? r > radius : d > 0 && r < radius)) fail('the angle is too small to move the quarter-disk walls');
@@ -104,8 +129,10 @@ export function draftQuarterDisk(profile: readonly ProfileSegment[], names: read
   const local = buildBrep({ source: { family: 'drafted-extrusion', id },
     vertices: Object.entries(points).map(([key, point]) => ({ id: key, point })), edges,
     bodies: [{ id: id + '_body', kind: 'solid', shells: [{ id: 's', closed: true, faces }] }] });
-  const x = dx / radius, y = dy / radius;
-  const brep = transformBrep(local, { matrix: [x, -y, 0, y, x, 0, 0, 0, 1], offset: [cx, cy, z0] });
+  const placed = transformBrep(local, { matrix: [x, -y, 0, y, x, 0, 0, 0, 1], offset: [cx, cy, z0] });
+  const brep = cardinal ? placed : retainDraftBaseEndpoints(placed, new Map([
+    ['b0', [cx, cy, z0]], ['b1', [ax, ay, z0]], ['b3', [bx, by, z0]],
+  ]));
   const inRange = (point: Point) => point.every(value => Math.abs(value) <= CadNumericPolicy.coordinateAbs);
   if (!brep.vertices.every(vertex => inRange(vertex.point))
     || !brep.edges.every(edge => edge.curve.controlPoints.every(inRange))

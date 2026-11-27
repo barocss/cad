@@ -2,6 +2,7 @@ import { buildBrep, checkBrep, lineCurve, type Brep, type BrepFaceInput, type Br
 import { transformBrep } from '../brep/brep-transform.js';
 import { binary64Dyadic } from '../core/dyadic.js';
 import { CadNumericPolicy, linearToleranceMM } from '../numeric-policy.js';
+import { retainDraftBaseEndpoints } from './draft-base-endpoints.js';
 import { capSurface, segmentCurve, type ProfileSegment } from './extruded-profile-solid.js';
 import type { Curve, Point, Surface } from '../types.js';
 
@@ -75,15 +76,6 @@ export function draftObliqueCircularSegment(profile: readonly ProfileSegment[], 
     fail('the circular segment does not have a stable chord frame');
   return buildDraftedSegment({ radius: arc.radius, halfWidth: q0, chord: c, center: arc.center, xAxis: [x, y], arcIndex: index,
     baseEndpoints: [arc.start, arc.end] }, names, z0, z1, slope, id, tag, fail);
-}
-
-/** Preserve the admitted authored endpoints and every incident curve end, without a frame round trip. */
-function retainBaseEndpoints(brep: Brep, endpoints: NonNullable<SegmentSource['baseEndpoints']>, z0: number): Brep {
-  const fixed = new Map<string, Point>([['b0', [endpoints[0][0], endpoints[0][1], z0]], ['b2', [endpoints[1][0], endpoints[1][1], z0]]]);
-  return { ...brep, vertices: brep.vertices.map(vertex => fixed.has(vertex.id) ? { ...vertex, point: fixed.get(vertex.id)! } : vertex),
-    edges: brep.edges.map(edge => ({ ...edge, curve: { ...edge.curve, controlPoints: edge.curve.controlPoints.map((point, i, points) =>
-      i === 0 && fixed.has(edge.vertices[0]) ? fixed.get(edge.vertices[0])!
-        : i === points.length - 1 && fixed.has(edge.vertices[1]) ? fixed.get(edge.vertices[1])! : point) } })) };
 }
 
 /** Shared exact cone/plane producer; c=0 retains the original half-disk arithmetic and native bytes. */
@@ -163,7 +155,10 @@ function buildDraftedSegment(source: SegmentSource, names: readonly string[], z0
   const local = buildBrep({ source: { family: 'drafted-extrusion', id }, vertices: Object.entries(points).map(([key, point]) => ({ id: key, point })),
     edges, bodies: [{ id: id + '_body', kind: 'solid', shells: [{ id: 's', closed: true, faces }] }] });
   const placed = transformBrep(local, { matrix: [x, -y, 0, y, x, 0, 0, 0, 1], offset: [cx, cy, z0] });
-  const brep = source.baseEndpoints ? retainBaseEndpoints(placed, source.baseEndpoints, z0) : placed;
+  const endpoints = source.baseEndpoints;
+  const brep = endpoints ? retainDraftBaseEndpoints(placed, new Map([
+    ['b0', [...endpoints[0], z0]], ['b2', [...endpoints[1], z0]],
+  ])) : placed;
   if (!brep.vertices.every(vertex => withinModelingRange(vertex.point))
     || !brep.edges.every(({ curve }) => curve.controlPoints.every(withinModelingRange))
     || !brep.faces.every(({ surface }) => surface.kind === 'surface' && surface.controlPoints.every(row => row.every(withinModelingRange))))
