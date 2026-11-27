@@ -134,3 +134,19 @@ test('a four-point line–arc–line draft records only the original interior ar
  assert.equal(allowed(draft({...s,bulges:[.1,0,0,0]})),false);
  assert.equal(allowed(draft({...s,points:s.points.slice(0,3),bulges:[.5,0,0]})),false);
 });
+
+test('Line–Arc–Line–Arc records either indexed radius, never multiple, moved, or substituted arcs', () => {
+ const s: Polygon = { ...shape(), points:[[10,10],[30,10],[30,30],[10,30],[10,15]], bulges:[0,.5,0,.5,0] };
+ const first = { ...s, bulges:[0,.4,0,.5,0] }, second = {...s, bulges:[0,.5,0,.35,0]};
+ assert.ok(allowed(draft(s)));
+ assert.ok(change(s,first)); assert.ok(change(s,second)); assert.equal(change(first,second),false);
+ assert.equal(change(s,{...s,bulges:[0,.4,0,.35,0]}),false);
+ assert.equal(change(s,{...s,bulges:[0,.5,0,-.35,0]}),false);
+ assert.equal(change(s,{...s,bulges:[0,.5,0,2,0]}),false);
+ assert.equal(change(s,{...s,bulges:[0,.5,0,0,0]}),false);
+ assert.equal(change(s,{...second,points:[...s.points]}),false);
+ assert.equal(allowed(draft({...s,bulges:[0,.5,.5,0,0]})),false);
+ assert.equal(allowed(draft({...s,bulges:[0,.5,0,.5,.1]})),false);
+ assert.equal(allowed(draft({...s,points:[...s.points,[0,0]],bulges:[0,.5,0,.5,0,0]})),false);
+ assert.equal(allowed({...draft(s),done:[shape()]}),false);
+});

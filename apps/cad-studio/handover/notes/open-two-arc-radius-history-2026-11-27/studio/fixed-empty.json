@@ -1,0 +1,112 @@
+{
+  "status": "PASS",
+  "observations": [
+    {
+      "label": "native-accepted",
+      "valid": true,
+      "kind": [
+        "solid"
+      ],
+      "volume": 1449.3962529583437,
+      "cylinders": [
+        {
+          "kind": "cylinder",
+          "c": [
+            16.614378000000002,
+            22.499999999999993,
+            0
+          ],
+          "a": [
+            0,
+            0,
+            1
+          ],
+          "r": 9.999999816344204,
+          "out": 1
+        },
+        {
+          "kind": "cylinder",
+          "c": [
+            17.510004000000002,
+            20,
+            0
+          ],
+          "a": [
+            0,
+            0,
+            1
+          ],
+          "r": 16.0000000025005,
+          "out": 1
+        }
+      ]
+    },
+    {
+      "label": "native-reopened",
+      "valid": true,
+      "kind": [
+        "solid"
+      ],
+      "volume": 1449.3962529583437,
+      "cylinders": [
+        {
+          "kind": "cylinder",
+          "c": [
+            16.614378000000002,
+            22.499999999999993,
+            0
+          ],
+          "a": [
+            0,
+            0,
+            1
+          ],
+          "r": 9.999999816344204,
+          "out": 1
+        },
+        {
+          "kind": "cylinder",
+          "c": [
+            17.510004000000002,
+            20,
+            0
+          ],
+          "a": [
+            0,
+            0,
+            1
+          ],
+          "r": 16.0000000025005,
+          "out": 1
+        }
+      ]
+    }
+  ],
+  "states": [
+    {
+      "label": "01-undo-first-arc-keeps-second"
+    },
+    {
+      "label": "02-impossible-radius-preserves-redo"
+    },
+    {
+      "label": "03-closed-sketch"
+    },
+    {
+      "label": "04-extruded-extruded"
+    },
+    {
+      "label": "05-fresh-open"
+    }
+  ],
+  "errors": [],
+  "consoleErrors": [],
+  "changes": [],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "sourceCount": 1244
+}
