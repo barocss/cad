@@ -144,7 +144,14 @@ const READ: Record<string, JsonSchema | null> = {
     curveJoin: o({ curveId: str, parameter: num, point: nativePoint, angleDegrees: num, unit: { type: 'string', const: 'degrees' }, revision: str },
     ['curveId', 'parameter', 'point', 'angleDegrees', 'unit', 'revision']),
     surfacePoint: o({ surfaceId: str, u: num, v: num, point: nativePoint, normal: nativePoint, unit: { type: 'string', const: 'mm' }, revision: str },
-      ['surfaceId', 'u', 'v', 'point', 'normal', 'unit', 'revision']) }),
+      ['surfaceId', 'u', 'v', 'point', 'normal', 'unit', 'revision']),
+    guidedFill: o({
+      surfaceId: str, sources: o({ seam: str, first: str, second: str, guide: str, donor: str }, ['seam', 'first', 'second', 'guide', 'donor']),
+      boundaryMaximumGapMM: num, guideMaximumGapMM: num, seamNormalAngleBoundDegrees: num, sampleCount: num,
+      topology: o({ kind: { type: 'string', const: 'sheet' }, closed: { type: 'boolean', const: false },
+        faceCount: num, edgeCount: num, openEdges: num }, ['kind', 'closed', 'faceCount', 'edgeCount', 'openEdges']),
+      revision: str,
+    }, ['surfaceId', 'sources', 'boundaryMaximumGapMM', 'guideMaximumGapMM', 'seamNormalAngleBoundDegrees', 'sampleCount', 'topology', 'revision']) }),
   select: o({ ok: bool, selected: obj }, ['ok']),
   checkpoint: o({ ok: bool, checkpoint: str, model_hash: str, checkpoints: arr }, ['ok', 'checkpoint']),
   // (CG6, DA-8: a version and a branch change the version log, not the document, as a checkpoint keeps a snapshot.)

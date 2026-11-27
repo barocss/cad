@@ -3,6 +3,7 @@ import type { BodyResult } from '../../engine/evaluate';
 import type { StudioDoc } from '../../engine/doc';
 import { requirementEvidenceRevision } from '../../util/digest';
 import { directReviewKind, directReviewRevision } from '../directProposalReview';
+import { isDirectGuidedFillOperation } from '../directGuidedFillProposal';
 import { proposalIsStale } from '../proposals';
 import { fail, type ChatState, type Evaluate, type PartRun, type ToolOutcome } from '../toolKit';
 import { previewProposalWith } from './proposals';
@@ -12,7 +13,7 @@ export type DirectCandidatePin = { proposal: string; proposalRevision: string; b
 
 /** Replays a supported review candidate without advancing the working document. */
 export async function pinnedDirectCandidate(state: ChatState, args: Record<string, unknown>, baseDirectRevision: string,
-  evaluate: Evaluate, dispatch: PartRun, action: 'RENDER' | 'INSPECT' | 'CHECK'): Promise<
+  evaluate: Evaluate, dispatch: PartRun, action: 'RENDER' | 'INSPECT' | 'CHECK' | 'GUIDED_FILL_INSPECT'): Promise<
   { refusal: ToolOutcome } | { kind: 'sheet' | 'solid'; preview: { doc: StudioDoc; bodies: BodyResult[] }; candidate: DirectCandidatePin; pending: Proposal }
 > {
   const { proposal, expectedProposalRevision } = args;
@@ -22,9 +23,14 @@ export async function pinnedDirectCandidate(state: ChatState, args: Record<strin
   const matches = (state.doc.proposals ?? []).filter(p => p.id === proposal);
   const pending = matches.length === 1 ? matches[0] : undefined;
   const kind = pending && directReviewKind(pending), pin = pending && directReviewRevision(pending);
-  if (!pending || !kind || !pin || (action !== 'RENDER' && kind !== 'solid'))
+  const guided = action === 'GUIDED_FILL_INSPECT';
+  const supported = guided ? kind === 'sheet' && pending?.ops.length === 1 && isDirectGuidedFillOperation(pending.ops[0])
+    : action === 'RENDER' || kind === 'solid';
+  if (!pending || !kind || !pin || !supported) {
+    if (guided) return refused('PROPOSAL_UNAVAILABLE', 'Choose one open Guided Fill proposal from proposals.list.');
     return refused('PROPOSAL_UNAVAILABLE', action !== 'RENDER' ? 'Choose a unique open Exact Thicken proposal from proposals.list.'
       : 'Choose a unique open Direct sheet or Exact Thicken proposal from proposals.list.');
+  }
   if (kind === 'sheet' && state.bodies.length)
     return refused('SCOPE', 'Use sheet and curve review on a base document with only Direct geometry to display.');
   if (pin !== expectedProposalRevision || proposalIsStale(pending, requirementEvidenceRevision(state.doc)))

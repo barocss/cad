@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { checkBrep, compileCadModel, evaluateCurve, evaluateSurface, surfaceD1Evaluator, type Curve, type Point, type Surface } from '@barocss/cad';
-import { buildGuidedJunction } from '../src/engine/guidedJunction';
+import { buildGuidedJunction, measureGuidedJunction } from '../src/engine/guidedJunction';
 
 const curve = (id: string, controlPoints: Point[]): Curve => ({ kind: 'curve', id, degree: controlPoints.length - 1,
   knots: [...controlPoints.map(() => 0), ...controlPoints.map(() => 1)], controlPoints, weights: controlPoints.map(() => 1) });
@@ -122,4 +122,41 @@ test('Guided Junction: native clamped domains and all donor parameter directions
     f.donor.controlPoints = net;
     assert.deepEqual(buildGuidedJunction(f).surface, baseline);
   }
+});
+
+
+test('Guided Junction evidence: exact stored native results and open topology match ordinary construction', () => {
+  const f = fixture(), before = structuredClone(f), built = buildGuidedJunction(f), measured = measureGuidedJunction(f);
+  assert.deepEqual({ surface: measured.surface, source: measured.source, brep: measured.brep }, built);
+  assert.deepEqual(f, before);
+  assert.deepEqual(measured.evidence, { boundaryMaximumGapMM: 0, guideMaximumGapMM: 0, seamNormalAngleBoundDegrees: 0,
+    sampleCount: 33, topology: { kind: 'sheet', closed: false, faceCount: 1, edgeCount: 3, openEdges: 3 } });
+  assert.deepEqual(Object.keys(built).sort(), ['brep', 'source', 'surface'], 'preview API has no measurement payload');
+  f.seam = reversed(f.seam); f.guide = reversed(f.guide); [f.left, f.right] = [reversed(f.right), reversed(f.left)];
+  assert.deepEqual(measureGuidedJunction(f).evidence, measured.evidence, 'measurement follows admitted directions');
+});
+
+test('Guided Junction evidence: position observations use actual source curves, including accepted rounding residuals', () => {
+  const f = fixture(); f.seam.controlPoints[1][2] = 5e-14; f.guide.controlPoints[1][2] = 5e-14;
+  const { surface, evidence } = measureGuidedJunction(f);
+  let boundaryGap = 0, guideGap = 0;
+  for (let i = 0; i < evidence.sampleCount; i++) {
+    const t = i / (evidence.sampleCount - 1);
+    boundaryGap = Math.max(boundaryGap, distance(evaluateSurface(surface, t, 0), evaluateCurve(f.seam, t)),
+      distance(evaluateSurface(surface, 0, t), evaluateCurve(f.left, t)), distance(evaluateSurface(surface, 1 - t, t), evaluateCurve(f.right, t)));
+    guideGap = Math.max(guideGap, distance(evaluateSurface(surface, .25, .75 * t), evaluateCurve(f.guide, t)));
+  }
+  assert.ok(evidence.boundaryMaximumGapMM > 0); assert.ok(evidence.guideMaximumGapMM > 0);
+  assert.equal(evidence.boundaryMaximumGapMM, boundaryGap); assert.equal(evidence.guideMaximumGapMM, guideGap);
+});
+
+test('Guided Junction evidence: whole donor normal field contributes to the coefficient angle bound', () => {
+  const f = fixture(), tilt = 1e-13;
+  f.donor.controlPoints[0][0][2] = tilt; f.donor.controlPoints[1][0][2] = tilt;
+  const { evidence } = measureGuidedJunction(f), expected = Math.atan(tilt / 24) * 180 / Math.PI;
+  assert.ok(evidence.seamNormalAngleBoundDegrees > 0);
+  assert.ok(Math.abs(evidence.seamNormalAngleBoundDegrees - expected) < expected * 1e-12,
+    'the reported bound is derived from the stored donor, not the admission threshold');
+  const changed = fixture(); changed.guide.controlPoints[1][0] += .01;
+  assert.throws(() => measureGuidedJunction(changed), /guide/, 'measurement retains construction admission');
 });

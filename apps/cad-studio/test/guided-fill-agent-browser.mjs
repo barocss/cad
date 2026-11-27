@@ -12,6 +12,7 @@ const pins = [
   'packages/barocss-cad-model/src/chat/directProposalReview.ts', 'packages/barocss-cad-model/src/chat/part/features.ts',
   'packages/barocss-cad-model/src/chat/part/directCandidate.ts', 'packages/barocss-cad-model/src/chat/part/views.ts',
   'packages/barocss-cad-model/src/chat/part/proposals.ts', 'packages/barocss-cad-model/src/chat/toolDefinitions.ts',
+  'packages/barocss-cad-model/src/chat/part/guidedFillInspection.ts', 'packages/barocss-cad-model/src/chat/contract.ts',
   'packages/barocss-cad-model/src/engine/direct.ts', 'packages/barocss-cad-model/src/engine/guidedJunction.ts',
 ];
 const f = await createFlow({
@@ -40,6 +41,8 @@ const button = (name, scope = f.page) => scope.getByRole('button', { name, exact
 const waitForSheets = count => f.page.waitForFunction(count => (window.__studioProposalOverlay?.()?.directSheets ?? 0) === count, count);
 const shapeRow = name => f.page.locator('.ol.direct').getByText(name, { exact: true });
 const render = (request, args) => request('tools/call', { name: 'query', arguments: { action: 'render', ...args } });
+const selections = { seam: 'bodyEdge', first: 'sideEdge', second: 'handleEdge', guide: 'guide', donor: 'body' };
+const inspect = (call, args, error = false) => call('query', { action: 'inspect', guidedFill: selections, ...args }, error);
 
 async function image(request, args, label) {
   const result = await render(request, args);
@@ -77,15 +80,14 @@ await f.run(async () => {
   f.phase = 'Render the current and private candidate through native local MCP';
   const file = join(f.output, 'pending.bcad');
   await writeFile(file, JSON.stringify(input));
-  const { base, candidate, args } = await mcp(file, 'proposal', async (call, request) => {
+  const { base, candidate, args, nativeEvidence } = await mcp(file, 'proposal', async (call, request) => {
     const baseline = await readFile(file);
     const help = await call('describe', { command: 'direct-guided-fill' });
     assert.match(help.hint, /user reviews and approves/);
     const { direct_revision: revision, direct_curves, direct_surfaces } = await call('query', { action: 'summary' });
     for (const id of ['bodyEdge','sideEdge','handleEdge','guide']) assert.ok(direct_curves.some(curve => curve.id === id));
     assert.ok(direct_surfaces.some(surface => surface.id === 'body'));
-    const command = { action: 'command', command: help.command, expectedRevision: revision,
-      values: { seam:'bodyEdge', first:'sideEdge', second:'handleEdge', guide:'guide', donor:'body' } };
+    const command = { action: 'command', command: help.command, expectedRevision: revision, values: selections };
     const op = args => ({ tool: 'features', args });
     const propose = args => ({ action: 'propose', title: 'Guided Fill for the body junction', ops: [op(args)] });
     assert.match((await call('features', command, true)).error, /user approval/i);
@@ -109,8 +111,15 @@ await f.run(async () => {
     assert.deepEqual([candidate.directObjects.at(-1).name, candidate.directObjects.at(-1).kind], ['Guided Fill','surface']);
     assert.notEqual(candidate.revision, base.revision);
     assert.notEqual(candidate.imageSha256, base.imageSha256);
+    const native = await inspect(call, args);
+    assert.deepEqual(native.candidate, { ...candidate.candidate, directRevision: candidate.revision });
+    assert.deepEqual(native.guidedFill, { surfaceId: candidate.directObjects.at(-1).id, sources: selections,
+      boundaryMaximumGapMM: 0, guideMaximumGapMM: 0, seamNormalAngleBoundDegrees: 0, sampleCount: 33,
+      topology: { kind: 'sheet', closed: false, faceCount: 1, edgeCount: 3, openEdges: 3 }, revision: candidate.revision });
+    assert.equal((await inspect(call, { ...args, guidedFill: { ...selections, guide: 'disconnected' } }, true)).code,
+      'DIRECT_GUIDED_FILL_INSPECT_SOURCE');
     assert.deepEqual(await readFile(file), pending);
-    return { base, candidate, args };
+    return { base, candidate, args, nativeEvidence: native.guidedFill };
   });
   const original = await readFile(file), pending = JSON.parse(original);
   assert.deepEqual(pending.direct, input.direct);
@@ -140,6 +149,9 @@ await f.run(async () => {
     assert.equal(stale, true);
     await refuse(request, args, 'DIRECT_RENDER_STALE');
     await refuse(request, { ...args, expectedDirectRevision: revision }, 'DIRECT_RENDER_PROPOSAL_STALE');
+    assert.equal((await inspect(call, args, true)).code, 'DIRECT_GUIDED_FILL_INSPECT_STALE');
+    assert.equal((await inspect(call, { ...args, expectedDirectRevision: revision }, true)).code,
+      'DIRECT_GUIDED_FILL_INSPECT_PROPOSAL_STALE');
     assert.deepEqual(await readFile(edited.file), byteBaseline);
   });
 
@@ -173,9 +185,30 @@ await f.run(async () => {
     const result = await image(request, { expectedDirectRevision: revision }, '08-mcp-accepted');
     assert.equal(result.candidate, undefined);
     assert.deepEqual([result.revision, result.imageSha256, result.directObjects], [candidate.revision, candidate.imageSha256, candidate.directObjects]);
+    const savedEvidence = await inspect(call, { expectedDirectRevision: revision, guidedFill: { ...selections, surface: nativeEvidence.surfaceId } });
+    assert.equal(savedEvidence.candidate, undefined);
+    assert.deepEqual(savedEvidence.guidedFill, nativeEvidence);
+    assert.equal((await inspect(call, { expectedDirectRevision: revision, guidedFill: { ...selections, surface: 'body' } }, true)).code,
+      'DIRECT_GUIDED_FILL_INSPECT_GEOMETRY');
     await refuse(request, { ...args, expectedDirectRevision: revision }, 'DIRECT_RENDER_PROPOSAL_UNAVAILABLE');
     return result;
   });
+  f.phase = 'Refuse an edited support even with its current revision';
+  const changedFile = join(f.output, 'edited-guided-surface.bcad');
+  const changedSurface = structuredClone(accepted.doc);
+  const { source } = changedSurface.direct.objects.find(object => object.id === nativeEvidence.surfaceId);
+  const originalText = changedSurface.direct.sources[source];
+  changedSurface.direct.sources[source] = originalText.replace('-84', '-83');
+  assert.notEqual(changedSurface.direct.sources[source], originalText);
+  await writeFile(changedFile, JSON.stringify(changedSurface));
+  await mcp(changedFile, 'different-support', async call => {
+    const originalBytes = await readFile(changedFile);
+    const { direct_revision: revision } = await call('query', { action: 'summary' });
+    const failure = await inspect(call, { expectedDirectRevision: revision, guidedFill: { ...selections, surface: nativeEvidence.surfaceId } }, true);
+    assert.equal(failure.code, 'DIRECT_GUIDED_FILL_INSPECT_GEOMETRY');
+    assert.match(failure.error, /stored Guided Fill no longer matches/);
+    assert.deepEqual(await readFile(changedFile), originalBytes);
+  });
   assert.deepEqual(await readFile(file), original);
-  f.report.observations.push({ base, candidate, reopened, staleRepliesWithImages: 0 });
+  f.report.observations.push({ base, candidate, reopened, nativeEvidence, staleRepliesWithImages: 0 });
 });

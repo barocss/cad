@@ -1,9 +1,18 @@
-import { buildBrep, CadNumericPolicy, checkBrep, editSurfaceControlNet, lineCurve, validateCurve, validateSurface, type Brep, type Curve, type Point, type Surface } from '@barocss/cad';
+import { buildBrep, CadNumericPolicy, checkBrep, curveEvaluator, editSurfaceControlNet, lineCurve, surfaceEvaluator, validateCurve, validateSurface, type Brep, type Curve, type Point, type Surface } from '@barocss/cad';
 import { isRefusal, refusal } from './refusal';
 import { add, cross, dot, len, scale, sub, unit } from './vec3';
 
-interface JunctionInput { seam: Curve; left: Curve; right: Curve; guide: Curve; donor: Surface; surfaceId: string }
-interface Chart { origin: Point; x: Point; y: Point; normal: Point; height: number; shape: number; seam: Curve; left: Curve; right: Curve }
+export interface JunctionInput { seam: Curve; left: Curve; right: Curve; guide: Curve; donor: Surface; surfaceId: string }
+interface Chart {
+  origin: Point; x: Point; y: Point; normal: Point; height: number; shape: number;
+  seam: Curve; left: Curve; right: Curve; guide: Curve; guideU: number; guideEndV: number; donorNormalAngleBound: number;
+}
+export interface GuidedJunctionEvidence {
+  boundaryMaximumGapMM: number; guideMaximumGapMM: number; seamNormalAngleBoundDegrees: number;
+  /** Equally spaced stations per boundary and guide, including both ends. Position gaps are sampled. */
+  sampleCount: number;
+  topology: { kind: 'sheet'; closed: false; faceCount: number; edgeCount: number; openEdges: number };
+}
 const TOL = CadNumericPolicy.linearTolerance;
 const samePoint = (a: Point, b: Point) => a.every((value, i) => value === b[i]);
 const fail = (message: string): never => { throw refusal('DIRECT_VALUE', `Guided Junction: ${message}`); };
@@ -29,7 +38,7 @@ function floatBudget(points: readonly Point[]): number {
 }
 const near = (a: Point, b: Point, budget: number) => len(sub(a, b)) <= budget;
 
-function donorInward(donor: Surface, start: Point, end: Point, budget: number, seamNormal: Point): [Point, Point] {
+function donorInward(donor: Surface, start: Point, end: Point, budget: number, seamNormal: Point): { inward: [Point, Point]; normalAngleBound: number } {
   try { validateSurface(donor); } catch { return fail('choose a valid native planar donor.'); }
   requireValue(donor.degreeU === 1 && donor.degreeV === 1 && donor.controlPoints.length === 2
     && donor.controlPoints.every(row => row.length === 2) && donor.weights.every(row => row.every(value => value === 1))
@@ -40,14 +49,16 @@ function donorInward(donor: Surface, start: Point, end: Point, budget: number, s
   const [[a, d], [b, c]] = donor.controlPoints;
   const normal = unit(cross(sub(b, a), sub(d, a)));
   requireValue(Math.abs(dot(normal, sub(c, a))) <= budget, 'the donor must be planar.');
+  let minimumProjection = Infinity, maximumResidual = 0;
   for (const [u, v] of [[0, 0], [0, 1], [1, 0], [1, 1]]) {
     const du = sub(v === 0 ? b : c, v === 0 ? a : d), dv = sub(u === 0 ? d : c, u === 0 ? a : b);
     const area = cross(du, dv), signed = dot(normal, area);
     requireValue(signed > TOL * Math.max(len(du), len(dv)), 'the donor must be regular, without a fold or overlap.');
     requireValue(len(sub(area, scale(normal, signed))) <= signed * CadNumericPolicy.relativeComparison / 8,
       'the stored donor cannot retain one tangent plane.');
-    const seamSigned = dot(seamNormal, area);
-    requireValue(len(sub(area, scale(seamNormal, seamSigned))) <= Math.abs(seamSigned) * CadNumericPolicy.relativeComparison / 8,
+    const seamSigned = dot(seamNormal, area), residual = len(sub(area, scale(seamNormal, seamSigned)));
+    minimumProjection = Math.min(minimumProjection, Math.abs(seamSigned)); maximumResidual = Math.max(maximumResidual, residual);
+    requireValue(residual <= Math.abs(seamSigned) * CadNumericPolicy.relativeComparison / 8,
       'the full donor normal field must match the seam tangent plane.');
   }
   const matches: [Point, Point][] = [];
@@ -56,7 +67,9 @@ function donorInward(donor: Surface, start: Point, end: Point, budget: number, s
     if (samePoint(start, q) && samePoint(end, p)) matches.push([sub(insideQ, q), sub(insideP, p)]);
   }
   requireValue(matches.length === 1, 'the seam must match one entire unambiguous donor edge.');
-  return matches[0];
+  // A bilinear donor's normal field is affine. Its corner hull bounds every
+  // stored normal, including between the seam stations used for position gaps.
+  return { inward: matches[0], normalAngleBound: Math.atan(maximumResidual / minimumProjection) };
 }
 
 /** Affine projected coordinates; nonzero determinant also rejects a collapsed triangle. */
@@ -87,11 +100,11 @@ function chartFor(seam: Curve, sides: readonly Curve[], guide: Curve, donor: Sur
   'the shoulder controls must have the same quadratic rise and planar seam tangents.');
   requireValue(seam.controlPoints.every((point, i) => near(point, world(basis, i / seam.degree, 0, 0), budget)),
     'the seam must be a straight polynomial segment.');
-  const inward = donorInward(donor, a, b, budget, normal), across = unit(cross(normal, x));
-  requireValue(inward.every(direction => Math.abs(dot(normal, direction)) <= budget && dot(across, direction) < -TOL),
+  const donorField = donorInward(donor, a, b, budget, normal), across = unit(cross(normal, x));
+  requireValue(donorField.inward.every(direction => Math.abs(dot(normal, direction)) <= budget && dot(across, direction) < -TOL),
     'the donor must share the seam tangent plane and stay on the opposite side; overlap is refused.');
   const uv = coordinates(a, x, y, normal);
-  const candidates: number[] = [];
+  const candidates: { shape: number; curve: Curve; u: number; endV: number }[] = [];
   for (const curve of [guide, reverse(guide)]) {
     const first = uv(curve.controlPoints[0]), u = first[0], endV = 1 - u;
     if (!(u > 0 && endV > 0 && u * len(x) > TOL && endV * len(x) > TOL && endV * len(y) > TOL)) continue;
@@ -99,14 +112,16 @@ function chartFor(seam: Curve, sides: readonly Curve[], guide: Curve, donor: Sur
     const shape = (3 * z2 - height * endV ** 2) / denominator;
     if (!Number.isFinite(shape)) continue;
     const heights = [0, 0, (height * endV ** 2 + shape * denominator) / 3, height * endV ** 2];
-    if (curve.controlPoints.every((point, i) => near(point, world(basis, u, endV * i / 3, heights[i]), budget))) candidates.push(shape);
+    if (curve.controlPoints.every((point, i) => near(point, world(basis, u, endV * i / 3, heights[i]), budget))) candidates.push({ shape, curve, u, endV });
   }
   requireValue(candidates.length === 1, 'one connected, unambiguous cubic guide must run from inside the seam to the opposite shoulder, with constant projected U.');
-  return { ...basis, height, shape: candidates[0], seam, left, right };
+  const accepted = candidates[0];
+  return { ...basis, height, shape: accepted.shape, seam, left, right, guide: accepted.curve,
+    guideU: accepted.u, guideEndV: accepted.endV, donorNormalAngleBound: donorField.normalAngleBound };
 }
 
 /** Bound the stored projected derivative coefficients, rather than infer regularity from a mesh. */
-function certifyStoredSurface(surface: Surface, chart: Chart, budget: number): void {
+function certifyStoredSurface(surface: Surface, chart: Chart, budget: number): number {
   const uv = coordinates(chart.origin, chart.x, chart.y, chart.normal), net = surface.controlPoints;
   const projected = net.map(row => row.map(uv));
   // Projected map = identity + E. Each row sum of DE is < 1/8 on the entire
@@ -122,14 +137,17 @@ function certifyStoredSurface(surface: Surface, chart: Chart, budget: number): v
   const along = net.slice(0, -1).map((row, i) => scale(sub(net[i + 1][0], row[0]), 2));
   const across = net.map(row => scale(sub(row[1], row[0]), 3));
   const choose2 = [1, 2, 1], choose3 = [1, 3, 3, 1];
+  let minimumProjection = Infinity, maximumResidual = 0;
   for (let k = 0; k < 4; k++) {
     let area: Point = [0, 0, 0];
     for (let i = 0; i < 2; i++) { const j = k - i; if (j >= 0 && j <= 2) area = add(area, scale(cross(along[i], across[j]), choose2[j] / choose3[k])); }
-    const signed = dot(area, chart.normal);
+    const signed = dot(area, chart.normal), residual = len(sub(area, scale(chart.normal, signed)));
+    minimumProjection = Math.min(minimumProjection, signed); maximumResidual = Math.max(maximumResidual, residual);
     requireValue(signed > TOL * Math.max(...along.map(len), ...across.map(len))
-      && len(sub(area, scale(chart.normal, signed))) <= signed * CadNumericPolicy.relativeComparison / 8,
+      && residual <= signed * CadNumericPolicy.relativeComparison / 8,
     'the complete stored seam cannot retain regular G1 contact.');
   }
+  return Math.atan(maximumResidual / minimumProjection);
 }
 
 /** One bounded triangular open patch, with a real interior guide and one planar G1 seam.
@@ -137,7 +155,7 @@ function certifyStoredSurface(surface: Surface, chart: Chart, budget: number): v
  * The rectangular support stays regular; the kept triangle is u>=0,v>=0,u+v<=1.
  * Returned native topology is an independent sheet, not persistent sewing to the donor.
  */
-export function buildGuidedJunction(input: JunctionInput): { surface: Surface; source: string; brep: Brep } {
+function constructGuidedJunction(input: JunctionInput) {
   try { validateSurface(input.donor); } catch { return fail('choose a valid native planar donor.'); }
   const seam = polynomial(input.seam, [1, 2, 3], 'The seam'), left = polynomial(input.left, [2], 'Each shoulder'), right = polynomial(input.right, [2], 'Each shoulder'), guide = polynomial(input.guide, [3], 'The guide');
   const budget = floatBudget([...seam.controlPoints, ...left.controlPoints, ...right.controlPoints, ...guide.controlPoints, ...input.donor.controlPoints.flat()]);
@@ -158,7 +176,7 @@ export function buildGuidedJunction(input: JunctionInput): { surface: Surface; s
   let made: ReturnType<typeof editSurfaceControlNet>;
   try { made = editSurfaceControlNet(candidate, { poleEdits: [{ uIndex: 0, vIndex: 0, xMM: candidate.controlPoints[0][0][0] }] }); }
   catch { return fail('the accepted support cannot be stored within the native coordinate range without coefficient loss.'); }
-  certifyStoredSurface(made.surface, chart, budget);
+  const patchNormalAngleBound = certifyStoredSurface(made.surface, chart, budget);
   const brep = buildBrep({ source: { family: 'guided-junction', id: input.surfaceId }, tolerance: TOL,
     vertices: [{ id: 'a', point: chart.seam.controlPoints[0] }, { id: 'b', point: chart.seam.controlPoints.at(-1)! }, { id: 'c', point: chart.left.controlPoints[2] }],
     edges: [{ id: 'seam', curve: chart.seam, vertices: ['a', 'b'] }, { id: 'right', curve: chart.right, vertices: ['b', 'c'] }, { id: 'left', curve: chart.left, vertices: ['a', 'c'] }],
@@ -169,5 +187,33 @@ export function buildGuidedJunction(input: JunctionInput): { surface: Surface; s
     ] }] }] }] }] });
   const report = checkBrep(brep, { strict: true, pcurveSamples: 33 });
   requireValue(report.valid, 'the native open patch does not retain its original boundary curves and trim charts.');
-  return { surface: made.surface, source: made.source, brep };
+  return { surface: made.surface, source: made.source, brep, chart,
+    seamNormalAngleBoundDegrees: (patchNormalAngleBound + chart.donorNormalAngleBound) * 180 / Math.PI };
+}
+
+export function buildGuidedJunction(input: JunctionInput): { surface: Surface; source: string; brep: Brep } {
+  const { surface, source, brep } = constructGuidedJunction(input);
+  return { surface, source, brep };
+}
+
+/** Read native evidence without adding sampling work to ordinary previews.
+ * Position gaps use actual stored evaluators and the accepted original curve controls.
+ * The G1 bound uses the complete stored seam Bernstein normal hull and whole donor
+ * normal hull, not sampled normal angles. It bounds unoriented tangent-plane angles.
+ * Callers must bind this reconstruction to their actual result support and trim.
+ */
+export function measureGuidedJunction(input: JunctionInput): { surface: Surface; source: string; brep: Brep; evidence: GuidedJunctionEvidence } {
+  const { surface, source, brep, chart, seamNormalAngleBoundDegrees } = constructGuidedJunction(input);
+  const at = surfaceEvaluator(surface), seamAt = curveEvaluator(chart.seam), leftAt = curveEvaluator(chart.left),
+    rightAt = curveEvaluator(chart.right), guideAt = curveEvaluator(chart.guide), sampleCount = 33;
+  let boundaryMaximumGapMM = 0, guideMaximumGapMM = 0;
+  for (let i = 0; i < sampleCount; i++) {
+    const t = i / (sampleCount - 1);
+    boundaryMaximumGapMM = Math.max(boundaryMaximumGapMM, len(sub(at(t, 0), seamAt(t))),
+      len(sub(at(0, t), leftAt(t))), len(sub(at(1 - t, t), rightAt(t))));
+    guideMaximumGapMM = Math.max(guideMaximumGapMM, len(sub(at(chart.guideU, chart.guideEndV * t), guideAt(t))));
+  }
+  return { surface, source, brep, evidence: { boundaryMaximumGapMM, guideMaximumGapMM, seamNormalAngleBoundDegrees, sampleCount,
+    topology: { kind: 'sheet', closed: false, faceCount: brep.faces.length, edgeCount: brep.edges.length,
+      openEdges: new Set(brep.coedges.filter(use => use.twin === null).map(use => use.edge)).size } } };
 }

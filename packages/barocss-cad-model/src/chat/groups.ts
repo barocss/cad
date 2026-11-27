@@ -41,7 +41,7 @@ export const GROUPS: Record<string, Group> = {
     about: 'Reads the part without changing it.',
     actions: {
       summary: ['get_part_summary', 'body?, page? — features and persistent geometry names'],
-      inspect: ['inspect', 'faces?, edges?, curve?, surface? — native detail and review pins'],
+      inspect: ['inspect', 'faces?, edges?, curve?, surface?, guidedFill? — native detail and review pins'],
       measure: ['measure', 'a, b? — a face or edge, or the distance and angle between two'],
       mass: ['mass_properties', 'bodies?'],
       interference: ['interference', 'bodies? — overlap and clearance'],
@@ -209,7 +209,7 @@ export function v2Result(text: string, handler?: string): string {
   // These records carry literal IDs, names and refusal codes.
   if (handler === 'list_feature_edit_fields' && isRecord(parsed) && Array.isArray(parsed.fields)) return text;
   if (handler === 'get_drawing_dimensions' || handler === 'calculate_drawing_tolerance_stack'
-    || (handler === 'inspect' && isRecord(parsed) && ('curveJoin' in parsed || 'surfacePoint' in parsed
+    || (handler === 'inspect' && isRecord(parsed) && ('curveJoin' in parsed || 'surfacePoint' in parsed || 'guidedFill' in parsed
       || (parsed.unit === 'mm' && typeof parsed.revision === 'string' && Array.isArray(parsed.faces))))
     || (handler === 'check_spec' && isRecord(parsed) && ('candidate' in parsed || String(parsed.code).startsWith('DIRECT_CHECK_')))
     || (handler === 'render_views' && isRecord(parsed) && typeof parsed.imageSha256 === 'string')

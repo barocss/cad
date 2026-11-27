@@ -353,7 +353,7 @@ Ref = {"node": index of the feature that made a visible body, "side": "solid"} (
   },
   {
     name: 'inspect',
-    description: 'Face and edge details, or exact native planes and cylinders by face name. For a pending Exact Thicken, pass faces with proposal, expectedProposalRevision and expectedDirectRevision from query.render. For a pending model image, pass faces with proposal, expectedRevision for the unchanged base, expectedProposalRevision from proposals.list and expectedReviewRevision from candidate.reviewRevision in query.render. For current native faces, pass faces and expectedRevision from query.rebuild or query.render. For a Direct join pass curve, parameter and expectedDirectRevision. For an untrimmed Direct surface point pass surface, u, v and expectedDirectRevision.',
+    description: 'Face and edge details, or exact native planes and cylinders by face name. For a pending Exact Thicken, pass faces with proposal, expectedProposalRevision and expectedDirectRevision from query.render. For a pending model image, pass faces with proposal, expectedRevision for the unchanged base, expectedProposalRevision from proposals.list and expectedReviewRevision from candidate.reviewRevision in query.render. For current native faces, pass faces and expectedRevision from query.rebuild or query.render. For a Direct join pass curve, parameter and expectedDirectRevision. For an untrimmed Direct surface point pass surface, u, v and expectedDirectRevision. For native Guided Fill evidence, pass guidedFill and expectedDirectRevision. A pending Guided Fill also takes its proposal and expectedProposalRevision. A saved result takes its exact surface ID in guidedFill.',
     input_schema: { type: 'object', properties: {
       faces: selectorList('Faces'), edges: selectorList('Edges'),
       curve: { type: 'string', description: 'A visible Direct curve ID from query.summary.' },
@@ -361,6 +361,10 @@ Ref = {"node": index of the feature that made a visible body, "side": "solid"} (
       surface: { type: 'string', description: 'A visible untrimmed Direct surface ID from query.summary.' },
       u: { type: 'number', description: 'The native u parameter of the surface point.' },
       v: { type: 'number', description: 'The native v parameter of the surface point.' },
+      guidedFill: { type: 'object', properties: {
+        seam: { type: 'string' }, first: { type: 'string' }, second: { type: 'string' }, guide: { type: 'string' }, donor: { type: 'string' },
+        surface: { type: 'string', description: 'Exact current output ID from query.render. Omit for a pending proposal.' },
+      }, required: ['seam', 'first', 'second', 'guide', 'donor'], additionalProperties: false },
       expectedDirectRevision: { type: 'string', pattern: '^[a-f0-9]{64}$', description: 'The direct_revision from query.summary.' },
       expectedRevision: { type: 'string', pattern: '^[a-f0-9]{16}$', description: 'The current part revision, or the base revision for pending model inspection.' },
       proposal: { type: 'string', description: 'The open proposal ID from the pinned candidate image.' },

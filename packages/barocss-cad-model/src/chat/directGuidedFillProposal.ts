@@ -17,21 +17,27 @@ export const DIRECT_GUIDED_FILL_COMMAND = {
 
 export const isDirectGuidedFillOperation = (op: Op) => op.tool === 'run_command' && op.args?.command === DIRECT_GUIDED_FILL_COMMAND.command;
 
+export function guidedFillSources(values: unknown) {
+  if (!isObj(values) || Object.keys(values).length !== 5) return;
+  const { seam, first, second, guide, donor } = values;
+  if (typeof seam !== 'string' || !seam || typeof first !== 'string' || !first || typeof second !== 'string' || !second
+    || typeof guide !== 'string' || !guide || typeof donor !== 'string' || !donor || new Set([seam, first, second, guide, donor]).size !== 5)
+    return;
+  return { seam, first, second, guide, donor };
+}
+
 export async function proposeDirectGuidedFillCommand(state: ChatState, args: Record<string, unknown>, evaluate: Evaluate, options: CallOptions) {
   if (!options.proposal || state.partOf)
     return fail(state, 'Propose Guided Fill in the base part for user approval in Studio.', { code: 'needs_approval' });
 
-  const { expectedRevision, values } = args;
+  const { expectedRevision } = args, picks = guidedFillSources(args.values);
   const invalid = () => fail(state, 'Use five distinct Direct IDs as values.seam, first, second, guide and donor, with direct_revision from query.summary as expectedRevision.', { code: 'DIRECT_GUIDED_FILL_INPUT' });
   if (typeof expectedRevision !== 'string' || !/^[a-f0-9]{64}$/.test(expectedRevision)
-    || !isObj(values) || Object.keys(values).length !== 5
+    || !picks
     || args.faces !== undefined || args.edges !== undefined || args.bodies !== undefined || args.point !== undefined)
     return invalid();
 
-  const { seam, first, second, guide, donor } = values;
-  if (typeof seam !== 'string' || !seam || typeof first !== 'string' || !first || typeof second !== 'string' || !second
-    || typeof guide !== 'string' || !guide || typeof donor !== 'string' || !donor || new Set([seam, first, second, guide, donor]).size !== 5)
-    return invalid();
+  const { seam, first, second, guide, donor } = picks;
   const revision = directInspectionRevision(state.doc);
   if (expectedRevision !== revision)
     return fail(state, 'The Direct inputs changed. Read query.summary again and make a new proposal.', { code: 'DIRECT_GUIDED_FILL_STALE', revision });

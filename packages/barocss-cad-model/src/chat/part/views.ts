@@ -11,6 +11,7 @@ import { directInspectionRevision } from '../sweepSource';
 import { isDirectPin, pinnedDirectCandidate, type DirectCandidatePin } from './directCandidate';
 import { reviewModelCandidate } from './modelCandidate';
 import { nativeFaceReview } from './nativeFaceReview';
+import { inspectGuidedFill } from './guidedFillInspection';
 import { evaluateCurve, surfaceDomain } from '@barocss/cad';
 
 async function renderDirectReview(state: ChatState, args: Record<string, unknown>, evaluate: Evaluate, dispatch: PartRun): Promise<ToolOutcome> {
@@ -196,6 +197,7 @@ async function inspectNativeFaces(state: ChatState, args: Record<string, unknown
 }
 
 const inspectTool: PartHandler = async (state, args, evaluate, _options, dispatch) => {
+  if (args.guidedFill !== undefined) return inspectGuidedFill(state, args, evaluate, _options, dispatch);
   if (args.orientation === 'opposite' && (args.expectedReviewRevision === undefined || args.expectedDirectRevision !== undefined))
     return fail(state, 'Use opposite orientation with the pinned pending solid image.', { code: 'MODEL_REVIEW_INPUT' });
   if (args.expectedRevision !== undefined || args.proposal !== undefined || args.expectedProposalRevision !== undefined || args.expectedReviewRevision !== undefined)

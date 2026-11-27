@@ -10,7 +10,7 @@ import { nextFreeId } from '../util/ids';
 import { refusal } from './refusal';
 import { measureCurveCurvature } from './edgeCurvature';
 import { buildPlanarTangentFill } from './planarTangentFill';
-import { buildGuidedJunction } from './guidedJunction';
+import { buildGuidedJunction, measureGuidedJunction } from './guidedJunction';
 
 export interface DirectObject {
   id: string; name: string; source: string; geometry: string; hidden?: boolean;
@@ -193,6 +193,33 @@ function fillDonor(d: DirectGeometry, ids: readonly string[], donorId: string, o
       throw refusal('DIRECT_PICK', 'Select visible original curves and one visible adjacent surface.');
   }
   return wholeSurfaceOf(d, donorId, operation);
+}
+
+interface GuidedFillSources { seam: string; first: string; second: string; guide: string; donor: string }
+const guidedFillTrim = (): TrimLoop[] => [{ keep: 'inside', uv: [[0, 0], [1, 0], [0, 1]] }];
+
+function guidedFillInput(d: DirectGeometry, picks: GuidedFillSources, surfaceId: string) {
+  const { seam, first, second, guide, donor } = picks, ids = [seam, first, second, guide];
+  if (new Set([...ids, donor]).size !== 5)
+    throw refusal('DIRECT_PICK', 'Select three different boundary curves, one interior guide and one adjacent surface.');
+  const adjacent = fillDonor(d, ids, donor, 'Guided Fill');
+  return { seam: curveOf(d, seam), left: curveOf(d, first), right: curveOf(d, second), guide: curveOf(d, guide), donor: adjacent, surfaceId };
+}
+
+/** Read evidence only if these exact current inputs reproduce the stored support and UV trim. */
+export function measureDirectGuidedFill(d: DirectGeometry, picks: GuidedFillSources, id: string) {
+  const matches = d.objects.filter(item => item.id === id);
+  const result = matches.length === 1 && !matches[0].hidden ? matches[0] : null;
+  if (!result || Object.values(picks).includes(id))
+    throw refusal('DIRECT_PICK', 'Use the exact visible Guided Fill result ID from the rendered Direct objects.');
+  const trim = result.trims;
+  if (!trim || trim.length !== 1 || trim[0].keep !== 'inside' || trim[0].uv.length !== 3
+    || !trim[0].uv.every(([u, v], i) => Object.is(u, i === 1 ? 1 : 0) && Object.is(v, i === 2 ? 1 : 0)))
+    throw refusal('DIRECT_VALUE', 'The stored Guided Fill must retain its original triangular trim.');
+  const measured = measureGuidedJunction(guidedFillInput(d, picks, result.geometry));
+  if (measured.source !== d.sources[result.source] || measured.surface.id !== result.geometry)
+    throw refusal('DIRECT_VALUE', 'The stored Guided Fill no longer matches these exact selected inputs.');
+  return measured.evidence;
 }
 
 /** Copy accepted trim metadata before the new direct object is published. */
@@ -534,12 +561,10 @@ export const directOps = {
     if (ids.length !== 4 || !ids.includes(seamId) || !ids.includes(guideId) || seamId === guideId
       || new Set([...ids, donorId]).size !== 5)
       throw refusal('DIRECT_PICK', 'Select three different boundary curves, one interior guide and one adjacent surface.');
-    const donor = fillDonor(d, ids, donorId, 'Guided Fill');
-    const [left, right] = ids.filter(id => id !== seamId && id !== guideId).map(id => curveOf(d, id));
-    const made = buildGuidedJunction({ seam: curveOf(d, seamId), guide: curveOf(d, guideId), left, right,
-      donor, surfaceId: fresh(usedIds(d), 'guided_fill') });
-    const trims: TrimLoop[] = [{ keep: 'inside', uv: [[0, 0], [1, 0], [0, 1]] }];
-    return add(d, [], made.source, [{ geometry: made.surface.id, name: 'Guided Fill', trims }]);
+    const [first, second] = ids.filter(id => id !== seamId && id !== guideId);
+    const picks = { seam: seamId, first, second, guide: guideId, donor: donorId };
+    const made = buildGuidedJunction(guidedFillInput(d, picks, fresh(usedIds(d), 'guided_fill')));
+    return add(d, [], made.source, [{ geometry: made.surface.id, name: 'Guided Fill', trims: guidedFillTrim() }]);
   },
   /**
    * The surface run on past one of its edges along its tangent there by `distance` mm (re-fitted as a bicubic B-spline).
