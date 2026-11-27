@@ -2082,7 +2082,17 @@ export function featureLabel(node: ModelNode, index: number, nodes: readonly Mod
     case 'union': return node.bossPattern ? 'Joined boss pattern' : 'Union';
     case 'intersect': return 'Intersect';
     case 'difference': return 'Subtract';
-    case 'rib': return 'Rib';
+    case 'rib': {
+      const faces = Object.entries(node.sigs ?? {});
+      if (faces.length !== 1) return 'Rib';
+      const [name, sig] = faces[0], sign = sig?.d?.[2];
+      const [x0, y0, z0] = node.min, [x1, y1, z1] = node.max;
+      if (sig?.k !== 'plane' || !Number.isFinite(sig.p?.[2]) || (sign !== 1 && sign !== -1)
+        || typeof x0 !== 'number' || typeof y0 !== 'number' || typeof z0 !== 'number'
+        || typeof x1 !== 'number' || typeof y1 !== 'number' || typeof z1 !== 'number') return 'Rib';
+      const height = sign === 1 ? z1 - sig.p[2] : sig.p[2] - z0;
+      return `Rib · ${sign === 1 ? 'Top' : 'Bottom'} ${name} · ${fmt(x1 - x0)} × ${fmt(y1 - y0)} × ${fmt(height)} mm`;
+    }
     case 'rectangular-relief': return node.mode === 'emboss' ? 'Rectangular emboss' : 'Rectangular engrave';
     case 'translate': return 'Move';
     case 'rotate': return `Rotate ${node.angle}°`;

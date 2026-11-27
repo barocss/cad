@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D2077: [Attach a straight Rib to the original top or bottom face](notes/attached-rib-2026-11-27/README.md), #755. Verify the selected cap and fixed protrusion through a stock thickness edit and native Studio Open.
 - D2076: [Set curvature comb density independently from scale](notes/curvature-comb-density-2026-11-27/README.md), #762. Verify 2, 4, and 8 spokes per span while keeping native measurements and clipped tip lines.
 - D2075: [Read pinned native Guided Fill evidence](notes/agent-guided-fill-evidence-2026-11-27/README.md), #324. Read the same original guide contact, coefficient normal bound and open native topology before and after Studio approval.
 - D2074: [Review and approve a Guided Fill from the local Agent](notes/agent-guided-fill-approval-2026-11-27/README.md), #324. Refuse stale revisions and require explicit Studio approval of the same native open patch.

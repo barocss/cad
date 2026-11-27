@@ -11,6 +11,7 @@ import { commandLaunchContext } from './commandLaunchContext';
 import type { Active } from './commandState';
 import { newFilletActive, type FilletType } from './filletFamily';
 import { LINKED_INSET_EXTRUDE } from './roundedInsetCommand';
+import { ATTACHED_RIB, ribAttachment } from './attachedRibCommand';
 
 export function useStudioCommandEntry(openIntent: RefObject<OpenScope>, readActive: () => Active | null,
   restoreEditorFocusAfterClose: (button: HTMLElement | null) => void) {
@@ -62,14 +63,15 @@ export function prepareStudioFeatureCommand({ launch, evaluated, viewport, initi
   prepareFillet, join }: StudioFeatureEntry): Active {
   const { command: cmd, ctx, doc, selection } = launch;
   // Turn a head-on profile to show the direction of the pull.
-  if (cmd === LINKED_INSET_EXTRUDE || ['extrude', 'revolve', 'pipe', 'loft'].includes(cmd.id)) {
+  if (cmd === ATTACHED_RIB || cmd === LINKED_INSET_EXTRUDE || ['extrude', 'revolve', 'pipe', 'loft'].includes(cmd.id)) {
     const [i] = pickedSketches(evaluated.nodes, selection.sketches), face = cmd.id === 'extrude' ? extrudeProfile(ctx) : null;
-    const normal = face ? planeOf(face.node).normal : i !== undefined ? planeOf(evaluated.nodes[i] as SketchNode).normal : null;
+    const normal = cmd === ATTACHED_RIB ? ribAttachment(ctx)?.attachment.d
+      : face ? planeOf(face.node).normal : i !== undefined ? planeOf(evaluated.nodes[i] as SketchNode).normal : null;
     const camera = viewport.current?.camera;
     if (normal && camera) {
       const forward = camera.basis().forward;
       const alignment = forward[0] * normal[0] + forward[1] * normal[1] + forward[2] * normal[2];
-      if (Math.abs(alignment) > 0.95) viewport.current?.setView('iso');
+      if (Math.abs(alignment) > 0.95) viewport.current?.setView(cmd === ATTACHED_RIB && normal[2] < 0 ? 'iso-bottom' : 'iso');
     }
   }
   const startCtx = commandLaunchContext(launch);

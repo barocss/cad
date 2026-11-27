@@ -162,8 +162,9 @@ export class OrbitCamera {
     this.pitch = Math.max(-Math.PI / 2 + 0.01, Math.min(Math.PI / 2 - 0.01, Math.asin(normal[2])));
   }
 
-  setView(name: 'iso' | 'top' | 'front' | 'right' | 'bottom' | 'back' | 'left') {
-    const views = { iso: [-0.32, 0.2], top: [-0.5, 0.4999], bottom: [-0.5, -0.4999], front: [-0.5, 0], back: [0.5, 0], right: [0, 0], left: [1, 0] } as const;
+  setView(name: 'iso' | 'iso-bottom' | 'top' | 'front' | 'right' | 'bottom' | 'back' | 'left') {
+    const views = { iso: [-0.32, 0.2], 'iso-bottom': [-0.32, -0.2], top: [-0.5, 0.4999], bottom: [-0.5, -0.4999],
+      front: [-0.5, 0], back: [0.5, 0], right: [0, 0], left: [1, 0] } as const;
     const [y, p] = views[name];
     this.yaw = Math.PI * y; this.pitch = Math.PI * p;
   }

@@ -6,6 +6,7 @@ import { resolveDrivenSketch } from '../sketch/driven';
 import { fillPatternDocumentProblem } from './fillFeaturePattern';
 import { circularPatternSpanProblem } from './circularPatternSpan';
 import { alignFeatures } from './alignPlacement';
+import { resolveAttachedRib } from './attachedRib';
 import { alignDocumentProblem } from './alignRecipe';
 import { faceEndExtrudeHeight, faceEndExtrudeProblem } from './faceEndExtrude';
 import { throughCutHeight, throughCutProblem } from './throughCut';
@@ -757,6 +758,11 @@ function buildPartDocument(doc: StudioDoc, before?: number): CadPartDocument {
       if (node.kind === 'band-surface' && (node.suppressed || gone.has(node.a.parent.node) || gone.has(node.b.parent.node))) { gone.add(i); return; }
       if (node.suppressed || ('from' in node && Array.isArray(node.from) && node.from.some(p => gone.has(p))) || ((node.kind === 'gear' || node.kind === 'rack' || node.kind === 'bevel-gear' || node.kind === 'worm') && node.mesh && gone.has(node.mesh.gear))) { gone.add(i); return; }
       features.push(...convert(node, i)); return;
+    }
+    if (node.kind === 'rib' && !node.suppressed && Object.hasOwn(node, 'sigs')) {
+      const corners = resolveAttachedRib(doc, node, i, features);
+      features.push(featureOf({ ...node, ...corners }, i));
+      return;
     }
     // Active cut patterns, ribs and reliefs must reach kernel source admission even when their parent is gone.
     // Suppressing the pattern itself keeps the ordinary parent pass-through below.
