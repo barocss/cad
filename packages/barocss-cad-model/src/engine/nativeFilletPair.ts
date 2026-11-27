@@ -91,6 +91,10 @@ function fittedSeam(edge: BrepEdge, a: Vec3, b: Vec3, diagonal: number, roundoff
     && seamSamples(curve, circle);
 }
 
+// The four-edge box proof uses the same native supports and fitted intersection bounds.
+export { curveMatches as nativeFilletCurveMatches, quarterNet as nativeFilletQuarterNet,
+  cardinalPlane as nativeFilletCardinalPlane, fittedSeam as nativeFilletFittedSeam };
+
 function sharedSeams(first: Boundary, second: Boundary, peer: readonly [BrepFace, BrepFace], a: Vec3, middle: Vec3, b: Vec3,
   diagonal: number, tolerance: number, circle: SeamCircle): boolean {
   const left = first.filter(item => item.neighbor === peer[1]), right = second.filter(item => item.neighbor === peer[0]);

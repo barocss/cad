@@ -114,7 +114,7 @@ export function gizmoMarks(g: TransformGizmo | null, handles: readonly FeatureHa
       {waiting ? <title>{h.label}: {h.historyFilletProofPending === 'circular'
         ? 'Drag needs a verified original circular edge. You can type Radius in History.'
         : h.historyFilletProofPending === 'pair' ? 'Drag needs both original edges. You can type Radius in History.'
-          : h.historyFilletProofPending === 'group' ? 'Drag needs all three original edges. You can type Radius in History.'
+          : h.historyFilletProofPending === 'group' ? 'Drag needs every original edge. You can type Radius in History.'
           : 'End-on drag needs a verified original edge. Turn the view to drag, or type Radius in History.'}</title>
         : h.scalarDragSession && <title>{h.label}: when viewed end-on, drag up to increase or down to decrease. Sensitivity is fixed when the drag starts.</title>}
       <line x1={from[0]} y1={from[1]} x2={head[2][0]} y2={head[2][1]} stroke={EDGE} strokeOpacity={0.85} strokeWidth={on ? 6.5 : 5.5} strokeLinecap="round" />

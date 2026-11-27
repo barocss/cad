@@ -400,3 +400,30 @@ test('the shared vertical Fillet handle uses the first authored edge after certi
     ({ ...round, centre: [NaN, ...round.centre.slice(1)] as typeof round.centre })) }), null);
   assert.equal(placeBody(body, [1, 0, 0, 0, 1, 0, 0, 0, 1], [1, 0, 0]).nativeVerticalFillets, undefined);
 });
+
+test('the four upper Fillets use the first authored rim instead of the merged display face', () => {
+  const sketch: SketchNode = { kind: 'sketch', profile: 'rectangle', min: [0, 0], max: [12, 8] };
+  const edges = [1, 0, 2, 3].map(side => `n1.side${side}|n1.top`);
+  const { doc, accepted, reply } = evaluatedFixture(sketch, edges, 2, 8);
+  const [body] = accepted.bodies;
+  const rounds = body.nativeBoxTopFillets;
+  assert.ok(rounds && rounds.length === 4);
+  const proof = (result: typeof body, source = reply) => historyFilletReceipt(doc, doc, 2, [result], source, 3, () => true);
+  const expected = proof({ ...body, nativeBoxTopFillets: [...rounds].reverse() });
+  assert.ok(expected?.frame);
+  assert.equal(expected.edge, edges[0]);
+  const display = body.mesh.faces.filter(face => face.name === 'n2.face');
+  assert.deepEqual(display, [expected.face]);
+  assert.ok(expected.frame.at.every((value, i) => Math.abs(value - [12 + Math.SQRT2, 4, 8 + Math.SQRT2][i]) < 1e-9));
+  assert.ok(expected.frame.dir.every((value, i) => Math.abs(value - [Math.SQRT1_2, 0, Math.SQRT1_2][i]) < 1e-9));
+
+  assert.equal(proof({ ...body, nativeBoxTopFillets: rounds.slice(1) }), null);
+  assert.equal(proof({ ...body, nativeBoxTopFillets: rounds.map((round, i) => ({
+    ...round, edge: rounds[(i + 1) % rounds.length].edge,
+  })) }), null);
+  assert.equal(proof({ ...body, nativeBoxTopFillets: rounds.map(round => ({ ...round, faceId: rounds[0].faceId })) }), null);
+  const [stock] = reply.bodies;
+  const mesh = { ...stock.mesh, edges: stock.mesh.edges.filter(edge => !edge.names.includes(edges[0])) };
+  assert.equal(proof(body, { ...reply, bodies: [{ ...stock, mesh }] }), null);
+  assert.equal(placeBody(body, [1, 0, 0, 0, 1, 0, 0, 0, 1], [5, 0, 0]).nativeBoxTopFillets, undefined);
+});

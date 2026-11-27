@@ -9,6 +9,8 @@ import { closedFilletDisplayFace, closedFilletRimNames, type NativeClosedFilletT
 import { circularFilletPair } from '@barocss/cad-model/app/circularFilletPair';
 import { add, cross, dot, len, scale, sub, unit, type Vec3 } from '@barocss/cad-model/engine/vec3';
 import type { Active } from '../app/commandState';
+import { closedSolid, exactStraightEdge, originalFilletEdge, sameVec } from './historyFilletEvidence';
+import { boxTopFilletFrame, boxTopFilletRims } from './historyBoxTopFillet';
 
 type Fillet = Extract<ModelNode,{kind:'fillet'}>;
 export type HistoryFilletReceipt = {
@@ -91,9 +93,10 @@ export function ordinaryHistoryFillet(doc: StudioDoc,index: number|null,bodies?:
   const verticalGroup = verticalHistoryGroup(sketch, fillet);
   if (!plain && !circular && !closedRims && !verticalGroup) return null;
   if (verticalGroup && bodies && (bodies.length !== 1 || bodies[0].nativeVerticalFillets?.length !== 3)) return null;
-  const pair = historyTopEdges(doc, fillet);
+  const pair = historyTopEdges(doc, fillet), boxTop = plain && boxTopFilletRims(doc, fillet);
+  if (boxTop && bodies && (bodies.length !== 1 || bodies[0].nativeBoxTopFillets?.length !== 4)) return null;
   const circularPair = circular && historyCircularRims(doc, fillet);
-  if (fillet.edges.length !== 1 && !(plain && pair) && !circularPair && !closedRims && !verticalGroup) return null;
+  if (fillet.edges.length !== 1 && !(plain && pair) && !boxTop && !circularPair && !closedRims && !verticalGroup) return null;
   if (pair?.adjacent && bodies && (bodies.length !== 1 || bodies[0].nativeFilletPair?.adjacentTop !== true)) return null;
   if (circularPair && bodies && (bodies.length !== 1 || !bodies[0].nativeFilletTorusPair)) return null;
   if (closedRims && bodies && (bodies.length !== 1 ||
@@ -101,27 +104,6 @@ export function ordinaryHistoryFillet(doc: StudioDoc,index: number|null,bodies?:
   const out=doc.outputs[bodyKeyFor(doc.nodes,index,'solid')];
   return out?.node===index&&out.side==='solid'?fillet:null;
 }
-const sameVec=(a:readonly number[],b:readonly number[])=>a.length===3&&b.length===3&&a.every((v,k)=>Number.isFinite(v)&&v===b[k]);
-
-function originalFilletEdge(stock: BodyResult, fillet: Fillet, edge: string, signatures: ReturnType<typeof signaturesOf>) {
-  const sources = stock.mesh.edges.filter(source => source.names.includes(edge));
-  const [source] = sources, sig = signatures.edges.get(edge), stored = fillet.sigs?.[edge];
-  if (sources.length !== 1 || source.names.length !== 1 || !source.nativeJoint ||
-    !sig || sig.shared || !stored || stored.k !== sig.kind || stored.n !== undefined) return;
-  const native = toSig(sig);
-  if (stored.s === native.s && sameVec(stored.p, native.p)) return { source, sig, stored, native };
-}
-
-function exactStraightEdge(match: NonNullable<ReturnType<typeof originalFilletEdge>>) {
-  const { sig, source, stored, native } = match;
-  return sig.kind === 'line' && source.straight && source.nativeLine && stored.d && native.d && sameVec(stored.d, native.d);
-}
-
-function closedSolid(body: BodyResult) {
-  return body.topology?.kind === 'solid' && body.topology.bodyCount === 1 &&
-    body.topology.openShells === 0 && body.topology.boundaryEdges === 0;
-}
-
 function pairedHistoryFrame(doc: StudioDoc, fillet: Fillet, stock: BodyResult, finished: BodyResult,
   radius: number): HistoryFilletReceipt['frame'] {
   const spec = historyTopEdges(doc, fillet), accepted = finished.nativeFilletPair;
@@ -284,13 +266,17 @@ export function historyFilletReceipt(doc:StudioDoc,commandDoc:StudioDoc,index:nu
     finished.key!==bodyKeyFor(doc.nodes,index,'solid')||finished.ref?.node!==index||finished.ref?.side!=='solid'||
     (stock.pieces??1)!==1||(finished.pieces??1)!==1) return null;
   const name=featureId(doc.nodes,index)+'.face', face=finished.mesh.faces.filter(f=>f.name.startsWith(featureId(doc.nodes,index)+'.'));
-  const topPair = historyTopEdges(doc, fillet);
+  const topPair = historyTopEdges(doc, fillet), boxTop = boxTopFilletRims(doc, fillet);
   const circularPair = historyCircularRims(doc, fillet), closedRims = historyClosedCircularRims(doc, fillet);
   // Each complete rim has one display face. Both rims can have the same name.
-  const expectedFaces = closedRims?.length ?? (topPair?.adjacent ? 1 : fillet.edges.length);
+  const expectedFaces = closedRims?.length ?? (topPair?.adjacent || boxTop ? 1 : fillet.edges.length);
   if(face.length!==expectedFaces||face.some(item=>item.name!==name||!item.normal.every(Number.isFinite)||
     Math.abs(Math.hypot(...item.normal)-1)>1e-8)) return null;
   const radius = Number(fillet.radius), sketch = doc.nodes[0];
+  if (boxTop) {
+    const frame = boxTopFilletFrame(boxTop, fillet, stock, finished, face[0], radius);
+    return frame ? { document: doc, commandDoc, index, bodies, edge, face: face[0], isCurrent, frame } : null;
+  }
   if (sketch.kind === 'sketch' && verticalHistoryGroup(sketch, fillet)) {
     const stockNode = doc.nodes[1];
     if (stockNode.kind !== 'extrude' || typeof stockNode.height !== 'number') return null;
