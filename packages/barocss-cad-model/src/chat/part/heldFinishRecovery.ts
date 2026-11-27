@@ -1,11 +1,13 @@
 import { lookKey } from '../../app/lookKey';
-import { prefixDoc } from '../../engine/doc';
+import { prefixDoc, type StudioDoc } from '../../engine/doc';
 import { rememberedEvaluate } from '../../engine/evalMemo';
 import { heldChamferThroughHole, heldPairedFilletThroughHole, parentChamferEdge, parentPairedFilletEdge } from '../../engine/heldChamferThroughHole';
+import type { BodyResult } from '../../engine/evaluate';
+import { heldFilletBoxSource, heldFilletBoxGroup, originalFilletBox } from '../../engine/heldFilletBoxCompanion';
 import type { DisplayEdge } from '../../engine/mesh';
 import { heldFinishGroupProblems, isHeldConstantLineFinish, nativeLine, positiveSize, validFinishGroupEdge } from '../../engine/heldFinishGroup';
 import { bodyKeyFor, featureId } from '../../engine/ids';
-import { sameDatumTargetSourceSig, toSig, verifyReferences } from '../../engine/references';
+import { sameDatumTargetSourceSig, toSig, verifyReferences, type Problem } from '../../engine/references';
 import { signaturesOf } from '../../engine/rematch';
 import { revisionOf } from '../../util/revision';
 import type { ChatState, Evaluate } from '../toolKit';
@@ -18,6 +20,26 @@ export async function heldFinishRecovery(state: ChatState, evaluate: Evaluate, o
   if (state.doc.nodes.at(-1)?.kind === 'hole') {
     return (await heldChamferRecovery(state, evaluate, only, page, pageSize))
       ?? heldPairedFilletRecovery(state, evaluate, only, page, pageSize);
+  }
+  const source = heldFilletBoxSource(state.doc, 2, state.bodies);
+  if (source) {
+    const { doc, fillet, companion } = source;
+    if ((only && only !== fillet.key) || doc.bodies?.[lookKey(doc.nodes, fillet)]?.hidden) return;
+    try {
+      const { problems, changes } = await verifyReferences(doc, state.bodies, evaluate);
+      const scope = !changes.length && heldFilletBoxGroup(source, problems);
+      if (!scope) return;
+      const stock = await rememberedEvaluate(evaluate)(prefixDoc(doc, scope.index));
+      const parent = stock?.ok && originalFilletBox(scope, stock.bodies);
+      if (!parent) return;
+      return {
+        ...groupRecoveryPage(doc, scope.index, fillet, scope.group, page, pageSize),
+        source_body: parent.key, independent_body: companion.key,
+      };
+    } catch {
+      // A failed reference read leaves the ordinary part summary available.
+      return;
+    }
   }
   return (await terminalFilletRecovery(state, evaluate, only, page, pageSize))
     ?? heldChainedFinishRecovery(state, evaluate, only, page, pageSize);
@@ -36,11 +58,15 @@ async function terminalFilletRecovery({ doc, bodies }: ChatState, evaluate: Eval
   const { problems, changes } = await verifyReferences(doc, bodies, evaluate);
   const slots = !changes.length && heldFinishGroupProblems(doc, index, problems);
   if (!slots) return;
+  return groupRecoveryPage(doc, index, body, slots, page, pageSize);
+}
+
+function groupRecoveryPage(doc: StudioDoc, index: number, body: BodyResult, slots: readonly Problem[], page: number, pageSize: number) {
   const edges = body.mesh.edges, start = (page - 1) * pageSize;
   const selectable = (name: string) => validFinishGroupEdge(edges.find(edge => edge.names.includes(name)), edges);
   const picks = edges.slice(start, start + pageSize).filter(edge => validFinishGroupEdge(edge, edges));
   return {
-    feature: featureId(doc.nodes, index), body: key, revision: revisionOf(doc),
+    feature: featureId(doc.nodes, index), body: body.key, revision: revisionOf(doc),
     mode: 'studio_history_review', page, pages: Math.max(1, Math.ceil(edges.length / pageSize)),
     slots: slots.map(({ name, candidates }, i) => ({
       slot: i + 1, authored_edge: name, signature_matches: candidates.filter(selectable),

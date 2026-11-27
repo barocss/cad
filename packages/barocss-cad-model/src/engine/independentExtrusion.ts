@@ -1,4 +1,4 @@
-import type { StudioDoc } from '@barocss/cad-model/engine/doc';
+import type { StudioDoc } from './doc';
 
 export function independentExtrusionProfile(doc: StudioDoc, sketchIndex: number): 'rectangle' | 'circle' | undefined {
   const extrudeIndex = sketchIndex + 1;

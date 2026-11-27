@@ -7,6 +7,7 @@ import { evaluatePart } from '../src/engine/evaluate';
 import { toSig, captureSignatures, verifyReferences } from '../src/engine/references';
 import { signaturesOf } from '../src/engine/rematch';
 import { revisionOf } from '../src/util/revision';
+import { defaultDrawing } from '../src/drawing/types';
 
 const names = ['n1.side1|n1.side2', 'n1.side0|n1.side1', 'n1.side2|n1.side3'];
 const parent = { node: 1, side: 'solid' } as const;
@@ -249,4 +250,105 @@ test('summary diagnoses an earlier held single-edge finish before a downstream h
   const evalRepaired = await evaluate(repaired);
   assert.ok(evalRepaired.ok);
   assert.equal(await summary({ doc: repaired, bodies: evalRepaired.bodies }), undefined);
+});
+
+async function boxCompanionFixture() {
+  const stock = rectanglePart(80, 40, 10);
+  const edges = ['n1.retiredZ|n1.side3', 'n1.retiredA|n1.side1'];
+  const withFillet = withNode(stock, {
+    kind: 'fillet', parent, edges, radius: 2, held: 'Missing Fillet edges', suppressed: true,
+    sigs: {
+      [edges[0]]: { k: 'line', p: [-6,-7,5], d: [0.6,0.8,0], s: 10 },
+      [edges[1]]: { k: 'line', p: [86,47,5], d: [-0.6,0.8,0], s: 10 },
+    },
+  });
+  const doc = withNode(withNode(withFillet, { kind: 'sketch', profile: 'rectangle', min: [90, 0], max: [100, 10] }),
+    { kind: 'extrude', sketch: 3, height: 5 });
+  const result = await evaluate(doc);
+  assert.ok(result.ok);
+  const bodies = [...result.bodies].reverse();
+  return { doc, bodies, edges };
+}
+
+test('public summary pins the paired Fillet and independent box and lists only original-body choices', async () => {
+  const { doc, bodies, edges } = await boxCompanionFixture();
+  const state = { doc, bodies }, snapshot = structuredClone(state);
+  const recovery = await summary(state, { body: 'b2', response_format: 'detailed' });
+  assert.deepEqual([recovery.feature, recovery.body, recovery.source_body, recovery.independent_body,
+    recovery.revision, recovery.mode, recovery.page, recovery.pages],
+  ['n2', 'b2', 'b1', 'b4', revisionOf(doc), 'studio_history_review', 1, 1]);
+  assert.equal(recovery.downstream_feature, undefined);
+  assert.deepEqual(recovery.slots, edges.map((name, i) => ({ slot: i + 1, authored_edge: name, signature_matches: [] })));
+  const target = bodies.find(body => body.key === 'b2');
+  assert.ok(target);
+  assert.equal(recovery.pick_edges.length, 12);
+  assert.deepEqual(recovery.pick_edges, target.mesh.edges.map(edge => ({ name: edge.names[0], from: edge.a, to: edge.b })));
+  const second = await summary(state, { page: 2 });
+  assert.equal(second.page, 2);
+  assert.deepEqual(second.slots, recovery.slots);
+  assert.deepEqual(second.pick_edges, []);
+  const hiddenCompanion = { ...doc, bodies: { b4: { hidden: true } } };
+  assert.deepEqual(await summary({ ...state, doc: hiddenCompanion }), { ...recovery, revision: revisionOf(hiddenCompanion) });
+  assert.deepEqual(state, snapshot);
+});
+
+test('companion diagnosis omits hidden and non-root targets, bad producers, and unverified or repaired references', async () => {
+  const { doc, bodies } = await boxCompanionFixture();
+  const state = { doc, bodies };
+  let reads = 0;
+  const count = async (d: StudioDoc) => { reads++; return evaluate(d); };
+  assert.equal(await summary(state, { body: 'b4' }, count), undefined);
+  assert.equal(await summary(state, { response_format: 'concise' }, count), undefined);
+  assert.equal(await summary({ ...state, partOf: 'p1' }, {}, count), undefined);
+  assert.equal(await summary({ ...state, doc: { ...doc, bodies: { b1: { hidden: true } } } }, {}, count), undefined);
+  assert.equal(await summary({ ...state, doc: { ...doc, outputs: { ...doc.outputs, b4: doc.outputs.b2 } } }, {}, count), undefined);
+  assert.equal(reads, 0);
+  assert.equal(await summary(state, {}, async () => { throw new Error('Prefix unavailable'); }), undefined);
+  assert.equal(await summary(state, {}, async source => {
+    const reply = await evaluate(source);
+    assert.ok(reply.ok);
+    return { ...reply, bodies: [...reply.bodies, reply.bodies[0]] };
+  }), undefined);
+  const finish = doc.nodes[2], target = bodies.find(body => body.key === 'b2');
+  assert.ok(finish.kind === 'fillet' && target);
+  const picks = target.mesh.edges.filter(e => e.axis === 'z' && (e.a[0] === 0 && e.a[1] === 0 || e.a[0] === 80 && e.a[1] === 40));
+  const liveEdges = signaturesOf(target).edges;
+  const names = picks.map(edge => edge.names[0]);
+  assert.equal(names.length, 2);
+  const repaired = { ...doc, nodes: doc.nodes.map((node, i) => i === 2
+    ? { ...finish, edges: names, sigs: Object.fromEntries(names.map(name => [name, toSig(liveEdges.get(name)!)])), held: undefined, suppressed: undefined }
+    : node) };
+  const full = await evaluate(repaired);
+  assert.ok(full.ok);
+  assert.notEqual(revisionOf(repaired), revisionOf(doc));
+  assert.equal(await summary({ doc: repaired, bodies: full.bodies }, {}, count), undefined);
+  assert.equal(reads, 0);
+});
+
+test('a changed prefix plane or a separate pending rematch cannot authorize the companion diagnosis', async () => {
+  const { doc, bodies } = await boxCompanionFixture();
+  const target = bodies.find(body => body.key === 'b2');
+  assert.ok(target);
+  assert.equal(await summary({ doc, bodies }, {}, async source => {
+    const reply = await evaluate(source);
+    assert.ok(reply.ok);
+    const [parent] = reply.bodies;
+    const [first, ...rest] = parent.mesh.faces;
+    return { ...reply, bodies: [{ ...parent, mesh: { ...parent.mesh, faces: [{ ...first, area: first.area + 1e-9 }, ...rest] } }] };
+  }), undefined);
+
+  const rails = target.mesh.edges.filter(edge => edge.axis === 'x' && edge.a[2] === 10);
+  assert.equal(rails.length, 2);
+  const [a, b] = rails;
+  const renamed = 'n1.retired|n1.top', signature = signaturesOf(target).edges.get(a.names[0]);
+  assert.ok(signature);
+  const withDrawing = { ...doc, drawing: { ...defaultDrawing(), bisectorCenterlines: [{
+    id: 'cl1', view: 'top' as const, first: { edge: renamed, near: a.a, sig: toSig(signature) }, second: { edge: b.names[0], near: b.a },
+  }] } };
+  const checked = await verifyReferences(withDrawing, bodies, evaluate);
+  assert.equal(checked.changes.length, 1);
+  assert.equal(checked.changes[0].was, renamed);
+  assert.equal(checked.problems.length, 2);
+  assert.equal(await summary({ doc: withDrawing, bodies }), undefined);
+  assert.equal(withDrawing.drawing.bisectorCenterlines[0].first.edge, renamed);
 });

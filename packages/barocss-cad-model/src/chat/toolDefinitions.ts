@@ -105,7 +105,7 @@ export { featureKinds };
 const PART_TOOLS: ToolDefinition[] = [
   {
     name: 'get_part_summary',
-    description: 'Read feature nodes, sketch and Direct IDs, parameters, body volume and bounds, and persistent names. Supply body and page for large parts. Read before using unknown geometry. For a supported held Fillet or Chamfer, held_finish_recovery lists the revision, authored edges, tentative matches and eligible Studio History picks.',
+    description: 'Read feature nodes, sketch and Direct IDs, parameters, body volume and bounds, and persistent names. Supply body and page for large parts. Read before using unknown geometry. For a supported held Fillet or Chamfer, held_finish_recovery lists the revision, authored edges, tentative matches and eligible Studio History picks. For a paired Fillet beside a separate box, independent_body identifies the box that stays unchanged.',
     input_schema: { type: 'object', properties: { body: { type: 'string', description: 'A body key (e.g. "b27") to list the faces and edges of.' }, page: { type: 'integer', description: 'The page of that body\'s faces and edges (60 a page, from 1).' } }, additionalProperties: false },
   },
   {

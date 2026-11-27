@@ -4,7 +4,12 @@ import { rectanglePart, withNode, type ModelNode, type StudioDoc } from '@barocs
 import { evaluatePart, type BodyResult } from '@barocss/cad-model/engine/evaluate';
 import { heldFinishGroupProblems } from '@barocss/cad-model/engine/heldFinishGroup';
 import type { Problem, Sig } from '@barocss/cad-model/engine/references';
-import { heldFilletBoxCompanion, replaceFilletBesideBox, filletCompanionPreserved } from '../src/state/heldFilletBoxCompanion';
+import { heldFilletBoxSource, heldFilletBoxGroup, filletCompanionPreserved } from '@barocss/cad-model/engine/heldFilletBoxCompanion';
+import { replaceFilletBesideBox } from '../src/state/heldFilletBoxCompanion';
+
+function heldFilletBoxCompanion(doc: StudioDoc, index: number, problems: Problem[], bodies: BodyResult[]) {
+  return heldFilletBoxGroup(heldFilletBoxSource(doc, index, bodies), problems);
+}
 
 function fixture() {
   const edges = ['n1.side[retired1]|n1.side1', 'n1.side[retired2]|n1.side3'];

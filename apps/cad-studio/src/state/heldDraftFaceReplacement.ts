@@ -1,4 +1,4 @@
-import { independentExtrusionProfile } from './independentExtrusion';
+import { independentExtrusionProfile } from '@barocss/cad-model/engine/independentExtrusion';
 import { commandById } from '@barocss/cad-model/app/commands';
 import { prefixDoc, type ModelNode, type StudioDoc } from '@barocss/cad-model/engine/doc';
 import type { BodyResult, EvalResult } from '@barocss/cad-model/engine/evaluate';

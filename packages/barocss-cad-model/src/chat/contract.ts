@@ -24,14 +24,15 @@ const num: JsonSchema = { type: 'number' }, str: JsonSchema = { type: 'string' }
 const clearanceSchema = (coordinate: 'fraction' | 'time'): JsonSchema => ({ type: ['object', 'null'], properties: { value: num, [coordinate]: num, links: { type: 'array', items: str } }, required: ['value', coordinate, 'links'], additionalProperties: false });
 const heldFinishRecovery = {
   ...o({ feature: str, body: str, revision: str, mode: { type: 'string', enum: ['studio_history_review'] }, page: num, pages: num,
-    source_body: { type: 'string', description: 'Original body before the held Chamfer.' },
-    downstream_feature: { type: 'string', description: 'Through Hole that remains active during Chamfer review.' },
+    source_body: { type: 'string', description: 'Original body before the held finish.' },
+    downstream_feature: { type: 'string', description: 'Feature that follows the held finish on the same body.' },
+    independent_body: { type: 'string', description: 'Separate rectangular extrusion preserved during paired Fillet review.' },
     slots: { type: 'array', items: o({ slot: num, authored_edge: str, signature_matches: { type: 'array', items: str, description: 'Tentative matches; each slot still needs an explicit choice.' } },
       ['slot', 'authored_edge', 'signature_matches']) },
     pick_edges: { type: 'array', items: o({ name: str, from: { type: 'array', items: num }, to: { type: 'array', items: num } }, ['name', 'from', 'to']),
       description: 'Eligible viewport picks on this body page, with endpoints in mm. Review and apply in Studio History.' },
   }, ['feature', 'body', 'revision', 'mode', 'page', 'pages', 'slots', 'pick_edges']),
-  description: 'Read-only recovery information for three held straight Constant Fillet slots or a held one-edge Chamfer before a Through Hole.',
+  description: 'Read-only choices for supported held Fillets and Chamfers, including a paired Fillet beside a separate rectangular extrusion. Confirm edge replacements in Studio History.',
 };
 const versionPin = o({ id: str, snapshot: str, revision: str, evidenceRevision: str }, ['id', 'snapshot', 'revision', 'evidenceRevision']);
 const directCandidatePin = o({ proposal: str, proposalRevision: str, baseDirectRevision: str, directRevision: str },

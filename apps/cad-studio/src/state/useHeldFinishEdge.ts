@@ -1,4 +1,5 @@
-import { heldFilletBoxCompanion, replaceFilletBesideBox, filletCompanionPreserved } from './heldFilletBoxCompanion';
+import { heldFilletBoxSource, heldFilletBoxGroup, filletCompanionPreserved } from '@barocss/cad-model/engine/heldFilletBoxCompanion';
+import { replaceFilletBesideBox } from './heldFilletBoxCompanion';
 import { heldFinishGroupProblems, heldFinishPassthroughBody, heldFinishProblem, heldFinishCandidate, heldFinishReplacement,
   replaceHeldFinishGroup, validFinishGroupEdge, type ReplacementEndpoints } from './heldFinishReplacement';
 import { heldChamferThroughHole, heldPairedFilletThroughHole, parentChamferEdge, parentPairedFilletEdge } from '@barocss/cad-model/engine/heldChamferThroughHole';
@@ -53,7 +54,7 @@ export function useHeldFinishEdge({ doc, index, problems, bodies, enabled, ownsS
   const strictSource = finish && ((finish.edges.length > 1 && !downstreamFillet) || (finish.kind === 'fillet' && finish.radii));
   const body = strictSource && sources.length !== 1 ? undefined : sources[0] ?? downstream?.body ?? passthrough;
   const problem = enabled && body && index !== null ? heldFinishProblem(doc, index, problems, body, !!downstreamFillet) : undefined;
-  const boxCompanion = useMemo(() => enabled && index !== null ? heldFilletBoxCompanion(doc, index, problems, bodies) : undefined,
+  const boxCompanion = useMemo(() => enabled && index !== null ? heldFilletBoxGroup(heldFilletBoxSource(doc, index, bodies), problems) : undefined,
     [enabled, index, doc, problems, bodies]);
   const group = enabled && body && index !== null ? boxCompanion?.group ?? heldFinishGroupProblems(doc, index, problems, !!downstreamFillet) : undefined;
   const [firstProblem, secondProblem, thirdProblem] = group ?? [];

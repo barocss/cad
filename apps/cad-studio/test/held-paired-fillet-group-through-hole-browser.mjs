@@ -1,11 +1,15 @@
 import assert from 'node:assert/strict';
 import { createFlow } from './flow-helper.mjs';
+import { readHeldFinishSummary } from './held-finish-recovery-mcp.mjs';
 
 const baseline = process.argv.includes('--baseline');
 const priorSamePick = process.argv.includes('--prior-same-pick');
-const companion = process.argv.includes('--companion');
+const priorMcp = process.argv.includes('--prior-mcp-companion');
+const mcp = priorMcp || process.argv.includes('--mcp-companion');
+const companion = mcp || process.argv.includes('--companion');
 const additionalBody = companion ? 'box' : 'hole';
 assert.ok(!priorSamePick || !(baseline || companion));
+assert.ok(!mcp || !baseline);
 const oldNames = ['n1.side[retired1]|n1.side[e4]', 'n1.side[retired2]|n1.side[e3]'];
 const newNames = ['n1.side[e1]|n1.side[e4]', 'n1.side[e2]|n1.side[e3]'];
 const ref = node => ({ node, side: 'solid' });
@@ -35,11 +39,24 @@ const files = [
 ];
 if (companion && !baseline) files.push(
   'apps/cad-studio/src/state/heldFilletBoxCompanion.ts',
-  'apps/cad-studio/src/state/independentExtrusion.ts',
+  ...(priorMcp ? ['apps/cad-studio/src/state/independentExtrusion.ts'] : [
+    'packages/barocss-cad-model/src/engine/heldFilletBoxCompanion.ts',
+    'packages/barocss-cad-model/src/engine/independentExtrusion.ts',
+  ]),
+);
+if (mcp) files.push(
+  'apps/cad-studio/test/held-finish-recovery-mcp.mjs',
+  'apps/cad-studio/test/mcp-browser-session.mjs',
+  'apps/cad-studio/scripts/cad-mcp.mjs',
+  'packages/barocss-cad-model/src/chat/part/heldFinishRecovery.ts',
+  'packages/barocss-cad-model/src/chat/part/query.ts',
+  'packages/barocss-cad-model/src/chat/contract.ts',
+  'packages/barocss-cad-model/src/chat/toolDefinitions.ts',
 );
 const f = await createFlow({
   name: companion ? 'held-paired-fillet-box-companion' : 'held-paired-fillet-group-through-hole', output: process.argv[2], envFrozen: companion ? 'D2051_SOURCE_FROZEN' : 'D1987_SOURCE_FROZEN',
-  qualification: companion ? 'Recover both held Fillet edges beside an independent rectangular Extrude.' : priorSamePick ? 'Reproduce a stale duplicate-pick refusal after a valid same-edge reselection.'
+  qualification: mcp ? 'Read the currently held Fillet through local MCP and review its owned edges in Studio History.'
+    : companion ? 'Recover both held Fillet edges beside an independent rectangular Extrude.' : priorSamePick ? 'Reproduce a stale duplicate-pick refusal after a valid same-edge reselection.'
     : 'Explicit History group replacement of both retired straight edges in a two-edge constant Fillet before an independent top Through Hole.',
   initialFiles: files, requiredFrozen: files,
   inspectorSource: `
@@ -187,6 +204,50 @@ await f.run(async () => {
   }
 
   const history = await stack();
+  let heldRevision;
+  let repairPoints = [[-20, -20, 5], [60, 20, 5]];
+  if (mcp) {
+    f.phase = 'read the exact saved Studio file through local MCP';
+    const { file } = await f.save('held-fillet-and-box-for-mcp');
+    const { summary, revision, describe } = await readHeldFinishSummary(f, file, 'fillet-and-box-held', 'b2');
+    heldRevision = revision;
+    const recovery = summary.held_finish_recovery;
+    await f.same(opened.doc);
+    assert.deepEqual(await stack(), history);
+    if (priorMcp) {
+      assert.equal(recovery, undefined);
+      assert.equal(await replace.isEnabled(), true);
+      await f.snapshot('01b-prior-agent-omits-current-repair');
+      f.report.observations.push({ label: 'prior-mcp-absence', revision, studioRepairAvailable: true });
+      return;
+    }
+    assert.ok(recovery);
+    assert.match(describe.description, /independent_body identifies the box that stays unchanged/);
+    assert.deepEqual([recovery.feature, recovery.body, recovery.source_body, recovery.independent_body, recovery.revision,
+      recovery.mode, recovery.page, recovery.pages], ['n2', 'b2', 'b1', 'b4', revision, 'studio_history_review', 1, 1]);
+    assert.deepEqual(recovery.slots, oldNames.map((name, index) => ({ slot: index + 1, authored_edge: name, signature_matches: [] })));
+    assert.equal(recovery.pick_edges.length, 12);
+    assert.ok(recovery.pick_edges.every(pick => pick.name.split('|').every(name => name.startsWith('n1.'))));
+    repairPoints = newNames.map((name, index) => {
+      const edge = recovery.pick_edges.find(pick => pick.name === name);
+      assert.ok(edge, name);
+      const point = edge.from.map((value, axis) => (value + edge.to[axis]) / 2);
+      assert.deepEqual(point, repairPoints[index]);
+      return point;
+    });
+    const other = await readHeldFinishSummary(f, file, 'fillet-and-box-other-body', 'b4');
+    assert.equal(other.revision, revision);
+    assert.equal(other.summary.held_finish_recovery, undefined);
+    const pageTwo = await readHeldFinishSummary(f, file, 'fillet-and-box-page-two', 'b2', 2);
+    assert.equal(pageTwo.revision, revision);
+    assert.deepEqual(pageTwo.summary.held_finish_recovery, { ...recovery, page: 2, pick_edges: [] });
+    await f.same(opened.doc);
+    assert.deepEqual(await stack(), history);
+    await f.snapshot('01b-unchanged-after-mcp-read');
+    f.report.observations.push({ label: 'local-mcp-read', revision, owner: recovery.body, independent: recovery.independent_body,
+      authoredSlots: recovery.slots.length, pickCount: recovery.pick_edges.length });
+  }
+
   const editor = f.editor();
   const stage = editor.getByRole('group', { name: 'Fillet edge replacements', exact: true });
   const nthRow = index => stage.locator('.row-actions').nth(index);
@@ -219,7 +280,7 @@ await f.run(async () => {
   await f.snapshot(companion ? '02-companion-edge-refused' : '02-hole-rim-refused');
 
   await direction('Front left');
-  await stagePick(0, [-20, -20, 5]);
+  await stagePick(0, repairPoints[0]);
   assert.equal(await apply().isEnabled(), false);
   await pick([-20, -20, 5]);
   await f.page.getByRole('alert').filter({ hasText: 'Edge not selected' }).waitFor();
@@ -236,9 +297,9 @@ await f.run(async () => {
   f.phase = 'stage both original vertical corners and apply atomically';
   await replace.click();
   await waitStageReady();
-  await stagePick(0, [-20, -20, 5]);
+  await stagePick(0, repairPoints[0]);
   await direction('Back right');
-  await stagePick(1, [60, 20, 5]);
+  await stagePick(1, repairPoints[1]);
   assert.equal(await apply().isEnabled(), true);
   await f.same(opened.doc);
   assert.deepEqual(await stack(), history);
@@ -256,7 +317,7 @@ await f.run(async () => {
   assert.deepEqual(await stack(), history);
 
   await direction('Front left');
-  await stagePick(0, [-20, -20, 5]);
+  await stagePick(0, repairPoints[0]);
   await f.page.waitForFunction(() => !document.querySelector('.node-editor [aria-pressed="true"]'));
   for (const [slot, name] of newNames.entries()) {
     assert.equal(await nthRow(slot).getByRole('status').innerText(), name);
@@ -294,4 +355,12 @@ await f.run(async () => {
   const reopened = await f.freshOpen(file, repaired.doc, `07-fresh-open-with-${additionalBody}`);
   assert.equal(await refs().count(), 0);
   await verify('reopened-native', reopened, true);
+  if (mcp) {
+    const { summary, revision } = await readHeldFinishSummary(f, file, 'fillet-and-box-repaired', 'b2');
+    assert.notEqual(revision, heldRevision);
+    assert.equal(summary.held_finish_recovery, undefined);
+    await f.same(repaired.doc);
+    await f.snapshot('08-repaired-diagnostic-retired');
+    f.report.observations.push({ label: 'resolved-mcp-read', revision, previousRevision: heldRevision });
+  }
 });
