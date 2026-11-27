@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import { createFlow } from './flow-helper.mjs';
+import { installFilletTimingObserver, timeFilletDrags } from './fillet-timing-observer.mjs';
 
 const baseline = process.argv.includes('--baseline');
+const timing = process.argv.includes('--timing');
 const captureLoss = process.argv.includes('--capture-loss');
 const legacyGrip = baseline && !captureLoss;
 const width = 12, depth = 8, height = 8;
@@ -16,11 +18,11 @@ const stock = {
   ], outputs: { b1: { node: 1, side: 'solid' } },
 };
 const f = await createFlow({
-  name: 'box-top-fillet-history', output: process.argv[2], envFrozen: captureLoss ? 'D2059_SOURCE_FROZEN' : 'D2058_SOURCE_FROZEN',
+  name: 'box-top-fillet-history', output: process.argv[2], envFrozen: timing ? 'D2060_SOURCE_FROZEN' : captureLoss ? 'D2059_SOURCE_FROZEN' : 'D2058_SOURCE_FROZEN',
   qualification: 'Create a four-upper-edge box Fillet and drag the History radius from its first original rim.',
   limits: ['One terminal constant Fillet on the four original top edges of one numerical horizontal rectangular Extrude.'],
   initialFiles: ['apps/cad-studio/src/state/historyFilletRadiusReceipt.ts', 'apps/cad-studio/src/app/useHistoryFilletRadius.ts',
-    'apps/cad-studio/src/viewport/useCommandGizmos.ts', ...(captureLoss ? ['apps/cad-studio/src/viewport/viewportPointerInput.ts',
+    'apps/cad-studio/src/viewport/useCommandGizmos.ts', ...(timing ? ['apps/cad-studio/test/fillet-timing-observer.mjs'] : []), ...(captureLoss ? ['apps/cad-studio/src/viewport/viewportPointerInput.ts',
       ...(!baseline ? ['apps/cad-studio/src/viewport/filletScalarDraft.ts'] : [])] : []),
     ...(legacyGrip ? [] : [
       'apps/cad-studio/src/state/historyBoxTopFillet.ts', 'packages/barocss-cad-model/src/engine/nativeBoxTopFillets.ts',
@@ -196,6 +198,7 @@ const readHistory = () => f.page.evaluate(() => ({
 
 await f.run(async () => {
   await f.newPage();
+  if (timing) await f.page.evaluate(installFilletTimingObserver);
   await f.page.getByLabel('Model file', { exact: true }).setInputFiles({
     name: 'rectangular-stock.bcad', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(stock)),
   });
@@ -245,6 +248,31 @@ await f.run(async () => {
     await loseCapture(created, true);
     if (baseline) return;
     await f.save('history-after-capture-loss');
+  }
+  if (timing) {
+    await orbit(0, Math.PI / 4);
+    const { actual: origin, errorPx } = await position(1);
+    assert.ok(errorPx < .75);
+    const [point, projected, cross] = await Promise.all([f.screenOf(anchor),
+      f.screenOf(anchor.map((value, i) => value + 10 * direction[i])), f.screenOf([anchor[0], anchor[1] + 1, anchor[2]])]);
+    const pixelsPerMm = nearby(point, cross);
+    assert.ok(nearby(point, projected) < .15);
+    f.report.observations.push({ label: 'timing-camera', pixelsPerMm, camera: await f.page.evaluate(() => window.__studioCamera()) });
+    await timeFilletDrags(f, { origin, pixelsPerMm, prepare: async () => {
+      if (!(await f.editor().isVisible())) await openHistory();
+      await handle().locator('title').filter({ hasText: /when viewed end-on/ }).waitFor({ state: 'attached' });
+    }, cancel: async () => {
+      await button('Cancel', hud()).click();
+      await f.same(created);
+    } });
+    await f.snapshot('timing-ready-r2');
+    await button('Apply', hud()).click();
+    await f.changed(created);
+    const edited = await f.doc();
+    await verify(edited, 'timing-accepted-native', 2);
+    await view('Iso');
+    await f.snapshot('timing-applied-r2');
+    return;
   }
   await drag(created, 2, '03-history-cancel-preview');
   await button('Cancel', hud()).click();
