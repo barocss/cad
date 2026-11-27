@@ -18,7 +18,8 @@ async function record(label,measurement,required=true){
   const canvas=document.querySelector('.vp-canvas'),rect=canvas.getBoundingClientRect(),group=document.querySelector('.curvature-comb'),c=window.__studioViewer?.camera;
   const segments=[...group.querySelectorAll('line')].map(el=>['x1','y1','x2','y2'].map(k=>Number(el.getAttribute(k))));
   const points=samples.map(s=>({world:s.point,page:window.__studioScreenOf(s.point),project:window.__studioProject(s.point)}));
-  return {segments,points,width:rect.width,height:rect.height,left:rect.left,top:rect.top,edge:group.dataset.edge,eye:window.__studioEye(),viewer:c?{position:[...c.position],target:[...c.target],projection:c.projection,near:c.near,far:Number.isFinite(c.far)?c.far:'Infinity',autoClip:c.autoClip}:null};
+  const tips=[...group.querySelectorAll('polyline')].map(el=>el.getAttribute('points'));
+  return {segments,tips,points,width:rect.width,height:rect.height,left:rect.left,top:rect.top,edge:group.dataset.edge,eye:window.__studioEye(),viewer:c?{position:[...c.position],target:[...c.target],projection:c.projection,near:c.near,far:Number.isFinite(c.far)?c.far:'Infinity',autoClip:c.autoClip}:null};
  },measurement.spans.flat());
  assert.equal(state.edge,'n2_e13');assert.ok(state.segments.every(s=>s.every(Number.isFinite)));
  const visibleSamples=state.points.filter(p=>p.page[0]>=state.left&&p.page[0]<=state.left+state.width&&p.page[1]>=state.top&&p.page[1]<=state.top+state.height).length;
@@ -42,6 +43,13 @@ await f.run(async()=>{for(const width of [1024,1440]){
  await record(`${width}-initial`,measurement);await panel().getByLabel('Comb scale (mm²)').selectOption('64');await settle();await record(`${width}-scale64`,measurement);
  const anchor=measurement.spans.flat()[4].point;
  for(let i=0;i<5;i++){f.phase=`${width}-zoom-${i+1}`;const p=await f.page.evaluate(p=>window.__studioScreenOf(p),anchor);assert.ok(p.every(Number.isFinite));await f.page.mouse.move(...p);await f.page.mouse.wheel(0,-280);await f.page.waitForTimeout(180);await record(`${width}-zoom-${i+1}`,measurement);}
+ const full=await record(`${width}-zoom-density8`,measurement);
+ await panel().getByLabel('Comb density').selectOption('2');await settle();
+ const reduced=await record(`${width}-zoom-density2`,measurement,false);
+ assert.deepEqual(reduced.tips,full.tips);
+ assert.ok(reduced.segments.length<=2);
+ assert.ok(reduced.segments.every(line=>full.segments.some(segment=>segment.every((value,i)=>value===line[i]))));
+ await panel().getByLabel('Comb density').selectOption('8');await settle();
  await panel().getByLabel('Comb scale (mm²)').selectOption('4');await settle();await record(`${width}-scale4-after-zoom`,measurement);
  await f.page.getByTitle('Frame all (F)',{exact:true}).click();await settle();await record(`${width}-framed`,measurement);
  await button('Ortho').click();await f.page.getByTitle('Frame all (F)',{exact:true}).click();await settle();await record(`${width}-perspective-control`,measurement,true);

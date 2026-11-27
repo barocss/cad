@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D2076: [Set curvature comb density independently from scale](notes/curvature-comb-density-2026-11-27/README.md), #762. Verify 2, 4, and 8 spokes per span while keeping native measurements and clipped tip lines.
 - D2075: [Read pinned native Guided Fill evidence](notes/agent-guided-fill-evidence-2026-11-27/README.md), #324. Read the same original guide contact, coefficient normal bound and open native topology before and after Studio approval.
 - D2074: [Review and approve a Guided Fill from the local Agent](notes/agent-guided-fill-approval-2026-11-27/README.md), #324. Refuse stale revisions and require explicit Studio approval of the same native open patch.
 - D2073: [Fill one guided handle-to-body junction](notes/guided-handle-junction-2026-11-27/README.md), #753. Match three native boundaries and an interior guide, verify open topology and preserve the result through Studio Save/Open.

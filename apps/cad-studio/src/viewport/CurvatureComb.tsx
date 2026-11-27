@@ -25,9 +25,12 @@ export function CurvatureComb({ overlay, projectSegment }: { overlay: CurvatureO
         if (run && samePixel(run[run.length - 1], segment[0])) run.push(segment[1]);
         else { run = [segment[0], segment[1]]; runs.push(run); }
       }
+      // Density selects measured spokes per span. The tip outline still uses every sample.
+      const count = Math.min(points.length, overlay.density);
+      const spokes = Array.from({ length: count }, (_, i) => points[Math.floor((i + 0.5) * points.length / count)]);
       return <g key={index}>
         {runs.map((pixels, at) => <polyline key={at} points={pixels.map(point => point.join(',')).join(' ')} />)}
-        {points.filter(point => point.curved).map(({ start, end, parameter }) => {
+        {spokes.filter(point => point.curved).map(({ start, end, parameter }) => {
           const segment = projectSegment(start, end);
           return segment && <line key={parameter} x1={segment[0][0]} y1={segment[0][1]} x2={segment[1][0]} y2={segment[1][1]} />;
         })}

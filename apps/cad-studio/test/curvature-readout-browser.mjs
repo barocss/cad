@@ -12,7 +12,7 @@ const pins = ['apps/cad-studio/src/ui/curvatureReadout.ts',
 ];
 const f = await createFlow({
   name: 'curvature-readout', envFrozen: 'D1378_SOURCE_FROZEN', output, initialFiles: pins, requiredFrozen: pins,
-  qualification: 'Verify constant and varying curvature readouts, comb scaling, selection clearing and keyboard focus on native edges and direct curves.',
+  qualification: 'Verify constant and varying curvature readouts, independent comb scale and density, selection clearing and keyboard focus.',
   limits: ['Authored two-span rational curve and straight control, native R4 semicircle and G2 edge. Desktop Chrome WebGPU at 1024x800 and1440x900; no assistive-technology claim.'],
   inspectorSource: `
 import { readFileSync } from 'node:fs';
@@ -174,13 +174,53 @@ async function scaleProof(region,label) {
  assert.equal(await region.getByRole('status').locator('b').innerText(),before);
  f.report.observations.push({label,readout:before,combCount:a.length,scale4to8OnlyChangesLength:true});
 }
+async function densityProof(region, label, fullCount) {
+  const density = region.getByLabel('Comb density', { exact: true });
+  const scale = region.getByLabel('Comb scale (mm²)', { exact: true });
+  const status = region.getByRole('status').locator('b');
+  const strokes = () => comb().locator('line').evaluateAll(lines => lines.map(line =>
+    ['x1','y1','x2','y2'].map(key => Number(line.getAttribute(key)))));
+  const tips = () => comb().locator('polyline').evaluateAll(lines => lines.map(line => line.getAttribute('points')));
+  const history = async () => [await button('Undo').isEnabled(), await button('Redo').isEnabled()];
+  const doc = await f.doc(), before = await history(), readout = await status.innerText();
+  assert.equal(await density.inputValue(),'8');
+  assert.equal(await scale.inputValue(),'8');
+  const full = await strokes(), fullTips = await tips();
+  assert.equal(full.length,fullCount);
+  for (const level of [2,4,8]) {
+    await density.selectOption(String(level));
+    const shown = await strokes();
+    assert.equal(shown.length,fullCount*level/8);
+    assert.ok(shown.every(line => full.some(original => original.every((value,i) => value===line[i]))));
+    assert.deepEqual(await tips(),fullTips);
+    assert.equal(await status.innerText(),readout);
+    assert.equal(await scale.inputValue(),'8');
+    if (label.includes('semicircle') || level === 2) await f.snapshot(label+'-density-'+level);
+  }
+  await density.selectOption('2');
+  const wide = await strokes();
+  await scale.selectOption('4');
+  const short = await strokes();
+  assert.equal(await density.inputValue(),'2');
+  assert.equal(wide.length,short.length);
+  for (let i=0; i<wide.length; i++) {
+    const [x,y,X,Y] = wide[i], [a,b,A,B] = short[i];
+    assert.deepEqual([x,y],[a,b]);
+    assert.ok(Math.abs(Math.hypot(X-x,Y-y)-2*Math.hypot(A-a,B-b))<1e-5);
+  }
+  await f.same(doc);
+  assert.deepEqual(await history(),before);
+  f.report.observations.push({label, densityCounts:[fullCount/4,fullCount/2,fullCount], readout, tipLinesIdentical:true, scaleIndependent:true});
+}
 await f.run(async()=>{for(const width of [1024,1440]){
  await f.newPage();await f.page.setViewportSize({width,height:width===1024?800:900});
  const doc=source();await open(doc,'direct-curvature.bcad');
  await row('Straight control').click();await keyboardShow(panel());
- assert.equal(await result().locator('b').innerText(),'0 mm⁻¹');assert.equal(await panel().getByLabel('Comb scale (mm²)').count(),0);await comb().waitFor({state:'hidden'});
+ assert.equal(await result().locator('b').innerText(),'0 mm⁻¹');assert.equal(await panel().getByLabel('Comb scale (mm²)').count(),0);
+ assert.equal(await panel().getByLabel('Comb density').count(),0);await comb().waitFor({state:'hidden'});
  const clear=button('Clear curvature',panel());await clear.press('Enter');await button('Show curvature comb',panel()).waitFor();assert.ok(await panel().getByRole('button').first().evaluate(el=>el===document.activeElement));
  await row('Rational arch').click();await keyboardShow(panel());await capture('initial',doc,`${width}-arch-four`);await scaleProof(panel(),`${width}-arch`);await capture('initial',doc,`${width}-arch-eight`);await f.snapshot(`${width}-arch`);
+ await densityProof(panel(),`${width}-arch`,16);
  await row('Straight control').click();await comb().waitFor({state:'hidden'});assert.equal(await result().locator('b').count(),0);await keyboardShow(panel());await f.snapshot(`${width}-straight`);await f.same(doc);
  for(const c of [{label:'native-line',doc:capsule,view:'Top',point:[10,-4,6],count:0},{label:'semicircle',doc:capsule,view:'Top',point:[24,0,6],count:16},{label:'g2',doc:g2,view:'Right',point:[30,.375,19.625],count:8}]){
   f.phase=`${width}-${c.label}`;await open(c.doc,c.label+'.bcad');await button(c.view,f.page.locator('.views')).click();
@@ -191,6 +231,7 @@ await f.run(async()=>{for(const width of [1024,1440]){
   const region=f.page.getByRole('region',{name:'Edge curvature',exact:true});await keyboardShow(region);if(c.count===0){assert.equal(await region.getByRole('status').locator('b').innerText(),'0 mm⁻¹');await comb().waitFor({state:'hidden'});assert.equal(await region.getByLabel('Comb scale (mm²)').count(),0);await region.scrollIntoViewIfNeeded();await f.snapshot(width+'-native-line');const clear=button('Clear curvature',region);await clear.focus();await clear.press('Enter');await button('Show curvature comb',region).waitFor();assert.ok(await region.getByRole('button').first().evaluate(el=>el===document.activeElement));await f.same(c.doc);continue;}await comb().locator('line').nth(c.count-1).waitFor();assert.equal(await comb().locator('line').count(),c.count);
   const value=await region.getByRole('status').locator('b').innerText();if(c.label==='semicircle')assert.equal(value,'0.25 mm⁻¹');else assert.equal(value,'0.09090197 – 0.9918771 mm⁻¹');
   await scaleProof(region,`${width}-${c.label}`);await region.scrollIntoViewIfNeeded();await f.snapshot(`${width}-${c.label}`);
+  await densityProof(region,`${width}-${c.label}`,c.count);
   const hide=button('Hide curvature comb',region);await hide.focus();await hide.press('Enter');await comb().waitFor({state:'hidden'});assert.ok(await region.getByRole('button').first().evaluate(el=>el===document.activeElement));await f.same(c.doc);
  }
 }});
