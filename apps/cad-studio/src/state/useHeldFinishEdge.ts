@@ -151,8 +151,8 @@ export function useHeldFinishEdge({ doc, index, problems, bodies, enabled, ownsS
         : downstreamChamfer ? 'Select an original straight top edge clear of the Through Hole.'
         : downstreamFillet ? 'Select a different original straight edge clear of the Through Hole.'
         : candidate && 'error' in candidate ? candidate.error : 'Select one edge on the body of this feature.';
-      if (downstream || passthrough) reportFailure({ title: 'Edge not selected', hint, detail: '' });
-      else notice({ title: 'Edge not selected', hint, detail: '' });
+      // The pick belongs to this replacement even when its source is a terminal body.
+      reportFailure({ title: 'Edge not selected', hint, detail: '' });
     }
     return true;
   };
