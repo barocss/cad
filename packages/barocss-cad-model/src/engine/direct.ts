@@ -10,6 +10,7 @@ import { nextFreeId } from '../util/ids';
 import { refusal } from './refusal';
 import { measureCurveCurvature } from './edgeCurvature';
 import { buildPlanarTangentFill } from './planarTangentFill';
+import { buildGuidedJunction } from './guidedJunction';
 
 export interface DirectObject {
   id: string; name: string; source: string; geometry: string; hidden?: boolean;
@@ -183,6 +184,15 @@ function wholeSurfaceOf(d: DirectGeometry, id: string, operation: string): Surfa
   const picked = selectedSurface(d, id);
   requireWholeSurface(picked.object, operation, 'DIRECT_VALUE');
   return picked.surface;
+}
+
+function fillDonor(d: DirectGeometry, ids: readonly string[], donorId: string, operation: string): Surface {
+  for (const id of [...ids, donorId]) {
+    const matches = d.objects.filter(item => item.id === id);
+    if (matches.length !== 1 || matches[0].hidden)
+      throw refusal('DIRECT_PICK', 'Select visible original curves and one visible adjacent surface.');
+  }
+  return wholeSurfaceOf(d, donorId, operation);
 }
 
 /** Copy accepted trim metadata before the new direct object is published. */
@@ -513,16 +523,23 @@ export const directOps = {
   fillTangent(d: DirectGeometry, ids: readonly string[], seamId: string, donorId: string): DirectGeometry {
     if (ids.length !== 4 || !ids.includes(seamId) || new Set([...ids, donorId]).size !== 5)
       throw refusal('DIRECT_PICK', 'Select four different boundary curves, one seam and one adjacent surface.');
-    for (const id of [...ids, donorId]) {
-      const matches = d.objects.filter(item => item.id === id);
-      if (matches.length !== 1 || matches[0].hidden)
-        throw refusal('DIRECT_PICK', 'Select visible original boundary curves and one visible adjacent surface.');
-    }
-    const donor = wholeSurfaceOf(d, donorId, 'Tangent Fill');
+    const donor = fillDonor(d, ids, donorId, 'Tangent Fill');
     const ordered = [seamId, ...ids.filter(id => id !== seamId)];
     const boundaries = exactFillBoundaries(chainFillLoop(ordered.map(id => curveOf(d, id)), true));
     const made = buildPlanarTangentFill(boundaries, donor, fresh(usedIds(d), 'tangent_fill'));
     return add(d, [], made.source, [{ geometry: made.surface.id, name: 'Tangent Fill' }]);
+  },
+  /** Create an independent open patch with three boundaries and one interior guide. */
+  fillGuidedJunction(d: DirectGeometry, ids: readonly string[], seamId: string, guideId: string, donorId: string): DirectGeometry {
+    if (ids.length !== 4 || !ids.includes(seamId) || !ids.includes(guideId) || seamId === guideId
+      || new Set([...ids, donorId]).size !== 5)
+      throw refusal('DIRECT_PICK', 'Select three different boundary curves, one interior guide and one adjacent surface.');
+    const donor = fillDonor(d, ids, donorId, 'Guided Fill');
+    const [left, right] = ids.filter(id => id !== seamId && id !== guideId).map(id => curveOf(d, id));
+    const made = buildGuidedJunction({ seam: curveOf(d, seamId), guide: curveOf(d, guideId), left, right,
+      donor, surfaceId: fresh(usedIds(d), 'guided_fill') });
+    const trims: TrimLoop[] = [{ keep: 'inside', uv: [[0, 0], [1, 0], [0, 1]] }];
+    return add(d, [], made.source, [{ geometry: made.surface.id, name: 'Guided Fill', trims }]);
   },
   /**
    * The surface run on past one of its edges along its tangent there by `distance` mm (re-fitted as a bicubic B-spline).

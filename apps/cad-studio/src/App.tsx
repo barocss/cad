@@ -53,8 +53,8 @@ import { useCommandPreview } from './state/useCommandPreview';
 import { DirectInspector } from './ui/DirectInspector';
 import { BridgeCurvePanel } from './ui/BridgeCurvePanel';
 import { useBridgeCurve } from './app/useBridgeCurve';
-import { TangentFillPanel } from './ui/TangentFillPanel';
-import { useTangentFill } from './app/useTangentFill';
+import { DirectFillPanel } from './ui/DirectFillPanel';
+import { useDirectFill } from './app/useDirectFill';
 import { ModelTools } from './ui/ModelTools';
 import { useStudioHistoryHandles } from './viewport/useStudioHistoryHandles';
 import { useModelAppearance } from './viewport/useModelAppearance';
@@ -1848,12 +1848,12 @@ export function App() {
   const bridge = useBridgeCurve({ model: { doc, evaluated, bodies, selection, directSelection: directSel, ready: directDraftReady },
     engine, current: ownsDirectDraft,
     commit: (next, id) => { if (!commitDirect(next, [id])) return false; setSelection(emptySel); return true; } });
-  const tangentFill = useTangentFill({ doc, selected: directSel, ready: directDraftReady && directReady,
+  const directFill = useDirectFill({ doc, selected: directSel, ready: directDraftReady && directReady,
     current: ownsDirectDraft, commit: (next, id) => commitDirect(next, [id]) });
   const viewportDirect = useMemo(() => {
     const items = sewPreviewDirect(directShown, active?.cmd.id, active?.ctx, sewCandidateShown);
-    return bridge.preview.length || tangentFill.preview.length ? [...items, ...bridge.preview, ...tangentFill.preview] : items;
-  }, [directShown, active?.cmd.id, active?.ctx, sewCandidateShown, bridge.preview, tangentFill.preview]);
+    return bridge.preview.length || directFill.preview.length ? [...items, ...bridge.preview, ...directFill.preview] : items;
+  }, [directShown, active?.cmd.id, active?.ctx, sewCandidateShown, bridge.preview, directFill.preview]);
   viewBodiesRef.current = viewBodies;
   sectionPickRef.current = viewportSelection.sectionPick;
   const sectionVertex = useStudioSectionVertex({
@@ -2225,7 +2225,7 @@ export function App() {
       {!rendering && !sketch && !measure && !!doc.instances?.length && (assembly.draft || !!singleTop(instanceSel)) && <MatePanel assembly={assembly} instances={doc.instances} instance={singleTop(instanceSel)}
         onRefused={why => setToast({ title: 'The mate was refused', hint: why, detail: '' })} />}
       <BridgeCurvePanel bridge={bridge} />
-      <TangentFillPanel tool={tangentFill} />
+      <DirectFillPanel tool={directFill} />
       {!rendering && !active && !sketch && !measure && !instanceSel.length && directSel.length > 0 && doc.direct && <DirectInspector doc={doc} directSel={directSel} onSelect={setDirectSel} poleControls={poleEditor.controls}
         curveCurvature={directCurveVisible ? directCurvature : undefined}
         changes={{ commitDirect }} onThicken={(id, t, side) => {

@@ -7,7 +7,7 @@ const f = await createFlow({
   limits: ['One bilinear planar donor, four exact polynomial boundary curves and one G1 seam. No trimming, sewing or solid generation.'],
   initialFiles: ['apps/cad-studio/test/tangent-fill-browser.mjs'],
   requiredFrozen: [
-    'apps/cad-studio/src/App.tsx', 'apps/cad-studio/src/app/useTangentFill.ts', 'apps/cad-studio/src/ui/TangentFillPanel.tsx',
+    'apps/cad-studio/src/App.tsx', 'apps/cad-studio/src/app/useDirectFill.ts', 'apps/cad-studio/src/ui/DirectFillPanel.tsx',
     'packages/barocss-cad-model/src/engine/direct.ts', 'packages/barocss-cad-model/src/engine/planarTangentFill.ts',
   ],
   inspectorSource: `

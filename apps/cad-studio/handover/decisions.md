@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D2073: [Fill one guided handle-to-body junction](notes/guided-handle-junction-2026-11-27/README.md), #753. Match three native boundaries and an interior guide, verify open topology and preserve the result through Studio Save/Open.
 - D2072: [Match one planar seam with Tangent Fill](notes/planar-tangent-fill-2026-11-27/README.md), #751. Verify the original G0 angle, preserved boundaries, one native G1 seam and desktop Save/Open.
 - D2071: [Create an independent native Bridge Curve](notes/native-bridge-curve-2026-11-27/README.md), #750. Preview exact G0/G1 across two selected straight edges and preserve the source B-reps and curve through Studio Save and fresh Open.
 - D2060: [Measure actual Fillet radius drag and release timing](notes/fillet-radius-desktop-timing-2026-11-27/README.md), #214. Compare the same Studio case across the two exact versions and verify final radius ownership.
