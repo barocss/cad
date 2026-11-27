@@ -1,4 +1,4 @@
-import { useMemo, useState, type Dispatch, type SetStateAction, type RefObject } from 'react';
+import { useEffect, useMemo, useState, type Dispatch, type SetStateAction, type RefObject } from 'react';
 import { placedDoc, type StudioDoc } from '@barocss/cad-model/engine/doc';
 import { placementOf } from '@barocss/cad-model/engine/placement';
 import type { BodyResult } from '@barocss/cad-model/engine/evaluate';
@@ -50,9 +50,9 @@ export function useProposalPreview({ model, worker, changes, chatRowFiles, displ
       return { kind: 'unavailable', reason: 'Could not evaluate the placed proposal.' };
     }
   };
-  const resetForModelChange = () => { setGhost(g => { if (g) setPreviewBodies(null); return null; }); };
   // (Only wanted to show an open proposal stale.)
   const evidenceRevision = useMemo(() => doc.proposals?.some(p => p.status === 'open') ? requirementEvidenceRevision(doc) : '', [doc]);
+  useEffect(() => { setGhost(g => { if (g) setPreviewBodies(null); return null; }); }, [doc.nodes, doc.parameters, evidenceRevision, session, setPreviewBodies]);
   const isStale = (p: Proposal) => proposalIsStale(p, evidenceRevision);
   const currentProposal = doc.proposals?.find(p => p.id === ghost?.id && p.status === 'open');
   const drawingGhost = !reviewBlocked && currentProposal && !isStale(currentProposal)
@@ -110,13 +110,13 @@ export function useProposalPreview({ model, worker, changes, chatRowFiles, displ
     setGhost(g => g && { ...g, leaveOut, bodies: r.bodies, placed, shown: partial.doc, after: true }); setPreviewBodies(r.bodies);
   };
   // (G12: the diff of the part as it is and the proposal as shown, again when what is shown changes; none without one.)
-  const updateDiff = () => {
+  useEffect(() => {
     if (!ghost) { setProposalOverlay(null); return; }
     // (R4b: on the O9 'proposal-diff' lane — a reply for a proposal no longer shown comes back stale.)
     const at = nextRevision(), key = `${ghost.id}|${ghost.leaveOut.join(',')}`;
     void lanes.run('proposal-diff', { revision: at, source: key }, () => engine.proposalDiff(doc, ghost.shown, at, { revision: modelHash(doc), proposal: key })).then(reply => { if (!reply.stale) setProposalOverlay('error' in reply.result ? null : reply.result); });
     return () => lanes.cancel('proposal-diff');
-  };
+  }, [ghost?.id, ghost?.shown]);
   const flipGhost = () => setGhost(g => { if (!g) return g; setPreviewBodies(g.after ? null : g.bodies); return { ...g, after: !g.after }; });
   const acceptIt = async (p: Proposal) => {
     if (active || sketch) return;
@@ -137,6 +137,6 @@ export function useProposalPreview({ model, worker, changes, chatRowFiles, displ
     return directSheets.length ? { ...(diff ?? { added: null, removed: null, changedFaces: [], method: 'faces', why: null }), directSheets } : diff;
   }, [directSheets, showOverlay, proposalOverlay]);
   return { ghost, proposalOverlay: overlay, drawingCallouts,
-    screwChangesAvailable: screwShape && !!proposalOverlay, toggleScrewChanges, proposalBusy, reviewBlocked, evidenceRevision,
-    isStale, partEval, resetForModelChange, updateDiff, showProposal, rebaseIt, tickPart, flipGhost, acceptIt, rejectIt };
+    screwChangesAvailable: screwShape && !!proposalOverlay, toggleScrewChanges, proposalBusy, reviewBlocked,
+    isStale, partEval, showProposal, rebaseIt, tickPart, flipGhost, acceptIt, rejectIt };
 }

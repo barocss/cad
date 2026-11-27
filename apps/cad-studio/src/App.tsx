@@ -1556,7 +1556,7 @@ export function App() {
   const [failingOnly, setFailingOnly] = useState(false);
   const proposals = useProposalPreview({ model: { doc, bodies, instances: instanceBodies, marker, active: !!active, sketch: !!sketch }, worker: { engine, lanes, session: workerSession, currentSession: () => workerSessionNow.current, nextRevision: () => revision.current++ },
     changes: { commit: next => commit(next, false, false, true), currentDoc: () => docNow.current, undo, setPreviewBodies }, chatRowFiles, displayDirect: D?.directDisplay, onNotice: setToast });
-  const { ghost, proposalOverlay, proposalBusy, evidenceRevision, isStale, partEval, acceptIt, rejectIt } = proposals;
+  const { ghost, proposalOverlay, proposalBusy, isStale, partEval, acceptIt, rejectIt } = proposals;
   const heldDraftPreviewClear = heldDraftFacePreviewClear({ proposal: ghost, proposalBusy, comparison: workingComparison,
     comparisonOverlay: compareOverlay, candidateShown: candidateReview?.shown });
   const heldDraftOpen = openIntent.current;
@@ -1590,8 +1590,6 @@ export function App() {
   routeContext.current = { blocked: busy || !fresh || !!parameterEdit || marker !== null || !!shownVariant.current || !!active || !!sketch || rendering || drawing || !!measure || !!assembly.draft || !!cageEd.session || !!skel.session || !!ghost };
   const footprintReady = nativeVertexReady && !routeContext.current.blocked && !routePanelOpen && !bodyDrag;
   useEffect(() => routeEditor.discardBlocked(), [busy, fresh, parameterEdit, marker, active, sketch, rendering, drawing, measure, assembly.draft, cageEd.session, skel.session, ghost, doc]);
-  useEffect(() => proposals.resetForModelChange(), [doc.nodes, doc.parameters, evidenceRevision, workerSession]);
-  useEffect(() => proposals.updateDiff(), [ghost?.id, ghost?.shown]);
   // (CG6: a version compared with the working document — its geometry's difference on the same overlay, version → working.)
   useEffect(() => {
     if (!workingComparison) { setVersionDiff(null); return; }

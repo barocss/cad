@@ -23,6 +23,7 @@ export function nativeFaceReview(state: ChatState, doc: StudioDoc, bodies: reado
   }
   const faces = [];
   const boredPlates = new Map<string, NonNullable<ReturnType<typeof readTwoThroughBorePlate>>>();
+  const pinnedPlates = review && 'throughBorePlates' in review ? review.throughBorePlates : undefined;
   for (const name of names) {
     const matches = owners.filter(({ face }) => (face.name ?? face.id) === name);
     if (matches.length !== 1)
@@ -31,7 +32,7 @@ export function nativeFaceReview(state: ChatState, doc: StudioDoc, bodies: reado
     const geometry = face.surface.kind === 'surface' ? faceGeometry(face) : null;
     if (!geometry || geometry.kind === 'other')
       return fail(state, `${JSON.stringify(name)} has no supported analytic plane or cylinder.`, { code: 'NATIVE_FACE_GEOMETRY' });
-    if (geometry.kind === 'cylinder' && geometry.out === -1) {
+    if (!pinnedPlates && geometry.kind === 'cylinder' && geometry.out === -1) {
       const plate = throughBorePlate(brep);
       if (plate?.bores.some(bore => bore.faces.includes(name))) boredPlates.set(key, plate);
     }

@@ -11,6 +11,7 @@ import { treeDiff } from '../transactions';
 import { approvalOf, diffLine, DIRECT_GEOMETRY_APPROVAL, nextProposalId, PLAN_CHARS, PROMPT_CHARS, proposalIsStale, proposalRevisionOf, riskOf, riskRank, withHistory } from '../proposals';
 import { isDirectRuledOperation } from '../directRuledProposal';
 import { directReviewRevision } from '../directProposalReview';
+import { lockedPlateProposal } from '../lockedPlateProposalReview';
 import { cornerBatchProposal, rebindReviewedFilletBatch, reviewedCornerBatchEvidence, savedChamferResizeProposal } from '../cornerProposalReview';
 import { boredWallProposal } from '../modelProposalReview';
 import { pairedElbowInletProposal, pairedElbowOutletProposal } from '../pairedElbowOutletProposalReview';
@@ -426,7 +427,7 @@ async function listProposalsTool(state: ChatState, args: Record<string, unknown>
         ?? pairedElbowInletProposal(state.doc, p)?.revision ?? pairedElbowOutletPlaneProposal(state.doc, p)?.revision
         ?? pairedElbowInletPlaneProposal(state.doc, p)?.revision ?? pairedTiltedOutletProposal(state.doc, p)?.revision
         ?? pairedTiltedInletProposal(state.doc, p)?.revision ?? pairedTiltedOppositeCapProposal(state.doc, p)?.revision
-        ?? perpendicularAnnularOutletProposal(state.doc, p)?.revision;
+        ?? perpendicularAnnularOutletProposal(state.doc, p)?.revision ?? lockedPlateProposal(state.doc, p)?.revision;
     return { ...details, ops: ops.length, stale: proposalIsStale(p, revision),
       ...(p.status === 'open' ? { proposalRevision: proposalRevisionOf(p) } : {}),
       ...(direct ? { directReviewRevision: direct } : {}),

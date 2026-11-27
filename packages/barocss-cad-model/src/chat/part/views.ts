@@ -66,7 +66,8 @@ const renderViewsTool: PartHandler = async (state, args, evaluate, _options, dis
       ? ('closedCavities' in duct && duct.closedCavities ? 'Closed duct with two sealed cavities' : `Rectangular ${duct.pathKind ?? 'S-bend'} duct`)
       : intersection ? ('centroid' in intersection
         ? `${intersection.offset === 0 ? 'Centered' : 'Offset'} two-cavity duct Intersect` : 'Offset rectangular duct Intersect')
-        : 'perpendicularAnnularOutletOffset' in review.geometry ? 'Perpendicular annular outlet Offset'
+        : 'lockedPlateReference' in review.geometry ? 'Locked-reference plate proposal'
+          : 'perpendicularAnnularOutletOffset' in review.geometry ? 'Perpendicular annular outlet Offset'
           : 'pairedElbowOutletOffset' in review.geometry ? 'Paired duct outlet Offset'
           : 'pairedElbowInletOffset' in review.geometry ? 'Paired duct inlet Offset'
           : 'pairedElbowOutletPlaneOffset' in review.geometry ? 'Paired duct outlet Offset to plane'
