@@ -152,7 +152,7 @@ export const COMMAND_DOCS: Record<string, { selection: string; values: Record<st
   'full-round': { selection: 'faces: [flat tops of one body facing +Z, each an axis-aligned rectangle: a rib or wall top]', values: { along: 'auto (each face\'s longer side) | x | y' } },
   fillet: { selection: 'edges: [edges of one body]', values: { radius: 'fillet radius (with endRadius: at the chain\'s start)', endRadius: 'optional: the radius at the other end of one open chain (0: the same); the radius varies along it', stationMode: 'ends (default) | interior | two-interior. Interior controls need one original straight edge. Two interior controls need a convex edge outside a tangent chain.', stationAt: 'first interior position in percent from the authored start, strictly between 0 and 100', stationRadius: 'positive radius in mm at the first interior position', station2At: 'two-interior only: second position in percent, after stationAt and below 100', station2Radius: 'two-interior only: positive radius in mm at station2At', shape: 'optional section: circular (default) | conic | g2 (curving as the faces do at the contacts)', rho: 'conic: 0–1 exclusive (0.5 a parabola; smaller flatter, larger fuller)', tension: 'g2: 0–1 exclusive (default 0.5)' } },
   decimate: { selection: 'bodies: [one mesh body] (an imported STL, OBJ or scan: facet faces)', values: { keep: 'per cent of the triangles to keep (1–99)', maxError: 'mm: no collapse past it (0: none)', crease: 'degrees: also keep edges sharper than this (0: only the regions\u2019 boundaries and open edges)' } },
-  shell: { selection: 'faces to open on one body, or one body for a closed hollow', values: {
+  shell: { selection: 'Choose distinct faces to open on one body, or choose one body for a closed hollow. For an original full capsule Revolve, use one or both complete hemisphere names from query.summary. Pass expectedRevision from query.rebuild for the reviewed part.', values: {
     t: 'uniform wall thickness in mm',
     join: 'default | sharp | arc. Sharp and Round need expectedRevision from query.rebuild and one exact original upright L body ID or its single original end cap name.',
     wallMode: 'uniform | per-face. For per-face, give expectedRevision from query.rebuild and exact original faces of an upright rectangular extrusion. Choose one or two distinct original faces as openings. Give a thickness for every kept wall.',
@@ -299,6 +299,8 @@ async function runCommandTool(state: ChatState, args: Record<string, unknown>, e
   }
   if (deleteFace && selection.faces.length !== sel.names.faces.length)
     return fail(state, 'Delete face needs distinct original faces; duplicate names or aliases of the same face are not supported.');
+  if (cmd.id === 'shell' && new Set(sel.names.faces).size !== sel.names.faces.length)
+    return fail(state, 'Shell needs distinct face names for its openings. Send each opening once.', { code: 'COMMAND_INPUT' });
   const point = Array.isArray(args.point) && args.point.length === 3 ? args.point.map(Number) as [number, number, number] : undefined;
   let given = isObj(args.values) ? args.values : {};
   const perFaceShell = cmd.id === 'shell' && given.wallMode === 'per-face';

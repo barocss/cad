@@ -82,6 +82,17 @@ test('a v2 call is the handler\'s call: the same result; an unknown or missing a
   assert.equal(v1Call('measure', {}), null, 'a handler\'s name is not translated');
 });
 
+test('Shell refuses repeated opening names before the viewport selection can merge them', async () => {
+  const state = await stateOf(starterDoc());
+  const literal = 'n1.top';
+  for (const faces of [[literal, literal], [literal, { feature: 'n1', role: 'top' }]]) {
+    const outcome = await dispatchTool(state, 'features', { action: 'command', command: 'shell', faces, values: { t: 1 } }, evaluate);
+    assert.ok(outcome.isError);
+    assert.match(read(outcome.content).error, /Shell needs distinct face names/);
+    assert.deepEqual(outcome.state.doc, state.doc);
+  }
+});
+
 test('describe: the tools, a tool\'s actions, an action\'s handler schema, a command\'s values, a feature kind\'s JSON', async () => {
   const s = await stateOf(starterDoc());
   const d = async (args: object) => { const r = await dispatchTool(s, 'describe', args, evaluate); return { ...read(r.content), isError: r.isError, changed: r.changed } as Record<string, any>; };
