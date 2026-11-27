@@ -116,3 +116,63 @@ for (const [command, expectedVolume] of [['ruled-turn', 3200], ['smooth-turn', 4
     assert.ok(volume !== null && Math.abs(volume - expectedVolume) < 1e-7);
   });
 }
+
+const quarterDisk: SketchNode = {
+  kind: 'sketch', profile: 'loop', segments: [
+    { kind: 'line', start: [0, 0] },
+    { kind: 'arc', start: [10, 0], center: [0, 0], direction: 'ccw' },
+    { kind: 'line', start: [0, 10] },
+  ],
+};
+const draftFixture = withNode(withNode(emptyDoc(), quarterDisk),
+  { kind: 'sketch', profile: 'rectangle', min: [16, 0], max: [34, 9] });
+const draftValues = { sketch: 'n0', h: 10, draft: 10, depth: 'distance' };
+const reviewedDraft = { action: 'command', command: 'extrude', expectedRevision: revisionOf(draftFixture), values: draftValues };
+
+test('reviewed distance Draft runs the shared Extrude on the exact sketch, with either sign', async () => {
+  const current = await stateOf(draftFixture);
+  for (const draft of [10, -10]) {
+    const result = await dispatchTool(current, 'features', { ...reviewedDraft, values: { ...draftValues, draft } }, evaluate);
+    assert.ok(result.changed && !result.isError, result.content);
+    const manual = commandById('extrude')!.build!({
+      doc: current.doc, bodies: [], selection: { faces: [], edges: [], bodies: [], sketches: [0] },
+    }, { h: 10, draft });
+    assert.deepEqual(result.state.doc, manual);
+    assert.equal(JSON.parse(result.content).sketch, 'n0');
+  }
+  const implicit = await dispatchTool(current, 'features',
+    { action: 'command', command: 'extrude', values: { h: 10, draft: 10 } }, evaluate);
+  assert.ok(implicit.changed && !implicit.isError, implicit.content);
+  assert.deepEqual(implicit.state.doc.nodes.at(-1), { id: 'n2', kind: 'extrude', sketch: 1, height: 10, draft: 10 });
+});
+
+test('reviewed distance Draft refuses ambiguous sources and values before evaluation', async () => {
+  const original = await stateOf(draftFixture);
+  const candidates = [
+    { ...reviewedDraft, expectedRevision: undefined },
+    { ...reviewedDraft, faces: [] },
+    ...[
+      { sketch: 0 }, { sketch: 'missing' }, { h: '10' }, { h: 0.01 }, { h: Infinity },
+      { draft: 0 }, { draft: 61 }, { draft: NaN }, { depth: 'through' }, { op: 'join' },
+    ].map(extra => ({ ...reviewedDraft, values: { ...draftValues, ...extra } })),
+  ];
+  const unexpectedEvaluation = () => assert.fail('Invalid reviewed Draft reached candidate evaluation');
+  for (const args of candidates) {
+    const result = await dispatchTool(original, 'features', args, unexpectedEvaluation);
+    assert.equal(JSON.parse(result.content).code, 'COMMAND_INPUT');
+    assert.equal(result.state, original);
+  }
+  const [source, other] = original.doc.nodes;
+  assert.ok(source.kind === 'sketch' && other.kind === 'sketch');
+  for (const nodes of [
+    [source, { ...other, id: source.id }],
+    [{ ...source, suppressed: true as const }, other],
+    [{ ...source, on: { node: 1, side: 'solid' as const } }, other],
+  ]) {
+    const state = { ...original, doc: { ...original.doc, nodes } };
+    const result = await dispatchTool(state, 'features',
+      { ...reviewedDraft, expectedRevision: revisionOf(state.doc) }, unexpectedEvaluation);
+    assert.equal(JSON.parse(result.content).code, 'COMMAND_INPUT');
+    assert.equal(result.state, state);
+  }
+});
