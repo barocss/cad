@@ -12,15 +12,15 @@ import type { EngineClient } from '../engine/client';
 interface FeatureHistoryOptions {
   model: { doc: StudioDoc; marker: number | null; bodies: BodyResult[]; selection: Selection };
   worker: { engine: EngineClient; nextRevision(): number };
-  suppression: { evaluate(doc: StudioDoc): ReturnType<EngineClient['part']>; owner(): () => boolean; commit(doc: StudioDoc): boolean };
-  changes: { canChangeDocument(): boolean; commit(next: StudioDoc): boolean; setSelection: Dispatch<SetStateAction<Selection>> };
+  suppression: { evaluate(doc: StudioDoc): ReturnType<EngineClient['part']>; commit(doc: StudioDoc): boolean };
+  changes: { canChangeDocument(): boolean; captureOwner(): () => boolean; commit(next: StudioDoc): boolean; setSelection: Dispatch<SetStateAction<Selection>> };
   onNotice(notice: FriendlyError, options?: { acceptedDocument: true }): void;
 }
 /** Feature history operations retain their original validation and central acceptance callbacks. */
 export function useFeatureHistory({ model, worker, suppression, changes, onNotice: setToast }: FeatureHistoryOptions) {
   const { doc, marker, bodies, selection } = model;
   const { engine, nextRevision } = worker;
-  const { canChangeDocument, commit, setSelection } = changes;
+  const { canChangeDocument, captureOwner, commit, setSelection } = changes;
   // Deleting a feature (with the sketches only it used): later features, mates and drawing dimensions follow.
   const deleteNode = (index: number, opener: HTMLElement | null = null) => {
     if (!canChangeDocument()) return;
@@ -56,8 +56,10 @@ export function useFeatureHistory({ model, worker, suppression, changes, onNotic
     if (marker !== null) { setToast({ title: 'Roll forward to reorder', hint: 'Steps are moved in the whole history: roll forward to the end first.', detail: '' }); return; }
     const label = featureLabel(doc.nodes[i], i, doc.nodes), r = moveFeature(doc, i, dir);
     if ('error' in r) { setToast({ title: `Cannot move ${label}`, hint: r.error, detail: '' }); return; }
+    // Open owns replacement as soon as reading starts, before docNow changes.
+    const owns = captureOwner();
     engine.evaluate(prefixDoc(r.doc, r.doc.nodes.length), nextRevision()).then(e => {
-      if (!e) return;
+      if (!e || !owns()) return;
       if (!e.ok) { setToast({ ...e.error, title: `Cannot move ${label} there: ${e.error.title}` }); return; }
       commit(r.doc);
     });
@@ -68,7 +70,7 @@ export function useFeatureHistory({ model, worker, suppression, changes, onNotic
     if (!canChangeDocument()) return;
     const n = doc.nodes[i]; if (!n || n.kind === 'sketch' || n.kind === 'driven-sketch') return;
     const next = { ...doc, nodes: doc.nodes.map((x, k) => k !== i ? x : x.suppressed ? (({ suppressed: _s, ...rest }) => rest as ModelNode)(x) : { ...x, suppressed: true as const }) };
-    const request = {}, owns = suppression.owner();
+    const request = {}, owns = captureOwner();
     suppressionRequest.current = request;
     const label = featureLabel(n, i, doc.nodes);
     const title = `Cannot ${n.suppressed ? 'unsuppress' : 'suppress'} ${label}`;

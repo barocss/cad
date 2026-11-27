@@ -2,9 +2,12 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { createFlow, sha256 } from './flow-helper.mjs';
 
+const priorOpenRace = process.argv.includes('--prior-open-race');
+const openRace = priorOpenRace || process.argv.includes('--open-race');
 const pins = [
   'apps/cad-studio/test/feature-order-project-browser.mjs',
   'apps/cad-studio/src/ui/FeatureHistoryBar.tsx',
+  'apps/cad-studio/src/files/useStudioDocumentFiles.ts',
   'apps/cad-studio/src/ui/FeatureHistoryMenu.tsx',
   'apps/cad-studio/src/state/useFeatureHistory.ts',
   'packages/barocss-cad-model/src/chat/features.ts',
@@ -81,7 +84,95 @@ async function verifySolids(label, expected, depth) {
   f.report.observations.push({ label, order: state.doc.nodes.map(node => node.id), native });
 }
 
+// Delay only timing: neither the real Worker reply nor the browser's file bytes are altered.
+function installOpenRace() {
+  const prototype = Worker.prototype;
+  const onmessage = Object.getOwnPropertyDescriptor(prototype, 'onmessage');
+  const post = prototype.postMessage, arrayBuffer = File.prototype.arrayBuffer;
+  let armed = false, target, reply, file;
+  prototype.postMessage = function(request, ...args) {
+    if (armed && request?.type === 'evaluate') {
+      armed = false;
+      target = { worker: this, id: request.id };
+    }
+    return post.call(this, request, ...args);
+  };
+  Object.defineProperty(prototype, 'onmessage', {
+    ...onmessage,
+    set(listener) {
+      onmessage.set.call(this, listener && function(event) {
+        if (target?.worker === this && target.id === event.data?.id) {
+          target = null;
+          window.__historyOpenRace.replyOK = event.data.result?.ok;
+          reply = () => listener.call(this, event);
+          return;
+        }
+        listener.call(this, event);
+      });
+    },
+  });
+  File.prototype.arrayBuffer = async function(...args) {
+    const bytes = await arrayBuffer.apply(this, args);
+    if (this.name === 'D808-newer-open.bcad') await new Promise(resolve => { file = resolve; });
+    return bytes;
+  };
+  window.__historyOpenRace = {
+    arm() { armed = true; },
+    replyHeld: () => !!reply,
+    fileHeld: () => !!file,
+    sendReply() { const send = reply; reply = null; send(); },
+    sendFile() { const send = file; file = null; send(); },
+  };
+}
+const upload = (name, doc) => f.page.locator('input[aria-label="Model file"]').setInputFiles({
+  name, mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(doc)),
+});
+const settle = () => f.page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+async function verifyOpenRace() {
+  const newContext = f.browser.newContext.bind(f.browser);
+  f.browser.newContext = async options => {
+    const context = await newContext(options);
+    await context.addInitScript(installOpenRace);
+    return context;
+  };
+  await f.newPage();
+  f.browser.newContext = newContext;
+  const newer = { ...source, nodes: source.nodes.map(node => node.id === 'n1' ? { ...node, height: 12 } : node) };
+  await upload('D808-old.bcad', source);
+  await f.same(source);
+  f.phase = 'hold successful reorder reply, then begin real file Open';
+  await f.page.evaluate(() => window.__historyOpenRace.arm());
+  await moveEarlier(3);
+  await f.page.waitForFunction(() => window.__historyOpenRace.replyHeld());
+  assert.equal(await f.page.evaluate(() => window.__historyOpenRace.replyOK), true);
+  await upload('D808-newer-open.bcad', newer);
+  await f.page.waitForFunction(() => window.__historyOpenRace.fileHeld());
+  await f.page.evaluate(() => window.__historyOpenRace.sendReply());
+  await settle();
+  f.phase = 'release real file bytes after the previous reorder result';
+  await f.page.evaluate(() => window.__historyOpenRace.sendFile());
+  if (priorOpenRace) {
+    await f.same(reordered);
+    await settle();
+    await verifySolids('01-prior-reorder-cancelled-open', reordered, 8);
+    f.report.observations.push({ priorReproduced: true, newerOpenLost: true });
+    return;
+  }
+  await f.same(newer);
+  await verifySolids('02-newer-open-wins', newer, 12);
+  assert.equal(await f.page.getByText(/Cannot move|Change not applied/).count(), 0);
+  await f.undo();
+  await f.same(source);
+  await verifySolids('03-undo-to-original-order', source, 8);
+  await f.redo();
+  await f.same(newer);
+  const saved = await f.save('D808-newer-open-accepted');
+  await f.freshOpen(saved.file, newer, '04-fresh-open');
+  await verifySolids('05-reopened-native', newer, 12);
+}
+
 await f.run(async () => {
+  if (openRace) return verifyOpenRace();
   f.phase = 'open two independent extrusions and a dependent Hole';
   await f.newPage();
   const [chooser] = await Promise.all([f.page.waitForEvent('filechooser'), button(f.page, 'Open').click()]);

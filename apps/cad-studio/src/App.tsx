@@ -1478,12 +1478,11 @@ export function App() {
         const candidate = inPlace ? resolveShopRows(next, inPlace.assembly).doc : next;
         return engine.part(prefixDoc(candidate, candidate.nodes.length), revision.current++, 'read');
       },
-      owner: () => {
-        const open = openIntent.current;
-        return () => openIntent.current === open && ownsEvaluatedSource() && shownDocNow.current === shownDoc;
-      },
     },
-    changes: { canChangeDocument, commit, setSelection },
+    changes: { canChangeDocument, commit, setSelection, captureOwner: () => {
+      const open = openIntent.current;
+      return () => openIntent.current === open && ownsEvaluatedSource() && shownDocNow.current === shownDoc;
+    } },
     onNotice: (message, options) => setToast(options?.acceptedDocument ? { ...message, documentSource: { doc: docNow.current } } : message) });
   const { deleteNode, separate, reorder, toggleSuppress, cascade, setCascade, deleteCascade, deleteSelection } = featureHistory;
   const sketchSection = sectionSketchAction({
