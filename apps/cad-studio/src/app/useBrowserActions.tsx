@@ -5,6 +5,7 @@ import type { BodyResult } from '@barocss/cad-model/engine/evaluate';
 import type { InstanceEvaluationSource } from '../viewport/instanceEvaluation';
 import { addToIsolation } from './addToIsolation';
 import { browserRevealTarget } from './bodyBrowserReveal';
+import { browserActionAvailability, type BrowserActionConditions } from './browserActionAvailability';
 import { NO_INSTANCES } from './studioConstants';
 import { useBodyBrowserReveal } from './useBodyBrowserReveal';
 
@@ -12,11 +13,11 @@ interface BrowserActionsOptions {
   model: { doc: StudioDoc; evaluated: StudioDoc; bodies: readonly BodyResult[]; generation: number; workerSession: number; openIntent: object };
   instances: { entries: ReadonlyMap<string, { inst: PartInstance; sourceKey: string; bodies: readonly BodyResult[] }>; sources: ReadonlyMap<string, InstanceEvaluationSource> };
   selection: { model: Selection; instances: readonly string[]; direct: readonly string[]; selectBodies(indices: number[]): void };
-  browser: { open: boolean; setOpen(open: boolean): void; blocked: string | null };
+  browser: { open: boolean; setOpen(open: boolean): void };
+  conditions: BrowserActionConditions;
   isolation: {
     ids: readonly string[] | undefined;
     setIds: Dispatch<SetStateAction<readonly string[] | undefined>>;
-    blocked: string | null;
     hasActiveMode(): boolean;
     onInputBlocked(): void;
   };
@@ -26,12 +27,13 @@ interface BrowserActionsOptions {
 const hasFocusedInput = () => document.activeElement?.matches('input, textarea, select, [contenteditable="true"]');
 
 /** Keep each Browser action bound to the model state that displayed it. */
-export function useBrowserActions({ model, instances, selection, browser, isolation, isCurrent }: BrowserActionsOptions) {
+export function useBrowserActions({ model, instances, selection, browser, conditions, isolation, isCurrent }: BrowserActionsOptions) {
   const { doc, evaluated, bodies, generation, workerSession, openIntent } = model;
   const { entries, sources } = instances;
   const { model: picked, instances: pickedInstances, direct, selectBodies } = selection;
-  const { open, setOpen, blocked: revealBlocked } = browser;
-  const { ids, setIds, blocked: isolationBlocked, hasActiveMode, onInputBlocked } = isolation;
+  const { open, setOpen } = browser;
+  const { ids, setIds, hasActiveMode, onInputBlocked } = isolation;
+  const { reveal: revealBlocked, isolation: isolationBlocked } = browserActionAvailability(conditions);
 
   // A property query remains reviewed when the user only changes selection.
   const queryOwner = useMemo(() => ({}), [doc, evaluated, bodies, generation, workerSession, openIntent, revealBlocked]);
@@ -67,7 +69,7 @@ export function useBrowserActions({ model, instances, selection, browser, isolat
   } : undefined;
 
   return {
-    reveal, isolationAction, queryOwner,
+    reveal, revealBlocked, isolationAction, queryOwner,
     selectQueryMatches(indices: number[], owner: object) {
       if (owner !== queryOwnerNow.current || revealBlocked || !isCurrent() || !indices.length) return false;
       selectBodies(indices);

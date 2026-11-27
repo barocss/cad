@@ -2007,31 +2007,25 @@ export function App() {
   const referenceDecisions = !sketch && !active && !rendering && (refMarks.length > 0 || refProblems.length > 0)
     ? <ReferenceDecisions doc={doc} referenceLabels={referenceLabels} refMarks={refMarks} refProblems={refProblems} refChoices={refChoices}
       previewReference={previewReference} settleRef={settleRef} showRefChoices={showRefChoices} /> : null;
-  const bodyRevealBlocked = !fresh || busy || workerFailure || shownDoc !== doc || marker !== null
-    ? 'Wait for the current model result before finding the selection.'
-    : active || sketch || editNode !== null || instanceEdit || renaming || parameterEdit || assembly.draft || cageEd.session || skel.session || cutDraft
-      ? 'Finish or cancel the current edit before finding the selection.'
-      : rendering || drawing || inPlace || section || measure || printEnabled || camEnabled || pmiEnabled || previewMode !== 'none' || routePanelOpen || stepsDisp || isolatedInstances || ghost || workingComparison
-        ? 'Return to the ordinary Model view before finding the selection.'
-        : bodyDrag || instDrag || poleEditor.dragging || sectionDragFrom || dragCmd.current
-          ? 'Finish the current drag before finding the selection.'
-          : project.opening() || workspaceModeExit.pending || askDiscard || palette || cascade || flatPatternOpen || cutListView || stepAsk || stlAsk
-            ? 'Finish the current document or dialog operation before finding the selection.' : null;
   const bodyRevealOpenIntent = openIntent.current;
-  const isolationAddBlocked = !fresh || busy || workerFailure || shownDoc !== doc || marker !== null || variants.showing
-    ? 'Wait for the current main Model result.'
-    : displayScopeReason || active || sketch || editNode !== null || instanceEdit || renaming || parameterEdit || assembly.draft || inPlace || section || measure || previewMode !== 'none' || pmiEnabled || routePanelOpen || stepsDisp || ghost || workingComparison || cutDraft
-      ? 'Finish the current operation and return to ordinary Model view.'
-      : bodyDrag || instDrag || poleEditor.dragging || sectionDragFrom || dragCmd.current || project.opening() || workspaceModeExit.pending || askDiscard || palette || cascade || flatPatternOpen || cutListView || stepAsk || stlAsk
-        ? 'Finish the current drag or dialog first.' : null;
   const browserActions = useBrowserActions({
     model: { doc, evaluated, bodies, generation: docGeneration, workerSession, openIntent: bodyRevealOpenIntent },
     instances: { entries: instanceBodies, sources: instanceSources },
     selection: { model: selection, instances: instanceSel, direct: directSel, selectBodies: indices => {
       setDirectSel([]); setInstanceSel([]); setSelection({ faces: [], edges: [], bodies: indices });
     } },
-    browser: { open: browserOpen, setOpen: setBrowserOpen, blocked: bodyRevealBlocked },
-    isolation: { ids: isolatedInstances, setIds: setIsolatedInstances, blocked: isolationAddBlocked,
+    browser: { open: browserOpen, setOpen: setBrowserOpen },
+    conditions: {
+      currentModel: fresh && !busy && !workerFailure && shownDoc === doc && marker === null,
+      editing: !!(active || sketch || editNode !== null || instanceEdit || renaming || parameterEdit || assembly.draft || cutDraft),
+      editingRevealOnly: !!(cageEd.session || skel.session),
+      limitedModelView: !!(inPlace || section || measure || previewMode !== 'none' || pmiEnabled || routePanelOpen || stepsDisp || ghost || workingComparison),
+      limitedRevealView: !!(rendering || drawing || printEnabled || camEnabled || isolatedInstances),
+      limitedIsolationView: !!displayScopeReason, showingVariant: !!variants.showing,
+      dragging: !!(bodyDrag || instDrag || poleEditor.dragging || sectionDragFrom || dragCmd.current),
+      dialogPending: () => !!(project.opening() || workspaceModeExit.pending || askDiscard || palette || cascade || flatPatternOpen || cutListView || stepAsk || stlAsk),
+    },
+    isolation: { ids: isolatedInstances, setIds: setIsolatedInstances,
       hasActiveMode: () => !!(activeStore.get() || shownVariant.current),
       onInputBlocked: () => setToast({ title: 'Isolation unchanged', hint: 'Press Tab or click outside the current field before adding a part. Its draft has been kept.', detail: '' }),
     },
@@ -2040,7 +2034,7 @@ export function App() {
   });
   const browserPanel = (
       <ModelBrowser ref={referenceBrowser} model={{ doc, evaluated, namesDoc, bodies, generation: docGeneration, fresh, busy }} actions={browserActions}
-        state={{ open: browserOpen, setOpen: setBrowserOpen, blocked: bodyRevealBlocked, onCollapse: clearReferencePreview }}
+        state={{ open: browserOpen, setOpen: setBrowserOpen, blocked: browserActions.revealBlocked, onCollapse: clearReferencePreview }}
         geometry={{
           bodies: { selection, rows: { expanded, setExpanded, renaming, setRenaming, editNode, setRowHover },
             changes: { commit, commitVisibility: commitBodyVisibility, setSelection, setDirectSel, setInstanceSel,

@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { bodyRevealTarget, ownsBodyReveal, revealScrollDelta, revealBodyRow, revealInteractionProblem } from '../src/app/bodyBrowserReveal';
+import { browserActionAvailability } from '../src/app/browserActionAvailability';
 import type { Selection } from '@barocss/cad-model/app/commands';
 const empty = (): Selection => ({ bodies: [], faces: [], edges: [] });
 const bodies = [{ key: 'first' }, { key: 'second' }], other = { instances: 0, direct: 0 };
@@ -75,4 +76,39 @@ test('one-shot reveal ownership rejects new document, evaluation, selection, Esc
   assert.equal(ownsBodyReveal(request, owner, undefined, 1, true), false);
   assert.equal(ownsBodyReveal(request, owner, 'first', 2, true), false);
   assert.equal(ownsBodyReveal(request, owner, 'first', 1, false), false);
+});
+
+test('the Browser keeps reveal and isolation blocker priority and their independent modes', () => {
+  const ready = {
+    currentModel: true, editing: false, editingRevealOnly: false, limitedModelView: false, limitedRevealView: false,
+    limitedIsolationView: false, showingVariant: false, dragging: false, dialogPending: () => false,
+  };
+  assert.deepEqual(browserActionAvailability(ready), { reveal: null, isolation: null });
+  assert.deepEqual(browserActionAvailability({ ...ready, currentModel: false, editing: true, dragging: true,
+    dialogPending: () => { throw new Error('Stale actions should not read dialog state'); } }), {
+    reveal: 'Wait for the current model result before finding the selection.',
+    isolation: 'Wait for the current main Model result.',
+  });
+  assert.deepEqual(browserActionAvailability({ ...ready, editingRevealOnly: true, showingVariant: true }), {
+    reveal: 'Finish or cancel the current edit before finding the selection.',
+    isolation: 'Wait for the current main Model result.',
+  });
+  assert.deepEqual(browserActionAvailability({ ...ready, limitedRevealView: true, limitedIsolationView: true, dragging: true }), {
+    reveal: 'Return to the ordinary Model view before finding the selection.',
+    isolation: 'Finish the current operation and return to ordinary Model view.',
+  });
+  assert.deepEqual(browserActionAvailability({ ...ready, limitedRevealView: true }), {
+    reveal: 'Return to the ordinary Model view before finding the selection.', isolation: null,
+  });
+  assert.deepEqual(browserActionAvailability({ ...ready, limitedIsolationView: true }), {
+    reveal: null, isolation: 'Finish the current operation and return to ordinary Model view.',
+  });
+  assert.deepEqual(browserActionAvailability({ ...ready, dragging: true, dialogPending: () => true }), {
+    reveal: 'Finish the current drag before finding the selection.',
+    isolation: 'Finish the current drag or dialog first.',
+  });
+  assert.deepEqual(browserActionAvailability({ ...ready, dialogPending: () => true }), {
+    reveal: 'Finish the current document or dialog operation before finding the selection.',
+    isolation: 'Finish the current drag or dialog first.',
+  });
 });
