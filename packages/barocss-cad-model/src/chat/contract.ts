@@ -6,6 +6,7 @@
 // property newly required) needs a new contract version. (O105: the handlers' own 83-tool list, v1, is no longer served.)
 
 import { GROUPS } from './groups';
+import { stepDigestSchema } from './assemblyStepPresentation';
 
 /** The consolidated tools (A5.3, O11): 13 tools, each action a handler (groups.ts), frozen in `tools-v2.json`; the only surface (O105). */
 export const TOOL_CONTRACT_V2 = 'barocss-cad-tools-v2';
@@ -49,6 +50,17 @@ const drawingCalloutFields = { source: str, callouts: { type: 'array',
 } satisfies Record<string, JsonSchema>;
 const nativeJointRead = { body: str, revision: str };
 const nativePoint = { type: 'array', items: num, minItems: 3, maxItems: 3 };
+const nullableStepDigest = { ...stepDigestSchema, type: ['string', 'null'] };
+const stepPresentationFields = {
+  scope: { type: 'string', const: 'saved-static-assembly-step' },
+  step: o({ index: { type: 'integer', minimum: 0 }, id: str, name: str }, ['index', 'id', 'name']),
+  camera: { ...o({ eye: nativePoint, target: nativePoint, up: nativePoint }, ['eye', 'target', 'up']), type: ['object', 'null'] },
+  explode_scale: { type: 'number', minimum: 0, maximum: 2 },
+  visibility: o({ waiting_policy: { type: 'string', const: 'hide' }, shown: stepIds, hidden_by_document: stepIds }, ['waiting_policy', 'shown', 'hidden_by_document']),
+  installed: stepIds, active: stepIds, waiting: stepIds, unresolved: stepIds,
+  evidence: o({ reference_digest: nullableStepDigest, checklist_digest: nullableStepDigest }, ['reference_digest', 'checklist_digest']),
+  model_revision: stepDigestSchema, revision: stepDigestSchema,
+} satisfies Record<string, JsonSchema>;
 const curveSample = o({ parameter: num, magnitude: num, point: nativePoint, vector: nativePoint },
   ['parameter', 'magnitude', 'point', 'vector']);
 const READ: Record<string, JsonSchema | null> = {
@@ -173,7 +185,8 @@ const READ: Record<string, JsonSchema | null> = {
   subd_select: o({ ok: bool, faces: arr, vertices: arr, edges: arr, count: num, cageRevision: str }, ['ok']),
   drawing_issues: o({ sheet: obj, issues: arr }, ['sheet', 'issues']),
   tolerance_suggestions: o({ mode: str, suggestions: arr }, ['mode', 'suggestions']),
-  get_assembly: o({ base: obj, instances: arr, mates: arr, note: str, assembly_steps: savedInstructions }, ['base']),
+  get_assembly: o({ base: obj, instances: arr, mates: arr, note: str, assembly_steps: savedInstructions,
+    assembly_step_presentation: o(stepPresentationFields, Object.keys(stepPresentationFields)) }, ['base']),
   list_library: o({ libraries: arr, note: str }, ['libraries']),
   check_printability: o({ direction: { type: ['object', 'null'] }, rules: arr }, ['rules']),
   link_inertia: o({ links: arr }, ['links']),

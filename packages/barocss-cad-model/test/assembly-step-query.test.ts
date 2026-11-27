@@ -91,10 +91,78 @@ test('public describe exposes optional step inputs and result schema retains exi
  assert.equal(described.input.properties.include_steps.type, 'boolean');
  assert.equal(described.input.properties.step_index.type, 'integer');
  assert.equal(described.input.properties.step_index.minimum, 0);
+ assert.equal(described.input.properties.step_presentation.type, 'object');
  assert.ok(!(described.input.required ?? []).includes('include_steps'));
  assert.ok(!(described.input.required ?? []).includes('step_index'));
  assert.match(described.description, /not current UI visibility or motion/);
  const schema = outputSchemaOf('get_assembly')!;
  assert.deepEqual(schema.required, ['base']);
  assert.ok(schema.properties?.assembly_steps); assert.deepEqual(doc, before);
+});
+
+const evidence = { reference_digest: 'a'.repeat(64), checklist_digest: 'b'.repeat(64) };
+const presentationArgs = { include_steps: true, step_index: 0, step_presentation: evidence };
+
+test('static presentation keeps occurrence identity independent of names and saved visibility', async () => {
+ const doc = fixture(); doc.instances![0].hidden = true;
+ const { assembly_step_presentation: first, ...legacy } = (await query(doc, presentationArgs)).value;
+ assert.deepEqual(legacy, (await query(doc, { include_steps: true, step_index: 0 })).value);
+ assert.deepEqual(first.step, { index: 0, id: 'get_assembly', name: 'run_command' });
+ assert.deepEqual(first.camera, doc.assemblySteps![0].view);
+ assert.equal(first.explode_scale, .75);
+ assert.deepEqual(first.evidence, evidence);
+ assert.deepEqual(first.visibility, { shown: [], hidden_by_document: ['p1'], waiting_policy: 'hide' });
+ assert.deepEqual(first.active, ['p1']);
+ assert.deepEqual(first.waiting, ['p2', 'p3']);
+ assert.deepEqual(first.unresolved, ['missing']);
+ assert.match(first.model_revision, /^[a-f0-9]{64}$/);
+ assert.match(first.revision, /^[a-f0-9]{64}$/);
+ const { assembly_step_presentation: last } = (await query(doc, { ...presentationArgs, step_index: 1, step_presentation: {} })).value;
+ assert.deepEqual(last.visibility.shown, ['p2', 'p3']);
+ assert.deepEqual(last.active, ['p2']);
+ assert.equal(last.camera, null);
+ assert.equal(last.explode_scale, 0);
+ assert.deepEqual(last.evidence, { reference_digest: null, checklist_digest: null });
+});
+
+test('presentation rejects stale evidence, model or selected view without evaluating geometry', async () => {
+ const doc = fixture();
+ const { assembly_step_presentation: original } = (await query(doc, presentationArgs)).value;
+ const pinned = { ...evidence, expected_revision: original.revision };
+ const read = (d: StudioDoc, step_presentation: object) => query(d, { ...presentationArgs, step_presentation });
+ const unrelatedStep = structuredClone(doc);
+ unrelatedStep.assemblySteps![1].note = 'Changed another step note';
+ unrelatedStep.assemblySteps![1].explode = 1;
+ assert.deepEqual((await read(unrelatedStep, pinned)).value.assembly_step_presentation, original);
+ const variants: ((d: StudioDoc) => void)[] = [
+  d => { d.instances![0].position[0] += 1; },
+  d => { d.instances![0].doc = rectanglePart(11, 5, 2); },
+  d => { d.instances![0].hidden = true; },
+  d => { d.assemblySteps![0].view!.eye[0] += 1; },
+  d => { d.assemblySteps![0].explode = 0; },
+  d => { d.assemblySteps![0].add = ['p3']; },
+ ];
+ async function stale(d: StudioDoc, step_presentation: object) {
+  const state = { doc: d, bodies: [] };
+  const r = await runTool(state, 'assembly', { action: 'get', ...presentationArgs, step_presentation },
+   async () => assert.fail('stale presentation evaluated geometry'));
+  assert.equal(r.isError, true);
+  assert.equal(r.changed, false);
+  assert.equal(r.state.doc, d);
+  assert.equal(JSON.parse(r.content).code, 'STEP_PRESENTATION_STALE', r.content);
+ }
+ for (const change of variants) { const next = structuredClone(doc); change(next); await stale(next, pinned); }
+ await stale(doc, { ...pinned, reference_digest: 'c'.repeat(64) });
+ await stale(doc, { ...pinned, checklist_digest: 'd'.repeat(64) });
+});
+
+test('invalid presentation requests fail without evaluating geometry', async () => {
+ const doc = fixture();
+ for (const args of [{ step_presentation: {} }, ...[null, true, { reference_digest: 'bad' }, { unknown: evidence.reference_digest }].map(step_presentation => ({ ...presentationArgs, step_presentation }))]) {
+  const r = await runTool({ doc, bodies: [] }, 'assembly', { action: 'get', ...args },
+   async () => assert.fail('invalid presentation evaluated geometry'));
+  assert.equal(r.isError, true);
+  assert.equal(r.changed, false);
+  assert.equal(r.state.doc, doc);
+ }
 });

@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D2082: [Read a saved static assembly presentation from the local Agent](notes/saved-assembly-presentation-2026-11-28/README.md), #278. Pin the synthetic reference checklist to exact occurrence IDs, camera and explode scale, and verify the submitted Studio view after reopening.
 - D2081: [Verify STEP from the approved four-part reference draft](notes/two-view-draft-step-2026-11-27/README.md), #747. Verify the real output's four solids, active units, placement and axis.
 - D2080: [Propose a four-part native draft from two reference views](notes/two-view-native-draft-2026-11-27/README.md), #747. Save the proposal and verify approval, independent edits and native reopening in Studio.
 - D2079: [Calibrate visible part envelopes from two attached views](notes/two-view-reference-scale-2026-11-27/README.md), #747. Verify one measured diameter, paired outlines, explicit unknown depth and mismatched view refusal through Studio and local MCP.

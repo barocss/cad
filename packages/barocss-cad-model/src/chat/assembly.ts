@@ -1,4 +1,5 @@
 import { MAX_STEP_NAME, addAssemblyStep, stepsOf, stepStateOf, assemblyStepProblems } from '../assembly/steps';
+import { readStepPresentation, stepPresentationInput } from './assemblyStepPresentation';
 import { resolveShopTree } from '../engine/shopRows';
 import { readConnector, validateBallOptions, validateFastenedOptions, validateUniversalOptions, validateCylindricalOptions, type Connector } from '../assembly/connectors';
 // Chat tools for assemblies: parts as instances (each its own feature tree, built with the part tools
@@ -196,6 +197,14 @@ export async function runAssemblyTool(state: State, name: string, args: Record<s
       const steps = stepsOf(doc);
       if (hasIndex && (typeof args.step_index !== 'number' || !Number.isSafeInteger(args.step_index) || args.step_index < 0 || args.step_index >= steps.length))
         return fail(doc, `step_index must be a zero-based integer within the saved steps (${steps.length}).`);
+      const classified = hasIndex ? stepStateOf(doc, args.step_index as number) : undefined;
+      let presentation;
+      if (Object.hasOwn(args, 'step_presentation')) {
+        if (!classified) return fail(doc, 'step_presentation requires include_steps: true and a saved step_index.');
+        const result = readStepPresentation(doc, classified, args.step_presentation);
+        if (result.error) return fail(doc, result.error, { code: result.code });
+        presentation = result.presentation;
+      }
       const detail = args.faces_of === undefined ? null : String(args.faces_of);
       if (detail && detail !== BASE && !byId(hostOf(detail))) return fail(doc, `No part "${detail}"; parts: ${partList()}.`);
       const lost = detail && detail !== BASE && detail.includes('/') ? occurrenceProblem(byId(hostOf(detail))!.doc, hostOf(detail), splitPart(detail).path) : null;
@@ -203,7 +212,6 @@ export async function runAssemblyTool(state: State, name: string, args: Record<s
       const out = await describe(doc, state.bodies, evaluate, detail);
       // Saved instruction membership only: never the current UI step, visibility or a physical assembly plan.
       const listed = args.include_steps === true ? new Set(steps.flatMap(step => step.add)) : undefined;
-      const classified = hasIndex ? stepStateOf(doc, args.step_index as number) : undefined;
       const assembly_steps = listed ? {
         scope: 'saved-top-level-instructions',
         steps: steps.map((step, index) => ({ index, id: step.id, name: step.name, parts: [...step.add] })),
@@ -213,7 +221,8 @@ export async function runAssemblyTool(state: State, name: string, args: Record<s
           installed: classified.installed, active: classified.active, waiting: classified.waiting,
           unresolved: classified.unresolved, unassigned: classified.unassigned } } : {}),
       } : undefined;
-      return { doc, content: json(assembly_steps ? { ...out, assembly_steps } : out), isError: false, changed: false, summary: `${instances.length} parts, ${mates.length} mates` };
+      return { doc, content: json({ ...out, ...(assembly_steps ? { assembly_steps } : {}),
+        ...(presentation ? { assembly_step_presentation: presentation } : {}) }), isError: false, changed: false, summary: `${instances.length} parts, ${mates.length} mates` };
     }
     case 'add_part': {
       const label = typeof args.name === 'string' && args.name.trim() ? args.name.trim() : null;
@@ -432,8 +441,8 @@ export const ASSEMBLY_TOOLS: ToolDefinition[] = [
   },
   {
     name: 'get_assembly',
-    description: 'The assembly: the base part (the document\'s own part, fixed at the origin) and every placed part (instance id, name, placement, grounded, volume, bounds in the assembly), the mates and any that cannot be met. With faces_of, also that part\'s mateable faces and edges (flat: normal; round: axis, radius, inner hole or outer shaft; sphere: centre, radius; cone: apex, axis, half-angle; straight or circular edge: direction or normal, length or radius) in its own coordinates. include_steps explicitly adds saved top-level instruction membership and problems, not current UI visibility or motion. Optional step_index classifies that saved step (zero-based; requires include_steps true); note text, camera and explode settings are not returned.',
-    input_schema: { type: 'object', properties: { faces_of: { type: 'string', description: 'A part id or "base".' }, include_steps: { type: 'boolean', description: 'Opt in to saved top-level instruction membership (not current UI state).' }, step_index: { type: 'integer', minimum: 0, description: 'Saved step to classify, zero-based; requires include_steps true.' } }, additionalProperties: false },
+    description: 'The assembly: the base part (the document\'s own part, fixed at the origin) and every placed part (instance id, name, placement, grounded, volume, bounds in the assembly), the mates and any that cannot be met. With faces_of, also that part\'s mateable faces and edges (flat: normal; round: axis, radius, inner hole or outer shaft; sphere: centre, radius; cone: apex, axis, half-angle; straight or circular edge: direction or normal, length or radius) in its own coordinates. include_steps adds saved top-level membership and problems, not current UI visibility or motion. step_index is zero-based. With both, step_presentation adds the saved camera, display-only explode scale, top-level visibility with waiting occurrences hidden, and a revision pin. A null camera means no saved view. Evidence digests come from the caller. This report does not capture pixels or approve engineering results.',
+    input_schema: { type: 'object', properties: { faces_of: { type: 'string', description: 'A part id or "base".' }, include_steps: { type: 'boolean', description: 'Opt in to saved top-level instruction membership (not current UI state).' }, step_index: { type: 'integer', minimum: 0, description: 'Saved step to classify, zero-based; requires include_steps true.' }, step_presentation: stepPresentationInput }, additionalProperties: false },
   },
   {
     name: 'add_part',
