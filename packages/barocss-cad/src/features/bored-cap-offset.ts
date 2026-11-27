@@ -287,6 +287,22 @@ function admittedCap(brep: Brep, faceName: string, kind: StockKind = 'bored'): C
   return { point: [anchorX, anchorY, up ? hi : lo], sign: up ? 1 : -1, opposite: up ? lo : hi, min, max, center, radius };
 }
 
+/** Read the two proven circular passages and their common exterior caps in a rectangular plate. */
+export function readTwoThroughBorePlate(brep: Brep) {
+  const stock = admittedAxialStock(brep, 'two-bore');
+  if (!stock?.boreDisks || !stock.borePairs) return;
+  const { bottom, top, lo, hi, boreDisks, borePairs, min, max } = stock;
+  return {
+    bounds: { min: [min[0], min[1], lo], max: [max[0], max[1], hi] },
+    openings: [{ face: bottom.name ?? bottom.id, z: lo }, { face: top.name ?? top.id, z: hi }],
+    bores: borePairs.map((pair, index) => ({
+      center: [boreDisks[index].center[0], boreDisks[index].center[1]],
+      diameter: 2 * boreDisks[index].radius,
+      faces: pair.map(face => face.name ?? face.id),
+    })),
+  };
+}
+
 /** A handle anchor on the material and its exact signed axial direction. */
 export function boredCapOffsetFrame(brep: Brep, faceName: string): { anchor: Point; normal: Point } | undefined {
   const cap = admittedCap(brep, faceName);

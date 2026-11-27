@@ -3,8 +3,6 @@
 import { resolveNames, resolveSelectors, type NameSelection } from '../names';
 import { edgeDetail, faceDetail } from '../observe';
 import { renderDirectViews, renderViews } from '../views';
-import { partBreps, type BodyResult } from '../../engine/evaluate';
-import type { StudioDoc } from '../../engine/doc';
 import { type ChatState, type Evaluate, type ToolOutcome, type PartHandler, type PartRun, json, fail, strings, list } from '../toolKit';
 import { isObj } from '../../util/guards';
 import { revisionOf } from '../../util/revision';
@@ -12,7 +10,8 @@ import { loadDirect } from '../../engine/directModule';
 import { directInspectionRevision } from '../sweepSource';
 import { isDirectPin, pinnedDirectCandidate, type DirectCandidatePin } from './directCandidate';
 import { reviewModelCandidate } from './modelCandidate';
-import { evaluateCurve, faceGeometry, surfaceDomain } from '@barocss/cad';
+import { nativeFaceReview } from './nativeFaceReview';
+import { evaluateCurve, surfaceDomain } from '@barocss/cad';
 
 async function renderDirectReview(state: ChatState, args: Record<string, unknown>, evaluate: Evaluate, dispatch: PartRun): Promise<ToolOutcome> {
   const { expectedDirectRevision, proposal, expectedProposalRevision } = args;
@@ -159,32 +158,6 @@ async function inspectSurfacePoint(state: ChatState, args: Record<string, unknow
   } catch {
     return fail(state, 'The native surface normal is unavailable at this parameter pair.', { code: 'DIRECT_SURFACE_NORMAL' });
   }
-}
-
-type ModelReview = Extract<Awaited<ReturnType<typeof reviewModelCandidate>>, { result: unknown }>;
-type NativeReviewEvidence = { candidate: DirectCandidatePin & { directRevision: string } } |
-  ({ candidate: ModelReview['candidate']; imageSha256: string } & ModelReview['geometry']);
-
-function nativeFaceReview(state: ChatState, doc: StudioDoc, bodies: readonly BodyResult[], names: readonly string[],
-  review?: NativeReviewEvidence): ToolOutcome {
-  const keys = new Set(bodies.map(body => body.key));
-  const native = partBreps(doc).filter(({ key }) => keys.has(key)).flatMap(({ key, brep }) => brep.faces.map(face => ({ key, face })));
-  const faces = [];
-  for (const name of names) {
-    const matches = native.filter(({ face }) => (face.name ?? face.id) === name);
-    if (matches.length !== 1)
-      return fail(state, `Use a unique native face name from the image. ${JSON.stringify(name)} has ${matches.length} matches.`, { code: 'NATIVE_FACE_NAME' });
-    const [{ face, key }] = matches;
-    const geometry = face.surface.kind === 'surface' ? faceGeometry(face) : null;
-    if (!geometry || geometry.kind === 'other')
-      return fail(state, `${JSON.stringify(name)} has no supported analytic plane or cylinder.`, { code: 'NATIVE_FACE_GEOMETRY' });
-    faces.push({ name, body: key, geometry: geometry.kind === 'plane'
-      ? { kind: 'plane', point: geometry.o, outwardNormal: geometry.n }
-      : { kind: 'cylinder', radius: geometry.r, axis: { point: geometry.c, direction: geometry.a },
-        outwardNormal: geometry.out === 1 ? 'away-from-axis' : 'toward-axis' } });
-  }
-  return { state, content: json({ revision: revisionOf(doc), unit: 'mm', faces, ...review }),
-    isError: false, changed: false, summary: `${faces.length} native faces inspected` };
 }
 
 async function inspectNativeFaces(state: ChatState, args: Record<string, unknown>, evaluate: Evaluate, dispatch: PartRun): Promise<ToolOutcome> {
