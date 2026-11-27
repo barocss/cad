@@ -45,8 +45,9 @@ export function useFeatureHistory({ model, worker, suppression, changes, onNotic
     if (!canChangeDocument()) return;
     if (marker !== null) { setToast({ title: 'Roll forward first', hint: 'New steps go at the end of the history.', detail: '' }); return; }
     const next = withNode(doc, { kind: 'separate', parent: refOf(b) });
+    const owns = captureOwner();
     engine.evaluate(prefixDoc(next, next.nodes.length), nextRevision()).then(e => {
-      if (!e) return;
+      if (!e || !owns()) return;
       if (!e.ok) { setToast({ ...e.error, title: `Cannot separate it: ${e.error.title}` }); return; }
       if (!commit(next)) return; setSelection(emptySel);
     });
