@@ -16,7 +16,7 @@ interface CommandGizmoOptions {
   model: { doc: StudioDoc; evaluated: StudioDoc; bodies: BodyResult[]; selection: Selection; marker: number | null; editNode: number | null };
   command: { active: Active | null; readActive?():Active|null; ctx: Ctx; setActive: Dispatch<SetStateAction<Active | null>>; handleDrag: RefObject<{ key: string; lastOk: number; wall: number; bad: number | null; want: number; step: number; dragging: boolean } | null>; previewFor: RefObject<string | null> };
   context: { sketch: object | null; rendering: boolean; drawing: boolean; measure: readonly unknown[] | null; assemblyDraft: object | null; instanceCount: number; snapStep: number };
-  historyFillet?: {receipt?:HistoryFilletReceipt;eligible:boolean;pending?:'pair'|'circular'};
+  historyFillet?: { receipt?: HistoryFilletReceipt; eligible: boolean; pending?: Exclude<FeatureHandle['historyFilletProofPending'], true> };
   splitSource?: { evidence: Ctx['splitSourceBounds']; canStart(evidence: Ctx['splitSourceBounds']): boolean };
   drag: { bodyDrag: BodyDrag; setBodyDrag: Dispatch<SetStateAction<BodyDrag>> };
 }

@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D2056: [Anchor a shared History radius to three original vertical edges](notes/parallel-fillet-history-radius-2026-11-27/README.md), #214. Match all three exact rounds and verify one end-on grip through desktop History and native Open.
 - D2055: [Discover and review a mixed through-cut Path proposal](notes/agent-mixed-path-approval-2026-11-27/README.md), #324. Align MCP discovery and refusal with the existing geometry and verify user approval in Studio.
 - D2054: [Qualify mixed quadratic Path relinking and equal-radius cut ownership](notes/mixed-quadratic-path-closeout-2026-11-27/README.md), #760. Verify desktop History relink, clearance refusal, distinct native owners and fresh Open.
 - D2053: [Keep two confirmed Flange references on fresh Open](notes/two-flange-reference-reopen-2026-11-27/README.md), #20. Verify both recovery orders in desktop Studio and reconcile the original issue criteria.

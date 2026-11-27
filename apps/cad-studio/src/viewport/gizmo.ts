@@ -47,7 +47,7 @@ export interface FeatureHandle {
   /** New Fillet scalar drag only: immutable command context owns its pointer-down conversion. */
   scalarDragSession?: object;
   /** A scoped History radius handle still awaiting original-edge proof. */
-  historyFilletProofPending?: true | 'circular' | 'pair';
+  historyFilletProofPending?: true | 'circular' | 'pair' | 'group';
   /**
    * An angle instead (degrees): an arc about `axis` through `centre`, from `from` (a point on it) as far
    * as the value; dragging it round sweeps the angle, `toValue` getting the degrees swept.

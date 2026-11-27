@@ -67,6 +67,12 @@ function historyClosedCircularRims(doc: StudioDoc, fillet: Fillet) {
   if (rims.length * 2 === fillet.edges.length) return rims;
 }
 
+function verticalHistoryGroup(sketch: SketchNode, fillet: Fillet) {
+  const plainPolygon = sketch.profile === 'polygon' && Object.keys(sketch).every(key => ['id', 'kind', 'profile', 'points'].includes(key));
+  return plainPolygon && fillet.edges.length === 3 && new Set(fillet.edges).size === 3 &&
+    fillet.edges.every(edge => fillet.sigs?.[edge]?.k === 'line');
+}
+
 export function ordinaryHistoryFillet(doc: StudioDoc,index: number|null,bodies?:readonly BodyResult[]): Fillet | null {
   if (index!==2 || doc.schema!==3 || doc.nodes.length!==3 || doc.direct!==undefined ||
       doc.instances?.length || doc.variability || doc.configurations || Object.hasOwn(doc,'routeBundles')) return null;
@@ -82,10 +88,12 @@ export function ordinaryHistoryFillet(doc: StudioDoc,index: number|null,bodies?:
     && numericPoint(sketch.min) && numericPoint(sketch.max);
   const circular = sketch.profile === 'loop' && stored?.k === 'curve' && plainQuarterSector(sketch);
   const closedRims = historyClosedCircularRims(doc, fillet);
-  if (!plain && !circular && !closedRims) return null;
+  const verticalGroup = verticalHistoryGroup(sketch, fillet);
+  if (!plain && !circular && !closedRims && !verticalGroup) return null;
+  if (verticalGroup && bodies && (bodies.length !== 1 || bodies[0].nativeVerticalFillets?.length !== 3)) return null;
   const pair = historyTopEdges(doc, fillet);
   const circularPair = circular && historyCircularRims(doc, fillet);
-  if (fillet.edges.length !== 1 && !(plain && pair) && !circularPair && !closedRims) return null;
+  if (fillet.edges.length !== 1 && !(plain && pair) && !circularPair && !closedRims && !verticalGroup) return null;
   if (pair?.adjacent && bodies && (bodies.length !== 1 || bodies[0].nativeFilletPair?.adjacentTop !== true)) return null;
   if (circularPair && bodies && (bodies.length !== 1 || !bodies[0].nativeFilletTorusPair)) return null;
   if (closedRims && bodies && (bodies.length !== 1 ||
@@ -157,6 +165,41 @@ function pairedHistoryFrame(doc: StudioDoc, fillet: Fillet, stock: BodyResult, f
   if (indices.some(matches => matches.length !== 1) || indices[0][0] === indices[1][0]) return;
   const dir = unit(first.outward);
   return { at: add(first.midpoint, scale(dir, radius)), dir };
+}
+
+function verticalHistoryFrame(fillet: Fillet, stock: BodyResult, finished: BodyResult,
+  faces: readonly HistoryFilletReceipt['face'][], height: number, radius: number): HistoryFilletReceipt['frame'] {
+  const accepted = finished.nativeVerticalFillets;
+  if (!accepted || !closedSolid(stock) || !closedSolid(finished) ||
+    new Set(accepted.map(round => round.faceId)).size !== 3) return;
+  const signatures = signaturesOf(stock);
+  const usedVertices = new Set<string>();
+  const frames = fillet.edges.map(edge => {
+    const match = originalFilletEdge(stock, fillet, edge, signatures);
+    const rounds = accepted.filter(round => round.edge === edge);
+    const [round] = rounds;
+    const display = faces.find(face => face.id === round?.faceId)?.exact;
+    if (!match || !exactStraightEdge(match) || rounds.length !== 1 ||
+      round.bottom !== 0 || round.top !== height || !(Math.abs(round.radius - radius) <= 1e-8) ||
+      display?.kind !== 'cylinder' || !(Math.abs(display.r - radius) <= 1e-8)) return;
+    const { a, b, nativeVertices, nativeJoint } = match.source;
+    if (!nativeJoint || !nativeVertices || nativeVertices[0] === nativeVertices[1] ||
+      nativeVertices.some(vertex => usedVertices.has(vertex)) || ![...a, ...b].every(Number.isFinite) ||
+      a[0] !== b[0] || a[1] !== b[1] || Math.min(a[2], b[2]) !== 0 || Math.max(a[2], b[2]) !== height) return;
+    const walls = nativeJoint.faces.map(id => stock.mesh.faces.find(face => face.id === id));
+    const [first, second] = walls.map(wall => wall?.exact);
+    if (!edge.split('|').every(name => walls.some(wall => wall?.nativePlaneName === name)) ||
+      first?.kind !== 'plane' || second?.kind !== 'plane' || first.n[2] !== 0 || second.n[2] !== 0 ||
+      Math.abs(first.n[0]) + Math.abs(first.n[1]) !== 1 || Math.abs(second.n[0]) + Math.abs(second.n[1]) !== 1 ||
+      dot(first.n, second.n) !== 0) return;
+    const outward = add(first.n, second.n), midpoint = scale(add(a, b), .5);
+    const centre = sub(midpoint, scale(outward, radius));
+    if (![round.centre, display.c].every(c => Math.hypot(c[0] - centre[0], c[1] - centre[1]) <= 1e-8)) return;
+    nativeVertices.forEach(vertex => usedVertices.add(vertex));
+    const dir = unit(outward);
+    return { at: add(midpoint, scale(dir, radius)), dir };
+  });
+  return frames.every(frame => !!frame) ? frames[0] : undefined;
 }
 
 function verifiedCircularFrame(source: DisplayEdge, torus: Omit<NativeFilletTorusFace, 'faceId' | 'face'>, radius: number):
@@ -248,6 +291,13 @@ export function historyFilletReceipt(doc:StudioDoc,commandDoc:StudioDoc,index:nu
   if(face.length!==expectedFaces||face.some(item=>item.name!==name||!item.normal.every(Number.isFinite)||
     Math.abs(Math.hypot(...item.normal)-1)>1e-8)) return null;
   const radius = Number(fillet.radius), sketch = doc.nodes[0];
+  if (sketch.kind === 'sketch' && verticalHistoryGroup(sketch, fillet)) {
+    const stockNode = doc.nodes[1];
+    if (stockNode.kind !== 'extrude' || typeof stockNode.height !== 'number') return null;
+    const frame = verticalHistoryFrame(fillet, stock, finished, face, stockNode.height, radius);
+    // The generic edit handle starts on the first display face. The verified frame belongs to the first authored edge.
+    return frame ? { document:doc,commandDoc,index,bodies,edge,face:face[0],isCurrent,frame } : null;
+  }
   if (closedRims) {
     if (!closedSolid(stock) || !closedSolid(finished)) return null;
     const accepted = closedRims.length === 1 ? [finished.nativeClosedFilletTorus] : finished.nativeClosedFilletTorusPair;

@@ -39,6 +39,7 @@ import { stableNames } from './occurrences';
 import { rememberNativeMass, placeNativeMass } from './nativeMassWire';
 import { nativeClosedFilletTorusOf, nativeClosedFilletTorusPairOf, nativeFilletTorusOf, nativeFilletTorusPairOf, type NativeClosedFilletTorus, type NativeFilletTorus, type NativeFilletTorusPair } from './nativeFilletTorus';
 import { nativeFilletPairOf, type NativeFilletPair } from './nativeFilletPair';
+import { nativeVerticalFilletsOf, type NativeVerticalFillet } from './nativeVerticalFillets';
 
 /** A kernel output's body key and the node and side it is now. */
 /** A body's role, from the node that made it (O60: 'infill' on a print infill's mesh node). */
@@ -76,6 +77,8 @@ export interface BodyResult {
   nativeClosedFilletTorusPair?: readonly [NativeClosedFilletTorus, NativeClosedFilletTorus];
   /** Resolved targets and verified outward cylinders of a two-edge finish on the original body. */
   nativeFilletPair?: NativeFilletPair;
+  /** Three original convex vertical rounds on one unplaced body. */
+  nativeVerticalFillets?: NativeVerticalFillet[];
   /** Whole native cap rims certified on the original, unplaced half ring. */
   halfRingFilletRims?: NonNullable<ReturnType<typeof halfRingFilletReferenceRims>>;
   /** The successful Chamfer preview's original native edge targets. */
@@ -298,11 +301,13 @@ function bodyOf(o: CadPartSnapshot['outputs'][number], doc: StudioDoc, revision:
   const nativeClosedFilletTorusPair = closedRimCount === 2 ? nativeClosedFilletTorusPairOf(o) : undefined;
   const nativeFilletPair = node?.kind === 'fillet' && !node.radii && !node.section && node.edges.length === 2 &&
     node.edges.every(edge => node.sigs?.[edge]?.k === 'line') ? nativeFilletPairOf(o) : undefined;
+  const nativeVerticalFillets = node?.kind === 'fillet' && typeof node.radius === 'number' && !node.radii && !node.section &&
+    node.edges.length === 3 && node.edges.every(edge => node.sigs?.[edge]?.k === 'line') ? nativeVerticalFilletsOf(o) : undefined;
   const halfRingFilletRims = node?.kind === 'intersect' ? halfRingFilletReferenceRims(o.brep) : undefined;
   return { ...at, topology: nativeBodyTopology(o.brep), ...(o.cylindricalWrap ? { cylindricalWrap: o.cylindricalWrap } : {}), ...(o.band ? { band: o.band } : {}), ...(notes.length ? { notes } : {}), ...(roleOf(lib) ? { role: roleOf(lib) } : {}), innerShells: inner, family: o.representation, mesh: meshOf(o.brep, revision, quality), ...mass, ...areaOf(A, o.brep, revision, quality), ...(o.bodyCount > 1 ? { pieces: o.bodyCount, ...touchField(o.brep, meshOf(o.brep, revision, quality)) } : {}),
     ...(o.gearPlacement ? { gear: o.gearPlacement } : {}), ...(o.bevelGear?.idealModel ? { idealModel: o.bevelGear.diagnostics.find(x => x.code === 'IDEAL_MODEL')?.message ?? 'an ideal model' } : {}), ...(o.rackPlacement ? { rack: o.rackPlacement } : {}),
     ...(o.subd && o.subd.caps ? { subd: o.subd } : {}), ...(sheet ? sheetFields(sheet) : {}), ...(o.member && m ? { cutPiece: cutPiece(o, { volume: m.volume }) } : {}), ...(element ? { element } : {}), ...(nativeFilletTorus ? { nativeFilletTorus } : {}), ...(nativeFilletTorusPair ? { nativeFilletTorusPair } : {}), ...(nativeClosedFilletTorus ? { nativeClosedFilletTorus } : {}), ...(nativeFilletPair ? { nativeFilletPair } : {}),
-    ...(nativeClosedFilletTorusPair ? { nativeClosedFilletTorusPair } : {}), ...(halfRingFilletRims ? { halfRingFilletRims } : {}) };
+    ...(nativeClosedFilletTorusPair ? { nativeClosedFilletTorusPair } : {}), ...(nativeVerticalFillets ? { nativeVerticalFillets } : {}), ...(halfRingFilletRims ? { halfRingFilletRims } : {}) };
 }
 
 /** The main part's evaluation profiles its features (O10; a reused snapshot keeps the option). */
@@ -710,6 +715,7 @@ export function placeBody(b: BodyResult, m: readonly number[], t: readonly numbe
   delete placedBody.nativeClosedFilletTorus;
   delete placedBody.nativeClosedFilletTorusPair;
   delete placedBody.nativeFilletPair;
+  delete placedBody.nativeVerticalFillets;
   delete placedBody.halfRingFilletRims;
   return { ...placedBody, mesh, ...placedMass(b, m, t), ...(b.massRef !== undefined ? { massPlace: [...(b.massPlace ?? []), { m: [...m], t: [...t] }] } : {}), ...(element ? { element } : {}) };
 }

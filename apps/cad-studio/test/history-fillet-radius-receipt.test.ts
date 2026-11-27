@@ -371,3 +371,32 @@ test('History binds both complete rings to one upper-rim grip and keeps its drag
     assert.equal(ownedHistoryFilletHandle(x.evidence, x.cmd, x.ctx, x.handle, null), undefined);
   }
 });
+
+
+test('the shared vertical Fillet handle uses the first authored edge after certifying all three native rounds', () => {
+  const polygon: SketchNode = { kind: 'sketch', profile: 'polygon',
+    points: [[0, -12], [20, -12], [20, 20], [15, 20], [15, 15], [5, 15], [5, 20], [0, 20]] };
+  const edges = ['n1.side1|n1.side2', 'n1.side0|n1.side1', 'n1.side2|n1.side3'];
+  const { doc, accepted, reply } = evaluatedFixture(polygon, edges, 2, 3);
+  const [body] = accepted.bodies;
+  const rounds = body.nativeVerticalFillets;
+  assert.ok(rounds && rounds.length === 3);
+  const current = () => true;
+  const receipt = (finished: typeof body) => historyFilletReceipt(doc, doc, 2, [finished], reply, 3, current);
+  const result = receipt({ ...body, nativeVerticalFillets: [...rounds].reverse() });
+  assert.ok(result?.frame);
+  assert.equal(result.edge, edges[0]);
+  assert.equal(result.face, body.mesh.faces.find(face => face.name === 'n2.face'));
+  assert.ok(result.frame.at.every((value, i) => Math.abs(value - [20 + Math.SQRT2, 20 + Math.SQRT2, 1.5][i]) < 1e-9));
+  assert.ok(result.frame.dir.every((value, i) => Math.abs(value - [Math.SQRT1_2, Math.SQRT1_2, 0][i]) < 1e-9));
+  assert.equal(receipt({ ...body, nativeVerticalFillets: rounds.slice(1) }), null);
+  assert.equal(receipt({ ...body, nativeVerticalFillets: rounds.map((round, i) =>
+    ({ ...round, edge: rounds[(i + 1) % rounds.length].edge })) }), null);
+  assert.equal(receipt({ ...body, nativeVerticalFillets: rounds.map(round =>
+    ({ ...round, faceId: rounds[0].faceId })) }), null);
+  assert.equal(receipt({ ...body, nativeVerticalFillets: rounds.map((round, i) =>
+    ({ ...round, faceId: rounds[(i + 1) % rounds.length].faceId })) }), null);
+  assert.equal(receipt({ ...body, nativeVerticalFillets: rounds.map(round =>
+    ({ ...round, centre: [NaN, ...round.centre.slice(1)] as typeof round.centre })) }), null);
+  assert.equal(placeBody(body, [1, 0, 0, 0, 1, 0, 0, 0, 1], [1, 0, 0]).nativeVerticalFillets, undefined);
+});
