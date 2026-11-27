@@ -11,8 +11,8 @@ const relink = process.argv.includes('--relink');
 const beforeRelink = process.argv.includes('--prior-relink');
 const entry = process.argv.includes('--history') ? 'History' : 'Browser';
 assert.ok(!(quarter && quadratic));
-assert.ok(!relink || (quarter && mixed), 'Relink fixture starts from the mixed quarter-arc recipe');
 const mixedCurved = mixed && (quarter || quadratic);
+assert.ok(!relink || mixedCurved, 'Relink requires a mixed through-cut plate with a curved source path');
 const count = mixedCurved ? 2 : quarter || mixed ? 4 : 3;
 const spacing = mixedCurved ? (quadratic ? 14 : 19) : quadratic ? 10 : quarter ? 8 : mixed ? 12.5 : 16;
 const revisedSpacing = mixedCurved ? (quadratic ? 15 : 20) : quadratic ? 12 : quarter ? 9 : mixed ? 12 : 14;
@@ -239,12 +239,14 @@ await f.run(async () => {
   await f.newPage();
   await openModel(stock, 'circle-path-source.bcad');
   f.phase = 'Author a linked XY path and choose the earlier circular Subtract';
-  let doc = await createPath();
+  const doc = await createPath();
   if (relink) {
     // Add two named world-mm curves to the document being opened, without
-    // changing the authored quarter arc or the downstream source cut.
+    // changing the authored curved path or the downstream source cut.
+    const towardLaterCut = [laterCircle[0] - 10, laterCircle[1] - 10, 0];
+    assert.ok(Math.abs(Math.hypot(...towardLaterCut) - spacing) < 5);
     for (const [id, name, end] of [['clear_relink', 'Clear vertical path', [0, 24, 0]],
-      ['hit_relink', 'Path across later bore', [10 * Math.sqrt(3), 15, 0]]]) {
+      ['hit_relink', 'Path across later bore', towardLaterCut]]) {
       doc.direct.sources[id] = `@model ${id} { version: 0; length-unit: mm;
         @curve #${id} { type: nurbs; degree: 1; knots: [0,0,1,1]; control-points: [[0,0,0],${JSON.stringify(end)}]; weights: [1,1]; } }`;
       doc.direct.objects.push({ id, name, source: id, geometry: id });
@@ -323,7 +325,10 @@ await f.run(async () => {
     assert.deepEqual(await inspect('after-refused-relink', applied, originalCenters, true), accepted);
     await f.snapshot('07-colliding-relink-refused');
     if (beforeRelink) return;
+    await field(f.editor(), 'Path').selectOption('clear_relink');
     await f.closeEditor();
+    await f.same(applied);
+    assert.deepEqual(await stackState(), historyBefore);
     await f.redo(); await f.same(edited);
     await f.openFeatureEditor(stock.nodes.length, 'Compatible relink');
     await field(f.editor(), 'Path').selectOption('clear_relink');
@@ -335,6 +340,7 @@ await f.run(async () => {
     await f.undo(); await f.same(edited);
     assert.deepEqual(await inspect('relink-undone-native', edited, centers, true), editedWalls);
     await f.redo(); await f.same(linked);
+    assert.deepEqual(await inspect('relink-redone-native', linked, linkedCenters, true), moved);
     const file = await f.save('relinked-cut-pattern');
     const reopened = await f.freshOpen(file.file, linked, '09-relink-fresh-open');
     assert.deepEqual(await inspect('relink-reopened-native', reopened.doc, linkedCenters, true), moved);

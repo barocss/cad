@@ -226,20 +226,27 @@ test('omitted source keeps the existing current-rectangle Path recipe', () => {
   assert.ok(!output.brep.faces.some(face => face.name?.startsWith('circleTool.side[round]@')));
 });
 
-for (const { name, rail, pointAt, pitches, obstacle } of [
-  {
-    name: 'polynomial quadratic', rail: quadratic(), obstacle: [25, 20],
-    pitches: [14, 15, 10 + 5 * Math.SQRT2 * Math.asinh(1), 17],
-    pointAt(pitch) {
-      const primitive = x => 5 * Math.SQRT2 * (x * Math.hypot(1, x) + Math.asinh(x));
-      let lo = 0, hi = 1;
-      for (let i = 0; i < 55; i++) {
-        const t = (lo + hi) / 2;
-        if (primitive(2 * t - 1) - primitive(-1) < pitch) lo = t; else hi = t;
-      }
+const mixedQuadratic = {
+  name: 'polynomial quadratic', rail: quadratic(), obstacle: [25, 20],
+  pitches: [14, 15, 10 + 5 * Math.SQRT2 * Math.asinh(1), 17],
+  pointAt(pitch) {
+    const primitive = x => 5 * Math.SQRT2 * (x * Math.hypot(1, x) + Math.asinh(x));
+    let lo = 0, hi = 1;
+    for (let i = 0; i < 55; i++) {
       const t = (lo + hi) / 2;
-      return [10 + 40 * t - 20 * t * t, 10 + 20 * t * t];
-    },
+      if (primitive(2 * t - 1) - primitive(-1) < pitch) lo = t; else hi = t;
+    }
+    const t = (lo + hi) / 2;
+    return [10 + 40 * t - 20 * t * t, 10 + 20 * t * t];
+  },
+};
+
+for (const { name, rail, pointAt, pitches, obstacle, obstacleRadius = 3 } of [
+  mixedQuadratic,
+  {
+    ...mixedQuadratic, name: 'polynomial quadratic with two original R2 bores',
+    // At t=1/2 the copy centre is [25, 15]. A 4 mm separation is tangency for two R2 bores.
+    obstacle: [25, 19], obstacleRadius: 2,
   }, {
     name: 'canonical quarter arc', rail: quarter(), obstacle: [10 + 10 * Math.sqrt(3), 25],
     pitches: [19, 20, 20 * Math.PI / 3, 22],
@@ -251,7 +258,7 @@ for (const { name, rail, pointAt, pitches, obstacle } of [
     const input = document(rail), repeat = input.features.pop();
     input.parameters.pitch = startPitch;
     input.features.push(
-      { id: 'newSketch', kind: 'sketch', profile: 'circle', center: obstacle, radius: 3, sideTags: { outer: ['newRound'] } },
+      { id: 'newSketch', kind: 'sketch', profile: 'circle', center: obstacle, radius: obstacleRadius, sideTags: { outer: ['newRound'] } },
       { id: 'newTool', kind: 'extrude', sketch: 'newSketch', height: 10 },
       { id: 'third', kind: 'difference', target: 'second', tool: 'newTool' });
     const walls = brep => brep.faces.flatMap(face => {
@@ -259,6 +266,14 @@ for (const { name, rail, pointAt, pitches, obstacle } of [
       return g.kind === 'cylinder' ? [{ name: face.name, ...g }] : [];
     });
     const current = evaluateCadPart(input).outputs[0].brep, originals = walls(current);
+    for (const [name, [x, y], radius] of [['circleTool.side[round]', [10, 10], 2],
+      ['newTool.side[newRound]', obstacle, obstacleRadius]]) {
+      const original = originals.filter(wall => wall.name === name || wall.name.startsWith(name + '#'));
+      assert.equal(original.length, 2);
+      for (const wall of original) {
+        near(wall.c[0], x); near(wall.c[1], y); near(wall.r, radius);
+      }
+    }
     input.features.push({ ...repeat, target: 'third', count: 2 });
     const initial = evaluateCadPart(input), saved = saveCadPart(initial);
     const edited = reevaluate(initial, { parameters: { pitch: editPitch } });
@@ -269,11 +284,12 @@ for (const { name, rail, pointAt, pitches, obstacle } of [
       assert.equal(report.topology[0].shells, 1);
       assert.equal(report.topology[0].genus, 4);
       const [x, y] = pointAt(pitch);
-      const volume = 23920 - 170 * Math.PI;
+      const obstacleVolume = 10 * Math.PI * obstacleRadius ** 2;
+      const volume = 23920 - 80 * Math.PI - obstacleVolume;
       const mass = brepMassProperties(brep, 1);
       near(mass.volume, volume);
-      near(mass.centroid[0], (717920 - Math.PI * (40 * (10 + x) + 90 * obstacle[0])) / volume);
-      near(mass.centroid[1], (479280 - Math.PI * (40 * (10 + y) + 90 * obstacle[1])) / volume);
+      near(mass.centroid[0], (717920 - 40 * Math.PI * (10 + x) - obstacleVolume * obstacle[0]) / volume);
+      near(mass.centroid[1], (479280 - 40 * Math.PI * (10 + y) - obstacleVolume * obstacle[1]) / volume);
       const actual = walls(brep);
       assert.equal(actual.length, 6);
       assert.deepEqual(actual.filter(wall => originals.some(old => old.name === wall.name)), originals);
