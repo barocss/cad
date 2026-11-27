@@ -1,13 +1,16 @@
 import assert from 'node:assert/strict';
 import { createFlow } from './flow-helper.mjs';
 
-const segment = process.argv.includes('segment');
+const major = process.argv.includes('major');
+const segment = major || process.argv.includes('segment');
 const outward = process.argv.includes('outward');
 const baseline = process.argv.includes('--baseline');
-const firstAngle = segment ? 6 : outward ? -10 : 10, secondAngle = segment ? -10 : outward ? -14 : 14;
-const collapseAngle = segment ? '12' : '35';
+const firstAngle = major ? 10 : segment ? 6 : outward ? -10 : 10;
+const secondAngle = segment ? -10 : outward ? -14 : 14;
+const collapseAngle = major ? '40' : segment ? '12' : '35';
 const profileName = segment ? 'circular segment' : 'half-disk';
-const fileStem = segment ? 'circular-segment' : 'half-disk';
+const sketchName = major ? 'major circular segment' : profileName;
+const fileStem = major ? 'major-circular-segment' : segment ? 'circular-segment' : 'half-disk';
 
 const pins = [
   'apps/cad-studio/src/App.tsx',
@@ -23,7 +26,7 @@ const pins = [
 const f = await createFlow({
   name: 'half-disk-draft-extrude', output: process.argv[2], envFrozen: 'D1253_SOURCE_FROZEN',
   initialFiles: pins, requiredFrozen: pins,
-  qualification: segment ? 'Draft a circular segment with an off-centre cardinal chord and reopen the native file.'
+  qualification: segment ? `Draft a ${sketchName} with an off-centre cardinal chord and reopen the native file.`
     : `Create an ${outward ? 'outward' : 'inward'} half-disk Draft Extrude, edit its angle and reopen the native file.`,
   limits: ['One original XY sketch with a radius-10 circular arc and one cardinal chord, positive extrusion distance.'],
   inspectorSource: `
@@ -46,7 +49,7 @@ console.log(JSON.stringify({ outputs: outputs.length, check: checkBrep(brep, { s
   kinds: brep.faces.map(face => faceGeometry(face).kind), curvedSupports, mass }));
 `,
 });
-const radius = 10, height = 10, chord = segment ? 6 : 0, halfChord = segment ? 8 : radius;
+const radius = 10, height = 10, chord = major ? -6 : segment ? 6 : 0, halfChord = segment ? 8 : radius;
 const seed = {
   format: 'barocss-cad-model', schema: 3, units: 'mm', parameters: {}, nextId: 1,
   nodes: [{ id: 'n0', kind: 'sketch', profile: 'loop', segments: [
@@ -104,7 +107,7 @@ await f.run(async () => {
   await f.newPage();
   const width = Number(process.argv.slice(3).find(arg => /^\d+$/.test(arg)) ?? 1440);
   await f.page.setViewportSize({ width, height: width === 1024 ? 800 : 900 });
-  f.phase = `Open the editable XY ${profileName} sketch and start Extrude`;
+  f.phase = `Open the editable XY ${sketchName} sketch and start Extrude`;
   const [chooser] = await Promise.all([f.page.waitForEvent('filechooser'), button('Open').click()]);
   await chooser.setFiles({ name: `${fileStem}-sketch.bcad`, mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(seed)) });
   await f.same(seed);
@@ -132,6 +135,7 @@ await f.run(async () => {
     return;
   }
   if (outward || segment) {
+    f.phase = 'Reject an out-of-range outward Draft and keep the original sketch';
     await field('Distance', hud).fill('1800');
     await draft.fill('-80');
     await hud.getByText(`The drafted ${profileName} exceeds the modeling range`, { exact: true }).waitFor();
@@ -140,6 +144,7 @@ await f.run(async () => {
     await f.snapshot('half-disk-outward-range-refused');
     await field('Distance', hud).fill(String(height));
   }
+  f.phase = 'Reject a collapsed section and preview an admissible Draft';
   await draft.fill(collapseAngle);
   await hud.getByText('The draft is too steep for this height', { exact: true }).waitFor();
   assert.equal(await button('Apply', hud).isEnabled(), false);
@@ -149,6 +154,21 @@ await f.run(async () => {
   await hud.locator('.status').filter({ hasText: /^preview$/ }).waitFor();
   await f.same(seed);
   await f.snapshot('half-disk-preview');
+  if (major) {
+    f.phase = 'Cancel the major-segment preview and start a new preview';
+    const undoWasEnabled = await button('Undo').isEnabled();
+    await button('Cancel', hud).click();
+    await hud.waitFor({ state: 'hidden' });
+    await f.same(seed);
+    assert.equal(await button('Undo').isEnabled(), undoWasEnabled);
+    await f.snapshot('major-draft-cancelled');
+    await button('Sketch 1', browser).click();
+    await f.openExtrudeHud();
+    await field('Distance', hud).fill(String(height));
+    await draft.fill(String(firstAngle));
+    await hud.locator('.status').filter({ hasText: /^preview$/ }).waitFor();
+  }
+  f.phase = 'Apply the admissible Draft and inspect the native solid';
   await button('Apply', hud).click();
   await f.changed(seed);
   const created = (await f.snapshot('half-disk-extruded')).doc;

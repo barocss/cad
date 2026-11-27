@@ -27,11 +27,11 @@ export function draftHalfDisk(profile: readonly ProfileSegment[], names: readonl
     names, z0, z1, slope, id, tag, fail);
 }
 
-/** One original minor circular segment with an exact symmetric cardinal chord. No near-cardinal snapping. */
-export function draftMinorCircularSegment(profile: readonly ProfileSegment[], names: readonly string[], z0: number, z1: number,
+/** One original minor or major circular segment with an exact symmetric cardinal chord. No near-cardinal snapping. */
+export function draftCardinalCircularSegment(profile: readonly ProfileSegment[], names: readonly string[], z0: number, z1: number,
   slope: number, id: string, tag: string, fail: (detail: string) => never): Brep | undefined {
   const index = profile.findIndex(segment => segment.kind === 'arc'), arc = profile[index], chord = profile[1 - index];
-  if (arc?.kind !== 'arc' || chord?.kind !== 'line' || !(arc.sweep > 0 && arc.sweep < Math.PI)) return undefined;
+  if (arc?.kind !== 'arc' || chord?.kind !== 'line' || !(arc.sweep > 0 && arc.sweep < 2 * Math.PI)) return undefined;
   const [cx, cy] = arc.center, [ax, ay] = [arc.start[0] - cx, arc.start[1] - cy], [bx, by] = [arc.end[0] - cx, arc.end[1] - cy];
   let x: number, y: number, q0: number, c: number;
   if (ay === by && ax === -bx && ax !== 0) {
@@ -39,7 +39,7 @@ export function draftMinorCircularSegment(profile: readonly ProfileSegment[], na
   } else if (ax === bx && ay === -by && ay !== 0) {
     x = 0; y = ay > 0 ? 1 : -1; q0 = Math.abs(ay); c = -ax * y;
   } else return undefined;
-  if (!(c > 0 && c < arc.radius)) return undefined;
+  if (!(c !== 0 && Math.abs(c) < arc.radius)) return undefined;
   return buildDraftedSegment({ radius: arc.radius, halfWidth: q0, chord: c, center: [cx, cy], xAxis: [x, y], arcIndex: index },
     names, z0, z1, slope, id, tag, fail);
 }
@@ -48,14 +48,14 @@ export function draftMinorCircularSegment(profile: readonly ProfileSegment[], na
 function buildDraftedSegment(source: SegmentSource, names: readonly string[], z0: number, z1: number, slope: number, id: string, tag: string,
   fail: (detail: string) => never): Brep {
   const { radius: r, halfWidth: q0, chord: c, center: [cx, cy], xAxis: [x, y], arcIndex: index } = source;
-  const minor = c !== 0, shape = minor ? 'circular segment' : 'half-disk';
-  const h = z1 - z0, d = h * slope, gap = minor ? r - c - 2 * d : r - 2 * d;
+  const offCentre = c !== 0, shape = offCentre ? 'circular segment' : 'half-disk';
+  const h = z1 - z0, d = h * slope, gap = offCentre ? r - c - 2 * d : r - 2 * d;
   if (!(d < 0 ? r - d > r : d > 0 && r - d < r)) fail(`the angle is too small to move the ${shape} walls`);
   // At the top, the chord is at c+d and the arc apex at r-d. The remaining sag must exceed the linear tolerance.
   const size = Math.max(r, h, Math.abs(cx), Math.abs(cy), Math.abs(z0), Math.abs(z1));
-  if (!(gap > linearToleranceMM(size)) || (minor && !(r - c > linearToleranceMM(size))))
+  if (!(gap > linearToleranceMM(size)) || (offCentre && !(r - c > linearToleranceMM(size))))
     fail(`the draft closes the ${shape} at or before the top (steeper than the profile allows)`);
-  const rt = r - d, q = minor ? Math.sqrt((r + c) * gap) : Math.sqrt(r * gap);
+  const rt = r - d, q = offCentre ? Math.sqrt((r + c) * gap) : Math.sqrt(r * gap);
   const points: Record<string, Point> = {
     b0: [q0, c, 0], b1: [0, r, 0], b2: [-q0, c, 0],
     t0: [q, c + d, h], t1: [0, rt, h], t2: [-q, c + d, h],
@@ -70,7 +70,7 @@ function buildDraftedSegment(source: SegmentSource, names: readonly string[], z0
     const a = points[from], b = points[to];
     return segmentCurve({ kind: 'arc', center: [0, 0], radius, start: [a[0], a[1]], end: [b[0], b[1]], startAngle, sweep, length: radius * sweep }, a[2], key);
   };
-  const R90 = Math.PI / 2, baseAngle = minor ? Math.atan2(c, q0) : 0, angle = Math.atan2(minor ? c + d : d, q);
+  const R90 = Math.PI / 2, baseAngle = offCentre ? Math.atan2(c, q0) : 0, angle = Math.atan2(offCentre ? c + d : d, q);
   edge('b01', 'b0', 'b1', bottom, right, arcAt('b01', 'b0', 'b1', r, baseAngle, R90 - baseAngle));
   edge('b12', 'b1', 'b2', bottom, left, arcAt('b12', 'b1', 'b2', r, R90, R90 - baseAngle));
   edge('b20', 'b2', 'b0', bottom, wall);
@@ -82,18 +82,18 @@ function buildDraftedSegment(source: SegmentSource, names: readonly string[], z0
   const middleX = (q0 + q) / 2, middleZ = h * q0 / (q0 + q);
   for (const [key, sign, from, to, cone] of [['s0', 1, 'b0', 't0', right], ['s2', -1, 'b2', 't2', left]] as const) {
     edge(key, from, to, wall, cone, { kind: 'curve', id: key, degree: 2, knots: QUADRATIC,
-      controlPoints: [points[from], [sign * middleX, minor ? c + slope * middleZ : slope * middleZ, middleZ], points[to]], weights: [1, 1, 1] });
+      controlPoints: [points[from], [sign * middleX, offCentre ? c + slope * middleZ : slope * middleZ, middleZ], points[to]], weights: [1, 1, 1] });
   }
   edge('s1', 'b1', 't1', right, left);
 
-  // Both sections share one fixed angular chart. An outward top arc exceeds a semicircle overall,
-  // so each cone chart extends from its top intersection to the common apex-angle ruling.
+  // Both sections share one fixed angular chart. For either major section each cone patch spans
+  // more than a quadrant but less than a semicircle, ending at the common apex-angle ruling.
   const cone = (key: string, sector: readonly (readonly [number, number])[]): Surface => {
     const outerRadius = d < 0 ? rt : r, chord = d < 0 ? c + d : c, halfWidth = d < 0 ? q : q0;
-    const angular = minor || d < 0 ? key === 'right'
+    const angular = offCentre || d < 0 ? key === 'right'
       ? [[halfWidth / outerRadius, chord / outerRadius], [halfWidth / (r + c), 1], [0, 1]]
       : [[0, 1], [-halfWidth / (r + c), 1], [-halfWidth / outerRadius, chord / outerRadius]] : sector;
-    const weight = minor || d < 0 ? Math.sqrt((r + c) / (2 * outerRadius)) : Math.SQRT1_2;
+    const weight = offCentre || d < 0 ? Math.sqrt((r + c) / (2 * outerRadius)) : Math.SQRT1_2;
     return {
       kind: 'surface', id: key, degreeU: 2, degreeV: 1, knotsU: QUADRATIC, knotsV: LINE,
       controlPoints: angular.map(([x, y]) => [[x * r, y * r, 0], [x * rt, y * rt, h]]),
@@ -101,7 +101,7 @@ function buildDraftedSegment(source: SegmentSource, names: readonly string[], z0
     };
   };
   // q(z) is concave for outward draft; a trapezoid joining r to q(top) would miss the seams.
-  const wallRadius = minor ? Math.max(q0, q) : d < 0 ? q : r, capRadius = (minor ? c + d < 0 : d < 0) ? rt : q;
+  const bottomRadius = c < 0 ? r : q0, wallRadius = offCentre ? Math.max(q0, q) : d < 0 ? q : r, capRadius = (offCentre ? c + d < 0 : d < 0) ? rt : q;
   const flat: Surface = {
     kind: 'surface', id: 'wall', degreeU: 1, degreeV: 1, knotsU: LINE, knotsV: LINE,
     controlPoints: [[[-wallRadius, c, 0], [-wallRadius, c + d, h]], [[wallRadius, c, 0], [wallRadius, c + d, h]]], weights: [[1, 1], [1, 1]],
@@ -112,7 +112,7 @@ function buildDraftedSegment(source: SegmentSource, names: readonly string[], z0
     id: surface.id, name, surface, sense: 'forward', loops: [{ kind: 'outer', uses }],
   });
   const faces = [
-    face(bottom, capSurface({ min: [-q0, c], max: [q0, r] }, 0, 'bottom', false), [fall('b20'), fall('b12'), fall('b01')]),
+    face(bottom, capSurface({ min: [-bottomRadius, c], max: [bottomRadius, r] }, 0, 'bottom', false), [fall('b20'), fall('b12'), fall('b01')]),
     face(top, capSurface({ min: [-capRadius, c + d], max: [capRadius, rt] }, h, 'top', true), [rise('t01'), rise('t12'), rise('t20')]),
     face(wall, flat, [rise('b20'), rise('s0'), fall('t20'), fall('s2')]),
     face(right, cone('right', [[1, 0], [1, 1], [0, 1]]), [rise('b01'), rise('s1'), fall('t01'), fall('s0')]),

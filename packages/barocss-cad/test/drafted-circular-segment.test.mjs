@@ -93,8 +93,6 @@ test('circular segment rejects collapse, noncardinal or asymmetric chords and na
   assert.throws(() => draftedExtrusion({ profile: oblique, z0: 0, z1: 10, draft: 6, tag: 'e' }), /not tangent/);
   const asymmetric = [{ kind: 'line', start: [-8, 6] }, { kind: 'arc', start: [8, 6], center: [0.01, 0], direction: 'ccw' }];
   assert.throws(() => draftedExtrusion({ profile: asymmetric, z0: 0, z1: 10, draft: 6, tag: 'e' }), /not on one circle/);
-  const major = [{ kind: 'line', start: [-8, -6] }, { kind: 'arc', start: [8, -6], center: [0, 0], direction: 'ccw' }];
-  assert.throws(() => draftedExtrusion({ profile: major, z0: 0, z1: 10, draft: -10, tag: 'e' }), /not tangent/);
   assert.throws(() => draftedExtrusion({ profile, z0: 0, z1: 1800, draft: -80, tag: 'e' }), /circular segment.*modeling coordinate range/);
 });
 

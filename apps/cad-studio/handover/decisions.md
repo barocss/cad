@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D2105: [Draft an original major circular segment](notes/major-circular-segment-draft-2026-11-28/README.md), #14. Verify signed drafts, full cap charts, preview cancellation and native desktop reopen.
 - D2104: [Draft an original minor circular segment](notes/minor-circular-segment-draft-2026-11-28/README.md), #14. Verify both signed drafts with exact off-centre seams, collapse refusal and native desktop reopen.
 - D2103: [Extract Studio Agent turn application](notes/studio-agent-turn-application-2026-11-28/README.md). Match direct and concurrent application, selection and Undo in actual desktop Studio.
 - D2102: [Draft a half-disk extrusion outward](notes/outward-half-disk-draft-2026-11-28/README.md), #14. Verify full cone charts, exact seams, range refusal, signed History and native desktop reopen.
