@@ -29,7 +29,7 @@ import { joinedBossFillets } from './joinedBossPattern';
 import type { BodyResult, EvalResult } from './evaluate';
 import { hasSplitShellCapAmbiguity, isSplitCapFace, matchSignature, rankAlike, signaturesOf, type Signature } from './rematch';
 import type { DisplayEdge, Vec3 } from './mesh';
-import { followsRotatedPivotStock, hasRotatedPivotBinding } from './pivotStock';
+import { hasRotatedPivotBinding, rotatedPivotStockMode } from './pivotStock';
 
 /** A stored signature (rounded: positions to 1e-6 mm, directions to 1e-9, sizes to 1e-6). */
 /** `n`: the kernel names its display face or edge carried together, when more than one (Signature's `shared`). */
@@ -440,9 +440,10 @@ export async function verifyReferences(doc: StudioDoc, finals: readonly BodyResu
     let m: string | string[];
     if (ref.exactName) {
       const live = cands.get(ref.name);
-      if (node?.kind === 'draft' && node.hingeEdge !== undefined && ref.node !== null && followsRotatedPivotStock(out.nodes, node)) {
+      const rotatedMode = node && rotatedPivotStockMode(out.nodes, node);
+      if (rotatedMode && node?.kind === 'draft' && node.hingeEdge !== undefined && ref.node !== null) {
         const stock = parents.get(parentKey(ref.node, node.parent));
-        m = live?.kind === ref.sig.k && stock && hasRotatedPivotBinding(stock, node.faces[0], node.hingeEdge) ? ref.name : [];
+        m = live?.kind === ref.sig.k && stock && hasRotatedPivotBinding(stock, node.faces[0], node.hingeEdge, rotatedMode) ? ref.name : [];
       } else m = live && rankAlike(fromSig(ref.sig), new Map([[ref.name, live]]), ref.edge).length ? ref.name : [];
     } else if (fixedBossEdge) {
       // Side tags and the cap name still identify the same rim after a dimension changes its position.

@@ -181,8 +181,8 @@ test('rotated hinge mode refuses wrong edges, unsupported ancestry and collapse 
   }
   const draftedRoot = document(placements); draftedRoot.features[1].draft = 2;
   check(draftedRoot, 'INPUT', /explicit pull/);
-  const triangle = document(placements); triangle.features[0] = { id: 'n0', kind: 'sketch', profile: 'polygon', points: [[0, 0], [40, 0], [0, 20]] };
-  check(triangle, 'INPUT', /explicit pull/);
+  const circular = document(placements); circular.features[0] = { id: 'n0', kind: 'sketch', profile: 'circle', center: [0, 0], radius: 20 };
+  check(circular, 'INPUT', /explicit pull/);
   const collapsed = document(placements, 40); collapsed.features[0].max[1] = 1;
   check(collapsed, 'GEOMETRY', /closes a box wall/);
   const overflow = document([{ kind: 'rotate', axis: 'z', angle: 0 }, { kind: 'translate', offset: [0, -9990, 0] }], -40);

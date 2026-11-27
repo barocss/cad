@@ -115,8 +115,7 @@ test('hexagonal Pivot face accepts both cap edges of the original wall and keeps
   assert.deepEqual([next.hingeEdge, next.pull], [upper, '-z']);
   assert.ok(Math.abs(volume(changed) - expected) < 1e-7);
 
-  const rotated = withNode(stock, { kind: 'rotate', parent: { node: 1, side: 'solid' }, axis: 'x', angle: 19 });
-  for (const wrong of [pivotContext(moved, face, 'n1.side0|n1.side1'), pivotContext(moved, 'n1.bottom', lower), pivotContext(rotated, face, lower)]) {
+  for (const wrong of [pivotContext(moved, face, 'n1.side0|n1.side1'), pivotContext(moved, 'n1.bottom', lower)]) {
     assert.equal(pivotFaceCommand.available(wrong).ok, false);
     assert.throws(() => command(wrong, { deg }), /original cap edge/);
   }
@@ -144,6 +143,40 @@ test('triangular and octagonal Pivot faces keep cap-edge choices and the origina
     assert.equal(edit.handles(history, values)[0].arc?.worldPlane, true);
     assert.ok(Math.abs(volume(first) - expected) < 1e-7 && Math.abs(volume(revised) - expected) < 1e-7);
   }
+});
+
+test('Rotated polygon Pivot retains the original cap binding on an upstream Rotate edit', async () => {
+  const box = rectanglePart(24, 16, 10);
+  const stock: StudioDoc = { ...box, nodes: [
+    { kind: 'sketch', id: 'n0', profile: 'polygon', points: [[0, 0], [24, 0], [6, 16]] }, box.nodes[1],
+  ] };
+  const turned = withNode(stock, { kind: 'rotate', parent: { node: 1, side: 'solid' }, axis: 'y', angle: 37, pivot: [9, 3, 5] });
+  const face = 'n1.side0', upper = 'n1.side0|n1.top', lower = 'n1.bottom|n1.side0', vertical = 'n1.side0|n1.side1';
+  const ctx = pivotContext(turned, face, upper), deg = Math.atan(1 / 5) * 180 / Math.PI;
+  assert.ok(pivotFaceCommand.available(ctx).ok);
+  assert.equal(pivotFaceCommand.available(pivotContext(turned, face, vertical)).ok, false);
+  assert.equal(pivotFaceCommand.available(pivotContext(turned, 'n1.top', upper)).ok, false);
+  assert.equal(pivotFaceCommand.handles!(ctx, { deg })[0].arc?.worldPlane, true);
+  const doc = pivotFaceCommand.build!(ctx, { deg }), index = 3;
+  const edit = editSavedPivotFaceCommand(doc, index, ctx.bodies[0]);
+  assert.ok(edit?.build && edit.fields && edit.defaults);
+  const editCtx = { ...ctx, doc };
+  const choices = edit.fields(editCtx).find(field => field.key === 'hingeEdge');
+  assert.ok(choices?.kind === 'choice');
+  assert.deepEqual(choices.options.map(option => option.value).sort(), [lower, upper].sort());
+  const revised: StudioDoc = edit.build(editCtx, { ...edit.defaults(editCtx), hingeEdge: lower });
+  const pivot = revised.nodes[index];
+  assert.ok(pivot.kind === 'draft' && pivot.sigs);
+  assert.equal(Object.hasOwn(pivot, 'pull'), false);
+  const retuned: StudioDoc = { ...revised, nodes: revised.nodes.map(node => node.kind === 'rotate' ? { ...node, angle: 49 } : node) };
+  assert.ok(Math.abs(volume(retuned) - 1690) < 1e-7);
+  const evaluate = async (prefix: StudioDoc) => evaluateDoc(prefix, 3);
+  const verified = await verifyReferences(retuned, bodiesOf(retuned), evaluate);
+  assert.deepEqual([verified.problems, verified.changes], [[], []]);
+  const broken: StudioDoc = { ...retuned, nodes: retuned.nodes.map((node, i) => i === index ?
+    { ...pivot, hingeEdge: vertical, sigs: { [face]: pivot.sigs![face], [vertical]: pivot.sigs![lower] } } : node) };
+  const held = await verifyReferences(broken, [], evaluate);
+  assert.ok(held.problems.some(problem => problem.name === vertical && problem.candidates.length === 0));
 });
 
 test('Studio draft: +Z is the default for a side face and builds the old node, without a pull', () => {

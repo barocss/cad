@@ -207,8 +207,8 @@ export type CadPartFeature = Base & (
     readonly pull?: CadPartAxis | '-x' | '-y' | '-z'; readonly neutral?: CadPartDim;
     /** Original edge shared by the moving face and pull-start face. Explicit pull stays a world axis.
      * An original upright convex polygon extrusion admits one side and an original cap edge with z/-z pull.
-     * With pull omitted, an original rectangular stock's authored Move/Rotate chain (at least one Rotate)
-     * derives the pull from that edge's other original stock support. */
+     * With pull omitted, an original stock's authored Move/Rotate chain (at least one Rotate) derives the
+     * pull from that edge's other original support; polygon stock requires an original cap edge. */
     readonly hingeEdge?: string; readonly expect?: Readonly<Record<string, CadPartNameSignature>> }
   /** Move a named end cap of a rectangular taper in its outward direction and continue its original side planes. */
   | { readonly kind: 'offset-face'; readonly target: string; readonly face: string; readonly distance: number; readonly expect?: Readonly<Record<string, CadPartNameSignature>> }

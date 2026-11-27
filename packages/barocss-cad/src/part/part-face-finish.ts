@@ -12,7 +12,8 @@ import type { ProfileSegmentInput } from '../features/extruded-profile-solid.js'
 import type { CadPartDim, CadPartFeature, Part, Result, Solid } from './part-types.js';
 import type { Tools } from './part-model.js';
 import { draftBoxCorner, draftBoxHinge } from './part-box-draft.js';
-import { draftRotatedBoxHinge, type RotatedBoxStock } from './part-rotated-box-draft.js';
+import { draftRotatedBoxHinge } from './part-rotated-box-draft.js';
+import { draftRotatedPolygonHinge, type RotatedPivotStock } from './part-rotated-polygon-draft.js';
 import { pivotPrismWall } from '../features/prism-wall-offset.js';
 
 // Private structural contract. Original functions retain their caches, profiling and closure state.
@@ -22,7 +23,7 @@ interface FaceFinishHelpers {
   readonly namedFaceTargetBrep: (t: Tools, target: unknown, part: Part) => Brep;
   readonly originalRectangularPrism: (target: unknown, part: Part, t: Tools, label: string) => boolean;
   readonly originalPolygonPrism: (target: unknown, part: Part, t: Tools, label: string) => boolean;
-  readonly rotatedRectangularPrism: (target: unknown, part: Part, t: Tools, label: string) => RotatedBoxStock | undefined;
+  readonly rotatedOriginalPrism: (target: unknown, part: Part, t: Tools, label: string) => RotatedPivotStock | undefined;
   readonly bounds: (solid: Solid) => { min: Point; max: Point };
   readonly boxSolid: (min: Point, max: Point, tag: string) => Solid;
   readonly boolean: (a: Solid, b: Solid, op: 'union' | 'difference' | 'intersection', at: string, edgeFitTolerance?: number) => Solid;
@@ -186,13 +187,13 @@ export function faceFinishOperation(f: CadPartFeature & Record<string, unknown>,
       const names = requested as string[];
       if (typeof angle !== 'number' || !Number.isFinite(angle) || angle === 0 || Math.abs(angle) >= 45) fail('INPUT', 'angle must be a number of degrees, not 0, below 45 in size');
       if (target.length !== 1) fail('REFERENCE', 'draft one part at a time (name it as id/k)');
-      let rotatedStock: RotatedBoxStock | undefined;
+      let rotatedStock: RotatedPivotStock | undefined;
       let polygonStock = false;
       if (hinge !== undefined) {
         if (typeof hinge !== 'string' || hinge.length === 0 || names.length !== 1 || f.neutral !== undefined)
           fail('INPUT', 'Draft about an edge needs one edge name, one face name and an explicit pull from the edge.');
         if (f.pull === undefined) {
-          rotatedStock = k.rotatedRectangularPrism(f.target, target[0], t, 'Draft edge target');
+          rotatedStock = k.rotatedOriginalPrism(f.target, target[0], t, 'Draft edge target');
           if (!rotatedStock) fail('INPUT', 'Draft about an edge needs one edge name, one face name and an explicit pull from the edge.');
         } else if (!k.originalRectangularPrism(f.target, target[0], t, 'Draft edge target')) {
           polygonStock = k.originalPolygonPrism(f.target, target[0], t, 'Draft edge target');
@@ -204,9 +205,12 @@ export function faceFinishOperation(f: CadPartFeature & Record<string, unknown>,
       if (pull !== 'x' && pull !== 'y' && pull !== 'z' && pull !== '-x' && pull !== '-y' && pull !== '-z') fail('INPUT', 'pull must be x, y or z (a positive coordinate axis), or -x, -y or -z');
       return () => {
         if (target[0].solid.kind === 'brep' && target[0].solid.brep.faces.some(isFacetFace)) fail('CAPABILITY', 'draft on mesh faces is not supported yet (general draft and offset arrive with R11)');
-        if (typeof hinge === 'string' && rotatedStock) return one({ kind: 'brep',
-          brep: draftRotatedBoxHinge(k.namedFaceTargetBrep(t, f.target, target[0]), rotatedStock, names[0], hinge,
-            (angle as number) * Math.PI / 180, at, fail) });
+        if (typeof hinge === 'string' && rotatedStock) {
+          const original = k.namedFaceTargetBrep(t, f.target, target[0]), a = (angle as number) * Math.PI / 180;
+          return one({ kind: 'brep', brep: rotatedStock.kind === 'box'
+            ? draftRotatedBoxHinge(original, rotatedStock, names[0], hinge, a, at, fail)
+            : draftRotatedPolygonHinge(original, rotatedStock, names[0], hinge, a, fail) });
+        }
         if (typeof hinge === 'string' && polygonStock) {
           if (pull !== 'z' && pull !== '-z') return fail('SELECTION', 'Pivot face on a polygon extrusion needs a signed world Z pull.');
           return one({ kind: 'brep', brep: pivotPrismWall(k.namedFaceTargetBrep(t, f.target, target[0]), names[0], hinge,

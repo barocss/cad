@@ -1,13 +1,13 @@
 # CAD roadmap — current status and execution order
 
-Updated 2026-11-28 · Priority authority: D520 · Latest delivery: D2091 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
+Updated 2026-11-28 · Priority authority: D520 · Latest delivery: D2092 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
 
 This is the only current status index. Detailed tracks define acceptance; the 34 stable row pages retain scope and issue navigation. Immutable decision notes retain results. Do not append chronological status paragraphs here. [D520 decision](notes/cad-roadmap-replan-2026-11-04/README.md) supersedes D445 execution order and historical next-item text, while retaining its safeguards and bounded proofs.
 
 ## Now and next
 
-- **Current position:** [D2091](notes/polygon-pivot-face-2026-11-28/README.md), P5 rows 07 and 31. Pivot face supports an original convex polygon wall at either exact cap edge. Triangle and octagon pass native Studio editing and reopen. Studio also verifies explicit approval of a local Agent hinge change ([#629](https://github.com/barocss/cad/issues/629), [#14](https://github.com/barocss/cad/issues/14)).
-- **Next MAIN:** D2092, P5 rows 07 and 31. Pivot an original convex polygon wall after a rigid Rotate. Qualify the exact world-space hinge, an upstream angle edit and native Studio reopen ([#629](https://github.com/barocss/cad/issues/629), [#14](https://github.com/barocss/cad/issues/14)).
+- **Current position:** [D2092](notes/rotated-polygon-pivot-face-2026-11-28/README.md), P5 rows 07 and 31. Pivot face keeps the original cap edge and trims when a convex polygon extrusion has an authored Rotate. Studio verifies refusal, signed History edits, the upstream Rotate edit and native reopen ([#629](https://github.com/barocss/cad/issues/629), [#14](https://github.com/barocss/cad/issues/14)).
+- **Next MAIN:** D2093, P0/P5 rows 16 and 30. Audit the native plane Split topology receipt against [#3](https://github.com/barocss/cad/issues/3). Reuse existing mappings and fix the first missing native lineage case if it prevents distinguishing ambiguous or deleted sources. Qualify the declared subset against Studio Save and fresh Open.
 - **Separate follow-ups:** Continue Studio App extraction in cohesive parts with affected desktop checks. [#608 Rendering](https://github.com/barocss/cad/issues/608) stays on HOLD. API inventory drift remains open. The issue tracker records [#126](https://github.com/barocss/cad/issues/126), [#613](https://github.com/barocss/cad/issues/613), [#152](https://github.com/barocss/cad/issues/152) and [#22](https://github.com/barocss/cad/issues/22) as closed.
 - **Active repository:** [barocss/cad](https://github.com/barocss/cad), based on `origin/main`. Fetch before work and preserve unexpected changes. The [migration record](../../../docs/migration/README.md) maps the former `local/cad-dev` history and issue numbers.
 - **Evidence correction:** D482 records2167 PASS/0 FAIL/2 existing SKIP in a later full-kernel run than D433. Neither result is a new full-suite PASS at this audit HEAD. [D482 record](notes/vertical-contact-refusal-2026-11-04/README.md).

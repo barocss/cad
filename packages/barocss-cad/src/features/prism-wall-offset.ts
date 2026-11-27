@@ -313,7 +313,10 @@ function offsetWall(brep: Brep, prism: WallPrism, distance: number): Brep {
   return result;
 }
 
-function rebindPrismTrim(brep: Brep, moved: ReadonlyMap<string, Point>, charts: ReadonlyMap<Face, Chart>): Brep {
+export type PrismTrimFace = Pick<Face, 'original' | 'loop' | 'chart'>;
+
+/** Keep native owners while rebinding changed planar trims, including after rigid placement. */
+export function rebindPrismTrim(brep: Brep, moved: ReadonlyMap<string, Point>, charts: ReadonlyMap<PrismTrimFace, Chart>): Brep {
   const vertices = brep.vertices.map(vertex => {
     const point = moved.get(vertex.id);
     return point ? { ...vertex, point } : vertex;
@@ -442,6 +445,16 @@ type PivotFailure = (code: 'INPUT' | 'CAPABILITY' | 'REFERENCE' | 'SELECTION' | 
 
 /** Turn one original convex polygon wall about its exact shared edge with the signed world-Z start cap. */
 export function pivotPrismWall(brep: Brep, faceName: string, edgeName: string, angle: number, pull: 'z' | '-z', refuse: PivotFailure): Brep {
+  return pivotPrismWallAtCap(brep, faceName, edgeName, angle, refuse, pull).brep;
+}
+
+/** Omitted-pull Rotate mode derives its original signed pull from native cap incidence. */
+export function pivotPrismWallFromCap(brep: Brep, faceName: string, edgeName: string, angle: number, refuse: PivotFailure): { brep: Brep; capName: string } {
+  return pivotPrismWallAtCap(brep, faceName, edgeName, angle, refuse);
+}
+
+function pivotPrismWallAtCap(brep: Brep, faceName: string, edgeName: string, angle: number, refuse: PivotFailure,
+  pull?: 'z' | '-z'): { brep: Brep; capName: string } {
   if (!Number.isFinite(angle) || angle === 0 || Math.abs(angle) >= Math.PI / 4)
     return refuse('INPUT', 'Pivot face needs a nonzero angle below 45 degrees in size.');
   const faces = brep.faces.filter(face => face.name === faceName), edges = brep.edges.filter(edge => edge.name === edgeName);
@@ -452,15 +465,18 @@ export function pivotPrismWall(brep: Brep, faceName: string, edgeName: string, a
   const wall = prism.walls[prism.selected], [edge] = edges;
   const uses = brep.coedges.filter(use => use.edge === edge.id);
   const incident = uses.map(use => brep.loops.find(loop => loop.id === use.loop)?.face);
-  const fixed = pull === 'z' ? 0 : 1, cap = prism.caps[fixed];
+  const fixed = pull === undefined ? prism.caps.findIndex(cap => cap.edges.includes(edge)) : pull === 'z' ? 0 : 1;
+  if (fixed !== 0 && fixed !== 1) return refuse('SELECTION', 'The Pivot edge must join the selected original side to an original cap.');
+  const cap = prism.caps[fixed];
   if (uses.length !== 2 || uses[0].sense === uses[1].sense || !incident.includes(wall.face.original.id)
     || !incident.includes(cap.original.id) || !wall.face.edges.includes(edge) || !cap.edges.includes(edge)
     || edge.curve.controlPoints.some(point => point[2] !== cap.corners[0].point[2]))
     return refuse('SELECTION', 'The Pivot edge must join the selected original side to the start cap of the signed Z pull.');
-  const c = Math.cos(angle), s = Math.sin(angle) * (pull === 'z' ? 1 : -1);
+  const c = Math.cos(angle), s = Math.sin(angle) * (fixed === 0 ? 1 : -1);
   const normal: Point = [wall.normal[0] * c, wall.normal[1] * c, s];
-  return replacePrismWall(brep, prism, { origin: edge.curve.controlPoints[0], normal }, fixed,
+  const result = replacePrismWall(brep, prism, { origin: edge.curve.controlPoints[0], normal }, fixed,
     (code, detail) => refuse(code === 'INPUT' ? 'INPUT' : 'GEOMETRY', `Pivot face: ${detail}`));
+  return { brep: result, capName: cap.original.name! };
 }
 
 /** Replacement and hinge drafting share the support proof, chart extension and native trim binding. */

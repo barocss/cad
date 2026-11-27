@@ -30,7 +30,7 @@ import { blindDrillHoleOperation } from './part-blind-drill-hole.js';
 import { prismaticDetailOperation } from './part-prismatic-detail.js';
 import { profileSolidOperation } from './part-profile-solid.js';
 import { faceFinishOperation } from './part-face-finish.js';
-import type { RotatedBoxStock } from './part-rotated-box-draft.js';
+import type { RotatedPivotStock } from './part-rotated-polygon-draft.js';
 import { stepTessellatedChars } from '../io/step.js';
 import { brepFromTriangles, isMeshBrepError } from '../mesh/mesh-brep.js';
 import { weldVertices } from '../mesh/facet-brep.js';
@@ -721,7 +721,7 @@ function originalPolygonPrism(reference: unknown, part: Part, t: Tools, label: s
 }
 
 /** The original stock and its authored rigid placements, not an inverse-transformed approximation. */
-function rotatedRectangularPrism(reference: unknown, part: Part, t: Tools, label: string): RotatedBoxStock | undefined {
+function rotatedOriginalPrism(reference: unknown, part: Part, t: Tools, label: string): RotatedPivotStock | undefined {
   let current = t.ref(reference, label), owner = part, rotated = false;
   const seen = new Set<string>(), placements: BrepAffine[] = [];
   for (;;) {
@@ -735,8 +735,10 @@ function rotatedRectangularPrism(reference: unknown, part: Part, t: Tools, label
     placements.unshift({ matrix: move.m, offset: move.o });
     current = parent; owner = parent.result.parts[0];
   }
-  if (!rotated || !originalRectangularPrism(current.id, owner, t, label)) return;
-  return { brep: namedFaceTargetBrep(t, current.id, owner), placements };
+  if (!rotated) return;
+  const kind = originalRectangularPrism(current.id, owner, t, label) ? 'box'
+    : originalPolygonPrism(current.id, owner, t, label) ? 'polygon' : undefined;
+  return kind && { brep: namedFaceTargetBrep(t, current.id, owner), placements, kind };
 }
 
 // ---- operations ---------------------------------------------------------------------------------------
@@ -1410,4 +1412,4 @@ const PRISMATIC_DETAIL_HELPERS = Object.freeze({ CadPartLimits, lineOnly, brepOf
 const PROFILE_SOLID_HELPERS = Object.freeze({ isRecord, CadPartLimits, placed, sweepBrep, guideInFrame });
 
 // Captured only after this module's constants initialize; original functions retain their shared runtime state.
-const FACE_FINISH_HELPERS = Object.freeze({ CadPartLimits, brepOf, namedFaceTargetBrep, originalRectangularPrism, originalPolygonPrism, rotatedRectangularPrism, bounds, boxSolid, boolean, empty, exactVolume, faceVertices, affine, draftWedge });
+const FACE_FINISH_HELPERS = Object.freeze({ CadPartLimits, brepOf, namedFaceTargetBrep, originalRectangularPrism, originalPolygonPrism, rotatedOriginalPrism, bounds, boxSolid, boolean, empty, exactVolume, faceVertices, affine, draftWedge });

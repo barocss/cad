@@ -1,9 +1,10 @@
 import { isBoxReplacementSource, isStraightPolygonReplacementSource, type ModelNode } from './doc';
 import type { BodyResult } from './evaluate';
 
-export type PivotStockMode = 'cardinal' | 'rotated' | 'polygon';
+type RotatedPivotStockMode = 'rotated' | 'rotated-polygon';
+export type PivotStockMode = 'cardinal' | 'polygon' | RotatedPivotStockMode;
 
-/** Original stock with single-solid placement features. Rotate is supported for rectangular stock. */
+/** Original stock with owned single-solid placement features. */
 export function pivotStockMode(nodes: readonly ModelNode[], index: number): PivotStockMode | undefined {
   let at = index, rotated = false;
   for (;;) {
@@ -11,8 +12,8 @@ export function pivotStockMode(nodes: readonly ModelNode[], index: number): Pivo
     if (!node || node.suppressed || node.held) return;
     if (node.kind !== 'translate' && node.kind !== 'rotate') {
       if (isBoxReplacementSource(nodes, at)) return rotated ? 'rotated' : 'cardinal';
-      if (!rotated && node.kind === 'extrude' && node.cutDepth === undefined && isStraightPolygonReplacementSource(nodes, node))
-        return 'polygon';
+      if (node.kind === 'extrude' && node.cutDepth === undefined && isStraightPolygonReplacementSource(nodes, node))
+        return rotated ? 'rotated-polygon' : 'polygon';
       return;
     }
     const { side, node: parent } = node.parent;
@@ -34,13 +35,28 @@ export function pivotStockEdge(body: BodyResult, faceIndex: number, edgeIndex: n
   return { faceName: face.nativePlaneName, supportName: other.nativePlaneName, face, edge, other };
 }
 
-export function followsRotatedPivotStock(nodes: readonly ModelNode[], node: ModelNode): boolean {
-  return node.kind === 'draft' && node.hingeEdge !== undefined && node.pull === undefined && node.neutral === undefined
-    && node.parent.side === 'solid' && pivotStockMode(nodes, node.parent.node) === 'rotated';
+export function pivotPolygonCap(face: string, support: string): 'top' | 'bottom' | undefined {
+  const owner = /^(.+)\.side\d+$/.exec(face)?.[1];
+  if (!owner) return;
+  if (support === `${owner}.top`) return 'top';
+  if (support === `${owner}.bottom`) return 'bottom';
 }
 
-export function hasRotatedPivotBinding(body: BodyResult, faceName: string, edgeName: string): boolean {
+export function rotatedPivotStockMode(nodes: readonly ModelNode[], node: ModelNode): RotatedPivotStockMode | undefined {
+  if (node.kind !== 'draft' || node.hingeEdge === undefined || node.pull !== undefined || node.neutral !== undefined
+    || node.parent.side !== 'solid') return;
+  const mode = pivotStockMode(nodes, node.parent.node);
+  if (mode === 'rotated' || mode === 'rotated-polygon') return mode;
+}
+
+export function followsRotatedPivotStock(nodes: readonly ModelNode[], node: ModelNode): boolean {
+  return rotatedPivotStockMode(nodes, node) !== undefined;
+}
+
+export function hasRotatedPivotBinding(body: BodyResult, faceName: string, edgeName: string, mode: RotatedPivotStockMode = 'rotated'): boolean {
   const faces = body.mesh.faces.filter(face => face.nativePlaneName === faceName);
   const edges = body.mesh.edges.filter(edge => edge.names.includes(edgeName));
-  return faces.length === 1 && edges.length === 1 && !!pivotStockEdge(body, faces[0].index, edges[0].index);
+  if (faces.length !== 1 || edges.length !== 1) return false;
+  const hinge = pivotStockEdge(body, faces[0].index, edges[0].index);
+  return !!hinge && (mode === 'rotated' || !!pivotPolygonCap(hinge.faceName, hinge.supportName));
 }

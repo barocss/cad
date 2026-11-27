@@ -1,6 +1,6 @@
 import { withNode } from '../engine/doc';
 import type { BodyResult } from '../engine/evaluate';
-import { pivotStockEdge, pivotStockMode, type PivotStockMode } from '../engine/pivotStock';
+import { pivotPolygonCap, pivotStockEdge, pivotStockMode, type PivotStockMode } from '../engine/pivotStock';
 import { captureSignatures } from '../engine/references';
 import { refusal } from '../engine/refusal';
 import type { Command, Ctx } from './commands';
@@ -10,7 +10,7 @@ import { pivotFaceAngleHandle } from './pivotFaceHandle';
 
 export const PIVOT_FACE = 'pivot-face';
 
-const selectionReason = 'Select a face and Shift-select its straight edge on rectangular stock, or select an upright convex polygon wall and its original cap edge.';
+const selectionReason = 'Select a face and Shift-select its straight edge on rectangular stock, or select an original convex polygon wall and its original cap edge.';
 const angleField = { key: 'deg', label: 'Angle', kind: 'deg', min: -45, max: 45, step: 1 } as const;
 
 export function pivotStockHinge(body: BodyResult, faceIndex: number, edgeIndex: number, mode: PivotStockMode) {
@@ -18,6 +18,11 @@ export function pivotStockHinge(body: BodyResult, faceIndex: number, edgeIndex: 
   if (!target) return;
   const { faceName, supportName, face, edge, other } = target;
   const names = { face: faceName, edge: edge.names[0] };
+  if (mode === 'rotated-polygon') {
+    const cap = pivotPolygonCap(faceName, supportName);
+    if (!cap) return;
+    return { ...names, pull: undefined, label: cap === 'top' ? 'Original top' : 'Original bottom' };
+  }
   if (mode === 'rotated') {
     const label = supportName.endsWith('.top') ? 'Original top' : supportName.endsWith('.bottom') ? 'Original bottom' : supportName;
     return { ...names, pull: undefined, label };
