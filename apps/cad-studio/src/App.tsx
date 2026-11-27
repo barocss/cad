@@ -1964,7 +1964,7 @@ export function App() {
     candidate: candidateReview, setCandidate: setCandidateReview, reviewView, showInVersions: versionsVisible && candidateView,
     dockVisible: dockDocked || layout.dockSheet, localCandidateView,
     instances: instancesStepped, placements: instancesPlaced, isolatedInstances,
-    proposalBodies: placedPreviewEnabled && ghost?.after && ghost.placed?.kind === 'ready' ? ghost.placed.bodies : undefined,
+    proposal: placedPreviewEnabled && ghost?.after && ghost.placed?.kind === 'ready' ? ghost.placed : undefined,
     reviewTaskRun, setToast,
   });
   const placedSnapsEligible = sketch?.tool === 'rectangle' && sketch.editNode === undefined && !sketch.base

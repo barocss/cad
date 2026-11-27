@@ -1,10 +1,9 @@
 import { useCallback, useEffect, useMemo, type Dispatch, type RefObject, type SetStateAction } from 'react';
-import type { BodyResult } from '@barocss/cad-model/engine/evaluate';
 import type { StudioNotice } from '../app/studioNotice';
 import type { TaskRunReviewRequest } from '../chat/taskRunOffer';
 import type { CandidateReview } from '../files/taskCandidateReview';
 import type { useScenePoses } from '../state/useScenePoses';
-import { withPlacedProposalBodies, WORKER_CANDIDATE_TINT } from './instanceEvaluation';
+import { withPlacedProposalBodies, WORKER_CANDIDATE_TINT, type PlacedProposalPreview } from './instanceEvaluation';
 import type { InstanceItem } from './renderer';
 
 type ReviewState = { review: CandidateReview; shown: boolean } | null;
@@ -19,14 +18,14 @@ interface Inputs {
   instances: InstanceItem[];
   placements: ReturnType<typeof useScenePoses>['instancesPlaced'];
   isolatedInstances?: readonly string[];
-  proposalBodies?: ReadonlyMap<string, BodyResult[]>;
+  proposal?: Extract<PlacedProposalPreview, { kind: 'ready' }>;
   reviewTaskRun: (request: Omit<TaskRunReviewRequest, 'baselineDigest'>) => Promise<unknown>;
   setToast: (notice: StudioNotice) => void;
 }
 
 export function usePlacedCandidatePreview({
   candidate, setCandidate, reviewView, showInVersions, dockVisible, localCandidateView,
-  instances, placements, isolatedInstances, proposalBodies, reviewTaskRun, setToast,
+  instances, placements, isolatedInstances, proposal, reviewTaskRun, setToast,
 }: Inputs) {
   const visible = (occurrence: string) => (!isolatedInstances || isolatedInstances.includes(occurrence))
     && instances.some(instance => instance.id === occurrence && instance.bodies.length > 0);
@@ -54,9 +53,11 @@ export function usePlacedCandidatePreview({
   };
 
   const placedCandidate = candidateAvailable && candidate?.shown ? candidate.review.preview.bodies : undefined;
-  const placedProposal = proposalBodies ?? placedCandidate;
+  const placedProposal = proposal?.bodies ?? placedCandidate;
   const tint = placedCandidate ? WORKER_CANDIDATE_TINT : undefined;
-  const viewportInstances = useMemo(() => withPlacedProposalBodies(instances, placedProposal, tint), [instances, placedProposal, tint]);
+  const additions = proposal?.additions;
+  const viewportInstances = useMemo(() => withPlacedProposalBodies(additions ? [...instances, ...additions] : instances, placedProposal, tint),
+    [instances, additions, placedProposal, tint]);
   const viewportPlacements = useMemo(() => withPlacedProposalBodies(placements, placedProposal, tint), [placements, placedProposal, tint]);
 
   return { candidateAvailable, hideCandidatePreview, toggleCandidatePreview, placedProposal, viewportInstances, viewportPlacements };

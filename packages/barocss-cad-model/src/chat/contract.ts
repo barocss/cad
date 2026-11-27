@@ -195,7 +195,7 @@ const READ: Record<string, JsonSchema | null> = {
   get_joints: o({ version: num, base: str, links: arr, joints: arr, loops: arr, couplings: arr, problems: arr, notes: arr, frames: arr }, ['version', 'base', 'links', 'joints', 'loops', 'couplings', 'problems', 'notes']),
 };
 /** Changes that only add (a feature, a part, a mate, a proposal, a library): nothing there before is altered. */
-const ADDS = new Set(['add_assembly_step', 'run_command', 'add_features', 'extrude_image_layer', 'inflate_image_layer', 'add_part', 'add_mate', 'pattern_part', 'insert_part', 'add_library', 'add_library_part', 'propose']);
+const ADDS = new Set(['add_assembly_step', 'run_command', 'add_features', 'extrude_image_layer', 'inflate_image_layer', 'add_part', 'add_mate', 'pattern_part', 'insert_part', 'add_library', 'add_library_part', 'propose', 'propose_photo_pair']);
 /** Changes that may alter or remove what is there; `true`: the same call twice has no further effect. */
 const ALTERS: Record<string, boolean> = {
   load_rows: true, edit_feature: true, delete_feature: true, apply_ops: false, run_script: false, restore: true, restore_best: true, set_requirements: true, set_brief: true, set_material: true, set_stock: true, set_casting: true, set_frame_stock: true, set_parameters: false, set_frame_sections: true, set_welds: true, ask_user: false, add_reference: false, add_datum: false, add_keepout: false, delete_reference_item: true, import_drawing: false, accept_proposal: true,

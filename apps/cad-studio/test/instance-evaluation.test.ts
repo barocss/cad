@@ -66,3 +66,21 @@ test('a geometry edit at the same placement still reports its volume change', as
   assert.ok(Math.abs(candidate.volumeChange! + 32 * Math.PI) < 1e-9);
   assert.equal(candidate.distanceMate, undefined);
 });
+
+test('review an appended part without replacing or moving the accepted instance', async () => {
+  const { before, pin } = fixture();
+  const added = { ...pin, id: 'new', name: 'New pin', position: [10, 12, 0] as [number, number, number] };
+  const after = { ...before, instances: [pin, added] };
+  const bodies = [{ volume: 320 * Math.PI }] as BodyResult[];
+  const ready = await placedProposalPreview(before, after, new Map(), async (inst, _, parent) => {
+    assert.equal(inst, added);
+    assert.equal(parent, after);
+    return { ok: true, bodies } as EvalResult;
+  });
+  assert.equal(ready?.kind, 'ready');
+  assert.deepEqual(ready.additions, [{ id: 'new', bodies }]);
+  assert.deepEqual([...ready.bodies.keys()], ['new']);
+  assert.equal(ready.volumeChange, bodies[0].volume);
+  const moved: StudioDoc = { ...after, instances: [{ ...pin, position: [1, 2, 3] }, added] };
+  assert.equal((await placedProposalPreview(before, moved, new Map(), async () => assert.fail('Unexpected placement evaluation')))?.kind, 'unavailable');
+});

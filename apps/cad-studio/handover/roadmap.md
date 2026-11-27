@@ -1,13 +1,13 @@
 # CAD roadmap — current status and execution order
 
-Updated 2026-11-27 · Priority authority: D520 · Latest delivery: D2079 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
+Updated 2026-11-27 · Priority authority: D520 · Latest delivery: D2080 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
 
 This is the only current status index. Detailed tracks define acceptance; the 34 stable row pages retain scope and issue navigation. Immutable decision notes retain results. Do not append chronological status paragraphs here. [D520 decision](notes/cad-roadmap-replan-2026-11-04/README.md) supersedes D445 execution order and historical next-item text, while retaining its safeguards and bounded proofs.
 
 ## Now and next
 
-- **Current position:** [D2079](notes/two-view-reference-scale-2026-11-27/README.md), P1 rows 04 and 08. Studio attaches two synthetic reference views. Local MCP uses one measured diameter to estimate four visible envelopes, rejects mismatched views and reports unobserved depth ([#747](https://github.com/barocss/cad/issues/747)).
-- **Next MAIN:** D2080, P1 rows 04 and 08. Use the calibrated pair from D2079 to stage four separately editable native parts for [#747](https://github.com/barocss/cad/issues/747). Preserve the supplied diameter and the estimated dimensions in the review. Use existing solid and assembly features, then check the parts and their edits in desktop Studio.
+- **Current position:** [D2080](notes/two-view-native-draft-2026-11-27/README.md), P1 rows 04 and 08. From the calibrated pair in [D2079](notes/two-view-reference-scale-2026-11-27/README.md), local MCP stages four editable native parts. Studio verifies approval, independent edits and fresh Open ([#747](https://github.com/barocss/cad/issues/747)).
+- **Next MAIN:** D2081, P2 row 13. Export the four-part draft from Studio and check the actual STEP file's solid count, dimensions, placement, axis and units against the approved synthetic model. Reconcile the original acceptance criteria for [#747](https://github.com/barocss/cad/issues/747).
 - **Separate follow-ups:** Continue Studio App extraction in cohesive parts with affected desktop checks. [#608 Rendering](https://github.com/barocss/cad/issues/608) stays on HOLD. API inventory drift remains open. The issue tracker records [#126](https://github.com/barocss/cad/issues/126), [#613](https://github.com/barocss/cad/issues/613), [#152](https://github.com/barocss/cad/issues/152) and [#22](https://github.com/barocss/cad/issues/22) as closed.
 - **Active repository:** [barocss/cad](https://github.com/barocss/cad), based on `origin/main`. Fetch before work and preserve unexpected changes. The [migration record](../../../docs/migration/README.md) maps the former `local/cad-dev` history and issue numbers.
 - **Evidence correction:** D482 records2167 PASS/0 FAIL/2 existing SKIP in a later full-kernel run than D433. Neither result is a new full-suite PASS at this audit HEAD. [D482 record](notes/vertical-contact-refusal-2026-11-04/README.md).

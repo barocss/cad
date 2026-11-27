@@ -5,6 +5,7 @@ import type { Op } from '@barocss/cad-model/engine/schema/proposals';
 import { canonical } from '@barocss/cad-model/util/revision';
 import type { Vec3 } from '@barocss/cad-model/engine/mesh';
 import type { InstanceRenderLooks } from './instanceLook';
+import type { InstanceItem } from './renderer';
 
 export const WORKER_CANDIDATE_TINT: Vec3 = [0.42, 0.58, 0.85];
 
@@ -28,7 +29,7 @@ export function instanceEvaluationCurrent(have: { inst: PartInstance; sourceKey:
 type DistanceMateChange = { occurrence: string; before: number; after: number };
 
 export type PlacedProposalPreview =
-  | { kind: 'ready'; bodies: ReadonlyMap<string, BodyResult[]>; volumeChange: number | null; distanceMate?: DistanceMateChange }
+  | { kind: 'ready'; bodies: ReadonlyMap<string, BodyResult[]>; volumeChange: number | null; distanceMate?: DistanceMateChange; additions?: InstanceItem[] }
   | { kind: 'unavailable'; reason: string };
 type PlacedBodies = { inst: PartInstance; sourceKey: string; bodies: BodyResult[] };
 type EvaluatePlaced = (inst: PartInstance, base: StudioDoc, parent: StudioDoc) => Promise<EvalResult>;
@@ -64,8 +65,24 @@ export async function placedProposalPreview(before: StudioDoc, after: StudioDoc,
   if (!oldInstances.length && !newInstances.length) return null;
   const oldById = new Map(oldInstances.map(i => [i.id, i]));
   const unavailable = (reason: string): PlacedProposalPreview => ({ kind: 'unavailable', reason });
-  if (oldInstances.length !== newInstances.length || oldById.size !== oldInstances.length || new Set(newInstances.map(i => i.id)).size !== newInstances.length)
+  if (oldById.size !== oldInstances.length || new Set(newInstances.map(i => i.id)).size !== newInstances.length)
     return unavailable('Placement changes are outside this preview.');
+  if (newInstances.length > oldInstances.length && canonical(oldInstances) === canonical(newInstances.slice(0, oldInstances.length))
+    && canonical(before.mates) === canonical(after.mates)) {
+    const sources = instanceEvaluationSources(after), additions: InstanceItem[] = [];
+    let volumeChange: number | null = 0;
+    for (const inst of newInstances.slice(oldInstances.length)) {
+      const source = sources.get(inst.id);
+      if (!source?.ok || inst.hidden || inst.doc.instances?.length) return unavailable(`Could not prepare new placed part ${inst.name}.`);
+      const candidate = await evaluate(inst, source.base, after);
+      if (!candidate.ok || !candidate.bodies.length) return unavailable(`Could not evaluate new placed part ${inst.name}.`);
+      additions.push({ id: inst.id, bodies: candidate.bodies });
+      const measured = measuredVolume(candidate.bodies);
+      volumeChange = volumeChange === null || measured === null ? null : volumeChange + measured;
+    }
+    return { kind: 'ready', additions, bodies: new Map(additions.map(item => [item.id, item.bodies])), volumeChange };
+  }
+  if (oldInstances.length !== newInstances.length) return unavailable('Placement changes are outside this preview.');
   const distanceMate = distanceMateChange(before, after, ops);
   const oldSources = instanceEvaluationSources(before), newSources = instanceEvaluationSources(after);
   const replacements = new Map<string, BodyResult[]>();

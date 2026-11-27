@@ -2,7 +2,7 @@
 // a layer extruded or inflated into the part; the tracing geometry they share.
 import { featureLabel, withNode, type ModelNode } from '../../engine/doc';
 import { withImageDraft } from '../drafts';
-import { measurePhotoPairTool } from '../photoPairTool';
+import { draftPhotoPairTool, measurePhotoPairTool } from '../photoPairTool';
 import type { ImageTrace, Pt } from '../trace';
 import { insideRing as inside } from '../../engine/geom2';
 import { type ChatState, type Evaluate, type ToolOutcome, type PartHandler, type CallOptions, json, accept, fail } from '../toolKit';
@@ -176,4 +176,5 @@ async function inflateImageLayerTool(state: ChatState, args: Record<string, unkn
 
 /** The image group's handlers, by v1 tool name (R3). */
 export const IMAGE_HANDLERS: Readonly<Record<string, PartHandler>> = { get_image_layers: getImageLayersTool,
-  measure_photo_pair: measurePhotoPairTool, extrude_image_layer: extrudeImageLayerTool, inflate_image_layer: inflateImageLayerTool };
+  measure_photo_pair: measurePhotoPairTool, propose_photo_pair: draftPhotoPairTool,
+  extrude_image_layer: extrudeImageLayerTool, inflate_image_layer: inflateImageLayerTool };

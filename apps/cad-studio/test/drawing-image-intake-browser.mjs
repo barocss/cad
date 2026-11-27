@@ -6,16 +6,18 @@ import { isAbsolute, join, relative, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { build } from 'esbuild';
 import { createFlow, sha256 } from './flow-helper.mjs';
+import { inspectorSource, reviewPhotoDraft } from './fixtures/photo-draft-review.mjs';
 
 const [output, scenario] = process.argv.slice(2), repo = resolve(import.meta.dirname, '../../..');
 assert.ok(output && isAbsolute(output) && relative(repo, output).startsWith('../'));
-assert.ok(scenario === undefined || scenario === '--capacity' || scenario === '--photo-pair');
-const capacity = scenario === '--capacity', photoPair = scenario === '--photo-pair';
+assert.ok(scenario === undefined || scenario === '--capacity' || scenario === '--photo-pair' || scenario === '--photo-draft');
+const capacity = scenario === '--capacity', photoDraft = scenario === '--photo-draft', photoPair = scenario === '--photo-pair' || photoDraft;
 const app = join(repo, 'apps/cad-studio');
 const drawingPath = 'apps/cad-studio/test/fixtures/dimensioned-angle-bracket.svg';
 const photoFixture = 'packages/barocss-cad-model/test/fixtures/two-view-reference.ts';
 const scripted = 'apps/cad-studio/test/fixtures/scripted-claude.mjs';
-const pins = [photoPair ? photoFixture : drawingPath, scripted, 'apps/cad-studio/test/flow-helper.mjs', 'apps/cad-studio/src/ui/ChatPanel.tsx', 'apps/cad-studio/src/chat/images.ts'];
+const pins = [photoPair ? photoFixture : drawingPath, scripted, 'apps/cad-studio/test/flow-helper.mjs', 'apps/cad-studio/src/ui/ChatPanel.tsx', 'apps/cad-studio/src/chat/images.ts',
+  ...(photoDraft ? ['apps/cad-studio/test/fixtures/photo-draft-review.mjs', 'apps/cad-studio/src/viewport/instanceEvaluation.ts'] : [])];
 const bundled = await build({
   entryPoints: { server: join(app, 'server/chatServer.ts'), mcp: join(app, 'server/cadMcp.ts'),
     ...(photoPair ? { photo: join(repo, photoFixture) } : {}) },
@@ -28,6 +30,7 @@ const f = await createFlow({
   envFrozen: photoPair ? 'PHOTO_PAIR_SOURCE_FROZEN' : capacity ? 'D599_SOURCE_FROZEN' : 'D598_SOURCE_FROZEN', initialFiles: [...pins, ...dependencies],
   requiredFrozen: pins, qualification: 'Desktop image attachment through the real local Chat server and read-only MCP calls',
   limits: ['The CLI fixture records provider input and calls the real MCP tools. Live model interpretation is outside this control.'],
+  ...(photoDraft ? { inspectorSource, qualification: 'Review a four-part photo draft from the real local Chat and MCP tool' } : {}),
 });
 for (const file of bundled.outputFiles) await writeFile(file.path, file.contents);
 const { createChatServer } = await import(pathToFileURL(join(output, 'server.mjs')).href);
@@ -116,17 +119,17 @@ async function requestTurn(prompt) {
   return response;
 }
 
-async function turn(description, calls) {
+async function turn(description, calls, changesDocument = false) {
   const prompt = promptFor(description, calls);
-  return readTurn(await requestTurn(prompt), description, calls);
+  return readTurn(await requestTurn(prompt), description, calls, changesDocument);
 }
 
-async function readTurn(response, description, calls) {
+async function readTurn(response, description, calls, changesDocument = false) {
   const prompt = promptFor(description, calls);
   assert.equal(response.status(), 200);
   const events = (await response.text()).split('\n').filter(line => line.startsWith('data: ')).map(line => JSON.parse(line.slice(6)));
   assert.equal(events.at(-1)?.end, 'done');
-  assert.equal(events.at(-1)?.doc, undefined);
+  if (!changesDocument) assert.equal(events.at(-1)?.doc, undefined);
   assert.equal(events.filter(event => event.type === 'tool').length, calls.length);
   await button('Send').waitFor();
   const lines = (await readFile(capture, 'utf8')).trim().split('\n').map(line => JSON.parse(line));
@@ -278,6 +281,15 @@ async function checkPhotoPair(original) {
   await f.same(original);
   f.report.observations.push({ report: normal, controls: [unobserved.parts[1], mismatched.code, swapped.code, invalid.code] });
   await f.snapshot('02-read-only-measurement');
+  if (photoDraft) {
+    f.phase = 'Stage four editable native parts without applying them';
+    const staged = await turn('Propose the calibrated assembly for review.', [photo({ ...args, action: 'propose_pair', traceRevision: normal.evidence.traceRevision })], true);
+    const [proposal] = staged.tools;
+    assert.equal(proposal.error, false, JSON.stringify(proposal.result));
+    assert.deepEqual([proposal.result.proposal, proposal.result.applied], ['P1', false]);
+    await f.changed(original);
+    await reviewPhotoDraft(f, original, await f.doc(), normal);
+  }
 }
 
 try {
@@ -287,7 +299,7 @@ try {
     server.on('request', (request, response) => { void handler(request, response); });
     const newContext = f.browser.newContext.bind(f.browser);
     f.browser.newContext = async options => {
-      const context = await newContext({ ...options, serviceWorkers: 'block', acceptDownloads: false });
+      const context = await newContext({ ...options, serviceWorkers: 'block', acceptDownloads: photoDraft });
       await context.route('**/*', route => {
         const url = new URL(route.request().url());
         if (url.hostname === 'fonts.googleapis.com') return route.fulfill({ contentType: 'text/css', body: '' });
@@ -313,6 +325,11 @@ try {
       return context;
     };
     await f.newPage();
+    if (photoDraft) {
+      const empty = { format: 'barocss-cad-model', schema: 3, units: 'mm', nodes: [], outputs: {}, parameters: {}, nextId: 0 };
+      await f.openFile({ name: 'reference-draft.bcad', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(empty)) }, 0);
+      await f.same(empty);
+    }
     const original = await f.doc();
     await button('Chat').click();
     await f.page.waitForFunction(() => document.querySelector('[aria-label="Chat message"]')?.disabled === false);

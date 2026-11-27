@@ -118,6 +118,7 @@ export const GROUPS: Record<string, Group> = {
     title: 'Image',
     about: 'A traced picture (a character, logo, icon) as solids.',
     actions: { layers: ['get_image_layers', 'image?'], measure_pair: ['measure_photo_pair', 'frontImage, sideImage, reference, parts'],
+      propose_pair: ['propose_photo_pair', 'frontImage, sideImage, reference, parts, traceRevision'],
       extrude: ['extrude_image_layer', 'width, height, image?, layer?, base?, orientation?, at?, y?'], inflate: ['inflate_image_layer', 'width, depth, image?, layer?, mode?, body_depth?, orientation?, at?, y?'] },
   },
   describe: { title: 'Describe', about: '', actions: {} },

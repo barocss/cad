@@ -12,7 +12,7 @@ interface PhotoReference extends Omit<PhotoLayerPair, 'sideLayer'> {
   diameterMM: number;
 }
 
-function layerBounds(trace: ImageTrace, id: string) {
+export function photoLayerBounds(trace: ImageTrace, id: string) {
   const matches = trace.layers.filter(layer => layer.id === id);
   if (matches.length !== 1 || matches[0].regions.length !== 1 || id === 'silhouette') return;
   const [region] = matches[0].regions;
@@ -21,16 +21,16 @@ function layerBounds(trace: ImageTrace, id: string) {
   const xs = points.map(([x]) => x), ys = points.map(([, y]) => y);
   const left = Math.min(...xs), right = Math.max(...xs), top = Math.min(...ys), bottom = Math.max(...ys);
   if (left <= 0 || right >= trace.width || top <= 0 || bottom >= trace.height || !(left < right && top < bottom)) return;
-  return { width: right - left, height: bottom - top, top, bottom, holes: region.holes.length };
+  return { width: right - left, height: bottom - top, centerX: (left + right) / 2, top, bottom, openings: region.holes };
 }
 
 /** Estimate part envelopes from a near-orthographic front ring and its side view. */
 export function measurePhotoPair(front: ImageTrace, side: ImageTrace, reference: PhotoReference, parts: readonly PhotoLayerPair[]) {
   if (front === side || !Number.isFinite(reference.diameterMM) || reference.diameterMM <= 0 || reference.diameterMM > CadNumericPolicy.coordinateAbs)
     return { error: 'Supply two distinct views and a positive measured front ring diameter in mm.', code: 'PHOTO_PAIR_INPUT' } as const;
-  const frontRing = layerBounds(front, reference.frontLayer), sideRing = layerBounds(side, reference.sideLayer);
+  const frontRing = photoLayerBounds(front, reference.frontLayer), sideRing = photoLayerBounds(side, reference.sideLayer);
   // The ring must be visible as an annulus from the front and a band from the side.
-  if (!frontRing || !sideRing || frontRing.holes !== 1 || sideRing.holes !== 0 || frontRing.width < 20 || sideRing.height < 20
+  if (!frontRing || !sideRing || frontRing.openings.length !== 1 || sideRing.openings.length !== 0 || frontRing.width < 20 || sideRing.height < 20
     || Math.abs(frontRing.height - frontRing.width) > 0.06 * frontRing.width || sideRing.width >= sideRing.height)
     return { error: 'Select an uncropped ring in the front view and its narrower side band. Check the view directions and perspective.', code: 'PHOTO_PAIR_REFERENCE' } as const;
   const { diameterMM } = reference, frontMMPerPixel = diameterMM / frontRing.width, sideMMPerPixel = diameterMM / sideRing.height;
@@ -45,7 +45,7 @@ export function measurePhotoPair(front: ImageTrace, side: ImageTrace, reference:
   const registrationToleranceMM = 2 * (frontMMPerPixel + sideMMPerPixel);
   const envelopes = [];
   for (const [index, part] of pairs.entries()) {
-    const a = layerBounds(front, part.frontLayer), b = part.sideLayer === undefined ? undefined : layerBounds(side, part.sideLayer);
+    const a = photoLayerBounds(front, part.frontLayer), b = part.sideLayer === undefined ? undefined : photoLayerBounds(side, part.sideLayer);
     if (!a || (part.sideLayer !== undefined && !b))
       return { error: `${names[index]} needs a unique single-region layer in each assigned view.`, code: 'PHOTO_PAIR_LAYER' } as const;
     const top = (a.top - frontRing.top) * frontMMPerPixel, bottom = (a.bottom - frontRing.top) * frontMMPerPixel;

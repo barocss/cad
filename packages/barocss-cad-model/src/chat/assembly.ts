@@ -222,6 +222,8 @@ export async function runAssemblyTool(state: State, name: string, args: Record<s
       try {
         const copy = args.copy_of !== undefined ? partCopy(doc, String(args.copy_of)) : undefined;
         const r = addPart(doc, { name: label, ...(copy ? { doc: copy } : {}), position: vec3(args.position) ?? [0, 0, 0], rotation: vec3(args.rotation) ?? [0, 0, 0], grounded: !!args.grounded });
+        if (args.expectedId !== undefined && args.expectedId !== r.id)
+          return fail(doc, 'The next part ID changed. Make a new proposal before adding features to the new part.');
         return reported(doc, r, `added part ${r.id} "${label}"${args.copy_of !== undefined ? ` (a copy of ${String(args.copy_of)})` : ''}`,
           { part: r.id, note: copy?.nodes.length ? 'build or edit it with the part tools and "part": id' : 'empty: build it with run_command / add_features and "part": id (its own coordinates; place it with place_part or mates)' });
       } catch (e) { if (isRefusal(e, ...ASSEMBLY_CODES)) return fail(doc, e.message); throw e; }
@@ -436,7 +438,8 @@ export const ASSEMBLY_TOOLS: ToolDefinition[] = [
   {
     name: 'add_part',
     description: 'Adds a separate part to the assembly (an instance with its own feature tree), empty or a copy of another part. Build it with the part tools (run_command, add_features, edit_feature, …, extrude/inflate_image_layer) by passing "part": its id; its features are in its own coordinates. Then place it with mates (preferred: they keep it right when parts change) or place_part.',
-    input_schema: { type: 'object', properties: { name: { type: 'string' }, copy_of: { type: 'string', description: 'A part id or "base" to copy.' }, position: xyz, rotation: xyz, grounded: { type: 'boolean' } }, required: ['name'], additionalProperties: false },
+    input_schema: { type: 'object', properties: { name: { type: 'string' }, copy_of: { type: 'string', description: 'A part id or "base" to copy.' }, position: xyz, rotation: xyz, grounded: { type: 'boolean' },
+      expectedId: { type: 'string', description: 'Optional exact next occurrence ID. Refuses if that ID is no longer available.' } }, required: ['name'], additionalProperties: false },
   },
   {
     name: 'place_part',
