@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import { createFlow } from './flow-helper.mjs';
 
 const baseline = process.argv.includes('--baseline');
+const priorSamePick = process.argv.includes('--prior-same-pick');
+assert.ok(!(baseline && priorSamePick));
 const oldNames = ['n1.side[retired1]|n1.side[e4]', 'n1.side[retired2]|n1.side[e3]'];
 const newNames = ['n1.side[e1]|n1.side[e4]', 'n1.side[e2]|n1.side[e3]'];
 const ref = node => ({ node, side: 'solid' });
@@ -26,7 +28,8 @@ const files = [
 ];
 const f = await createFlow({
   name: 'held-paired-fillet-group-through-hole', output: process.argv[2], envFrozen: 'D1987_SOURCE_FROZEN',
-  qualification: 'Explicit History group replacement of both retired straight edges in a two-edge constant Fillet before an independent top Through Hole.',
+  qualification: priorSamePick ? 'Reproduce a stale duplicate-pick refusal after a valid same-edge reselection.'
+    : 'Explicit History group replacement of both retired straight edges in a two-edge constant Fillet before an independent top Through Hole.',
   initialFiles: files, requiredFrozen: files,
   inspectorSource: `
 import { readFileSync } from 'node:fs';
@@ -194,6 +197,35 @@ await f.run(async () => {
   await f.same(opened.doc);
   assert.deepEqual(await stack(), history);
   await f.snapshot('04-two-picks-await-apply');
+
+  f.phase = 'refuse the second slot edge in the first slot, then reselect its existing valid edge';
+  await button('Pick first edge', stage).click();
+  await pick([60, 20, 5]);
+  const pickRefusal = f.page.getByRole('alert').filter({ hasText: 'Edge not selected' });
+  await pickRefusal.waitFor();
+  assert.equal(await apply().isEnabled(), true);
+  const duplicate = await f.snapshot('04a-duplicate-after-both-slots-picked');
+  assert.deepEqual(duplicate.doc, opened.doc);
+  assert.deepEqual(duplicate.bodies, opened.bodies);
+  assert.deepEqual(await stack(), history);
+
+  await direction('Front left');
+  await stagePick(0, [-20, -20, 5]);
+  await f.page.waitForFunction(() => !document.querySelector('.node-editor [aria-pressed="true"]'));
+  for (const [slot, name] of newNames.entries()) {
+    assert.equal(await nthRow(slot).getByRole('status').innerText(), name);
+  }
+  assert.equal(await apply().isEnabled(), true);
+  if (priorSamePick) {
+    await pickRefusal.waitFor();
+    await f.same(opened.doc);
+    await f.snapshot('04b-prior-valid-edge-stale-notice');
+    return;
+  }
+  await pickRefusal.waitFor({ state: 'detached' });
+  await f.same(opened.doc);
+  assert.deepEqual(await stack(), history);
+  await f.snapshot('04b-valid-edge-cleared-notice');
 
   await apply().click();
   await f.changed(opened.doc);

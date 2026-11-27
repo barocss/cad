@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D2050: [Retire a duplicate-edge notice after a valid Fillet pick](notes/held-fillet-duplicate-pick-notice-2026-11-27/README.md), #20. Verify both staged picks, real native Apply refusal, and desktop Save and fresh Open.
 - D1981: [Verify the tilted shared-endpoint Perpendicular and competing tangent refusal](notes/tilted-shared-endpoint-perpendicular-2026-11-25/README.md), #281.
 - D1980: [Constrain a line perpendicular to an arc at the shared endpoint](notes/shared-endpoint-perpendicular-2026-11-25/README.md), #281. Verify native geometry, dimensions, fresh Open and an explicit previous-reader refusal.
 - D1979: [Add the CAD React Hole component](notes/cad-react-native-hole-2026-11-25/README.md). Verify current native and visible Viewer frames, then edit, save and reopen the returned Hole in actual Studio.

@@ -219,6 +219,15 @@ await f.run(async () => {
     if (nativeRefusal) {
       await pick([10, 0, height]); await stage.getByText(frontTop, { exact: true }).waitFor();
       assert.equal(await apply.isEnabled(), true);
+      if (!expectStaleNotice) {
+        await button('Pick first edge', stage).click();
+        await pick([10, 0, height]);
+        await duplicateNotice.waitFor();
+        await direction('Back right');
+        await pick(inside);
+        await duplicateNotice.waitFor({ state: 'hidden' });
+        await direction('Front right');
+      }
       await f.snapshot('04a-two-admitted-picks');
       await apply.click(); await failure.waitFor();
       await f.same(before.doc);
@@ -230,6 +239,15 @@ await f.run(async () => {
       await stage.getByText(desired, { exact: true }).waitFor();
       await stage.getByText(frontTop, { exact: true }).waitFor();
       await button('Pick second edge', stage).click();
+      if (!expectStaleNotice) {
+        await pick([10, 0, height]);
+        await f.page.waitForFunction(() => !document.querySelector('.node-editor [aria-pressed="true"]'));
+        await failure.waitFor();
+        assert.equal(await apply.isEnabled(), true);
+        await f.same(before.doc);
+        await f.snapshot('04c-same-edge-keeps-native-refusal');
+        await button('Pick second edge', stage).click();
+      }
     }
     await pick(outside);
     if (chamfer) await duplicateNotice.waitFor({ state: 'hidden' });

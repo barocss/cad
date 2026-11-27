@@ -11,6 +11,7 @@ import { toSig, type Problem } from '@barocss/cad-model/engine/references';
 import type { FriendlyError } from '@barocss/cad-model/engine/errors';
 
 type Finish = Extract<ModelNode, { kind: 'fillet' | 'chamfer' }>;
+type FailurePhase = 'pick' | 'evaluation';
 type Hit = { edge: { body: number; edge: number } | null; edgeMesh?: BodyResult['mesh']; instance?: string };
 type GroupDraft = { slot: number | null; edges: (DisplayEdge | undefined)[]; sourceEdges?: (DisplayEdge | undefined)[]; ownsSource(): boolean };
 type Draft = { doc: StudioDoc; index: number; name: string | null; endpoints?: ReplacementEndpoints;
@@ -56,15 +57,18 @@ export function useHeldFinishEdge({ doc, index, problems, bodies, enabled, ownsS
   const heldName = finish?.edges.length === 2 ? problem?.name : undefined;
   const [draft, setDraft] = useState<Draft | null>(null);
   const ticket = useRef<object | null>(null);
-  const failureNotice = useRef<FriendlyError | null>(null);
+  const failureNotice = useRef<{ value: FriendlyError; phase: FailurePhase } | null>(null);
   const clearFailure = useCallback(() => {
     const owned = failureNotice.current;
     failureNotice.current = null;
-    if (owned) retireNotice(owned);
+    if (owned) retireNotice(owned.value);
   }, [retireNotice]);
-  const reportFailure = (failure: FriendlyError) => {
-    failureNotice.current = failure;
-    notice(failure);
+  const reportFailure = (phase: FailurePhase, value: FriendlyError) => {
+    failureNotice.current = { value, phase };
+    notice(value);
+  };
+  const acceptPick = (changed: boolean) => {
+    if (changed || failureNotice.current?.phase === 'pick') clearFailure();
   };
   useLayoutEffect(() => {
     ticket.current = null;
@@ -97,7 +101,7 @@ export function useHeldFinishEdge({ doc, index, problems, bodies, enabled, ownsS
       setDraft({ ...opened, parent });
     } else {
       setDraft(null);
-      reportFailure({ title: 'Edge replacement unavailable',
+      reportFailure('evaluation', { title: 'Edge replacement unavailable',
         hint: downstreamFillet ? 'The original Fillet body could not be read.' : 'The original Chamfer body could not be read.', detail: '' });
     }
   };
@@ -117,23 +121,23 @@ export function useHeldFinishEdge({ doc, index, problems, bodies, enabled, ownsS
         const original = current.parent && parentPairedFilletEdge(downstreamFillet, current.parent, edge);
         const sourceEdges = current.group.sourceEdges ?? edges;
         if (!original || sourceEdges.some((picked, i) => i !== slot && picked === original)) {
-          reportFailure({ title: 'Edge not selected', hint: 'Select a different original straight edge clear of the Through Hole.', detail: '' });
+          reportFailure('pick', { title: 'Edge not selected', hint: 'Select a different original straight edge clear of the Through Hole.', detail: '' });
           return true;
         }
         const picks = edges.map((picked, i) => i === slot ? edge : picked);
         const sourcePicks = sourceEdges.map((picked, i) => i === slot ? original : picked);
         const nextSlot = sourcePicks.indexOf(undefined);
-        if (edges[slot] !== edge) clearFailure();
+        acceptPick(edges[slot] !== edge);
         setDraft({ ...current, group: { ...current.group, edges: picks, sourceEdges: sourcePicks, slot: nextSlot === -1 ? null : nextSlot } });
         return true;
       }
       if (!validFinishGroupEdge(edge, body.mesh.edges) || edges.some((picked, i) => i !== slot && picked === edge)) {
-        reportFailure({ title: 'Edge not selected', hint: 'Select a different unmerged straight edge on the body of this feature.', detail: '' });
+        reportFailure('pick', { title: 'Edge not selected', hint: 'Select a different unmerged straight edge on the body of this feature.', detail: '' });
         return true;
       }
       const picks = edges.map((picked, i) => i === slot ? edge : picked);
       const nextSlot = picks.indexOf(undefined);
-      if (edges[slot] !== edge) clearFailure();
+      acceptPick(edges[slot] !== edge);
       setDraft({ ...current, group: { ...current.group, edges: picks, slot: nextSlot === -1 ? null : nextSlot } });
       return true;
     }
@@ -142,7 +146,7 @@ export function useHeldFinishEdge({ doc, index, problems, bodies, enabled, ownsS
       : downstreamFillet ? current.parent && parentPairedFilletEdge(downstreamFillet, current.parent, edge) : edge;
     const candidate = finish && heldFinishCandidate(finish, original, source.mesh.edges, doc.parameters, heldName);
     if(candidate && !('error' in candidate)) {
-      if (current.edge !== edge) clearFailure();
+      acceptPick(current.edge !== edge);
       setDraft({...current,...candidate,edge,sourceEdge:original});
     }
     else {
@@ -152,7 +156,7 @@ export function useHeldFinishEdge({ doc, index, problems, bodies, enabled, ownsS
         : downstreamFillet ? 'Select a different original straight edge clear of the Through Hole.'
         : candidate && 'error' in candidate ? candidate.error : 'Select one edge on the body of this feature.';
       // The pick belongs to this replacement even when its source is a terminal body.
-      reportFailure({ title: 'Edge not selected', hint, detail: '' });
+      reportFailure('pick', { title: 'Edge not selected', hint, detail: '' });
     }
     return true;
   };
@@ -193,9 +197,9 @@ export function useHeldFinishEdge({ doc, index, problems, bodies, enabled, ownsS
         if (ticket.current !== request || !stillOwnsSource()) return;
         if (accept(next, resolved, nextProblems)) cancel();
       }
-      else reportFailure({ ...result.error, title: 'Edge replacement not applied' });
+      else reportFailure('evaluation', { ...result.error, title: 'Edge replacement not applied' });
     } catch (error) {
-      if (ticket.current === request && stillOwnsSource()) reportFailure({ title: 'Edge replacement not applied', hint: 'The feature is unchanged.', detail: String(error) });
+      if (ticket.current === request && stillOwnsSource()) reportFailure('evaluation', { title: 'Edge replacement not applied', hint: 'The feature is unchanged.', detail: String(error) });
     } finally {
       if (ticket.current === request) {
         ticket.current = null;
