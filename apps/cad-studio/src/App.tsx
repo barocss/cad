@@ -239,9 +239,7 @@ import { DraftsPanel } from './ui/DraftsPanel';
 import { isBodyEyeVisibilityOnly } from './state/bodyVisibilityReferenceProblems';
 import { heldDraftFacePreviewClear, heldDraftFaceWorkCurrent } from './state/heldDraftFaceSession';
 import { useHeldDraftFace } from './state/useHeldDraftFace';
-import { useHeldShellFace } from './state/useHeldShellFace';
-import { useHeldFinishEdge } from './state/useHeldFinishEdge';
-import { refreshDownstreamProblems } from './state/referenceDecisions';
+import { useStudioHeldReferences } from './app/useStudioHeldReferences';
 import { resolveShopRows } from '@barocss/cad-model/engine/shopRows';
 import { openAccepted, type InPlaceSession } from './app/editInPlace';
 import { editInPlaceActions } from './app/editInPlaceActions';
@@ -1337,46 +1335,21 @@ export function App() {
     retire: commandPreview.retire, clearApply: commandApply.clearApply, set: setActive,
     select: setSelection, notice: setToast, setRequest: setFilletPickedEdgeRequest,
   });
-  const finishEdgeOpen = openIntent.current;
-  const finishEdgeEditor = useHeldFinishEdge({
-    doc, index: editNode, problems: refProblems, bodies,
-    enabled: fresh && !busy && marker === null && !shownVariant.current && !inPlace && !active && !section &&
-      !sketch && !rendering && !drawing && !measure && !directSel.length && !instanceSel.length &&
-      !previewBodies && !assembly.draft && !cageEd.session && !skel.session,
-    ownsSource: () => finishEdgeOpen === openIntent.current && ownsEvaluatedSource() && shownDocNow.current === doc
-      && editNodeNow.current === editNode && bodiesRef.current === bodies && referenceProblems.current.get(doc) === refProblems,
-    evaluate: (next, marker) => engine.part(prefixDoc(next, marker ?? next.nodes.length), revision.current++, 'refs'),
-    refreshProblems: (next, releasedNode, remaining, nextBodies) =>
-      refreshDownstreamProblems(next, releasedNode, remaining, nextBodies, partDoc => engine.part(partDoc, revision.current++, 'refs')),
-    accept: (next, resolved, nextProblems) => {
-      if (!commit(next, false, false, true)) return false;
-      referenceProblems.current.set(next, nextProblems ? [...nextProblems] : refProblems.filter(value => !resolved.includes(value)));
-      return true;
+  const { finishEdgeEditor, shellFaceEditor, edgeReplacement, shellFaceReplacement } = useStudioHeldReferences({
+    model: { doc, index: editNode, problems: refProblems, bodies },
+    owner: {
+      open: openIntent, problemsByDoc: referenceProblems,
+      enabled: fresh && !busy && marker === null && !shownVariant.current && !inPlace && !active && !section &&
+        !sketch && !rendering && !drawing && !measure && !directSel.length && !instanceSel.length &&
+        !previewBodies && !assembly.draft && !cageEd.session && !skel.session,
+      shellEnabled: !workerFailure && !bodyDrag && !instDrag && !exploded && !routePanelOpen &&
+        !routePreviewBodies && !parameterEdit && previewMode === 'none',
+      current: () => ownsEvaluatedSource() && shownDocNow.current === doc && editNodeNow.current === editNode && bodiesRef.current === bodies,
+      shellCurrent: () => !shownVariant.current && !inPlaceNow.current && !activeStore.get() && !sectionRef.current
+        && !nodeEditorDraft.current && !parameterEditNow.current && !project.opening(),
     },
-    notice: setToast,
-    retireNotice: clearOwnedNotice,
-  });
-  const shellFaceEditor = useHeldShellFace({
-    doc, index: editNode, problems: refProblems, bodies,
-    enabled: fresh && !busy && !workerFailure && marker === null && !shownVariant.current && !inPlace && !active && !section &&
-      !sketch && !rendering && !drawing && !measure && !directSel.length && !instanceSel.length &&
-      !previewBodies && !assembly.draft && !cageEd.session && !skel.session && !bodyDrag && !instDrag && !exploded &&
-      !routePanelOpen && !routePreviewBodies && !parameterEdit && previewMode === 'none',
-    ownsSource: () => finishEdgeOpen === openIntent.current && ownsEvaluatedSource() && shownDocNow.current === doc
-      && editNodeNow.current === editNode && bodiesRef.current === bodies && referenceProblems.current.get(doc) === refProblems
-      && !shownVariant.current && !inPlaceNow.current && !activeStore.get() && !sectionRef.current
-      && !nodeEditorDraft.current && !parameterEditNow.current && !project.opening(),
-    evaluate: next => engine.part(prefixDoc(next, next.nodes.length), revision.current++, 'refs'),
-    refreshProblems: (next, releasedNode, remaining, nextBodies) =>
-      refreshDownstreamProblems(next, releasedNode, remaining, nextBodies, partDoc => engine.part(partDoc, revision.current++, 'refs')),
-    accept: (next, _resolved, nextProblems) => {
-      void _resolved;
-      if (!commit(next, false, false, true)) return false;
-      referenceProblems.current.set(next, [...nextProblems]);
-      return true;
-    },
-    notice: setToast,
-    retireNotice: clearOwnedNotice,
+    worker: { engine, nextRevision: () => revision.current++ },
+    changes: { commit: next => commit(next, false, false, true), notice: setToast, retireNotice: clearOwnedNotice },
   });
   const replacementEndpointLocations = finishEdgeEditor.current?.endpoints;
   const displayedFilletEndpoints = replacementEndpointLocations ?? filletEndpointLocations;
@@ -2267,11 +2240,7 @@ export function App() {
           editor={{ onFilletStations: publishFilletStations, filletEndpoints: replacementEndpointLocations ?? historyEndpointLocations,
             alignPreview: historyAlign, oppositeRadiusPreview, readAlignTargets: readAlignHistoryTargets,
             draftFaceReplacement: heldDraftFace.available ? heldDraftFace : undefined,
-            shellFaceReplacement: shellFaceEditor.available ? { start: shellFaceEditor.start, cancel: shellFaceEditor.cancel,
-              apply: shellFaceEditor.apply, draft: shellFaceEditor.current } : undefined,
-            edgeReplacement: finishEdgeEditor.available ? { start: finishEdgeEditor.start, cancel: finishEdgeEditor.cancel,
-              apply: finishEdgeEditor.apply, draft: finishEdgeEditor.current, grouped: finishEdgeEditor.grouped,
-              group: finishEdgeEditor.groupReview, selectSlot: finishEdgeEditor.selectSlot } : undefined,
+            shellFaceReplacement, edgeReplacement,
             onDraft: reportNodeEditorDraft, pending: parameterEdit?.kind === 'direct',
             onDelete: opener => deleteNode(editNode, opener), onClose: () => closeHistoryEditor(() => {
               heldDraftFace.cancel();
