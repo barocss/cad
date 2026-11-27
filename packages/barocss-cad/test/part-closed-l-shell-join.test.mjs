@@ -124,34 +124,37 @@ test('absent join preserves both incumbent native archives and does not serializ
 const openTopDoc = (join, thickness = 2, points = P) => {
   const source = doc(join, thickness, points); source.features.at(-1).open = ['e.top']; return source;
 };
-for (const join of ['sharp', 'arc']) for (const reversed of [false, true]) test(`exact original top opening with ${join}/${reversed ? 'CW' : 'CCW'} is one native shell with an intact bottom`, () => {
-  const source = openTopDoc(join, 2, reversed ? P.toReversed() : P), before = structuredClone(source), snapshot = evaluateCadPart(source), output = snapshot.outputs[0], brep = output.brep;
-  assert.deepEqual(source, before); strict(brep, join, true); close(massPropertiesOf(output).volume, expectedVolume(2, join, true), 'independent open-top L volume');
-  const rim = brep.faces.find(f => f.name === 'e.top'), bottom = brep.faces.find(f => f.name === 'e.bottom'); assert.ok(rim && bottom);
-  assert.equal(bottom.loops.length, 1); assert.equal(rim.loops.length, 2);
-  close(faceGeometry(rim).o[2], 20, 'top rim stays on original cap'); close(faceGeometry(bottom).o[2], 0, 'outer bottom support');
+for (const capName of ['top', 'bottom']) for (const join of ['sharp', 'arc']) for (const reversed of [false, true]) test(`exact original ${capName} opening with ${join}/${reversed ? 'CW' : 'CCW'} is one native shell with an intact opposite cap`, () => {
+  const source = openTopDoc(join, 2, reversed ? P.toReversed() : P), sign = capName === 'top' ? 1 : -1, zOf = z => capName === 'top' ? z : 20 - z;
+  source.features.at(-1).open = [`e.${capName}`];
+  const before = structuredClone(source), snapshot = evaluateCadPart(source), output = snapshot.outputs[0], brep = output.brep;
+  assert.deepEqual(source, before); strict(brep, join, true); close(massPropertiesOf(output).volume, expectedVolume(2, join, true), 'independent one-cap L volume');
+  const rim = brep.faces.find(f => f.name === `e.${capName}`), retained = brep.faces.find(f => f.name === (capName === 'top' ? 'e.bottom' : 'e.top')); assert.ok(rim && retained);
+  assert.equal(retained.loops.length, 1); assert.equal(rim.loops.length, 2);
+  close(faceGeometry(rim).o[2], zOf(20), 'rim stays on original cap'); close(faceGeometry(retained).o[2], zOf(0), 'outer retained cap support');
   const loops = rim.loops.map(id => brep.loops.find(l => l.id === id)), outer = loops.find(l => l.kind === 'outer'), inner = loops.find(l => l.kind === 'inner');
   assert.ok(outer && inner); assert.equal(outer.coedges.length, 6); assert.equal(inner.coedges.length, join === 'arc' ? 7 : 6);
   const coedges = new Map(brep.coedges.map(c => [c.id, c])), edges = new Map(brep.edges.map(e => [e.id, e]));
-  for (const loop of [outer, inner]) for (const id of loop.coedges) for (const p of edges.get(coedges.get(id).edge).curve.controlPoints) close(p[2], 20, 'all rim trims reach the connected opening');
+  for (const loop of [outer, inner]) for (const id of loop.coedges) for (const p of edges.get(coedges.get(id).edge).curve.controlPoints) close(p[2], zOf(20), 'all rim trims reach the connected opening');
   const outerPoints = outer.coedges.map(id => { const c = coedges.get(id), edge = edges.get(c.edge); return edge.curve.controlPoints[c.sense === 'forward' ? 0 : edge.curve.controlPoints.length - 1].slice(0, 2); });
-  assert.deepEqual(outerPoints.map(p => p.join(',')).sort(), P.map(p => p.join(',')).sort(), 'the exact original L top outline remains');
+  assert.deepEqual(outerPoints.map(p => p.join(',')).sort(), P.map(p => p.join(',')).sort(), 'the exact original L cap outline remains');
   const horizontal = brep.faces.map(f => ({ face: f, g: faceGeometry(f) })).filter(x => x.g.kind === 'plane' && Math.abs(x.g.n[2]) === 1);
-  assert.equal(horizontal.length, 3, 'only bottom, cavity floor and connected top rim remain');
-  const floor = horizontal.find(x => x.g.n[2] === 1 && Math.abs(x.g.o[2] - 2) < 1e-9);
-  assert.ok(floor); assert.equal(floor.face.loops.length, 1); assert.equal(horizontal.filter(x => x.g.n[2] === -1).length, 1, 'there is no retained inner ceiling');
+  assert.equal(horizontal.length, 3, 'only retained cap, cavity floor/ceiling and connected rim remain');
+  const cavityCap = horizontal.find(x => x.g.n[2] === sign && Math.abs(x.g.o[2] - zOf(2)) < 1e-9);
+  assert.ok(cavityCap); assert.equal(cavityCap.face.loops.length, 1); assert.equal(horizontal.filter(x => x.g.n[2] === -sign).length, 1, 'no inner cap blocks the selected opening');
   const cylinders = brep.faces.filter(f => faceGeometry(f).kind === 'cylinder'); assert.equal(cylinders.length, join === 'arc' ? 1 : 0);
   if (join === 'arc') {
     for (const u of [0, .15, .4, .7, 1]) for (const v of [0, .2, .7, 1]) {
       const p = evaluateSurface(cylinders[0].surface, u, v); close((p[0] - 10) ** 2 + (p[1] - 10) ** 2, 4, 'exact radius-two Round chart');
-      assert.ok(p[2] >= 2 - 1e-9 && p[2] <= 20 + 1e-9);
+      assert.ok(zOf(p[2]) >= 2 - 1e-9 && zOf(p[2]) <= 20 + 1e-9);
     }
     const arc = inner.coedges.map(id => edges.get(coedges.get(id).edge)).find(edge => edge.curve.degree === 2); assert.ok(arc);
     for (const t of [0, .2, .5, .8, 1]) { const p = evaluateCurve(arc.curve, t); close((p[0] - 10) ** 2 + (p[1] - 10) ** 2, 4, 'native Round top-rim arc'); }
   }
   const mesh = meshOf(brep);
-  assert.equal(materialAt(mesh, [5, 5, 1]), true, 'a 2 mm bottom remains'); assert.equal(materialAt(mesh, [5, 5, -1]), false);
-  for (const z of [3, 10, 19.5, 21]) assert.equal(materialAt(mesh, [5, 5, z]), false, 'one cavity continues through the selected top');
+  for (const z of [1, 1.5]) assert.equal(materialAt(mesh, [5, 5, zOf(z)]), true, 'the opposite cap keeps its 2 mm wall');
+  assert.equal(materialAt(mesh, [5, 5, zOf(-1)]), false);
+  for (const z of [2.5, 3, 10, 19.5, 21]) assert.equal(materialAt(mesh, [5, 5, zOf(z)]), false, 'one cavity continues through the selected cap');
   assert.equal(materialAt(mesh, [1, 5, 10]), true); assert.equal(materialAt(mesh, [3, 5, 10]), false);
   assert.equal(materialAt(mesh, [8.4, 8.4, 10]), join === 'sharp');
   if (!reversed) {
@@ -160,25 +163,32 @@ for (const join of ['sharp', 'arc']) for (const reversed of [false, true]) test(
   }
 });
 
-test('top-only L choice retains tagged loop walls and nonzero original from when thickness changes', () => {
+for (const capName of ['top', 'bottom']) test(`${capName}-only L choice retains tagged loop walls and nonzero original from when thickness changes`, () => {
   const source = openTopDoc('arc', 3), tags = ['a', 'b', 'c', 'd', 'e', 'f'];
+  source.features.at(-1).open = [`e.${capName}`];
   source.features[0] = { id: 's', kind: 'sketch', profile: 'loop', segments: P.map(start => ({ kind: 'line', start })), sideTags: { outer: tags } }; source.features[1].from = 3;
   const snapshot = evaluateCadPart(source), output = snapshot.outputs[0]; strict(output.brep, 'arc', true);
-  close(massPropertiesOf(output).volume, expectedVolume(3, 'arc', true), 'independent edited open-top volume');
-  close(faceGeometry(output.brep.faces.find(f => f.name === 'e.top')).o[2], 23, 'translated original top');
-  assert.ok(output.brep.faces.some(f => { const g = faceGeometry(f); return g.kind === 'plane' && g.n[2] === 1 && Math.abs(g.o[2] - 6) < 1e-9; }));
+  close(massPropertiesOf(output).volume, expectedVolume(3, 'arc', true), 'independent edited one-cap volume');
+  close(faceGeometry(output.brep.faces.find(f => f.name === `e.${capName}`)).o[2], capName === 'top' ? 23 : 3, 'translated original opened cap');
+  assert.ok(output.brep.faces.some(f => { const g = faceGeometry(f); return g.kind === 'plane' && g.n[2] === (capName === 'top' ? 1 : -1) && Math.abs(g.o[2] - (capName === 'top' ? 6 : 20)) < 1e-9; }));
   assert.ok(tags.every(tag => output.brep.faces.some(f => f.name === `e.side[${tag}]`)));
   assert.deepEqual(loadCadPart(saveCadPart(snapshot)).outputs[0].brep, output.brep);
 });
 
-test('explicit L top choice refuses side, bottom, multiple, duplicate and nonexact cap names', () => {
-  for (const open of [['e.bottom'], ['e.side0'], ['e.top', 'e.bottom'], ['e.top', 'e.top'], ['e.top#1'], ['e.top', 'e.side0'], ['top']]) {
+test('explicit L cap choice refuses side, multiple, duplicate and nonexact cap names', () => {
+  for (const open of [['e.side0'], ['e.top', 'e.bottom'], ['e.top', 'e.top'], ['e.bottom', 'e.bottom'], ['e.top#1'], ['e.bottom#1'], ['e.top', 'e.side0'], ['e.bottom', 'e.side0'], ['top'], ['bottom']]) {
     const source = openTopDoc('arc'); source.features.at(-1).open = open;
     assert.throws(() => evaluateCadPart(source), e => e.code === 'CAPABILITY' && /single exact original top cap/.test(e.message));
   }
   const box = openTopDoc('arc'); box.features[0] = { id: 's', kind: 'sketch', profile: 'rectangle', min: [0, 0], max: [40, 30] };
   assert.throws(() => evaluateCadPart(box), e => e.code === 'CAPABILITY');
   for (const thickness of [5, 6]) assert.throws(() => evaluateCadPart(openTopDoc('arc', thickness)), e => e.code === 'PARAMETER' && /less than 5 mm/.test(e.message));
+});
+
+test('bottom choice retains the exact incumbent limit-five diagnostic', () => {
+  const source = openTopDoc('arc', 5); source.features.at(-1).open = ['e.bottom'];
+  assert.throws(() => evaluateCadPart(source), e => e.code === 'PARAMETER'
+    && e.message === 'sh: Shell join wall thickness must be less than 5 mm to keep both L arms and the closed height.');
 });
 
 test('closed explicit and absent open-top L native archives remain unchanged', () => {
@@ -192,4 +202,15 @@ test('closed explicit and absent open-top L native archives remain unchanged', (
       close(massPropertiesOf(output).volume, expectedVolume(2, 'arc', true), 'incumbent default open-top Round');
     }
   }
+});
+
+test('explicit top and absent bottom L native archives remain unchanged', () => {
+  const bottom = openTopDoc(undefined); bottom.features.at(-1).open = ['e.bottom'];
+  for (const [source, digest] of [[openTopDoc('sharp'), '2088292e2c6f73a79be6c0cbbf0df1cffb27ba6e4c6fd7ea4436dccd7f55d718'],
+    [openTopDoc('arc'), '7d0ef7cf6ca1ac3f678f6544f0ca06f12ca96b9434554672c18bec277c9ebd50'],
+    [bottom, 'cd72822000d3ff9ebaa995d645a20246037a776b23c102552f7a3019f3e518e3']]) {
+    const snapshot = evaluateCadPart(source), output = snapshot.outputs[0]; assert.equal(hash(output.brep), digest);
+    assert.deepEqual(loadCadPart(saveCadPart(snapshot)).outputs[0].brep, output.brep);
+  }
+  const text = saveCadPart(evaluateCadPart(bottom)); assert.equal(Object.hasOwn(JSON.parse(text).features.at(-1), 'join'), false);
 });

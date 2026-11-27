@@ -530,7 +530,7 @@ export type CadPartFeature = Base & (
    */
   | { readonly kind: 'sheet-corner-relief'; readonly target: string; readonly corner: string; readonly shape: 'square' | 'round'; readonly size: CadPartDim }
   | { readonly kind: 'sheet-flange'; readonly target: string; readonly edge: string; readonly length: CadPartDim; readonly angle?: number; readonly bendRadius?: CadPartDim; readonly measure?: 'outer' | 'inner' | 'tangent'; readonly position?: 'material-inside' | 'material-outside' | 'bend-outside'; readonly offsets?: readonly [CadPartDim, CadPartDim]; readonly relief?: { readonly kind: 'rectangular' | 'obround'; readonly width: CadPartDim; readonly depth: CadPartDim } | { readonly kind: 'none' } }
-  /** Hollowed to walls `thickness` thick; `open` names removed faces. Explicit `join` is for an original upright orthogonal L, closed or with only its original top opened; absent keeps the incumbent route. */
+  /** Hollowed to walls `thickness` thick; `open` names removed faces. Explicit `join` is for an original upright orthogonal L, closed or with only its original top or bottom opened; absent keeps the incumbent route. */
   | { readonly kind: 'shell'; readonly target: string; readonly thickness: CadPartDim; readonly open?: readonly string[]; readonly join?: 'sharp' | 'arc'; readonly expect?: Readonly<Record<string, CadPartNameSignature>> }
   /** Independent walls of an original cardinal box. The optional second opening names a distinct original face. */
   | { readonly kind: 'shell-walls'; readonly target: string; readonly opening: string; readonly secondOpening?: string; readonly walls: Readonly<Record<string, number>>; readonly expect?: Readonly<Record<string, CadPartNameSignature>> }

@@ -17,8 +17,9 @@ export function shellOpenFaces(ctx: Ctx, body: BodyResult): string[] {
 }
 
 export function canSetShellCorner(nodes: readonly ModelNode[], parent: BodyRef, open: readonly string[]): boolean {
-  const top = featureId(nodes, parent.node) + '.top';
-  return (open.length === 0 || open.length === 1 && open[0] === top) && canSetClosedShellCorner(nodes, parent);
+  const owner = featureId(nodes, parent.node);
+  return (open.length === 0 || open.length === 1 && (open[0] === owner + '.top' || open[0] === owner + '.bottom'))
+    && canSetClosedShellCorner(nodes, parent);
 }
 
 /** An explicit Agent corner needs one literal original body or one unique literal original top cap. */
@@ -33,7 +34,8 @@ export function canSetAgentShellCorner(ctx: Ctx, bodyInput: unknown, faceInput: 
     || selection.bodies.length || selection.faces.length !== 1) return false;
   const name = faceInput[0], pick = selection.faces[0], body = bodies[pick.body], parent = body?.ref;
   const face = body?.mesh.faces[pick.face];
-  return !!parent && face?.name === name && face.nativePlaneName === name && canSetShellCorner(doc.nodes, parent, [name])
+  return !!parent && name === featureId(doc.nodes, parent.node) + '.top' && face?.name === name && face.nativePlaneName === name
+    && canSetClosedShellCorner(doc.nodes, parent)
     && bodies.flatMap(candidate => candidate.mesh.faces.filter(member => member.nativePlaneName === name)).length === 1;
 }
 

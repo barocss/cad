@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D2118: [Choose the inner corner of an open-bottom L Shell](notes/open-bottom-l-shell-corner-2026-11-28/README.md), #13. Verify both corner modes, original lower rim, intact top and exact native desktop reopen.
+
 - D2117: [Pin a local Agent Shell corner to the original top cap](notes/agent-open-top-l-shell-2026-11-28/README.md), #324. Verify exact top selection, current revision, explicit desktop approval and native geometry equality.
 
 - D2116: [Choose the inner corner of an open-top L Shell](notes/open-top-l-shell-corner-2026-11-28/README.md), #13. Verify both cavity corners, original rim ownership, intact bottom and exact desktop reopen.

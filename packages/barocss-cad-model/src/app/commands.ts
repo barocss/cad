@@ -845,7 +845,7 @@ const allCommands: Command[] = [
       const open = shellOpenFaces(ctx, body);
       const parent = refOf(body);
       if (join !== undefined && !canSetShellCorner(ctx.doc.nodes, parent, open))
-        throw refusal('BAD_REFERENCE', 'Choose an inner corner on an original upright L-shaped extrusion, closed or with only its top face open.');
+        throw refusal('BAD_REFERENCE', 'Choose an inner corner on an original upright L-shaped extrusion, closed or with one end cap open.');
       return withNode(ctx.doc, { kind: 'shell', parent, thickness: Number(v.t), open, ...(join === undefined ? {} : { join }) });
     },
   },

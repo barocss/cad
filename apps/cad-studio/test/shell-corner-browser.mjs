@@ -5,10 +5,16 @@ import { createFlow } from './flow-helper.mjs';
 import { clickModelCommand } from './model-rail-helper.mjs';
 
 const baseline = process.argv.includes('--baseline');
-const openTop = process.argv.includes('--open-top');
-const opening = openTop ? ['n1.top'] : [];
-const legacyDigest = openTop ? 'ee4925e7874fb86a1f87f661211c35a1a8c2f0a141e8efade990fd2ef3de74f1'
-  : '24096dc2d7d70b12de98b95847e79052dc930f5bcbff0c1e796fc2c8b522ba9c';
+const openCap = process.argv.includes('--open-bottom') ? 'bottom' : process.argv.includes('--open-top') ? 'top' : undefined;
+const openName = openCap && `n1.${openCap}`;
+const opening = openName ? [openName] : [];
+const openAt = openCap === 'bottom' ? 0 : 20;
+const openSign = openCap === 'bottom' ? -1 : 1;
+const legacyDigests = {
+  top: 'ee4925e7874fb86a1f87f661211c35a1a8c2f0a141e8efade990fd2ef3de74f1',
+  bottom: '43ef94d472d8a93cbf7d696051d559fd82ebfd1e037f5ee0baa80cdf3ab89fad',
+  closed: '24096dc2d7d70b12de98b95847e79052dc930f5bcbff0c1e796fc2c8b522ba9c',
+};
 const pins = [
   'packages/barocss-cad/src/part/part-shell.ts',
   'packages/barocss-cad/src/blend/general-shell.ts',
@@ -20,7 +26,7 @@ const f = await createFlow({
   name: 'shell-corner', output: process.argv[2], envFrozen: 'SHELL_CORNER_FROZEN',
   initialFiles: pins, requiredFrozen: pins,
   qualification: 'Choose the L-prism Shell inner corner, edit it in History and reopen the native document.',
-  limits: [`Uniform Shell on one original six-edge orthogonal L-prism, ${openTop ? 'with one open top cap' : 'without an opening'}.`],
+  limits: [`Uniform Shell on one original six-edge orthogonal L-prism, ${openCap ? `with one open ${openCap} cap` : 'without an opening'}.`],
   inspectorSource: `
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
@@ -60,15 +66,16 @@ async function verify(label, doc, t, rounded) {
   assert.ok(read.report.valid, read.report.issues.join('\n'));
   const innerArea = (40 - 2 * t) * (10 - 2 * t) + (10 - 2 * t) * (30 - 2 * t) - (10 - 2 * t) ** 2;
   const cornerArea = rounded ? t ** 2 * (1 - Math.PI / 4) : 0;
-  const volume = 12000 - (innerArea + cornerArea) * (20 - (openTop ? 1 : 2) * t);
-  assert.equal(read.report.counts.shells, openTop ? 1 : 2);
-  if (openTop) {
+  const volume = 12000 - (innerArea + cornerArea) * (20 - (openCap ? 1 : 2) * t);
+  assert.equal(read.report.counts.shells, openCap ? 1 : 2);
+  if (openCap) {
     const at = z => read.faces.filter(({ geometry: g }) => g.kind === 'plane' && Math.abs(g.n[2]) === 1 && Math.abs(g.o[2] - z) < 1e-9);
-    const rim = at(20);
+    const rim = at(openAt);
     assert.equal(rim.length, 1);
     assert.deepEqual(rim[0].loops.slice().sort(), ['inner', 'outer']);
-    assert.equal(at(t).length, 1, 'cavity floor retains the wall thickness above the original bottom');
-    assert.equal(at(0).length, 1, 'outer bottom stays on the original support');
+    const opposite = 20 - openAt;
+    assert.equal(at(opposite + openSign * t).length, 1, 'cavity end retains the opposite wall thickness');
+    assert.equal(at(opposite).length, 1, 'opposite cap stays on the original support');
   }
   near(read.mass.volume, volume);
   const worker = (await f.bodies()).bodies;
@@ -78,16 +85,23 @@ async function verify(label, doc, t, rounded) {
   return read;
 }
 
+async function lookAtOpening() {
+  if (await button('Ortho').getAttribute('aria-pressed') !== 'true') await button('Ortho').click();
+  if (openCap === 'bottom') {
+    await button('View cube directions').click();
+    await f.page.getByRole('menuitem', { name: 'Bottom', exact: true }).click();
+  } else await button('Top', f.page.locator('.views')).click();
+  await f.page.getByTitle('Frame all (F)', { exact: true }).click();
+  await f.page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+}
+
 async function startShell() {
-  if (openTop) {
+  if (openCap) {
     const filter = button('Selection filter');
     for (let attempt = 0; attempt < 6 && !(await filter.innerText()).includes('Faces'); attempt++) await filter.click();
     assert.match(await filter.innerText(), /Faces/);
-    if (await button('Ortho').getAttribute('aria-pressed') !== 'true') await button('Ortho').click();
-    await button('Top', f.page.locator('.views')).click();
-    await f.page.getByTitle('Frame all (F)', { exact: true }).click();
-    await f.page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
-    const pixel = await f.page.evaluate(() => window.__studioScreenOf([5, 5, 20]));
+    await lookAtOpening();
+    const pixel = await f.page.evaluate(z => window.__studioScreenOf([5, 5, z]), openAt);
     await f.page.mouse.click(...pixel);
     await f.page.waitForFunction(() => window.__studioSelection.selection.faces.length === 1);
   } else {
@@ -122,7 +136,7 @@ await f.run(async () => {
     const legacy = JSON.parse(await readFile(legacyFile, 'utf8'));
     const reopened = (await f.freshOpen(legacyFile, legacy, 'legacy-reopened')).doc;
     assert.equal(Object.hasOwn(reopened.nodes[2], 'join'), false);
-    assert.equal((await verify('legacy-reopened-native', reopened, 2, true)).digest, legacyDigest);
+    assert.equal((await verify('legacy-reopened-native', reopened, 2, true)).digest, legacyDigests[openCap ?? 'closed']);
   }
   await f.freshOpen(seed, stock, 'original-l-prism');
   await startShell();
@@ -162,7 +176,7 @@ await f.run(async () => {
   const sharp = await f.doc();
   assert.deepEqual(sharp.nodes[2], {
     id: 'n2', kind: 'shell', parent: { node: 1, side: 'solid' }, thickness: 2, open: opening, join: 'sharp',
-    ...(openTop ? { sigs: { 'n1.top': { d: [0, 0, 1], k: 'plane', p: [15, 10, 20], s: 600 } } } : {}),
+    ...(openName ? { sigs: { [openName]: { d: [0, 0, openSign], k: 'plane', p: [15, 10, openAt], s: 600 } } } : {}),
   });
   const sharpRead = await verify('sharp-native', sharp, 2, false);
   assert.equal(sharpRead.faces.filter(face => face.geometry.kind === 'cylinder').length, 0);
@@ -189,11 +203,15 @@ await f.run(async () => {
   await f.same(sharp);
   await f.redo();
   await f.same(round);
-  const saved = await f.save(openTop ? 'open-top-l-round-shell' : 'closed-l-round-shell');
+  const saved = await f.save(`${openCap ? 'open-' + openCap : 'closed'}-l-round-shell`);
   const reopened = (await f.freshOpen(saved.file, round, 'round-reopened')).doc;
   assert.equal((await verify('round-reopened-native', reopened, 2, true)).digest, roundRead.digest);
   await f.openFeatureEditor(2, 'reopened Round Shell corner');
   assert.equal(await corner(f.editor()).inputValue(), 'arc');
   await f.closeEditor();
+  if (openCap === 'bottom') {
+    await lookAtOpening();
+    await f.snapshot('round-bottom-opening-reopened');
+  }
   await section('round-reopened-cavity', reopened);
 });
