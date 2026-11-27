@@ -1,13 +1,13 @@
 # CAD roadmap — current status and execution order
 
-Updated 2026-11-28 · Priority authority: D520 · Latest delivery: D2118 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
+Updated 2026-11-28 · Priority authority: D520 · Latest delivery: D2119 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
 
 This is the only current status index. Detailed tracks define acceptance; the 34 stable row pages retain scope and issue navigation. Immutable decision notes retain results. Do not append chronological status paragraphs here. [D520 decision](notes/cad-roadmap-replan-2026-11-04/README.md) supersedes D445 execution order and historical next-item text, while retaining its safeguards and bounded proofs.
 
 ## Now and next
 
-- **Current position:** [D2118](notes/open-bottom-l-shell-corner-2026-11-28/README.md), P5 rows 07 and 30. Studio supports Sharp and Round cavity corners at the single original bottom opening of an orthogonal L. The original rim, intact top and native reopen pass ([#13](https://github.com/barocss/cad/issues/13)).
-- **Next MAIN:** D2119, P0 row 04/B09 and rows 07 and 30. Verify the bottom-opening L Shell case through the local Agent using its exact original cap, current revision and explicit Studio approval ([#324](https://github.com/barocss/cad/issues/324)).
+- **Current position:** [D2119](notes/agent-open-bottom-l-shell-2026-11-28/README.md), P0 row 04/B09 and rows 07 and 30. The local Agent uses either exact original end cap on the supported L Shell. Explicit Studio approval and fresh Open match the manual geometry ([#324](https://github.com/barocss/cad/issues/324)).
+- **Next MAIN:** D2120, P5 rows 16 and 30. Check the original Boolean Union case of an exact sphere touching a box at exactly one vertex. Verify the independent material volume and admissible native output. Resolve a reproduced result defect in that bounded case ([#7](https://github.com/barocss/cad/issues/7)).
 - **Separate follow-ups:** Continue Studio App extraction in cohesive parts with affected desktop checks. [#608 Rendering](https://github.com/barocss/cad/issues/608) stays on HOLD. API inventory drift remains open. The issue tracker records [#126](https://github.com/barocss/cad/issues/126), [#613](https://github.com/barocss/cad/issues/613), [#152](https://github.com/barocss/cad/issues/152) and [#22](https://github.com/barocss/cad/issues/22) as closed.
 - **Active repository:** [barocss/cad](https://github.com/barocss/cad), based on `origin/main`. Fetch before work and preserve unexpected changes. The [migration record](../../../docs/migration/README.md) maps the former `local/cad-dev` history and issue numbers.
 - **Evidence correction:** D482 records2167 PASS/0 FAIL/2 existing SKIP in a later full-kernel run than D433. Neither result is a new full-suite PASS at this audit HEAD. [D482 record](notes/vertical-contact-refusal-2026-11-04/README.md).

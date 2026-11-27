@@ -16,13 +16,17 @@ export function shellOpenFaces(ctx: Ctx, body: BodyResult): string[] {
     .flatMap(face => body.mesh.faces[face.face].name.split('+')))];
 }
 
-export function canSetShellCorner(nodes: readonly ModelNode[], parent: BodyRef, open: readonly string[]): boolean {
+function isOriginalShellCap(nodes: readonly ModelNode[], parent: BodyRef, name: string): boolean {
   const owner = featureId(nodes, parent.node);
-  return (open.length === 0 || open.length === 1 && (open[0] === owner + '.top' || open[0] === owner + '.bottom'))
+  return name === owner + '.top' || name === owner + '.bottom';
+}
+
+export function canSetShellCorner(nodes: readonly ModelNode[], parent: BodyRef, open: readonly string[]): boolean {
+  return (open.length === 0 || open.length === 1 && isOriginalShellCap(nodes, parent, open[0]))
     && canSetClosedShellCorner(nodes, parent);
 }
 
-/** An explicit Agent corner needs one literal original body or one unique literal original top cap. */
+/** An explicit Agent corner needs one literal original body or one unique literal original end cap. */
 export function canSetAgentShellCorner(ctx: Ctx, bodyInput: unknown, faceInput: unknown): boolean {
   const { doc, bodies, selection } = ctx;
   if (selection.edges.length) return false;
@@ -34,8 +38,8 @@ export function canSetAgentShellCorner(ctx: Ctx, bodyInput: unknown, faceInput: 
     || selection.bodies.length || selection.faces.length !== 1) return false;
   const name = faceInput[0], pick = selection.faces[0], body = bodies[pick.body], parent = body?.ref;
   const face = body?.mesh.faces[pick.face];
-  return !!parent && name === featureId(doc.nodes, parent.node) + '.top' && face?.name === name && face.nativePlaneName === name
-    && canSetClosedShellCorner(doc.nodes, parent)
+  return !!parent && face?.name === name && face.nativePlaneName === name
+    && isOriginalShellCap(doc.nodes, parent, name) && canSetClosedShellCorner(doc.nodes, parent)
     && bodies.flatMap(candidate => candidate.mesh.faces.filter(member => member.nativePlaneName === name)).length === 1;
 }
 

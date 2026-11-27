@@ -5,8 +5,11 @@ import { createFlow } from './flow-helper.mjs';
 import { currentPartRevision, withMcpSession } from './mcp-browser-session.mjs';
 
 const baseline = process.argv.includes('--baseline');
-const openTop = process.argv.includes('--open-top');
-const opening = openTop ? ['n1.top'] : [];
+const openCap = process.argv.includes('--open-bottom') ? 'bottom' : process.argv.includes('--open-top') ? 'top' : undefined;
+const capName = openCap && `n1.${openCap}`;
+const opening = capName ? [capName] : [];
+const direction = openCap === 'bottom' ? -1 : 1;
+const capZ = openCap === 'bottom' ? 0 : 20;
 const pins = [
   'packages/barocss-cad-model/src/chat/part/features.ts',
   'packages/barocss-cad-model/src/app/shellCorner.ts',
@@ -39,8 +42,12 @@ const stock = {
   ],
   outputs: { b1: { node: 1, side: 'solid' } },
 };
-const volume = openTop ? 5952 - 18 * (4 - Math.PI) : 6624 - 16 * (4 - Math.PI);
-const title = openTop ? 'Round the inner corner of the original open-top L Shell' : 'Round the inner corner of the original L Shell';
+const volume = openCap ? 5952 - 18 * (4 - Math.PI) : 6624 - 16 * (4 - Math.PI);
+const title = `Round the inner corner of the original ${openCap ? 'open-' + openCap + ' ' : ''}L Shell`;
+const manualNativeDigests = {
+  top: 'eb4262eceedfc28daffb702dcd47614b2632e85302c3d6fc6b3db4d68710984f',
+  bottom: '5271414d1534ed86dbc9ff8902459b831d25768661a5b88248e025cac06ce0e1',
+};
 const reportedVolume = Number(volume.toFixed(3));
 const reportedChange = Number((reportedVolume - 12000).toFixed(3));
 const button = (name, scope = f.page) => scope.getByRole('button', { name, exact: true });
@@ -58,17 +65,17 @@ await f.run(async () => {
     const summary = await call('query', { action: 'summary' });
     near(summary.facts.volume, 12000);
     const command = { action: 'command', command: 'shell',
-      ...(openTop ? { faces: opening } : { bodies: ['b1'] }), values: { t: 2, join: 'arc' } };
+      ...(openCap ? { faces: opening } : { bodies: ['b1'] }), values: { t: 2, join: 'arc' } };
     const propose = args => ({ action: 'propose', title, ops: [{ tool: 'features', args }] });
     const stale = await call('proposals', propose({ ...command, expectedRevision: '0'.repeat(16) }), true);
     assert.match(stale.error, /part changed/i);
     assert.deepEqual(await readFile(file), original);
     if (baseline) {
-      if (openTop) {
+      if (openCap) {
         const refusal = await call('proposals', propose({ ...command, expectedRevision: revision }), true);
         assert.match(refusal.error, /one exact original body/i);
         assert.deepEqual(await readFile(file), original);
-        return { revision, openTopRefused: true };
+        return { revision, originalCapRefused: capName };
       }
       const unpinned = await call('proposals', propose(command));
       assert.deepEqual([unpinned.proposal, unpinned.applied], ['P1', false]);
@@ -77,11 +84,12 @@ await f.run(async () => {
     }
     const help = await call('describe', { command: 'shell' });
     assert.match(help.values.join, /expectedRevision/);
-    if (openTop) assert.match(help.values.join, /original top cap/);
-    const badTargets = openTop ? [
-      { ...command, faces: ['n1.bottom'] },
-      { ...command, faces: ['n1.top', 'n1.top'] },
-      { ...command, faces: [{ feature: 'n1', role: 'top' }] },
+    if (openCap) assert.match(help.values.join, /original end cap/);
+    const badTargets = openCap ? [
+      { ...command, faces: ['n1.side0'] },
+      { ...command, faces: [capName, capName] },
+      { ...command, faces: ['n1.top', 'n1.bottom'] },
+      { ...command, faces: [{ feature: 'n1', role: openCap }] },
       { ...command, bodies: ['b1'] },
     ] : [{ ...command, bodies: ['b1', 'b1'] }, { ...command, faces: ['n1.top'] }];
     for (const [args, reason] of [
@@ -103,8 +111,8 @@ await f.run(async () => {
     return { revision, unpinned: false, volume: candidate.change.volume };
   });
   f.report.observations.push(receipt);
-  if (baseline && openTop) {
-    await f.freshOpen(file, stock, 'original-stock-after-top-agent-refusal');
+  if (baseline && openCap) {
+    await f.freshOpen(file, stock, 'original-stock-after-cap-agent-refusal');
     near((await f.bodies()).bodies[0].volume, 12000);
     return;
   }
@@ -114,6 +122,11 @@ await f.run(async () => {
   await f.freshOpen(file, pending, 'original-stock-with-pending-shell');
   await button('Chat').first().click();
   await card().getByText(title, { exact: false }).waitFor();
+  if (openCap === 'bottom') {
+    await button('View cube directions').click();
+    await f.page.getByRole('menuitem', { name: 'Bottom', exact: true }).click();
+    await f.page.getByTitle('Frame all (F)', { exact: true }).click();
+  }
   await button('Preview', card()).click();
   await button('Hide', card()).waitFor();
   await f.same(pending);
@@ -131,13 +144,13 @@ await f.run(async () => {
   assert.deepEqual(approved.nodes.slice(0, 2), stock.nodes);
   assert.deepEqual(approved.nodes[2], {
     id: 'n2', kind: 'shell', parent: { node: 1, side: 'solid' }, thickness: 2, open: opening, join: 'arc',
-    ...(openTop ? { sigs: { 'n1.top': { d: [0, 0, 1], k: 'plane', p: [15, 10, 20], s: 600 } } } : {}),
+    ...(capName ? { sigs: { [capName]: { d: [0, 0, direction], k: 'plane', p: [15, 10, capZ], s: 600 } } } : {}),
   });
   const native = await f.inspect('accepted-round-shell', approved);
   assert.equal(native.count, 1);
   assert.ok(native.topology.valid, native.topology.issues.join('\n'));
-  assert.equal(native.topology.counts.shells, openTop ? 1 : 2);
-  if (openTop) assert.equal(native.digest, 'eb4262eceedfc28daffb702dcd47614b2632e85302c3d6fc6b3db4d68710984f');
+  assert.equal(native.topology.counts.shells, openCap ? 1 : 2);
+  if (openCap) assert.equal(native.digest, manualNativeDigests[openCap]);
   assert.equal(native.cylinders.length, 1);
   near(native.cylinders[0], 2);
   near(native.volume, volume);
