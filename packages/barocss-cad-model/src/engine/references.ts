@@ -52,6 +52,8 @@ type Tables = (part: string) => FaceTable | undefined;
 export interface Ref {
   where: string; edge: boolean; name: string; sig?: Sig; rematched: boolean;
   nativeFace?: true | 'plane' | 'individual';
+  /** A Pivot face requires the authored native name and orientation. */
+  exactName?: true;
   /** Selected-body drawing references never search excluded outputs; null means the owner is invalid. */
   drawingBodyKey?: string | null;
   /** Datum targets keep their exact edge name and require an explicitly selected endpoint. */
@@ -132,12 +134,14 @@ export function referencesOf(source: StudioDoc, readOnly = false): { doc: Studio
     const key = refKey(node), groups = bandGroups(node) ?? (key && 'parent' in node ? [{ parent: node.parent, list: (node as unknown as Record<string, string[]>)[key] }] : null);
     if (!groups) return;
     const n = node as unknown as Record<string, unknown> & Named;
-    const nativeFace = node.kind === 'replace-face' ? 'plane'
+    const hinge = node.kind === 'draft' ? node.hingeEdge : undefined;
+    const nativeFace = node.kind === 'replace-face' || hinge !== undefined ? 'plane'
       : node.kind === 'offset-face' ? node.sigs?.[node.faces[0]]?.k === 'curved' ? 'individual' : 'plane'
       : node.kind === 'delete-face' ? node.sigs?.[node.faces[0]]?.k === 'plane' ? 'plane' : 'individual'
       : node.kind === 'cylindrical-wrap' ? true : undefined;
     for (const { parent, list } of groups) list.forEach((name, i) => refs.push({
       where: `feature ${k}`, nativeFace, edge: key === 'edges' || node.kind === 'band-surface', node: k, parent, name, sig: n.sigs?.[name], rematched: !!n.rematched?.[name], was: n.rematched?.[name],
+      ...(hinge !== undefined ? { exactName: true } : {}),
       rename(to, mark) {
         const from = list[i], sig = n.sigs?.[from]; list[i] = to;
         if (sig) { n.sigs = { ...n.sigs }; delete n.sigs[from]; n.sigs[to] = sig; }
@@ -146,6 +150,14 @@ export function referencesOf(source: StudioDoc, readOnly = false): { doc: Studio
       setSig(sig) { n.sigs = { ...n.sigs, [list[i]]: sig }; },
       clear() { if (n.rematched) { n.rematched = { ...n.rematched }; delete n.rematched[list[i]]; if (!Object.keys(n.rematched).length) delete n.rematched; } },
     }));
+    if (node.kind === 'draft' && hinge !== undefined) {
+      const where = `feature ${k} fixed edge`;
+      refs.push({ where, edge: true, exactName: true, node: k, parent: node.parent, name: hinge, sig: node.sigs?.[hinge], rematched: false,
+        rename(to) { node.hingeEdge = to; },
+        setSig(sig) { node.sigs = { ...node.sigs, [node.hingeEdge!]: sig }; },
+        clear() {},
+      });
+    }
   });
   for (const mate of doc.mates ?? []) for (const side of [mate.a, mate.b] as (typeof mate.a & Pointed)[]) {
     // (A lock's faces are unused, ''; an origin plane is the part's own, not a face of its B-rep.)
@@ -253,6 +265,7 @@ function pointed(where: string, edge: boolean, at: Pointed, get: () => string, s
 /** Whether any stored reference has no signature (without copying the document). */
 function unsigned(doc: StudioDoc): boolean {
   for (const n of doc.nodes) {
+    if (n.kind === 'draft' && n.hingeEdge !== undefined && !n.sigs?.[n.hingeEdge]) return true;
     if (n.kind === 'band-surface') { if ([...n.a.edges, ...n.b.edges].some(name => !n.sigs?.[name])) return true; continue; }
     const key = refKey(n), list = key && (n as unknown as Record<string, string[]>)[key];
     if (list?.some(name => !n.sigs?.[name])) return true;
@@ -417,13 +430,16 @@ export async function verifyReferences(doc: StudioDoc, finals: readonly BodyResu
     if (!ref.sig) continue;
     await ensureParent(ref);
     const fixedBossEdge = ref.edge && ref.node !== null && fixedBossFillets.has(ref.node);
-    const cands = candidatesOf(ref, finals, parents, tables) ?? (fixedBossEdge ? new Map<string, Signature>() : null);
+    const cands = candidatesOf(ref, finals, parents, tables) ?? (fixedBossEdge || ref.exactName ? new Map<string, Signature>() : null);
     if (!cands) continue;
     const splitCap = ref.nativeFace !== 'plane' && ref.node !== null && !ref.edge && isSplitCapFace(out.nodes, ref.name);
     const parent = splitCap && ref.parent ? parents.get(parentKey(ref.node!, ref.parent)) : undefined;
     const ambiguous = parent !== undefined && hasSplitShellCapAmbiguity(out.nodes, out.nodes[ref.node!], parent, ref.name);
     let m: string | string[];
-    if (fixedBossEdge) {
+    if (ref.exactName) {
+      const live = cands.get(ref.name);
+      m = live && rankAlike(fromSig(ref.sig), new Map([[ref.name, live]]), ref.edge).length ? ref.name : [];
+    } else if (fixedBossEdge) {
       // Side tags and the cap name still identify the same rim after a dimension changes its position.
       // Require one live native line with that exact name, and never rank a replacement for these rims.
       const live = ref.node !== null && ref.parent ? parents.get(parentKey(ref.node, ref.parent)) : undefined;

@@ -5,6 +5,7 @@ import { awaitingRevolveAxis, REVOLVE_AXIS_EDIT } from '@barocss/cad-model/app/r
 import { SWEEP_CURVE } from '@barocss/cad-model/app/profileCommands';
 import { OFFSET_FACE_EDIT } from '@barocss/cad-model/app/offsetFaceEdit';
 import { DRAFT_EDIT } from '@barocss/cad-model/app/draftEdit';
+import { PIVOT_FACE } from '@barocss/cad-model/app/pivotFaceCommand';
 import type { StudioDoc } from '@barocss/cad-model/engine/doc';
 import { awaitingMirrorPlane, currentIndependentExtrudePreview, selectedExtrudeJoin, type Active } from '../app/commandState';
 import { filletSectionNumberProblem } from '../app/featureNumberInput';
@@ -44,7 +45,7 @@ export function commandApplyReadiness(active: Active, scope: ModelScope): ApplyR
   const replaceAxis = id === REVOLVE_AXIS_EDIT;
   const sweep = id === SWEEP_CURVE;
   const needsCurrentModel = active.fillet || toFace || region || replaceAxis || sweep
-    || ['split', 'align', 'mirror', 'delete-face', OFFSET_FACE_EDIT, DRAFT_EDIT].includes(id);
+    || ['split', 'align', 'mirror', 'delete-face', OFFSET_FACE_EDIT, DRAFT_EDIT, PIVOT_FACE].includes(id);
   if (needsCurrentModel && (ctx.doc !== scope.commandDoc || !scope.modelCurrent)) {
     return { kind: 'retire', clearRepeat: false };
   }

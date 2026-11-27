@@ -5,18 +5,20 @@ import { prismaticFromProfile, type PrismaticSolid } from '../features/prismatic
 import { isMeshBrepError } from '../mesh/mesh-brep.js';
 import { threadSolid } from '../machine/thread-solid.js';
 import { add, cross, dot, len, scale, sub, unit } from '../core/vec3.js';
-import type { BrepAffine } from '../brep/brep-transform.js';
+import { transformBrep, type BrepAffine } from '../brep/brep-transform.js';
 import type { XY } from '../brep/curved-arrangement.js';
 import type { Point } from '../types.js';
 import type { ProfileSegmentInput } from '../features/extruded-profile-solid.js';
 import type { CadPartDim, CadPartFeature, Part, Result, Solid } from './part-types.js';
 import type { Tools } from './part-model.js';
-import { draftBoxCorner } from './part-box-draft.js';
+import { draftBoxCorner, draftBoxHinge } from './part-box-draft.js';
 
 // Private structural contract. Original functions retain their caches, profiling and closure state.
 interface FaceFinishHelpers {
   readonly CadPartLimits: { readonly edges: number };
   readonly brepOf: (part: Part, id: string) => Brep;
+  readonly namedFaceTargetBrep: (t: Tools, target: unknown, part: Part) => Brep;
+  readonly originalRectangularPrism: (target: unknown, part: Part, t: Tools, label: string) => boolean;
   readonly bounds: (solid: Solid) => { min: Point; max: Point };
   readonly boxSolid: (min: Point, max: Point, tag: string) => Solid;
   readonly boolean: (a: Solid, b: Solid, op: 'union' | 'difference' | 'intersection', at: string, edgeFitTolerance?: number) => Solid;
@@ -175,11 +177,17 @@ export function faceFinishOperation(f: CadPartFeature & Record<string, unknown>,
       };
     }
     case 'draft': {
-      const target = solids(f.target, 'target'), requested = f.faces as unknown, angle = f.angle as unknown;
+      const target = solids(f.target, 'target'), requested = f.faces as unknown, angle = f.angle as unknown, hinge = f.hingeEdge;
       if (!Array.isArray(requested) || !requested.length || requested.length > CadPartLimits.edges || !requested.every(x => typeof x === 'string')) fail('INPUT', 'faces must list 1 to 64 face names');
       const names = requested as string[];
       if (typeof angle !== 'number' || !Number.isFinite(angle) || angle === 0 || Math.abs(angle) >= 45) fail('INPUT', 'angle must be a number of degrees, not 0, below 45 in size');
       if (target.length !== 1) fail('REFERENCE', 'draft one part at a time (name it as id/k)');
+      if (hinge !== undefined) {
+        if (typeof hinge !== 'string' || hinge.length === 0 || names.length !== 1 || f.pull === undefined || f.neutral !== undefined)
+          fail('INPUT', 'Draft about an edge needs one edge name, one face name and an explicit pull from the edge.');
+        if (!k.originalRectangularPrism(f.target, target[0], t, 'Draft edge target'))
+          fail('CAPABILITY', 'Draft about an edge needs an original rectangular extrusion.');
+      }
       const neutral = f.neutral === undefined ? undefined : dim(f.neutral as CadPartDim, 'neutral');
       const pull = f.pull === undefined ? 'z' : f.pull as unknown;
       if (pull !== 'x' && pull !== 'y' && pull !== 'z' && pull !== '-x' && pull !== '-y' && pull !== '-z') fail('INPUT', 'pull must be x, y or z (a positive coordinate axis), or -x, -y or -z');
@@ -189,8 +197,16 @@ export function faceFinishOperation(f: CadPartFeature & Record<string, unknown>,
         const negativePull = pull === '-x' || pull === '-y' || pull === '-z';
         const toZ: BrepAffine['matrix'] | null = pull === 'x' ? [0, 1, 0, 0, 0, 1, 1, 0, 0] : pull === 'y' ? [0, 0, 1, 1, 0, 0, 0, 1, 0] : pull === '-x' ? [0, 1, 0, 0, 0, -1, -1, 0, 0] : pull === '-y' ? [0, 0, 1, -1, 0, 0, 0, -1, 0] : pull === '-z' ? [1, 0, 0, 0, -1, 0, 0, 0, -1] : null;
         const fromZ: BrepAffine['matrix'] | null = pull === 'x' ? [0, 0, 1, 1, 0, 0, 0, 1, 0] : pull === 'y' ? [0, 1, 0, 0, 0, 1, 1, 0, 0] : pull === '-x' ? [0, 0, -1, 1, 0, 0, 0, -1, 0] : pull === '-y' ? [0, -1, 0, 0, 0, -1, 1, 0, 0] : pull === '-z' ? [1, 0, 0, 0, -1, 0, 0, 0, -1] : null;
+        const a = (angle as number) * Math.PI / 180;
+        if (typeof hinge === 'string') {
+          // Convert the original output first. Converting a local prismatic solid would assign new IDs.
+          const original = k.namedFaceTargetBrep(t, f.target, target[0]);
+          const local = toZ ? transformBrep(original, { matrix: toZ }) : original;
+          const result = draftBoxHinge(local, names[0], hinge, a, at, fail);
+          return one({ kind: 'brep', brep: fromZ ? transformBrep(result, { matrix: fromZ }) : result });
+        }
         const localSolid = toZ ? affine(target[0].solid, toZ, [0, 0, 0]) : target[0].solid;
-        const box = bounds(localSolid), zN = negativePull && neutral !== undefined ? -neutral : neutral ?? box.min[2], a = (angle as number) * Math.PI / 180;
+        const box = bounds(localSolid), zN = negativePull && neutral !== undefined ? -neutral : neutral ?? box.min[2];
         if (names.length === 2 || names.length === 3 || names.length === 4) {
           // Materialize upright input under this feature's id regardless of the source Part's cached B-rep.
           const corner = draftBoxCorner(brepOf({ solid: localSolid }, at), names, zN, a, at, fail);

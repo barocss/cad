@@ -243,6 +243,69 @@ test('adjacent box Draft rejects a collapsed section or out-of-range corner at e
 });
 
 const front = 'n1.side[e1]';
+
+test('Draft about a named box edge keeps its full native curve and identity for signed turns', () => {
+  for (const [pull, face, fixedFace, hingeLength, thickness, pullSpan, normal] of [
+    ['z', right, 'n1.bottom', 40, 80, 10, t => [1, 0, t]],
+    ['-z', right, 'n1.top', 40, 80, 10, t => [1, 0, -t]],
+    ['-x', front, right, 10, 40, 80, t => [-t, -1, 0]],
+    ['y', right, front, 10, 80, 40, t => [1, t, 0]],
+  ]) {
+    const input = document({ target: 'm', faces: [face], pull, hingeEdge: [face, fixedFace].sort().join('|') });
+    input.features.splice(2, 0, { id: 'm', kind: 'translate', target: 'n1', offset: [-7, 11, -3] });
+    const source = evaluateCadPart({ ...input, features: input.features.slice(0, -1) });
+    const original = source.outputs[0].brep, recipe = input.features.at(-1);
+    const hinge = original.edges.find(edge => edge.name === recipe.hingeEdge);
+    const incident = brep => brep.coedges.filter(use => use.edge === hinge.id).map(use => brep.loops.find(loop => loop.id === use.loop).face).sort();
+    assert.ok(hinge, recipe.hingeEdge);
+
+    for (const angle of [10, -10]) {
+      recipe.angle = angle;
+      const before = structuredClone(input), snapshot = evaluateCadPart(input), [output] = snapshot.outputs;
+      const { brep } = output, check = checkBrep(brep, { strict: true });
+      assert.deepEqual(input, before);
+      assert.equal(check.valid, true, JSON.stringify(check.issues));
+      assert.deepEqual(check.counts, { bodies: 1, shells: 1, faces: 6, loops: 6, coedges: 24, edges: 12, vertices: 8 });
+      assert.equal(brep.shells[0].closed, true);
+      assert.equal(check.topology[0].genus, 0);
+      assert.deepEqual(brep.edges.filter(edge => edge.name === recipe.hingeEdge), [hinge]);
+      assert.deepEqual(incident(brep), incident(original));
+      for (const id of hinge.vertices) assert.deepEqual(brep.vertices.find(vertex => vertex.id === id), original.vertices.find(vertex => vertex.id === id));
+
+      const slope = Math.tan(angle * Math.PI / 180);
+      // The change is a triangular prism of depth pullSpan times the slope at the far end.
+      const expectedVolume = hingeLength * pullSpan * (thickness - pullSpan * slope / 2);
+      close(massPropertiesOf(output).volume, expectedVolume, 1e-7, 'signed edge draft volume');
+      const support = faceGeometry(brep.faces.find(candidate => candidate.name === face));
+      const expectedNormal = normal(slope).map(value => value / Math.hypot(1, slope));
+      assert.equal(support.kind, 'plane');
+      close(Math.hypot(...support.n.map((value, i) => value - expectedNormal[i])), 0, coordinateLimit, 'turned face normal');
+      assert.deepEqual(reevaluate(source, { document: input }).outputs[0].brep, brep);
+      assert.deepEqual(loadCadPart(saveCadPart(snapshot)).outputs[0].brep, brep);
+    }
+  }
+});
+
+test('Draft about an edge refuses bad ownership, direction, input and wall collapse', () => {
+  const hingeEdge = ['n1.bottom', right].join('|');
+  const valid = { hingeEdge, pull: 'z' };
+  for (const options of [{ pull: undefined }, { neutral: 0 }, { faces: [front, right] }, { hingeEdge: '' }])
+    assert.throws(() => evaluateCadPart(document({ ...valid, ...options })), error => error.code === 'INPUT' && /needs one edge/.test(error.message));
+  for (const options of [{ pull: '-z' }, { faces: [front] }, { hingeEdge: [front, right].sort().join('|') }])
+    assert.throws(() => evaluateCadPart(document({ ...valid, ...options })), error => error.code === 'SELECTION' && /start face/.test(error.message));
+  assert.throws(() => evaluateCadPart(document({ ...valid, hingeEdge: 'missing' })), error => error.code === 'REFERENCE' && /missing or ambiguous/.test(error.message));
+
+  const hole = document({ ...valid, target: 'h' });
+  hole.features.splice(2, 0, { id: 'h', kind: 'hole', target: 'n1', center: [0, 0], radius: 2 });
+  assert.throws(() => evaluateCadPart(hole), error => error.code === 'CAPABILITY' && /original rectangular extrusion/.test(error.message));
+
+  const collapsed = document({ ...valid, angle: 30 });
+  collapsed.features[0].max[0] = -16;
+  const before = structuredClone(collapsed);
+  assert.throws(() => evaluateCadPart(collapsed), error => error.code === 'GEOMETRY' && /closes a box wall/.test(error.message));
+  assert.deepEqual(collapsed, before);
+});
+
 const threeSides = [right, front, back];
 function threeSideBox(angle, pull = 'z') {
   const doc = cornerDocument({ angle, pull, faces: threeSides });

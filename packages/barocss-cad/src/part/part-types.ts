@@ -203,7 +203,10 @@ export type CadPartFeature = Base & (
    * for a positive pull, maximum for a negative pull).
    * The faces are selected by name.
    */
-  | { readonly kind: 'draft'; readonly target: string; readonly faces: readonly string[]; readonly angle: number; readonly pull?: CadPartAxis | '-x' | '-y' | '-z'; readonly neutral?: CadPartDim; readonly expect?: Readonly<Record<string, CadPartNameSignature>> }
+  | { readonly kind: 'draft'; readonly target: string; readonly faces: readonly string[]; readonly angle: number;
+    readonly pull?: CadPartAxis | '-x' | '-y' | '-z'; readonly neutral?: CadPartDim;
+    /** Original edge shared by the one drafted face and the start face of an explicit pull. */
+    readonly hingeEdge?: string; readonly expect?: Readonly<Record<string, CadPartNameSignature>> }
   /** Move a named end cap of a rectangular taper in its outward direction and continue its original side planes. */
   | { readonly kind: 'offset-face'; readonly target: string; readonly face: string; readonly distance: number; readonly expect?: Readonly<Record<string, CadPartNameSignature>> }
   /** Replace a supported planar face with a tilted plane and keep the remaining supports. */

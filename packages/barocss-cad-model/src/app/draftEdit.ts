@@ -3,12 +3,26 @@ import { draftBodyEnd, draftInputs, draftNeutral, draftNeutralDefault, draftNeut
 import { prefixDoc, type StudioDoc } from '../engine/doc';
 import { bodyKeyFor } from '../engine/ids';
 import { refusal } from '../engine/refusal';
+import { pivotAngle, pivotFaceCommand } from './pivotFaceCommand';
 
 export const DRAFT_EDIT = 'draft-history-edit';
 
 export function editSavedDraftCommand(doc: StudioDoc, index: number): Command | null {
   const node = doc.nodes[index];
   if (node?.kind !== 'draft' || node.held || node.suppressed || node.rematched) return null;
+  const hinge = node.hingeEdge;
+  if (hinge !== undefined) return {
+    ...pivotFaceCommand, id: DRAFT_EDIT, label: 'Edit Pivot face',
+    available: ctx => ctx.doc === doc ? { ok: true } : { ok: false, reason: 'Open the current Pivot face in History again.' },
+    defaults: () => ({ deg: node.angle }),
+    steps: () => [{ label: 'Face', text: node.faces[0], done: true }, { label: 'Fixed edge', text: hinge, done: true }],
+    build: (ctx, values) => {
+      if (ctx.doc !== doc) throw refusal('BAD_REFERENCE', 'Open the current Pivot face in History again.');
+      const angle = pivotAngle(values.deg);
+      if (angle === node.angle) return doc;
+      return { ...doc, nodes: doc.nodes.map((feature, i) => i === index ? { ...node, angle } : feature) };
+    },
+  };
   const pull = node.pull ?? 'z', storedNeutral = node.neutral;
   const coordinate = typeof storedNeutral === 'number' ? storedNeutral : storedNeutral && doc.parameters[storedNeutral.parameter];
   if (!isDraftPull(pull) || storedNeutral !== undefined && !Number.isFinite(coordinate)) return null;

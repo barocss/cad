@@ -5,6 +5,8 @@ import { cardinalBoxOf } from './part-box-shell.js';
 import type { Tools } from './part-model.js';
 
 type Ranges = readonly (readonly number[])[];
+type CardinalBox = NonNullable<ReturnType<typeof cardinalBoxOf>>;
+type BoxSide = { readonly axis: 0 | 1 | 2; readonly side: 0 | 1 };
 
 /** A plane covering the trim with poles inside the result's bounds. */
 function boxDraftPlane(id: string, axis: 0 | 1 | 2, side: 0 | 1, base: Ranges, top: Ranges): Surface {
@@ -40,7 +42,35 @@ export function draftBoxCorner(brep: Brep, names: readonly string[], neutral: nu
   if (names.length === 4 && !(neutral > start && neutral < end)) return undefined;
   if (neutral < start) fail('CAPABILITY', 'Draft on adjacent box sides needs the neutral plane at the start of the pull');
   if (neutral >= end) return undefined;
+  return rebuildDraftedBox(brep, box, sides, neutral, angle, id, fail);
+}
 
+/** Turn one box face about its exact shared edge with the pull's start face. */
+export function draftBoxHinge(brep: Brep, name: string, edgeName: string, angle: number, id: string, fail: Tools['fail']): Brep {
+  const box = cardinalBoxOf(brep);
+  if (!box) return fail('CAPABILITY', 'Draft about an edge needs one closed cardinal box.');
+  const faces = brep.faces.filter(face => face.name === name);
+  const edges = brep.edges.filter(edge => edge.name === edgeName);
+  if (faces.length !== 1 || edges.length !== 1)
+    return fail('REFERENCE', 'The original Draft face or edge is missing or ambiguous.');
+
+  const [face] = faces, [edge] = edges, side = box.sides.get(face.id)!;
+  const uses = brep.coedges.filter(use => use.edge === edge.id);
+  const incident = uses.map(use => brep.loops.find(loop => loop.id === use.loop)?.face);
+  const other = incident.find(faceId => faceId !== face.id);
+  const startFace = other === undefined ? undefined : box.sides.get(other);
+  const start = box.ranges[2][0];
+  // The box proof certifies full native line curves and their ordered vertex positions.
+  if (side.axis === 2 || uses.length !== 2 || uses[0].sense === uses[1].sense || !incident.includes(face.id)
+    || startFace?.axis !== 2 || startFace.side !== 0 || edge.curve.controlPoints.some(point => point[2] !== start))
+    return fail('SELECTION', 'The Draft edge must join the selected face to the start face of the pull.');
+
+  return rebuildDraftedBox(brep, box, [side], start, angle, id, fail, edge.id);
+}
+
+function rebuildDraftedBox(brep: Brep, box: CardinalBox, sides: readonly BoxSide[], neutral: number, angle: number,
+  id: string, fail: Tools['fail'], hingeId?: string): Brep {
+  const [start, end] = box.ranges[2];
   const slope = Math.tan(angle);
   const capRanges = (station: number) => {
     const ranges = box.ranges.map(range => [...range]), inset = (station - neutral) * slope;
@@ -68,7 +98,7 @@ export function draftBoxCorner(brep: Brep, names: readonly string[], neutral: nu
     return { ...vertex, point };
   });
   const points = new Map(vertices.map(vertex => [vertex.id, vertex.point]));
-  const edges = brep.edges.map(edge => ({ ...edge,
+  const edges = brep.edges.map(edge => edge.id === hingeId ? edge : ({ ...edge,
     curve: lineCurve(edge.curve.id, points.get(edge.vertices[0])!, points.get(edge.vertices[1])!) }));
   const faces = brep.faces.map(face => {
     const { axis, side } = box.sides.get(face.id)!;

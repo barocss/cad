@@ -5,6 +5,7 @@ import { friendlyCause, type FriendlyError } from '@barocss/cad-model/engine/err
 import { isRefusal } from '@barocss/cad-model/engine/refusal';
 import { closedFilletPerimeter } from './closedFilletPerimeter';
 import { DRAFT_EDIT } from '@barocss/cad-model/app/draftEdit';
+import { PIVOT_FACE } from '@barocss/cad-model/app/pivotFaceCommand';
 
 /** Explicit, named rows that the existing Edit picked edges list can remove. */
 function removablePickedEdgeCount(ctx: Ctx): number | null {
@@ -41,7 +42,7 @@ export function commandBuildFailure(command: string, cause: unknown, ctx?: Ctx):
         ? ' Or open Edit picked edges and remove edges to open the perimeter.' : ''),
       detail: cause.message, code: cause.code };
   }
-  if ((command === 'draft' || command === DRAFT_EDIT) && isRefusal(cause, 'DRAFT_ANGLE')) return friendlyCause(cause);
+  if ((command === 'draft' || command === DRAFT_EDIT || command === PIVOT_FACE) && isRefusal(cause, 'DRAFT_ANGLE')) return friendlyCause(cause);
   if (command === 'offset-face' && ctx && isRefusal(cause, 'VALUE')
     && cause.message === '[VALUE] Offset face: the other cap is not a congruent native right-prism cap.'
     && ctx.selection.faces.length === 1) {

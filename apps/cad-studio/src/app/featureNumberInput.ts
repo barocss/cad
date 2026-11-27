@@ -1,4 +1,5 @@
 import { DRAFT_EDIT } from '@barocss/cad-model/app/draftEdit';
+import { PIVOT_FACE } from '@barocss/cad-model/app/pivotFaceCommand';
 import type { Active } from './commandState';
 import type { ModelNode } from '@barocss/cad-model/engine/doc';
 import { CadNumericPolicy, CadPartLimits } from '@barocss/cad';
@@ -20,7 +21,7 @@ export function commandNumberRule(command: string, key: string, operation?: unkn
   if (command === 'pipe' && key === 'bendAngle') return 'pipe-angle';
   if (command === 'keyway' && (key === 'b' || key === 't2')) return 'positive';
   if (command === 'scale' && key === 'factor') return 'scale-factor';
-  if ((command === 'draft' || command === DRAFT_EDIT) && key === 'deg') return 'draft-angle';
+  if ((command === 'draft' || command === DRAFT_EDIT || command === PIVOT_FACE) && key === 'deg') return 'draft-angle';
   if (command === 'align' && key === 'gap') return 'align-gap';
   if (command === 'box' && (key === 'w' || key === 'd')) return 'positive';
   if (command === 'extrude' && key === 'h' && operation === 'cut') return 'positive';

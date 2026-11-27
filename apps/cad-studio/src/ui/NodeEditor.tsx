@@ -338,7 +338,7 @@ export function NodeEditor({ onFilletStations, filletEndpoints, nodes, index, on
       {savedReliefShapeEdit && <button className="ghost" type="button" disabled={pending || changed}
         onClick={() => { retireEvaluation(); savedReliefShapeEdit.start(); }}>{savedReliefShapeEdit.label}</button>}
       {onEditDraft && <button className="ghost" type="button" disabled={pending || changed}
-        onClick={() => { retireEvaluation(); onEditDraft(); }}>Edit draft</button>}
+        onClick={() => { retireEvaluation(); onEditDraft(); }}>{node?.kind === 'draft' && node.hingeEdge !== undefined ? 'Edit pivot face' : 'Edit draft'}</button>}
       {onEditOffset && <button className="ghost" type="button" disabled={pending || changed}
         onClick={() => { retireEvaluation(); onEditOffset(); }}>Edit offset</button>}
       {onReplaceAxis && <button className="ghost" type="button" disabled={pending || changed}

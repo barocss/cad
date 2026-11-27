@@ -2,6 +2,7 @@
 // commands, raw nodes, edits and deletes, materials, and the person's rows (stock, frame stock, sections, welds).
 import { commandById, commands, givenValues, shownFields, type Ctx, type Values } from '../../app/commands';
 import { boxShellSelection } from '../../app/boxShellSelection';
+import { PIVOT_FACE } from '../../app/pivotFaceCommand';
 import { updateBoxFootprint } from '../../app/editCommand';
 import { editFields, type BindableField } from '../../app/editFields';
 import { extrudeEndFaceValues } from '../../app/extrudeEndFacePick';
@@ -143,6 +144,7 @@ export const COMMAND_DOCS: Record<string, { selection: string; values: Record<st
   hole: { selection: 'faces: [one flat face facing ±X/±Y/±Z]', values: { type: 'through | blind | blind-drill (fixed 118° point on the original rectangular stock top) | counterbore | countersink (90°) | tapped', d: 'diameter (tapped: the tap drill, set from thread)', depth: 'flat-bottom blind depth (also tapped with tend blind)', drillDepth: 'positive cylindrical depth for blind-drill; the conical point adds to total depth', cd: 'counterbore diameter', ch: 'counterbore depth', csd: 'countersink diameter at the face', thread: 'tapped: M3 | M4 | M5 | M6 | M8 | M10 | M12 (coarse, cosmetic thread)', tend: 'tapped: through | blind', pat: 'one | row | circle (copies on the face, the first at x, y)', pn: 'copies in all (2–64)', pa: 'row: step along the first axis', pb: 'row: step along the second axis', qa: 'circle: its centre, first axis', qb: 'circle: its centre, second axis', x: 'centre, first axis of the face plane (Z face: X; X face: Y; Y face: X)', y: 'centre, second axis (Z face: Y; X face: Z; Y face: Z)' } },
   chamfer: { selection: 'edges: [edges of one body]', values: { distance: 'chamfer distance' } },
   draft: { selection: 'faces: flat side faces of one body square to the pull axis. Use disjoint faces, two adjacent or three distinct sides of an exact rectangular box at its pull-start plane, or every side of an extruded body with +Z pull.', values: { deg: 'draft angle in degrees (positive: the top leans in), below 45', pull: 'the pull axis: z (default) | -z | x | -x | y | -y; each face turns about the body\'s end facing away from it' } },
+  [PIVOT_FACE]: { selection: 'Give the current expectedRevision, one exact native box face name in faces, and one original straight edge of that face in edges.', values: { deg: 'signed angle in degrees, nonzero and below 45 in size. Positive tilts inward.' } },
   'face-thread': { selection: 'faces: [one whole cylindrical face: a shaft or a hole (its tap drill)]', values: { pitch: 'thread pitch (the user\'s size data, else say it is an estimate)', d: 'nominal diameter: a hole\'s thread only (a shaft\'s is its own)', len: 'threaded length from the end (0: the whole face)', end: '+ (the end further along the axis) | -', relief: 'groove width where the thread stops at a shoulder (default one pitch)', clear: 'a hole\'s thread only: its clearance on a bolt\'s, mm (default 0.04, a modelled nut\'s)', hand: 'right (default) | left' } },
   'face-fillet': { selection: 'faces: [two faces of one body: two flat ones not parallel; a flat one and a round one across its axis (a boss, a rim, a hole: whole round) or along it (a tube on a plate, a shaft\'s flat); two parallel round ones (bosses joined); a cone, sphere or torus with a plane or cylinder about its axis (a tapered boss, a countersink, a ball on a stem, a dome, a bead); or planes and cylinders at any angle (a pipe tee, a tilted pin or hole: the rolling ball, slower). They need not touch — a chamfer or step between them is replaced; every corner they make is rounded]', values: { r: 'fillet radius (mm)' } },
   'full-round': { selection: 'faces: [flat tops of one body facing +Z, each an axis-aligned rectangle: a rib or wall top]', values: { along: 'auto (each face\'s longer side) | x | y' } },
@@ -262,6 +264,15 @@ async function runCommandTool(state: ChatState, args: Record<string, unknown>, e
       return fail(state, 'Rib needs the current expectedRevision and one exact original native face name in the base part.', { code: 'COMMAND_INPUT' });
     if (args.values !== undefined && (!isObj(args.values) || Object.values(args.values).some(value => !Number.isFinite(value))))
       return fail(state, 'Rib values must be finite numbers in mm.', { code: 'COMMAND_INPUT' });
+  }
+  if (cmd.id === PIVOT_FACE) {
+    const face = Array.isArray(args.faces) && args.faces.length === 1 ? args.faces[0] : undefined;
+    const edge = Array.isArray(args.edges) && args.edges.length === 1 ? args.edges[0] : undefined;
+    if (args.expectedRevision === undefined || typeof face !== 'string' || typeof edge !== 'string'
+      || list(args.bodies).length || args.point !== undefined
+      || state.bodies.flatMap(body => body.mesh.faces.filter(candidate => candidate.nativePlaneName === face)).length !== 1
+      || state.bodies.flatMap(body => body.mesh.edges.filter(candidate => candidate.nativeLine && candidate.names.length === 1 && candidate.names[0] === edge)).length !== 1)
+      return fail(state, 'Pivot face needs the current expectedRevision and exact, unique names for one native face and its straight edge.', { code: 'COMMAND_INPUT' });
   }
   if (cmd.id === 'extrude' && isObj(args.values) && args.values.depth === 'to-face')
     return extrudeToReviewedFace(state, args, args.values, evaluate, options);

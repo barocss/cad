@@ -1477,7 +1477,9 @@ type ModelNodeBase = DrivenSketchNode | RoundedRectangleInsetNode | SketchNode |
   /** Direct surfaces (copied, by their names) sewn along their edges into one closed solid; edges `tolerance` mm apart still meet. */
   | { kind: 'sew'; names: string[]; surfaces: { degreeU: number; degreeV: number; knotsU: number[]; knotsV: number[]; controlPoints: [number, number, number][][]; weights: number[][] }[]; tolerance?: number }
   /** Draft on named side faces: angle in degrees, signed principal pull (default +Z), neutral world coordinate in mm (default the body's minimum for positive pull, maximum for negative pull). */
-  | { kind: 'draft'; parent: BodyRef; faces: string[]; angle: number; pull?: Axis | '-x' | '-y' | '-z'; neutral?: Dim }
+  | { kind: 'draft'; parent: BodyRef; faces: string[]; angle: number; pull?: Axis | '-x' | '-y' | '-z'; neutral?: Dim;
+    /** An original straight edge shared by the one moving face and the signed pull-start face. */
+    hingeEdge?: string }
   /** Full round (a face fillet) of named flat +Z rectangular tops: each a half cylinder across its width, along `along` (default its longer side). */
   | { kind: 'full-round'; parent: BodyRef; faces: string[]; along?: 'x' | 'y' }
   /** A face fillet of `radius` between two faces that need not touch — two planes, a plane and a cylinder across or along its axis, two parallel cylinders, cones, spheres and tori with planes and cylinders about one axis, faces at any angle by the rolling ball: the round tangent to both, filled at an inside corner, cut at an outside one. */
@@ -2061,7 +2063,7 @@ export function featureLabel(node: ModelNode, index: number, nodes: readonly Mod
     case 'blind-drill-hole': return `Blind drill Ø${typeof node.radius === 'number' ? fmt(node.radius * 2) : node.radius.parameter}`;
     case 'hole': return (node.thread ? `Tapped ${node.thread}` : `${node.countersink ? 'Countersunk' : 'Hole'} Ø${typeof node.radius === 'number' ? fmt(node.radius * 2) : node.radius.parameter}`) + (node.pattern && node.pattern.count > 1 ? ` × ${node.pattern.count}` : '');
     case 'chamfer': return `Chamfer ${n(node.distance)}`;
-    case 'draft': return `Draft ${fmt(node.angle)}° × ${node.faces.length}`;
+    case 'draft': return node.hingeEdge === undefined ? `Draft ${fmt(node.angle)}° × ${node.faces.length}` : `Pivot face ${fmt(node.angle)}°`;
     case 'full-round': return `Full round × ${node.faces.length}`;
     case 'face-fillet': return `Face fillet ${n(node.radius)}`;
     case 'face-thread': return (node.diameter !== undefined ? `Thread M${n(node.diameter)}×${n(node.pitch)}` : `Thread ×${n(node.pitch)}`) + (node.hand === 'left' ? ' LH' : '');

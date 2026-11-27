@@ -358,6 +358,7 @@ export function featureOf(node: ModelNode, index: number, nodes?: readonly Model
     case 'sew': return { ...at, kind: 'sew', surfaces: node.surfaces, ...(node.tolerance !== undefined ? { tolerance: node.tolerance } : {}) };
     case 'draft': return { ...at, kind: 'draft', target: ref(node.parent), faces: node.faces, angle: node.angle,
       ...(Object.hasOwn(node, 'pull') ? { pull: structuredClone(node.pull) } : {}),
+      ...(Object.hasOwn(node, 'hingeEdge') ? { hingeEdge: node.hingeEdge } : {}),
       ...(Object.hasOwn(node, 'neutral') ? { neutral: structuredClone(node.neutral) } : {}), ...expectOf(node, node.faces) };
     case 'face-thread': return { ...at, kind: 'face-thread', target: ref(node.parent), face: node.face, pitch: node.pitch, ...(node.diameter !== undefined ? { diameter: node.diameter } : {}),
       ...(node.length !== undefined ? { length: node.length } : {}), ...(node.end ? { end: node.end } : {}), ...(node.relief !== undefined ? { relief: node.relief } : {}), ...(node.clearance !== undefined ? { clearance: node.clearance } : {}), ...(node.hand ? { hand: node.hand } : {}) };

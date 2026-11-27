@@ -145,11 +145,18 @@ export async function rematchNames(prev: StudioDoc, next: StudioDoc, evaluate: (
     if (!a?.ok || !b?.ok) continue;
     const before = a.bodies.find(x => x.key === bodyKeyFor(prev.nodes, parentBefore.node, parentBefore.side)), after = b.bodies.find(x => x.key === bodyKeyFor(nodes, node.parent.node, node.parent.side));
     if (!before || !after) continue;
-    const nativeFaces = node.kind === 'replace-face' ? 'plane'
+    const nativeFaces = node.kind === 'replace-face' || node.kind === 'draft' && node.hingeEdge !== undefined ? 'plane'
       : node.kind === 'offset-face' ? node.sigs?.[node.faces[0]]?.k === 'curved' ? 'individual' : 'plane'
       : node.kind === 'delete-face' ? node.sigs?.[node.faces[0]]?.k === 'plane' ? 'plane' : 'individual'
       : node.kind === 'cylindrical-wrap';
     const sa = signaturesOf(before, nativeFaces), sb = signaturesOf(after, nativeFaces);
+    if (node.kind === 'draft' && node.hingeEdge !== undefined) {
+      const edgeBefore = sa.edges.get(node.hingeEdge), edgeAfter = sb.edges.get(node.hingeEdge);
+      const faceBefore = sa.faces.get(node.faces[0]), faceAfter = sb.faces.get(node.faces[0]);
+      if (!edgeBefore || !edgeAfter || !alike(edgeBefore, edgeAfter, true) || !faceBefore || !faceAfter || !alike(faceBefore, faceAfter, false))
+        return { error: '[BAD_REFERENCE] Pivot face needs its original planar face and straight edge.' };
+      continue;
+    }
     const old = what.edge ? sa.edges : sa.faces, now = what.edge ? sb.edges : sb.faces;
     const stableNames = sameNames(old, now, what.edge);
     const list = (node as Record<string, unknown>)[what.key] as string[], out: string[] = [], rematched: Record<string, string> = { ...(node as { rematched?: Record<string, string> }).rematched };

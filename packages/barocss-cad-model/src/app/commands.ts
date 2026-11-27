@@ -11,6 +11,7 @@ import { curveFeaturePatternProblem, eligibleCurvePatternPaths, type CurveFeatur
 import { profileCommands, type ExtrudeJoinEvidence } from './profileCommands';
 import { deleteFaceCommand } from './deleteFaceCommand';
 import { replaceFaceCommand } from './replaceFaceCommand';
+import { pivotFaceCommand } from './pivotFaceCommand';
 import { sheetCommands } from './sheetCommands';
 import { frameCommands } from './frameCommands';
 import { primitives, puck } from './primitives';
@@ -480,6 +481,7 @@ const allCommands: Command[] = [
   ...profileCommands,
   deleteFaceCommand,
   replaceFaceCommand,
+  pivotFaceCommand,
   ...sheetCommands,
   ...frameCommands,
   ...fitCommands,

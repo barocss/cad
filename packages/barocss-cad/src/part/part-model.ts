@@ -666,20 +666,20 @@ function exactSweepFaceEditSource(author: CadPartFeature | undefined, ref: Tools
 }
 
 /** One original zero-draft rectangular prism, with only single-part translation wrappers. */
-function originalRectangularCutter(reference: unknown, part: Part, t: Tools): boolean {
-  let current = t.ref(reference, 'circular join cutter'), owner = part;
+function originalRectangularPrism(reference: unknown, part: Part, t: Tools, label: string): boolean {
+  let current = t.ref(reference, label), owner = part;
   const seen = new Set<string>();
   for (;;) {
     if (seen.has(current.id) || current.result.kind !== 'solid' || current.result.parts.length !== 1
       || current.result.parts[0] !== owner) return false;
     seen.add(current.id);
     if (current.author?.kind !== 'translate') break;
-    const parent = t.ref(current.author.target, 'circular join original cutter');
+    const parent = t.ref(current.author.target, `${label} parent`);
     if (parent.result.kind !== 'solid' || parent.result.parts.length !== 1 || owner.moved?.from !== parent.result.parts[0]) return false;
     current = parent; owner = parent.result.parts[0];
   }
   if (current.author?.kind !== 'extrude' || (current.author.draft !== undefined && current.author.draft !== 0)) return false;
-  const sketch = t.ref(current.author.sketch, 'circular join cutter sketch');
+  const sketch = t.ref(current.author.sketch, `${label} sketch`);
   if (sketch.author?.kind !== 'sketch' || sketch.result.kind !== 'sketch' || sketch.result.regions?.length
     || sketch.result.holes?.length) return false;
   // The evaluated native section, rather than a feature label, proves the primitive's four sides.
@@ -710,7 +710,7 @@ function operation(f: CadPartFeature & Record<string, unknown>, t: Tools): () =>
       const retainCircular = source?.author?.kind === 'sweep-curve' && source.author.mode === 'exact'
         && source.result.kind === 'solid' && source.result.parts.length === 1 && source.result.parts[0] === target[0]
         && target[0].solid.kind === 'brep' && target[0].solid.brep.source.family === 'sweep-curve'
-        && target[0].solid.brep.source.id === source.author.id && originalRectangularCutter(f.tool, tool[0], t);
+        && target[0].solid.brep.source.id === source.author.id && originalRectangularPrism(f.tool, tool[0], t, 'circular join cutter');
       return () => {
         if (!tool.length || !target.length) {
           const left = target.length ? target : tool;
@@ -1366,4 +1366,4 @@ const PRISMATIC_DETAIL_HELPERS = Object.freeze({ CadPartLimits, lineOnly, brepOf
 const PROFILE_SOLID_HELPERS = Object.freeze({ isRecord, CadPartLimits, placed, sweepBrep, guideInFrame });
 
 // Captured only after this module's constants initialize; original functions retain their shared runtime state.
-const FACE_FINISH_HELPERS = Object.freeze({ CadPartLimits, brepOf, bounds, boxSolid, boolean, empty, exactVolume, faceVertices, affine, draftWedge });
+const FACE_FINISH_HELPERS = Object.freeze({ CadPartLimits, brepOf, namedFaceTargetBrep, originalRectangularPrism, bounds, boxSolid, boolean, empty, exactVolume, faceVertices, affine, draftWedge });
