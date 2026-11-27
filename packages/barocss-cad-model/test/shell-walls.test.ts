@@ -86,8 +86,36 @@ test('top and vertical per-face Shell stores both openings and keeps only four e
     assert.ok('error' in loaded);
     assert.match(loaded.error, message);
   }
-  const opposed = { ...context, selection: { ...context.selection, faces: [pick('n1.top'), pick('n1.bottom')] } };
-  assert.deepEqual(shell.fields!(opposed, values).map(field => field.key), ['t']);
+  const twoSides = { ...context, selection: { ...context.selection, faces: [pick('n1.side0'), pick('n1.side1')] } };
+  assert.deepEqual(shell.fields!(twoSides, values).map(field => field.key), ['t']);
+});
+
+test('opposite caps form a through Shell with four independent side walls', () => {
+  const doc = rectanglePart(40, 30, 20), stock = evaluateDoc(doc, 1);
+  assert.ok(stock.ok);
+  const faces = ['n1.bottom', 'n1.top'].map(name => {
+    const face = stock.bodies[0].mesh.faces.findIndex(candidate => candidate.nativePlaneName === name);
+    assert.ok(face >= 0);
+    return { body: 0, face };
+  });
+  const shell = commandById('shell')!;
+  const ctx = { doc, bodies: stock.bodies, selection: { bodies: [], edges: [], faces } };
+  const values = { ...shell.defaults!(ctx), wallMode: 'per-face', leftWall: 3, rightWall: 5, frontWall: 2, backWall: 4 };
+  assert.deepEqual(shell.fields!(ctx, values).map(field => field.key), ['wallMode', 'frontWall', 'rightWall', 'backWall', 'leftWall']);
+  const made = shell.build!(ctx, values);
+  const opened = readStudioDoc(JSON.stringify(made));
+  assert.ok('doc' in opened);
+  const node = opened.doc.nodes[2];
+  assert.ok(node.kind === 'shell-walls');
+  assert.deepEqual([node.opening, node.secondOpening, node.walls], ['n1.top', 'n1.bottom', {
+    'n1.side0': 2, 'n1.side1': 5, 'n1.side2': 4, 'n1.side3': 3,
+  }]);
+  const native = evaluateDoc(opened.doc, 2);
+  assert.ok(native.ok && Math.abs(native.bodies[0].volume! - 8640) < 1e-7);
+  const right = editFields(opened.doc.nodes, 2).find(field => field.key === 'rightWall');
+  assert.ok(right?.kind === 'number');
+  const edited = evaluateDoc({ ...opened.doc, nodes: right.set(opened.doc.nodes, 7) }, 3);
+  assert.ok(edited.ok && Math.abs(edited.bodies[0].volume! - 9600) < 1e-7);
 });
 
 test('a lateral per-face Shell exposes its five retained walls and keeps the top wall editable after Open', () => {

@@ -151,8 +151,8 @@ function checkNamedBoxStock(stock: PrismaticSolid, box: CardinalBox, names: read
     return fail('CAPABILITY', 'Per-face Shell needs the same exact named upright box in its native and slab representations.');
 }
 
-/** An exact top-and-side opening. Keep the existing prism converter's connected coplanar rim patches. */
-export function adjacentBoxShellWithWalls(stock: PrismaticSolid, source: Brep, openings: readonly [string, string],
+/** Exact top-and-side rims or top-and-bottom rings, using the existing prism converter. */
+export function twoOpeningBoxShellWithWalls(stock: PrismaticSolid, source: Brep, openings: readonly [string, string],
   walls: Readonly<Record<string, unknown>>, id: string, fail: Tools['fail']): { solid: PrismaticSolid; brep: Brep } {
   const box = cardinalBoxOf(source);
   if (!box || !checkBrep(source, { strict: true }).valid)
@@ -165,8 +165,9 @@ export function adjacentBoxShellWithWalls(stock: PrismaticSolid, source: Brep, o
     return fail('SELECTION', 'Two-opening per-face Shell needs two distinct original cardinal face names.');
   const sides = selected.map(face => box.sides.get(face!.id)!);
   const top = sides.findIndex(side => side.axis === 2 && side.side === 1), vertical = sides.findIndex(side => side.axis !== 2);
-  if (top < 0 || vertical < 0)
-    return fail('CAPABILITY', 'Two-opening per-face Shell needs the original top and one original vertical face.');
+  const tube = top >= 0 && sides.some(side => side.axis === 2 && side.side === 0);
+  if (top < 0 || (vertical < 0 && !tube))
+    return fail('CAPABILITY', 'Two-opening per-face Shell needs the original top and one original vertical face or the original bottom.');
   if (Object.keys(walls).length !== 4 || openings.some(name => Object.hasOwn(walls, name))
     || names.some(name => !openings.includes(name) && !Object.hasOwn(walls, name)))
     return fail('REFERENCE', 'Two-opening per-face Shell needs one thickness for each of the four kept faces.');
@@ -189,11 +190,11 @@ export function adjacentBoxShellWithWalls(stock: PrismaticSolid, source: Brep, o
   const solid = booleanPrismatic(stock, namedBoxPrism(cavity, innerNames), 'difference');
   const brep = brepFromPrismatic(solid, { id }), report = checkBrep(brep, { strict: true });
   const counts = report.counts;
-  if (!report.valid || counts.bodies !== 1 || counts.shells !== 1 || counts.faces !== 12 || counts.loops !== 12
-    || counts.coedges !== 56 || counts.edges !== 28 || counts.vertices !== 18 || report.topology.length !== 1
-    || report.topology[0].genus !== 0 || !brep.coedges.every(use => use.pcurve)
-    || new Set(brep.faces.map(face => face.name)).size !== 12)
-    return fail('GEOMETRY', 'Two-opening per-face Shell could not retain one exact connected rim and four interior walls.');
+  if (!report.valid || counts.bodies !== 1 || counts.shells !== 1 || counts.faces !== (tube ? 10 : 12) || counts.loops !== 12
+    || counts.coedges !== (tube ? 48 : 56) || counts.edges !== (tube ? 24 : 28) || counts.vertices !== (tube ? 16 : 18)
+    || report.topology.length !== 1 || report.topology[0].genus !== (tube ? 1 : 0) || !brep.coedges.every(use => use.pcurve)
+    || new Set(brep.faces.map(face => face.name)).size !== (tube ? 10 : 12))
+    return fail('GEOMETRY', 'Two-opening per-face Shell could not retain its exact rims and four interior walls.');
 
   const byName = new Map(brep.faces.map(face => [face.name, face]));
   const checkSupport = (face: Brep['faces'][number], axis: number, boundary: number, normal: number) => {
@@ -206,18 +207,28 @@ export function adjacentBoxShellWithWalls(stock: PrismaticSolid, source: Brep, o
   for (const original of source.faces) {
     const name = original.name!, { axis, side } = box.sides.get(original.id)!;
     const outer = brep.faces.filter(face => face.name === name || face.name?.replace(/#\d+$/, '') === name);
-    const pieces = name === openings[vertical] ? 3 : 1;
-    if (outer.length !== pieces || outer.some(face => face.loops.length !== 1))
+    const pieces = !tube && name === openings[vertical] ? 3 : 1;
+    if (outer.length !== pieces || outer.some(face => face.loops.length !== (tube && openings.includes(name) ? 2 : 1)))
       return fail('GEOMETRY', 'Two-opening per-face Shell lost an original face or its rim patches.');
     for (const face of outer) checkSupport(face, axis, box.ranges[axis][side], side === 1 ? 1 : -1);
     const inner = byName.get(`${id}.in.${name}`);
     if (openings.includes(name)) {
-      const loopLengths = outer.map(face => brep.loops.find(loop => loop.id === face.loops[0])?.coedges.length).sort((a, b) => a! - b!);
+      const loops = outer.flatMap(face => face.loops.map(id => brep.loops.find(loop => loop.id === id)!));
+      if (tube) {
+        if (inner || loops.filter(loop => loop.kind === 'outer').length !== 1
+          || loops.filter(loop => loop.kind === 'inner').length !== 1 || loops.some(loop => loop.coedges.length !== 4))
+          return fail('GEOMETRY', 'Two-opening per-face Shell could not retain its exact original cap rings.');
+        continue;
+      }
+      const loopLengths = loops.map(loop => loop.coedges.length).sort((a, b) => a - b);
       const expected = name === openings[top] ? [8] : [4, 5, 5];
       if (inner || JSON.stringify(loopLengths) !== JSON.stringify(expected))
         return fail('GEOMETRY', 'Two-opening per-face Shell could not retain the exact open rim trims.');
     } else {
       if (!inner) return fail('GEOMETRY', 'Two-opening per-face Shell lost a kept interior wall.');
+      if (tube && (outer[0].loops.some(id => brep.loops.find(loop => loop.id === id)!.coedges.length !== 4)
+        || inner.loops.length !== 1 || brep.loops.find(loop => loop.id === inner.loops[0])!.coedges.length !== 4))
+        return fail('GEOMETRY', 'Two-opening per-face Shell lost an exact rectangular side wall.');
       checkSupport(inner, axis, cavity[axis][side], side === 1 ? -1 : 1);
     }
   }

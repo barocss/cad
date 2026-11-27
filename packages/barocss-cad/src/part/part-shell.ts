@@ -14,7 +14,7 @@ import { transformBrep } from '../brep/brep-transform.js';
 import { unsupportedNativeMass } from '../internal/native-si-mass-state.js';
 import { withCavities } from '../brep/brep-glue.js';
 import { generalShell } from '../blend/general-shell.js';
-import { adjacentBoxShellWithWalls, boxShellWallLimit, boxShellWithWalls } from './part-box-shell.js';
+import { twoOpeningBoxShellWithWalls, boxShellWallLimit, boxShellWithWalls } from './part-box-shell.js';
 import { openRevolvedCapsuleShell } from './part-capsule-shell.js';
 import { offsetCavity, offsetShell, smoothOffsetBody } from '../blend/offset-cavity.js';
 import { regionShell } from '../blend/region-shell.js';
@@ -107,7 +107,7 @@ export function shellOperation(f: CadPartFeature & Record<string, unknown>, t: T
           checkExpected(original, expect, false, 'shell-walls', fail);
         }
         const { solid, brep } = secondOpening === undefined ? boxShellWithWalls(stock, original, opening, walls, at, fail)
-          : adjacentBoxShellWithWalls(stock, original, [opening, secondOpening as string], walls, at, fail);
+          : twoOpeningBoxShellWithWalls(stock, original, [opening, secondOpening as string], walls, at, fail);
         return { kind: 'solid', parts: [{ solid: { kind: 'upright', solid }, brep }] };
       };
     }
