@@ -17,7 +17,8 @@ import { placedProposalPreview, type PlacedProposalPreview } from '../viewport/i
 interface ProposalPreviewOptions {
   model: { doc: StudioDoc; bodies: BodyResult[]; instances: Parameters<typeof placedProposalPreview>[2]; marker: number | null; active: boolean; sketch: boolean };
   worker: { engine: EngineClient; lanes: Lanes; session: number; currentSession(): number; nextRevision(): number };
-  changes: { commit(next: StudioDoc): boolean; currentDoc(): StudioDoc; setPreviewBodies: Dispatch<SetStateAction<BodyResult[] | null>> };
+  changes: { commit(next: StudioDoc): boolean; currentDoc(): StudioDoc; undo: readonly { doc: StudioDoc }[];
+    setPreviewBodies: Dispatch<SetStateAction<BodyResult[] | null>> };
   chatRowFiles: RefObject<PersonRowFiles | undefined>;
   displayDirect?: typeof directDisplay;
   onNotice(notice: StudioNotice): void;
@@ -82,9 +83,11 @@ export function useProposalPreview({ model, worker, changes, chatRowFiles, displ
   const rebaseIt = async (p: Proposal) => {
     if (active || sketch || marker !== null) return;
     setProposalBusy(true);
-    const r = await (await import('@barocss/cad-model/chat/tools')).rebaseProposal({ doc, bodies, rowFiles: chatRowFiles.current }, p.id, partEval);
+    const r = await (await import('@barocss/cad-model/chat/tools')).rebaseProposal(
+      { doc, bodies, rowFiles: chatRowFiles.current }, p.id, partEval, { agent: 'user' }, changes.undo.map(entry => entry.doc),
+    );
     setProposalBusy(false);
-    if (doc !== currentDoc()) return;
+    if (doc !== currentDoc() || session !== currentSession()) return;
     if ('error' in r) {
       setToast({ title: `${p.id} could not be rebased`, hint: r.error, detail: 'Nothing changed; the proposal stays open.', documentSource: { doc } });
       return;

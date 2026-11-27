@@ -11,7 +11,7 @@ import { treeDiff } from '../transactions';
 import { approvalOf, diffLine, DIRECT_GEOMETRY_APPROVAL, nextProposalId, PLAN_CHARS, PROMPT_CHARS, proposalIsStale, proposalRevisionOf, riskOf, riskRank, withHistory } from '../proposals';
 import { isDirectRuledOperation } from '../directRuledProposal';
 import { directReviewRevision } from '../directProposalReview';
-import { cornerBatchProposal, savedChamferResizeProposal } from '../cornerProposalReview';
+import { cornerBatchProposal, rebindReviewedFilletBatch, reviewedCornerBatchEvidence, savedChamferResizeProposal } from '../cornerProposalReview';
 import { boredWallProposal } from '../modelProposalReview';
 import { pairedElbowInletProposal, pairedElbowOutletProposal } from '../pairedElbowOutletProposalReview';
 import { pairedElbowInletPlaneProposal, pairedElbowOutletPlaneProposal } from '../pairedElbowOutletPlaneProposalReview';
@@ -221,17 +221,20 @@ export async function acceptProposalWith(dispatch: PartRun, state: ChatState, id
  * change, broken references, the checks' delta and risk all recomputed — kept with the base it was made on first
  * and the risk it had then, and recorded in the history. It stays open, to be looked at before it is accepted.
  */
-export async function rebaseProposalWith(dispatch: PartRun, state: ChatState, id: string, evaluate: Evaluate, by: Decider = { agent: 'user' }): Promise<{ state: ChatState; made: OpsRun & { checks?: ChecksDelta; risk: Risk; summary: string } } | { error: string }> {
+export async function rebaseProposalWith(dispatch: PartRun, state: ChatState, id: string, evaluate: Evaluate,
+  by: Decider = { agent: 'user' }, reviewHistory: readonly StudioDoc[] = []): Promise<{ state: ChatState; made: OpsRun & { checks?: ChecksDelta; risk: Risk; summary: string } } | { error: string }> {
   const p = state.doc.proposals?.find(q => q.id === id);
   if (!p || p.status !== 'open') return { error: p ? `${id} is ${p.status} already.` : `No proposal ${id}.` };
   const revision = requirementEvidenceRevision(state.doc);
   if (!proposalIsStale(p, revision)) return { error: `${id} was made on the part as it is: nothing to rebase.` };
   if (nestedParameterOps(p.ops) !== undefined || hasNestedFaceRepair(p.ops)) return { error: staleNested(p) };
   const now = modelHash(state.doc);
+  const refreshed = by.agent === 'user' && !state.partOf ? rebindReviewedFilletBatch(state.doc, p, reviewHistory) : undefined;
+  if (refreshed && 'error' in refreshed) return { error: refreshed.error };
   // (O133: its ops' feature indices and the ids it made itself moved to the part as it is, when it says what they named.)
-  let ops = p.ops;
+  let ops = refreshed ? [refreshed.op] : p.ops;
   if (p.orders?.length === p.ops.length) {
-    const moved = await moveOpsWith(dispatch, state, p.ops, p.orders, evaluate);
+    const moved = await moveOpsWith(dispatch, state, ops, p.orders, evaluate);
     if ('error' in moved) return { error: `${id} no longer applies: ${moved.error}` };
     ops = moved.ops;
   } else if (p.base !== now && (p.merge || p.ops.some(op => typeof op.args?.index === 'number'))) {
@@ -239,11 +242,16 @@ export async function rebaseProposalWith(dispatch: PartRun, state: ChatState, id
   }
   const made = await proposalOfWith(dispatch, state, ops, evaluate);
   if ('fail' in made) return { error: `${id} no longer applies: ${errorOf(made.fail)}` };
+  if (refreshed && !reviewedCornerBatchEvidence(state.doc, made.cur.doc, refreshed.edit))
+    return { error: 'The rebased Fillets could not be verified on both original corner targets. Make a new proposal on the current model.' };
+  const approval = 'rebased sketch corner targets';
+  const risk = refreshed || p.risk.approval.includes(approval)
+    ? { ...made.risk, approval: [...new Set([...made.risk.approval, approval])] } : made.risk;
   const rebased = { original: p.rebased?.original ?? p.base, from: p.base, at: new Date().toISOString(), risk_was: p.rebased?.risk_was ?? p.risk };
-  const q: Proposal = { ...p, base: now, base_evidence_revision: revision, ops: made.ops, orders: made.orders, risk: made.risk, summary: made.summary, rebased, ...(made.checks ? { checks: made.checks } : {}) };
+  const q: Proposal = { ...p, base: now, base_evidence_revision: revision, ops: made.ops, orders: made.orders, risk, summary: made.summary, rebased, ...(made.checks ? { checks: made.checks } : {}) };
   if (!made.checks) delete q.checks;
-  const doc = withHistory({ ...state.doc, proposals: state.doc.proposals!.map(x => x.id === id ? q : x) }, { kind: 'rebase', by, proposal: id, base_was: p.base, model_hash: now, summary: `${id} rebased: ${made.summary}`, risk: made.risk });
-  return { state: { ...state, doc }, made };
+  const doc = withHistory({ ...state.doc, proposals: state.doc.proposals!.map(x => x.id === id ? q : x) }, { kind: 'rebase', by, proposal: id, base_was: p.base, model_hash: now, summary: `${id} rebased: ${made.summary}`, risk });
+  return { state: { ...state, doc }, made: { ...made, risk } };
 }
 
 /** A feature a proposal adds, changes or deletes, and the ones (of the proposal's) that go when it is left out. */

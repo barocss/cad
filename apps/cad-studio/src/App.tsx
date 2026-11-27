@@ -1555,7 +1555,7 @@ export function App() {
     worker: { engine, nextRevision: () => revision.current++ }, onNotice: setToast });
   const [failingOnly, setFailingOnly] = useState(false);
   const proposals = useProposalPreview({ model: { doc, bodies, instances: instanceBodies, marker, active: !!active, sketch: !!sketch }, worker: { engine, lanes, session: workerSession, currentSession: () => workerSessionNow.current, nextRevision: () => revision.current++ },
-    changes: { commit: next => commit(next, false, false, true), currentDoc: () => docNow.current, setPreviewBodies }, chatRowFiles, displayDirect: D?.directDisplay, onNotice: setToast });
+    changes: { commit: next => commit(next, false, false, true), currentDoc: () => docNow.current, undo, setPreviewBodies }, chatRowFiles, displayDirect: D?.directDisplay, onNotice: setToast });
   const { ghost, proposalOverlay, proposalBusy, evidenceRevision, isStale, partEval, acceptIt, rejectIt } = proposals;
   const heldDraftPreviewClear = heldDraftFacePreviewClear({ proposal: ghost, proposalBusy, comparison: workingComparison,
     comparisonOverlay: compareOverlay, candidateShown: candidateReview?.shown });

@@ -1,14 +1,16 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { evaluatePart } from '../src/engine/evaluate';
-import { emptyDoc, rectanglePart, type StudioDoc } from '../src/engine/doc';
+import { emptyDoc, rectanglePart, withNode, type StudioDoc } from '../src/engine/doc';
 import { acceptProposal, agentMayNotAccept, dispatchTool, leaveOutClosure, previewProposal, proposalParts, rebaseProposal, runTool, type ChatState } from '../src/chat/tools';
 import { approvalOf, compactHistory, HISTORY_BYTES, rejectProposal, PROMPT_CHARS, stripHistory, withHistory } from '../src/chat/proposals';
 import type { HistoryEntry } from '../src/engine/schema/proposals';
 import { modelHash } from '../src/chat/spec';
 import { requirementEvidenceRevision } from '../src/util/digest';
+import { revisionOf } from '../src/util/revision';
 import { readStudioDoc } from '../src/engine/migrate';
 import { defaultDrawing } from '../src/drawing/types';
+import { profileOf } from '../src/sketch/loops';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
@@ -74,6 +76,47 @@ test('an occurrence edit and a missing proposal revision both require a fresh re
   const accepted = await acceptProposal(historyOnly, 'P1', evaluate);
   assert.ok('state' in accepted, JSON.stringify(accepted));
   assert.equal(accepted.state.doc.history!.at(-1)?.evidence_revisions?.before, proposal.base_evidence_revision);
+});
+
+test('an explicit Fillet batch rebase keeps its reviewed sketch, corner IDs and user approval', async () => {
+  const sketch = (width: number) => {
+    const profile = profileOf([{ kind: 'polygon', closed: true, points: [[0, 0], [width, 0], [width, 40], [0, 40]],
+      ids: ['e1', 'e2', 'e3', 'e4'], hv: { h: [0, 2], v: [1, 3] } }]);
+    assert.ok('node' in profile);
+    return profile.node;
+  };
+  const original = withNode(withNode(emptyDoc(), sketch(80)), { kind: 'extrude', sketch: 0, height: 8 });
+  const sketchRound = { sketch: 'n0', corners: [['e1', 'e2'], ['e3', 'e4']], radius: 4 };
+  const pending = await runTool(await stateOf(original), 'propose', { title: 'Round two corners', ops: [{ tool: 'edit_feature',
+    args: { index: 0, expectedRevision: revisionOf(original), sketchRound } }] }, evaluate);
+  assert.equal(pending.isError, false, pending.content);
+  const proposed = pending.state.doc;
+  const [outline, extrusion] = proposed.nodes;
+  assert.equal(extrusion.kind, 'extrude');
+  const taller = await stateOf({ ...proposed, nodes: [outline, { ...extrusion, height: 9 }] });
+  const withoutBase = await rebaseProposal(taller, 'P1', evaluate);
+  assert.ok('error' in withoutBase && /Undo history/.test(withoutBase.error));
+  const editedSketch = { ...taller.doc, nodes: [{ ...sketch(81), id: 'n0' }, taller.doc.nodes[1]] };
+  const different = await rebaseProposal(await stateOf(editedSketch), 'P1', evaluate, { agent: 'user' }, [proposed]);
+  assert.ok('error' in different && /original sketch/.test(different.error));
+  const autonomous = await rebaseProposal(taller, 'P1', evaluate, { agent: 'chat' }, [proposed]);
+  assert.ok('error' in autonomous && /revision/.test(autonomous.error));
+  const updated = await rebaseProposal(taller, 'P1', evaluate, { agent: 'user' }, [proposed]);
+  assert.ok('state' in updated, JSON.stringify(updated));
+  assert.equal(updated.state.doc.nodes, taller.doc.nodes);
+  assert.equal(proposed.proposals![0].ops[0].args!.expectedRevision, revisionOf(original));
+  const [proposal] = updated.state.doc.proposals!;
+  assert.deepEqual([proposal.status, proposal.ops[0].args], ['open', { index: 0, expectedRevision: revisionOf(taller.doc), sketchRound }]);
+  assert.match(agentMayNotAccept(proposal, 4) ?? '', /always needs the user's approval/);
+  const withDrawing = { ...updated.state.doc, drawing: defaultDrawing() };
+  assert.equal(revisionOf(withDrawing), revisionOf(updated.state.doc));
+  const stablePin = await rebaseProposal(await stateOf(withDrawing), 'P1', evaluate);
+  assert.ok('state' in stablePin, JSON.stringify(stablePin));
+  assert.match(agentMayNotAccept(stablePin.state.doc.proposals![0], 4) ?? '', /always needs the user's approval/);
+  const accepted = await acceptProposal(updated.state, 'P1', evaluate);
+  assert.ok('state' in accepted, JSON.stringify(accepted));
+  assert.equal(accepted.state.doc.proposals![0].status, 'accepted');
+  assert.ok(Math.abs(accepted.state.bodies[0].volume! - 9 * (80 * 40 - 2 * (16 - 4 * Math.PI))) < 1e-7);
 });
 
 test('propose: worked out on a copy (diff, checks before and after, risk), the part unchanged, kept in the document', async () => {

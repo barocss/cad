@@ -2,7 +2,7 @@
 // the HUD and built by the same `build`), raw feature nodes for what has no command (sketched profiles,
 // revolves, sweeps, lofts), the feature editor's fields, delete, measure, select and a part summary.
 // Each change is evaluated by the engine before it is kept; the result is what the model reads back.
-import { type DocPlane, type PartInstance } from '../engine/doc';
+import { type DocPlane, type PartInstance, type StudioDoc } from '../engine/doc';
 type Vec3T = [number, number, number];
 import { CAGE_TOOL_NAMES, runCageTool } from './cageTools';
 import { DRAWING_TOOL_NAMES, runDrawingTool } from './drawing';
@@ -69,7 +69,8 @@ export function proposeFollowUpRepair(state: ChatState, args: Record<string, unk
 /** A proposal accepted (A4.2, A4.3): see acceptProposalWith. */
 export function acceptProposal(state: ChatState, id: string, evaluate: Evaluate, o: { by?: Decider; leaveOut?: readonly string[] } = {}) { return acceptProposalWith(runProposalTool, state, id, evaluate, o); }
 /** A stale proposal made again on the part as it is now (D41): see rebaseProposalWith. */
-export function rebaseProposal(state: ChatState, id: string, evaluate: Evaluate, by: Decider = { agent: 'user' }) { return rebaseProposalWith(runProposalTool, state, id, evaluate, by); }
+export function rebaseProposal(state: ChatState, id: string, evaluate: Evaluate, by: Decider = { agent: 'user' },
+  reviewHistory: readonly StudioDoc[] = []) { return rebaseProposalWith(runProposalTool, state, id, evaluate, by, reviewHistory); }
 /** Ops made on one state replayed one at a time on another (O133): see moveOpsWith. */
 export function moveOps(state: ChatState, ops: readonly Op[], orders: readonly (readonly string[])[], evaluate: Evaluate, ids: Map<string, string> = new Map(), made?: readonly (readonly string[])[]) { return moveOpsWith(runToolCounted, state, ops, orders, evaluate, ids, made); }
 /** The bodies a proposal would leave (its ghost preview), or its refusal: see previewProposalWith. */

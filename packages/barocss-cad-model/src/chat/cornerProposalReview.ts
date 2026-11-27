@@ -2,8 +2,8 @@ import { CadNumericPolicy, checkBrep, faceGeometry, type Brep, type BrepFace, ty
 import { dropStaleMade, type StudioDoc } from '../engine/doc';
 import { partBreps } from '../engine/evaluate';
 import { bodyKeyFor } from '../engine/ids';
-import type { Proposal } from '../engine/schema/proposals';
-import { digestOf } from '../util/digest';
+import type { Op, Proposal } from '../engine/schema/proposals';
+import { digestOf, requirementEvidenceRevision } from '../util/digest';
 import { isObj } from '../util/guards';
 import { canonical, canonicalOf, revisionOf } from '../util/revision';
 import { editSketchCorner, sketchEditChamfers, sketchEditCorners } from './part/sketchCorner';
@@ -50,6 +50,26 @@ export function cornerBatchProposal(doc: StudioDoc, proposal: Proposal) {
   }
   const operation: Operation = round ? 'fillet' : 'chamfer';
   return { revision: digestOf(proposal), sourceRevision: args.expectedRevision, sketch: source.sketchId, operation, size, pairs };
+}
+
+/** A Studio user can renew the pin only while the exact reviewed sketch is still verifiable. */
+export function rebindReviewedFilletBatch(doc: StudioDoc, proposal: Proposal, history: readonly StudioDoc[]):
+  { op: Op; edit: NonNullable<ReturnType<typeof cornerBatchProposal>> } | { error: string } | undefined {
+  const edit = cornerBatchProposal(doc, proposal);
+  if (edit?.operation !== 'fillet' || proposal.merge || proposal.follow_up_repair) return;
+  const revision = revisionOf(doc);
+  if (edit.sourceRevision === revision) return;
+  const base = proposal.base_evidence_revision && history.find(prior =>
+    requirementEvidenceRevision(prior) === proposal.base_evidence_revision && revisionOf(prior) === edit.sourceRevision);
+  if (!base) return { error: 'The original reviewed model is no longer in this document’s Undo history. Make a new proposal on the current model.' };
+  const before = scope(base), now = scope(doc);
+  const original = cornerBatchProposal(base, proposal);
+  if (!before || !now || !original || before.feature !== now.feature || before.body !== now.body ||
+    canonical(proposal.orders) !== canonical([[before.sketchId, before.feature]]) ||
+    canonical(before.sketch) !== canonical(now.sketch) || canonical(base.parameters) !== canonical(doc.parameters))
+    return { error: 'The original sketch, its parameters or its feature owners changed. Make a new proposal from the current corner targets.' };
+  const [op] = proposal.ops;
+  return { op: { ...op, args: { ...op.args, expectedRevision: revision } }, edit: { ...edit, sourceRevision: revision } };
 }
 
 /** Every old side must survive in order. Each requested pair has exactly one new side between its sides. */

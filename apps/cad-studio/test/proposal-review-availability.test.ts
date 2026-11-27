@@ -21,7 +21,7 @@ function controller(flags: Partial<Pick<Model, 'active' | 'sketch' | 'marker'>> 
   function Probe() {
     api = useProposalPreview({ model: { doc, bodies: [], instances: new Map(), active: false, sketch: false, marker: null, ...flags },
       worker: { engine: { part() { workerCalls++; throw new Error('Unexpected evaluation'); } } as unknown as Parameters<typeof useProposalPreview>[0]['worker']['engine'], lanes: new Lanes(), session: 0, currentSession: () => 0, nextRevision: () => 1 },
-      changes: { currentDoc: () => doc, commit(next) { commits.push(next); return true; }, setPreviewBodies: next => previews.push(next) },
+      changes: { currentDoc: () => doc, commit(next) { commits.push(next); return true; }, undo: [], setPreviewBodies: next => previews.push(next) },
       chatRowFiles: { current: undefined }, onNotice: notice => notices.push(notice) });
     return null;
   }
