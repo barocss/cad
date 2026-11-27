@@ -3,20 +3,27 @@ import { createFlow } from './flow-helper.mjs';
 
 const baseline = process.argv.includes('--baseline');
 const priorSamePick = process.argv.includes('--prior-same-pick');
-assert.ok(!(baseline && priorSamePick));
+const companion = process.argv.includes('--companion');
+const additionalBody = companion ? 'box' : 'hole';
+assert.ok(!priorSamePick || !(baseline || companion));
 const oldNames = ['n1.side[retired1]|n1.side[e4]', 'n1.side[retired2]|n1.side[e3]'];
 const newNames = ['n1.side[e1]|n1.side[e4]', 'n1.side[e2]|n1.side[e3]'];
 const ref = node => ({ node, side: 'solid' });
 const holeNode = { id: 'n3', kind: 'hole', parent: ref(2), axis: 'z', side: 'max', face: 'n1.top', center: [20, 0], radius: 2 };
+const companionCorner = [86, -42, 2.5];
+const companionNodes = [
+  { id: 'n3', kind: 'sketch', profile: 'rectangle', min: [86, -42], max: [96, -32] },
+  { id: 'n4', kind: 'extrude', sketch: 3, height: 5 },
+];
 const baseDoc = edges => ({
   format: 'barocss-cad-model', schema: 3, units: 'mm', parameters: {},
   nodes: [
     { id: 'n0', kind: 'sketch', profile: 'rectangle', min: [-20, -20], max: [60, 20], sideTags: { outer: ['e1', 'e2', 'e3', 'e4'] } },
     { id: 'n1', kind: 'extrude', sketch: 0, height: 10 },
     { id: 'n2', kind: 'fillet', parent: ref(1), edges, radius: 2 },
-    holeNode,
+    ...(companion ? companionNodes : [holeNode]),
   ],
-  outputs: { b3: ref(3) }, nextId: 4,
+  outputs: companion ? { b2: ref(2), b4: ref(4) } : { b3: ref(3) }, nextId: companion ? 5 : 4,
 });
 
 const files = [
@@ -26,9 +33,13 @@ const files = [
   'packages/barocss-cad-model/src/engine/heldFinishGroup.ts',
   'packages/barocss-cad-model/src/engine/heldChamferThroughHole.ts',
 ];
+if (companion && !baseline) files.push(
+  'apps/cad-studio/src/state/heldFilletBoxCompanion.ts',
+  'apps/cad-studio/src/state/independentExtrusion.ts',
+);
 const f = await createFlow({
-  name: 'held-paired-fillet-group-through-hole', output: process.argv[2], envFrozen: 'D1987_SOURCE_FROZEN',
-  qualification: priorSamePick ? 'Reproduce a stale duplicate-pick refusal after a valid same-edge reselection.'
+  name: companion ? 'held-paired-fillet-box-companion' : 'held-paired-fillet-group-through-hole', output: process.argv[2], envFrozen: companion ? 'D2051_SOURCE_FROZEN' : 'D1987_SOURCE_FROZEN',
+  qualification: companion ? 'Recover both held Fillet edges beside an independent rectangular Extrude.' : priorSamePick ? 'Reproduce a stale duplicate-pick refusal after a valid same-edge reselection.'
     : 'Explicit History group replacement of both retired straight edges in a two-edge constant Fillet before an independent top Through Hole.',
   initialFiles: files, requiredFrozen: files,
   inspectorSource: `
@@ -37,7 +48,9 @@ import { brepMassProperties, checkBrep, faceGeometry } from '@barocss/cad';
 import { evaluateDoc, partBreps } from '@barocss/cad-model/engine/evaluate';
 import { captureSignatures } from '@barocss/cad-model/engine/references';
 const input = JSON.parse(readFileSync(process.argv[2], 'utf8'));
-const inspect = doc => partBreps(doc).map(({ brep }) => ({
+const inspect = doc => partBreps(doc).map(({ key, brep }) => ({
+  key,
+  ...(key === 'b4' ? { brep } : {}),
   mass: brepMassProperties(brep, 1),
   check: checkBrep(brep, { strict: true }),
   cylinders: brep.faces.flatMap(face => {
@@ -80,17 +93,32 @@ async function pick(point) {
   await f.page.mouse.move(...xy);
   await f.page.mouse.click(...xy);
 }
+let originalCompanion;
 async function verify(label, state, repaired) {
   const doc = state.doc;
-  assert.equal(state.bodies.bodies.length, 1);
-  assert.equal(state.bodies.bodies[0].key, 'b3');
-  assert.deepEqual(doc.nodes[3], holeNode);
-  const [{ mass, check, cylinders }] = await f.inspect(label, doc);
+  const targetKey = companion ? 'b2' : 'b3';
+  const runtime = new Map(state.bodies.bodies.map(body => [body.key, body]));
+  const native = await f.inspect(label, doc);
+  assert.deepEqual([...runtime.keys()].sort(), companion ? ['b2', 'b4'] : ['b3']);
+  if (companion) {
+    assert.deepEqual(doc.nodes.slice(3), companionNodes);
+    const other = native.find(body => body.key === 'b4');
+    assert.ok(other.check.valid);
+    assert.deepEqual(other.check.counts, { bodies: 1, shells: 1, faces: 6, loops: 6, coedges: 24, edges: 12, vertices: 8 });
+    near(other.mass.volume, 500);
+    near(runtime.get('b4').volume, 500);
+    other.mass.centroid.forEach((value, axis) => near(value, [91, -37, 2.5][axis]));
+    const corners = [86, 96].flatMap(x => [-42, -32].flatMap(y => [0, 5].map(z => [x, y, z])));
+    assert.deepEqual(other.brep.vertices.map(vertex => vertex.point.join(',')).sort(), corners.map(corner => corner.join(',')).sort());
+    originalCompanion ??= other.brep;
+    assert.deepEqual(other.brep, originalCompanion);
+  } else assert.deepEqual(doc.nodes[3], holeNode);
+  const { mass, check, cylinders } = native.find(body => body.key === targetKey);
   assert.ok(check.valid, check.issues.join('\n'));
   assert.equal(check.topology.length, 1);
-  assert.equal(check.topology[0].genus, 1);
+  assert.equal(check.topology[0].genus, companion ? 0 : 1);
   const holeFaces = cylinders.filter(c => c.out === -1 && Math.abs(c.c[0] - 20) < 1e-7 && Math.abs(c.c[1]) < 1e-7);
-  assert.equal(holeFaces.length, 2);
+  assert.equal(holeFaces.length, companion ? 0 : 2);
   for (const c of holeFaces) near(c.r, 2);
   const filletFaces = cylinders.filter(c => c.out === 1);
   assert.equal(filletFaces.length, repaired ? 2 : 0);
@@ -101,14 +129,14 @@ async function verify(label, state, repaired) {
       near(faces[0].r, 2);
     }
   }
-  const volume = 32000 - 40 * Math.PI - (repaired ? 20 * (4 - Math.PI) : 0);
+  const volume = 32000 - (companion ? 0 : 40 * Math.PI) - (repaired ? 20 * (4 - Math.PI) : 0);
   near(mass.volume, volume);
-  near(state.bodies.bodies[0].volume, volume);
+  near(runtime.get(targetKey).volume, volume);
   f.report.observations.push({ label, volume, topology: check.counts });
 }
 
 await f.run(async () => {
-  f.phase = 'prepare exact signed target and held two-edge Fillet with both edges retired before Through Hole';
+  f.phase = 'prepare exact signed target and held two-edge Fillet with both edges retired';
   const { doc: targetDoc } = await f.inspect('native-target', { prepare: true, doc: baseDoc(newNames) });
   const seed = structuredClone(targetDoc);
   seed.nodes[2] = {
@@ -120,18 +148,32 @@ await f.run(async () => {
     },
   };
 
-  f.phase = 'open the held two-edge Constant Fillet with both slots missing and an active Through Hole';
+  f.phase = 'open the held two-edge Constant Fillet and the additional feature';
   await f.newPage();
   await f.page.getByLabel('Model file', { exact: true }).setInputFiles({
-    name: 'held-paired-fillet-group-through-hole.bcad', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(seed)),
+    name: companion ? 'held-paired-fillet-with-box.bcad' : 'held-paired-fillet-group-through-hole.bcad', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(seed)),
   });
-  await f.page.waitForFunction(() => window.__studioDoc?.nodes[3]?.kind === 'hole');
+  await f.page.waitForFunction(kind => window.__studioDoc?.nodes[3]?.kind === kind, companion ? 'sketch' : 'hole');
   await f.ready();
   const missing = refs().getByText('Reference missing · Feature held', { exact: true });
   await missing.nth(1).waitFor();
   assert.equal(await missing.count(), 2);
+  if (companion && !baseline) {
+    f.phase = 'verify that the test position actually picks the independent body';
+    const filter = button('Selection filter');
+    for (let i = 0; i < 6 && !(await filter.innerText()).includes('Edges'); i++) await filter.click();
+    assert.match(await filter.innerText(), /Edges/);
+    await direction('Front left');
+    await pick(companionCorner);
+    await f.page.waitForFunction(() => {
+      const edges = window.__studioSelection.selection.edges;
+      return edges.length === 1 && window.__studioBodies().bodies[edges[0].body]?.key === 'b4';
+    });
+    await f.page.keyboard.press('Escape');
+    await f.page.waitForFunction(() => window.__studioSelection.selection.edges.length === 0);
+  }
   await f.openFeatureEditor(2, 'Fillet');
-  const opened = await f.snapshot(baseline ? '00-no-group-replacement' : '01-both-slots-held-with-hole');
+  const opened = await f.snapshot(baseline ? '00-no-group-replacement' : `01-both-slots-held-with-${additionalBody}`);
   await verify('before-native', opened, false);
   assert.deepEqual(opened.doc.nodes[2].edges, oldNames);
   assert.equal(opened.doc.nodes[2].suppressed, true);
@@ -160,18 +202,21 @@ await f.run(async () => {
     return !!btn && !btn.hasAttribute('disabled');
   });
 
-  f.phase = 'refuse Hole rim, stage first edge, refuse duplicate, and cancel unchanged';
-  await button('Top').click();
-  await f.page.getByTitle('Frame all (F)', { exact: true }).click();
+  f.phase = 'refuse an unrelated edge, stage first edge, refuse duplicate, and cancel unchanged';
+  if (companion) await direction('Front left');
+  else {
+    await button('Top').click();
+    await f.page.getByTitle('Frame all (F)', { exact: true }).click();
+  }
   await replace.click();
   await waitStageReady();
   assert.equal(await stage.locator('.row-actions').count(), 2);
-  await pick([22, 0, 10]);
+  await pick(companion ? companionCorner : [22, 0, 10]);
   await f.page.getByRole('alert').filter({ hasText: 'Edge not selected' }).waitFor();
   assert.equal(await apply().isEnabled(), false);
   await f.same(opened.doc);
   assert.deepEqual(await stack(), history);
-  await f.snapshot('02-hole-rim-refused');
+  await f.snapshot(companion ? '02-companion-edge-refused' : '02-hole-rim-refused');
 
   await direction('Front left');
   await stagePick(0, [-20, -20, 5]);
@@ -186,6 +231,7 @@ await f.run(async () => {
   await cancel().click();
   await f.same(opened.doc);
   assert.deepEqual(await stack(), history);
+  if (companion) await f.snapshot('03b-cancel-keeps-both-solids');
 
   f.phase = 'stage both original vertical corners and apply atomically';
   await replace.click();
@@ -230,7 +276,7 @@ await f.run(async () => {
   await apply().click();
   await f.changed(opened.doc);
   await refs().waitFor({ state: 'hidden' });
-  const repaired = await f.snapshot('05-repaired-group-with-hole');
+  const repaired = await f.snapshot(`05-repaired-group-with-${additionalBody}`);
   assert.deepEqual(repaired.doc, targetDoc);
   await verify('repaired-native', repaired, true);
 
@@ -239,12 +285,13 @@ await f.run(async () => {
   await f.undo();
   await f.same(opened.doc);
   await missing.nth(1).waitFor();
-  await f.snapshot('06-undo-both-held-with-hole');
+  const undone = await f.snapshot(`06-undo-both-held-with-${additionalBody}`);
+  if (companion) await verify('undo-native', undone, false);
   await f.redo();
   await f.same(repaired.doc);
   await refs().waitFor({ state: 'hidden' });
-  const { file } = await f.save('paired-fillet-group-through-hole');
-  const reopened = await f.freshOpen(file, repaired.doc, '07-fresh-open-with-hole');
+  const { file } = await f.save(companion ? 'paired-fillet-with-box' : 'paired-fillet-group-through-hole');
+  const reopened = await f.freshOpen(file, repaired.doc, `07-fresh-open-with-${additionalBody}`);
   assert.equal(await refs().count(), 0);
   await verify('reopened-native', reopened, true);
 });

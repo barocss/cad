@@ -1,3 +1,4 @@
+import { independentExtrusionProfile } from './independentExtrusion';
 import { commandById } from '@barocss/cad-model/app/commands';
 import { prefixDoc, type ModelNode, type StudioDoc } from '@barocss/cad-model/engine/doc';
 import type { BodyResult, EvalResult } from '@barocss/cad-model/engine/evaluate';
@@ -28,23 +29,14 @@ const samePlane = (a: ReturnType<typeof toSig>, b: ReturnType<typeof toSig>) =>
   a.k === 'plane' && b.k === 'plane' && a.s === b.s &&
   a.p.every((v, i) => v === b.p[i]) && a.d?.length === 3 && b.d?.length === 3 && a.d.every((v, i) => v === b.d![i]);
 
-/** Only a trailing literal, unattached box or cylinder with its own unique producer. */
 function independentCompanion(doc: StudioDoc, bodies: readonly BodyResult[], sketchIndex: number): Companion | undefined {
+  const profile = independentExtrusionProfile(doc, sketchIndex);
+  if (!profile) return;
   const extrudeIndex = sketchIndex + 1;
-  const sketch = doc.nodes[sketchIndex], extrude = doc.nodes[extrudeIndex];
-  if (sketch?.kind !== 'sketch' || (sketch.profile !== 'rectangle' && sketch.profile !== 'circle') || sketch.suppressed || sketch.held
-    || sketch.on || sketch.plane || sketch.association || sketch.pocketFloor || sketch.outline
-    || sketch.regions?.length || sketch.holes?.length || sketch.holeOutlines?.length
-    || extrude?.kind !== 'extrude' || extrude.sketch !== sketchIndex || extrude.suppressed || extrude.held
-    || extrude.draft !== undefined || extrude.from !== undefined || extrude.cutDepth !== undefined
-    || typeof extrude.height !== 'number' || !Number.isFinite(extrude.height) || extrude.height <= 0) return;
-  const dimensions = sketch.profile === 'rectangle' ? [...sketch.min, ...sketch.max] : [...sketch.center, sketch.radius];
-  if (!dimensions.every(n => typeof n === 'number' && Number.isFinite(n))
-    || (sketch.profile === 'circle' && !(Number(sketch.radius) > 0))) return;
   const key = bodyKeyFor(doc.nodes, extrudeIndex, 'solid'), ref = doc.outputs[key];
   if (ref?.node !== extrudeIndex || ref.side !== 'solid') return;
   const match = bodies.filter(body => body.key === key && body.ref?.node === extrudeIndex && body.ref.side === 'solid' && (body.pieces ?? 1) === 1);
-  if (match.length === 1) return { body: match[0], profile: sketch.profile };
+  if (match.length === 1) return { body: match[0], profile };
 }
 
 function independentCompanions(doc: StudioDoc, bodies: readonly BodyResult[]): Companion[] | undefined {

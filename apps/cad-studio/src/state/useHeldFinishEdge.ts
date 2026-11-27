@@ -1,7 +1,8 @@
+import { heldFilletBoxCompanion, replaceFilletBesideBox, filletCompanionPreserved } from './heldFilletBoxCompanion';
 import { heldFinishGroupProblems, heldFinishPassthroughBody, heldFinishProblem, heldFinishCandidate, heldFinishReplacement,
   replaceHeldFinishGroup, validFinishGroupEdge, type ReplacementEndpoints } from './heldFinishReplacement';
 import { heldChamferThroughHole, heldPairedFilletThroughHole, parentChamferEdge, parentPairedFilletEdge } from '@barocss/cad-model/engine/heldChamferThroughHole';
-import { useCallback, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { DisplayEdge } from '@barocss/cad-model/engine/mesh';
 import type { ModelNode, StudioDoc } from '@barocss/cad-model/engine/doc';
 import type { BodyResult, EvalResult } from '@barocss/cad-model/engine/evaluate';
@@ -52,7 +53,9 @@ export function useHeldFinishEdge({ doc, index, problems, bodies, enabled, ownsS
   const strictSource = finish && ((finish.edges.length > 1 && !downstreamFillet) || (finish.kind === 'fillet' && finish.radii));
   const body = strictSource && sources.length !== 1 ? undefined : sources[0] ?? downstream?.body ?? passthrough;
   const problem = enabled && body && index !== null ? heldFinishProblem(doc, index, problems, body, !!downstreamFillet) : undefined;
-  const group = enabled && body && index !== null ? heldFinishGroupProblems(doc, index, problems, !!downstreamFillet) : undefined;
+  const boxCompanion = useMemo(() => enabled && index !== null ? heldFilletBoxCompanion(doc, index, problems, bodies) : undefined,
+    [enabled, index, doc, problems, bodies]);
+  const group = enabled && body && index !== null ? boxCompanion?.group ?? heldFinishGroupProblems(doc, index, problems, !!downstreamFillet) : undefined;
   const [firstProblem, secondProblem, thirdProblem] = group ?? [];
   const heldName = finish?.edges.length === 2 ? problem?.name : undefined;
   const [draft, setDraft] = useState<Draft | null>(null);
@@ -179,8 +182,8 @@ export function useHeldFinishEdge({ doc, index, problems, bodies, enabled, ownsS
     if (!resolved) return;
     const stillOwnsSource = current.group?.ownsSource ?? ownsSource;
     if (!stillOwnsSource()) return;
-    const next = current.group
-      ? replaceHeldFinishGroup(doc, current.index, resolved, current.parent ?? body, current.group.sourceEdges ?? current.group.edges, !!downstreamFillet)
+    const next = current.group && boxCompanion ? replaceFilletBesideBox(boxCompanion, current.group.edges)
+      : current.group ? replaceHeldFinishGroup(doc, current.index, resolved, current.parent ?? body, current.group.sourceEdges ?? current.group.edges, !!downstreamFillet)
       : replaceSingle(current, current.parent ?? body, finish);
     if (!next) return;
     const request = {};
@@ -190,6 +193,10 @@ export function useHeldFinishEdge({ doc, index, problems, bodies, enabled, ownsS
       const result = await evaluate(next);
       if (ticket.current !== request || !stillOwnsSource()) return;
       if (result.ok) {
+        if (boxCompanion && !filletCompanionPreserved(boxCompanion, result.bodies)) {
+          reportFailure('evaluation', { title: 'Edge replacement not applied', hint: 'The independent extrusion could not be verified.', detail: '' });
+          return;
+        }
         const remaining = problems.filter(value => !resolved.includes(value));
         const nextProblems = refreshProblems
           ? await refreshProblems(next, current.index, remaining, result.bodies)
