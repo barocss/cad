@@ -49,22 +49,30 @@ function wallNames(brep: Brep, id: string, names: readonly string[]): Brep {
   return nameRevolvedEdges({ ...brep, source: { family: 'shell', id }, faces });
 }
 
-/** Open only the complete bare upper hemisphere of an unchanged full capsule Revolve.
+/** Open one complete bare hemisphere of an unchanged full capsule Revolve.
  * The caller owns the original Revolve provenance; unsupported inputs retain the old Shell path.
  */
 export function openRevolvedCapsuleShell(input: RevolveInput, wall: number, open: readonly string[], id: string,
   fail: Tools['fail']): Part | undefined {
   if (open.length !== 1 || open[0].includes('#')) return;
   const source = capsule(input);
-  if (!source || open[0] !== source.upper) return;
+  if (!source || (open[0] !== source.upper && open[0] !== source.lower)) return;
+  const lower = open[0] === source.lower;
   const { radius, height } = source, inner = radius - wall;
   if (!Number.isFinite(wall) || wall < ExtrudedProfileLimits.minimumLengthMM || wall > CadNumericPolicy.coordinateAbs)
     return fail('PARAMETER', `Capsule Shell needs a positive wall of at least ${ExtrudedProfileLimits.minimumLengthMM} mm within the modeling range.`);
   if (!(wall < radius && inner >= ExtrudedProfileLimits.minimumRadiusMM))
     return fail('PARAMETER', `Capsule Shell needs a wall smaller than the radius, leaving an inner radius of at least ${ExtrudedProfileLimits.minimumRadiusMM} mm.`);
-  // Material stays on the left: outer lower quarter, barrel, annular lip, inner barrel,
-  // clockwise inner lower quarter, then the short axis closure between the two poles.
-  const profile: ProfileSegmentInput[] = [
+  // Give the lower-opening loop clockwise. Normalization reverses it while retaining the
+  // radius measured at the inner equator. The pole height needs only one rounded addition.
+  const profile: ProfileSegmentInput[] = lower ? [
+    { kind: 'line', start: [0, height + inner] },
+    { kind: 'arc', start: [0, height + radius], center: [0, height], direction: 'cw' },
+    { kind: 'line', start: [radius, height] },
+    { kind: 'line', start: [radius, 0] },
+    { kind: 'line', start: [inner, 0] },
+    { kind: 'arc', start: [inner, height], center: [0, height], direction: 'ccw' },
+  ] : [
     { kind: 'arc', start: [0, -radius], center: [0, 0], direction: 'ccw' },
     { kind: 'line', start: [radius, 0] },
     { kind: 'line', start: [radius, height] },
@@ -73,8 +81,10 @@ export function openRevolvedCapsuleShell(input: RevolveInput, wall: number, open
     { kind: 'line', start: [0, -inner] },
   ];
   const recipe: RevolveInput = { id, profile, axis: { origin: [0, 0], direction: [0, 1] }, angle: 360 };
-  const brep = wallNames(revolveProfile(recipe), id,
-    [source.lower, source.barrel, `${id}.rim`, `${id}.in.${source.barrel}`, `${id}.in.${source.lower}`]);
+  const innerBarrel = `${id}.in.${source.barrel}`, rim = `${id}.rim`;
+  const names = lower ? [`${id}.in.${source.upper}`, innerBarrel, rim, source.barrel, source.upper]
+    : [source.lower, source.barrel, rim, innerBarrel, `${id}.in.${source.lower}`];
+  const brep = wallNames(revolveProfile(recipe), id, names);
   const inside = (point: readonly number[]) => point.every(value => Number.isFinite(value) && Math.abs(value) <= CadNumericPolicy.coordinateAbs);
   if (brep.vertices.some(vertex => !inside(vertex.point)) || brep.edges.some(edge => edge.curve.controlPoints.some(point => !inside(point)))
     || brep.faces.some(face => face.surface.kind !== 'surface' || face.surface.controlPoints.some(row => row.some(point => !inside(point)))))
