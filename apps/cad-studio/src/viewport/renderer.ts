@@ -722,6 +722,10 @@ export class Renderer implements ViewRenderer {
     for (const x of this.directExtras) this.free(x.line);
     this.direct = []; this.directExtras = [];
     for (const it of items) {
+      if (it.preview) {
+        this.directExtras.push({ line: this.plainLines(it.positions), color: [...this.theme.selection, 1], width: 1.5 });
+        continue;
+      }
       const on = selected.includes(it.id), surface = it.kind === 'surface' && !!it.indices?.length;
       this.direct.push({
         id: it.id, kind: it.kind, on,
@@ -1030,7 +1034,7 @@ export class Renderer implements ViewRenderer {
       }
       gl.uniform1f(this.u(this.line, 'uWidth'), 0.62 * dpr);
     }
-    if (this.direct.length || this.proposal.length) {
+    if (this.direct.length || this.directExtras.length || this.proposal.length) {
       this.unplaced(this.line, false);
       // (Widths as the GPU viewer's, in CSS pixels: curves 2, selected 3.4; their nets 1.2 and isocurves 1; a proposal's edges 1.6.)
       for (const d of this.direct) {

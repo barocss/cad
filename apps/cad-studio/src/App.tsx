@@ -51,6 +51,8 @@ import { useModelChecks } from './state/useModelChecks';
 import { ViewContextMenu } from './ui/ViewContextMenu';
 import { useCommandPreview } from './state/useCommandPreview';
 import { DirectInspector } from './ui/DirectInspector';
+import { BridgeCurvePanel } from './ui/BridgeCurvePanel';
+import { useBridgeCurve } from './app/useBridgeCurve';
 import { ModelTools } from './ui/ModelTools';
 import { useStudioHistoryHandles } from './viewport/useStudioHistoryHandles';
 import { useModelAppearance } from './viewport/useModelAppearance';
@@ -1836,7 +1838,17 @@ export function App() {
   const ghostExtra = useMemo(() => inPlace ? [...refShown, ...inPlace.context] : refShown, [refShown, inPlace?.context]);
   const viewBodies = useMemo(() => (ghostExtra.length ? [...shownBodies, ...ghostExtra] : shownBodies), [shownBodies, ghostExtra]);
   const sewCandidateShown = !!previewBodies?.length && shownBodies === previewBodies && !cageEd.session;
-  const viewportDirect = useMemo(() => sewPreviewDirect(directShown, active?.cmd.id, active?.ctx, sewCandidateShown), [directShown, active?.cmd.id, active?.ctx, sewCandidateShown]);
+  const bridge = useBridgeCurve({ model: { doc, evaluated, bodies, selection, directSelection: directSel,
+    ready: placedMeasureContext && !section && !measure && !bodyDrag && !exploded && !jointTree && editNode === null
+      && !instanceSel.length && !workingComparison && !candidateReview?.shown
+      && !ghost && !previewBodies && !variants.showing && shownDoc === doc && fresh && !busy && !workerFailure
+      && viewBodies === drawnBodies && sameMeshes(drawnBodies, bodies) },
+    engine, current: () => placedMeasureContextReady() && ownsEvaluatedSource() && !parameterEditNow.current && !project.opening(),
+    commit: (next, id) => { if (!commitDirect(next, [id])) return false; setSelection(emptySel); return true; } });
+  const viewportDirect = useMemo(() => {
+    const items = sewPreviewDirect(directShown, active?.cmd.id, active?.ctx, sewCandidateShown);
+    return bridge.preview.length ? [...items, ...bridge.preview] : items;
+  }, [directShown, active?.cmd.id, active?.ctx, sewCandidateShown, bridge.preview]);
   viewBodiesRef.current = viewBodies;
   sectionPickRef.current = viewportSelection.sectionPick;
   const sectionVertex = useStudioSectionVertex({
@@ -1972,7 +1984,7 @@ export function App() {
       instanceSelection: assembly.draft ? assembly.highlight.instances : steppedSelection,
       instanceFaces: mateFaces ? assembly.highlight.instanceFaces : liveMeasurement.instanceFaces,
     },
-    actions: picking, historyPreview: !!historyPreviewBodies,
+    actions: { ...picking, onPick: (hit, additive) => { bridge.rememberPick(hit, additive); onPick(hit, additive); } }, historyPreview: !!historyPreviewBodies,
     draftFace: !heldDraftFace.view ? null : heldDraftFace.view.kind === 'ready' ? { kind: 'ready' } : { kind: 'picking', pick: heldDraftFace.pick },
     shellFace: shellFaceEditor.current ? shellFaceEditor.pick : undefined,
     finishEdge: finishEdgePick, proposedInstances: placedProposal,
@@ -2020,7 +2032,7 @@ export function App() {
   const viewDisplay = useSceneDisplayMode({
     draggingInstance: !!instancePreview, assemblyEdit: !!assembly.draft, outsideModel: rendering || drawing,
     analysisOverlay: !!(viewAnalysis || scalarMaps?.length || mouldShown),
-    directOverlay: !!(directShown.length || ghost && proposalOverlay),
+    directOverlay: !!(viewportDirect.length || ghost && proposalOverlay),
     editorActive: !!(sketch || cageInputActive || skel.tool || active || regions.length),
     sectionClipped: !!sectionClip, hasInstances,
   });
@@ -2207,6 +2219,7 @@ export function App() {
       {!rendering && !drawing && !sketch && !measure && !instanceSel.length && <GravityExperimentPanel doc={doc} joints={jointTree?.joints ?? []} />}
       {!rendering && !sketch && !measure && !!doc.instances?.length && (assembly.draft || !!singleTop(instanceSel)) && <MatePanel assembly={assembly} instances={doc.instances} instance={singleTop(instanceSel)}
         onRefused={why => setToast({ title: 'The mate was refused', hint: why, detail: '' })} />}
+      <BridgeCurvePanel bridge={bridge} />
       {!rendering && !active && !sketch && !measure && !instanceSel.length && directSel.length > 0 && doc.direct && <DirectInspector doc={doc} directSel={directSel} onSelect={setDirectSel} poleControls={poleEditor.controls}
         curveCurvature={directCurveVisible ? directCurvature : undefined}
         changes={{ commitDirect }} onThicken={(id, t, side) => {

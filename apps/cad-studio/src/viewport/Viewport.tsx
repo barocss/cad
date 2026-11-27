@@ -159,8 +159,7 @@ interface Props extends ViewportPointerProps, MarkHandlers {
   offsets?: Map<number, Vec3>;
   /** Bodies shown moved while a gizmo drags them (by body index; see ViewState.transforms). */
   transforms?: Map<number, Float64Array> | null;
-  /** Direct curves and surfaces, and the selected ones. */
-  direct?: DirectDisplay[];
+  /** The selected Direct curves and surfaces. */
   directSelection?: string[];
   /** Cosmetic thread rings (line segments). */
   threads?: Float32Array;

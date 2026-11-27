@@ -753,6 +753,8 @@ function freshPrefix(used: Set<string>, stem: string, max = 20): string {
 
 export interface DirectDisplay {
   id: string; name: string; kind: 'curve' | 'surface';
+  /** Transient line overlay without a pick target or a document object. */
+  preview?: true;
   /** Surfaces: a triangle mesh (mm); curves: line segments (pairs of points). */
   positions: Float32Array; normals?: Float32Array; indices?: Uint32Array;
   /** Curves: the control polygon; surfaces: the control net rows and columns (segments). */

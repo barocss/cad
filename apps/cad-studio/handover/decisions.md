@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D2071: [Create an independent native Bridge Curve](notes/native-bridge-curve-2026-11-27/README.md), #750. Preview exact G0/G1 across two selected straight edges and preserve the source B-reps and curve through Studio Save and fresh Open.
 - D2060: [Measure actual Fillet radius drag and release timing](notes/fillet-radius-desktop-timing-2026-11-27/README.md), #214. Compare the same Studio case across the two exact versions and verify final radius ownership.
 - D2059: [Discard an interrupted Fillet radius drag](notes/fillet-radius-pointer-capture-loss-2026-11-27/README.md), #214. Retire the owned radius draft on capture loss and verify accepted state, retry and native Save/fresh Open.
 - D2058: [Anchor the shared History radius to the first of four upper box rims](notes/four-top-history-fillet-radius-2026-11-27/README.md), #214. Use a verified original edge for end-on drag and preserve all four rounds through Save and fresh Open.

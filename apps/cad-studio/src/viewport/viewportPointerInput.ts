@@ -5,6 +5,7 @@ import { useCallback, useLayoutEffect, useRef, useState, type DragEvent, type Mo
 import { CadPartLimits, ExtrudedProfileLimits } from '@barocss/cad';
 import type { ModelAnnotation } from '@barocss/cad-model/drawing/annotations3d';
 import type { BodyResult } from '@barocss/cad-model/engine/evaluate';
+import type { DirectDisplay } from '@barocss/cad-model/engine/direct';
 import { insideRing, segmentDistance } from '@barocss/cad-model/engine/geom2';
 import type { Vec3 } from '@barocss/cad-model/engine/mesh';
 import type { RenderSettings } from '@barocss/cad-model/engine/render';
@@ -63,6 +64,7 @@ export interface ViewportPointerProps {
   annotations?: readonly ModelAnnotation[] | null;
   onPickAnnotation?(id: string): void;
   bodies: BodyResult[];
+  direct?: DirectDisplay[];
   hiddenBodies?: Set<number>;
   /** Grid step in mm for sketch points, placing and gizmo moves (0: off). */
   snapStep?: number;
@@ -82,7 +84,7 @@ export interface ViewportPointerProps {
   /** A double-click on a body's face: pick the whole body; on an edge: its chain (`onPickChain`). */
   onPickBody?(body: number): void;
   onPickChain?(body: number, edge: number): void;
-  onPick(hit: { face: FaceRef | null; edge: EdgeRef | null; edgeMesh?: BodyResult['mesh']; faceMesh?: BodyResult['mesh']; point: Vec3 | null; direct?: string; instance?: string; instanceFace?: FaceRef; instanceCap?: { body: number }; vertex?: { body: number; at: Vec3 } }, additive: boolean): void;
+  onPick(hit: { face: FaceRef | null; edge: EdgeRef | null; edgeMesh?: BodyResult['mesh']; faceMesh?: BodyResult['mesh']; point: Vec3 | null; endpointHint?: Vec3; direct?: string; instance?: string; instanceFace?: FaceRef; instanceCap?: { body: number }; vertex?: { body: number; at: Vec3 } }, additive: boolean): void;
   /** `fresh`: a new shape starts (the current one, if closed, is kept beside it). */
   onSketchShape(shape: SketchShape | null, fresh?: boolean, origin?: 'line-point' | 'rectangle-start' | 'rectangle-preview' | 'rectangle-finish' | 'circle-start' | 'circle-preview' | 'circle-finish' | 'slot-start' | 'slot-preview' | 'slot-finish' | 'ellipse-finish' | 'centre-arc-finish' | 'arc-start' | 'arc-preview' | 'arc-finish'): void;
   onSketchDragChange?(active: boolean): void;
@@ -1347,9 +1349,19 @@ export function useViewportPointerInput({ canvas, camera, propsRef, rendering, f
     }
     const r = renderer.current;
     if (!r) return;
+    const nearEnd = (a: Vec3, b: Vec3) => {
+      const d = (p: Vec3) => { const q = camera.current.project(p, w, h); return Math.hypot(q[0] - x, q[1] - y); };
+      return d(a) <= d(b) ? a : b;
+    };
     syncDirect(r);
     const direct = r.pickDirect?.(x, y, camera.current) ?? null;
-    if (direct) { propsRef.current.onPick({ face: null, edge: null, point: null, direct }, e.shiftKey); return; }
+    if (direct) {
+      const points = propsRef.current.direct?.find(item => item.id === direct && item.kind === 'curve')?.positions;
+      const n = points?.length ?? 0;
+      const endpointHint = points && n >= 6 ? nearEnd([points[0], points[1], points[2]], [points[n - 3], points[n - 2], points[n - 1]]) : undefined;
+      propsRef.current.onPick({ face: null, edge: null, point: null, direct, endpointHint }, e.shiftKey);
+      return;
+    }
     const instance = r.pickInstanceFace?.(x, y, camera.current) ?? null;
     if (instance) { propsRef.current.onPick({ face: null, edge: null, point: null, ...instancePickFields(instance) }, e.shiftKey); return; }
     const frontFace = prof ? r.pickFace(x, y, camera.current, viewState()) : undefined;
@@ -1359,7 +1371,9 @@ export function useViewportPointerInput({ canvas, camera, propsRef, rendering, f
     if (vertex) { propsRef.current.onPick({ face: null, edge: null, point: vertex.at, vertex }, e.shiftKey); return; }
     const edgeMesh = edge ? rendererBodies.current[edge.body]?.mesh : undefined;
     const faceMesh = face ? rendererBodies.current[face.body]?.mesh : undefined;
-    propsRef.current.onPick({ face, edge, edgeMesh, faceMesh, point: surfacePoint(x, y, w, h, face) }, e.shiftKey || !!shiftPick);
+    const picked = edge && edgeMesh?.edges[edge.edge];
+    const endpointHint = picked?.straight ? nearEnd(picked.a, picked.b) : undefined;
+    propsRef.current.onPick({ face, edge, edgeMesh, faceMesh, point: surfacePoint(x, y, w, h, face), endpointHint }, e.shiftKey || !!shiftPick);
   };
 
   /** Window selection left→right (fully inside), crossing right→left (touching). */

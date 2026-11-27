@@ -989,6 +989,10 @@ export class GpuRenderer implements ViewRenderer {
     for (const c of this.controls) { c.remove(); c.geometry.dispose(); }
     this.direct = []; this.controls = [];
     for (const it of items) {
+      if (it.preview) {
+        this.controls.push(this.viewer.add({ positions: it.positions, topology: 'lines' }, { material: { color: this.theme.selection, lineWidth: 3, unlit: true }, pickable: false, castShadow: false }));
+        continue;
+      }
       const on = selected.includes(it.id);
       const mesh = it.kind === 'surface'
         ? this.viewer.add({ positions: it.positions, normals: it.normals, indices: it.indices }, { name: 'direct:' + it.id, material: { color: on ? this.theme.selection : '#8fb3d9', roughness: 0.5, doubleSided: true } })
