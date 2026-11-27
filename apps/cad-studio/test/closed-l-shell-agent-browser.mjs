@@ -5,6 +5,8 @@ import { createFlow } from './flow-helper.mjs';
 import { currentPartRevision, withMcpSession } from './mcp-browser-session.mjs';
 
 const baseline = process.argv.includes('--baseline');
+const openTop = process.argv.includes('--open-top');
+const opening = openTop ? ['n1.top'] : [];
 const pins = [
   'packages/barocss-cad-model/src/chat/part/features.ts',
   'packages/barocss-cad-model/src/app/shellCorner.ts',
@@ -14,7 +16,7 @@ const pins = [
 const f = await createFlow({
   name: 'closed-l-shell-agent', output: process.argv[2], envFrozen: 'CLOSED_L_SHELL_AGENT_FROZEN',
   initialFiles: pins, requiredFrozen: pins,
-  qualification: 'Stage a revision-bound closed L Shell corner and approve its native geometry in Studio.',
+  qualification: 'Stage a revision-bound L Shell corner and approve its native geometry in Studio.',
   limits: ['One local L1 stdio MCP session and one synthetic original L prism.'],
   inspectorSource: `
 import { createHash } from 'node:crypto';
@@ -37,7 +39,8 @@ const stock = {
   ],
   outputs: { b1: { node: 1, side: 'solid' } },
 };
-const volume = 6624 - 16 * (4 - Math.PI), title = 'Round the inner corner of the original L Shell';
+const volume = openTop ? 5952 - 18 * (4 - Math.PI) : 6624 - 16 * (4 - Math.PI);
+const title = openTop ? 'Round the inner corner of the original open-top L Shell' : 'Round the inner corner of the original L Shell';
 const reportedVolume = Number(volume.toFixed(3));
 const reportedChange = Number((reportedVolume - 12000).toFixed(3));
 const button = (name, scope = f.page) => scope.getByRole('button', { name, exact: true });
@@ -46,7 +49,7 @@ const mcp = (file, label, run) => withMcpSession({ app: f.app, output: f.output,
 const near = (actual, expected) => assert.ok(Number.isFinite(actual) && Math.abs(actual - expected) < 1e-7, `${actual} vs ${expected}`);
 
 await f.run(async () => {
-  f.phase = 'Read the native source and stage the original closed L Shell through local MCP';
+  f.phase = 'Read the native source and stage the original L Shell through local MCP';
   const file = join(f.output, 'agent-closed-l-shell.bcad');
   const original = Buffer.from(JSON.stringify(stock));
   await writeFile(file, original);
@@ -54,12 +57,19 @@ await f.run(async () => {
     const revision = await currentPartRevision(call);
     const summary = await call('query', { action: 'summary' });
     near(summary.facts.volume, 12000);
-    const command = { action: 'command', command: 'shell', bodies: ['b1'], values: { t: 2, join: 'arc' } };
+    const command = { action: 'command', command: 'shell',
+      ...(openTop ? { faces: opening } : { bodies: ['b1'] }), values: { t: 2, join: 'arc' } };
     const propose = args => ({ action: 'propose', title, ops: [{ tool: 'features', args }] });
     const stale = await call('proposals', propose({ ...command, expectedRevision: '0'.repeat(16) }), true);
     assert.match(stale.error, /part changed/i);
     assert.deepEqual(await readFile(file), original);
     if (baseline) {
+      if (openTop) {
+        const refusal = await call('proposals', propose({ ...command, expectedRevision: revision }), true);
+        assert.match(refusal.error, /one exact original body/i);
+        assert.deepEqual(await readFile(file), original);
+        return { revision, openTopRefused: true };
+      }
       const unpinned = await call('proposals', propose(command));
       assert.deepEqual([unpinned.proposal, unpinned.applied], ['P1', false]);
       assert.equal(unpinned.change.volume, reportedChange);
@@ -67,10 +77,16 @@ await f.run(async () => {
     }
     const help = await call('describe', { command: 'shell' });
     assert.match(help.values.join, /expectedRevision/);
+    if (openTop) assert.match(help.values.join, /original top cap/);
+    const badTargets = openTop ? [
+      { ...command, faces: ['n1.bottom'] },
+      { ...command, faces: ['n1.top', 'n1.top'] },
+      { ...command, faces: [{ feature: 'n1', role: 'top' }] },
+      { ...command, bodies: ['b1'] },
+    ] : [{ ...command, bodies: ['b1', 'b1'] }, { ...command, faces: ['n1.top'] }];
     for (const [args, reason] of [
       [command, /expectedRevision/],
-      [{ ...command, bodies: ['b1', 'b1'], expectedRevision: revision }, /one exact original body/i],
-      [{ ...command, faces: ['n1.top'], expectedRevision: revision }, /one exact original body/i],
+      ...badTargets.map(args => [{ ...args, expectedRevision: revision }, /one exact original body/i]),
       [{ ...command, values: { t: 5, join: 'arc' }, expectedRevision: revision }, /less than 5 mm/i],
     ]) {
       assert.match((await call('proposals', propose(args), true)).error, reason);
@@ -87,6 +103,11 @@ await f.run(async () => {
     return { revision, unpinned: false, volume: candidate.change.volume };
   });
   f.report.observations.push(receipt);
+  if (baseline && openTop) {
+    await f.freshOpen(file, stock, 'original-stock-after-top-agent-refusal');
+    near((await f.bodies()).bodies[0].volume, 12000);
+    return;
+  }
   const pending = JSON.parse(await readFile(file, 'utf8'));
   assert.deepEqual(pending.nodes, stock.nodes);
   assert.equal(pending.proposals[0].status, 'open');
@@ -108,11 +129,15 @@ await f.run(async () => {
   const approved = await f.doc();
   assert.deepEqual([approved.proposals[0].status, approved.proposals[0].decided.by], ['accepted', 'user']);
   assert.deepEqual(approved.nodes.slice(0, 2), stock.nodes);
-  assert.deepEqual(approved.nodes[2], { id: 'n2', kind: 'shell', parent: { node: 1, side: 'solid' }, thickness: 2, open: [], join: 'arc' });
+  assert.deepEqual(approved.nodes[2], {
+    id: 'n2', kind: 'shell', parent: { node: 1, side: 'solid' }, thickness: 2, open: opening, join: 'arc',
+    ...(openTop ? { sigs: { 'n1.top': { d: [0, 0, 1], k: 'plane', p: [15, 10, 20], s: 600 } } } : {}),
+  });
   const native = await f.inspect('accepted-round-shell', approved);
   assert.equal(native.count, 1);
   assert.ok(native.topology.valid, native.topology.issues.join('\n'));
-  assert.equal(native.topology.counts.shells, 2);
+  assert.equal(native.topology.counts.shells, openTop ? 1 : 2);
+  if (openTop) assert.equal(native.digest, 'eb4262eceedfc28daffb702dcd47614b2632e85302c3d6fc6b3db4d68710984f');
   assert.equal(native.cylinders.length, 1);
   near(native.cylinders[0], 2);
   near(native.volume, volume);

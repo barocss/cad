@@ -21,6 +21,22 @@ export function canSetShellCorner(nodes: readonly ModelNode[], parent: BodyRef, 
   return (open.length === 0 || open.length === 1 && open[0] === top) && canSetClosedShellCorner(nodes, parent);
 }
 
+/** An explicit Agent corner needs one literal original body or one unique literal original top cap. */
+export function canSetAgentShellCorner(ctx: Ctx, bodyInput: unknown, faceInput: unknown): boolean {
+  const { doc, bodies, selection } = ctx;
+  if (selection.edges.length) return false;
+  if (Array.isArray(bodyInput) && bodyInput.length === 1 && selection.bodies.length === 1 && !selection.faces.length) {
+    const body = bodies[selection.bodies[0]], parent = body?.ref;
+    return !!parent && bodyInput[0] === body.key && canSetClosedShellCorner(doc.nodes, parent);
+  }
+  if (bodyInput !== undefined || !Array.isArray(faceInput) || faceInput.length !== 1 || typeof faceInput[0] !== 'string'
+    || selection.bodies.length || selection.faces.length !== 1) return false;
+  const name = faceInput[0], pick = selection.faces[0], body = bodies[pick.body], parent = body?.ref;
+  const face = body?.mesh.faces[pick.face];
+  return !!parent && face?.name === name && face.nativePlaneName === name && canSetShellCorner(doc.nodes, parent, [name])
+    && bodies.flatMap(candidate => candidate.mesh.faces.filter(member => member.nativePlaneName === name)).length === 1;
+}
+
 export function canSetClosedShellCorner(nodes: readonly ModelNode[], parent: BodyRef): boolean {
   const source = nodes[parent.node];
   if (parent.side !== 'solid' || source?.kind !== 'extrude' || source.cutDepth !== undefined
