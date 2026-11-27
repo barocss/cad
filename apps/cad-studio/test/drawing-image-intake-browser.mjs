@@ -9,27 +9,30 @@ import { createFlow, sha256 } from './flow-helper.mjs';
 
 const [output, scenario] = process.argv.slice(2), repo = resolve(import.meta.dirname, '../../..');
 assert.ok(output && isAbsolute(output) && relative(repo, output).startsWith('../'));
-assert.ok(scenario === undefined || scenario === '--capacity');
-const capacity = scenario === '--capacity';
+assert.ok(scenario === undefined || scenario === '--capacity' || scenario === '--photo-pair');
+const capacity = scenario === '--capacity', photoPair = scenario === '--photo-pair';
 const app = join(repo, 'apps/cad-studio');
 const drawingPath = 'apps/cad-studio/test/fixtures/dimensioned-angle-bracket.svg';
+const photoFixture = 'packages/barocss-cad-model/test/fixtures/two-view-reference.ts';
 const scripted = 'apps/cad-studio/test/fixtures/scripted-claude.mjs';
-const pins = [drawingPath, scripted, 'apps/cad-studio/test/flow-helper.mjs', 'apps/cad-studio/src/ui/ChatPanel.tsx', 'apps/cad-studio/src/chat/images.ts'];
+const pins = [photoPair ? photoFixture : drawingPath, scripted, 'apps/cad-studio/test/flow-helper.mjs', 'apps/cad-studio/src/ui/ChatPanel.tsx', 'apps/cad-studio/src/chat/images.ts'];
 const bundled = await build({
-  entryPoints: { server: join(app, 'server/chatServer.ts'), mcp: join(app, 'server/cadMcp.ts') },
+  entryPoints: { server: join(app, 'server/chatServer.ts'), mcp: join(app, 'server/cadMcp.ts'),
+    ...(photoPair ? { photo: join(repo, photoFixture) } : {}) },
   absWorkingDir: repo, outdir: output, outExtension: { '.js': '.mjs' }, platform: 'node', target: 'node22', format: 'esm',
   bundle: true, metafile: true, write: false, logLevel: 'warning',
 });
 const dependencies = Object.keys(bundled.metafile.inputs);
 const f = await createFlow({
-  output, name: 'drawing-image-intake', envFrozen: capacity ? 'D599_SOURCE_FROZEN' : 'D598_SOURCE_FROZEN', initialFiles: [...pins, ...dependencies],
+  output, name: photoPair ? 'two-view-reference' : 'drawing-image-intake',
+  envFrozen: photoPair ? 'PHOTO_PAIR_SOURCE_FROZEN' : capacity ? 'D599_SOURCE_FROZEN' : 'D598_SOURCE_FROZEN', initialFiles: [...pins, ...dependencies],
   requiredFrozen: pins, qualification: 'Desktop image attachment through the real local Chat server and read-only MCP calls',
   limits: ['The CLI fixture records provider input and calls the real MCP tools. Live model interpretation is outside this control.'],
 });
 for (const file of bundled.outputFiles) await writeFile(file.path, file.contents);
 const { createChatServer } = await import(pathToFileURL(join(output, 'server.mjs')).href);
 const capture = join(output, 'capture.jsonl'), wrapper = join(output, 'record-scripted-claude.mjs');
-const wrapperSource = `#!/usr/bin/env node
+const wrapperSource = `#!${process.execPath}
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { appendFileSync, readFileSync } from 'node:fs';
@@ -41,13 +44,23 @@ if (args[0] !== '--version') {
   const { images, turns } = JSON.parse(readFileSync(statePath, 'utf8'));
   appendFileSync(${JSON.stringify(capture)}, JSON.stringify({ input: JSON.parse(bytes), images, turns, resume: args.includes('--resume') ? args[args.indexOf('--resume') + 1] : null }) + '\\n');
 }
-const child = spawn(process.execPath, [${JSON.stringify(join(repo, scripted))}, ...args], { stdio: ['pipe', 'pipe', 'inherit'] });
+let fixtureArgs = ['--version'];
+if (args[0] !== '--version') {
+  const config = JSON.parse(args[args.indexOf('--mcp-config') + 1]);
+  if (${photoPair}) {
+    // The fixture receives the authored prompt on stdin and opens the captured state through MCP.
+    delete config.mcpServers.cad.env.CAD_PROMPT;
+  }
+  fixtureArgs = ['--mcp-config', JSON.stringify(config)];
+}
+const child = spawn(process.execPath, [${JSON.stringify(join(repo, scripted))}, ...fixtureArgs], { stdio: ['pipe', 'pipe', 'inherit'] });
 const closed = once(child, 'close');
 process.on('SIGTERM', () => child.kill('SIGTERM'));
 child.stdin.end(bytes);
 const result = [];
 for await (const chunk of child.stdout) { result.push(chunk); process.stdout.write(chunk); }
-const [code] = await closed;
+const [code, signal] = await closed;
+if (code !== 0) throw new Error('Scripted provider exited with ' + (signal ?? code));
 if (args[0] !== '--version') appendFileSync(${JSON.stringify(capture)}, JSON.stringify({ output: Buffer.concat(result).toString().trim().split('\\n').map(line => JSON.parse(line)) }) + '\\n');
 process.exitCode = code ?? 1;
 `;
@@ -220,6 +233,53 @@ async function checkCapacity(a, b, original) {
   await f.snapshot('04-new-conversation');
 }
 
+async function checkPhotoPair(original) {
+  const { twoViewPixels, twoViewTrace, twoViewAssignments } = await import(pathToFileURL(join(output, 'photo.mjs')).href);
+  const rasterPixels = async ({ rgba, width, height }) => {
+    const encoded = await f.page.evaluate(({ rgba, width, height }) => {
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      canvas.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(rgba), width, height), 0, 0);
+      return canvas.toDataURL('image/png').split(',')[1];
+    }, { rgba: Array.from(rgba), width, height });
+    return Buffer.from(encoded, 'base64');
+  };
+  f.phase = 'Attach the independent front and side reference PNGs';
+  const front = await rasterPixels(twoViewPixels('front')), side = await rasterPixels(twoViewPixels('side'));
+  const wrongSide = await rasterPixels(twoViewPixels('side', 100));
+  await attachFiles([{ name: 'ring-tool-front.png', buffer: front }, { name: 'ring-tool-side.png', buffer: side },
+    { name: 'ring-tool-mismatched-side.png', buffer: wrongSide }]);
+  await pending().nth(2).waitFor();
+  await f.snapshot('01-attached-references');
+  const traces = [twoViewTrace('front'), twoViewTrace('side'), twoViewTrace('side', 100)];
+  const assignments = twoViewAssignments(traces[0], traces[1]);
+  const args = { action: 'measure_pair', frontImage: 1, sideImage: 2, ...assignments };
+  const photo = args => ({ tool: 'image', args });
+  const noSide = assignments.parts.map((part, index) => index === 0 ? { ...part, sideLayer: undefined } : part);
+  f.phase = 'Measure four envelopes and verify the source controls through actual local Chat and MCP';
+  const measured = await turn('Use the supplied 84 mm ring diameter to measure the visible envelopes.', [
+    imageLayers(1), imageLayers(2), imageLayers(3),
+    photo(args), photo({ ...args, parts: noSide }), photo({ ...args, sideImage: 3 }),
+    photo({ ...args, frontImage: 2, sideImage: 1 }), photo({ ...args, reference: { ...assignments.reference, diameterMM: 0 } }),
+  ]);
+  assert.deepEqual(measured.record.images, traces);
+  assert.deepEqual(measured.tools.map(tool => tool.error), [false, false, false, false, false, true, true, true]);
+  const [normal, unobserved, mismatched, swapped, invalid] = measured.tools.slice(3).map(tool => tool.result);
+  assert.equal(normal.calibration.diameterMM, 84);
+  assert.deepEqual(normal.parts.map(part => part.name), ['Ring head', 'Handle', 'Filter cap', 'Button']);
+  for (const [i, [width, depth]] of [[84, 54], [22, 20], [26, 24], [8, 8]].entries()) {
+    assert.ok(Math.abs(normal.parts[i].widthMM - width) < .5);
+    assert.ok(Math.abs(normal.parts[i].depthMM - depth) < .5);
+  }
+  assert.match(normal.evidence.traceRevision, /^[a-f0-9]{64}$/);
+  assert.deepEqual([unobserved.parts[1].depthMM, unobserved.parts[1].depthEvidence], [null, 'unknown']);
+  assert.deepEqual([mismatched.code, swapped.code, invalid.code], ['PHOTO_PAIR_ALIGNMENT', 'PHOTO_PAIR_REFERENCE', 'PHOTO_PAIR_INPUT']);
+  await f.same(original);
+  f.report.observations.push({ report: normal, controls: [unobserved.parts[1], mismatched.code, swapped.code, invalid.code] });
+  await f.snapshot('02-read-only-measurement');
+}
+
 try {
   await f.run(async () => {
     const origin = new URL(f.server.resolvedUrls.local[0]).origin;
@@ -256,6 +316,10 @@ try {
     const original = await f.doc();
     await button('Chat').click();
     await f.page.waitForFunction(() => document.querySelector('[aria-label="Chat message"]')?.disabled === false);
+    if (photoPair) {
+      await checkPhotoPair(original);
+      return;
+    }
     const a = await raster(drawingA), b = await raster(drawingB);
     assert.notEqual(sha256(a), sha256(b));
     await writeFile(join(output, 'rev-a.png'), a);

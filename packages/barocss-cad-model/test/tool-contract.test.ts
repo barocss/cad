@@ -1,4 +1,5 @@
 import test from 'node:test';
+import { twoViewAssignments, twoViewTrace } from './fixtures/two-view-reference';
 import assert from 'node:assert/strict';
 import { evaluatePart } from '../src/engine/evaluate';
 import { emptyDoc, rectanglePart, starterDoc, withNode, type StudioDoc } from '../src/engine/doc';
@@ -77,6 +78,28 @@ test('every read tool’s result matches its output schema and changes nothing',
   let s: ChatState = { doc, bodies: r.bodies };
   const calls: [string, object][] = [['get_part_summary', {}], ['list_feature_edit_fields', { index: 1 }], ['measure', { a: 'n1.top' }], ['measure', { a: 'n1.top', b: 'n1.bottom' }], ['mass_properties', {}], ['rebuild_report', {}], ['interference', {}], ['section', { axis: 'z', at: 4 }], ['wall_thickness', {}], ['draft', {}], ['check_spec', {}], ['diff', {}], ['list_proposals', {}], ['inspect', { faces: ['n1.top'] }], ['select', { faces: ['n1.top'] }], ['checkpoint', { name: 'a' }], ['make_version', { name: 'v1' }], ['make_branch', { name: 'b' }], ['list_versions', {}], ['compare_versions', {}], ['drawing_issues', {}], ['tolerance_suggestions', {}], ['get_assembly', {}], ['list_library', {}], ['check_printability', {}], ['render_views', {}], ['get_joints', {}], ['forward_kinematics', {}], ['link_inertia', {}], ['export_urdf', {}], ['export_mjcf', {}], ['sweep_path', { to: {} }], ['gravity_torques', {}], ['motion_torques', { to: {}, profile: 'trapezoid' }], ['size_actuators', { to: {}, profile: 'trapezoid' }], ['get_brief', {}], ['get_references', {}], ['get_drafts', {}], ['standards_lookup', {}], ['standards_lookup', { table: 'fasteners-metric-coarse', row: 'M6', field: 'tap' }]];
   const seen = new Set<string>();
+  const photoName = 'measure_photo_pair', front = twoViewTrace('front'), side = twoViewTrace('side'), mismatch = twoViewTrace('side', 100);
+  const photoState = { ...s, images: [front, side, mismatch] }, photos = { frontImage: 1, sideImage: 2, ...twoViewAssignments(front, side) };
+  const measured = await dispatchTool(photoState, photoName, photos, evaluate);
+  assert.ok(!measured.isError && !measured.changed, measured.content);
+  assert.equal(measured.state.doc, doc);
+  const result = JSON.parse(measured.content);
+  assert.deepEqual(validate(outputSchemaOf(photoName)!, result), []);
+  assert.deepEqual(result.parts.map((part: { name: string }) => part.name), ['Ring head', 'Handle', 'Filter cap', 'Button']);
+  assert.equal(result.parts[0].widthMM, 84);
+  for (const [i, [width, depth]] of [[84, 54], [22, 20], [26, 24], [8, 8]].entries()) {
+    assert.ok(Math.abs(result.parts[i].widthMM - width) < .5);
+    assert.ok(Math.abs(result.parts[i].depthMM - depth) < .5);
+  }
+  for (const [args, code] of [[{ ...photos, frontImage: 2, sideImage: 1 }, 'PHOTO_PAIR_REFERENCE'],
+    [{ ...photos, sideImage: 3 }, 'PHOTO_PAIR_ALIGNMENT'],
+    [{ ...photos, reference: { ...photos.reference, diameterMM: 0 } }, 'PHOTO_PAIR_INPUT']] as const) {
+    const rejected = await dispatchTool(photoState, photoName, args, evaluate);
+    assert.equal(JSON.parse(rejected.content).code, code);
+    assert.ok(rejected.isError && !rejected.changed);
+    assert.equal(rejected.state.doc, doc);
+  }
+  seen.add(photoName);
   for (const [name, args] of calls) {
     const out = await dispatchTool(s, name, args, evaluate);
     assert.ok(!out.isError, `${name}: ${out.content.slice(0, 200)}`);

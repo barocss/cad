@@ -19,6 +19,7 @@ import { CHAT_COMMANDS, COMMAND_DOCS } from './part/features';
 import { DIRECT_RULED_COMMAND } from './directRuledProposal';
 import { DIRECT_GUIDED_FILL_COMMAND } from './directGuidedFillProposal';
 import { DIRECT_THICKEN_COMMAND } from './directThickenProposal';
+import { photoPairTool } from './photoPairTool';
 
 const directCommands = [DIRECT_RULED_COMMAND, DIRECT_THICKEN_COMMAND, DIRECT_GUIDED_FILL_COMMAND];
 export const FEATURE_COMMANDS = [...CHAT_COMMANDS, ...directCommands.map(command => command.command)];
@@ -173,6 +174,7 @@ Ref = {"node": index of the feature that made a visible body, "side": "solid"} (
     description: 'The traced outlines of an attached image (a character, logo, icon or silhouette): its silhouette and its flat colour regions, each with colour, share of the figure, region and hole counts and its box within the silhouette, plus the silhouette\'s aspect ratio. Use it before extrude_image_layer.',
     input_schema: { type: 'object', properties: { image: { type: 'integer', description: 'Image number in this conversation (1 = first; default the latest).' } }, additionalProperties: false },
   },
+  photoPairTool,
   {
     name: 'extrude_image_layer',
     description: 'Builds a solid from a traced image layer: its outline (with holes and separate islands) scaled so the whole silhouette is width mm wide, extruded `height` mm, starting `base` mm off the sketch plane. Every layer of an image uses the same scale and placement, so stacking them makes a relief (a keychain, badge, cookie cutter or figure plaque): the silhouette as the base, then colour layers on top of it (base = the base\'s thickness) to raise details like eyes, mouth and outlines. orientation "flat" lies on XY (thickness up +Z); "standing" stands it on XZ (figure upright, thickness towards −Y, `y` sets the plane). Later run_command union can join the layers into one body.',

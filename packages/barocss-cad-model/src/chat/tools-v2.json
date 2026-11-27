@@ -201,6 +201,7 @@
      "action": {
       "enum": [
        "layers",
+       "measure_pair",
        "extrude",
        "inflate"
       ],

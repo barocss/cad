@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D2079: [Calibrate visible part envelopes from two attached views](notes/two-view-reference-scale-2026-11-27/README.md), #747. Verify one measured diameter, paired outlines, explicit unknown depth and mismatched view refusal through Studio and local MCP.
 - D2078: [Review a face-attached Rib from the local Agent](notes/attached-rib-agent-2026-11-27/README.md), #324. Share the Studio command, pin native image review, and match the explicitly approved file and thickness edit.
 - D2077: [Attach a straight Rib to the original top or bottom face](notes/attached-rib-2026-11-27/README.md), #755. Verify the selected cap and fixed protrusion through a stock thickness edit and native Studio Open.
 - D2076: [Set curvature comb density independently from scale](notes/curvature-comb-density-2026-11-27/README.md), #762. Verify 2, 4, and 8 spokes per span while keeping native measurements and clipped tip lines.
