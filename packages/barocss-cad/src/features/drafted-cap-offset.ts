@@ -470,6 +470,54 @@ export function boxCapOffsetFrame(brep: Brep, faceName: string): { anchor: Point
   return admitted?.axis === 2 ? boxReplacementFrame(admitted) : undefined;
 }
 
+/** The new wall path requires exact cardinal supports and the complete original native trims. */
+function certifiedBoxWallOffset(brep: Brep, faceName: string): CertifiedBoxFace | undefined {
+  const admitted = certifiedBoxFace(brep, faceName);
+  if (!admitted || admitted.axis === 2 || !brep.coedges.every(use => use.pcurve)) return undefined;
+  const names = brep.faces.map(face => face.name);
+  if (names.some(name => typeof name !== 'string' || !name) || new Set(names).size !== 6) return undefined;
+  const bounds = boxBounds(admitted.box);
+  for (const face of brep.faces) {
+    const wall = admitted.box.walls.get(face.id), axis = wall?.axis ?? 2;
+    const end = wall?.end ?? (face === admitted.box.caps[0] ? 0 : 1), plane = planeOf(face);
+    if (!plane || !plane.n.every((value, k) => value === (k === axis ? end === 0 ? -1 : 1 : 0))
+      || face.surface.kind !== 'surface' || !face.surface.controlPoints.every(row => row.every(point => point[axis] === bounds[axis][end])))
+      return undefined;
+  }
+  return admitted;
+}
+
+/** Locate one exact original cardinal wall for a signed Distance Offset. The caller proves its authored source. */
+export function boxWallOffsetFrame(brep: Brep, faceName: string): { anchor: Point; normal: Point } | undefined {
+  const admitted = certifiedBoxWallOffset(brep, faceName);
+  return admitted && boxReplacementFrame(admitted);
+}
+
+function boxWallOffsetFailure(code: BrepError['code'], detail: string): never {
+  throw new BrepError(code, `box wall offset: ${detail}`);
+}
+
+/** Move four original corners while re-extending the five fixed planar supports and retaining all native owners. */
+export function offsetBoxWallIfAdmitted(brep: Brep, faceName: string, distance: number): Brep | undefined {
+  const admitted = certifiedBoxWallOffset(brep, faceName);
+  if (!admitted) return undefined;
+  if (!Number.isFinite(distance) || distance === 0 || Math.abs(distance) > CadNumericPolicy.coordinateAbs)
+    return boxWallOffsetFailure('INPUT', 'distance must be nonzero and within the modeling range');
+  const { box, face, axis, end } = admitted, { anchor, normal } = boxReplacementFrame(admitted);
+  const opposite = boxBounds(box)[axis][1 - end], next = anchor[axis] + normal[axis] * distance;
+  const extent = Math.max(Math.abs(next), geometryScaleMM(brep.vertices.map(vertex => vertex.point)));
+  if (!(extent <= CadNumericPolicy.coordinateAbs)) return boxWallOffsetFailure('GEOMETRY', 'the wall leaves the modeling range');
+  if (next === anchor[axis]) return boxWallOffsetFailure('GEOMETRY', 'distance is too small to move the wall');
+  if (!((next - opposite) * normal[axis] > linearToleranceMM(extent)))
+    return boxWallOffsetFailure('GEOMETRY', 'the offset would reach or cross the opposite wall');
+  const origin = [...anchor] as Point; origin[axis] = next;
+  const wanted: Plane = { kind: 'plane', o: origin, n: normal };
+  const lifted = brep.vertices.filter(vertex => vertex.point[axis] === anchor[axis]).map(vertex => {
+    const point = [...vertex.point] as Point; point[axis] = next; return { vertex, point };
+  });
+  return rebuildReplacementTrim(brep, box, face, axis, wanted, lifted, boxWallOffsetFailure);
+}
+
 function boxCapOffsetFailure(code: BrepError['code'], detail: string): never {
   throw new BrepError(code, `box cap offset: ${detail}`);
 }

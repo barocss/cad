@@ -4,12 +4,15 @@ import { join } from 'node:path';
 import { createFlow } from './flow-helper.mjs';
 
 const baseline = process.argv.includes('--baseline');
+const box = process.argv.includes('box');
 const pins = ['packages/barocss-cad-model/src/app/nativeOffsetFace.ts', 'packages/barocss-cad-model/src/app/offsetFaceEdit.ts',
   'packages/barocss-cad-model/src/engine/doc.ts',
-  'packages/barocss-cad/src/features/prism-wall-offset.ts', 'packages/barocss-cad/src/part/part-model.ts'];
+  'packages/barocss-cad/src/features/prism-wall-offset.ts', 'packages/barocss-cad/src/features/drafted-cap-offset.ts',
+  'packages/barocss-cad/src/part/part-model.ts'];
 const f = await createFlow({
   name: 'offset-polygon-wall', output: process.argv[2], envFrozen: 'OFFSET_POLYGON_WALL_FROZEN',
-  qualification: 'Signed Offset face on an original triangular and octagonal extrusion wall.',
+  qualification: box ? 'Signed Offset face on an original rectangular extrusion wall.'
+    : 'Signed Offset face on an original triangular and octagonal extrusion wall.',
   limits: ['Original straight convex polygon profiles, upright uncut extrusion, signed distance mode.'],
   initialFiles: pins, requiredFrozen: pins,
   inspectorSource: `
@@ -25,7 +28,11 @@ console.log(JSON.stringify({ count: outputs.length, volume: massPropertiesOf(bod
     brep.coedges.map(({ pcurve, ...use }) => [use, pcurve?.id]), brep.loops, brep.shells, brep.bodies] }));
 `,
 });
-const examples = [
+const examples = box ? [{
+  id: 'box', x: 20, height: 20, footprint: [[0, 0], [40, 0], [40, 30], [0, 30]],
+  sketch: { profile: 'rectangle', min: [0, 0], max: [40, 30] }, refused: [-30],
+  corners: y => [[0, y], [40, y]], volume: mm => 800 * (30 + mm),
+}] : [
   { id: 'triangle', x: 12, footprint: [[0, 0], [24, 0], [6, 16]], refused: [-16],
     corners: y => [[3 * y / 8, y], [24 - 9 * y / 8, y]], volume: mm => 7.5 * (16 + mm) ** 2 },
   { id: 'octagon', x: 10, footprint: [[4, 0], [16, 0], [20, 4], [20, 12], [16, 16], [4, 16], [0, 12], [0, 4]],
@@ -39,9 +46,10 @@ const near = (a, b) => Math.abs(a - b) <= 1e-8;
 const same = (a, b) => a.every((value, i) => near(value, b[i]));
 const dot = (a, b) => a.reduce((sum, value, i) => sum + value * b[i], 0);
 
-function source(footprint) {
+function source(example) {
+  const profile = example.sketch ?? { profile: 'polygon', points: example.footprint };
   return { format: 'barocss-cad-model', schema: 3, units: 'mm', parameters: {}, nextId: 2,
-    nodes: [{ kind: 'sketch', id: 'n0', profile: 'polygon', points: footprint }, { kind: 'extrude', id: 'n1', sketch: 0, height: 10 }],
+    nodes: [{ kind: 'sketch', id: 'n0', ...profile }, { kind: 'extrude', id: 'n1', sketch: 0, height: example.height ?? 10 }],
     outputs: { b1: { node: 1, side: 'solid' } } };
 }
 
@@ -53,7 +61,7 @@ async function prove(label, doc, from, example, distance) {
   }]);
   assert.deepEqual(actual.ids, from.ids);
   const wanted = [...example.corners(-distance), ...example.footprint.slice(2)];
-  for (const z of [0, 10]) for (const [x, y] of wanted) {
+  for (const z of [0, example.height ?? 10]) for (const [x, y] of wanted) {
     assert.equal(actual.vertices.filter(vertex => same(vertex.point, [x, y, z])).length, 1);
   }
   const faces = new Map(actual.faces);
@@ -71,14 +79,14 @@ async function prove(label, doc, from, example, distance) {
 
 await f.run(async () => {
   for (const example of examples) {
-    const stock = source(example.footprint), file = join(f.output, example.id + '-stock.bcad');
+    const stock = source(example), file = join(f.output, example.id + '-stock.bcad');
     await writeFile(file, JSON.stringify(stock));
     const original = await f.inspect(example.id + '-stock', stock);
     await f.freshOpen(file, stock, example.id + '-original');
     await button('Front', f.page.locator('.views')).click();
     if (await button('Ortho').getAttribute('aria-pressed') !== 'true') await button('Ortho').click();
     await f.page.getByTitle('Frame all (F)', { exact: true }).click();
-    const pixel = await f.page.evaluate(x => window.__studioScreenOf([x, 0, 5]), example.x);
+    const pixel = await f.page.evaluate(point => window.__studioScreenOf(point), [example.x, 0, (example.height ?? 10) / 2]);
     await f.page.mouse.click(...pixel);
     await f.page.waitForFunction(() => window.__studioSelection.selection.faces.length === 1);
     await button('Iso', f.page.locator('.views')).click();
@@ -87,16 +95,30 @@ await f.run(async () => {
     const dialog = hud();
     await offset(dialog).fill('2');
     if (baseline) {
-      await status(dialog, 'refused');
-      assert.ok(await button('Apply', dialog).isDisabled());
       await f.same(stock);
-      await f.snapshot(example.id + '-baseline-refused');
+      if (box) {
+        await status(dialog, 'preview');
+        await button('Apply', dialog).click();
+        await f.changed(stock);
+        const legacy = await f.doc();
+        assert.deepEqual(legacy.nodes.slice(2).map(node => node.kind), ['sketch', 'extrude', 'union']);
+        assert.equal(legacy.nodes[4].made?.command, 'offset-face');
+        const result = await f.inspect('box-legacy-join', legacy);
+        assert.ok(result.report.valid && near(result.volume, example.volume(2)));
+        assert.notDeepEqual(result.ids, original.ids);
+        await f.snapshot('box-baseline-legacy-join');
+      } else {
+        await status(dialog, 'refused');
+        assert.ok(await button('Apply', dialog).isDisabled());
+        await f.snapshot(example.id + '-baseline-refused');
+      }
       continue;
     }
     await status(dialog, 'preview');
     await f.same(stock);
     await f.snapshot(example.id + '-outward-preview');
-    assert.equal(await dialog.getByLabel('Mode', { exact: true }).inputValue(), 'distance');
+    if (box) assert.equal(await dialog.getByLabel('Mode', { exact: true }).count(), 0);
+    else assert.equal(await dialog.getByLabel('Mode', { exact: true }).inputValue(), 'distance');
     await button('Cancel', dialog).click();
     await f.same(stock);
     await f.command('Offset face');
@@ -110,7 +132,8 @@ await f.run(async () => {
     await f.openFeatureEditor(2, example.id + ' original side Offset');
     await button('Edit offset', f.editor()).click();
     const history = hud('Edit Offset face');
-    assert.equal(await history.getByLabel('Mode', { exact: true }).inputValue(), 'distance');
+    if (box) assert.equal(await history.getByLabel('Mode', { exact: true }).count(), 0);
+    else assert.equal(await history.getByLabel('Mode', { exact: true }).inputValue(), 'distance');
     for (const refused of example.refused) {
       await offset(history).fill(String(refused));
       await status(history, 'refused');

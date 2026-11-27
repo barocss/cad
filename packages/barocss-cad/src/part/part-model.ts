@@ -72,7 +72,7 @@ import { frameOperation, planEndpointBeads, endpointContext, isEndpointBead } fr
 import type { EndpointBead } from './part-frame.js';
 import { checkExpected, expectOf } from './part-expect.js';
 import { KernelError } from '../core/barocss-error.js';
-import { boxFaceReplacementFrame, offsetBoxCapIfAdmitted, offsetDraftedFace, replaceRectangularSolidFace } from '../features/drafted-cap-offset.js';
+import { boxFaceReplacementFrame, offsetBoxCapIfAdmitted, offsetBoxWallIfAdmitted, offsetDraftedFace, replaceRectangularSolidFace } from '../features/drafted-cap-offset.js';
 import { offsetExactSemicylinderCapIfAdmitted, offsetExactSemicylinderWallIfAdmitted, offsetExactSemicylinderSecondWallIfAdmitted, offsetExactSemicylinderMixedOffsetIfAdmitted, offsetExactSemicylinderWallAfterReplacementIfAdmitted, replaceExactSemicylinderCapIfAdmitted, replaceExactSemicylinderCapAfterWallIfAdmitted } from '../features/exact-cylinder-cap-offset.js';
 import { offsetPrismWallIfAdmitted, replacePrismCapIfAdmitted, replacePrismWallIfAdmitted } from '../features/prism-wall-offset.js';
 import { annularCapReplacementFrame, offsetBoredCapIfAdmitted, offsetBoredPlateWallIfAdmitted, offsetBoreWallIfAdmitted, offsetCircularWallIfAdmitted,
@@ -810,6 +810,10 @@ function operation(f: CadPartFeature & Record<string, unknown>, t: Tools): () =>
       const polygonOffset = (hole?.kind === 'extrude' || hole?.kind === 'translate') && target[0].solid.kind === 'upright'
         && target[0].solid.solid.slabs[0]?.regions[0]?.outer.length !== 6
         && originalPolygonPrism(f.target, target[0], t, 'Offset polygon stock');
+      const boxWallSketch = hole?.kind === 'extrude' && target[0].solid.kind === 'upright'
+        && target[0].solid.solid.slabs[0]?.regions[0]?.outer.length === 4 ? ref(hole.sketch, 'Offset box wall sketch').author : undefined;
+      const boxWallOffset = boxWallSketch?.kind === 'sketch' && boxWallSketch.profile === 'rectangle'
+        && originalRectangularPrism(f.target, target[0], t, 'Offset box wall stock');
       const borePlan = hole?.kind === 'difference' ? exactCylinderBorePlan(t, f.target, exactBoreOffsetRefusal) : undefined;
       const exactBore = borePlan && { ...borePlan, thickness: dim(borePlan.source.thickness, 'Thicken thickness', true) };
       const stock = hole?.kind === 'hole' ? ref(hole.target, 'tube stock').author : undefined;
@@ -884,6 +888,7 @@ function operation(f: CadPartFeature & Record<string, unknown>, t: Tools): () =>
           ?? offsetCircularWallIfAdmitted(brep, face, distance)
           ?? offsetBoreWallIfAdmitted(brep, face, distance)
           ?? offsetPrismWallIfAdmitted(brep, face, distance, polygonOffset)
+          ?? (boxWallOffset ? offsetBoxWallIfAdmitted(brep, face, distance) : undefined)
           ?? offsetBoxCapIfAdmitted(brep, face, distance) ?? offsetDraftedFace(brep, face, distance);
         return one({ kind: 'brep', brep: offset });
       };

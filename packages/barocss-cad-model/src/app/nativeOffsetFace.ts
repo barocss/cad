@@ -1,6 +1,6 @@
 // Offset face owns a native cap snapshot. Display data identifies the pick only; it never authors a profile.
 import { CadNumericPolicy, CadPartLimits, brepFromPrismatic, checkBrep, prismaticFromProfile, prismaticMassProperties, reevaluate, transformBrep, type Brep, type BrepFace, type Curve, type Surface } from '@barocss/cad';
-import { boxCapOffsetFrame, draftedFaceOffsetFrame } from '@barocss/cad/internal/drafted-cap-offset';
+import { boxCapOffsetFrame, boxWallOffsetFrame, draftedFaceOffsetFrame } from '@barocss/cad/internal/drafted-cap-offset';
 import { annularCapReplacementFrame, boredCapOffsetFrame, boredPlateWallOffsetFrame, boreWallOffsetFrame, circularWallOffsetFrame } from '@barocss/cad/internal/bored-cap-offset';
 import { exactSemicylinderBoredOuterWallOffsetFrame, exactSemicylinderCapOffsetFrame, exactSemicylinderMixedOffsetFrame, exactSemicylinderSecondWallOffsetFrame, exactSemicylinderWallOffsetAfterReplacementFrame, exactSemicylinderWallOffsetFrame } from '@barocss/cad/internal/exact-cylinder-cap-offset';
 import { exactPairedElbowOutletOffsetFrame, exactPerpendicularAnnularInletOffsetFrame, exactPerpendicularAnnularOutletOffsetFrame } from '@barocss/cad/internal/exact-paired-elbow-offset';
@@ -466,19 +466,20 @@ export function resolveDirectOffsetFace(ctx: Ctx): {
   }
   const boredPlate = isBoredPlateOffsetSource(ctx.doc.nodes, ref.node);
   const box = isBoxCapOffsetSource(ctx.doc.nodes, ref.node);
-  const boxCap = box && display.nativeAxisPlane?.axis === 'z';
-  if (box && !boxCap) return undefined;
+  const axis = display.nativeAxisPlane?.axis;
+  const boxCap = box && axis === 'z';
+  const boxWall = box && node.kind === 'extrude' && (axis === 'x' || axis === 'y');
+  if (box && !boxCap && !boxWall) return undefined;
   if (!boredPlate && node.kind !== 'draft' && node.kind !== 'offset-face' && node.kind !== 'extrude') return undefined;
   const hex = isStraightHexagonalExtrusion(ctx.doc.nodes, node);
   const polygonWall = !hex && isStraightPolygonOffsetSource(ctx.doc.nodes, node);
-  if (!boxCap && node.kind === 'extrude' && !node.draft &&
-      ((!hex && !polygonWall) || display.nativeAxisPlane?.axis === 'z')) return undefined;
+  if (!box && node.kind === 'extrude' && !node.draft && ((!hex && !polygonWall) || axis === 'z')) return undefined;
   currentOffsetBody(ctx.doc, body);
   const { brep } = nativeOffsetBody(ctx, body, display);
   const frame = boredPlate ? boredCapOffsetFrame(brep, display.name) ?? boredPlateWallOffsetFrame(brep, display.name)
-    : boxCap ? boxCapOffsetFrame(brep, display.name)
+    : box ? (boxCap ? boxCapOffsetFrame : boxWallOffsetFrame)(brep, display.name)
       : draftedFaceOffsetFrame(brep, display.name) ?? prismWallOffsetFrame(brep, display.name, polygonWall);
-  return frame ? { parent: ref, face: display.name, ...frame, allowsPlane: !boredPlate && !boxCap } : undefined;
+  return frame ? { parent: ref, face: display.name, ...frame, allowsPlane: !boredPlate && !box } : undefined;
 }
 
 /** Current native semantic identity is resolved before qualification; every returned snapshot is owned. */

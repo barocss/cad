@@ -3,7 +3,10 @@ import assert from 'node:assert/strict';
 import { exportStep } from '@barocss/cad';
 import { cylinderPart, emptyDoc, rectanglePart, withNode, type StudioDoc } from '../src/engine/doc';
 import { evaluateDoc, partBreps } from '../src/engine/evaluate';
+import { readStudioDoc } from '../src/engine/migrate';
 import { resolveNativeOffsetFace, validateNativeOffsetDistance } from '../src/app/nativeOffsetFace';
+import { buildNativeOffsetFace } from '../src/app/profileCommands';
+import { editSavedOffsetFaceCommand } from '../src/app/offsetFaceEdit';
 import { isRefusal } from '../src/engine/refusal';
 import type { Ctx } from '../src/app/commands';
 import { dispatchTool } from '../src/chat/tools';
@@ -207,4 +210,39 @@ test('features.command offsets the exact triangle wall at the current revision a
   const collapsed = await dispatchTool(state, 'features', { ...args, values: { d: -16 } }, evaluate);
   assert.ok(collapsed.isError && !collapsed.changed && collapsed.state.doc === doc, collapsed.content);
   assert.match(collapsed.content, /collapse or cross a wall/);
+});
+
+test('Offset face on the original box wall has one native node and retains the legacy extrusion route', async () => {
+  const doc = rectanglePart(40, 30, 20), ctx = context(doc, 'n1.side0');
+  const composed = buildNativeOffsetFace(ctx, 2), operation = composed.nodes[4];
+  assert.deepEqual(composed.nodes.slice(2).map(node => node.kind), ['sketch', 'extrude', 'union']);
+  assert.ok(operation.kind === 'union');
+  const legacy: StudioDoc = { ...composed, nodes: [...composed.nodes.slice(0, 4),
+    { ...operation, made: { command: 'offset-face', nodes: 3, values: { d: 2, face: 'n1.side0' } } }] };
+  const opened = readStudioDoc(JSON.stringify(legacy));
+  assert.ok('doc' in opened);
+  const legacyGeometry = evaluateDoc(opened.doc, 1);
+  assert.ok(legacyGeometry.ok);
+  assert.ok(Math.abs(legacyGeometry.bodies[0].volume! - 25600) < 1e-7);
+  const history = editSavedOffsetFaceCommand(opened.doc, 4);
+  assert.ok(history?.build);
+  const edited = history.build({ doc: opened.doc, bodies: legacyGeometry.bodies, selection: { faces: [], edges: [], bodies: [] } }, { d: 3 });
+  const editedLegacy = evaluateDoc(edited, 2);
+  assert.ok(editedLegacy.ok);
+  assert.ok(Math.abs(editedLegacy.bodies[0].volume! - 26400) < 1e-7);
+  assert.equal(edited.nodes[4].id, operation.id);
+
+  const state = { doc, bodies: ctx.bodies };
+  const evaluate = async (candidate: StudioDoc) => evaluateDoc(candidate, 1);
+  const current = await dispatchTool(state, 'query', { action: 'rebuild' }, evaluate);
+  assert.ok(!current.isError, current.content);
+  const result = await dispatchTool(state, 'features', { action: 'command', command: 'offset-face',
+    expectedRevision: JSON.parse(current.content).revision, faces: ['n1.side0'], values: { d: 2 } }, evaluate);
+  assert.ok(result.changed && !result.isError, result.content);
+  const applied = result.state.doc;
+  assert.equal(applied.nodes.length, 3);
+  const node = applied.nodes[2];
+  assert.ok(node.kind === 'offset-face');
+  assert.deepEqual([node.parent, node.faces, node.distance], [{ node: 1, side: 'solid' }, ['n1.side0'], 2]);
+  assert.ok(Math.abs(result.state.bodies[0].volume! - 25600) < 1e-7);
 });

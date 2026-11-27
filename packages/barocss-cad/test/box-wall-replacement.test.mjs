@@ -311,5 +311,5 @@ test('Replace face refuses corner collapse, unsupported slope and stale picks', 
   refuses({ face: 'b.side1#1' }, 'REFERENCE', /missing or ambiguous/);
   refuses({ expect: { [face]: { kind: 'plane', at: [40, 15, 5], dir: [0, 1, 0], size: 300 } } }, 'REFERENCE', /REFERENCE_MOVED/);
 
-  assert.throws(() => output([...source, { id: 'old', kind: 'offset-face', target: 'b', face, distance: 2 }]), /tapered walls/);
+  assert.equal(offsetBoxCapIfAdmitted(before, face, 2), undefined, 'the existing cap helper does not admit wall offsets');
 });

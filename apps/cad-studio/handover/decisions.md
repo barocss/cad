@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D2100: [Offset an original rectangular extrusion wall](notes/native-box-wall-offset-2026-11-28/README.md), #17. Keep original native incidence in one signed operation and verify rollback, legacy History and desktop reopen.
 - D2099: [Open any two original box faces in per-face Shell](notes/all-box-shell-opening-pairs-2026-11-28/README.md), #13. Verify all ten additional pairs, exact world cavities, downstream Split and native Studio reopen.
 - D2098: [Link a convex polygon wall Offset to an exact parallel plane](notes/octagonal-wall-offset-reference-plane-2026-11-28/README.md), #17. Verify donor movement and repick, stale and collapsing donor refusal and native desktop reopen.
 - D2097: [Offset an original convex polygon wall](notes/polygon-wall-offset-2026-11-28/README.md), #17. Verify both signed offsets, original supports, edge collapse refusal, revision-pinned local Agent use and desktop native reopen.
