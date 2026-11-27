@@ -28,7 +28,7 @@ test('A06 real App committed mount/unmount releases its owned native engine Work
   const output = process.env.A06_ARTIFACT_DIR; await mkdir(output, { recursive: true });
   const report = { status: 'RUNNING', runnerProcess: process.pid, states: [], errors: [], boundary: 'Real App with controlled React root; native Worker subclass delegates constructor/terminate. Public call counts, not heap or driver memory; no StrictMode/natural failure acceptance.' };
   const persist = () => writeFile(path.join(output, 'receipt.json'), JSON.stringify(report, null, 2));
-  const server = await createServer({ root: app, configFile: path.join(app, 'vite.config.ts'), plugins: [{ name: 'owned-engine-lifecycle-entry', transformIndexHtml(html) { return html.replace('/src/main.tsx', '/test/fixtures/engine-lifecycle-entry.ts'); } }], server: { host: '127.0.0.1', port: 0 }, logLevel: 'error' });
+  const server = await createServer({ root: app, configFile: path.join(app, 'vite.config.ts'), cacheDir: path.join(output, 'vite-cache'), plugins: [{ name: 'owned-engine-lifecycle-entry', transformIndexHtml(html) { return html.replace('/src/main.tsx', '/test/fixtures/engine-lifecycle-entry.ts'); } }], server: { host: '127.0.0.1', port: 0 }, logLevel: 'error' });
   await server.listen();
   const { chromium } = createRequire(path.join(process.env.PW_DIR, 'package.json'))('playwright');
   let browser, context, page;

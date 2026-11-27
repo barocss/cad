@@ -1,5 +1,6 @@
 import { useStudioSheetPatterns } from './app/useStudioSheetPatterns';
 import { useStudioModelEvaluation, type RouteEvaluationHandoff, type StudioParameterEdit } from './state/useStudioModelEvaluation';
+import { useStudioWorkerRecovery } from './state/useStudioWorkerRecovery';
 import { useStudioInspectionViews } from './app/useStudioInspectionViews';
 import { useStudioMeasurementReadouts, useStudioMeasurementSession } from './app/useStudioMeasurementReadouts';
 import { selectedInstanceActions } from './assembly/selectedInstanceActions';
@@ -122,7 +123,7 @@ import { CursorReadout } from './ui/CursorReadout';
 import { revokePersonRowFiles, isPersonRowFiles, type PersonRowFiles } from '@barocss/cad-model/engine/rowFiles';
 import { Profiler, Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties } from 'react';
 import { EngineClient, type ProposalOverlay } from './engine/client';
-import { beginWork, createWorkOwnership, finishWork, invalidateWork, reserveAcceptedChange, stopOwnedWork, workEditRefusal, type WorkHistory } from './state/workOwnership';
+import { beginWork, createWorkOwnership, finishWork, reserveAcceptedChange, workEditRefusal, type WorkHistory } from './state/workOwnership';
 import type { OpenScope } from './state/openOwnership';
 import { scheduleProjectOpenFit } from './app/projectOpenFit';
 import { prepareSignedFinishOpen, verifyStoredNativeOpen } from './files/documentFile';
@@ -1372,38 +1373,15 @@ export function App() {
   const { freeSketches, innerSteps, profiles } = useStudioProfilePresentation(
     doc.nodes, evaluated, shownDoc.parameters, selection, sketch,
   );
-  // A computation running past a second can be stopped (D42: a committed Boolean on a mesh of up to 20000
-  // triangles takes a few seconds): the worker restarts and the change that started it is taken back.
-  const [slow, setSlow] = useState(false);
-  useEffect(() => { if (!busy) { setSlow(false); return; } const t = setTimeout(() => setSlow(true), 1000); return () => clearTimeout(t); }, [busy]);
-  const invalidateDocumentWork = useCallback(() => {
-    workOwnership.current = invalidateWork(workOwnership.current); undoFor.current = null; workCompletion.current = null;
-    parameterRequest.current++; parameterEditNow.current = null; setParameterEdit(null); evaluationEvidence.clearHandoff();
-    evaluationEvidence.discardUninstalled();
-    setBusy(false);
-  }, [evaluationEvidence]);
-  // A failed or restarted worker cannot supply current caches or finish an older import.
-  const invalidateWorkerResults = () => {
-    // A content match cannot carry worker provenance across restart. Keep old pixels stale until recomputed.
-    setCandidateReview(null);
-    evaluationEvidence.reset(); routeAcceptedHandoff.current = null;
-    claimBodies.current = false; setBodiesFor(null); discardRouteRef.current();
-    setInstanceBodies(new Map()); workerSessionNow.current++; setWorkerSession(workerSessionNow.current);
-    setBusy(false); setSlow(false); setPreviewBodies(null);
-  };
-  const restartDocumentWorker = () => {
-    invalidateWorkerResults();
-    const ready = engine.restart();
-    if (ready) setWorkerFailure(null);
-    return ready;
-  };
-  workerFailureHandler.current = error => {
-    beginOpenIntent(); invalidateDocumentWork(); invalidateWorkerResults(); cancelStepExportRef.current(); setWorkerFailure(error);
-  };
-  const retryWorker = () => {
-    beginOpenIntent(); invalidateDocumentWork();
-    if (restartDocumentWorker()) { setToast(null); setImportWorkerRecovery(value => value + 1); }
-  };
+  const { slow, invalidateDocumentWork, retryWorker, stopImport, stopDocumentWork } = useStudioWorkerRecovery({
+    busy, setBusy, work: { ownership: workOwnership, undoFor, completion: workCompletion, evidence: evaluationEvidence },
+    parameters: { request: parameterRequest, edit: parameterEditNow, setEdit: setParameterEdit },
+    worker: { engine, session: workerSessionNow, setSession: setWorkerSession, failureHandler: workerFailureHandler,
+      setFailure: setWorkerFailure, setImportRecovery: setImportWorkerRecovery },
+    view: { setCandidateReview, routeHandoff: routeAcceptedHandoff, claimBodies, setBodiesFor,
+      discardRoute: discardRouteRef, clearInstances: () => setInstanceBodies(new Map()), setPreviewBodies },
+    beginOpenIntent, cancelStepExport: cancelStepExportRef, setNotice: setToast,
+  });
   const activeNotice = noticeExpired ? null : notice;
   const toast = workerFailure ? { ...workerFailure, action: { label: 'Retry engine', run: retryWorker } } : activeNotice;
   const clearHistoryBoundaryDraft = useCallback(() => {
@@ -1430,14 +1408,8 @@ export function App() {
     invalidateWork: invalidateDocumentWork, cancelReview: cancelNativeReview, cancel,
   });
   const cancelWork = () => {
-    if (!workOwnership.current.run) { setBusy(false); setSlow(false); return; }
-    const stopped = stopOwnedWork(workOwnership.current, docNow.current, evaluatedRef.current, undo[undo.length - 1]);
-    workOwnership.current = stopped.state; undoFor.current = null; workCompletion.current = null;
-    // Invalidate before restart resolves pending promises. An unaccepted candidate has no history to undo.
-    parameterRequest.current++;
-    parameterEditNow.current = null; setParameterEdit(null);
-    restartDocumentWorker();
-    const target = stopped.target;
+    const target = stopDocumentWork(docNow.current, evaluatedRef.current, undo[undo.length - 1]);
+    if (target === undefined) return;
     if (target) {
       const redoEntry = reverseHistoryEntry(target, docNow.current, markerNow.current);
       setRedo(r => [...r, redoEntry]); setUndo(u => u.slice(0, -1));
@@ -1518,8 +1490,7 @@ export function App() {
       canOpenImport: () => openAccepted(inPlaceNow.current),
       requestNativeOpen: (accept, focus) => requestNativeOpen.current(accept, focus),
       canReviewLocalCandidate: occurrence => localCandidateView.current(occurrence) },
-    worker: { engine, workerSessionNow, nextRevision: () => revision.current++,
-      stopImport: () => { beginOpenIntent(); invalidateDocumentWork(); if (restartDocumentWorker()) setImportWorkerRecovery(value => value + 1); } },
+    worker: { engine, workerSessionNow, nextRevision: () => revision.current++, stopImport },
     changes: { replaceDoc, setDocState, setFileName, setDirty,
       onTaskRunReopened: run => { setReopenedTaskRun(run); setChat(true); },
       onTaskRunDecided: setDecidedTaskRun,
