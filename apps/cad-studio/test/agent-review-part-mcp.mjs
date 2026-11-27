@@ -13,6 +13,7 @@ await mkdir(output);
 const file = join(output, 'edited-stock-part.bcad');
 const sha256 = bytes => createHash('sha256').update(bytes).digest('hex');
 const textJSON = result => JSON.parse(result.content.find(c => c.type === 'text').text);
+const exchanges = [];
 
 async function render(call, label, expectedRevision) {
   const before = await readFile(file);
@@ -34,14 +35,17 @@ async function render(call, label, expectedRevision) {
   return data;
 }
 
-await withMcpSession({ app, output, clientName: 'barocss-agent-review-part', autonomy: 2 }, file, 'review', async (_read, request) => {
+await withMcpSession({
+  app, output, clientName: 'barocss-agent-review-part', autonomy: 2,
+  telemetry: row => exchanges.push({ label: 'initialize', ...row }),
+}, file, 'review', async (_read, request) => {
   const call = async (name, args, label = name, expectError = false) => {
-    const reply = await request('tools/call', { name, arguments: args });
+    const reply = await request('tools/call', { name, arguments: args }, { label });
     assert.equal(reply.isError, expectError, label + ': ' + reply.content[0].text);
     return reply;
   };
-  const describe = (tool, action) => call('describe', { tool, action });
-  const listed = await request('tools/list', {});
+  const describe = (tool, action) => call('describe', { tool, action }, `describe ${tool}.${action}`);
+  const listed = await request('tools/list', {}, { label: 'tools/list' });
   assert.ok(listed.tools.some(t => t.name === 'query') && listed.tools.some(t => t.name === 'describe'));
   assert.equal(listed.tools.length, 13);
   await describe('features', 'command');
@@ -65,6 +69,13 @@ await withMcpSession({ app, output, clientName: 'barocss-agent-review-part', aut
   assert.deepEqual([mismatch.summary.pass, mismatch.summary.fail, mismatch.summary.unknown], [0, 1, 0]);
   const pinnedA = await render(call, 'review-A-pinned', a.revision);
   assert.equal(pinnedA.imageSha256, a.imageSha256);
+  const source = await readFile(file);
+  const invalidAction = await call('query', { action: 'review-missing' }, 'unknown review action', true);
+  assert.match(textJSON(invalidAction).error, /query takes "action".*render/);
+  const extraField = await call('query', { action: 'render', expectedRevision: a.revision, invented: true }, 'unknown review argument', true);
+  assert.match(extraField.content[0].text, /UNKNOWN_ARGUMENT.*invented/);
+  assert.ok([invalidAction, extraField].every(result => result.content.every(block => block.type === 'text')));
+  assert.deepEqual(await readFile(file), source);
   const editSchema = textJSON(await describe('features', 'edit')).input;
   assert.deepEqual(editSchema.properties.expectedRevision, { type: 'string', pattern: '^[a-f0-9]{16}$' });
   assert.ok(!editSchema.required.includes('expectedRevision'));
@@ -102,4 +113,5 @@ await withMcpSession({ app, output, clientName: 'barocss-agent-review-part', aut
   const saved = JSON.parse(await readFile(file, 'utf8'));
   assert.equal(saved.nodes[extrusion.index].height, 12);
 });
+await writeFile(join(output, 'review-wire-measurements.json'), JSON.stringify({ node: process.version, exchanges }, null, 2));
 process.stdout.write('PASS: A and B render pins, stale refusal, PNG digests and native volume\n');

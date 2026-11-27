@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D2112: [Measure the current local MCP review contract](notes/local-mcp-review-evidence-2026-11-28/README.md), #324. Record wire cost and refusal diagnostics, decode both revision-bound images, and verify native Studio Open.
+
 - D2111: [Draft an original cylinder on a cardinal sketch plane](notes/cardinal-cylindrical-wall-draft-2026-11-28/README.md), #14. Verify signed axial pull, original world trim records and native desktop reopen.
 
 - D2110: [Draft the complete wall of an original cylinder](notes/original-cylindrical-wall-draft-2026-11-28/README.md), #14. Verify exact signed frusta, original parameter curves, axis-collapse refusal and native desktop reopen.

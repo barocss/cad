@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { createFlow, sha256 } from './flow-helper.mjs';
 
 // Open the actual file written by the local MCP session, then edit and save it in Studio.
@@ -20,6 +20,7 @@ edited.nodes[index].height = 16;
 delete edited.nodes[index].made;
 
 const pins = [
+  'apps/cad-studio/test/agent-review-part-mcp.mjs',
   'apps/cad-studio/test/agent-review-part-browser.mjs', 'apps/cad-studio/test/flow-helper.mjs',
   'apps/cad-studio/src/App.tsx', 'apps/cad-studio/src/files/useStudioDocumentFiles.ts',
   'packages/barocss-cad-model/src/engine/doc.ts', 'packages/barocss-cad-model/src/app/editFields.ts',
@@ -36,6 +37,7 @@ const doc = JSON.parse(readFileSync(process.argv[2], 'utf8'));
 console.log(JSON.stringify(partBreps(doc).map(({ brep }) => ({
   valid: checkBrep(brep, { strict: true }).valid, volume: brepMassProperties(brep, 1).volume,
   corners: brep.vertices.map(vertex => vertex.point), faces: brep.faces.length, edges: brep.edges.length,
+  faceNames: brep.faces.map(face => face.name),
 }))));
 `,
   oracleSource: `
@@ -62,11 +64,71 @@ async function verify(label, doc) {
   await flow.page.getByRole('button', { name: 'Iso', exact: true }).click();
   await flow.page.getByTitle('Frame all (F)', { exact: true }).click();
   await flow.snapshot(label + '-isometric');
+  return solids[0];
 }
+
+async function verifyReview(label, height, faceNames) {
+  const dir = dirname(resolve(input));
+  const image = await readFile(join(dir, label + '.png'));
+  const metadata = JSON.parse(await readFile(join(dir, label + '.json'), 'utf8'));
+  assert.equal(metadata.imageSha256, sha256(image));
+  const cells = await flow.page.evaluate(async data => {
+    const picture = new Image();
+    picture.src = 'data:image/png;base64,' + data;
+    await picture.decode();
+    const canvas = document.createElement('canvas');
+    canvas.width = picture.naturalWidth;
+    canvas.height = picture.naturalHeight;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(picture, 0, 0);
+    return ['front', 'top', 'right', 'iso'].map((name, index) => {
+      const cell = ctx.getImageData((index % 2) * 500 + 8, Math.floor(index / 2) * 500 + 8, 484, 484);
+      const { data: rgba } = cell;
+      let left = cell.width, right = 0, top = cell.height, bottom = 0, glyphPixels = 0;
+      for (let y = 0; y < cell.height; y++) {
+        for (let x = 0; x < cell.width; x++) {
+          const at = (y * cell.width + x) * 4;
+          if (rgba[at] < 250) {
+            left = Math.min(x, left); right = Math.max(x, right);
+            top = Math.min(y, top); bottom = Math.max(y, bottom);
+          }
+          if (rgba[at] === 20 && rgba[at + 1] === 20 && rgba[at + 2] === 20) glyphPixels++;
+        }
+      }
+      return { name, width: right - left + 1, height: bottom - top + 1, glyphPixels };
+    });
+  }, image.toString('base64'));
+  const extents = { front: [40, height], top: [40, 20], right: [20, height] };
+  const shownNames = new Set();
+  for (const cell of cells) {
+    const { visible_faces: visible, mm_per_px: scale } = metadata.views[cell.name];
+    assert.equal(visible.length, cell.name === 'iso' ? 3 : 1);
+    assert.ok(cell.glyphPixels >= 20 * visible.length, `${cell.name} contains its face labels`);
+    assert.ok(cell.width > 0 && cell.height > 0 && scale > 0);
+    if (cell.name in extents) {
+      const [horizontal, vertical] = extents[cell.name];
+      // The foreground bounds include the antialiased stroke, up to two pixels on each edge.
+      const strokeAllowance = 4 * scale;
+      assert.ok(Math.abs(cell.width * scale - horizontal) <= strokeAllowance, `${cell.name} projected width`);
+      assert.ok(Math.abs(cell.height * scale - vertical) <= strokeAllowance, `${cell.name} projected height`);
+    }
+    for (const name of visible) {
+      assert.ok(faceNames.includes(name), `${cell.name} names a face on the real B-rep`);
+      shownNames.add(name);
+    }
+  }
+  assert.deepEqual(Object.values(metadata.legend).sort(), [...shownNames].sort());
+  flow.report.observations.push({ label, revision: metadata.revision, pngSha256: sha256(image), cells });
+}
+
 await flow.run(async () => {
   flow.report.observations.push({ inputSha256: sha256(bytes) });
   await flow.freshOpen(resolve(input), source, '01-mcp-open');
-  await verify('02-opened', source);
+  const opened = await verify('02-opened', source);
+  flow.phase = 'Decode the two MCP reviews against the native part and independent view extents';
+  await verifyReview('review-A', 8, opened.faceNames);
+  await verifyReview('review-B', 12, opened.faceNames);
+  await flow.same(source);
   await flow.openFeatureEditor(index, 'Extrude');
   const distance = flow.editor().getByLabel('Distance', { exact: true });
   assert.equal(Number(await distance.inputValue()), 12);
