@@ -597,7 +597,8 @@ export const Viewport = forwardRef<ViewportHandle, Props>(function Viewport(sour
   useLayoutEffect(() => {
     const d = drag.current;
     if (d.mode === 'gizmo' && d.gizmo && (!gizmoPresent || !Object.is(gizmoSessionKey, d.sessionKey))) cancelGizmo('session-change');
-  }, [gizmoPresent, gizmoSessionKey]);
+    input.checkWorldAngleSource();
+  }, [gizmoPresent, gizmoSessionKey, props.handles]);
   useEffect(() => () => cancelGizmo('unmount'), []);
   const renderActive = !!props.render && !props.sketch;
   useEffect(() => { if (!renderActive) { const done = focusPick.current; focusPick.current = null; setPickingFocus(false); if (canvas.current) canvas.current.style.cursor = ''; done?.(null); } }, [renderActive]);

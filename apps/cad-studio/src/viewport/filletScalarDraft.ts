@@ -10,9 +10,9 @@ interface Options {
   restore(current: Active, next: Active | null): void;
 }
 
-/** Roll back this pointer's transient Fillet values, including any limit refinement from its preview. */
-export function captureFilletScalarDraft({ before, read, owns, readWall, retire, restore }: Options): ScalarHandleDraft {
-  let last: { values: object; wall: object } | undefined;
+/** Roll back this pointer's transient values, including any limit refinement from its preview. */
+export function captureScalarDraft({ before, read, owns, readWall, retire, restore }: Options): ScalarHandleDraft {
+  let last: { values: object; wall?: object } | undefined;
   return {
     remember(values, wall) { last = { values, wall }; },
     cancel() {
@@ -20,7 +20,7 @@ export function captureFilletScalarDraft({ before, read, owns, readWall, retire,
       last = undefined;
       const current = read();
       if (!captured || !current || !owns(current) ||
-        (current.values !== captured.values && readWall() !== captured.wall)) return;
+        (current.values !== captured.values && (!captured.wall || readWall() !== captured.wall))) return;
       retire();
       restore(current, before ? { ...before, preview: 'busy', error: undefined } : null);
     },

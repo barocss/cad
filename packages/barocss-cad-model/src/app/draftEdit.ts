@@ -8,6 +8,7 @@ import { toSig } from '../engine/references';
 import { refusal } from '../engine/refusal';
 import { signaturesOf } from '../engine/rematch';
 import { pivotAngle, pivotFaceCommand, pivotStockHinge } from './pivotFaceCommand';
+import { pivotFaceAngleHandle } from './pivotFaceHandle';
 
 export const DRAFT_EDIT = 'draft-history-edit';
 
@@ -51,6 +52,11 @@ export function editSavedPivotFaceCommand(doc: StudioDoc, index: number, stock: 
       ...pivotFaceCommand.fields!(ctx),
     ],
     defaults: () => ({ deg: node.angle, hingeEdge: original }),
+    handles: (ctx, values) => {
+      if (ctx.doc !== doc || !choices.some(choice => choice.edge === values.hingeEdge)) return [];
+      const handle = pivotFaceAngleHandle(stock, face, String(values.hingeEdge));
+      return handle ? [handle] : [];
+    },
     steps: () => [{ label: 'Face', text: face, done: true }],
     build: (ctx, values) => {
       if (ctx.doc !== doc) throw refusal('BAD_REFERENCE', 'Open the current Pivot face in History again.');

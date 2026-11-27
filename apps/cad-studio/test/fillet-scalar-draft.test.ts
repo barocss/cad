@@ -3,7 +3,7 @@ import test from 'node:test';
 import { commandById } from '@barocss/cad-model/app/commands';
 import { emptyDoc } from '@barocss/cad-model/engine/doc';
 import type { Active } from '../src/app/commandState';
-import { captureFilletScalarDraft } from '../src/viewport/filletScalarDraft';
+import { captureScalarDraft } from '../src/viewport/filletScalarDraft';
 
 function withRadius(radius: number): Active {
   return { cmd: commandById('fillet')!, preview: 'ok', values: { radius },
@@ -13,7 +13,7 @@ function withRadius(radius: number): Active {
 function capture(before: Active | null) {
   const source = before ?? withRadius(1);
   let current = before, wall: object | null = null, retired = 0;
-  const draft = captureFilletScalarDraft({ before, read: () => current, readWall: () => wall,
+  const draft = captureScalarDraft({ before, read: () => current, readWall: () => wall,
     owns: active => active.cmd === source.cmd && active.ctx === source.ctx,
     retire: () => { retired++; wall = null; },
     restore: (owner, next) => { assert.equal(owner, current); current = next; },
@@ -57,5 +57,19 @@ test('a stale capture cannot retire a replacement command or newer typed radius'
     update(next, null);
     draft.cancel();
     assert.deepEqual(state(), { current: next, wall: null, retired: 0 });
+  }
+});
+
+test('a handle without a preview wall restores only the exact values that it wrote', () => {
+  const before = withRadius(1);
+  for (const replaced of [true, false]) {
+    const { draft, state, update } = capture(before);
+    const dragged = { ...before, values: { radius: 2 } };
+    draft.remember(dragged.values);
+    const current = replaced ? { ...before, values: { radius: 3 } } : dragged;
+    update(current, null);
+    draft.cancel();
+    assert.equal(state().current?.values, replaced ? current.values : before.values);
+    assert.equal(state().retired, replaced ? 0 : 1);
   }
 });

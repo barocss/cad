@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { dragAlong, dragPlane, dragTurn, handleLayout, hitTest, layout, snapTo, type FeatureHandle, type Projector, type TransformGizmo } from '../src/viewport/gizmo';
 import type { Vec3 } from '@barocss/cad-model/engine/mesh';
-import { turnPlaneRadial, turnPlaneStep } from '../src/viewport/localTurnDrag';
+import { beginWorldAngleDrag, turnPlaneRadial, turnPlaneStep, worldAngleDragValue } from '../src/viewport/localTurnDrag';
 
 // A camera straight above, looking down −Z: screen x = world x, screen y = −world y (10 px per mm, origin at 500, 500).
 const top: Projector = { project: (p: Vec3) => [500 + p[0] * 10, 500 - p[1] * 10], forward: [0, 0, -1], size: 10 };
@@ -58,6 +58,27 @@ test('gizmo: an oblique turn measures the ray intersections and hides its edge-o
   assert.equal(turnPlaneRadial({ origin: eye, dir: [1, 0, 0] }, origin, direction), null);
   assert.equal(turnPlaneRadial({ origin: eye, dir: direction }, origin, direction), null);
   assert.equal(turnPlaneRadial({ origin: [0, 0, 1], dir: [0, 0, -1] }, [0, 0, 0], [0, 0, 1]), null);
+});
+
+test('world angle handle snaps signed angles and retains its original view and hinge', () => {
+  const axis: Vec3 = [0, -0.8, 0.6], centre: Vec3 = [10, 20, 30];
+  const radialAt = (degrees: number): Vec3 => {
+    const angle = degrees * Math.PI / 180;
+    return [Math.cos(angle), 0.6 * Math.sin(angle), 0.8 * Math.sin(angle)];
+  };
+  const handle: FeatureHandle = { id: 'deg', label: 'Angle', at: centre, dir: axis, value: 5, owner: {},
+    scalarDragSession: {}, arc: { centre, axis, from: [16, 20, 30], worldPlane: true },
+    toValue: (start, delta) => Math.round(start + delta), format: String, onDrag: () => undefined };
+  const drag = beginWorldAngleDrag(handle, 'view', radialAt(5));
+  assert.ok(drag);
+  assert.equal(worldAngleDragValue(drag, { ...handle, value: 15 }, 'view', radialAt(15)), 15);
+  assert.equal(worldAngleDragValue(drag, handle, 'view', radialAt(0)), 0);
+  assert.equal(worldAngleDragValue(drag, handle, 'view', radialAt(-5)), -5);
+  assert.equal(worldAngleDragValue(drag, handle, 'new-camera', radialAt(10)), null);
+  assert.equal(worldAngleDragValue(drag, { ...handle, scalarDragSession: {} }, 'view', radialAt(10)), null);
+  assert.equal(worldAngleDragValue(drag, { ...handle, arc: { ...handle.arc!, centre: [10, 21, 30] } }, 'view', radialAt(10)), null);
+  assert.equal(worldAngleDragValue(drag, handle, 'view', null), null);
+  assert.equal(worldAngleDragValue(drag, handle, 'view', radialAt(-6)), -6);
 });
 
 test('gizmo: plane squares sit between their two arrows, arcs face the camera', () => {

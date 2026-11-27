@@ -1,7 +1,7 @@
 import { ownedHistoryFilletHandle, historyFilletCanPatch, type HistoryFilletReceipt } from '../state/historyFilletRadiusReceipt';
 import { commandFieldLabel } from '../app/commandFieldLabel';
 import { draggedScaleFactor } from './draggedScaleFactor';
-import { captureFilletScalarDraft } from './filletScalarDraft';
+import { captureScalarDraft as captureCommandScalarDraft } from './filletScalarDraft';
 import { useMemo, useRef, type Dispatch, type SetStateAction, type RefObject } from 'react';
 import { fmt, type StudioDoc } from '@barocss/cad-model/engine/doc';
 import type { BodyResult } from '@barocss/cad-model/engine/evaluate';
@@ -96,19 +96,21 @@ export function useCommandGizmos({ model, command, context, drag, splitSource, h
     const history = readActive ? ownedHistoryFilletHandle(historyFillet?.receipt, handleCmd, handleCtx, h, active) : undefined;
     if (active?.historyFilletRadius && !history) return [];
     const newFilletRadius = active && handleCmd.id === 'fillet' && h.key === 'radius' && !h.arc && !pair;
+    const worldAngle = !!h.arc?.worldPlane && !!active && !!readActive;
     const waitForHistoryProof = !active && historyFillet?.eligible && !history && handleCmd.id==='edit' && h.key==='r' && !h.arc && !h.pair;
     const canPatch = (now: Active | null) => {
       if (history) return historyFilletCanPatch(history, handleCmd, handleCtx, now, active);
       if (savedOffset) return now?.cmd === handleCmd && now.ctx === handleCtx && now.historyOffsetDistance === true &&
         now.ownsSource === active?.ownsSource && now.ownsSource?.() === true && now.values.offsetMode !== 'to-plane';
+      if (worldAngle) return now?.cmd === handleCmd && now.ctx === handleCtx && now.ownsSource?.() !== false;
       return true;
     };
-    const canWrite = () => canUseHandle() && (!(history || savedOffset) || (!!readActive && canPatch(readActive())));
+    const canWrite = () => canUseHandle() && (!(history || savedOffset || worldAngle) || (!!readActive && canPatch(readActive())));
     if (pair && !Number.isFinite(value2)) return [];
     const frame = history?.frame ?? h;
-    const captureScalarDraft = (history || newFilletRadius) && readActive ? () => {
+    const captureScalarDraft = (history || newFilletRadius || worldAngle) && readActive ? () => {
       if (!canWrite()) return;
-      return captureFilletScalarDraft({
+      return captureCommandScalarDraft({
         before: readActive(), read: readActive, readWall: () => handleDrag.current, retire: retireScalarDraft,
         owns: current => canPatch(current) && current.cmd === handleCmd && current.ctx === handleCtx,
         restore: (current, next) => setActive(running => running === current ? next : running),
@@ -117,7 +119,7 @@ export function useCommandGizmos({ model, command, context, drag, splitSource, h
     return [{ id: pair ? `${h.key}+${pair.key}` : h.key, at: frame.at, dir: frame.dir, label: pair ? label.replace(/ \w$/, '') : label, value, screenOffset: h.screenOffset, ...(h.arc ? { arc: h.arc } : {}),
       ...(pair ? { plane: { dir2: pair.dir, value2, toValue2: snap } } : {}),
       ...(history ? { scalarDragSession: history } :
-        active && (savedOffset || newFilletRadius) ? { scalarDragSession: active.ctx } : {}),
+        active && (savedOffset || newFilletRadius || worldAngle) ? { scalarDragSession: active.ctx } : {}),
       ...(captureScalarDraft ? { captureScalarDraft } : {}),
       ...(waitForHistoryProof ? { historyFilletProofPending: historyFillet?.pending ?? true as const } : {}),
       toValue: snap,
@@ -130,6 +132,16 @@ export function useCommandGizmos({ model, command, context, drag, splitSource, h
       },
       onDrag: (v: number, done: boolean, v2?: number, draft?: ScalarHandleDraft) => {
         if (!canWrite()) return;
+        if (worldAngle) {
+          handleDrag.current = null;
+          setActive(a => {
+            if (!a || !canPatch(a) || a.values[h.key] === v) return a;
+            const values = patchValues(a.cmd, a.ctx, a.values, { [h.key]: v });
+            if (!done) draft?.remember(values);
+            return { ...a, values, preview: 'busy' };
+          });
+          return;
+        }
         if (pair) {
           // (Both coordinates at once; a refused spot shows as the preview's error, no wall.)
           handleDrag.current = null;

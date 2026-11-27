@@ -127,7 +127,9 @@ export interface HandleSpec {
   /** Offset a straight arrow across its projected axis so nearby arrows remain distinct. */
   screenOffset?: number;
   /** An angle handle: an arc about `axis` through `centre` from `from` (then `at` and `dir` are unused). */
-  arc?: { centre: [number, number, number]; axis: [number, number, number]; from: [number, number, number] };
+  arc?: { centre: [number, number, number]; axis: [number, number, number]; from: [number, number, number];
+    /** Measure this opt-in angle in its actual world plane, rather than its screen image. */
+    worldPlane?: true };
   /** What its readout counts in (default mm; an arc's degrees). */
   unit?: string;
   /** A puck that drags `key` along `dir` and `pair.key` along `pair.dir` at once (a centre on a face). */
@@ -329,7 +331,7 @@ function oriented(cmd: Command): Command {
       return hs.map(h => h.pair
         // The puck slides the base across the face (the values of the two axes in it).
         ? { ...h, at: pivot, key: 'xyz'[a], dir: unitOf(a), pair: { key: 'xyz'[b], dir: unitOf(b) } }
-        : { ...h, at: turn(h.at), dir: turnDir(h.dir), ...(h.arc ? { arc: { centre: turn(h.arc.centre), axis: turnDir(h.arc.axis), from: turn(h.arc.from) } } : {}) });
+        : { ...h, at: turn(h.at), dir: turnDir(h.dir), ...(h.arc ? { arc: { ...h.arc, centre: turn(h.arc.centre), axis: turnDir(h.arc.axis), from: turn(h.arc.from) } } : {}) });
     }),
   };
 }

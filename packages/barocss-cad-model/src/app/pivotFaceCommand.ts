@@ -5,6 +5,8 @@ import { captureSignatures } from '../engine/references';
 import { refusal } from '../engine/refusal';
 import type { Command, Ctx } from './commands';
 import type { DraftPull } from './draftInputs';
+import { bodyKeyFor } from '../engine/ids';
+import { pivotFaceAngleHandle } from './pivotFaceHandle';
 
 export const PIVOT_FACE = 'pivot-face';
 
@@ -35,7 +37,7 @@ function pivotSelection(ctx: Ctx) {
   const mode = pivotStockMode(ctx.doc.nodes, parent.node);
   if (!mode) return;
   const hinge = pivotStockHinge(body, faces[0].face, edges[0].edge, mode === 'rotated');
-  return hinge && { parent, ...hinge };
+  return hinge && { parent, body, ...hinge };
 }
 
 export function pivotAngle(value: unknown): number {
@@ -51,6 +53,12 @@ export const pivotFaceCommand: Command = {
   available: ctx => pivotSelection(ctx) ? { ok: true } : { ok: false, reason: selectionReason },
   fields: () => [angleField],
   defaults: () => ({ deg: 5 }),
+  handles: ctx => {
+    const pick = pivotSelection(ctx);
+    if (!pick || pick.body.key !== bodyKeyFor(ctx.doc.nodes, pick.parent.node, pick.parent.side)) return [];
+    const handle = pivotFaceAngleHandle(pick.body, pick.face, pick.edge);
+    return handle ? [handle] : [];
+  },
   steps: ctx => {
     const pick = pivotSelection(ctx);
     return pick ? [{ label: 'Face', text: pick.face, done: true }, { label: 'Fixed edge', text: pick.edge, done: true }] : [];

@@ -41,7 +41,7 @@ export interface TransformGizmo {
   onScale?(factor: number, done: boolean, pointerId?: number): void;
 }
 export interface ScalarHandleDraft {
-  remember(values: object, wall: object): void;
+  remember(values: object, wall?: object): void;
   cancel(): void;
 }
 
@@ -59,7 +59,7 @@ export interface FeatureHandle {
    * An angle instead (degrees): an arc about `axis` through `centre`, from `from` (a point on it) as far
    * as the value; dragging it round sweeps the angle, `toValue` getting the degrees swept.
    */
-  arc?: { centre: Vec3; axis: Vec3; from: Vec3 };
+  arc?: { centre: Vec3; axis: Vec3; from: Vec3; worldPlane?: true };
   /**
    * Two values at once (a hole's centre on its face): a puck at `at` dragged in the plane of `dir` and
    * `dir2`; mm along `dir` go to `toValue`, along `dir2` to `toValue2` from `value2`.

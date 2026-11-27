@@ -1,5 +1,5 @@
 import { captureScalarHandleDrag, historyFilletPendingPress, scalarHandleDragValue, type ScalarHandleDrag } from './scalarHandleDrag';
-import { turnPlaneRadial, turnPlaneStep } from './localTurnDrag';
+import { beginWorldAngleDrag, ownsWorldAngleDrag, turnPlaneRadial, turnPlaneStep, worldAngleDragValue, type WorldAngleDrag } from './localTurnDrag';
 import { wheelZoomFactor } from './wheelZoomPreference';
 import { useCallback, useLayoutEffect, useRef, useState, type DragEvent, type MouseEvent, type PointerEvent, type RefObject, type WheelEvent } from 'react';
 import { CadPartLimits, ExtrudedProfileLimits } from '@barocss/cad';
@@ -189,6 +189,7 @@ interface PointerDrag {
   handleToValue?: FeatureHandle['toValue'];
   scalarHandleDrag?: ScalarHandleDrag | null;
   scalarDraft?: ReturnType<NonNullable<FeatureHandle['captureScalarDraft']>>;
+  worldAngleDrag?: WorldAngleDrag;
   turnPlane?: { frame: string; radial: Vec3 };
   factor?: number;
   gizmo?: TransformGizmo;
@@ -498,6 +499,11 @@ export function useViewportPointerInput({ canvas, camera, propsRef, rendering, f
     d.scalarDraft?.cancel();
     if (d.pointerId !== undefined) d.gizmo?.onCancel?.(d.pointerId, reason);
   };
+  const checkWorldAngleSource = () => {
+    const d = drag.current;
+    if (d.worldAngleDrag && d.hit?.kind === 'handle'
+      && !ownsWorldAngleDrag(d.worldAngleDrag, propsRef.current.handles?.[d.hit.index])) cancelGizmo('session-change');
+  };
   const splineCancelRef = useRef<() => void>(() => undefined);
   const pointCancelRef = useRef<() => void>(() => undefined);
   const listenForSketchKeys = () => {
@@ -514,7 +520,7 @@ export function useViewportPointerInput({ canvas, camera, propsRef, rendering, f
       }
       if (e.key === 'Escape') {
         if (!e.repeat) {
-          gizmoEscaped = drag.current.mode === 'gizmo' && drag.current.gizmo?.cancelOnEscape === true;
+          gizmoEscaped = drag.current.mode === 'gizmo' && (drag.current.gizmo?.cancelOnEscape === true || !!drag.current.worldAngleDrag);
           if (gizmoEscaped) cancelGizmo('escape');
         }
         if (gizmoEscaped) { e.stopImmediatePropagation(); e.preventDefault(); return; }
@@ -529,7 +535,10 @@ export function useViewportPointerInput({ canvas, camera, propsRef, rendering, f
     };
     // An Ellipse draft's Escape drops the draft only (not the whole sketch, which is the app's Escape).
     const esc = (e: KeyboardEvent) => { if (e.key !== 'Escape' || !ellipseDraft.current) return; e.stopImmediatePropagation(); e.preventDefault(); ellipseDraft.current = null; requestRef.current(); };
-    const blur = () => { cancelDragTrim(); pointCancelRef.current(); };
+    const blur = () => {
+      cancelDragTrim(); pointCancelRef.current();
+      if (drag.current.worldAngleDrag) cancelGizmo('session-change');
+    };
     const visibility = () => { if (document.hidden) blur(); };
     window.addEventListener('keydown', key, true); window.addEventListener('keydown', esc, true);
     window.addEventListener('blur', blur); document.addEventListener('visibilitychange', visibility);
@@ -764,6 +773,21 @@ export function useViewportPointerInput({ canvas, camera, propsRef, rendering, f
     d.x = x; d.y = y;
     if (hit.kind === 'handle') {
       const hd = p.handles?.[hit.index];
+      const angle = d.worldAngleDrag;
+      if (angle) {
+        const frame = pointerFrame();
+        const radial = frame === angle.frame ? localTurnRadial(x, y, angle.arc.centre, angle.arc.axis) : null;
+        const value = worldAngleDragValue(angle, hd, frame, radial);
+        if (value === null || !hd) {
+          if (done) d.scalarDraft?.cancel();
+          else cancelGizmo('invalid-projection', d.pointerId);
+          return;
+        }
+        d.value = value;
+        hd.onDrag(value, done, undefined, d.scalarDraft);
+        if (done) valueBox.current = { id: hd.id, owner: hd.owner };
+        return;
+      }
       if (d.scalarHandleDrag !== undefined) {
         const value = scalarHandleDragValue(d.scalarHandleDrag, hd, d.from!, [x, y]);
         if (value === null || !hd) {
@@ -962,6 +986,15 @@ export function useViewportPointerInput({ canvas, camera, propsRef, rendering, f
         }
         turnPlane = { frame: pointerFrame(), radial };
       }
+      if (hd?.arc?.worldPlane) {
+        const radial = localTurnRadial(x, y, hd.arc.centre, hd.arc.axis);
+        const worldAngleDrag = radial && beginWorldAngleDrag(hd, pointerFrame(), radial);
+        const scalarDraft = worldAngleDrag && hd.captureScalarDraft?.();
+        drag.current = worldAngleDrag && scalarDraft
+          ? { mode: 'gizmo', x, y, moved: false, hit, start: hd.value, worldAngleDrag, scalarDraft, pointerId: e.pointerId }
+          : { mode: null, x, y, moved: true };
+        return;
+      }
       // The existing Shift release remains a pick; movement past its threshold gets a canceled scalar frame.
       const scalarHandleDrag = historyPress === 'shift-pick-only' ? null : hd?.scalarDragSession ? captureScalarHandleDrag(hd, projector()) : undefined;
       drag.current = { mode: 'gizmo', x, y, moved: false, hit, shiftPickHandle, from: [x, y], last: [x, y], turned: 0, turnPlane, start: hd?.value, start2: hd?.plane?.value2,
@@ -1015,6 +1048,7 @@ export function useViewportPointerInput({ canvas, camera, propsRef, rendering, f
     if (d.mode === 'orbit') { camera.current.orbit(x - d.x, y - d.y); d.x = x; d.y = y; d.moved = true; moving.current(); request(); return; }
     if (d.mode === 'pan') { camera.current.pan(x - d.x, y - d.y, h); d.x = x; d.y = y; d.moved = true; moving.current(); request(); return; }
     if (d.mode === 'gizmo') {
+      if (d.worldAngleDrag && !(e.buttons & 1)) { cancelGizmo('lostpointercapture', e.pointerId); return; }
       if (d.shiftPickHandle && !d.moved && Math.hypot(x - d.x, y - d.y) <= 5) return;
       if (d.shiftPickHandle && !d.moved) {
         const current = d.hit?.kind === 'handle' ? propsRef.current.handles?.[d.hit.index] : null;
@@ -1418,7 +1452,7 @@ export function useViewportPointerInput({ canvas, camera, propsRef, rendering, f
     propsRef.current.onHoverScalar?.(null);
     cancelDragTrim();
     pointCancelRef.current();
-    if (drag.current.hit?.kind === 'turn-along') cancelGizmo('invalid-projection');
+    if (drag.current.hit?.kind === 'turn-along' || drag.current.worldAngleDrag) cancelGizmo('invalid-projection');
     if (drag.current.circleChord) drag.current.moved = true;
     const { x, y, w, h } = local(e);
     camera.current.zoom(wheelZoomFactor(e, propsRef.current.reverseWheelZoom), (x / w) * 2 - 1, 1 - (y / h) * 2); moving.current(); request();
@@ -1464,7 +1498,7 @@ export function useViewportPointerInput({ canvas, camera, propsRef, rendering, f
     canvasHandlers: { onPointerDown, onPointerMove, onPointerLeave, onPointerUp, onPointerCancel, onLostPointerCapture, onDoubleClick, onWheel, onContextMenu },
     placementHandlers: { onDragOver, onDrop },
     overlay: { drag, gizmoHot, valueBox, sketchDraft, twoPointHover, bezierDraft, ellipseDraft, carc, liveShape, toolView, projector },
-    cancelGizmo, listenForSketchKeys, resetSketchTool, startSketchPrimitiveAt,
+    cancelGizmo, checkWorldAngleSource, listenForSketchKeys, resetSketchTool, startSketchPrimitiveAt,
     sketchPointFromClient: (event: { clientX: number; clientY: number }, plane: SketchPlane) => {
       const { x, y, w, h } = local(event);
       return sketchPoint(x, y, w, h, plane);
