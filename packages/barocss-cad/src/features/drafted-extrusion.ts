@@ -3,7 +3,8 @@
 // grows). A straight wall becomes a sloping plane, an arc a cone patch about the arc's centre. Tangent
 // joints stay tangent; two straight walls meet in a sloping edge through their offset lines' meeting
 // point. One circular arc and its chord have exact parabolic joints in either draft direction when
-// their original circle and stable chord frame can be proved. Other non-tangent curved joints and
+// their original circle and stable chord frame can be proved. An original cardinal quarter disk has
+// exact joins at its two radial walls. Other non-tangent curved joints and
 // drafts steep enough to collapse a wall are refused.
 import { BrepError, buildBrep, loopVectorArea, surfaceNormalAtCentre, type Brep } from '../brep/brep-core.js';
 import { sideName } from '../document/side-names.js';
@@ -11,6 +12,7 @@ import { buildProfileLoop, segmentCurve, type ProfileSegment, type ProfileSegmen
 import { dot } from '../core/vec3.js';
 import type { Curve, Point, Surface } from '../types.js';
 import { draftHalfDisk, draftCardinalCircularSegment, draftObliqueCircularSegment } from './drafted-half-disk.js';
+import { draftQuarterDisk } from './drafted-quarter-disk.js';
 
 export interface DraftedExtrusionInput {
   readonly profile: readonly ProfileSegmentInput[];
@@ -71,6 +73,11 @@ export function draftedExtrusion(input: DraftedExtrusionInput): Brep {
     if (segment) return segment;
     const oblique = draftObliqueCircularSegment(built, names, z0, z1, Math.tan(theta), id, tag, fail);
     if (oblique) return oblique;
+  }
+  if (theta !== 0 && built.length === 3) {
+    const names = built.map((_, i) => input.sideTags ? sideName(tag, loop0.reversed ? 2 - i : i, input.sideTags) : `${tag}.side${i}`);
+    const quarter = draftQuarterDisk(built, names, z0, z1, Math.tan(theta), id, tag, fail);
+    if (quarter) return quarter;
   }
   // A single circle becomes two halves, so every edge has two vertices.
   const bottom: ProfileSegment[] = built.length > 1 ? [...built] : (() => {
