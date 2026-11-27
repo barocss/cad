@@ -1,4 +1,5 @@
 import { useCallback, useRef, type RefObject } from 'react';
+import { ATTACHED_RIB, ribAttachment } from '@barocss/cad-model/app/attachedRibCommand';
 import { bodyName } from '@barocss/cad-model/app/bodies';
 import type { Values } from '@barocss/cad-model/app/commands';
 import { extrudeProfile, isIndependentExtrudeJoinProfile } from '@barocss/cad-model/app/profileCommands';
@@ -11,7 +12,6 @@ import { commandLaunchContext } from './commandLaunchContext';
 import type { Active } from './commandState';
 import { newFilletActive, type FilletType } from './filletFamily';
 import { LINKED_INSET_EXTRUDE } from './roundedInsetCommand';
-import { ATTACHED_RIB, ribAttachment } from './attachedRibCommand';
 
 export function useStudioCommandEntry(openIntent: RefObject<OpenScope>, readActive: () => Active | null,
   restoreEditorFocusAfterClose: (button: HTMLElement | null) => void) {

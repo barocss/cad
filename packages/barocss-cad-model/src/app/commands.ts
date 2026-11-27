@@ -38,6 +38,7 @@ import type { BodyResult } from '../engine/evaluate';
 import { circularFilletPair, closedCircularFilletPair } from './circularFilletPair';
 import { closedFilletDragLimit } from '../engine/nativeFilletTorus';
 import { boxShellSelection, buildBoxWallShell } from './boxShellSelection';
+import { ATTACHED_RIB } from './attachedRibCommand';
 import type { BearingAssemblyInput } from '../engine/bearingContext';
 import type { DisplayEdge } from '../engine/mesh';
 import { centreOf, oneBody, refOf, selectedBodies } from './bodyRef';
@@ -1115,6 +1116,7 @@ const allCommands: Command[] = [
   { id: 'subd-edit', label: 'Edit cage', icon: 'cad-subd', hint: 'Edit a SubD body\u2019s cage: pick vertices, edges or faces; move, extrude, insert loops, bridge, fill, weld, crease, mirror', group: 'modify', keywords: 'subd subdivision cage edit vertex edge face loop extrude crease mirror',
     available: ctx => subdNodeOf(ctx) !== null ? ok : no('Pick a SubD body (its cage is edited).'), action: 'cage' },
   { id: 'measure', label: 'Measure', icon: 'cad-measure', hint: 'Distances, angles and sizes between picked faces and edges', shortcut: 'Shift M', group: 'inspect', keywords: 'distance dimension', available: () => ok, action: 'measure' },
+  ATTACHED_RIB,
 ];
 /** The subd node the picked body comes from (its own output), or the part's only one; null when neither. */
 export function subdNodeOf(ctx: Ctx): number | null {

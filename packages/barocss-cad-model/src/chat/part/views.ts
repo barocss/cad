@@ -77,7 +77,8 @@ const renderViewsTool: PartHandler = async (state, args, evaluate, _options, dis
             : 'pairedTiltedInletReplacement' in review.geometry ? 'Paired duct tilted inlet replacement'
             : 'pairedTiltedOppositeCapReplacement' in review.geometry ? 'Paired duct second tilted cap replacement'
             : 'chamferResize' in review.geometry ? 'Saved Chamfer resize'
-            : 'cornerBatch' in review.geometry ? 'Sketch corner proposal' : 'Bored wall proposal';
+            : 'cornerBatch' in review.geometry ? 'Sketch corner proposal'
+            : 'attachedRib' in review.geometry ? 'Attached Rib proposal' : 'Bored wall proposal';
     return { state, content: json({ revision: review.revision, ...views, candidate: review.candidate, ...review.geometry }),
       isError: false, changed: false, summary: `${label} ${review.candidate.proposal}`, images: [{ data: image, mediaType: 'image/png' }] };
   }

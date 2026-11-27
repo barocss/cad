@@ -55,6 +55,10 @@ export const CHAT_COMMANDS = commands.filter(c => c.build && c.id !== 'loft' && 
 
 /** What each command needs selected and what its values mean. */
 export const COMMAND_DOCS: Record<string, { selection: string; values: Record<string, string> }> = {
+  rib: {
+    selection: 'Pass one exact original top or bottom native face name in faces and expectedRevision from query.rebuild for the same base part. Use proposals.propose to stage the attached Rib for Studio review.',
+    values: { length: 'positive X length in mm', width: 'positive Y width in mm', height: 'positive outward protrusion in mm', x: 'world X centre in mm', y: 'world Y centre in mm' },
+  },
   'ruled-turn': {
     selection: 'Use features.command with values.sketch and expectedRevision from query.rebuild. Requires one standalone rectangle.',
     values: { sketch: 'stable sketch ID from query.summary', height: 'positive height in mm', angle: 'signed degrees from −450 to +450' },
@@ -249,6 +253,16 @@ async function runCommandTool(state: ChatState, args: Record<string, unknown>, e
   if (refusal) return refusal;
   const cmd = commandById(String(args.command));
   if (!cmd?.build) return fail(state, `Unknown command "${String(args.command)}". Commands: ${CHAT_COMMANDS.join(', ')}.`);
+  const rib = cmd.id === 'rib';
+  if (rib) {
+    const face = Array.isArray(args.faces) && args.faces.length === 1 ? args.faces[0] : undefined;
+    if (state.partOf || args.expectedRevision === undefined || typeof face !== 'string'
+      || list(args.edges).length || list(args.bodies).length || args.point !== undefined
+      || state.bodies.flatMap(body => body.mesh.faces.filter(candidate => candidate.nativePlaneName === face)).length !== 1)
+      return fail(state, 'Rib needs the current expectedRevision and one exact original native face name in the base part.', { code: 'COMMAND_INPUT' });
+    if (args.values !== undefined && (!isObj(args.values) || Object.values(args.values).some(value => !Number.isFinite(value))))
+      return fail(state, 'Rib values must be finite numbers in mm.', { code: 'COMMAND_INPUT' });
+  }
   if (cmd.id === 'extrude' && isObj(args.values) && args.values.depth === 'to-face')
     return extrudeToReviewedFace(state, args, args.values, evaluate, options);
   const sketchTurn = cmd.id === 'ruled-turn' || cmd.id === 'smooth-turn' || cmd.id === 'smooth-screw';

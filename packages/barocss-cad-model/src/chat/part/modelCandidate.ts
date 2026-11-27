@@ -3,6 +3,7 @@ import { partBreps } from '../../engine/evaluate';
 import { bodyKeyFor, featureId } from '../../engine/ids';
 import { digestOf, requirementEvidenceRevision } from '../../util/digest';
 import { revisionOf } from '../../util/revision';
+import { attachedRibProposal, reviewedAttachedRibEvidence } from '../attachedRibProposalReview';
 import { cornerBatchProposal, reviewedChamferResizeEvidence, reviewedCornerBatchEvidence, savedChamferResizeProposal } from '../cornerProposalReview';
 import { lockedPlateProposal, reviewedLockedPlateEvidence } from '../lockedPlateProposalReview';
 import { boredWallProposal, reviewedBoreEvidence, type ModelCandidatePin } from '../modelProposalReview';
@@ -49,6 +50,7 @@ export async function reviewModelCandidate(state: ChatState, args: Record<string
     return refuse('MODEL_REVIEW_BASE_STALE', 'The base part changed. Read query.rebuild and proposals.list before reviewing again.');
   const matches = (state.doc.proposals ?? []).filter(entry => entry.id === proposal);
   const pending = matches.length === 1 ? matches[0] : undefined;
+  const rib = pending && attachedRibProposal(state.doc, pending);
   const lockedPlate = pending && lockedPlateProposal(state.doc, pending);
   const boreEdit = pending && boredWallProposal(state.doc, pending);
   const cornerEdit = pending && !boreEdit ? cornerBatchProposal(state.doc, pending) : undefined;
@@ -64,7 +66,7 @@ export async function reviewModelCandidate(state: ChatState, args: Record<string
   const tiltedOutlet = pending && pairedTiltedOutletProposal(state.doc, pending);
   const tiltedInlet = pending && !tiltedOutlet ? pairedTiltedInletProposal(state.doc, pending) : undefined;
   const tiltedOpposite = pending && !tiltedOutlet && !tiltedInlet ? pairedTiltedOppositeCapProposal(state.doc, pending) : undefined;
-  const proposalRevision = lockedPlate?.revision ?? boreEdit?.revision ?? cornerEdit?.revision ?? resizeEdit?.revision ?? duct?.revision ?? ductCut?.revision ??
+  const proposalRevision = rib?.revision ?? lockedPlate?.revision ?? boreEdit?.revision ?? cornerEdit?.revision ?? resizeEdit?.revision ?? duct?.revision ?? ductCut?.revision ??
     outlet?.revision ?? inlet?.revision ?? outletPlane?.revision ?? inletPlane?.revision ?? tiltedOutlet?.revision ?? tiltedInlet?.revision ?? tiltedOpposite?.revision ?? annularOutlet?.revision;
   if (!pending || !proposalRevision)
     return refuse('MODEL_REVIEW_UNAVAILABLE', 'Choose a unique open proposal with a modelReviewRevision from proposals.list.');
@@ -73,7 +75,8 @@ export async function reviewModelCandidate(state: ChatState, args: Record<string
 
   const preview = await previewProposalWith(dispatch, state, proposal, evaluate);
   if ('error' in preview) return refuse('MODEL_REVIEW_REPLAY_FAILED', preview.error);
-  const evidence = lockedPlate ? reviewedLockedPlateEvidence(preview.doc, preview.bodies, lockedPlate.reference)
+  const evidence = rib ? reviewedAttachedRibEvidence(state.doc, preview.doc, rib)
+    : lockedPlate ? reviewedLockedPlateEvidence(preview.doc, preview.bodies, lockedPlate.reference)
     : boreEdit ? boredWallEvidence(preview.doc, boreEdit)
     : cornerEdit ? reviewedCornerBatchEvidence(state.doc, preview.doc, cornerEdit)
       : resizeEdit ? reviewedChamferResizeEvidence(state.doc, preview.doc, resizeEdit)

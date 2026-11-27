@@ -1,9 +1,9 @@
 import { CadNumericPolicy } from '@barocss/cad';
-import { boxShellSelection } from '@barocss/cad-model/app/boxShellSelection';
-import type { Command, Ctx } from '@barocss/cad-model/app/commands';
-import { withNode } from '@barocss/cad-model/engine/doc';
-import type { Vec3 } from '@barocss/cad-model/engine/mesh';
-import { refusal } from '@barocss/cad-model/engine/refusal';
+import { withNode } from '../engine/doc';
+import type { Vec3 } from '../engine/mesh';
+import { refusal } from '../engine/refusal';
+import { boxShellSelection } from './boxShellSelection';
+import type { Command, Ctx } from './commands';
 
 const selectionReason = 'Select one original top or bottom face of a rectangular stock extrusion.';
 const engagement = 1;

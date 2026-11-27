@@ -3,7 +3,7 @@ import { createFlow } from './flow-helper.mjs';
 import { clickModelCommand, openModelGroup } from './model-rail-helper.mjs';
 
 const pins = [
-  'apps/cad-studio/src/app/attachedRibCommand.ts', 'apps/cad-studio/src/app/studioConstants.ts',
+  'packages/barocss-cad-model/src/app/attachedRibCommand.ts', 'apps/cad-studio/src/app/studioConstants.ts',
   'apps/cad-studio/src/app/useStudioCommandEntry.ts', 'apps/cad-studio/src/viewport/camera.ts', 'apps/cad-studio/test/attached-rib-browser.mjs',
   'packages/barocss-cad-model/src/engine/attachedRib.ts', 'packages/barocss-cad-model/src/engine/doc.ts',
   'packages/barocss-cad-model/src/engine/part.ts',
