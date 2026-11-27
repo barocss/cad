@@ -79,6 +79,49 @@ test('Pivot face follows the exact original joint through a Rotate edit and refu
   assert.ok(held.problems.some(problem => problem.name === rear && problem.candidates.length === 0));
 });
 
+test('hexagonal Pivot face accepts both cap edges of the original wall and keeps its signed world pull', () => {
+  const box = rectanglePart(20, 16, 10);
+  const stock: StudioDoc = { ...box, nodes: [
+    { kind: 'sketch', id: 'n0', profile: 'polygon', points: [[0, 0], [18, 0], [24, 8], [18, 16], [0, 16], [-6, 8]] },
+    box.nodes[1],
+  ] };
+  const moved = withNode(stock, { kind: 'translate', parent: { node: 1, side: 'solid' }, offset: [5, 2, 3] });
+  const face = 'n1.side1', lower = 'n1.bottom|n1.side1', upper = 'n1.side1|n1.top';
+  const ctxFor = (doc: StudioDoc, pickedFace: string, name: string): Ctx => {
+    const bodies = bodiesOf(doc), [body] = bodies;
+    return { doc, bodies, selection: { bodies: [],
+      faces: [{ body: 0, face: body.mesh.faces.findIndex(member => member.nativePlaneName === pickedFace) }],
+      edges: [{ body: 0, edge: body.mesh.edges.findIndex(edge => edge.names.includes(name)) }],
+    } };
+  };
+  const deg = Math.atan(1 / 5) * 180 / Math.PI;
+  const ctx = ctxFor(moved, face, lower);
+  assert.ok(pivotFaceCommand.available(ctx).ok);
+  const command = pivotFaceCommand.build!;
+  const accepted = command(ctx, { deg }), index = 3, pivot = accepted.nodes[index];
+  assert.ok(pivot.kind === 'draft');
+  assert.deepEqual([pivot.faces, pivot.hingeEdge, pivot.pull], [[face], lower, 'z']);
+  const expected = 67195 / 18;
+  assert.ok(Math.abs(volume(accepted) - expected) < 1e-7);
+  const edit = editSavedPivotFaceCommand(accepted, index, ctx.bodies[0]);
+  assert.ok(edit?.fields && edit.defaults && edit.build);
+  const editCtx = { ...ctx, doc: accepted };
+  const choices = edit.fields(editCtx).find(field => field.key === 'hingeEdge');
+  assert.ok(choices?.kind === 'choice');
+  assert.deepEqual(choices.options.map(option => option.value).sort(), [lower, upper].sort());
+  const changed: StudioDoc = edit.build(editCtx, { ...edit.defaults(editCtx), hingeEdge: upper });
+  const next = changed.nodes[index];
+  assert.ok(next.kind === 'draft');
+  assert.deepEqual([next.hingeEdge, next.pull], [upper, '-z']);
+  assert.ok(Math.abs(volume(changed) - expected) < 1e-7);
+
+  const rotated = withNode(stock, { kind: 'rotate', parent: { node: 1, side: 'solid' }, axis: 'x', angle: 19 });
+  for (const wrong of [ctxFor(moved, face, 'n1.side0|n1.side1'), ctxFor(moved, 'n1.bottom', lower), ctxFor(rotated, face, lower)]) {
+    assert.equal(pivotFaceCommand.available(wrong).ok, false);
+    assert.throws(() => command(wrong, { deg }), /original cap edge/);
+  }
+});
+
 test('Studio draft: +Z is the default for a side face and builds the old node, without a pull', () => {
   const doc = rectanglePart(40, 30, 10), ctx = ctxOn(doc, [[0, -1, 0]]);
   assert.equal(draft.available(ctx).ok, true);

@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D2090: [Pivot an original hexagonal extrusion wall](notes/hex-pivot-face-2026-11-28/README.md), #629 and #14. Preserve the exact fixed native cap edge and seven other supports, with Studio refusal, History and reopen.
 - D2089: [Drag a Pivot face angle around its fixed edge](notes/pivot-angle-handle-2026-11-28/README.md), #629. Measure the pointer in the native hinge plane and verify cancellation, signed History edits and fresh Open.
 - D2088: [Pivot a face after the original stock rotates](notes/rotated-pivot-face-2026-11-28/README.md), #629. Follow the exact native hinge through an upstream Rotate edit and fresh Open, and stage a local Agent proposal.
 - D2087: [Propose a saved Pivot face hinge replacement](notes/agent-pivot-fixed-edge-2026-11-28/README.md), #629. Discover the exact source edge on a pinned revision and verify explicit Studio approval and native Open.

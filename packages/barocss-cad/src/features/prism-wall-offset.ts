@@ -435,24 +435,57 @@ export function replacePrismCapIfAdmitted(brep: Brep, faceName: string, plane: R
 export function replacePrismWallIfAdmitted(brep: Brep, faceName: string, plane: ReplacementPlane): Brep | undefined {
   const prism = admittedWallPrism(brep, faceName);
   if (!prism) return undefined;
+  return replacePrismWall(brep, prism, plane);
+}
+
+type PivotFailure = (code: 'INPUT' | 'CAPABILITY' | 'REFERENCE' | 'SELECTION' | 'GEOMETRY', detail: string) => never;
+
+/** Turn one original hexagonal wall about its exact shared edge with the signed world-Z start cap. */
+export function pivotPrismWall(brep: Brep, faceName: string, edgeName: string, angle: number, pull: 'z' | '-z', refuse: PivotFailure): Brep {
+  if (!Number.isFinite(angle) || angle === 0 || Math.abs(angle) >= Math.PI / 4)
+    return refuse('INPUT', 'Pivot face needs a nonzero angle below 45 degrees in size.');
+  const faces = brep.faces.filter(face => face.name === faceName), edges = brep.edges.filter(edge => edge.name === edgeName);
+  if (faces.length !== 1 || edges.length !== 1)
+    return refuse('REFERENCE', 'The original Pivot face or edge is missing or ambiguous.');
+  const prism = brep.faces.length === HEXAGON_SIDE_COUNT + 2 && admittedWallPrism(brep, faceName);
+  if (!prism) return refuse('CAPABILITY', 'Pivot face needs an original upright wall of one straight convex hexagonal extrusion.');
+  const wall = prism.walls[prism.selected], [edge] = edges;
+  const uses = brep.coedges.filter(use => use.edge === edge.id);
+  const incident = uses.map(use => brep.loops.find(loop => loop.id === use.loop)?.face);
+  const fixed = pull === 'z' ? 0 : 1, cap = prism.caps[fixed];
+  if (uses.length !== 2 || uses[0].sense === uses[1].sense || !incident.includes(wall.face.original.id)
+    || !incident.includes(cap.original.id) || !wall.face.edges.includes(edge) || !cap.edges.includes(edge)
+    || edge.curve.controlPoints.some(point => point[2] !== cap.corners[0].point[2]))
+    return refuse('SELECTION', 'The Pivot edge must join the selected original side to the start cap of the signed Z pull.');
+  const c = Math.cos(angle), s = Math.sin(angle) * (pull === 'z' ? 1 : -1);
+  const normal: Point = [wall.normal[0] * c, wall.normal[1] * c, s];
+  return replacePrismWall(brep, prism, { origin: edge.curve.controlPoints[0], normal }, fixed,
+    (code, detail) => refuse(code === 'INPUT' ? 'INPUT' : 'GEOMETRY', `Pivot face: ${detail}`));
+}
+
+/** Replacement and hinge drafting share the support proof, chart extension and native trim binding. */
+function replacePrismWall(brep: Brep, prism: WallPrism, plane: ReplacementPlane, fixedCap?: 0 | 1,
+  refuse: typeof replacementFailure = replacementFailure): Brep {
   const { origin, normal: unit } = replacementPlaneInput(plane);
   const { selected, walls, lower, upper, caps } = prism;
   const wall = walls[selected], previous = prev(selected, walls.length), end = next(selected, walls.length);
   const horizontal = Math.hypot(unit[0], unit[1]), angularRoundoff = 64 * Number.EPSILON;
   const alignment = dot(unit, wall.normal), projected = Math.abs(alignment);
   if (horizontal <= angularRoundoff || projected <= angularRoundoff)
-    return replacementFailure('GEOMETRY', 'the reference plane is too close to perpendicular to the selected wall.');
+    return refuse('GEOMETRY', 'the reference plane is too close to perpendicular to the selected wall.');
   const normal = alignment > 0 ? unit : scale(unit, -1);
   const horizontalNormal: Point = [normal[0] / horizontal, normal[1] / horizontal, 0];
   const sourceExtent = Math.max(prism.extent, geometryScaleMM([origin]));
   if (!(sourceExtent <= CadNumericPolicy.coordinateAbs))
-    return replacementFailure('GEOMETRY', 'the replacement exceeds the modeling coordinate range.');
+    return refuse('GEOMETRY', 'the replacement exceeds the modeling coordinate range.');
   const supportAt = (point: Point) => dot(sub(point, origin), normal);
-  const refuseParallel = (code: BrepError['code']) => replacementFailure(code, 'the reference plane is parallel to an adjacent wall.');
-  const sections = [lower, upper].map(corners => {
+  const refuseParallel = (code: BrepError['code']) => refuse(code, 'the reference plane is parallel to an adjacent wall.');
+  const sections = [lower, upper].map((corners, capIndex) => {
     const anchor: Point = [wall.origin[0], wall.origin[1], corners[0].point[2]];
     const support = { ...wall, origin: add(anchor, scale(horizontalNormal, -supportAt(anchor) / horizontal)), normal: horizontalNormal };
     const supports = walls.map((original, i) => i === selected ? support : original);
+    // The fixed cap and hinge records never enter an intersection or roundoff-snap calculation.
+    if (capIndex === fixedCap) return { corners, points: corners.map(vertex => vertex.point), supports };
     function fitCorner(index: number, neighbor: Wall): Point {
       const old = corners[index].point, point = meet(support, neighbor, old, 0, refuseParallel);
       return dist(point, old) <= allowance(sourceExtent) ? old : point;
@@ -462,19 +495,19 @@ export function replacePrismWallIfAdmitted(brep: Brep, faceName: string, plane: 
   });
   const extent = Math.max(sourceExtent, geometryScaleMM(...sections.map(section => section.points)));
   if (!(extent <= CadNumericPolicy.coordinateAbs))
-    return replacementFailure('GEOMETRY', 'the replacement exceeds the modeling coordinate range.');
+    return refuse('GEOMETRY', 'the replacement exceeds the modeling coordinate range.');
   const roundoff = allowance(extent), linear = linearToleranceMM(extent);
   const displacements = wall.face.corners.map(vertex => supportAt(vertex.point) / projected);
   if (Math.max(...displacements) - Math.min(...displacements) <= linear)
-    return replacementFailure('GEOMETRY', 'the reference plane tilt is too small for this wall.');
+    return refuse('GEOMETRY', 'the reference plane tilt is too small for this wall.');
   const incident = (i: number) => i === selected || i === end;
   // Intersections and signed plane distances are affine in Z, so both certified end sections prove the entire slab.
   for (const { points, supports } of sections) {
     if (!keepsSection(points, supports, selected, 0, extent)
       || points.some((point, i) => !incident(i) && supportAt(point) >= -linear * horizontal))
-      return replacementFailure('GEOMETRY', 'the replacement would collapse or cross a wall of the polygon section.');
+      return refuse('GEOMETRY', 'the replacement would collapse or cross a wall of the polygon section.');
     if (points.some((point, i) => incident(i) && Math.abs(supportAt(point)) > roundoff))
-      return replacementFailure('GEOMETRY', 'the replacement cannot preserve the reference plane and its trim.');
+      return refuse('GEOMETRY', 'the replacement cannot preserve the reference plane and its trim.');
   }
 
   const moved = new Map<string, Point>();
@@ -490,15 +523,15 @@ export function replacePrismWallIfAdmitted(brep: Brep, faceName: string, plane: 
     const surface = face.chart.surface;
     const seed = face === wall.face ? affineChart({ ...surface, controlPoints: surface.controlPoints.map(row => row.map(lift)) }, face.original.sense) : face.chart;
     const fitted = seed && coverAffineTrim(seed, face.original.sense, corners, roundoff);
-    if (!fitted) return replacementFailure('GEOMETRY', 'the replacement cannot preserve the planar supports and their trims.');
+    if (!fitted) return refuse('GEOMETRY', 'the replacement cannot preserve the planar supports and their trims.');
     if (face === wall.face) {
       const poles = fitted.surface.controlPoints.flat(), supportRoundoff = allowance(Math.max(extent, geometryScaleMM(poles)));
       if (len(sub(fitted.normal, normal)) > 128 * Number.EPSILON || poles.some(point => Math.abs(supportAt(point)) > supportRoundoff))
-        return replacementFailure('GEOMETRY', 'the replacement cannot preserve the reference plane and its trim.');
+        return refuse('GEOMETRY', 'the replacement cannot preserve the reference plane and its trim.');
     }
     charts.set(face, fitted);
   }
   const result = rebindPrismTrim(brep, moved, charts), report = checkBrep(result, { strict: true });
-  if (!report.valid) return replacementFailure('GEOMETRY', `the replacement solid is invalid: ${report.issues[0]}`);
+  if (!report.valid) return refuse('GEOMETRY', `the replacement solid is invalid: ${report.issues[0]}`);
   return result;
 }

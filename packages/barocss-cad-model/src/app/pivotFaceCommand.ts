@@ -1,6 +1,6 @@
 import { withNode } from '../engine/doc';
 import type { BodyResult } from '../engine/evaluate';
-import { pivotStockEdge, pivotStockMode } from '../engine/pivotStock';
+import { pivotStockEdge, pivotStockMode, type PivotStockMode } from '../engine/pivotStock';
 import { captureSignatures } from '../engine/references';
 import { refusal } from '../engine/refusal';
 import type { Command, Ctx } from './commands';
@@ -10,17 +10,23 @@ import { pivotFaceAngleHandle } from './pivotFaceHandle';
 
 export const PIVOT_FACE = 'pivot-face';
 
-const selectionReason = 'Select one planar face of a rectangular extrusion, with or without Move and Rotate features, and Shift-select one straight edge on that face.';
+const selectionReason = 'Select a face and Shift-select its straight edge on rectangular stock, or select an upright hexagonal wall and its original cap edge.';
 const angleField = { key: 'deg', label: 'Angle', kind: 'deg', min: -45, max: 45, step: 1 } as const;
 
-export function pivotStockHinge(body: BodyResult, faceIndex: number, edgeIndex: number, followStock: boolean) {
+export function pivotStockHinge(body: BodyResult, faceIndex: number, edgeIndex: number, mode: PivotStockMode) {
   const target = pivotStockEdge(body, faceIndex, edgeIndex);
   if (!target) return;
   const { faceName, supportName, face, edge, other } = target;
   const names = { face: faceName, edge: edge.names[0] };
-  if (followStock) {
+  if (mode === 'rotated') {
     const label = supportName.endsWith('.top') ? 'Original top' : supportName.endsWith('.bottom') ? 'Original bottom' : supportName;
     return { ...names, pull: undefined, label };
+  }
+  if (mode === 'hexagonal') {
+    if (other.nativeAxisPlane?.axis !== 'z' || other.exact?.kind !== 'plane' || face.exact?.kind !== 'plane'
+      || Math.abs(face.exact.n[2]) > 1e-9 || Math.abs(other.exact.n[2]) < 1 - 1e-9) return;
+    const bottom = other.exact.n[2] < 0;
+    return { ...names, pull: bottom ? 'z' as const : '-z' as const, label: bottom ? 'Original bottom' : 'Original top' };
   }
   const start = other.nativeAlignFace;
   if (!start || !face.nativeAxisPlane || !edge.axis || start.axis === face.nativeAxisPlane.axis || start.axis === edge.axis) return;
@@ -36,7 +42,7 @@ function pivotSelection(ctx: Ctx) {
   if (!parent || parent.side !== 'solid') return;
   const mode = pivotStockMode(ctx.doc.nodes, parent.node);
   if (!mode) return;
-  const hinge = pivotStockHinge(body, faces[0].face, edges[0].edge, mode === 'rotated');
+  const hinge = pivotStockHinge(body, faces[0].face, edges[0].edge, mode);
   return hinge && { parent, body, ...hinge };
 }
 

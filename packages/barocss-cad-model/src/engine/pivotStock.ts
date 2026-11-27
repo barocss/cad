@@ -1,15 +1,19 @@
-import { isBoxReplacementSource, type ModelNode } from './doc';
+import { isBoxReplacementSource, isStraightHexagonalExtrusion, type ModelNode } from './doc';
 import type { BodyResult } from './evaluate';
 
-/** An original rectangular extrusion and a chain of single solid Move/Rotate features. */
-export function pivotStockMode(nodes: readonly ModelNode[], index: number): 'cardinal' | 'rotated' | undefined {
+export type PivotStockMode = 'cardinal' | 'rotated' | 'hexagonal';
+
+/** Original stock with single-solid placement features. Rotate is supported for rectangular stock. */
+export function pivotStockMode(nodes: readonly ModelNode[], index: number): PivotStockMode | undefined {
   let at = index, rotated = false;
   for (;;) {
     const node = nodes[at];
     if (!node || node.suppressed || node.held) return;
     if (node.kind !== 'translate' && node.kind !== 'rotate') {
-      if (!isBoxReplacementSource(nodes, at)) return;
-      return rotated ? 'rotated' : 'cardinal';
+      if (isBoxReplacementSource(nodes, at)) return rotated ? 'rotated' : 'cardinal';
+      if (!rotated && node.kind === 'extrude' && node.cutDepth === undefined && isStraightHexagonalExtrusion(nodes, node))
+        return 'hexagonal';
+      return;
     }
     const { side, node: parent } = node.parent;
     if (side !== 'solid' || !Number.isSafeInteger(parent) || parent < 0 || parent >= at) return;

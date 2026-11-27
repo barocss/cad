@@ -31,13 +31,15 @@ export function editSavedPivotFaceCommand(doc: StudioDoc, index: number, stock: 
   if (!parent || !node || stock.ref?.node !== parent.node || stock.ref.side !== parent.side
     || stock.key !== bodyKeyFor(doc.nodes, parent.node, parent.side)) return null;
   const original = node.hingeEdge!, face = node.faces[0];
-  const followStock = followsRotatedPivotStock(doc.nodes, node);
+  const stockMode = pivotStockMode(doc.nodes, parent.node);
+  if (!stockMode) return null;
+  const mode = stockMode === 'rotated' && !followsRotatedPivotStock(doc.nodes, node) ? 'cardinal' : stockMode;
   const faceIndex = stock.mesh.faces.findIndex(candidate => candidate.nativePlaneName === face);
   const sigs = signaturesOf(stock, 'plane');
   const faceSig = sigs.faces.get(face);
   if (!faceSig) return null;
   const choices = stock.mesh.edges.flatMap((_edge, edgeIndex) => {
-    const hinge = pivotStockHinge(stock, faceIndex, edgeIndex, followStock);
+    const hinge = pivotStockHinge(stock, faceIndex, edgeIndex, mode);
     const sig = hinge && sigs.edges.get(hinge.edge);
     return hinge && sig ? [{ ...hinge, sig }] : [];
   });

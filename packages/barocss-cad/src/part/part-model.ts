@@ -696,6 +696,29 @@ function originalRectangularPrism(reference: unknown, part: Part, t: Tools, labe
   return name !== undefined && !!boxFaceReplacementFrame(brep, name);
 }
 
+/** An authored six-point straight polygon, with only owned single-part Move wrappers. Native admission proves convexity. */
+function originalHexagonalPrism(reference: unknown, part: Part, t: Tools, label: string): boolean {
+  let current = t.ref(reference, label), owner = part;
+  const seen = new Set<string>();
+  for (;;) {
+    if (seen.has(current.id) || current.result.kind !== 'solid' || current.result.parts.length !== 1
+      || current.result.parts[0] !== owner) return false;
+    seen.add(current.id);
+    if (current.author?.kind !== 'translate') break;
+    const parent = t.ref(current.author.target, `${label} parent`);
+    if (parent.result.kind !== 'solid' || parent.result.parts.length !== 1 || owner.moved?.from !== parent.result.parts[0]) return false;
+    current = parent; owner = parent.result.parts[0];
+  }
+  if (current.author?.kind !== 'extrude' || (current.author.draft !== undefined && current.author.draft !== 0)) return false;
+  const sketch = t.ref(current.author.sketch, `${label} sketch`);
+  if (sketch.author?.kind !== 'sketch' || sketch.author.profile !== 'polygon' || sketch.author.points.length !== 6
+    || sketch.result.kind !== 'sketch' || sketch.result.regions?.length || sketch.result.holes?.length) return false;
+  if (part.solid.kind !== 'upright') return false;
+  const slabs = part.solid.solid.slabs, section = slabs[0]?.regions[0];
+  return slabs.length === 1 && slabs[0].regions.length === 1 && !!section && section.holes.length === 0
+    && section.outer.length === 6 && section.outer.every(segment => segment.kind === 'line');
+}
+
 /** The original stock and its authored rigid placements, not an inverse-transformed approximation. */
 function rotatedRectangularPrism(reference: unknown, part: Part, t: Tools, label: string): RotatedBoxStock | undefined {
   let current = t.ref(reference, label), owner = part, rotated = false;
@@ -1386,4 +1409,4 @@ const PRISMATIC_DETAIL_HELPERS = Object.freeze({ CadPartLimits, lineOnly, brepOf
 const PROFILE_SOLID_HELPERS = Object.freeze({ isRecord, CadPartLimits, placed, sweepBrep, guideInFrame });
 
 // Captured only after this module's constants initialize; original functions retain their shared runtime state.
-const FACE_FINISH_HELPERS = Object.freeze({ CadPartLimits, brepOf, namedFaceTargetBrep, originalRectangularPrism, rotatedRectangularPrism, bounds, boxSolid, boolean, empty, exactVolume, faceVertices, affine, draftWedge });
+const FACE_FINISH_HELPERS = Object.freeze({ CadPartLimits, brepOf, namedFaceTargetBrep, originalRectangularPrism, originalHexagonalPrism, rotatedRectangularPrism, bounds, boxSolid, boolean, empty, exactVolume, faceVertices, affine, draftWedge });
