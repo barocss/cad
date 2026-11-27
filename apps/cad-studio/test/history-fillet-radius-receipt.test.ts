@@ -427,3 +427,28 @@ test('the four upper Fillets use the first authored rim instead of the merged di
   assert.equal(proof(body, { ...reply, bodies: [{ ...stock, mesh }] }), null);
   assert.equal(placeBody(body, [1, 0, 0, 0, 1, 0, 0, 0, 1], [5, 0, 0]).nativeBoxTopFillets, undefined);
 });
+
+test('the non-cardinal upper rim owns the saved straight Fillet frame', () => {
+  const sketch: SketchNode = { kind: 'sketch', profile: 'rectangle', min: [0, 0], max: [12, 8],
+    plane: { origin: [4, 3, 0], normal: [0, 0, 1], xAxis: [.6, .8, 0] } };
+  const edge = 'n1.side0|n1.top';
+  const { doc, accepted, reply } = evaluatedFixture(sketch, edge, 2, 8);
+  const [body] = accepted.bodies, proof = body.nativeAngledTopFillet;
+  assert.ok(proof);
+  const receipt = (result: typeof body, source = reply) => historyFilletReceipt(doc, doc, 2, [result], source, 3, () => true);
+  const verified = receipt(body);
+  assert.ok(verified?.frame);
+  assert.equal(verified.edge, edge);
+  const dir = [.8 * Math.SQRT1_2, -.6 * Math.SQRT1_2, Math.SQRT1_2];
+  const anchor = [7.6, 7.8, 8];
+  assert.ok(verified.frame.dir.every((value, i) => Math.abs(value - dir[i]) < 1e-9));
+  assert.ok(verified.frame.at.every((value, i) => Math.abs(value - anchor[i] - 2 * dir[i]) < 1e-9));
+  assert.equal(receipt({ ...body, nativeAngledTopFillet: undefined }), null);
+  assert.equal(receipt({ ...body, nativeAngledTopFillet: { ...proof, faceId: 'another face' } }), null);
+  assert.equal(receipt({ ...body, nativeAngledTopFillet: { ...proof, axis: [1, 0, 0] } }), null);
+  const [stock] = reply.bodies;
+  const moved = { ...stock, mesh: { ...stock.mesh, edges: stock.mesh.edges.map(item =>
+    item.names.includes(edge) ? { ...item, a: [item.a[0], item.a[1], item.a[2] + 1] as typeof item.a } : item) } };
+  assert.equal(receipt(body, { ...reply, bodies: [moved] }), null);
+  assert.equal(placeBody(body, [1, 0, 0, 0, 1, 0, 0, 0, 1], [1, 0, 0]).nativeAngledTopFillet, undefined);
+});

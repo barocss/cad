@@ -11,6 +11,8 @@ import { add, cross, dot, len, scale, sub, unit, type Vec3 } from '@barocss/cad-
 import type { Active } from '../app/commandState';
 import { closedSolid, exactStraightEdge, originalFilletEdge, sameVec } from './historyFilletEvidence';
 import { boxTopFilletFrame, boxTopFilletRims } from './historyBoxTopFillet';
+import { angledTopFilletSource } from '@barocss/cad-model/engine/nativeAngledTopFillet';
+import { angledTopFilletFrame } from './historyAngledTopFillet';
 
 type Fillet = Extract<ModelNode,{kind:'fillet'}>;
 export type HistoryFilletReceipt = {
@@ -91,7 +93,9 @@ export function ordinaryHistoryFillet(doc: StudioDoc,index: number|null,bodies?:
   const circular = sketch.profile === 'loop' && stored?.k === 'curve' && plainQuarterSector(sketch);
   const closedRims = historyClosedCircularRims(doc, fillet);
   const verticalGroup = verticalHistoryGroup(sketch, fillet);
-  if (!plain && !circular && !closedRims && !verticalGroup) return null;
+  const angled = angledTopFilletSource(doc.nodes, index);
+  if (!plain && !circular && !closedRims && !verticalGroup && !angled) return null;
+  if (angled && bodies && (bodies.length !== 1 || bodies[0].nativeAngledTopFillet?.edge !== angled.edge)) return null;
   if (verticalGroup && bodies && (bodies.length !== 1 || bodies[0].nativeVerticalFillets?.length !== 3)) return null;
   const pair = historyTopEdges(doc, fillet), boxTop = plain && boxTopFilletRims(doc, fillet);
   if (boxTop && bodies && (bodies.length !== 1 || bodies[0].nativeBoxTopFillets?.length !== 4)) return null;
@@ -273,6 +277,11 @@ export function historyFilletReceipt(doc:StudioDoc,commandDoc:StudioDoc,index:nu
   if(face.length!==expectedFaces||face.some(item=>item.name!==name||!item.normal.every(Number.isFinite)||
     Math.abs(Math.hypot(...item.normal)-1)>1e-8)) return null;
   const radius = Number(fillet.radius), sketch = doc.nodes[0];
+  const angled = angledTopFilletSource(doc.nodes, index);
+  if (angled) {
+    const frame = angledTopFilletFrame(angled, fillet, stock, finished, face[0], radius);
+    return frame ? { document: doc, commandDoc, index, bodies, edge, face: face[0], isCurrent, frame } : null;
+  }
   if (boxTop) {
     const frame = boxTopFilletFrame(boxTop, fillet, stock, finished, face[0], radius);
     return frame ? { document: doc, commandDoc, index, bodies, edge, face: face[0], isCurrent, frame } : null;

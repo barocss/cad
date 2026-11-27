@@ -40,6 +40,7 @@ import { rememberNativeMass, placeNativeMass } from './nativeMassWire';
 import { nativeClosedFilletTorusOf, nativeClosedFilletTorusPairOf, nativeFilletTorusOf, nativeFilletTorusPairOf, type NativeClosedFilletTorus, type NativeFilletTorus, type NativeFilletTorusPair } from './nativeFilletTorus';
 import { nativeFilletPairOf, type NativeFilletPair } from './nativeFilletPair';
 import { nativeBoxTopFilletsOf, type NativeBoxTopFillet } from './nativeBoxTopFillets';
+import { angledTopFilletSource, nativeAngledTopFilletOf, type NativeAngledTopFillet } from './nativeAngledTopFillet';
 import { nativeVerticalFilletsOf, type NativeVerticalFillet } from './nativeVerticalFillets';
 
 /** A kernel output's body key and the node and side it is now. */
@@ -80,6 +81,8 @@ export interface BodyResult {
   nativeFilletPair?: NativeFilletPair;
   /** Exact original upper-rim Fillets on an unplaced rectangular Extrude. */
   nativeBoxTopFillets?: NativeBoxTopFillet[];
+  /** Exact native round on one original non-cardinal top rim. */
+  nativeAngledTopFillet?: NativeAngledTopFillet;
   /** Three original convex vertical rounds on one unplaced body. */
   nativeVerticalFillets?: NativeVerticalFillet[];
   /** Whole native cap rims certified on the original, unplaced half ring. */
@@ -306,13 +309,15 @@ function bodyOf(o: CadPartSnapshot['outputs'][number], doc: StudioDoc, revision:
     node.edges.every(edge => node.sigs?.[edge]?.k === 'line') ? nativeFilletPairOf(o) : undefined;
   const nativeBoxTopFillets = node?.kind === 'fillet' && typeof node.radius === 'number' && !node.radii && !node.section &&
     node.edges.length === 4 && node.edges.every(edge => node.sigs?.[edge]?.k === 'line') ? nativeBoxTopFilletsOf(o) : undefined;
+  const angledSource = node?.kind === 'fillet' && at.ref && angledTopFilletSource(doc.nodes, at.ref.node);
+  const nativeAngledTopFillet = angledSource ? nativeAngledTopFilletOf(o, angledSource) : undefined;
   const nativeVerticalFillets = node?.kind === 'fillet' && typeof node.radius === 'number' && !node.radii && !node.section &&
     node.edges.length === 3 && node.edges.every(edge => node.sigs?.[edge]?.k === 'line') ? nativeVerticalFilletsOf(o) : undefined;
   const halfRingFilletRims = node?.kind === 'intersect' ? halfRingFilletReferenceRims(o.brep) : undefined;
   return { ...at, topology: nativeBodyTopology(o.brep), ...(o.cylindricalWrap ? { cylindricalWrap: o.cylindricalWrap } : {}), ...(o.band ? { band: o.band } : {}), ...(notes.length ? { notes } : {}), ...(roleOf(lib) ? { role: roleOf(lib) } : {}), innerShells: inner, family: o.representation, mesh: meshOf(o.brep, revision, quality), ...mass, ...areaOf(A, o.brep, revision, quality), ...(o.bodyCount > 1 ? { pieces: o.bodyCount, ...touchField(o.brep, meshOf(o.brep, revision, quality)) } : {}),
     ...(o.gearPlacement ? { gear: o.gearPlacement } : {}), ...(o.bevelGear?.idealModel ? { idealModel: o.bevelGear.diagnostics.find(x => x.code === 'IDEAL_MODEL')?.message ?? 'an ideal model' } : {}), ...(o.rackPlacement ? { rack: o.rackPlacement } : {}),
     ...(o.subd && o.subd.caps ? { subd: o.subd } : {}), ...(sheet ? sheetFields(sheet) : {}), ...(o.member && m ? { cutPiece: cutPiece(o, { volume: m.volume }) } : {}), ...(element ? { element } : {}), ...(nativeFilletTorus ? { nativeFilletTorus } : {}), ...(nativeFilletTorusPair ? { nativeFilletTorusPair } : {}), ...(nativeClosedFilletTorus ? { nativeClosedFilletTorus } : {}), ...(nativeFilletPair ? { nativeFilletPair } : {}),
-    ...(nativeClosedFilletTorusPair ? { nativeClosedFilletTorusPair } : {}), ...(nativeVerticalFillets ? { nativeVerticalFillets } : {}), ...(nativeBoxTopFillets ? { nativeBoxTopFillets } : {}), ...(halfRingFilletRims ? { halfRingFilletRims } : {}) };
+    ...(nativeClosedFilletTorusPair ? { nativeClosedFilletTorusPair } : {}), ...(nativeVerticalFillets ? { nativeVerticalFillets } : {}), ...(nativeBoxTopFillets ? { nativeBoxTopFillets } : {}), ...(nativeAngledTopFillet ? { nativeAngledTopFillet } : {}), ...(halfRingFilletRims ? { halfRingFilletRims } : {}) };
 }
 
 /** The main part's evaluation profiles its features (O10; a reused snapshot keeps the option). */
@@ -722,6 +727,7 @@ export function placeBody(b: BodyResult, m: readonly number[], t: readonly numbe
   delete placedBody.nativeFilletPair;
   delete placedBody.nativeVerticalFillets;
   delete placedBody.nativeBoxTopFillets;
+  delete placedBody.nativeAngledTopFillet;
   delete placedBody.halfRingFilletRims;
   return { ...placedBody, mesh, ...placedMass(b, m, t), ...(b.massRef !== undefined ? { massPlace: [...(b.massPlace ?? []), { m: [...m], t: [...t] }] } : {}), ...(element ? { element } : {}) };
 }
