@@ -212,3 +212,44 @@ test('two independent boxes may surround the Shell viewport slot but cannot alia
   assert.ok(extra.ok);
   assert.equal(heldShellFaceProblem(extraBox, 2, problems, extra.bodies), undefined);
 });
+
+test('held Shell accepts its own planar candidate beside an independent circle Extrude, never the circle body', () => {
+  const { doc, problems } = makeHeldFixture();
+  const together: StudioDoc = {
+    ...doc, nextId: 8,
+    nodes: [...doc.nodes,
+      { id: 'n4', kind: 'sketch', profile: 'rectangle', min: [76, -12], max: [88, 4] },
+      { id: 'n5', kind: 'extrude', sketch: 4, height: 12 },
+      { id: 'n6', kind: 'sketch', profile: 'circle', center: [-39, -6], radius: 5 },
+      { id: 'n7', kind: 'extrude', sketch: 6, height: 10 }],
+    outputs: { b5: ref(5), ...doc.outputs, b7: ref(7) },
+  };
+  const evaluated = evaluateDoc(together, 1);
+  assert.ok(evaluated.ok);
+  const box = evaluated.bodies.find(body => body.key === 'b5')!;
+  const owner = evaluated.bodies.find(body => body.key === 'b3')!;
+  const round = evaluated.bodies.find(body => body.key === 'b7')!;
+  assert.ok(round && box && owner);
+  const good = owner.mesh.faces.find(face => face.name === n2New)!;
+  const unrelated = round.mesh.faces.find(face => face.kind === 'plane')!;
+  const ordered = [box, owner, round];
+  const before = structuredClone(together);
+  assert.equal(heldShellFaceProblem(together, 2, problems, ordered)?.bodyIndex, 1);
+  assert.equal(pickHeldShellFace(together, 2, problems, ordered,
+    { face: { body: 2, face: unrelated.index }, faceMesh: round.mesh }).ok, false);
+  assert.equal(pickHeldShellFace(together, 2, problems, ordered,
+    { face: { body: 1, face: good.index }, faceMesh: round.mesh }).ok, false);
+  const chosen = pickHeldShellFace(together, 2, problems, ordered,
+    { face: { body: 1, face: good.index }, faceMesh: owner.mesh });
+  assert.ok(chosen.ok);
+  const fixed = replaceHeldShellFace(together, 2, chosen.target);
+  assert.ok(fixed);
+  assert.deepEqual(fixed.nodes.slice(4), together.nodes.slice(4));
+  const retargeted: StudioDoc = {
+    ...together,
+    nodes: together.nodes.map((node, index) => index === 6 && node.kind === 'sketch'
+      ? { ...node, on: ref(1) } : node),
+  };
+  assert.equal(heldShellFaceProblem(retargeted, 2, problems, ordered), undefined);
+  assert.deepEqual(together, before);
+});

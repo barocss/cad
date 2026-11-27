@@ -3,9 +3,11 @@ import { createFlow } from './flow-helper.mjs';
 
 const baseline = process.argv.includes('--baseline');
 const three = process.argv.includes('--three');
+const round = process.argv.includes('--round');
+assert.ok(!round || three, '--round uses the mixed three-body fixture');
 const multi = three || process.argv.includes('--multi');
 const companions = multi ? [{ key: 'b5', volume: 2304, pick: [82, -12, 6] }] : [];
-if (three) companions.push({ key: 'b7', volume: 1680, pick: [-39, -12, 5] });
+if (three) companions.push({ key: 'b7', volume: round ? 250 * Math.PI : 1680, pick: [-39, round ? -11 : -12, 5] });
 const n2Old = 'n1.side[e1]', n2New = 'n1.side[s1]';
 const n3Old = 'n1.side[e1]#3|n2.ceiling', n3New = 'n1.side[s1]#3|n2.ceiling';
 const ref = node => ({ node, side: 'solid' });
@@ -22,7 +24,8 @@ const seed = {
     { id: 'n2', kind: 'shell', parent: ref(shellNode - 1), open: [n2Old], thickness: 2 },
     { id: 'n3', kind: 'chamfer', parent: ref(shellNode), edges: [n3Old], distance: 0.5 },
     ...(three ? [
-      { id: 'n6', kind: 'sketch', profile: 'rectangle', min: [-46, -12], max: [-32, 0] },
+      round ? { id: 'n6', kind: 'sketch', profile: 'circle', center: [-39, -6], radius: 5 }
+        : { id: 'n6', kind: 'sketch', profile: 'rectangle', min: [-46, -12], max: [-32, 0] },
       { id: 'n7', kind: 'extrude', sketch: chamferNode + 1, height: 10 },
     ] : []),
   ],

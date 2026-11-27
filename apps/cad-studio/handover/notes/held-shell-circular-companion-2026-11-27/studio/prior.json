@@ -1,0 +1,27 @@
+{
+  "status": "PASS",
+  "observations": [
+    {
+      "label": "both-held",
+      "volume": 31200,
+      "method": "planar-exact"
+    }
+  ],
+  "states": [
+    {
+      "label": "00-both-held"
+    },
+    {
+      "label": "00-previous-no-shell-face-pick"
+    }
+  ],
+  "errors": [],
+  "consoleErrors": [],
+  "changes": [],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "sourceCount": 1244
+}

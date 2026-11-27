@@ -1,0 +1,81 @@
+{
+  "status": "PASS",
+  "observations": [
+    {
+      "label": "both-held",
+      "volume": 31200,
+      "method": "planar-exact"
+    },
+    {
+      "label": "shell-applied",
+      "volume": 14642.265482457435,
+      "method": "quadrature"
+    },
+    {
+      "label": "both-restored",
+      "volume": 14638.615482457455,
+      "method": "quadrature"
+    },
+    {
+      "label": "undo-1",
+      "volume": 14642.265482457435,
+      "method": "quadrature"
+    },
+    {
+      "label": "undo-2",
+      "volume": 31200,
+      "method": "planar-exact"
+    },
+    {
+      "label": "redo-1",
+      "volume": 14642.265482457435,
+      "method": "quadrature"
+    },
+    {
+      "label": "redo-2",
+      "volume": 14638.615482457455,
+      "method": "quadrature"
+    },
+    {
+      "label": "fresh-open",
+      "volume": 14638.615482457455,
+      "method": "quadrature"
+    }
+  ],
+  "states": [
+    {
+      "label": "00-both-held"
+    },
+    {
+      "label": "01-foreign-body-refused"
+    },
+    {
+      "label": "01-second-foreign-body-refused"
+    },
+    {
+      "label": "01a-wrong-face-refused"
+    },
+    {
+      "label": "01b-picked-shell-face-preview"
+    },
+    {
+      "label": "02-shell-applied-chamfer-refreshed"
+    },
+    {
+      "label": "03-both-restored"
+    },
+    {
+      "label": "04-fresh-open"
+    }
+  ],
+  "errors": [],
+  "consoleErrors": [],
+  "changes": [],
+  "cleanup": [
+    "CONTEXT_CLOSED",
+    "CONTEXT_CLOSED",
+    "BROWSER_CLOSED",
+    "SERVER_CLOSED"
+  ],
+  "sourceCount": 1244
+}

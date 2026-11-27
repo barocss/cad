@@ -132,7 +132,7 @@ interface ReferencePreviewRoute {
 /**
  * A held feature is a passthrough, not the source of replacement geometry.
  * Resolve one exact Shell/held-finish output, never by name across meshes or by slot order.
- * Up to two companion outputs are admitted only as distinct independent rectangular extrusions.
+ * Up to two companion outputs are admitted only as distinct independent plain rectangular or circular extrusions.
  */
 export function heldShellCandidateFace(doc: StudioDoc, bodies: readonly BodyResult[], problem: Problem, name: string): Selection['faces'][number] | undefined {
   if (problem.node == null || doc.instances?.length || !problem.candidates.includes(name)) return;
@@ -156,12 +156,14 @@ export function heldShellCandidateFace(doc: StudioDoc, bodies: readonly BodyResu
     }
     return index === shellIndex;
   };
-  const independentBox = (tip: number) => {
+  const independentExtrude = (tip: number) => {
     const node = doc.nodes[tip];
     if (node?.kind !== 'extrude' || node.cutDepth || node.suppressed || node.draft || node.sketch >= tip) return false;
     const sketch = doc.nodes[node.sketch];
-    return sketch?.kind === 'sketch' && sketch.profile === 'rectangle' && !sketch.on && !sketch.association
-      && !sketch.suppressed && !sketch.regions?.length && !sketch.holes?.length;
+    if (sketch?.kind !== 'sketch' || sketch.on || sketch.association || sketch.suppressed
+      || sketch.regions?.length || sketch.holes?.length) return false;
+    return sketch.profile === 'rectangle'
+      || (sketch.profile === 'circle' && !sketch.pocketFloor && !sketch.outline && !sketch.holeOutlines?.length);
   };
 
   let owner: Selection['faces'][number] | undefined;
@@ -170,7 +172,7 @@ export function heldShellCandidateFace(doc: StudioDoc, bodies: readonly BodyResu
     const body = bodies[slot];
     if (!body || body.ref?.node !== ref.node || body.ref.side !== 'solid' || ref.side !== 'solid' || (body.pieces ?? 1) !== 1) return;
     if (!followsShell(ref.node)) {
-      if (!independentBox(ref.node)) return;
+      if (!independentExtrude(ref.node)) return;
       continue;
     }
     if (owner || lookOf(doc, body).hidden) return;
