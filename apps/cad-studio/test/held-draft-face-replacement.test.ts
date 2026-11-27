@@ -291,9 +291,13 @@ test('circular companion preserves its own caps and exact wall; altered placemen
   assert.ok(plan);
   const ready = readyHeldDraftReplacement(plan, wire(evaluatePart(plan.next, 91, 8, 'refs')), 91);
   assert.equal(ready, plan.next);
-  for (const patch of [{ center: [81, 6] as [number, number] }, { radius: 7 }]) {
-    const altered = { ...plan.next, nodes: plan.next.nodes.map((n, i) => i === 4 && n.kind === 'sketch'
-      && n.profile === 'circle' ? { ...n, ...patch } : n) };
+  const mutations: ({ center: [number, number] } | { radius: number })[] = [{ center: [81, 6] }, { radius: 7 }];
+  for (const patch of mutations) {
+    const altered: StudioDoc = {
+      ...plan.next,
+      nodes: plan.next.nodes.map((n, i): StudioDoc['nodes'][number] =>
+        i === 4 && n.kind === 'sketch' && n.profile === 'circle' ? { ...n, ...patch } : n),
+    };
     assert.equal(readyHeldDraftReplacement(plan, wire(evaluatePart(altered, 91, 8, 'refs')), 91), null);
   }
 });
