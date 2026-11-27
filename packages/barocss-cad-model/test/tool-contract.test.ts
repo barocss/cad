@@ -17,6 +17,7 @@ import { savedApprovalFixture } from './helpers/saved-approval';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { readStudioDoc } from '../src/engine/migrate';
+import { pivotFaceCommand } from '../src/app/pivotFaceCommand';
 
 // A5.1 (O9): the tool layer's contract. Every handler classified; the breaking-change rules (the v2 list is frozen by
 // them in tools-v2.json, toolset.test.ts); every read handler's result matching its output schema; the MCP server
@@ -57,6 +58,39 @@ test('query edit fields resolves parameter values without evaluating or changing
     assert.equal(bad.state.doc, doc);
     assert.equal(JSON.parse(bad.content).code, 'EDIT_FIELDS_INDEX');
   }
+});
+
+test('query edit fields offers the original Pivot face hinges and pins the exact replacement to that revision', async () => {
+  const stock = rectanglePart(40, 20, 12), built = evaluateDoc(stock, 1);
+  assert.ok(built.ok);
+  const [body] = built.bodies, face = 'n1.side0', upper = 'n1.side0|n1.top', lower = 'n1.bottom|n1.side0';
+  const faceIndex = body.mesh.faces.findIndex(member => member.nativePlaneName === face);
+  const edgeIndex = body.mesh.edges.findIndex(member => member.names.includes(upper));
+  const doc = pivotFaceCommand.build!({ doc: stock, bodies: built.bodies, selection: {
+    faces: [{ body: 0, face: faceIndex }], edges: [{ body: 0, edge: edgeIndex }], bodies: [],
+  } }, { deg: 12 });
+  const accepted = evaluateDoc(doc, 2);
+  assert.ok(accepted.ok);
+  const state: ChatState = { doc, bodies: accepted.bodies };
+  const discovery = { action: 'edit_fields', index: 2 };
+  const read = await dispatchTool(state, 'query', discovery, evaluate);
+  assert.ok(!read.isError && !read.changed && read.state.doc === doc, read.content);
+  const detail = JSON.parse(read.content);
+  assert.deepEqual(validate(outputSchemaOf('list_feature_edit_fields')!, detail), []);
+  const choice = detail.fields.find((field: { key: string }) => field.key === 'hingeEdge');
+  assert.deepEqual([choice.kind, choice.value, choice.options.length], ['choice', upper, 4]);
+  const nonadjacent = 'n1.side2|n1.top';
+  assert.ok(!choice.options.some((option: { value: string }) => option.value === nonadjacent));
+  const args = { action: 'edit', index: 2, expectedRevision: detail.revision, values: { hingeEdge: lower } };
+  const refusal = await dispatchTool(state, 'features', { ...args, values: { hingeEdge: nonadjacent } }, evaluate);
+  assert.ok(refusal.isError && !refusal.changed && refusal.state.doc === doc, refusal.content);
+  assert.equal(JSON.parse(refusal.content).code, 'BAD_REFERENCE');
+  const result = await dispatchTool(state, 'features', args, evaluate);
+  assert.ok(!result.isError && result.changed, result.content);
+  const pivot = result.state.doc.nodes[2];
+  assert.ok(pivot.kind === 'draft');
+  assert.deepEqual([pivot.faces, pivot.hingeEdge, pivot.pull, pivot.angle], [[face], lower, 'z', 12]);
+  assert.deepEqual(Object.keys(pivot.sigs ?? {}).sort(), [face, lower].sort());
 });
 
 test('the breaking-change rules: removals and narrowing break, additions do not', () => {

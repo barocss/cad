@@ -1,13 +1,13 @@
 # CAD roadmap — current status and execution order
 
-Updated 2026-11-28 · Priority authority: D520 · Latest delivery: D2086 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
+Updated 2026-11-28 · Priority authority: D520 · Latest delivery: D2087 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
 
 This is the only current status index. Detailed tracks define acceptance; the 34 stable row pages retain scope and issue navigation. Immutable decision notes retain results. Do not append chronological status paragraphs here. [D520 decision](notes/cad-roadmap-replan-2026-11-04/README.md) supersedes D445 execution order and historical next-item text, while retaining its safeguards and bounded proofs.
 
 ## Now and next
 
-- **Current position:** [D2086](notes/pivot-fixed-edge-history-2026-11-28/README.md), P5 rows 07 and 31. History replaces a Pivot face hinge with an adjacent edge of its original stock. Studio preserves the angle and verifies the exact new hinge after Undo, Redo and fresh Open ([#629](https://github.com/barocss/cad/issues/629)).
-- **Next MAIN:** D2087, P5 rows 07 and 31. Add a local Agent proposal for replacing the fixed edge of a saved Pivot face. Verify exact original-stock admission, rejection of a nonadjacent edge, explicit Studio approval and native reopen ([#629](https://github.com/barocss/cad/issues/629)).
+- **Current position:** [D2087](notes/agent-pivot-fixed-edge-2026-11-28/README.md), P5 rows 07 and 31. Local MCP proposes an exact original-stock hinge change for a saved Pivot face. Studio verifies the geometry before and after explicit approval and fresh Open ([#629](https://github.com/barocss/cad/issues/629)).
+- **Next MAIN:** D2088, P5 rows 07 and 31. Extend Pivot face to original rectangular stock after an authored rigid Rotate. Use the original stock frame and verify the exact hinge, Studio History and native reopen ([#629](https://github.com/barocss/cad/issues/629)).
 - **Separate follow-ups:** Continue Studio App extraction in cohesive parts with affected desktop checks. [#608 Rendering](https://github.com/barocss/cad/issues/608) stays on HOLD. API inventory drift remains open. The issue tracker records [#126](https://github.com/barocss/cad/issues/126), [#613](https://github.com/barocss/cad/issues/613), [#152](https://github.com/barocss/cad/issues/152) and [#22](https://github.com/barocss/cad/issues/22) as closed.
 - **Active repository:** [barocss/cad](https://github.com/barocss/cad), based on `origin/main`. Fetch before work and preserve unexpected changes. The [migration record](../../../docs/migration/README.md) maps the former `local/cad-dev` history and issue numbers.
 - **Evidence correction:** D482 records2167 PASS/0 FAIL/2 existing SKIP in a later full-kernel run than D433. Neither result is a new full-suite PASS at this audit HEAD. [D482 record](notes/vertical-contact-refusal-2026-11-04/README.md).

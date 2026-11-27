@@ -46,6 +46,7 @@ import { sweepSourceRevision } from '../sweepSource';
 import { isReferencePlaneEdit } from '../../app/offsetPlanePick';
 import { preparePairedFixedSpanHoleEdit } from '../../app/patternHoleSpacing';
 import { editSketchCorner, sketchEditChamfers, sketchEditCorners, sketchEditFillets } from './sketchCorner';
+import { editSavedPivotHinge, readSavedPivotHinge, savedPivotHingeKey } from './pivotHingeEdit';
 
 /** Commands the chat can run (the ones that build; sketch-mode and measure UI actions are tools of their own). */
 // (Loft takes sketches picked in the studio, Align a face clicked there; chat writes a loft node with
@@ -533,7 +534,7 @@ function featureEditFields(state: ChatState, index: number, parameters?: StudioD
   return fields;
 }
 
-async function listFeatureEditFields(state: ChatState, args: Record<string, unknown>): Promise<ToolOutcome> {
+async function listFeatureEditFields(state: ChatState, args: Record<string, unknown>, evaluate: Evaluate): Promise<ToolOutcome> {
   const { doc } = state, { nodes } = doc, { index } = args;
   if (typeof index !== 'number' || !Number.isInteger(index) || !nodes[index])
     return fail(state, `No feature at index ${String(index)}. Use get_part_summary to find its current index.`, { code: 'EDIT_FIELDS_INDEX' });
@@ -549,6 +550,8 @@ async function listFeatureEditFields(state: ChatState, args: Record<string, unkn
     return { key, label, kind, value, ...(field.kind === 'choice' ? { options: field.options } : {}) };
   });
   if (wall) fields.push({ key: savedWallDistanceKey, label: 'Offset distance', kind: 'number', unit: 'mm', value: wall.distance });
+  const pivot = await readSavedPivotHinge(state, index, evaluate);
+  if (pivot) fields.push({ ...pivot.field, value: pivot.values[savedPivotHingeKey] });
   const label = featureLabel(nodes[index], index, nodes);
   const corners = args.includeSketchCorners === true ? { sketchCorners: sketchEditCorners(doc, index) } : {};
   const chamfers = args.includeSketchCorners === true ? sketchEditChamfers(doc, index) : [];
@@ -580,6 +583,11 @@ async function editFeatureTool(state: ChatState, args: Record<string, unknown>, 
   if (editWallDistance && (args.expectedRevision === undefined || args.feature !== undefined || Object.keys(given).length !== 1))
     return fail(state, 'Edit a supported saved wall Offset with only values.offsetDistance and the current expectedRevision from query.render or query.rebuild.',
       { code: 'EDIT_INPUT' });
+  const editPivotHinge = Object.hasOwn(given, savedPivotHingeKey);
+  if (editPivotHinge && (args.expectedRevision === undefined || typeof args.index !== 'number' || args.feature !== undefined
+    || args.sketchChamfer !== undefined || args.sketchRound !== undefined || args.retainBoxCommand !== undefined
+    || Object.keys(given).length !== 1))
+    return fail(state, 'Edit a saved Pivot face with only values.hingeEdge, its index and the current expectedRevision.', { code: 'EDIT_INPUT' });
   const index = Number(args.index), nodes = state.doc.nodes;
   if (!Number.isInteger(index) || !nodes[index]) return fail(state, `There is no feature ${String(args.index)} (features 0–${nodes.length - 1}).`);
   const chamfer = args.sketchChamfer !== undefined;
@@ -591,6 +599,7 @@ async function editFeatureTool(state: ChatState, args: Record<string, unknown>, 
   if (args.retainBoxCommand !== undefined && (!retainBox || args.feature === undefined || args.values !== undefined || nodes.length !== 2 || index !== 0))
     return fail(state, 'Retaining the Box command requires a replacement sketch for one standard Box.');
   if (editWallDistance) return editReviewedWallDistance(state, index, given[savedWallDistanceKey], evaluate, options);
+  if (editPivotHinge) return editSavedPivotHinge(state, index, given[savedPivotHingeKey], evaluate, options);
   let next: ModelNode[];
   if (detach) {
     const node = nodes[index];
