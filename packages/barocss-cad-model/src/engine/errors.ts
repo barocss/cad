@@ -524,6 +524,9 @@ export function friendly(message: string, kind?: string): FriendlyError {
       detail, ...extra };
   if (code === 'INPUT' && detail === 'angle must be a number of degrees, not 0, below 45 in size')
     return { ...DRAFT_ANGLE_HELP, detail, ...extra };
+  if (code === 'GEOMETRY' && detail.replace(/^B-rep: /, '') === 'circular wall draft: the draft reaches or crosses the cylinder axis')
+    return { title: 'Draft reaches the cylinder axis',
+      hint: 'Reduce Angle or move the neutral plane so both caps keep a positive radius.', detail, ...extra };
   if (code === 'PARAMETER' && detail === 'The wall thicknesses leave no cavity in this box.')
     return { title: 'Wall thicknesses leave no cavity', hint: 'Reduce the thickness of one or more walls.', detail, ...extra };
   const shellCornerLimit = code === 'PARAMETER' ? /^Shell join wall thickness must be less than (\d+(?:\.\d+)?(?:e[+-]?\d+)?) mm to keep both L arms and the closed height\.$/i.exec(detail) : null;

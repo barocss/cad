@@ -2,6 +2,8 @@ import { faceGeometry } from '../brep/analytic-boolean.js';
 import { BrepError, checkBrep, type Brep, type BrepEdge, type BrepFace, type BrepLoop } from '../brep/brep-core.js';
 import { createCylindricalBoreCheck, readTiltedRectangularPlateBore } from '../brep/cylindrical-bore.js';
 import { transformBrep } from '../brep/brep-transform.js';
+import { circleOf } from '../brep/brep-tessellate.js';
+import { evaluateSurface } from '../core/math.js';
 import { add, dist, dot, len, scale, sub } from '../core/vec3.js';
 import { CadNumericPolicy, geometryScaleMM, linearToleranceMM } from '../numeric-policy.js';
 import type { Curve, Point } from '../types.js';
@@ -358,6 +360,69 @@ export function circularWallOffsetFrame(brep: Brep, faceName: string): { anchor:
   const point = surface.controlPoints[2][0];
   const anchor: Point = [point[0], point[1], stock.lo + (stock.hi - stock.lo) / 2];
   return { anchor, normal: [(point[0] - stock.center[0]) / stock.radius, (point[1] - stock.center[1]) / stock.radius, 0], faces };
+}
+
+/** Turn both original circular walls into one cone without changing any native trim parameter or owner. */
+export function draftCircularWallIfAdmitted(brep: Brep, faceNames: readonly string[], angle: number, pull: 'z' | '-z', neutral?: number): Brep | undefined {
+  if (faceNames.length !== 2 || new Set(faceNames).size !== 2 || brep.faces.length !== stockCounts.circular[0]) return undefined;
+  const admitted = admittedCircularWall(brep, faceNames[0]);
+  if (!admitted || admitted.bore || !admitted.faces.every(name => faceNames.includes(name))) return undefined;
+  const { stock, walls } = admitted, sign = pull === 'z' ? 1 : -1, zN = neutral ?? (sign === 1 ? stock.lo : stock.hi);
+  if ((pull !== 'z' && pull !== '-z') || !Number.isFinite(angle) || angle === 0 || Math.abs(angle) >= Math.PI / 4 || !Number.isFinite(zN) || zN < stock.lo || zN > stock.hi)
+    throw new BrepError('INPUT', 'circular wall draft: use a nonzero angle below 45 degrees and a neutral within the original caps');
+  const slope = sign * Math.tan(angle), radiusAt = (z: number) => stock.radius - slope * (z - zN);
+  const radii = [radiusAt(stock.lo), radiusAt(stock.hi)], extent = Math.max(geometryScaleMM(brep.vertices.map(v => v.point)), ...radii.map(Math.abs));
+  if (radii.some(radius => !Number.isFinite(radius) || !(radius > linearToleranceMM(extent))))
+    throw new BrepError('GEOMETRY', 'circular wall draft: the draft reaches or crosses the cylinder axis');
+  const [cx, cy] = stock.center;
+  const moved = (point: Point): Point => {
+    const radius = radiusAt(point[2]);
+    if (radius === stock.radius) return point; // Preserve a neutral cap, including all its original records, exactly.
+    const factor = radius / stock.radius;
+    return [cx + (point[0] - cx) * factor, cy + (point[1] - cy) * factor, point[2]];
+  };
+  // This non-affine map is exact only on the proved two-station recipe: constant-Z caps/rims,
+  // constant-radial straight seams, and degree-V-one sides with equal axial weights.
+  const candidate: Brep = {
+    ...brep, vertices: brep.vertices.map(vertex => { const point = moved(vertex.point); return point === vertex.point ? vertex : { ...vertex, point }; }),
+    edges: brep.edges.map(edge => {
+      const controlPoints = edge.curve.controlPoints.map(moved);
+      return controlPoints.every((p, i) => p === edge.curve.controlPoints[i]) ? edge : { ...edge, curve: { ...edge.curve, controlPoints } };
+    }),
+    faces: brep.faces.map(face => {
+      const surface = face.surface;
+      if (surface.kind !== 'surface') return face;
+      const controlPoints = surface.controlPoints.map(row => row.map(moved));
+      return controlPoints.every((row, i) => row.every((p, j) => p === surface.controlPoints[i][j])) ? face : { ...face, surface: { ...surface, controlPoints } };
+    }),
+  };
+  if (!candidate.edges.some((edge, i) => !samePoles(edge.curve.controlPoints, brep.edges[i].curve.controlPoints)))
+    throw new BrepError('GEOMETRY', 'circular wall draft: the angle is too small to move the native walls');
+  const poles = [...candidate.vertices.map(v => v.point), ...candidate.edges.flatMap(edge => edge.curve.controlPoints),
+    ...candidate.faces.flatMap(face => face.surface.kind === 'surface' ? face.surface.controlPoints.flat() : [])];
+  const nextExtent = geometryScaleMM(poles), roundoff = 128 * Number.EPSILON * Math.max(1, nextExtent);
+  if (!poles.every(point => point.every(Number.isFinite)) || nextExtent > CadNumericPolicy.coordinateAbs)
+    throw new BrepError('GEOMETRY', 'circular wall draft: the drafted walls leave the modeling range');
+  // Read the actual mapped rim circles and plane supports; do not use the input radius as the receipt.
+  for (const [i, cap] of [stock.bottom, stock.top].entries()) {
+    const z = i === 0 ? stock.lo : stock.hi, face = candidate.faces.find(f => f.id === cap.id)!, plane = faceGeometry(face, nextExtent);
+    const rims = candidate.edges.filter(edge => edge.curve.degree === 2 && level(edge, z));
+    if (plane.kind !== 'plane' || plane.o[2] !== z || !same(plane.n, [0, 0, i === 0 ? -1 : 1]) || rims.length !== 2
+      || rims.some(edge => { const circle = circleOf(edge.curve); return !circle || Math.abs(circle.r - radii[i]) > roundoff || dist(circle.c, [cx, cy, z]) > roundoff; }))
+      throw new BrepError('GEOMETRY', 'circular wall draft: the native cap or circular boundary could not be preserved');
+  }
+  for (const wall of walls) {
+    const face = candidate.faces.find(f => f.id === wall.id)!;
+    if (face.surface.kind !== 'surface') throw new BrepError('GEOMETRY', 'circular wall draft: a native wall lost its surface');
+    for (const u of [0, .25, .5, .75, 1]) for (const v of [0, .5, 1]) {
+      const point = evaluateSurface(face.surface, u, v);
+      if (Math.abs(Math.hypot(point[0] - cx, point[1] - cy) - radiusAt(point[2])) > roundoff)
+        throw new BrepError('GEOMETRY', 'circular wall draft: the mapped native wall does not retain its conical support');
+    }
+  }
+  const report = checkBrep(candidate, { strict: true });
+  if (!report.valid) throw new BrepError('GEOMETRY', `circular wall draft: the drafted solid is invalid: ${report.issues[0]}`, report);
+  return candidate;
 }
 
 function resizeAnnularOutside(brep: Brep, { stock, walls }: NonNullable<ReturnType<typeof admittedCircularWall>>, radius: number): Brep {

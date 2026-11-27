@@ -15,6 +15,7 @@ import { draftBoxCorner, draftBoxHinge } from './part-box-draft.js';
 import { draftRotatedBoxHinge } from './part-rotated-box-draft.js';
 import { draftRotatedPolygonHinge, type RotatedPivotStock } from './part-rotated-polygon-draft.js';
 import { pivotPrismWall } from '../features/prism-wall-offset.js';
+import { draftCircularWallIfAdmitted } from '../features/bored-cap-offset.js';
 
 // Private structural contract. Original functions retain their caches, profiling and closure state.
 interface FaceFinishHelpers {
@@ -35,6 +36,17 @@ interface FaceFinishHelpers {
     angle: number, frame: BrepAffine['matrix'], origin: Point, tag: string) => Solid;
 }
 const one = (s: Solid): Result => ({ kind: 'solid', parts: [{ solid: s }] });
+
+function originalCircularDraftStock(reference: unknown, part: Part, t: Tools): boolean {
+  const owner = t.ref(reference, 'Circular Draft stock'), author = owner.author;
+  if (author?.kind !== 'extrude' || owner.result.kind !== 'solid' || owner.result.parts.length !== 1 || owner.result.parts[0] !== part
+    || (author.draft !== undefined && author.draft !== 0) || part.solid.kind !== 'upright') return false;
+  const sketch = t.ref(author.sketch, 'Circular Draft sketch'), source = sketch.author;
+  if (source?.kind !== 'sketch' || source.profile !== 'circle' || source.plane !== undefined || source.holes?.length || source.regions?.length
+    || sketch.result.kind !== 'sketch' || sketch.result.frame || sketch.result.holes?.length || sketch.result.regions?.length) return false;
+  const slabs = part.solid.solid.slabs;
+  return slabs.length === 1 && slabs[0].regions.length === 1 && slabs[0].regions[0].holes.length === 0;
+}
 
 /** Resolve the original inputs and return the original deferred finish closure. */
 export function faceFinishOperation(f: CadPartFeature & Record<string, unknown>, t: Tools, k: FaceFinishHelpers): () => Result {
@@ -203,8 +215,17 @@ export function faceFinishOperation(f: CadPartFeature & Record<string, unknown>,
       const neutral = f.neutral === undefined ? undefined : dim(f.neutral as CadPartDim, 'neutral');
       const pull = f.pull === undefined ? 'z' : f.pull as unknown;
       if (pull !== 'x' && pull !== 'y' && pull !== 'z' && pull !== '-x' && pull !== '-y' && pull !== '-z') fail('INPUT', 'pull must be x, y or z (a positive coordinate axis), or -x, -y or -z');
+      const circularStock = hinge === undefined && originalCircularDraftStock(f.target, target[0], t);
       return () => {
         if (target[0].solid.kind === 'brep' && target[0].solid.brep.faces.some(isFacetFace)) fail('CAPABILITY', 'draft on mesh faces is not supported yet (general draft and offset arrive with R11)');
+        if (circularStock) {
+          if (pull !== 'z' && pull !== '-z') return fail('SELECTION', 'Circular wall Draft needs a signed world Z pull.');
+          const box = bounds(target[0].solid), zN = neutral ?? (pull === 'z' ? box.min[2] : box.max[2]);
+          if (zN < box.min[2] || zN > box.max[2]) fail('SELECTION', 'Circular wall Draft neutral must lie within the original caps.');
+          const brep = draftCircularWallIfAdmitted(k.namedFaceTargetBrep(t, f.target, target[0]), names, (angle as number) * Math.PI / 180, pull, zN);
+          if (!brep) return fail('CAPABILITY', 'Circular wall Draft needs both distinct original native halves of one circular extrusion.');
+          return one({ kind: 'brep', brep });
+        }
         if (typeof hinge === 'string' && rotatedStock) {
           const original = k.namedFaceTargetBrep(t, f.target, target[0]), a = (angle as number) * Math.PI / 180;
           return one({ kind: 'brep', brep: rotatedStock.kind === 'box'

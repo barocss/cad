@@ -1,6 +1,7 @@
-import type { Field, Values } from './commands';
+import type { Ctx, Field, Values } from './commands';
 import { partBreps } from '../engine/evaluate';
 import type { StudioDoc } from '../engine/doc';
+import { featureId } from '../engine/ids';
 import { refusal } from '../engine/refusal';
 
 const pulls = ['z', '-z', 'x', '-x', 'y', '-y'] as const;
@@ -10,6 +11,25 @@ export const draftLabel = (pull: DraftPull): string =>
 export const isDraftPull = (value: unknown): value is DraftPull => pulls.some(pull => pull === value);
 export const readDraftPull = (value: unknown): DraftPull => isDraftPull(value) ? value : 'z';
 export const draftPulls = pulls;
+
+/** A pick of the complete native wall on an original upright circle extrusion. */
+export function originalCylinderDraftSelection(ctx: Ctx, pull: DraftPull): { faces: string[]; end: number } | undefined {
+  if ((pull !== 'z' && pull !== '-z') || ctx.selection.faces.length !== 1) return;
+  const pick = ctx.selection.faces[0], body = ctx.bodies[pick.body], ref = body?.ref;
+  if (!ref || ref.side !== 'solid' || body.mesh.faces.length !== 3 || body.topology?.bodyCount !== 1) return;
+  const extrusion = ctx.doc.nodes[ref.node];
+  if (extrusion?.kind !== 'extrude' || extrusion.cutDepth !== undefined || (extrusion.draft !== undefined && extrusion.draft !== 0)) return;
+  const sketch = ctx.doc.nodes[extrusion.sketch];
+  if (sketch?.kind !== 'sketch' || sketch.profile !== 'circle' || sketch.plane || sketch.on || sketch.association
+    || sketch.pocketFloor || sketch.holes?.length || sketch.regions?.length) return;
+  const face = body.mesh.faces[pick.face], name = featureId(ctx.doc.nodes, ref.node);
+  if (!face?.name.startsWith(name + '.side') || face.exact?.kind !== 'cylinder'
+    || face.exact.a[0] !== 0 || face.exact.a[1] !== 0 || Math.abs(face.exact.a[2]) !== 1 || face.nativeFaces?.length !== 2) return;
+  const faces = face.nativeFaces.map(member => member.name).sort();
+  if (faces[0] !== face.name + '#1' || faces[1] !== face.name + '#2') return;
+  const cap = body.mesh.faces.find(candidate => candidate.nativePlaneName === name + (pull === 'z' ? '.bottom' : '.top'))?.nativeAxisPlane;
+  if (cap?.axis === 'z') return { faces, end: cap.at };
+}
 
 export const draftInputs = (): Field[] => [
   { key: 'deg', label: 'Angle', kind: 'deg', min: -45, max: 45, step: 1 },

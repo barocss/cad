@@ -53,7 +53,7 @@ import { printerProfile, processProfile } from '../library/materials';
 import { featureId } from '../engine/ids';
 import { coded, refusal } from '../engine/refusal';
 import { mirrorReplacementPlane } from '../engine/mirrorReplacement';
-import { draftBodyEnd, draftInputs, draftNeutral, draftNeutralDefault, draftNeutralStep, draftPulls, readDraftPull, type DraftPull } from './draftInputs';
+import { draftBodyEnd, draftInputs, draftNeutral, draftNeutralDefault, draftNeutralStep, draftPulls, originalCylinderDraftSelection, readDraftPull, type DraftPull } from './draftInputs';
 import { splitPlaneHandle } from './splitPlaneHandle';
 import { holeCircleCentreProblem, holeRowSpacingProblem } from './holePatternInput';
 
@@ -365,6 +365,8 @@ function draftOf(ctx: Ctx, pull: 'x' | 'y' | 'z' | '-x' | '-y' | '-z' = 'z', leg
   const picks = ctx.selection.faces; if (!picks.length) return 'Pick side faces of one body to draft (Shift-click for more).';
   if (picks.some(f => f.body !== picks[0].body)) return 'Pick faces of one body.';
   const body = ctx.bodies[picks[0].body]; if (!body) return 'Pick side faces of one body to draft (Shift-click for more).';
+  const cylinder = originalCylinderDraftSelection(ctx, pull);
+  if (cylinder) return { body, faces: cylinder.faces, extrude: null };
   const faces = picks.map(f => body.mesh.faces[f.face]), axis = 'xyz'.indexOf(pull.slice(-1));
   if (faces.some(f => !f || f.kind !== 'plane' || Math.abs(f.normal[axis]) > 1e-6)) return `A draft takes flat side faces, square to ${pull.toUpperCase()} (the pull).`;
   const names = faces.flatMap(f => f.name.split('+'));
@@ -376,6 +378,8 @@ function draftOf(ctx: Ctx, pull: 'x' | 'y' | 'z' | '-x' | '-y' | '-z' = 'z', leg
 
 const draftEnds = new WeakMap<StudioDoc, Map<string, number | undefined>>();
 function selectedDraftEnd(ctx: Ctx, pull: DraftPull): number | undefined {
+  const cylinder = originalCylinderDraftSelection(ctx, pull);
+  if (cylinder) return cylinder.end;
   const body = ctx.bodies[ctx.selection.faces[0]?.body];
   if (!body) return undefined;
   const key = body.key + '/' + pull, entries = draftEnds.get(ctx.doc) ?? new Map<string, number | undefined>();

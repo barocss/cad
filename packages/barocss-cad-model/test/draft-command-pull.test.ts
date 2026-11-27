@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { evaluateDoc, type BodyResult } from '../src/engine/evaluate';
-import { rectanglePart, withNode, type StudioDoc } from '../src/engine/doc';
+import { cylinderPart, rectanglePart, withNode, type StudioDoc } from '../src/engine/doc';
 import { verifyReferences } from '../src/engine/references';
 import { commands, patchValues, type Ctx } from '../src/app/commands';
 import { editSavedDraftCommand, editSavedPivotFaceCommand } from '../src/app/draftEdit';
@@ -237,6 +237,24 @@ test('Studio Draft creates a fixed neutral coordinate and preserves its binding 
   assert.ok(restored.kind === 'draft');
   assert.equal(restored.neutral, undefined);
   assert.throws(() => command.build!({ ...editContext, doc: { ...bound } }, values), /Open the current Draft in History again/);
+});
+
+test('Studio Draft binds both native halves of the original cylindrical wall', () => {
+  const doc = cylinderPart(10, 20), bodies = bodiesOf(doc), body = bodies[0];
+  const face = body.mesh.faces.findIndex(candidate => candidate.exact?.kind === 'cylinder');
+  assert.ok(face >= 0);
+  const ctx: Ctx = { doc, bodies, selection: { bodies: [], edges: [], faces: [{ body: 0, face }] } };
+  assert.ok(draft.available(ctx).ok);
+  const fixed = patchValues(draft, ctx, { ...draft.defaults!(ctx), pull: '-z' }, { neutralMode: 'fixed' });
+  assert.equal(fixed.neutral, 20);
+  assert.throws(() => draft.build!(ctx, { ...fixed, pull: 'x' }), /flat side faces/);
+  const made = draft.build!(ctx, { ...fixed, pull: 'z', neutral: 8, deg: 10 });
+  assert.deepEqual(made.nodes.slice(0, 2), doc.nodes);
+  const node = made.nodes[2];
+  assert.ok(node.kind === 'draft');
+  assert.deepEqual(node.faces, ['n1.side0#1', 'n1.side0#2']);
+  const slope = Math.tan(Math.PI / 18), bottom = 10 + 8 * slope, top = 10 - 12 * slope;
+  assert.ok(Math.abs(volume(made) - Math.PI * 20 / 3 * (bottom ** 2 + bottom * top + top ** 2)) < 1e-7);
 });
 
 test('Studio Draft retains three selected box sides through its editable History command', () => {
