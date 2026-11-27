@@ -8,9 +8,9 @@ export function extrudeDraftFailure(error: FeatureFailure, nodes: readonly Model
   if (node?.kind !== 'extrude' || error.feature !== featureId(nodes, index)) return;
   if (/draft closes/i.test(error.detail)) return { ...error, historyField: 'draft',
     hint: 'Reduce Draft or Distance so the walls stay apart, or Reset this edit to restore the accepted values.' };
-  if (/drafted half-disk exceeds.*modeling coordinate range/i.test(error.detail))
-    return { ...error, title: 'The drafted half-disk exceeds the modeling range', historyField: 'draft',
-      hint: 'Reduce Draft or Distance so the part fits inside the modeling range.' };
+  const rangeShape = /drafted (half-disk|circular segment) exceeds.*modeling coordinate range/i.exec(error.detail)?.[1];
+  if (rangeShape) return { ...error, title: `The drafted ${rangeShape} exceeds the modeling range`, historyField: 'draft',
+    hint: 'Reduce Draft or Distance so the part fits inside the modeling range.' };
 }
 
 export function extrudeDraftFeedback(active: Active): FeatureFailure | undefined {

@@ -7,13 +7,16 @@ const nodes: ModelNode[] = [
   { id: 'n1', kind: 'extrude', sketch: 0, height: 10, draft: -10 },
 ];
 const error = { title: 'Kernel error', hint: 'Undo', feature: 'n1', detail: 'drafted extrusion: the joint at (10, 0) between a curve and another wall is not tangent (not supported yet)' };
-test('outward half-disk range refusal points to Draft and preserves the native diagnostic', () => {
-  const range = { ...error, detail: 'drafted extrusion: the drafted half-disk exceeds the ±10000 mm modeling coordinate range' };
-  const result = extrudeDraftFailure(range, nodes, 1);
-  assert.ok(result);
-  assert.equal(result.historyField, 'draft');
-  assert.match(result.hint, /Draft or Distance/);
-  assert.equal(result.detail, range.detail);
+test('range refusal names the draft profile and preserves the native diagnostic', () => {
+  for (const shape of ['half-disk', 'circular segment']) {
+    const range = { ...error, detail: `drafted extrusion: the drafted ${shape} exceeds the ±10000 mm modeling coordinate range` };
+    const result = extrudeDraftFailure(range, nodes, 1);
+    assert.ok(result);
+    assert.equal(result.title, `The drafted ${shape} exceeds the modeling range`);
+    assert.equal(result.historyField, 'draft');
+    assert.match(result.hint, /Draft or Distance/);
+    assert.equal(result.detail, range.detail);
+  }
 });
 test('collapse points to Draft, Distance and Reset without changing kernel evidence', () => {
   const collapse = { ...error, detail: 'draft closes the half-disk at or before the top' };

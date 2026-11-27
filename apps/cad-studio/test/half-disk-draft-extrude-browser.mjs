@@ -1,9 +1,13 @@
 import assert from 'node:assert/strict';
 import { createFlow } from './flow-helper.mjs';
 
+const segment = process.argv.includes('segment');
 const outward = process.argv.includes('outward');
 const baseline = process.argv.includes('--baseline');
-const firstAngle = outward ? -10 : 10, secondAngle = outward ? -14 : 14;
+const firstAngle = segment ? 6 : outward ? -10 : 10, secondAngle = segment ? -10 : outward ? -14 : 14;
+const collapseAngle = segment ? '12' : '35';
+const profileName = segment ? 'circular segment' : 'half-disk';
+const fileStem = segment ? 'circular-segment' : 'half-disk';
 
 const pins = [
   'apps/cad-studio/src/App.tsx',
@@ -19,8 +23,9 @@ const pins = [
 const f = await createFlow({
   name: 'half-disk-draft-extrude', output: process.argv[2], envFrozen: 'D1253_SOURCE_FROZEN',
   initialFiles: pins, requiredFrozen: pins,
-  qualification: `Create an ${outward ? 'outward' : 'inward'} half-disk Draft Extrude, edit its angle and reopen the native file.`,
-  limits: ['One prepared XY sketch, one radius-10 semicircle and its diameter, positive extrusion distance.'],
+  qualification: segment ? 'Draft a circular segment with an off-centre cardinal chord and reopen the native file.'
+    : `Create an ${outward ? 'outward' : 'inward'} half-disk Draft Extrude, edit its angle and reopen the native file.`,
+  limits: ['One original XY sketch with a radius-10 circular arc and one cardinal chord, positive extrusion distance.'],
   inspectorSource: `
 import { readFileSync } from 'node:fs';
 import { checkBrep, curveDomain, evaluateCurve, evaluateSurface, faceGeometry, massPropertiesOf, surfaceDomain } from '@barocss/cad';
@@ -41,12 +46,12 @@ console.log(JSON.stringify({ outputs: outputs.length, check: checkBrep(brep, { s
   kinds: brep.faces.map(face => faceGeometry(face).kind), curvedSupports, mass }));
 `,
 });
-const radius = 10, height = 10;
+const radius = 10, height = 10, chord = segment ? 6 : 0, halfChord = segment ? 8 : radius;
 const seed = {
   format: 'barocss-cad-model', schema: 3, units: 'mm', parameters: {}, nextId: 1,
   nodes: [{ id: 'n0', kind: 'sketch', profile: 'loop', segments: [
-    { kind: 'line', start: [-radius, 0] },
-    { kind: 'arc', start: [radius, 0], center: [0, 0], direction: 'ccw' },
+    { kind: 'line', start: [-halfChord, chord] },
+    { kind: 'arc', start: [halfChord, chord], center: [0, 0], direction: 'ccw' },
   ] }], outputs: {},
 };
 const button = (name, scope = f.page) => scope.getByRole('button', { name, exact: true });
@@ -56,8 +61,8 @@ const near = (a, b, tol = tolerance) => Number.isFinite(a) && Math.abs(a - b) <=
 
 function integral(slope, intervals) {
   const area = z => {
-    const d = z * slope, r = radius - d;
-    return r * r * Math.acos(d / r) - d * Math.sqrt(r * r - d * d);
+    const d = z * slope, r = radius - d, station = chord + d;
+    return r * r * Math.acos(station / r) - station * Math.sqrt(r * r - station * station);
   };
   const step = height / intervals;
   let sum = area(0) + area(height);
@@ -81,7 +86,7 @@ async function check(label, doc, angle) {
   assert.notEqual(Math.sign(read.seams[0].points[0][0]), Math.sign(read.seams[1].points[0][0]));
   for (const seam of read.seams) {
     for (const [x, y, z] of seam.points) {
-      assert.ok(near(y, z * slope) && near(Math.hypot(x, y), radius - z * slope), JSON.stringify({ label, seam }));
+      assert.ok(near(y, chord + z * slope) && near(Math.hypot(x, y), radius - z * slope), JSON.stringify({ label, seam }));
     }
     assert.deepEqual(seam.points.map(point => Math.sign(point[0])), Array(seam.points.length).fill(Math.sign(seam.points[0][0])));
     assert.ok([0, height].every(z => seam.points.some(point => near(point[2], z))));
@@ -99,15 +104,24 @@ await f.run(async () => {
   await f.newPage();
   const width = Number(process.argv.slice(3).find(arg => /^\d+$/.test(arg)) ?? 1440);
   await f.page.setViewportSize({ width, height: width === 1024 ? 800 : 900 });
-  f.phase = 'Open the editable XY half-disk sketch and start Extrude';
+  f.phase = `Open the editable XY ${profileName} sketch and start Extrude`;
   const [chooser] = await Promise.all([f.page.waitForEvent('filechooser'), button('Open').click()]);
-  await chooser.setFiles({ name: 'half-disk-sketch.bcad', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(seed)) });
+  await chooser.setFiles({ name: `${fileStem}-sketch.bcad`, mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(seed)) });
   await f.same(seed);
   const browser = f.page.getByRole('complementary', { name: 'Browser', exact: true });
   await button('Sketch 1', browser).click();
   await f.openExtrudeHud();
   const hud = f.hud(), draft = field('Draft', hud);
   await field('Distance', hud).fill(String(height));
+  if (baseline && segment) {
+    await draft.fill(String(firstAngle));
+    await hud.locator('.status').filter({ hasText: /^refused$/ }).waitFor();
+    assert.match(await hud.locator('details code').textContent(), /not tangent/);
+    assert.equal(await button('Apply', hud).isDisabled(), true);
+    await f.same(seed);
+    await f.snapshot('circular-segment-baseline-refused');
+    return;
+  }
   if (baseline) {
     await draft.fill('-10');
     await hud.getByText('Outward Draft is not supported for this half-disk', { exact: true }).waitFor();
@@ -117,16 +131,16 @@ await f.run(async () => {
     await f.snapshot('half-disk-outward-baseline-refused');
     return;
   }
-  if (outward) {
+  if (outward || segment) {
     await field('Distance', hud).fill('1800');
     await draft.fill('-80');
-    await hud.getByText('The drafted half-disk exceeds the modeling range', { exact: true }).waitFor();
+    await hud.getByText(`The drafted ${profileName} exceeds the modeling range`, { exact: true }).waitFor();
     assert.equal(await button('Apply', hud).isDisabled(), true);
     await f.same(seed);
     await f.snapshot('half-disk-outward-range-refused');
     await field('Distance', hud).fill(String(height));
   }
-  await draft.fill('35');
+  await draft.fill(collapseAngle);
   await hud.getByText('The draft is too steep for this height', { exact: true }).waitFor();
   assert.equal(await button('Apply', hud).isEnabled(), false);
   await f.same(seed);
@@ -146,8 +160,8 @@ await f.run(async () => {
   await check('initial-native', created, firstAngle);
 
   const editor = f.editor();
-  await f.openFeatureEditor(1, 'drafted half-disk Extrude');
-  await field('Draft', editor).fill('35');
+  await f.openFeatureEditor(1, `drafted ${profileName} Extrude`);
+  await field('Draft', editor).fill(collapseAngle);
   await button('Apply', editor).click();
   await editor.getByText('The draft is too steep for this height', { exact: true }).waitFor();
   assert.equal(await field('Draft', editor).getAttribute('aria-invalid'), 'true');
@@ -166,10 +180,10 @@ await f.run(async () => {
   await f.same(created);
   await f.redo();
   await f.same(changed);
-  const saved = await f.save('half-disk-draft-extrude');
+  const saved = await f.save(`${fileStem}-draft-extrude`);
   const reopened = await f.freshOpen(saved.file, changed, 'half-disk-reopened');
   await check('reopened-native', reopened.doc, secondAngle);
-  await f.openFeatureEditor(1, 'reopened drafted half-disk Extrude');
+  await f.openFeatureEditor(1, `reopened drafted ${profileName} Extrude`);
   assert.equal(await field('Draft', f.editor()).inputValue(), String(secondAngle));
   await f.closeEditor();
   await f.same(changed);

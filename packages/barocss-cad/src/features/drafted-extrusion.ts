@@ -2,14 +2,14 @@
 // wall leans into the material by the draft angle (the section shrinks by (z1 − z0)·tan θ, a hole
 // grows). A straight wall becomes a sloping plane, an arc a cone patch about the arc's centre. Tangent
 // joints stay tangent; two straight walls meet in a sloping edge through their offset lines' meeting
-// point. A half-disk has two exact parabolic joints for inward or outward draft. Other non-tangent curved joints and
+// point. A cardinal half-disk or symmetric minor circular segment has exact parabolic joints in either draft direction. Other non-tangent curved joints and
 // drafts steep enough to collapse a wall are refused.
 import { BrepError, buildBrep, loopVectorArea, surfaceNormalAtCentre, type Brep } from '../brep/brep-core.js';
 import { sideName } from '../document/side-names.js';
 import { buildProfileLoop, segmentCurve, type ProfileSegment, type ProfileSegmentInput, type XY } from './extruded-profile-solid.js';
 import { dot } from '../core/vec3.js';
 import type { Curve, Point, Surface } from '../types.js';
-import { draftHalfDisk } from './drafted-half-disk.js';
+import { draftHalfDisk, draftMinorCircularSegment } from './drafted-half-disk.js';
 
 export interface DraftedExtrusionInput {
   readonly profile: readonly ProfileSegmentInput[];
@@ -66,6 +66,8 @@ export function draftedExtrusion(input: DraftedExtrusionInput): Brep {
     const names = built.map((_, i) => input.sideTags ? sideName(tag, loop0.reversed ? 1 - i : i, input.sideTags) : `${tag}.side${i}`);
     const halfDisk = draftHalfDisk(built, names, z0, z1, Math.tan(theta), id, tag, fail);
     if (halfDisk) return halfDisk;
+    const segment = draftMinorCircularSegment(built, names, z0, z1, Math.tan(theta), id, tag, fail);
+    if (segment) return segment;
   }
   // A single circle becomes two halves, so every edge has two vertices.
   const bottom: ProfileSegment[] = built.length > 1 ? [...built] : (() => {
