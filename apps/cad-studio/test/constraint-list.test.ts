@@ -2,7 +2,20 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { ELLIPSE_POINTS, ellipseShape } from '@barocss/cad-model/sketch/ellipse';
 import { commitDimension, removeConstraint, type Polygon } from '@barocss/cad-model/sketch/rules';
-import { activeCircleDistanceRow, circleDistanceConflict, constraintListRows, edgeCircleDistanceConflict, filterConstraintList, fixedPointDistanceConflict, opposingLengthConflict } from '../src/sketch/constraintList';
+import { activeCircleDistanceRow, circleDistanceConflict, constraintListRows, edgeCircleDistanceConflict, filterConstraintList, fixedArcRadiusConflict, fixedPointDistanceConflict, opposingLengthConflict } from '../src/sketch/constraintList';
+
+test('a fixed arc chord proves only radius requests below half its length', () => {
+  const shape: Polygon = {
+    kind: 'polygon', closed: true, points: [[0, 0], [20, 0], [20, 20], [0, 20]], bulges: [0, -.5, 0, 0],
+    rules: [{ kind: 'fix', point: 1, at: [20, 0] }, { kind: 'fix', point: 2, at: [20, 20] }],
+  };
+  assert.deepEqual(fixedArcRadiusConflict(shape, 'rad1', 9), { ids: ['rule:0', 'rule:1'], points: [1, 2], chord: 20 });
+  for (const value of [10 - 1e-8, 10, 11, 0, NaN, Infinity]) assert.equal(fixedArcRadiusConflict(shape, 'rad1', value), undefined);
+  for (const key of ['len1', 'rad0', 'rad2', 'rad3', 'rad20']) assert.equal(fixedArcRadiusConflict(shape, key, 9), undefined);
+  assert.equal(fixedArcRadiusConflict({ ...shape, closed: false }, 'rad1', 9), undefined);
+  assert.equal(fixedArcRadiusConflict({ ...shape, rules: shape.rules!.slice(0, 1) }, 'rad1', 9), undefined);
+  assert.equal(fixedArcRadiusConflict({ ...shape, rules: [...shape.rules!, shape.rules![1]] }, 'rad1', 9), undefined);
+});
 
 const rectangle: Polygon = {
   kind: 'polygon', points: [[0, 0], [40, 0], [40, 20], [0, 20]], closed: true, hv: { h: [0, 2], v: [1, 3] },

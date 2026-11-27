@@ -128,6 +128,31 @@ export function edgeCircleDistanceConflict(shape: Polygon, key: string, value: n
   }
 }
 
+function explicitFixedPoint(shape: Polygon, point: number) {
+  const matches = (shape.rules ?? []).flatMap((rule, i) =>
+    rule.kind === 'fix' && rule.point === point ? [{ id: `rule:${i}`, at: rule.at }] : []);
+  if (matches.length !== 1) return;
+  const [fix] = matches;
+  if (fix.at.length === 2 && [...fix.at].every(coordinate => Number.isFinite(coordinate) && Math.abs(coordinate) <= CadNumericPolicy.coordinateAbs)) return fix;
+}
+
+/** A circular arc's chord cannot exceed its diameter. Attribute only explicit endpoint locks. */
+export function fixedArcRadiusConflict(shape: Polygon, key: string, value: number) {
+  const match = /^rad(\d+)$/.exec(key);
+  if (!match || !shape.closed || shape.pending || !isSolverLength(value)) return;
+  const a = Number(match[1]), b = a + 1;
+  if (!Number.isSafeInteger(a) || !shape.points[a] || !shape.points[b] || !a) return;
+  const bulge = shape.bulges?.[a];
+  if (!bulge || !Number.isFinite(bulge)) return;
+  const first = explicitFixedPoint(shape, a), second = explicitFixedPoint(shape, b);
+  if (!first || !second) return;
+  const chord = Math.hypot(second.at[0] - first.at[0], second.at[1] - first.at[1]);
+  // Allow for both Fix residuals, the radius residual and subtraction at large coordinates.
+  const margin = 8 * CadNumericPolicy.linearTolerance + 16 * Number.EPSILON * CadNumericPolicy.coordinateAbs;
+  if (chord - 2 * value <= margin) return;
+  return { ids: [first.id, second.id], points: [a, b], chord };
+}
+
 /** Attribute a refused point distance or straight edge length to the two explicit Fix rows that determine it. */
 export function fixedPointDistanceConflict(shape: Polygon, key: string, value: number) {
   if (!shape.closed || shape.pending || !isSolverLength(value)) return;
@@ -148,14 +173,7 @@ export function fixedPointDistanceConflict(shape: Polygon, key: string, value: n
     b = (edge + 1) % shape.points.length;
     if (a <= 0 || b <= 0 || a === b || !shape.points[a] || !shape.points[b]) return;
   } else return;
-  const target = (point: number) => {
-    const matches = (shape.rules ?? []).flatMap((rule, i) =>
-      rule.kind === 'fix' && rule.point === point ? [{ id: `rule:${i}`, at: rule.at }] : []);
-    if (matches.length !== 1) return;
-    const [fix] = matches;
-    if (fix.at.length === 2 && [...fix.at].every(coordinate => Number.isFinite(coordinate) && Math.abs(coordinate) <= CadNumericPolicy.coordinateAbs)) return fix;
-  };
-  const first = target(a), second = target(b);
+  const first = explicitFixedPoint(shape, a), second = explicitFixedPoint(shape, b);
   if (!first || !second) return;
   const dx = Math.abs(second.at[0] - first.at[0]), dy = Math.abs(second.at[1] - first.at[1]);
   const distance = kind === 'dx' ? dx : kind === 'dy' ? dy : Math.hypot(dx, dy);

@@ -40,10 +40,10 @@ const NONE: SketchPick[] = [];
  * tangent joints stay tangent. The app settles every edit (see sketch/settle.ts) and reports `error`. O16: the contents
  * on shadcn (Input, NativeSelect, Button, FIELD); the shell (its title) and the chip toggles are the studio's.
  */
-export function SketchPanel({ sketch, constraintInspection, constraintDocument, toolLabel, error, coordinateFeedback, finishError, onEditEllipseAxes, conflictIds, onActivateOutline, referencePicker, toolControls, onShape, onDrivingLength, onPlace, onUi, outlineTools, onBand, onTransformOutline }: { sketch: SketchState; constraintInspection: ConstraintInspectionStore; constraintDocument: StudioDoc; toolLabel: string; error: string | null; coordinateFeedback?: string | null; finishError?: string | null; conflictIds?: readonly string[]; onActivateOutline?(index: number): void; referencePicker?: ReactNode; toolControls?: ReactNode; onShape(shape: SketchShape | null, coordinate?: CoordinateIntent, origin?: { kind: 'open-line-length' | 'open-arc-radius' | 'open-spline-fit-point'; source: SketchShape; doc: StudioDoc }): void; onPlace?(kind: SketchAnchor['kind'], offset: number, angle?: number): void;
+export function SketchPanel({ sketch, constraintInspection, constraintDocument, toolLabel, error, coordinateFeedback, finishError, onEditEllipseAxes, conflictIds, onActivateOutline, referencePicker, toolControls, onShape, onDrivingDimension, onPlace, onUi, outlineTools, onBand, onTransformOutline }: { sketch: SketchState; constraintInspection: ConstraintInspectionStore; constraintDocument: StudioDoc; toolLabel: string; error: string | null; coordinateFeedback?: string | null; finishError?: string | null; conflictIds?: readonly string[]; onActivateOutline?(index: number): void; referencePicker?: ReactNode; toolControls?: ReactNode; onShape(shape: SketchShape | null, coordinate?: CoordinateIntent, origin?: { kind: 'open-line-length' | 'open-arc-radius' | 'open-spline-fit-point'; source: SketchShape; doc: StudioDoc }): void; onPlace?(kind: SketchAnchor['kind'], offset: number, angle?: number): void;
   onTransformOutline?(owner: SketchState, doc: StudioDoc, candidate: SketchShape): boolean;
   onEditEllipseAxes?(): boolean;
-  onDrivingLength?(source: Polygon, edge: number, value: number): boolean;
+  onDrivingDimension?(source: Polygon, field: 'lengths' | 'radii', edge: number, value: number): boolean;
   /** Sets the picked outline entities or the dimension being edited in the viewport. */
   onUi?(patch: Pick<SketchState, 'picked' | 'editDim'>): void;
   /** Independently owned outline/offset tools, composed without forwarding their actions. */
@@ -91,7 +91,7 @@ export function SketchPanel({ sketch, constraintInspection, constraintDocument, 
 
   const lock = (poly: Polygon, key: 'lengths' | 'radii', i: number, value: number | null) => {
     if (value !== null && poly[key]?.[i] === value) return;
-    if (key === 'lengths' && value !== null && onDrivingLength?.(poly, i, value)) return;
+    if (value !== null && onDrivingDimension?.(poly, key, i, value)) return;
     const next = { ...(poly[key] ?? {}) };
     if (value === null) delete next[i]; else next[i] = value;
     onShape({ ...poly, [key]: next });

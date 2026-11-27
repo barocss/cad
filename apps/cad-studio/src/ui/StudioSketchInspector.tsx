@@ -10,7 +10,7 @@ import { commitOutlineRotation } from '../sketch/outlineRotationCommit';
 import { PathGapControls } from '../sketch/PathGapControls';
 import { SketchSnapControls } from '../sketch/SketchSnapControls';
 import type { useSketchDraftHistory } from '../sketch/useSketchDraftHistory';
-import { ownsPanelDrivingLength } from '../viewport/studioSketchViewportActions';
+import { ownsPanelDrivingDimension } from '../viewport/studioSketchViewportActions';
 import { OpenEndsControls } from './OpenEndsControls';
 import { OverlaidLinesControls } from './OverlaidLinesControls';
 import { SavedBezierPicker } from './SavedBezierPicker';
@@ -42,7 +42,7 @@ interface Props {
   edit: Omit<ComponentProps<typeof SketchOutlineTools>, 'sketch'> & {
     place: Panel['onPlace'];
     band: Panel['onBand'];
-    recoverLength: NonNullable<Panel['onDrivingLength']>;
+    recoverDimension: NonNullable<Panel['onDrivingDimension']>;
   };
 }
 
@@ -99,8 +99,8 @@ export function StudioSketchInspector({ sketch, document, draft, constraints, to
       if (origin && (origin.doc !== document.live.current || origin.source !== liveShape.current)) return;
       updateShape(shape, false, origin?.kind ?? 'panel', coordinate);
     }}
-    onDrivingLength={(source, edge, value) => !ownsPanelDrivingLength(doc, document.live.current, sketch,
-      renderedSketch.current.draft, pickerGeneration, generation.current) || edit.recoverLength(source, edge, value)}
+    onDrivingDimension={(source, field, edge, value) => !ownsPanelDrivingDimension(doc, document.live.current, sketch,
+      renderedSketch.current.draft, pickerGeneration, generation.current) || edit.recoverDimension(source, field, edge, value)}
     onPlace={sketch.editNode === undefined ? edit.place : undefined}
     onUi={patch => setSketch(current => current && { ...current, ...patch })} onBand={edit.band}
     outlineTools={<SketchOutlineTools sketch={sketch} onOffset={edit.onOffset} onToCurves={edit.onToCurves}

@@ -6,7 +6,7 @@ import { isDefaultPlane } from '@barocss/cad-model/sketch/plane';
 import { commitDimension, commitInlineDimension, dimensionLabel, dimensionValue, drivingDimensionValue, isSettled, isVerifiedFixedTriangleEdit, type Polygon } from '@barocss/cad-model/sketch/rules';
 import { sketchClick } from '@barocss/cad-model/sketch/select';
 import type { SketchShape, SketchState } from '@barocss/cad-model/sketch/types';
-import { circleAxisPairConflict, circleDistanceConflict, edgeCircleDistanceConflict, fixedPointDistanceConflict, opposingLengthConflict } from '../sketch/constraintList';
+import { circleAxisPairConflict, circleDistanceConflict, edgeCircleDistanceConflict, fixedArcRadiusConflict, fixedPointDistanceConflict, opposingLengthConflict } from '../sketch/constraintList';
 import { matchesStoredTriangle } from '../sketch/fixedTriangleEditor';
 import type { SceneSketchActions } from './SceneViewport';
 
@@ -19,7 +19,7 @@ export const isOutlinePickIssue = (reason: string | undefined) =>
   reason === outlinePickIssues.dimension || reason === outlinePickIssues.select || reason === outlinePickIssues.inactive;
 
 /** A panel input may outlive the render that owned its draft. */
-export function ownsPanelDrivingLength<T>(doc: T, currentDoc: T, owner: SketchState | null,
+export function ownsPanelDrivingDimension<T>(doc: T, currentDoc: T, owner: SketchState | null,
   rendered: SketchState | null, generation: number, currentGeneration: number): boolean {
   return doc === currentDoc && owner !== null && rendered === owner && generation === currentGeneration;
 }
@@ -54,10 +54,20 @@ function canRecoverLength(sketch: SketchState | null, opened: ReopenedSketchSour
 }
 
 /** Viewport gestures use Studio's existing sketch state and shape history. */
-export function studioSketchViewportActions({ liveShape, sketch, currentSketchSource, setSketch, setSketchError, offerEllipseAxes, clearOutlinePickIssue, updateCircleDiameter, setConstraintConflict, updateShape, trimSketch }: SketchViewportInputs): SceneSketchActions & { recoverPanelLength(source: Polygon, edge: number, value: number): boolean } {
+export function studioSketchViewportActions({ liveShape, sketch, currentSketchSource, setSketch, setSketchError, offerEllipseAxes, clearOutlinePickIssue, updateCircleDiameter, setConstraintConflict, updateShape, trimSketch }: SketchViewportInputs): SceneSketchActions & { recoverPanelDimension(source: Polygon, field: 'lengths' | 'radii', edge: number, value: number): boolean } {
+  const reportArcConflict = (source: Polygon, key: string, value: number, conflict: NonNullable<ReturnType<typeof fixedArcRadiusConflict>>) => {
+    const [a, b] = conflict.points, chord = Number(conflict.chord.toPrecision(12));
+    const minimum = Number((conflict.chord / 2).toPrecision(12));
+    setConstraintConflict(`${dimensionLabel(source, key)} = ${value} mm conflicts with the ${chord} mm chord set by fixed points ${a + 1} and ${b + 1}. The radius must be at least ${minimum} mm.`, source, conflict.ids);
+  };
   const applyDimension = (opened: ReopenedSketchSource | undefined, source: Polygon, key: string, value: number) => {
     const result = opened ? commitInlineDimension(source, key, value) : commitDimension(source, key, value);
     if (!result.ok) {
+      const arc = fixedArcRadiusConflict(source, key, value);
+      if (arc) {
+        reportArcConflict(source, key, value, arc);
+        return;
+      }
       const edge = opposingLengthConflict(source, key, value);
       const circle = circleDistanceConflict(source, key, value);
       const circleAxes = circle ? undefined : circleAxisPairConflict(source, key, value);
@@ -81,8 +91,14 @@ export function studioSketchViewportActions({ liveShape, sketch, currentSketchSo
     updateShape(result.shape);
   };
   return {
-    recoverPanelLength(source: Polygon, edge: number, value: number): boolean {
+    recoverPanelDimension(source: Polygon, field: 'lengths' | 'radii', edge: number, value: number): boolean {
       if (liveShape.current !== source || sketch?.shape !== source) return true;
+      if (field === 'radii') {
+        const key = `rad${edge}`, arc = fixedArcRadiusConflict(source, key, value);
+        if (!arc || commitDimension(source, key, value).ok) return false;
+        reportArcConflict(source, key, value, arc);
+        return true;
+      }
       const key = `len${edge}`;
       const opposite = opposingLengthConflict(source, key, value);
       if (opposite !== undefined) {

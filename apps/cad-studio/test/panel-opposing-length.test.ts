@@ -4,7 +4,7 @@ import type { SketchNode } from '@barocss/cad-model/engine/doc';
 import { xyPlane } from '@barocss/cad-model/sketch/plane';
 import { commitDimension, type Polygon } from '@barocss/cad-model/sketch/rules';
 import type { SketchShape, SketchState } from '@barocss/cad-model/sketch/types';
-import { ownsPanelDrivingLength, studioSketchViewportActions } from '../src/viewport/studioSketchViewportActions';
+import { ownsPanelDrivingDimension, studioSketchViewportActions } from '../src/viewport/studioSketchViewportActions';
 
 const rectangle: Polygon = {
   kind: 'polygon', closed: true, points: [[0, 0], [40, 0], [40, 20], [0, 20]],
@@ -32,7 +32,7 @@ test('panel refuses a proven opposite width conflict without mutating the source
   const { actions, shapes, errors, conflicts } = harness(source);
   const native = commitDimension(source, 'len0', 42);
   assert.ok(!native.ok);
-  assert.equal(actions.recoverPanelLength(source, 0, 42), true);
+  assert.equal(actions.recoverPanelDimension(source, 'lengths', 0, 42), true);
   assert.deepEqual(conflicts, [{ reason: native.reason, shape: source, ids: ['len:2'] }]);
   assert.equal(conflicts[0].shape, source);
   assert.deepEqual({ shapes, errors }, { shapes: [], errors: [] });
@@ -42,23 +42,23 @@ test('panel refuses a proven opposite width conflict without mutating the source
 test('adding an implied straight edge length names the attempted dimension without recording it', () => {
   const source: Polygon = { ...structuredClone(rectangle), lengths: { 0: 40 } };
   const original = structuredClone(source), { actions, shapes, errors, conflicts } = harness(source);
-  assert.equal(actions.recoverPanelLength(source, 2, 40), true);
+  assert.equal(actions.recoverPanelDimension(source, 'lengths', 2, 40), true);
   assert.equal(errors.length, 1);
   assert.match(errors[0], /^Length of edge 3 = 40 is already implied/);
   assert.deepEqual({ shapes, conflicts }, { shapes: [], conflicts: [] });
   assert.deepEqual(source, original);
-  assert.equal(actions.recoverPanelLength(source, 1, 21), false, 'valid new lock keeps its existing History route');
+  assert.equal(actions.recoverPanelDimension(source, 'lengths', 1, 21), false, 'valid new lock keeps its existing History route');
 });
 
 test('panel routing requires the current document, rendered sketch generation and exact active outline', () => {
   const source = structuredClone(rectangle), owner = draft(source), doc = {};
-  assert.equal(ownsPanelDrivingLength(doc, doc, owner, owner, 1, 1), true);
-  assert.equal(ownsPanelDrivingLength(doc, {}, owner, owner, 1, 1), false);
-  assert.equal(ownsPanelDrivingLength(doc, doc, owner, owner, 1, 2), false);
-  assert.equal(ownsPanelDrivingLength(doc, doc, owner, { ...owner }, 1, 1), false);
-  assert.equal(ownsPanelDrivingLength(doc, doc, null, null, 1, 1), false);
+  assert.equal(ownsPanelDrivingDimension(doc, doc, owner, owner, 1, 1), true);
+  assert.equal(ownsPanelDrivingDimension(doc, {}, owner, owner, 1, 1), false);
+  assert.equal(ownsPanelDrivingDimension(doc, doc, owner, owner, 1, 2), false);
+  assert.equal(ownsPanelDrivingDimension(doc, doc, owner, { ...owner }, 1, 1), false);
+  assert.equal(ownsPanelDrivingDimension(doc, doc, null, null, 1, 1), false);
   for (const state of [harness(source, owner, { ...source }), harness(source, draft({ ...source }), source)]) {
-    assert.equal(state.actions.recoverPanelLength(source, 0, 42), true);
+    assert.equal(state.actions.recoverPanelDimension(source, 'lengths', 0, 42), true);
     assert.deepEqual({ shapes: state.shapes, conflicts: state.conflicts, errors: state.errors }, { shapes: [], conflicts: [], errors: [] });
   }
 });
@@ -74,7 +74,7 @@ test('unproven or successful ordinary panel lengths keep their original route', 
   assert.equal(commitDimension(rectangle, 'len1', 21).ok, true);
   for (const [source, edge, value] of originals) {
     const original = structuredClone(source), state = harness(source);
-    assert.equal(state.actions.recoverPanelLength(source, edge, value), false);
+    assert.equal(state.actions.recoverPanelDimension(source, 'lengths', edge, value), false);
     assert.deepEqual({ shapes: state.shapes, conflicts: state.conflicts, errors: state.errors }, { shapes: [], conflicts: [], errors: [] });
     assert.deepEqual(source, original);
   }
@@ -93,8 +93,8 @@ test('reopened verified fixed triangle still recovers only its third edge', () =
   } satisfies SketchNode;
   const sketch = { ...draft(source), editNode: 0 };
   const state = harness(source, sketch, source, node);
-  assert.equal(state.actions.recoverPanelLength(source, 1, 124.05), false);
-  assert.equal(state.actions.recoverPanelLength(source, 2, 124.05), true);
+  assert.equal(state.actions.recoverPanelDimension(source, 'lengths', 1, 124.05), false);
+  assert.equal(state.actions.recoverPanelDimension(source, 'lengths', 2, 124.05), true);
   assert.equal(state.shapes.length, 1);
   const next = state.shapes[0];
   assert.ok(next?.kind === 'polygon' && state.recoveredLengths.has(next));
@@ -112,7 +112,7 @@ test('panel attributes a straight edge length conflict between two fixed endpoin
   };
   for (const source of [base, { ...base, lengths: { 1: 20 } }]) {
     const original = structuredClone(source), { actions, shapes, errors, conflicts } = harness(source);
-    assert.equal(actions.recoverPanelLength(source, 1, 25), true);
+    assert.equal(actions.recoverPanelDimension(source, 'lengths', 1, 25), true);
     assert.deepEqual(conflicts, [{
       reason: 'Length of edge 2 = 25 mm conflicts with the 20 mm distance set by fixed points 2 and 3.',
       shape: source,
@@ -121,4 +121,23 @@ test('panel attributes a straight edge length conflict between two fixed endpoin
     assert.deepEqual({ shapes, errors }, { shapes: [], errors: [] });
     assert.deepEqual(source, original);
   }
+});
+
+test('panel identifies both fixed arc endpoints and retains the fallback for other radii', () => {
+  const source: Polygon = {
+    kind: 'polygon', closed: true, points: [[0, 0], [20, 0], [20, 20], [0, 20]],
+    bulges: [0, .5, 0, 0], hv: { h: [0, 2], v: [3] },
+    rules: [{ kind: 'fix', point: 1, at: [20, 0] }, { kind: 'fix', point: 2, at: [20, 20] }],
+  };
+  const state = harness(source);
+  assert.equal(state.actions.recoverPanelDimension(source, 'radii', 1, 9), true);
+  assert.deepEqual(state.conflicts, [{
+    reason: 'Radius of arc 2 = 9 mm conflicts with the 20 mm chord set by fixed points 2 and 3. The radius must be at least 10 mm.',
+    shape: source, ids: ['rule:0', 'rule:1'],
+  }]);
+  assert.equal(state.actions.recoverPanelDimension(source, 'radii', 1, 11), false);
+  const unpinned = { ...source, rules: source.rules!.slice(0, 1) };
+  assert.equal(harness(unpinned).actions.recoverPanelDimension(unpinned, 'radii', 1, 9), false);
+  assert.equal(harness(source, draft(source), { ...source }).actions.recoverPanelDimension(source, 'radii', 1, 9), true);
+  assert.deepEqual({ shapes: state.shapes, errors: state.errors }, { shapes: [], errors: [] });
 });
