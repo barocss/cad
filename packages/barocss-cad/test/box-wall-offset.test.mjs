@@ -108,7 +108,6 @@ test('the native API restricts this wall route to the original rectangular Extru
     { id: 'change', kind: 'translate', target: 'box', offset: [5, 0, 0] },
     { id: 'change', kind: 'rotate', target: 'box', axis: 'z', angle: 90 },
     { id: 'change', kind: 'offset-face', target: 'box', face: 'box.top', distance: 2 },
-    { id: 'change', kind: 'offset-face', target: 'box', face: 'box.side0', distance: 2 },
   ]) {
     const d = document(); d.features.splice(2, 0, change); d.features.at(-1).target = 'change';
     assert.doesNotThrow(() => evaluateCadPart({ ...d, features: d.features.slice(0, -1) }));

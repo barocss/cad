@@ -4,24 +4,28 @@ import { join } from 'node:path';
 import { createFlow } from './flow-helper.mjs';
 
 const baseline = process.argv.includes('--baseline');
-const box = process.argv.includes('box');
+const roundTrip = process.argv.includes('roundtrip');
+const box = roundTrip || process.argv.includes('box');
 const pins = ['packages/barocss-cad-model/src/app/nativeOffsetFace.ts', 'packages/barocss-cad-model/src/app/offsetFaceEdit.ts',
   'packages/barocss-cad-model/src/engine/doc.ts',
   'packages/barocss-cad/src/features/prism-wall-offset.ts', 'packages/barocss-cad/src/features/drafted-cap-offset.ts',
   'packages/barocss-cad/src/part/part-model.ts'];
 const f = await createFlow({
   name: 'offset-polygon-wall', output: process.argv[2], envFrozen: 'OFFSET_POLYGON_WALL_FROZEN',
-  qualification: box ? 'Signed Offset face on an original rectangular extrusion wall.'
-    : 'Signed Offset face on an original triangular and octagonal extrusion wall.',
+  qualification: roundTrip ? 'Two signed native Offsets on the same original rectangular extrusion wall.'
+    : box ? 'Signed Offset face on an original rectangular extrusion wall.'
+      : 'Signed Offset face on an original triangular and octagonal extrusion wall.',
   limits: ['Original straight convex polygon profiles, upright uncut extrusion, signed distance mode.'],
   initialFiles: pins, requiredFrozen: pins,
   inspectorSource: `
+import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { partSnapshot } from '@barocss/cad-model/engine/part';
 import { checkBrep, faceGeometry, massPropertiesOf } from '@barocss/cad';
 const { outputs } = partSnapshot(JSON.parse(readFileSync(process.argv[2], 'utf8')));
 const body = outputs[0], { brep } = body, report = checkBrep(brep, { strict: true });
 console.log(JSON.stringify({ count: outputs.length, volume: massPropertiesOf(body).volume, report,
+  nativeHash: createHash('sha256').update(JSON.stringify(brep)).digest('hex'),
   closed: brep.shells.every(shell => shell.closed), vertices: brep.vertices,
   faces: brep.faces.map(face => [face.name, faceGeometry(face)]),
   ids: [brep.faces.map(({ surface, ...face }) => [face, surface.id]), brep.edges.map(edge => [edge.id, edge.name, edge.vertices, edge.curve.id]),
@@ -60,6 +64,7 @@ async function prove(label, doc, from, example, distance) {
     bodies: 1, shells: 1, faces: count + 2, loops: count + 2, coedges: 6 * count, edges: 3 * count, vertices: 2 * count,
   }]);
   assert.deepEqual(actual.ids, from.ids);
+  if (distance === 0) assert.equal(actual.nativeHash, from.nativeHash);
   const wanted = [...example.corners(-distance), ...example.footprint.slice(2)];
   for (const z of [0, example.height ?? 10]) for (const [x, y] of wanted) {
     assert.equal(actual.vertices.filter(vertex => same(vertex.point, [x, y, z])).length, 1);
@@ -72,9 +77,89 @@ async function prove(label, doc, from, example, distance) {
   }
   const volume = example.volume(distance);
   assert.ok(near(actual.volume, volume) && near((await f.bodies()).bodies[0].volume, volume));
-  const node = doc.nodes[2];
-  assert.deepEqual([node.kind, node.faces, node.distance], ['offset-face', ['n1.side0'], distance]);
   f.report.observations.push({ label, profile: example.id, distance, volume: actual.volume });
+}
+
+function expectOffset(node, parent, distance) {
+  assert.deepEqual([node.kind, node.parent, node.faces, node.distance],
+    ['offset-face', { node: parent, side: 'solid' }, ['n1.side0'], distance]);
+}
+
+async function pickFront(example, y) {
+  await button('Front', f.page.locator('.views')).click();
+  await f.page.waitForFunction(() => {
+    const camera = window.__studioCamera?.();
+    return camera && Math.abs(camera.pitch) < 0.01 && Math.cos(camera.yaw + Math.PI / 2) > 0.99999;
+  });
+  if (await button('Ortho').getAttribute('aria-pressed') !== 'true') await button('Ortho').click();
+  await f.page.getByTitle('Frame all (F)', { exact: true }).click();
+  const pixel = await f.page.evaluate(point => window.__studioScreenOf(point), [example.x, y, (example.height ?? 10) / 2]);
+  await f.page.mouse.click(...pixel);
+  await f.page.waitForFunction(() => window.__studioSelection.selection.faces.length === 1);
+  await button('Iso', f.page.locator('.views')).click();
+  await f.page.evaluate(() => document.activeElement?.blur());
+}
+
+async function inverseOffset(outward, original, example) {
+  f.phase = 'Pick the same original wall after its first Offset';
+  await pickFront(example, -2);
+  await f.command('Offset face');
+  const dialog = hud();
+  if (!baseline) {
+    await offset(dialog).fill('-32');
+    await status(dialog, 'refused');
+    assert.ok(await button('Apply', dialog).isDisabled());
+    await f.same(outward);
+    await f.snapshot('inverse-collapse-refused');
+  }
+  await offset(dialog).fill('-2');
+  if (baseline) {
+    const state = await dialog.locator('.status').getByText(/^(preview|refused)$/).textContent();
+    await f.same(outward);
+    if (state === 'refused') {
+      assert.ok(await button('Apply', dialog).isDisabled());
+      await f.snapshot('inverse-baseline-refused');
+    } else {
+      await button('Apply', dialog).click();
+      await f.changed(outward);
+      const legacy = await f.doc();
+      assert.deepEqual(legacy.nodes.slice(3).map(node => node.kind), ['sketch', 'extrude', 'difference']);
+      assert.equal(legacy.nodes[5].made?.command, 'offset-face');
+      const result = await f.inspect('inverse-legacy-cut', legacy);
+      assert.ok(result.report.valid && near(result.volume, example.volume(0)));
+      assert.notDeepEqual(result.ids, original.ids);
+      await f.snapshot('inverse-baseline-legacy-cut');
+    }
+    return;
+  }
+
+  await status(dialog, 'preview');
+  await f.same(outward);
+  await f.snapshot('inverse-preview');
+  await button('Apply', dialog).click();
+  await f.changed(outward);
+  const restored = await f.doc();
+  assert.equal(restored.nodes.length, 4);
+  assert.deepEqual(restored.nodes[2], outward.nodes[2]);
+  expectOffset(restored.nodes[3], 2, -2);
+  await prove('inverse-restored-native', restored, original, example, 0);
+  await f.undo();
+  await f.same(outward);
+  await f.redo();
+  await f.same(restored);
+  const saved = await f.save('two-signed-box-wall-offsets');
+  await f.freshOpen(saved.file, restored, 'inverse-reopened');
+  await prove('inverse-reopened-native', await f.doc(), original, example, 0);
+  await f.openFeatureEditor(3, 'reopened second Offset');
+  await button('Edit offset', f.editor()).click();
+  const history = hud('Edit Offset face');
+  assert.equal(await offset(history).inputValue(), '-2');
+  await f.snapshot('inverse-reopened-history');
+  await offset(history).fill('-1');
+  await status(history, 'preview');
+  await f.same(restored);
+  await button('Cancel', history).click();
+  await f.same(restored);
 }
 
 await f.run(async () => {
@@ -83,18 +168,11 @@ await f.run(async () => {
     await writeFile(file, JSON.stringify(stock));
     const original = await f.inspect(example.id + '-stock', stock);
     await f.freshOpen(file, stock, example.id + '-original');
-    await button('Front', f.page.locator('.views')).click();
-    if (await button('Ortho').getAttribute('aria-pressed') !== 'true') await button('Ortho').click();
-    await f.page.getByTitle('Frame all (F)', { exact: true }).click();
-    const pixel = await f.page.evaluate(point => window.__studioScreenOf(point), [example.x, 0, (example.height ?? 10) / 2]);
-    await f.page.mouse.click(...pixel);
-    await f.page.waitForFunction(() => window.__studioSelection.selection.faces.length === 1);
-    await button('Iso', f.page.locator('.views')).click();
-    await f.page.evaluate(() => document.activeElement?.blur());
+    await pickFront(example, 0);
     await f.command('Offset face');
     const dialog = hud();
     await offset(dialog).fill('2');
-    if (baseline) {
+    if (baseline && !roundTrip) {
       await f.same(stock);
       if (box) {
         await status(dialog, 'preview');
@@ -127,7 +205,12 @@ await f.run(async () => {
     await button('Apply', dialog).click();
     await f.changed(stock);
     const outward = await f.doc();
+    expectOffset(outward.nodes[2], 1, 2);
     await prove(example.id + '-outward-native', outward, original, example, 2);
+    if (roundTrip) {
+      await inverseOffset(outward, original, example);
+      continue;
+    }
 
     await f.openFeatureEditor(2, example.id + ' original side Offset');
     await button('Edit offset', f.editor()).click();
@@ -146,6 +229,7 @@ await f.run(async () => {
     await button('Apply', history).click();
     await f.changed(outward);
     const inward = await f.doc();
+    expectOffset(inward.nodes[2], 1, -2);
     await prove(example.id + '-inward-native', inward, original, example, -2);
     await f.undo();
     await f.same(outward);

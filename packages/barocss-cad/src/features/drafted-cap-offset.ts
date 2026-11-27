@@ -503,19 +503,45 @@ export function offsetBoxWallIfAdmitted(brep: Brep, faceName: string, distance: 
   if (!admitted) return undefined;
   if (!Number.isFinite(distance) || distance === 0 || Math.abs(distance) > CadNumericPolicy.coordinateAbs)
     return boxWallOffsetFailure('INPUT', 'distance must be nonzero and within the modeling range');
-  const { box, face, axis, end } = admitted, { anchor, normal } = boxReplacementFrame(admitted);
-  const opposite = boxBounds(box)[axis][1 - end], next = anchor[axis] + normal[axis] * distance;
+  const { axis } = admitted, { anchor, normal } = boxReplacementFrame(admitted);
+  return rebuildBoxWallAt(brep, admitted, anchor[axis] + normal[axis] * distance);
+}
+
+function checkBoxWallMotion(brep: Brep, admitted: CertifiedBoxFace, next: number, previous: number): void {
+  const { box, axis, end, normal } = admitted, opposite = boxBounds(box)[axis][1 - end];
   const extent = Math.max(Math.abs(next), geometryScaleMM(brep.vertices.map(vertex => vertex.point)));
   if (!(extent <= CadNumericPolicy.coordinateAbs)) return boxWallOffsetFailure('GEOMETRY', 'the wall leaves the modeling range');
-  if (next === anchor[axis]) return boxWallOffsetFailure('GEOMETRY', 'distance is too small to move the wall');
+  if (next === previous) return boxWallOffsetFailure('GEOMETRY', 'distance is too small to move the wall');
   if (!((next - opposite) * normal[axis] > linearToleranceMM(extent)))
     return boxWallOffsetFailure('GEOMETRY', 'the offset would reach or cross the opposite wall');
+}
+
+function rebuildBoxWallAt(brep: Brep, admitted: CertifiedBoxFace, next: number, previous?: number): Brep {
+  const { box, face, axis } = admitted, { anchor, normal } = boxReplacementFrame(admitted);
+  checkBoxWallMotion(brep, admitted, next, previous ?? anchor[axis]);
   const origin = [...anchor] as Point; origin[axis] = next;
   const wanted: Plane = { kind: 'plane', o: origin, n: normal };
   const lifted = brep.vertices.filter(vertex => vertex.point[axis] === anchor[axis]).map(vertex => {
     const point = [...vertex.point] as Point; point[axis] = next; return { vertex, point };
   });
   return rebuildReplacementTrim(brep, box, face, axis, wanted, lifted, boxWallOffsetFailure);
+}
+
+/** One owned same-wall second Offset. Replay the authored sum from the original to avoid inverse drift. */
+export function offsetBoxWallAfterOffsetIfAdmitted(brep: Brep, original: Brep, faceName: string,
+  firstDistance: number, distance: number): Brep | undefined {
+  const source = certifiedBoxWallOffset(original, faceName), current = certifiedBoxWallOffset(brep, faceName);
+  if (!source || !current) return undefined;
+  if (![firstDistance, distance].every(value => Number.isFinite(value) && value !== 0 && Math.abs(value) <= CadNumericPolicy.coordinateAbs))
+    return boxWallOffsetFailure('INPUT', 'both distances must be nonzero and within the modeling range');
+  const expected = offsetBoxWallIfAdmitted(original, faceName, firstDistance)!;
+  if (JSON.stringify(brep) !== JSON.stringify(expected))
+    return boxWallOffsetFailure('GEOMETRY', 'the current native solid does not match the first original wall Offset');
+  const { axis } = current, frame = boxReplacementFrame(current), sourceFrame = boxReplacementFrame(source);
+  checkBoxWallMotion(brep, current, frame.anchor[axis] + frame.normal[axis] * distance, frame.anchor[axis]);
+  const total = firstDistance + distance, next = sourceFrame.anchor[axis] + sourceFrame.normal[axis] * total;
+  checkBoxWallMotion(original, source, next, frame.anchor[axis]);
+  return total === 0 ? original : rebuildBoxWallAt(original, source, next, frame.anchor[axis]);
 }
 
 function boxCapOffsetFailure(code: BrepError['code'], detail: string): never {

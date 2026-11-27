@@ -72,7 +72,7 @@ import { frameOperation, planEndpointBeads, endpointContext, isEndpointBead } fr
 import type { EndpointBead } from './part-frame.js';
 import { checkExpected, expectOf } from './part-expect.js';
 import { KernelError } from '../core/barocss-error.js';
-import { boxFaceReplacementFrame, offsetBoxCapIfAdmitted, offsetBoxWallIfAdmitted, offsetDraftedFace, replaceRectangularSolidFace } from '../features/drafted-cap-offset.js';
+import { boxFaceReplacementFrame, offsetBoxCapIfAdmitted, offsetBoxWallIfAdmitted, offsetBoxWallAfterOffsetIfAdmitted, offsetDraftedFace, replaceRectangularSolidFace } from '../features/drafted-cap-offset.js';
 import { offsetExactSemicylinderCapIfAdmitted, offsetExactSemicylinderWallIfAdmitted, offsetExactSemicylinderSecondWallIfAdmitted, offsetExactSemicylinderMixedOffsetIfAdmitted, offsetExactSemicylinderWallAfterReplacementIfAdmitted, replaceExactSemicylinderCapIfAdmitted, replaceExactSemicylinderCapAfterWallIfAdmitted } from '../features/exact-cylinder-cap-offset.js';
 import { offsetPrismWallIfAdmitted, replacePrismCapIfAdmitted, replacePrismWallIfAdmitted } from '../features/prism-wall-offset.js';
 import { annularCapReplacementFrame, offsetBoredCapIfAdmitted, offsetBoredPlateWallIfAdmitted, offsetBoreWallIfAdmitted, offsetCircularWallIfAdmitted,
@@ -824,7 +824,15 @@ function operation(f: CadPartFeature & Record<string, unknown>, t: Tools): () =>
       } : undefined;
       const pairedElbow = exactSweepFaceEditSource(hole, ref);
       const firstOffset = hole?.kind === 'offset-face' ? hole : undefined;
-      const original = firstOffset ? ref(firstOffset.target, 'first Offset source').author : undefined;
+      const firstOffsetSource = firstOffset ? ref(firstOffset.target, 'first Offset source') : undefined;
+      const original = firstOffsetSource?.author;
+      const secondBoxWallPart = firstOffset && f.target === firstOffset.id && firstOffset.face === face
+        && original?.kind === 'extrude' && firstOffsetSource?.part === null && firstOffsetSource.result.kind === 'solid'
+        && firstOffsetSource.result.parts.length === 1 ? firstOffsetSource.result.parts[0] : undefined;
+      const secondBoxWallSketch = secondBoxWallPart?.solid.kind === 'upright' && original?.kind === 'extrude'
+        ? ref(original.sketch, 'second box wall Offset sketch').author : undefined;
+      const secondBoxWall = secondBoxWallPart && secondBoxWallSketch?.kind === 'sketch' && secondBoxWallSketch.profile === 'rectangle'
+        && originalRectangularPrism(firstOffset!.target, secondBoxWallPart, t, 'second box wall Offset stock');
       const secondCylinder = original?.kind === 'thicken' && original.mode === 'exact-cylinder' ? {
         id: original.id, surface: { ...structuredClone(original.surface), kind: 'surface', id: 'surface' } as Surface,
         thickness: dim(original.thickness, 'Thicken thickness', true), side: original.side,
@@ -883,6 +891,11 @@ function operation(f: CadPartFeature & Record<string, unknown>, t: Tools): () =>
           if (circle?.kind !== 'sketch' || circle.profile !== 'circle' || circle.plane !== undefined || circle.holes !== undefined || circle.regions !== undefined
             || !xy(hole.center, 'bore centre').every((value, axis) => value === xy(circle.center, 'tube centre')[axis]))
             return fail('CAPABILITY', 'Annular cap offset needs one upright coaxial circular stock and bore.');
+        }
+        if (secondBoxWall && firstOffset) {
+          const source = namedFaceTargetBrep(t, firstOffset.target, secondBoxWallPart!);
+          const offset = offsetBoxWallAfterOffsetIfAdmitted(brep, source, face, firstOffset.distance, distance);
+          if (offset) return one({ kind: 'brep', brep: offset });
         }
         const offset = offsetBoredCapIfAdmitted(brep, face, distance) ?? offsetBoredPlateWallIfAdmitted(brep, face, distance)
           ?? offsetCircularWallIfAdmitted(brep, face, distance)

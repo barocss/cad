@@ -246,3 +246,27 @@ test('Offset face on the original box wall has one native node and retains the l
   assert.deepEqual([node.parent, node.faces, node.distance], [{ node: 1, side: 'solid' }, ['n1.side0'], 2]);
   assert.ok(Math.abs(result.state.bodies[0].volume! - 25600) < 1e-7);
 });
+
+test('a second revision-pinned native Offset restores the exact original rectangular wall', async () => {
+  let doc = withNode(emptyDoc(), { kind: 'sketch', profile: 'rectangle', min: [0.1, 0.1], max: [40.1, 30.1] });
+  doc = withNode(doc, { kind: 'extrude', sketch: 0, height: 20 });
+  const initial = { doc, bodies: context(doc, 'n1.side0').bodies };
+  const evaluate = async (candidate: StudioDoc) => evaluateDoc(candidate, 1);
+  const offset = async (state: typeof initial, d: number) => {
+    const current = await dispatchTool(state, 'query', { action: 'rebuild' }, evaluate);
+    assert.ok(!current.isError, current.content);
+    return dispatchTool(state, 'features', { action: 'command', command: 'offset-face',
+      expectedRevision: JSON.parse(current.content).revision, faces: ['n1.side0'], values: { d } }, evaluate);
+  };
+  const forward = await offset(initial, 1);
+  assert.ok(forward.changed && !forward.isError, forward.content);
+  const inverse = await offset(forward.state, -1);
+  assert.ok(inverse.changed && !inverse.isError, inverse.content);
+  const saved = inverse.state.doc, second = saved.nodes[3];
+  assert.equal(saved.nodes.length, 4);
+  assert.ok(second.kind === 'offset-face');
+  assert.deepEqual([second.parent, second.faces, second.distance], [{ node: 2, side: 'solid' }, ['n1.side0'], -1]);
+  const reopened = readStudioDoc(JSON.stringify(saved));
+  assert.ok('doc' in reopened);
+  assert.deepEqual(partBreps(reopened.doc)[0].brep, partBreps(doc)[0].brep);
+});

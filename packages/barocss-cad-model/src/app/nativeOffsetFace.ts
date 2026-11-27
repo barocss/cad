@@ -468,7 +468,9 @@ export function resolveDirectOffsetFace(ctx: Ctx): {
   const box = isBoxCapOffsetSource(ctx.doc.nodes, ref.node);
   const axis = display.nativeAxisPlane?.axis;
   const boxCap = box && axis === 'z';
-  const boxWall = box && node.kind === 'extrude' && (axis === 'x' || axis === 'y');
+  const sameOriginalWall = node.kind === 'offset-face' && node.target === undefined
+    && node.faces.length === 1 && node.faces[0] === display.name && ctx.doc.nodes[node.parent.node]?.kind === 'extrude';
+  const boxWall = box && (node.kind === 'extrude' || sameOriginalWall) && (axis === 'x' || axis === 'y');
   if (box && !boxCap && !boxWall) return undefined;
   if (!boredPlate && node.kind !== 'draft' && node.kind !== 'offset-face' && node.kind !== 'extrude') return undefined;
   const hex = isStraightHexagonalExtrusion(ctx.doc.nodes, node);

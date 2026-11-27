@@ -1,13 +1,13 @@
 # CAD roadmap — current status and execution order
 
-Updated 2026-11-28 · Priority authority: D520 · Latest delivery: D2100 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
+Updated 2026-11-28 · Priority authority: D520 · Latest delivery: D2101 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
 
 This is the only current status index. Detailed tracks define acceptance; the 34 stable row pages retain scope and issue navigation. Immutable decision notes retain results. Do not append chronological status paragraphs here. [D520 decision](notes/cad-roadmap-replan-2026-11-04/README.md) supersedes D445 execution order and historical next-item text, while retaining its safeguards and bounded proofs.
 
 ## Now and next
 
-- **Current position:** [D2100](notes/native-box-wall-offset-2026-11-28/README.md), P5 rows 07 and 31. A rectangular extrusion wall can move through one signed native Offset. Studio verifies exact supports, preserved native incidence, collapse refusal and reopen ([#17](https://github.com/barocss/cad/issues/17)).
-- **Next MAIN:** D2101, P5 rows 07 and 31. Support a second signed Offset on the same original rectangular wall. Verify the forward and inverse operation, native ownership and desktop reopen, then reconcile the original direct-edit acceptance scopes ([#17](https://github.com/barocss/cad/issues/17)).
+- **Current position:** [D2101](notes/reverse-native-box-wall-offset-2026-11-28/README.md), P5 rows 07 and 31. Two signed native Offsets can restore the original rectangular wall. Studio verifies the same native solid on reopen, and the record maps all original [#17](https://github.com/barocss/cad/issues/17) acceptance checks.
+- **Next MAIN:** D2102, P5 rows 07 and 30. Extend the original half-disk Draft Extrude to outward draft. Reuse the exact inward result, certify the outward cone/plane seams and caps, and verify signed History and native reopen ([#14](https://github.com/barocss/cad/issues/14)).
 - **Separate follow-ups:** Continue Studio App extraction in cohesive parts with affected desktop checks. [#608 Rendering](https://github.com/barocss/cad/issues/608) stays on HOLD. API inventory drift remains open. The issue tracker records [#126](https://github.com/barocss/cad/issues/126), [#613](https://github.com/barocss/cad/issues/613), [#152](https://github.com/barocss/cad/issues/152) and [#22](https://github.com/barocss/cad/issues/22) as closed.
 - **Active repository:** [barocss/cad](https://github.com/barocss/cad), based on `origin/main`. Fetch before work and preserve unexpected changes. The [migration record](../../../docs/migration/README.md) maps the former `local/cad-dev` history and issue numbers.
 - **Evidence correction:** D482 records2167 PASS/0 FAIL/2 existing SKIP in a later full-kernel run than D433. Neither result is a new full-suite PASS at this audit HEAD. [D482 record](notes/vertical-contact-refusal-2026-11-04/README.md).
