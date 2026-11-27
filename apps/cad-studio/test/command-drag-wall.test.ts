@@ -53,6 +53,7 @@ async function drive(latency: number, path: number[], { hold = 1500, limit = () 
   const Gizmos = () => { handle = useCommandGizmos({ model: { doc: cx.doc, evaluated: cx.doc, bodies: [], selection, marker: null, editNode: null },
     command: { active: store.get(), ctx: cx, setActive: store.set, handleDrag: preview.handleDrag, previewFor },
     context: { sketch: null, rendering: false, drawing: false, measure: null, assemblyDraft: null, instanceCount: 0, snapStep: 1 },
+    retireScalarDraft: preview.retire,
     drag: { bodyDrag: null, setBodyDrag() {} } }).handles[0]; return null; };
   const fresh = () => { renderToString(createElement(Gizmos)); return handle; };
   await sleep(latency + 40); evaluated.length = 0; calls = 0; sent.length = 0;

@@ -23,6 +23,7 @@ function handlesOf(store: ReturnType<typeof createValueStore<Active | null>>, ha
   const Gizmos = () => { out = useCommandGizmos({ model: { doc, evaluated: doc, bodies: [], selection, marker: null, editNode: null },
     command: { active: store.get(), ctx, setActive: store.set, handleDrag: handleDrag as never, previewFor: { current: null } },
     context: { sketch: null, rendering: false, drawing: false, measure: null, assemblyDraft: null, instanceCount: 0, snapStep: 1 },
+    retireScalarDraft: () => {},
     drag: { bodyDrag: null, setBodyDrag() {} } }).handles; return null; };
   renderToString(createElement(Gizmos));
   return out;

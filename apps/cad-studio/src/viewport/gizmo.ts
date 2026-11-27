@@ -40,12 +40,19 @@ export interface TransformGizmo {
   scale?: boolean;
   onScale?(factor: number, done: boolean, pointerId?: number): void;
 }
+export interface ScalarHandleDraft {
+  remember(values: object, wall: object): void;
+  cancel(): void;
+}
+
 /** One dimension dragged along a direction: `value` at the start, `toValue` maps the mm moved to the new value. */
 export interface FeatureHandle {
   id: string; at: Vec3; dir: Vec3; label: string; value: number;
   screenOffset?: number;
-  /** New Fillet scalar drag only: immutable command context owns its pointer-down conversion. */
+  /** The source that owns the pointer-down scalar conversion. */
   scalarDragSession?: object;
+  /** Own a transient edit from pointer-down through normal release or cancellation. */
+  captureScalarDraft?(): ScalarHandleDraft | undefined;
   /** A scoped History radius handle still awaiting original-edge proof. */
   historyFilletProofPending?: true | 'circular' | 'pair' | 'group';
   /**
@@ -60,7 +67,7 @@ export interface FeatureHandle {
   plane?: { dir2: Vec3; value2: number; toValue2(start: number, mm: number): number };
   toValue(start: number, mm: number): number;
   format(value: number): string;
-  onDrag(value: number, done: boolean, value2?: number): void;
+  onDrag(value: number, done: boolean, value2?: number, draft?: ScalarHandleDraft): void;
   /**
    * Roadmap 20 ④ ⑥: the value's unit ('mm', '°' or a count's own), the command it belongs to (`owner`, compared by identity),
    * and while that command runs (`editing`) a typed value for it.

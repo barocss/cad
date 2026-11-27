@@ -1,6 +1,7 @@
 import { ownedHistoryFilletHandle, historyFilletCanPatch, type HistoryFilletReceipt } from '../state/historyFilletRadiusReceipt';
 import { commandFieldLabel } from '../app/commandFieldLabel';
 import { draggedScaleFactor } from './draggedScaleFactor';
+import { captureFilletScalarDraft } from './filletScalarDraft';
 import { useMemo, useRef, type Dispatch, type SetStateAction, type RefObject } from 'react';
 import { fmt, type StudioDoc } from '@barocss/cad-model/engine/doc';
 import type { BodyResult } from '@barocss/cad-model/engine/evaluate';
@@ -9,7 +10,7 @@ import { patchValues, refOf, selectedBodies, type Ctx, type Selection, type Valu
 import { editCommand, featureOfPick } from '@barocss/cad-model/app/editCommand';
 import { OFFSET_FACE_EDIT } from '@barocss/cad-model/app/offsetFaceEdit';
 import type { Active } from '../app/commandState';
-import type { FeatureHandle, TransformGizmo } from './Viewport';
+import type { FeatureHandle, ScalarHandleDraft, TransformGizmo } from './gizmo';
 import { alignMove, previewMatrix } from '@barocss/cad-model/assembly/drag';
 type BodyDrag = { matrix: Float64Array; settling: boolean } | null;
 interface CommandGizmoOptions {
@@ -19,9 +20,10 @@ interface CommandGizmoOptions {
   historyFillet?: { receipt?: HistoryFilletReceipt; eligible: boolean; pending?: Exclude<FeatureHandle['historyFilletProofPending'], true> };
   splitSource?: { evidence: Ctx['splitSourceBounds']; canStart(evidence: Ctx['splitSourceBounds']): boolean };
   drag: { bodyDrag: BodyDrag; setBodyDrag: Dispatch<SetStateAction<BodyDrag>> };
+  retireScalarDraft(): void;
 }
 /** Command gizmos and dimension handles share the original drag refs and central command store. */
-export function useCommandGizmos({ model, command, context, drag, splitSource, historyFillet }: CommandGizmoOptions) {
+export function useCommandGizmos({ model, command, context, drag, splitSource, historyFillet, retireScalarDraft }: CommandGizmoOptions) {
   const { doc, evaluated, bodies, selection, marker, editNode } = model;
   const { active, readActive, ctx, setActive, handleDrag, previewFor } = command;
   const { sketch, rendering, drawing, measure, assemblyDraft, instanceCount, snapStep } = context;
@@ -93,6 +95,7 @@ export function useCommandGizmos({ model, command, context, drag, splitSource, h
     if (savedOffset && (!active?.historyOffsetDistance || !readActive)) return [];
     const history = readActive ? ownedHistoryFilletHandle(historyFillet?.receipt, handleCmd, handleCtx, h, active) : undefined;
     if (active?.historyFilletRadius && !history) return [];
+    const newFilletRadius = active && handleCmd.id === 'fillet' && h.key === 'radius' && !h.arc && !pair;
     const waitForHistoryProof = !active && historyFillet?.eligible && !history && handleCmd.id==='edit' && h.key==='r' && !h.arc && !h.pair;
     const canPatch = (now: Active | null) => {
       if (history) return historyFilletCanPatch(history, handleCmd, handleCtx, now, active);
@@ -103,10 +106,19 @@ export function useCommandGizmos({ model, command, context, drag, splitSource, h
     const canWrite = () => canUseHandle() && (!(history || savedOffset) || (!!readActive && canPatch(readActive())));
     if (pair && !Number.isFinite(value2)) return [];
     const frame = history?.frame ?? h;
+    const captureScalarDraft = (history || newFilletRadius) && readActive ? () => {
+      if (!canWrite()) return;
+      return captureFilletScalarDraft({
+        before: readActive(), read: readActive, readWall: () => handleDrag.current, retire: retireScalarDraft,
+        owns: current => canPatch(current) && current.cmd === handleCmd && current.ctx === handleCtx,
+        restore: (current, next) => setActive(running => running === current ? next : running),
+      });
+    } : undefined;
     return [{ id: pair ? `${h.key}+${pair.key}` : h.key, at: frame.at, dir: frame.dir, label: pair ? label.replace(/ \w$/, '') : label, value, screenOffset: h.screenOffset, ...(h.arc ? { arc: h.arc } : {}),
       ...(pair ? { plane: { dir2: pair.dir, value2, toValue2: snap } } : {}),
       ...(history ? { scalarDragSession: history } :
-        active && (savedOffset || handleCmd.id === 'fillet' && h.key === 'radius' && !h.arc && !pair) ? { scalarDragSession: active.ctx } : {}),
+        active && (savedOffset || newFilletRadius) ? { scalarDragSession: active.ctx } : {}),
+      ...(captureScalarDraft ? { captureScalarDraft } : {}),
       ...(waitForHistoryProof ? { historyFilletProofPending: historyFillet?.pending ?? true as const } : {}),
       toValue: snap,
       format: (v: number) => h.arc ? `${fmt(v)}°` : h.unit !== undefined ? `${fmt(v)}${h.unit ? ' ' + h.unit : ''}` : `${fmt(v)} mm`,
@@ -116,7 +128,7 @@ export function useCommandGizmos({ model, command, context, drag, splitSource, h
         setActive(a => a && canPatch(a)
           ? { ...a, values: patchValues(a.cmd, a.ctx, a.values, { [h.key]: v }), preview: 'busy' } : a);
       },
-      onDrag: (v: number, done: boolean, v2?: number) => {
+      onDrag: (v: number, done: boolean, v2?: number, draft?: ScalarHandleDraft) => {
         if (!canWrite()) return;
         if (pair) {
           // (Both coordinates at once; a refused spot shows as the preview's error, no wall.)
@@ -138,9 +150,11 @@ export function useCommandGizmos({ model, command, context, drag, splitSource, h
         // An idle handle opens its feature's edit as the drag starts.
         setActive(a => {
           if (!canPatch(a)) return a;
-          return a ? (a.values[h.key] !== v ? { ...a, values: patchValues(a.cmd, a.ctx, a.values, { [h.key]: v }), preview: 'busy' } : a)
+          const next: Active = a ? (a.values[h.key] !== v ? { ...a, values: patchValues(a.cmd, a.ctx, a.values, { [h.key]: v }), preview: 'busy' } : a)
             : { cmd: handleCmd, values: patchValues(handleCmd, handleCtx, handleValues, { [h.key]: v }), preview: 'busy',
               ctx: history ? handleCtx : { ...handleCtx }, ...(history ? {historyFilletRadius:true as const,ownsSource:history.isCurrent} : evidence ? { ownsSource: evidence.isCurrent } : {}) };
+          if (next.values !== a?.values && !done) draft?.remember(next.values, hd);
+          return next;
         });
       } }];
   }) : [];

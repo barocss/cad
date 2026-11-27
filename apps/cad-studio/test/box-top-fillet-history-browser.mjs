@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import { createFlow } from './flow-helper.mjs';
 
 const baseline = process.argv.includes('--baseline');
+const captureLoss = process.argv.includes('--capture-loss');
+const legacyGrip = baseline && !captureLoss;
 const width = 12, depth = 8, height = 8;
 const top = [[width, depth / 2, height], [width / 2, 0, height], [width / 2, depth, height], [0, depth / 2, height]];
 const edges = [1, 0, 2, 3].map(side => `n1.side${side}|n1.top`);
@@ -14,11 +16,13 @@ const stock = {
   ], outputs: { b1: { node: 1, side: 'solid' } },
 };
 const f = await createFlow({
-  name: 'box-top-fillet-history', output: process.argv[2], envFrozen: 'D2058_SOURCE_FROZEN',
+  name: 'box-top-fillet-history', output: process.argv[2], envFrozen: captureLoss ? 'D2059_SOURCE_FROZEN' : 'D2058_SOURCE_FROZEN',
   qualification: 'Create a four-upper-edge box Fillet and drag the History radius from its first original rim.',
   limits: ['One terminal constant Fillet on the four original top edges of one numerical horizontal rectangular Extrude.'],
   initialFiles: ['apps/cad-studio/src/state/historyFilletRadiusReceipt.ts', 'apps/cad-studio/src/app/useHistoryFilletRadius.ts',
-    'apps/cad-studio/src/viewport/useCommandGizmos.ts', ...(baseline ? [] : [
+    'apps/cad-studio/src/viewport/useCommandGizmos.ts', ...(captureLoss ? ['apps/cad-studio/src/viewport/viewportPointerInput.ts',
+      ...(!baseline ? ['apps/cad-studio/src/viewport/filletScalarDraft.ts'] : [])] : []),
+    ...(legacyGrip ? [] : [
       'apps/cad-studio/src/state/historyBoxTopFillet.ts', 'packages/barocss-cad-model/src/engine/nativeBoxTopFillets.ts',
     ])],
   inspectorSource: `
@@ -35,7 +39,7 @@ console.log(JSON.stringify(partBreps(doc).map(({key, brep}) => ({key, digest: di
 const button = (name, root = f.page) => root.getByRole('button', { name, exact: true });
 const hud = () => f.page.locator('.hud');
 const field = () => hud().getByLabel('Radius', { exact: true });
-const handle = () => f.page.locator('g.gizmo-handle[data-handle="r"]');
+const handle = (key = 'r') => f.page.locator(`g.gizmo-handle[data-handle="${key}"]`);
 const preview = () => hud().locator('.status').filter({ hasText: /^preview$/ }).waitFor();
 const near = (a, b, tolerance = 1e-8) => assert.ok(Math.abs(a - b) < tolerance, `${a} vs ${b}`);
 const nearby = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
@@ -63,15 +67,15 @@ async function orbit(yaw, pitch) {
   near(camera.yaw, yaw, .003);
   near(camera.pitch, pitch, .003);
 }
-async function position(radius) {
+async function position(radius, key) {
   const expected = await f.screenOf(anchor.map((value, i) => value + radius * direction[i]));
-  const { x, y, width, height } = await handle().locator('circle').boundingBox();
+  const { x, y, width, height } = await handle(key).locator('circle').boundingBox();
   const actual = [x + width / 2, y + height / 2];
   return { expected, actual, errorPx: nearby(expected, actual) };
 }
 async function openHistory() {
   await f.openFeatureEditor(2, 'shared four upper rims');
-  if (!baseline) await handle().locator('title').filter({ hasText: /when viewed end-on/ }).waitFor({ state: 'attached' });
+  if (!legacyGrip) await handle().locator('title').filter({ hasText: /when viewed end-on/ }).waitFor({ state: 'attached' });
 }
 async function verify(doc, label, radius) {
   const node = doc.nodes[2];
@@ -124,6 +128,72 @@ async function drag(before, radius, label) {
   f.report.observations.push({ label, projectionPx, pixelsPerMm, errorPx });
 }
 
+async function loseCapture(before, history) {
+  const owner = history ? 'history' : 'creation';
+  f.phase = `Drop live pointer capture during a valid ${owner} R2 preview`;
+  await orbit(0, Math.PI / 4);
+  const { actual: [x, y] } = await position(1, history ? 'r' : 'radius');
+  const span = nearby(await f.screenOf(anchor), await f.screenOf([anchor[0], anchor[1] + 1, anchor[2]]));
+  const beforeHistory = await readHistory();
+  await f.page.evaluate(() => {
+    const canvas = document.querySelector('canvas.vp-canvas');
+    window.__filletCapture = { id: null, lost: [] };
+    canvas.addEventListener('pointerdown', event => {
+      if (event.isTrusted) window.__filletCapture.id = event.pointerId;
+    }, { once: true });
+    canvas.addEventListener('lostpointercapture', event => {
+      window.__filletCapture.lost.push({ id: event.pointerId, trusted: event.isTrusted });
+    }, { once: true });
+  });
+  await f.page.mouse.move(x, y);
+  await f.page.mouse.down();
+  try {
+    await f.page.mouse.move(x, y - span, { steps: 10 });
+    await preview();
+    assert.equal(Number(await field().inputValue()), 2);
+    await f.same(before);
+    const id = await f.page.evaluate(() => {
+      const canvas = document.querySelector('canvas.vp-canvas'), id = window.__filletCapture.id;
+      if (id === null || !canvas.hasPointerCapture(id)) return null;
+      canvas.releasePointerCapture(id);
+      return id;
+    });
+    assert.notEqual(id, null, 'Chrome must own this real pointer under the canvas');
+    await f.page.mouse.move(x + 1, y - span);
+    await f.page.waitForFunction(id => window.__filletCapture.lost.some(event => event.id === id && event.trusted), id);
+  } finally {
+    await f.page.mouse.up();
+  }
+  await f.same(before);
+  assert.deepEqual(await readHistory(), beforeHistory);
+  if (baseline) {
+    assert.equal(Number(await field().inputValue()), 2);
+    assert.equal(await button('Apply', hud()).isEnabled(), true);
+    await f.snapshot(`${owner}-capture-lost-stale-r2`);
+    if (!history) { await field().fill('1'); await preview(); }
+  } else if (history) {
+    await hud().waitFor({ state: 'hidden' });
+    await f.editor().waitFor();
+    assert.equal(Number(await f.editor().getByLabel('Radius', { exact: true }).inputValue()), 1);
+    await f.snapshot(`${owner}-capture-lost-restored-r1`);
+  } else {
+    await preview();
+    assert.equal(Number(await field().inputValue()), 1);
+    assert.equal(await button('Apply', hud()).isEnabled(), true);
+    await f.snapshot(`${owner}-capture-lost-restored-r1`);
+  }
+  f.report.observations.push({ label: 'trusted-lostpointercapture', owner, baseline,
+    events: await f.page.evaluate(() => window.__filletCapture.lost) });
+}
+
+const readHistory = () => f.page.evaluate(() => ({
+  undo: document.querySelector('button[aria-label="Undo"]').disabled,
+  redo: document.querySelector('button[aria-label="Redo"]').disabled,
+  nodes: [...document.querySelectorAll('.history .hs')].map(item => item.dataset.nodeIndex),
+  selection: window.__studioSelection?.selection,
+  dirty: !!document.querySelector('[aria-label="Unsaved changes"]'),
+}));
+
 await f.run(async () => {
   await f.newPage();
   await f.page.getByLabel('Model file', { exact: true }).setInputFiles({
@@ -144,21 +214,38 @@ await f.run(async () => {
   await f.command('Fillet');
   await field().fill('1');
   await preview();
+  if (captureLoss) {
+    await view('Iso');
+    await loseCapture(stock, false);
+  }
   await button('Apply', hud()).click();
   await f.changed(stock);
   const created = await f.doc();
   await verify(created, '01-created-native', 1);
   await view('Iso');
+  if (captureLoss) {
+    await openHistory();
+    await f.editor().getByLabel('Radius', { exact: true }).fill('2');
+    await f.applyEditor(created, 'setup-existing-redo');
+    await f.undo();
+    await f.same(created);
+    assert.equal(await button('Redo').isEnabled(), true);
+  }
   await openHistory();
   const positionAtOpen = await position(1);
   const ownsOriginal = (await handle().locator('title').allTextContents()).some(title => title.includes('when viewed end-on'));
   f.report.observations.push({ label: 'history-anchor', ...positionAtOpen, ownsOriginal });
-  await f.snapshot(baseline ? '02-generic-history-grip' : '02-original-upper-rim');
-  if (baseline) {
+  await f.snapshot(legacyGrip ? '02-generic-history-grip' : '02-original-upper-rim');
+  if (legacyGrip) {
     assert.ok(positionAtOpen.errorPx > 5 && !ownsOriginal);
     return;
   }
   assert.ok(positionAtOpen.errorPx < .75 && ownsOriginal);
+  if (captureLoss) {
+    await loseCapture(created, true);
+    if (baseline) return;
+    await f.save('history-after-capture-loss');
+  }
   await drag(created, 2, '03-history-cancel-preview');
   await button('Cancel', hud()).click();
   await f.same(created);

@@ -47,6 +47,7 @@ export function useStudioHistoryHandles({ model, command, source, context, drag,
   });
   const gizmos = useCommandGizmos({
     model, command, context, drag, historyFillet,
+    retireScalarDraft: () => { lifecycle.retirePreview(); lifecycle.clearApply(); },
     splitSource: { evidence: splitSource, canStart: evidence => {
       const running = readActive();
       return ownership.canChangeDocument() && (running

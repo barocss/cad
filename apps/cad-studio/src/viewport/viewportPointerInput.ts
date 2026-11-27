@@ -186,6 +186,7 @@ interface PointerDrag {
   shiftPickHandle?: FeatureHandle;
   handleToValue?: FeatureHandle['toValue'];
   scalarHandleDrag?: ScalarHandleDrag | null;
+  scalarDraft?: ReturnType<NonNullable<FeatureHandle['captureScalarDraft']>>;
   turnPlane?: { frame: string; radial: Vec3 };
   factor?: number;
   gizmo?: TransformGizmo;
@@ -492,6 +493,7 @@ export function useViewportPointerInput({ canvas, camera, propsRef, rendering, f
     drag.current = { mode: null, x: 0, y: 0, moved: true };
     if (d.pointerId !== undefined && canvas.current?.hasPointerCapture(d.pointerId)) canvas.current.releasePointerCapture(d.pointerId);
     requestRef.current();
+    d.scalarDraft?.cancel();
     if (d.pointerId !== undefined) d.gizmo?.onCancel?.(d.pointerId, reason);
   };
   const splineCancelRef = useRef<() => void>(() => undefined);
@@ -762,8 +764,12 @@ export function useViewportPointerInput({ canvas, camera, propsRef, rendering, f
       const hd = p.handles?.[hit.index];
       if (d.scalarHandleDrag !== undefined) {
         const value = scalarHandleDragValue(d.scalarHandleDrag, hd, d.from!, [x, y]);
-        if (value === null || !hd) { cancelGizmo('session-change', d.pointerId); return; }
-        d.value = value; hd.onDrag(value, done);
+        if (value === null || !hd) {
+          if (done) d.scalarDraft?.cancel();
+          else cancelGizmo('session-change', d.pointerId);
+          return;
+        }
+        d.value = value; hd.onDrag(value, done, undefined, d.scalarDraft);
         if (done) valueBox.current = { id: hd.id, owner: hd.owner };
         return;
       }
@@ -954,10 +960,11 @@ export function useViewportPointerInput({ canvas, camera, propsRef, rendering, f
         }
         turnPlane = { frame: pointerFrame(), radial };
       }
+      // The existing Shift release remains a pick; movement past its threshold gets a canceled scalar frame.
+      const scalarHandleDrag = historyPress === 'shift-pick-only' ? null : hd?.scalarDragSession ? captureScalarHandleDrag(hd, projector()) : undefined;
       drag.current = { mode: 'gizmo', x, y, moved: false, hit, shiftPickHandle, from: [x, y], last: [x, y], turned: 0, turnPlane, start: hd?.value, start2: hd?.plane?.value2,
         handleAt: hd ? [...hd.at] as Vec3 : undefined, handleToValue: hd?.toValue,
-        // The existing Shift release remains a pick; movement past its threshold gets a canceled scalar frame.
-        scalarHandleDrag: historyPress === 'shift-pick-only' ? null : hd?.scalarDragSession ? captureScalarHandleDrag(hd, projector()) : undefined,
+        scalarHandleDrag, scalarDraft: scalarHandleDrag ? hd?.captureScalarDraft?.() : undefined,
         origin: propsRef.current.gizmo ? [...propsRef.current.gizmo.origin] as Vec3 : undefined, gizmo: g, pointerId: e.pointerId, sessionKey: g?.sessionKey };
       g?.onStart?.(e.pointerId, e.shiftKey);
       return;
