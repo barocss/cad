@@ -807,6 +807,9 @@ function operation(f: CadPartFeature & Record<string, unknown>, t: Tools): () =>
         return fail('PARAMETER', 'Offset face needs a nonzero signed distance within the modeling range.');
       // Register authored dependencies before the evaluator captures cache inputs.
       const hole = ref(f.target, 'target').author;
+      const polygonOffset = (hole?.kind === 'extrude' || hole?.kind === 'translate') && target[0].solid.kind === 'upright'
+        && target[0].solid.solid.slabs[0]?.regions[0]?.outer.length !== 6
+        && originalPolygonPrism(f.target, target[0], t, 'Offset polygon stock');
       const borePlan = hole?.kind === 'difference' ? exactCylinderBorePlan(t, f.target, exactBoreOffsetRefusal) : undefined;
       const exactBore = borePlan && { ...borePlan, thickness: dim(borePlan.source.thickness, 'Thicken thickness', true) };
       const stock = hole?.kind === 'hole' ? ref(hole.target, 'tube stock').author : undefined;
@@ -880,7 +883,7 @@ function operation(f: CadPartFeature & Record<string, unknown>, t: Tools): () =>
         const offset = offsetBoredCapIfAdmitted(brep, face, distance) ?? offsetBoredPlateWallIfAdmitted(brep, face, distance)
           ?? offsetCircularWallIfAdmitted(brep, face, distance)
           ?? offsetBoreWallIfAdmitted(brep, face, distance)
-          ?? offsetPrismWallIfAdmitted(brep, face, distance)
+          ?? offsetPrismWallIfAdmitted(brep, face, distance, polygonOffset)
           ?? offsetBoxCapIfAdmitted(brep, face, distance) ?? offsetDraftedFace(brep, face, distance);
         return one({ kind: 'brep', brep: offset });
       };

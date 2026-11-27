@@ -207,9 +207,9 @@ function admittedWallPrism(brep: Brep, faceName: string, includeRectangles = fal
   return { ...prism, selected };
 }
 
-/** The face center and outward unit normal used by the signed offset handle. */
-export function prismWallOffsetFrame(brep: Brep, faceName: string): { anchor: Point; normal: Point } | undefined {
-  return brep.faces.length === HEXAGON_SIDE_COUNT + 2 ? prismWallReplacementFrame(brep, faceName) : undefined;
+/** The signed Offset frame. The caller proves original polygon ancestry before opting into other side counts. */
+export function prismWallOffsetFrame(brep: Brep, faceName: string, allowOriginalPolygon = false): { anchor: Point; normal: Point } | undefined {
+  return allowOriginalPolygon || brep.faces.length === HEXAGON_SIDE_COUNT + 2 ? prismWallReplacementFrame(brep, faceName) : undefined;
 }
 
 /** The face center and outward unit normal for the exact prism Replace face. */
@@ -268,18 +268,18 @@ export function uvPoint(chart: Chart, point: Point): Point {
   return [at(u, U), at(v, V), 0];
 }
 
-/** Offset one upright wall of a straight convex hexagonal prism. */
-export function offsetPrismWall(brep: Brep, faceName: string, distance: number): Brep {
+/** Offset a hexagonal wall, or another admitted polygon wall when its caller proves original ancestry. */
+export function offsetPrismWall(brep: Brep, faceName: string, distance: number, allowOriginalPolygon = false): Brep {
   if (typeof distance !== 'number' || !Number.isFinite(distance)) fail('INPUT', 'distance must be finite');
   if (!namedFace(brep, faceName)) fail('INPUT', 'the selected face name is missing or ambiguous');
-  const prism = brep.faces.length === HEXAGON_SIDE_COUNT + 2 && admittedWallPrism(brep, faceName);
-  if (!prism) return fail('GEOMETRY', 'pick an upright wall of one straight convex hexagonal prism');
+  const prism = (allowOriginalPolygon || brep.faces.length === HEXAGON_SIDE_COUNT + 2) && admittedWallPrism(brep, faceName);
+  if (!prism) return fail('GEOMETRY', `pick an upright wall of one straight convex ${allowOriginalPolygon ? 'polygon' : 'hexagonal'} prism`);
   return offsetWall(brep, prism, distance);
 }
 
 /** The Part route uses this for a valid request before it tries the rectangular taper recipe. */
-export function offsetPrismWallIfAdmitted(brep: Brep, faceName: string, distance: number): Brep | undefined {
-  if (brep.faces.length !== HEXAGON_SIDE_COUNT + 2) return undefined;
+export function offsetPrismWallIfAdmitted(brep: Brep, faceName: string, distance: number, allowOriginalPolygon = false): Brep | undefined {
+  if (!allowOriginalPolygon && brep.faces.length !== HEXAGON_SIDE_COUNT + 2) return undefined;
   const prism = admittedWallPrism(brep, faceName);
   return prism && offsetWall(brep, prism, distance);
 }
@@ -294,7 +294,8 @@ function offsetWall(brep: Brep, prism: WallPrism, distance: number): Brep {
   const extent = Math.max(prism.extent, geometryScaleMM([a, b]));
   if (!Number.isFinite(extent) || extent > CadNumericPolicy.coordinateAbs) fail('GEOMETRY', 'the offset exceeds the modeling coordinate range');
   const section = upper.map((vertex, i) => i === selected ? a : i === end ? b : vertex.point);
-  if (!keepsSection(section, walls, selected, distance, extent)) fail('GEOMETRY', 'the offset would collapse or cross a wall of the hexagonal section');
+  if (!keepsSection(section, walls, selected, distance, extent))
+    fail('GEOMETRY', `the offset would collapse or cross a wall of the ${walls.length === HEXAGON_SIDE_COUNT ? 'hexagonal' : 'polygon'} section`);
 
   const moved = new Map<string, Point>();
   for (const i of [selected, end]) {

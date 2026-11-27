@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D2097: [Offset an original convex polygon wall](notes/polygon-wall-offset-2026-11-28/README.md), #17. Verify both signed offsets, original supports, edge collapse refusal, revision-pinned local Agent use and desktop native reopen.
 - D2096: [Shell an original box through its top and bottom](notes/opposite-open-per-face-box-shell-2026-11-28/README.md), #13. Verify four independent side walls, two exact cap rings, collapse refusal and native Studio reopen.
 - D2095: [Shell an original box with its top and one side open](notes/adjacent-open-per-face-box-shell-2026-11-28/README.md), #13. Qualify four independent wall thicknesses, connected native rims, collapse refusal and explicit Studio Agent approval.
 - D2094: [Keep a Shell opening on its original face through Split edits](notes/split-original-shell-face-2026-11-28/README.md), #4. Use actual native lineage on the selected output and verify live refusal, cold rebuild and two-cap ambiguity.

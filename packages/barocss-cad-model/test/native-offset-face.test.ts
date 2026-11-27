@@ -6,6 +6,7 @@ import { evaluateDoc, partBreps } from '../src/engine/evaluate';
 import { resolveNativeOffsetFace, validateNativeOffsetDistance } from '../src/app/nativeOffsetFace';
 import { isRefusal } from '../src/engine/refusal';
 import type { Ctx } from '../src/app/commands';
+import { dispatchTool } from '../src/chat/tools';
 function context(doc: StudioDoc, name = 'n1.top'): Ctx {
   const result = evaluateDoc(doc, 1); assert.ok(result.ok, JSON.stringify(result));
   const face = result.bodies[0].mesh.faces.findIndex(f => f.name === name); assert.ok(face >= 0, name);
@@ -181,4 +182,29 @@ test('native Offset face: ordinary negative-cap outward offsets keep direct nati
     validateNativeOffsetDistance(resolveNativeOffsetFace(ctx), 2.125);
   }
   assert.deepEqual(doc, before);
+});
+
+test('features.command offsets the exact triangle wall at the current revision and keeps it on refusal', async () => {
+  let doc = withNode(emptyDoc(), { kind: 'sketch', profile: 'polygon', points: [[0, 0], [24, 0], [6, 16]] });
+  doc = withNode(doc, { kind: 'extrude', sketch: 0, height: 10 });
+  const { bodies } = context(doc, 'n1.side0');
+  const state = { doc, bodies };
+  const evaluate = async (candidate: StudioDoc) => evaluateDoc(candidate, 1);
+  const current = await dispatchTool(state, 'query', { action: 'rebuild' }, evaluate);
+  assert.ok(!current.isError, current.content);
+  const args = { action: 'command', command: 'offset-face', faces: ['n1.side0'], expectedRevision: JSON.parse(current.content).revision };
+  const result = await dispatchTool(state, 'features', { ...args, values: { d: -2 } }, evaluate);
+  assert.ok(result.changed && !result.isError, result.content);
+  const feature = result.state.doc.nodes[2];
+  assert.ok(feature.kind === 'offset-face');
+  assert.deepEqual([feature.faces, feature.distance], [['n1.side0'], -2]);
+  const volume = result.state.bodies[0].volume;
+  assert.ok(volume !== null && Math.abs(volume - 1470) < 1e-8);
+
+  const stale = await dispatchTool(result.state, 'features', { ...args, values: { d: 2 } }, evaluate);
+  assert.ok(stale.isError && !stale.changed && stale.state.doc === result.state.doc);
+
+  const collapsed = await dispatchTool(state, 'features', { ...args, values: { d: -16 } }, evaluate);
+  assert.ok(collapsed.isError && !collapsed.changed && collapsed.state.doc === doc, collapsed.content);
+  assert.match(collapsed.content, /collapse or cross a wall/);
 });

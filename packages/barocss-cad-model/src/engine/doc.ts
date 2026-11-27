@@ -346,6 +346,11 @@ export function isStraightPolygonReplacementSource(nodes: readonly unknown[], pa
   return count !== undefined && count >= 3 && count <= CadPartLimits.points;
 }
 
+/** Original uncut polygon stock for a native signed wall offset. */
+export function isStraightPolygonOffsetSource(nodes: readonly unknown[], parent: unknown): boolean {
+  return textRecord(parent) && parent.cutDepth === undefined && isStraightPolygonReplacementSource(nodes, parent);
+}
+
 function precedingSolidIndex(parent: unknown, index: number): number | undefined {
   if (textRecord(parent) && parent.side === 'solid' && typeof parent.node === 'number' &&
       Number.isSafeInteger(parent.node) && parent.node >= 0 && parent.node < index) return parent.node;
@@ -962,8 +967,9 @@ export function directFaceDocumentProblem(input: unknown): string | null {
       if (parent.kind === 'extrude') {
         if (typeof parent.draft === 'number' && Number.isFinite(parent.draft) && parent.draft !== 0) continue;
         if (isStraightHexagonalExtrusion(value.nodes, parent)) continue;
+        if (node.target === undefined && isStraightPolygonOffsetSource(value.nodes, parent)) continue;
       }
-      return 'Offset face: the parent must be Draft, a drafted extrusion, a box, a straight hexagonal extrusion, a supported through-hole plate, or a previous face offset.';
+      return 'Offset face: the parent must be Draft, a drafted extrusion, a box, a supported straight polygon extrusion, a supported through-hole plate, or a previous face offset.';
     }
     if (Array.isArray(value.instances)) for (const instance of value.instances) if (textRecord(instance)) stack.push(instance.doc);
     if (textRecord(value.pendingParts)) for (const pending of Object.values(value.pendingParts)) if (textRecord(pending)) stack.push(pending.doc);

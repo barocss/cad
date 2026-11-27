@@ -7,7 +7,7 @@ import { exactPairedElbowOutletOffsetFrame, exactPerpendicularAnnularInletOffset
 import { prismWallOffsetFrame } from '@barocss/cad/internal/prism-wall-offset';
 import { fillFeaturePatternSpec } from '@barocss/cad/api';
 import { finiteBinary64Integer } from '../engine/binary64';
-import { exactSemicylinderCapSource, exactSemicylinderRadialBoreSource, exactSemicylinderSecondOffset, exactSemicylinderWallAfterReplacement, isExactCylinderFaceEditChain, isAnnularCapOffsetSource, isAnnularReplacementSource, isBoredPlateHole, isBoredPlateOffsetSource, isBoxCapOffsetSource, isCylinderReplacementSource, isPairedElbowInletOffsetSource, isPairedElbowOutletOffsetSource, sweepOffsetPlaneSource, isStraightHexagonalExtrusion, leafBodies, perpendicularAnnularOffsetEnd, type SketchNode, type StudioDoc } from '../engine/doc';
+import { exactSemicylinderCapSource, exactSemicylinderRadialBoreSource, exactSemicylinderSecondOffset, exactSemicylinderWallAfterReplacement, isExactCylinderFaceEditChain, isAnnularCapOffsetSource, isAnnularReplacementSource, isBoredPlateHole, isBoredPlateOffsetSource, isBoxCapOffsetSource, isCylinderReplacementSource, isPairedElbowInletOffsetSource, isPairedElbowOutletOffsetSource, sweepOffsetPlaneSource, isStraightHexagonalExtrusion, isStraightPolygonOffsetSource, leafBodies, perpendicularAnnularOffsetEnd, type SketchNode, type StudioDoc } from '../engine/doc';
 import { evaluateDoc, massOfRef, partBreps, snapshotOf, type BodyResult } from '../engine/evaluate';
 import { bodyKeyFor, featureId, withIds } from '../engine/ids';
 import { refusal } from '../engine/refusal';
@@ -469,13 +469,16 @@ export function resolveDirectOffsetFace(ctx: Ctx): {
   const boxCap = box && display.nativeAxisPlane?.axis === 'z';
   if (box && !boxCap) return undefined;
   if (!boredPlate && node.kind !== 'draft' && node.kind !== 'offset-face' && node.kind !== 'extrude') return undefined;
+  const hex = isStraightHexagonalExtrusion(ctx.doc.nodes, node);
+  const polygonWall = !hex && isStraightPolygonOffsetSource(ctx.doc.nodes, node);
   if (!boxCap && node.kind === 'extrude' && !node.draft &&
-      (!isStraightHexagonalExtrusion(ctx.doc.nodes, node) || display.nativeAxisPlane?.axis === 'z')) return undefined;
+      ((!hex && !polygonWall) || display.nativeAxisPlane?.axis === 'z')) return undefined;
   currentOffsetBody(ctx.doc, body);
   const { brep } = nativeOffsetBody(ctx, body, display);
   const frame = boredPlate ? boredCapOffsetFrame(brep, display.name) ?? boredPlateWallOffsetFrame(brep, display.name)
-    : boxCap ? boxCapOffsetFrame(brep, display.name) : draftedFaceOffsetFrame(brep, display.name) ?? prismWallOffsetFrame(brep, display.name);
-  return frame ? { parent: ref, face: display.name, ...frame, allowsPlane: !boredPlate && !boxCap } : undefined;
+    : boxCap ? boxCapOffsetFrame(brep, display.name)
+      : draftedFaceOffsetFrame(brep, display.name) ?? prismWallOffsetFrame(brep, display.name, polygonWall);
+  return frame ? { parent: ref, face: display.name, ...frame, allowsPlane: !boredPlate && !boxCap && !polygonWall } : undefined;
 }
 
 /** Current native semantic identity is resolved before qualification; every returned snapshot is owned. */
