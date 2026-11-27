@@ -32,8 +32,9 @@ export function useFeatureHistory({ model, worker, suppression, changes, onNotic
       if (deps.length && 'doc' in deleteFeatures(doc, [index, ...deps])) { setCascade({ owner: doc, opener, label, deps: deps.map(k => featureLabel(doc.nodes[k], k, doc.nodes)), all: [index, ...deps] }); return; }
       setToast({ title: `Cannot delete ${label}`, hint: r.error, detail: '' }); return;
     }
+    const owns = captureOwner();
     engine.evaluate(prefixDoc(r.doc, r.doc.nodes.length), nextRevision()).then(e => {
-      if (!e) return;
+      if (!e || !owns()) return;
       if (!e.ok) { setToast({ ...e.error, title: `Cannot delete ${label}: ${e.error.title}` }); return; }
       if (!commit(r.doc)) return;
       if (r.droppedDimensions) setToast({ title: `Removed ${r.droppedDimensions} drawing dimension${r.droppedDimensions > 1 ? 's' : ''}`, hint: `They measured ${label}. Undo restores them.`, detail: '' }, { acceptedDocument: true });
@@ -123,8 +124,9 @@ export function useFeatureHistory({ model, worker, suppression, changes, onNotic
     if (!cascade) return;
     const r = deleteFeatures(doc, cascade.all), label = cascade.label; setCascade(null);
     if ('error' in r) { setToast({ title: `Cannot delete ${label}`, hint: r.error, detail: '' }); return; }
+    const owns = captureOwner();
     engine.evaluate(prefixDoc(r.doc, r.doc.nodes.length), nextRevision()).then(e => {
-      if (!e) return;
+      if (!e || !owns()) return;
       if (!e.ok) { setToast({ ...e.error, title: `Cannot delete ${label}: ${e.error.title}` }); return; }
       commit(r.doc);
     });
@@ -149,8 +151,9 @@ export function useFeatureHistory({ model, worker, suppression, changes, onNotic
     if (!indices.length) return;
     const r = deleteFeatures(doc, indices);
     if ('error' in r) { setToast({ title: `Cannot delete ${what}`, hint: r.error, detail: '' }); return; }
+    const owns = captureOwner();
     engine.evaluate(prefixDoc(r.doc, r.doc.nodes.length), nextRevision()).then(e => {
-      if (!e) return;
+      if (!e || !owns()) return;
       if (!e.ok) { setToast({ ...e.error, title: `Cannot delete ${what}: ${e.error.title}` }); return; }
       if (!commit(r.doc)) return; setSelection(emptySel);
       if (r.droppedDimensions) setToast({ title: `Removed ${r.droppedDimensions} drawing dimension${r.droppedDimensions > 1 ? 's' : ''}`, hint: `They measured ${what}. Undo restores them.`, detail: '' }, { acceptedDocument: true });

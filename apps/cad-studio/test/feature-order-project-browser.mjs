@@ -4,11 +4,15 @@ import { createFlow, sha256 } from './flow-helper.mjs';
 
 const priorOpenRace = process.argv.includes('--prior-open-race');
 const openRace = priorOpenRace || process.argv.includes('--open-race');
+const priorDeleteRace = process.argv.includes('--prior-delete-open-race');
+const deleteRace = priorDeleteRace || process.argv.includes('--delete-open-race');
 const pins = [
   'apps/cad-studio/test/feature-order-project-browser.mjs',
   'apps/cad-studio/src/ui/FeatureHistoryBar.tsx',
   'apps/cad-studio/src/files/useStudioDocumentFiles.ts',
   'apps/cad-studio/src/ui/FeatureHistoryMenu.tsx',
+  'apps/cad-studio/src/ui/DeleteDependentsDialog.tsx',
+  'apps/cad-studio/src/app/useStudioKeyboard.ts',
   'apps/cad-studio/src/state/useFeatureHistory.ts',
   'packages/barocss-cad-model/src/chat/features.ts',
 ];
@@ -59,18 +63,16 @@ async function moveEarlier(index) {
   await f.page.locator(`.history .hs[data-node-index="${index}"]`).click({ button: 'right' });
   await f.page.getByRole('menuitem', { name: 'Move earlier', exact: true }).click();
 }
-async function verifySolids(label, expected, depth) {
+const cylinderFact = { id: 'n3', key: 'b3', volume: Math.PI * 25 * 6, centroid: [50, 10, 3] };
+const drilledPlate = depth => ({ id: 'n4', key: 'b4', volume: (600 - 4 * Math.PI) * depth, centroid: [15, 10, depth / 2] });
+async function verifySolids(label, expected, depth, facts = [cylinderFact, drilledPlate(depth)]) {
   const state = await f.snapshot(label);
   assert.deepEqual(state.doc, expected);
   assert.equal(state.bodies.fresh, true);
   assert.equal(state.bodies.massReady, true);
   const native = await f.inspect(label, state.doc);
-  assert.equal(native.length, 2);
-  assert.equal(state.bodies.bodies.length, 2);
-  const facts = [
-    { id: 'n3', key: 'b3', volume: Math.PI * 25 * 6, centroid: [50, 10, 3] },
-    { id: 'n4', key: 'b4', volume: (600 - 4 * Math.PI) * depth, centroid: [15, 10, depth / 2] },
-  ];
+  assert.equal(native.length, facts.length);
+  assert.equal(state.bodies.bodies.length, facts.length);
   for (const { id, key, volume, centroid } of facts) {
     const solid = native.find(body => body.id === id);
     const worker = state.bodies.bodies.find(body => body.key === key);
@@ -128,7 +130,7 @@ const upload = (name, doc) => f.page.locator('input[aria-label="Model file"]').s
   name, mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(doc)),
 });
 const settle = () => f.page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
-async function verifyOpenRace() {
+async function newTimedPage() {
   const newContext = f.browser.newContext.bind(f.browser);
   f.browser.newContext = async options => {
     const context = await newContext(options);
@@ -137,20 +139,28 @@ async function verifyOpenRace() {
   };
   await f.newPage();
   f.browser.newContext = newContext;
-  const newer = { ...source, nodes: source.nodes.map(node => node.id === 'n1' ? { ...node, height: 12 } : node) };
+}
+const newer = { ...source, nodes: source.nodes.map(node => node.id === 'n1' ? { ...node, height: 12 } : node) };
+async function openSource() {
   await upload('D808-old.bcad', source);
   await f.same(source);
-  f.phase = 'hold successful reorder reply, then begin real file Open';
+}
+async function overlapOpen(action) {
   await f.page.evaluate(() => window.__historyOpenRace.arm());
-  await moveEarlier(3);
+  await action();
   await f.page.waitForFunction(() => window.__historyOpenRace.replyHeld());
   assert.equal(await f.page.evaluate(() => window.__historyOpenRace.replyOK), true);
   await upload('D808-newer-open.bcad', newer);
   await f.page.waitForFunction(() => window.__historyOpenRace.fileHeld());
   await f.page.evaluate(() => window.__historyOpenRace.sendReply());
   await settle();
-  f.phase = 'release real file bytes after the previous reorder result';
   await f.page.evaluate(() => window.__historyOpenRace.sendFile());
+}
+async function verifyOpenRace() {
+  await newTimedPage();
+  await openSource();
+  f.phase = 'overlap successful reorder reply with later native File Open';
+  await overlapOpen(() => moveEarlier(3));
   if (priorOpenRace) {
     await f.same(reordered);
     await settle();
@@ -171,7 +181,77 @@ async function verifyOpenRace() {
   await verifySolids('05-reopened-native', newer, 12);
 }
 
+async function historyDelete(index) {
+  await f.page.locator(`.history .hs[data-node-index="${index}"]`).click({ button: 'right' });
+  await f.page.getByRole('menuitem', { name: /^Delete\b/ }).click();
+}
+const deleteActions = [
+  {
+    name: 'history-delete',
+    action: () => historyDelete(4),
+    doc: { ...source, nodes: source.nodes.slice(0, 4), outputs: { b1: ref(1), b3: ref(3) } },
+    facts: [{ id: 'n1', key: 'b1', volume: 4800, centroid: [15, 10, 4] }, cylinderFact],
+  },
+  {
+    name: 'confirmed-dependent-delete',
+    action: async () => {
+      await historyDelete(1);
+      const dialog = f.page.getByRole('dialog', { name: 'Delete with dependents', exact: true });
+      await button(dialog, 'Delete 2').click();
+    },
+    doc: { ...source, nodes: [cylinderSketch, { ...cylinder, sketch: 0 }], outputs: { b3: ref(1) } },
+    facts: [cylinderFact],
+  },
+  {
+    name: 'keyboard-selection-delete',
+    action: async () => {
+      const browser = f.page.getByRole('complementary', { name: 'Browser', exact: true });
+      await button(browser, 'Cylinder 6').click();
+      await f.page.waitForFunction(() => window.__studioSelection?.selection.bodies.length === 1);
+      await f.page.keyboard.press('Delete');
+    },
+    doc: { ...source, nodes: [plateSketch, plate, hole], outputs: { b4: ref(2) } },
+    facts: [drilledPlate(8)],
+  },
+];
+async function verifyDeleteOpenRace() {
+  for (const { name, action, doc, facts } of deleteActions) {
+    f.phase = name + ': overlap successful delete with later native File Open';
+    await newTimedPage();
+    await openSource();
+    await overlapOpen(action);
+    if (priorDeleteRace) {
+      await f.same(doc);
+      await settle();
+      await verifySolids(name + '-prior-open-lost', doc, 8, facts);
+      f.report.observations.push({ name, priorReproduced: true, newerOpenLost: true });
+      continue;
+    }
+    await f.same(newer);
+    await verifySolids(name + '-newer-open-wins', newer, 12);
+    assert.equal(await f.page.locator('.toast').count(), 0);
+    await f.undo();
+    await f.same(source);
+    await verifySolids(name + '-first-undo-drilled-source', source, 8);
+    await f.redo();
+    await f.same(newer);
+    if (name === 'history-delete') {
+      const saved = await f.save('D808-newer-open-after-delete');
+      await f.freshOpen(saved.file, newer, name + '-fresh-open');
+      await verifySolids(name + '-fresh-native', newer, 12);
+    }
+    f.phase = name + ': same Delete without a competing Open still works';
+    await openSource();
+    await action();
+    await f.same(doc);
+    await verifySolids(name + '-current-delete', doc, 8, facts);
+    await f.undo();
+    await f.same(source);
+  }
+}
+
 await f.run(async () => {
+  if (deleteRace) return verifyDeleteOpenRace();
   if (openRace) return verifyOpenRace();
   f.phase = 'open two independent extrusions and a dependent Hole';
   await f.newPage();
