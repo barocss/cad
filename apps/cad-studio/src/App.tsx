@@ -113,6 +113,7 @@ import { sketchRegion } from './app/sketchControls';
 import { createDocumentReplacement, type ReplacementIntent } from './app/documentReplacement';
 import { createStudioVersionActions } from './app/studioVersionActions';
 import { createStudioDocumentEntryActions } from './app/studioDocumentEntryActions';
+import { createStudioChatTurnActions } from './app/studioChatTurnActions';
 import { createStudioParameterActions } from './app/studioParameterActions';
 import { activeKey, type Active } from './app/commandState';
 import { emptySel, NO_INSTANCES, BROWSER_PLACEMENT, PALETTE_EXTRA } from './app/studioConstants';
@@ -221,7 +222,7 @@ import { expandPatterns } from '@barocss/cad-model/assembly/patterns';
 /** The document with its instance patterns' occurrences made again from their seeds (roadmap 10 ③): every instance edit keeps them in step. */
 const withPatterns = (d: StudioDoc): StudioDoc => d.instancePatterns?.length ? expandPatterns(d) : d;
 import { TooltipLayer } from './ui/Tooltip';
-import { resolveNames, type NameSelection } from '@barocss/cad-model/chat/names';
+import type { NameSelection } from '@barocss/cad-model/chat/names';
 import { defaultDrawing, type DrawingSettings } from '@barocss/cad-model/drawing/types';
 import { MatePanel } from './ui/MatePanel';
 import { sweepLinks } from '@barocss/cad-model/robot/sweep';
@@ -232,7 +233,7 @@ import type { Analysis } from './viewport/analysis';
 import { type MapKind } from './viewport/scalarMaps';
 import { useStudioSectionOverlayDevHooks, useStudioViewportDevHooks } from './viewport/useStudioViewportDevHooks';
 import { sectionSketchAction } from './app/sectionSketch';
-import { describeChange, lookOf } from '@barocss/cad-model/app/bodies';
+import { lookOf } from '@barocss/cad-model/app/bodies';
 import { readBrief } from '@barocss/cad-model/chat/brief';
 import { BriefPanel } from './ui/BriefPanel';
 import { SpecifyPanel } from './ui/SpecifyPanel';
@@ -2282,6 +2283,9 @@ export function App() {
     onRadiusMode={mode => { const a = activeStore.get(); if (a?.fillet) changeFillet(a.fillet.type, mode); }}
     onFramePreview={owner => { if (activeStore.get() === owner && owner.preview === 'ok') viewport.current?.fit(); }}
     onFile={uploadFont} onHoleOptions={applyHoleOptions} onApply={applyHud} onCancel={cancel} />;
+  const chatTurnActions = createStudioChatTurnActions({ doc, bodies, commit,
+    rememberSelection: selection => { chatSelection.current = selection; }, select: setSelection,
+    undo: () => undoNow.current(), notice: setToast });
   const documentEntry = createStudioDocumentEntryActions({
     sessionBlocked, switchWhenReady: workspaceModeExit.switchWhenReady, replace: replaceDoc,
     drafts: { cage: () => cageEdRef.current?.session ?? null, feature: () => commandDraft() ?? nodeEditorDraft.current },
@@ -2436,27 +2440,7 @@ export function App() {
         faceDiagnosis={faceDiagnosis.selected} onClearFaceDiagnosis={faceDiagnosis.clear}
         taskRun={inPlace ? undefined : { reopened: reopenedTaskRun, decided: decidedTaskRun, sourceKey: project.taskSourceKey, export: exportTaskRun, start: startTaskRun, stop: stopTaskRun, refresh: refreshTaskRun, rebuild: rebuildTaskRun, observe: observeTaskRunStatus, openCheckpoint: openTaskRunCheckpoint, openBaseline: openTaskRunBaseline, readApproval: readTaskRunApproval, checkWorkingApproval, prepareWorkingRepair, prepareTaskReplacement, workingVersion: saveAcceptanceScope, review: reviewTaskRun, modelViewBlocked: !reviewView }} onRunning={setChatRunning} onRowFiles={files => { if (files === chatRowFiles.current || (files && !isPersonRowFiles(files))) return; revokePersonRowFiles(chatRowFiles.current); chatRowFiles.current = files; }} base={() => prefixDoc(doc, marker ?? doc.nodes.length)} evaluate={d => engine.part(d, revision.current++, 'agent').then(r => r.ok ? r.bodies : null)} check={partEval}
         blocked={sketch ? 'Finish or leave the sketch to chat.' : active ? `Apply or cancel ${active.cmd.label} to chat.` : null}
-        onPreview={setPreviewBodies} onCommit={(next, sel, merged) => {
-          // (Merged onto the edits made while it ran, O133: what applied, and what waits as a proposal and why.)
-          if (merged) {
-            const why = merged.deferred[0]?.reason;
-            if (!merged.applied.length && !merged.proposal) {
-              if (why) setToast({ title: 'Chat turn left the document unchanged', hint: why, detail: '' });
-              return;
-            }
-            if (!commit(next, true, true)) return;
-            chatSelection.current = sel ?? null;
-            const n = merged.applied.length + merged.deferred.length;
-            setToast({ title: 'Chat turn merged with your edits', hint: `${merged.applied.length} of ${n} change${n > 1 ? 's' : ''} applied${merged.proposal ? `. Review ${merged.proposal}` : ''}.${why ? ` ${why}` : ''}`, detail: '', action: { label: 'Undo', run: () => { undoNow.current(); setToast(null); } } });
-            return;
-          }
-          // (Applied directly by the agent — at L2 only value edits — said so with an undo, D41.)
-          const direct = JSON.stringify(next.nodes) !== JSON.stringify(doc.nodes) || JSON.stringify(next.parameters) !== JSON.stringify(doc.parameters), what = direct ? describeChange(doc, next) : '';
-          if (!commit(next)) return;
-          chatSelection.current = sel ?? null;
-          if (direct) setToast({ title: 'Applied by the agent', hint: `${what[0]?.toUpperCase() ?? ''}${what.slice(1)}.`, detail: '', action: { label: 'Undo', run: () => { undoNow.current(); setToast(null); } } });
-        }}
-        onSelect={sel => setSelection(resolveNames(bodies, sel).selection)} onClose={() => setChat(false)} context={chatContext} outbox={chatOutbox} onOutboxSent={id => setChatOutbox(o => (o?.id === id ? null : o))}
+        onPreview={setPreviewBodies} {...chatTurnActions} onClose={() => setChat(false)} context={chatContext} outbox={chatOutbox} onOutboxSent={id => setChatOutbox(o => (o?.id === id ? null : o))}
         proposals={doc.proposals} proposalStale={isStale} proposalBusy={proposalBusy} onAcceptProposal={p => void acceptIt(p)} onRejectProposal={rejectIt} /></Suspense>} />
     </div>
   );
