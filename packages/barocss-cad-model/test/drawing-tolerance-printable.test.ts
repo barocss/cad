@@ -4,6 +4,10 @@ import { deviationPair, deviationSet, lengthFormats, presetFor, type DeviationPa
 import { dimensionLine, dimensionMarks, toleranceText, valueMarks, withShownText } from '../src/drawing/sheet';
 import { emptyDoc, type StudioDoc } from '../src/engine/doc';
 import { withFit } from '../src/drawing/fits';
+import { resolveDimension } from '../src/drawing/dimensions';
+import type { DrawingDimension } from '../src/drawing/types';
+import { projectViews } from '../src/drawing/project';
+import { brepsFor } from '../src/engine/evaluate';
 
 // Independent exact-decimal oracle. Compare fractions by cross-products; no floating-point epsilon.
 type Fraction = { n: bigint; d: bigint };
@@ -112,4 +116,37 @@ test('issue 35: diameter 12.7 with symmetric 0.254 remains equal in mm and inch'
   assert.equal(Number(pair.upper),unit==='mm'?0.254:0.01);
   assert.equal(Number(pair.lower),unit==='mm'?-0.254:-0.01);
  }
+});
+
+test('a projected original circle supplies the authored nominal to the unchanged inward tolerance rule', () => {
+  const doc: StudioDoc = {
+    ...emptyDoc(), nextId: 2,
+    nodes: [
+      { id: 'n0', kind: 'sketch', profile: 'circle', center: [0, 0], radius: 6.35 },
+      { id: 'n1', kind: 'extrude', sketch: 0, height: 10 },
+    ],
+    outputs: { b1: { node: 1, side: 'solid' } },
+  };
+  const native = brepsFor(doc);
+  assert.ok('breps' in native);
+  const project = (breps: typeof native.breps) => {
+    const result = projectViews(breps, native.prefixes);
+    assert.ok(result.ok);
+    const edge = result.views.top.edges.find(edge => edge.circle && edge.pieces.some(piece => piece.visible));
+    assert.ok(edge?.circle);
+    const dim: DrawingDimension = { id: 'd1', kind: 'diameter', view: 'top', edge: edge.name, near: edge.circle.center,
+      place: [12, 9], tol: { kind: 'deviation', upper: 0.254, lower: -0.254 } };
+    const measured = resolveDimension(result.views, dim);
+    assert.ok(measured.ok && measured.kind === 'diameter');
+    return measured;
+  };
+  const current = project(native.breps), copy = project(structuredClone(native.breps));
+  assert.equal(current.radius, copy.radius);
+  assert.equal(current.value, 12.7);
+  assert.equal(copy.value, 12.700000000000001);
+  for (const unit of ['mm', 'inch'] as const) {
+    const pair = deviationPair(0.254, -0.254, presetFor({ units: unit }), unit, current.value);
+    assert.equal(pair.equal, true);
+    contained(pair, 12.7, 0.254, -0.254, unit);
+  }
 });

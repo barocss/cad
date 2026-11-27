@@ -443,11 +443,17 @@ function evaluateWith(input: CadPartDocument, previous: Cache | undefined, optio
           const list = f[key] as unknown;
           if (list === undefined) return {};
           if (!Array.isArray(list) || list.length > CadPartLimits.edges) fail('INPUT', `${key} must list up to 64 loops`);
-          return { [key]: (list as unknown[]).map((segments, i) => sketchOuter({ profile: 'loop', segments }, xy, dim, (code, detail) => fail(code, `${key}[${i}]: ${detail}`))) };
+          return { [key]: (list as unknown[]).map((segments, i) => sketchOuter({ profile: 'loop', segments }, xy, (code, detail) => fail(code, `${key}[${i}]: ${detail}`))) };
         };
-        const drawn = { outer: sketchOuter(f, xy, dim, fail), ...loops('regions'), ...loops('holes') } as { outer: ProfileSegmentInput[]; regions?: ProfileSegmentInput[][]; holes?: ProfileSegmentInput[][] };
+        const authoredCircle = f.profile === 'circle'
+          ? { center: xy(f.center as CadPartPoint2, 'center'), radius: dim(f.radius as CadPartDim, 'radius', true) } : undefined;
+        const outer: ProfileSegmentInput[] = authoredCircle ? [{ kind: 'arc',
+          start: [authoredCircle.center[0] + authoredCircle.radius, authoredCircle.center[1]],
+          center: authoredCircle.center, direction: 'ccw' }] : sketchOuter(f, xy, fail);
+        const drawn = { outer, ...loops('regions'), ...loops('holes') } as { outer: ProfileSegmentInput[]; regions?: ProfileSegmentInput[][]; holes?: ProfileSegmentInput[][] };
         const tags = f.sideTags === undefined ? undefined : sideTagsOf(f.sideTags, drawn, fail);
-        const sketch: Result = { kind: 'sketch', ...drawn, ...(frame ? { frame } : {}), ...(tags ? { tags } : {}) };
+        const sketch: Result = { kind: 'sketch', ...drawn, ...(frame ? { frame } : {}), ...(tags ? { tags } : {}),
+          ...(authoredCircle ? { authoredCircle } : {}) };
         // (The same sketch as before is the same object, so what is built on it can be reused.)
         const key = 'sketch:' + JSON.stringify(sketch);
         result = lookup(key, []) ?? sketch;
@@ -612,13 +618,12 @@ function loopPoints(loop: readonly ProfileSegmentInput[]): [number, number][] {
   return out;
 }
 
-function sketchOuter(f: Record<string, unknown>, xy: Tools['xy'], dim: Tools['dim'], fail: Tools['fail']): ProfileSegmentInput[] {
+function sketchOuter(f: Record<string, unknown>, xy: Tools['xy'], fail: Tools['fail']): ProfileSegmentInput[] {
   if (f.profile === 'rectangle') {
     const a = xy(f.min as CadPartPoint2, 'min'), b = xy(f.max as CadPartPoint2, 'max');
     if (!(a[0] < b[0] && a[1] < b[1])) fail('PARAMETER', 'rectangle min must be below max on both axes');
     return [[a[0], a[1]], [b[0], a[1]], [b[0], b[1]], [a[0], b[1]]].map(start => ({ kind: 'line', start: start as XY }));
   }
-  if (f.profile === 'circle') { const c = xy(f.center as CadPartPoint2, 'center'), r = dim(f.radius as CadPartDim, 'radius', true); return [{ kind: 'arc', start: [c[0] + r, c[1]], center: c, direction: 'ccw' }]; }
   if (f.profile === 'polygon') {
     if (!Array.isArray(f.points) || f.points.length < 3 || f.points.length > CadPartLimits.points) fail('INPUT', 'a polygon needs 3 to 1024 points');
     return (f.points as CadPartPoint2[]).map((p, i) => ({ kind: 'line', start: xy(p, `point ${i}`) }));

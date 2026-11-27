@@ -1,5 +1,6 @@
 // Sketch-driven solid operation cases, moved unchanged from part-model.ts. Shared geometry/state stays with its owner.
 import { BrepError, type Brep } from '../brep/brep-core.js';
+import { bindAuthoredPrismaticCircle } from '../brep/authored-circle-nominal.js';
 import { prismaticFromProfile } from '../features/prismatic-solid.js';
 import { draftedExtrusion } from '../features/drafted-extrusion.js';
 import { revolveProfile, revolveMassProperties } from '../features/revolve.js';
@@ -31,10 +32,15 @@ export function profileSolidOperation(f: CadPartFeature & Record<string, unknown
       if (sketch.kind !== 'sketch') fail('REFERENCE', `${f.sketch} is not a sketch`);
       const h = dim(f.height as CadPartDim, 'height'), from = f.from === undefined ? 0 : dim(f.from as CadPartDim, 'from');
       if (h === 0) fail('PARAMETER', 'height must not be zero');
-      const { outer, frame, regions, holes, tags } = sketch as Extract<Result, { kind: 'sketch' }>;
+      const { outer, frame, regions, holes, tags, authoredCircle } = sketch as Extract<Result, { kind: 'sketch' }>;
       const draft = f.draft === undefined ? 0 : f.draft as unknown;
       if (typeof draft !== 'number' || !Number.isFinite(draft) || !(Math.abs(draft) < 89)) fail('INPUT', 'draft must be a number of degrees below 89 in size');
-      if (draft === 0) return placed(frame, () => one({ kind: 'upright', solid: prismaticFromProfile({ outer, ...(regions ? { regions } : {}), ...(holes ? { holes } : {}), ...(tags ? { sideTags: tags } : {}), height: Math.abs(h), from: h > 0 ? from : from + h, tag: at }) }));
+      if (draft === 0) return placed(frame, () => {
+        const solid = prismaticFromProfile({ outer, ...(regions ? { regions } : {}), ...(holes ? { holes } : {}),
+          ...(tags ? { sideTags: tags } : {}), height: Math.abs(h), from: h > 0 ? from : from + h, tag: at });
+        if (authoredCircle && !frame && !holes?.length && !regions?.length) bindAuthoredPrismaticCircle(solid, authoredCircle);
+        return one({ kind: 'upright', solid });
+      });
       if (regions?.length || holes?.length) fail('CAPABILITY', 'a drafted extrude takes one loop (no regions or holes) yet');
       // Built upwards from the sketch plane, then turned over for a downward extrude (the walls lean
       // away from the sketch plane either way).

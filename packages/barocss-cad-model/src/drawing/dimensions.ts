@@ -427,7 +427,8 @@ export function resolveDimension(views: Partial<Record<DimView, BrepProjection>>
     return { ok: false, dim, reason: source ? noDrawableDetailArc : section ? 'The circle it measured cannot be found in the current section. Check the section position and the source feature.' : 'The circle it measured is no longer in the part.' };
   }
   if (!roundIn(pr, best)) return { ok: false, dim, reason: 'The circle no longer shows round in this view.' };
-  const r = best.circle.radius, value = dim.kind === 'diameter' ? 2 * r : r;
+  const r = best.circle.radius, nominalRadius = best.circle.nominalRadius ?? r;
+  const value = dim.kind === 'diameter' ? 2 * nominalRadius : nominalRadius;
   const center = inView(pr, best.circle.center);
   let detailArcs: CircularArc[] | undefined;
   if (dim.kind === 'diameter' && detail && Math.hypot(center[0] - detail.center[0], center[1] - detail.center[1]) + r > detail.radius + 1e-9) {

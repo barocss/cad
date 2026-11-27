@@ -1,4 +1,5 @@
 // Type contracts shared by the B-rep part evaluator and its feature families. No runtime imports or state.
+import type { AuthoredCircle } from '../brep/authored-circle-nominal.js';
 import type { Brep } from '../brep/brep-core.js';
 import type { PrismaticSolid } from '../features/prismatic-solid.js';
 import type { XY } from '../brep/curved-arrangement.js';
@@ -762,7 +763,7 @@ export interface BevelGearPlacement extends PlacedBevelGear { readonly meshesWit
 export type SweepStep = { kind: 'straight'; length: number } | { kind: 'bend'; radius: number; angle: number; toward: 'x' | '-x' | 'y' | '-y' };
 /** x ↦ m·x + o from a sketch's own XY (Z along its normal) into the part. */
 export type Frame = { readonly m: BrepAffine['matrix']; readonly o: Point };
-export type Result = { readonly kind: 'sketch'; readonly outer: readonly ProfileSegmentInput[]; readonly frame?: Frame; readonly regions?: readonly (readonly ProfileSegmentInput[])[]; readonly holes?: readonly (readonly ProfileSegmentInput[])[]; readonly tags?: SideTags } | { readonly kind: 'solid'; readonly parts: readonly Part[] };
+export type Result = { readonly kind: 'sketch'; readonly outer: readonly ProfileSegmentInput[]; readonly authoredCircle?: AuthoredCircle; readonly frame?: Frame; readonly regions?: readonly (readonly ProfileSegmentInput[])[]; readonly holes?: readonly (readonly ProfileSegmentInput[])[]; readonly tags?: SideTags } | { readonly kind: 'solid'; readonly parts: readonly Part[] };
 
 /**
  * `facetExplodeTriangles`: the F0 planar-path limit for this evaluation (FACET_PREVIEW_TRIANGLES for a preview; default

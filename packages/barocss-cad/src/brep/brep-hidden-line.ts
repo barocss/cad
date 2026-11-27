@@ -11,6 +11,7 @@
 //                changes between samples are found by bisection. Hidden runs that lie on visible ink
 //                are dropped (visible lines take precedence), as are silhouettes along a visible edge.
 import { faceGeometry } from './analytic-boolean.js';
+import { authoredBrepEdgeRadii } from './authored-circle-nominal.js';
 import type { Brep } from './brep-core.js';
 import { circleOf, tessellateBrep } from './brep-tessellate.js';
 import { hiddenGeneratorAlias, type HiddenGenerator, type HiddenGeneratorRun } from './brep-hidden-alias.js';
@@ -41,13 +42,23 @@ export interface ProjectedCylinderSource {
  * `ends`: its 3D end points (none for a closed circle); `circle`: a circular edge's exact geometry (`sweep`: its angle).
  * `pieces` is empty when the whole curve lies on visible ink (a hole's rim seen edge-on along the outline).
  */
+interface ProjectedCircle {
+  center: Point;
+  radius: number;
+  normal: Point;
+  full: boolean;
+  sweep: number;
+  /** Authored radius for dimension values, when the original producer identifies this exact edge. */
+  nominalRadius?: number;
+}
+
 export interface ProjectedEdge {
   readonly name: string;
   readonly kind: 'line' | 'circle' | 'curve' | 'silhouette';
   /** A tangent edge: a smooth joint between two different surfaces (only with `tangentEdges`). */
   readonly tangent?: true;
   readonly ends: readonly [Point, Point] | null;
-  readonly circle: { readonly center: Point; readonly radius: number; readonly normal: Point; readonly full: boolean; readonly sweep: number } | null;
+  readonly circle: Readonly<ProjectedCircle> | null;
   /** Analytic cylinder provenance for exact cylinder side silhouettes (absent on non-cylindrical edges). */
   readonly cylinder?: ProjectedCylinderSource;
   readonly pieces: readonly ProjectedPiece[];
@@ -174,6 +185,7 @@ export function projectBrepHiddenLines(breps: readonly Brep[], view: HiddenLineV
     const geomOf = (id: string) => geometryOfFace(faceById.get(id)!);
     const polylineOf = new Map(mesh.edges.map(e => [e.edgeId, e.points]));
     const vertex = new Map(brep.vertices.map(v => [v.id, v.point]));
+    const authoredRadii = authoredBrepEdgeRadii.get(brep);
 
     for (const edge of brep.edges) {
       const fs = facesOf.get(edge.id) ?? [];
@@ -246,7 +258,11 @@ export function projectBrepHiddenLines(breps: readonly Brep[], view: HiddenLineV
           let k = 0; while (k < ps.length - 2 && ps[k + 1] < s) k++;
           const d = ps[k + 1] - ps[k]; return lerp3(poly[k], poly[k + 1], d > 0 ? Math.min(1, Math.max(0, (s - ps[k]) / d)) : 0);
         };
-        into.push({ name, ...tangent, kind: kind === 'silhouette' ? 'silhouette' : 'circle', ends: full ? null : [a, b], circle: { center: circle.c, radius: circle.r, normal, full, sweep: total }, s0: 0, s1: total, eps: 1e-5 * size, at, probe,
+        const nominalRadius = authoredRadii?.get(edge.id);
+        const projectedCircle: ProjectedCircle = { center: circle.c, radius: circle.r, normal, full, sweep: total };
+        if (nominalRadius !== undefined) projectedCircle.nominalRadius = nominalRadius;
+        into.push({ name, ...tangent, kind: kind === 'silhouette' ? 'silhouette' : 'circle', ends: full ? null : [a, b],
+          circle: projectedCircle, s0: 0, s1: total, eps: 1e-5 * size, at, probe,
           out: (s0, s1) => arcOut(C, U, V, theta(s0), theta(s1)),
           samples: () => steps(0, total, Math.max(Math.ceil(extent * total / h), Math.ceil(total / (Math.PI / 32)))) });
         continue;

@@ -19,6 +19,7 @@
 // them, and a solid carries its cap sources (the authored tops and bottoms) that name the caps. Face
 // names are the tag, or `tag#k` when one tag names several faces (k by position); edge names join
 // the names of their two faces.
+import { authoredPrismaticRadii, authoredBrepEdgeRadii } from '../brep/authored-circle-nominal.js';
 import {
   booleanCurveRegions, curveArrangementVertices, pointInPolygon, curveTolerance, paramOf, regionArea, regionInteriorPoint, sampleRing, segAt, segDistance, segEnd, segReverse, segStart,
   type CurveRegion2, type CurveSegment2, type XY,
@@ -322,13 +323,20 @@ export function brepFromPrismatic(solid: PrismaticSolid, options: { readonly id?
   };
   nameFaces(faces);
   const edgeIds = new Map<string, string>(), edges: { id: string; curve: Curve; vertices: [string, string]; name?: string }[] = [];
+  const authoredRadius = authoredPrismaticRadii.get(solid);
+  const authoredEdges = authoredRadius === undefined ? undefined : new Map<string, number>();
   const edgeBase = (list: Use[]) => [...new Set(list.map(u => faces[u.face].name!))].sort().join('|');
   for (const [key, list] of finalUses) {
     const fwd = list.find(u => u.sense === 'forward')!, eid = `${id}_e${edges.length}`;
     edgeIds.set(key, eid);
     let curve: Curve;
     if (key.startsWith('s')) { const s = struts.get(key)!; curve = lineCurve(eid, [P[s.p][0], P[s.p][1], levels[s.lo]], [P[s.p][0], P[s.p][1], levels[s.hi]]); }
-    else { const [k, level] = key.slice(1).replace(/[ab]$/, '').split('_').map(Number); curve = curveOf(k, levels[level], eid); }
+    else {
+      const [k, level] = key.slice(1).replace(/[ab]$/, '').split('_').map(Number);
+      curve = curveOf(k, levels[level], eid);
+      const segment = pieces[k].seg;
+      if (segment.kind === 'arc' && segment.r === authoredRadius) authoredEdges?.set(eid, segment.r);
+    }
     edges.push({ id: eid, curve, vertices: [vertexOf(fwd.start, fwd.startRoot!), vertexOf(fwd.end, fwd.endRoot!)], name: edgeBase(list) });
   }
   nameEdges(edges);
@@ -364,11 +372,13 @@ export function brepFromPrismatic(solid: PrismaticSolid, options: { readonly id?
   }
   const faceInput = (i: number): BrepFaceInput => ({ id: faces[i].id, name: faces[i].name, surface: faces[i].surface, sense: faces[i].sense,
     loops: faces[i].loops.map((l): BrepLoopInput => ({ kind: l.kind, uses: l.uses.map(u => ({ edge: edgeIds.get(u.key)!, sense: u.sense, pcurve: u.pcurve! })) })) });
-  return buildBrep({
+  const brep = buildBrep({
     source: { family: 'prismatic-solid', id }, vertices, edges,
     bodies: bodies.map((b, k) => ({ id: `${id}_b${k}`, kind: 'solid' as const, shells: [b.outer, ...b.cavities].map((g, s) => ({ id: `${id}_b${k}_s${s}`, faces: g.faces.map(faceInput), closed: true })) })),
     tolerance: Math.max(tol, 1e-9),
   });
+  if (authoredEdges?.size) authoredBrepEdgeRadii.set(brep, authoredEdges);
+  return brep;
 }
 
 const byPosition = (a: Point, b: Point) => a[0] - b[0] || a[1] - b[1] || a[2] - b[2];
