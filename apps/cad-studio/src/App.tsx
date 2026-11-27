@@ -116,6 +116,7 @@ import { createStudioVersionActions } from './app/studioVersionActions';
 import { createStudioDocumentEntryActions } from './app/studioDocumentEntryActions';
 import { createStudioChatTurnActions } from './app/studioChatTurnActions';
 import { createStudioParameterActions } from './app/studioParameterActions';
+import { createStudioAssemblyCommits, createStudioAssemblyFeatureActions } from './app/studioAssemblyChanges';
 import { activeKey, type Active } from './app/commandState';
 import { emptySel, NO_INSTANCES, BROWSER_PLACEMENT, PALETTE_EXTRA } from './app/studioConstants';
 import { routeMessage } from './app/routeSession';
@@ -158,7 +159,6 @@ import { STEPS_COMMAND, shownSelection as litSelection } from './app/assemblySte
 import { useAssemblyStepReview } from './app/useAssemblyStepReview';
 import type { CutDraft } from './app/assemblyCutDraft';
 import { useAssemblyCutEditor } from './app/useAssemblyCutEditor';
-import { deleteAssemblyCut } from '@barocss/cad-model/assembly/cuts';
 import { useJoints } from './state/useJoints';
 import { refuseMotionSweep, timedMotion } from './state/motion';
 import { timedPathOf } from '@barocss/cad-model/robot/motion';
@@ -219,9 +219,6 @@ import { loadUserLibraries, setLibraryStore } from '@barocss/cad-model/library/l
 import { browserStore } from './ui/browserStore';
 import { processProfile } from '@barocss/cad-model/library/materials';
 import { useInstanceLooks } from './state/useInstanceLooks';
-import { expandPatterns } from '@barocss/cad-model/assembly/patterns';
-/** The document with its instance patterns' occurrences made again from their seeds (roadmap 10 ③): every instance edit keeps them in step. */
-const withPatterns = (d: StudioDoc): StudioDoc => d.instancePatterns?.length ? expandPatterns(d) : d;
 import { TooltipLayer } from './ui/Tooltip';
 import type { NameSelection } from '@barocss/cad-model/chat/names';
 import { defaultDrawing, type DrawingSettings } from '@barocss/cad-model/drawing/types';
@@ -250,7 +247,7 @@ import { resolveShopRows } from '@barocss/cad-model/engine/shopRows';
 import { openAccepted, type InPlaceSession } from './app/editInPlace';
 import { editInPlaceActions } from './app/editInPlaceActions';
 import { freshPartId, revisionOf } from '@barocss/cad-model/assembly/definitions';
-import { BASE, type Mate } from '@barocss/cad-model/assembly/mates';
+import { BASE } from '@barocss/cad-model/assembly/mates';
 import type { DirectGeometry } from '@barocss/cad-model/engine/direct';
 import { directNow, loadDirect } from '@barocss/cad-model/engine/directModule';
 import { FontUpload } from './app/fontUpload';
@@ -925,50 +922,21 @@ export function App() {
   const [directReady, setDirectReady] = useState(() => !!directNow());
   useEffect(() => { if (doc.direct?.objects.length && !directReady) void loadDirect().then(() => setDirectReady(true)); }, [doc.direct, directReady]);
   const D = directReady ? directNow() : null;
-  /** One undoable change of the placed instances. */
-  const commitInstances = useCallback((next: PartInstance[], select?: string[]) => {
-    if (!canChangeDocument()) return false;
-    pushUndo();
-    if (!setDoc(withPatterns({ ...doc, instances: next }))) return false; setDirty(true);
-    if (select) setInstanceSel(select);
-    return true;
-  }, [doc, marker, acceptanceScope]);
+  const { commitInstances, commitParts, commitAssembly } = useMemo(() => createStudioAssemblyCommits(doc, {
+    canChangeDocument, pushUndo, setDoc, markDirty: () => setDirty(true), selectInstances: setInstanceSel,
+  }), [doc, marker, acceptanceScope]);
+  const { patternEdit, deleteCut } = createStudioAssemblyFeatureActions(doc, commit, setToast);
   const { instanceSources, sceneInstanceBodies, renderGeometryReady } = usePlacedBodyEvaluation({
     model: { doc, shown: shownDoc, current: docNow, currentShown: shownDocNow },
     worker: { client: engine, lanes, revision, session: workerSession, currentSession: workerSessionNow },
     accepted: { bodies: instanceBodies, update: setInstanceBodies },
     draft: cutDraft, rendering, onNotice: setToast,
   });
-  /** One undoable change of the instances and their mates together. */
-  /** One undoable change of the placed parts and their waiting revisions (shared definitions). */
-  const commitParts = useCallback((next: Pick<StudioDoc, 'instances' | 'pendingParts'>) => {
-    if (!canChangeDocument()) return false;
-    pushUndo();
-    if (!setDoc(withPatterns({ ...doc, instances: next.instances, pendingParts: next.pendingParts }))) return false; setDirty(true);
-    return true;
-  }, [doc, marker, acceptanceScope]);
-  const commitAssembly = useCallback((instances: PartInstance[], mates: Mate[]) => {
-    if (!canChangeDocument()) return false;
-    pushUndo();
-    if (!setDoc(withPatterns({ ...doc, instances, mates }))) return false; setDirty(true);
-    return true;
-  }, [doc, marker, acceptanceScope]);
-  // Roadmap 10 ③: a pattern edit through the model (its refusal as a notice), committed with its occurrences.
-  const patternEdit = (run: () => { doc: StudioDoc }, refused = 'Pattern not changed', inline = false): string | undefined => {
-    let next: StudioDoc;
-    try { next = run().doc; } catch (e) {
-      const hint = e instanceof Error ? e.message : String(e);
-      if (!inline) setToast({ title: refused, hint, detail: '' });
-      return hint;
-    }
-    return commit(next) ? undefined : 'The change was not accepted. Review the document notice before trying again.';
-  };
   const cutEditor = useAssemblyCutEditor({
     doc, draft: cutDraft, setDraft: setCutDraft, instanceSelection: instanceSel, instanceBodies,
     setInstanceEdit, commit, onNotice: setToast,
   });
   const { open: openCut } = cutEditor;
-  const deleteCut = (id: string) => patternEdit(() => deleteAssemblyCut(doc, id), 'Cut not deleted');
   const readLinkedFaces = useCallback(async (owner: string, input: StudioDoc) => {
     const result = await engine.part(bearingFaceInput(doc, owner, input), revision.current++, 'read');
     return result.ok ? result.faceTable ?? null : null;
