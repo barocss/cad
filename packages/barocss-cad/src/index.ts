@@ -451,6 +451,8 @@ export type { MassInertiaAxis } from './brep/axis-inertia.js';
 export { evaluateCadPart, loadCadPart, emptyCadPart, massPropertiesOf, surfaceAreaOf, checkOutput, exportStl, flatPatternOf, outputOf, reevaluate, saveCadPart, CadPartError, CadPartLimits, stepSizeProblem, type GearPlacement, type RackPlacement, FACET_EXPLODE_TRIANGLES, FACET_PREVIEW_TRIANGLES } from './part/part-model.js';
 export type { CadPartDocument, CadPartFeature, CadPartSnapshot, CadPartOutput, CadPartDim, CadPartAxis, CadPartLoopSegment, CadPartErrorCode, CadPartBeadSharing, CadPartLoftSection, CadPartSweepStep, CadPartSketchPlane, CadPartEvaluationOptions, CadPartProfileCalls, CadPartFeatureProfile, CadPartSection, CadPartFrameOverride, CadPartFrameSegment, CadPartFrameCorners, CadPartFrameNotch, CadPartFrameTrim } from './part/part-model.js';
 export { booleanAnalytic } from './brep/analytic-boolean.js';
+export { splitTopologyEvolutionOf, resolveSplitTopologySource } from './part/split-topology-evolution.js';
+export type { SplitTopologyKind, SplitTopologySide, SplitTopologySource, SplitTopologyImage, SplitTopologyMapping, SplitTopologySideReceipt, SplitTopologyEvolutionReceipt, SplitTopologyResolution } from './part/split-topology-evolution.js';
 export type { AnalyticBooleanOperation } from './brep/analytic-boolean.js';
 export { curveFaceRegions, locateInRegion, regionInteriorPoint } from './brep/curved-arrangement.js';
 export { revolveProfile, revolveMassProperties } from './features/revolve.js';

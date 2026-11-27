@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D2093: [Read native topology evolution of a coordinate-plane Split](notes/split-topology-evolution-2026-11-28/README.md), #3. Map original face and edge images and generated cut boundaries. Verify refusal and native Studio reopen.
 - D2092: [Pivot a convex polygon wall after Rotate](notes/rotated-polygon-pivot-face-2026-11-28/README.md), #629 and #14. Keep the exact world cap, hinge, native IDs and trim owners through signed edits and an upstream Rotate.
 - D2091: [Pivot original convex polygon extrusion walls](notes/polygon-pivot-face-2026-11-28/README.md), #629 and #14. Qualify both original cap hinges on triangular and octagonal stock, including explicit Studio approval of an Agent hinge change.
 - D2090: [Pivot an original hexagonal extrusion wall](notes/hex-pivot-face-2026-11-28/README.md), #629 and #14. Preserve the exact fixed native cap edge and seven other supports, with Studio refusal, History and reopen.

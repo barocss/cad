@@ -494,6 +494,10 @@ function evaluateWith(input: CadPartDocument, previous: Cache | undefined, optio
 
 /** A snapshot's evaluation cache and options, so a re-evaluation reuses what it can (R7.3b). */
 const snapshotState = new WeakMap<CadPartSnapshot, { readonly cache: Cache | undefined; readonly options?: CadPartEvaluationOptions }>();
+/** Internal read receipts require an actual evaluated snapshot, including one opened from a saved document. */
+export function assertEvaluatedSnapshot(snapshot: CadPartSnapshot): void {
+  if (!snapshotState.has(snapshot)) throw new CadPartError('INPUT', null, 'The read receipt needs a snapshot from evaluateCadPart, reevaluate or loadCadPart.');
+}
 /** The output of a snapshot by id; refused, REFERENCE, when there is none. */
 export function outputOf(snapshot: CadPartSnapshot, id: string): CadPartOutput {
   const o = snapshot.outputs.find(x => x.id === id); if (!o) throw new CadPartError('REFERENCE', null, `no output ${id}`); return o;

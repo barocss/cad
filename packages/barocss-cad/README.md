@@ -26,6 +26,12 @@ const stepText = plate.step();
 
 Lengths in the part API are in millimetres, angles are in degrees, and density is in g/cm³. Geometry support depends on the input topology and surface types. Check the operation's documented limits and handle typed refusals. Use native results for geometry and mass checks. Use the mesh for display or mesh export.
 
+## Read Split face and edge history
+
+Use `splitTopologyEvolutionOf(snapshot, splitId)` with a snapshot from `evaluateCadPart`. A coordinate-plane Split of an original zero-draft rectangular extrusion reports the retained, modified and deleted faces and edges for each output. It also identifies the two generated caps and their boundary edges.
+
+Pass an original `{ kind, id }` from `receipt.sources` to `resolveSplitTopologySource(receipt, source)`. A source that survives on both sides resolves to `ambiguous`. Pass `'negative'` or `'positive'` as a third argument when the design specifies one side. The returned IDs belong to that evaluated source or output. Unsupported Split inputs raise a `CadPartError`.
+
 ## Validate locally
 
 ```sh
