@@ -9,8 +9,7 @@ import { deleteFeatures, featureDependents, renumber } from '../features';
 import { factsOf } from '../observe';
 import { treeDiff } from '../transactions';
 import { approvalOf, diffLine, DIRECT_GEOMETRY_APPROVAL, nextProposalId, PLAN_CHARS, PROMPT_CHARS, proposalIsStale, proposalRevisionOf, riskOf, riskRank, withHistory } from '../proposals';
-import { isDirectRuledOperation } from '../directRuledProposal';
-import { directReviewRevision } from '../directProposalReview';
+import { directReviewRevision, isDirectSheetOperation } from '../directProposalReview';
 import { lockedPlateProposal } from '../lockedPlateProposalReview';
 import { cornerBatchProposal, rebindReviewedFilletBatch, reviewedCornerBatchEvidence, savedChamferResizeProposal } from '../cornerProposalReview';
 import { boredWallProposal } from '../modelProposalReview';
@@ -146,7 +145,7 @@ export async function proposalOfWith(dispatch: PartRun, state: ChatState, ops: u
   // run.results also contains skipped opIds; run.ops retains only executed operations.
   const executedResults = run.results.filter(result => result.skipped === undefined);
   const stepChanges = run.ops.flatMap((op, index) => op.tool === 'add_assembly_step' && typeof executedResults[index]?.did === 'string' ? [executedResults[index].did as string] : []);
-  const sheets = run.ops.flatMap((op, index) => (isDirectRuledOperation(op) || isRuledThickenOperation(op))
+  const sheets = run.ops.flatMap((op, index) => (isDirectSheetOperation(op) || isRuledThickenOperation(op))
     && typeof executedResults[index]?.did === 'string' ? [executedResults[index].did as string] : []);
   const appended = run.ops.length === 1 && cur.doc.nodes.length === state.doc.nodes.length + 1 ? cur.doc.nodes.at(-1) : undefined;
   const boundOutlet = appended?.kind === 'offset-face' && appended.target && cur.doc.nodes[appended.parent.node]?.kind === 'sweep-curve'

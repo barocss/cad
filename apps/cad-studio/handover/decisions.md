@@ -1,5 +1,6 @@
 # CAD decisions — current navigation
 
+- D2074: [Review and approve a Guided Fill from the local Agent](notes/agent-guided-fill-approval-2026-11-27/README.md), #324. Refuse stale revisions and require explicit Studio approval of the same native open patch.
 - D2073: [Fill one guided handle-to-body junction](notes/guided-handle-junction-2026-11-27/README.md), #753. Match three native boundaries and an interior guide, verify open topology and preserve the result through Studio Save/Open.
 - D2072: [Match one planar seam with Tangent Fill](notes/planar-tangent-fill-2026-11-27/README.md), #751. Verify the original G0 angle, preserved boundaries, one native G1 seam and desktop Save/Open.
 - D2071: [Create an independent native Bridge Curve](notes/native-bridge-curve-2026-11-27/README.md), #750. Preview exact G0/G1 across two selected straight edges and preserve the source B-reps and curve through Studio Save and fresh Open.

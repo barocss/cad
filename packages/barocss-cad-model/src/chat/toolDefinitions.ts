@@ -17,9 +17,10 @@ import { REFERENCE_TOOLS } from './references';
 import { ASSEMBLY_TOOLS } from './assembly';
 import { CHAT_COMMANDS, COMMAND_DOCS } from './part/features';
 import { DIRECT_RULED_COMMAND } from './directRuledProposal';
+import { DIRECT_GUIDED_FILL_COMMAND } from './directGuidedFillProposal';
 import { DIRECT_THICKEN_COMMAND } from './directThickenProposal';
 
-const directCommands = [DIRECT_RULED_COMMAND, DIRECT_THICKEN_COMMAND];
+const directCommands = [DIRECT_RULED_COMMAND, DIRECT_THICKEN_COMMAND, DIRECT_GUIDED_FILL_COMMAND];
 export const FEATURE_COMMANDS = [...CHAT_COMMANDS, ...directCommands.map(command => command.command)];
 
 /** The tools a batch may hold (those changing the base part, one at a time). */
@@ -125,7 +126,7 @@ const PART_TOOLS: ToolDefinition[] = [
         edges: selectorList('Edges to select'),
         bodies: { ...nameList, description: 'Body keys to select (e.g. "b1").' },
         point: { type: 'array', items: { type: 'number' }, description: 'Optional picked point [x, y, z] on the face (hole default centre).' },
-        expectedRevision: { type: 'string', description: 'Revision from query.render or query.rebuild in the same part scope. For direct-ruled and direct-thicken, use direct_revision from query.summary. Refuses before selecting any geometry if the part has changed.' },
+        expectedRevision: { type: 'string', description: 'Revision from query.render or query.rebuild in the same part scope. For direct-ruled, direct-thicken and direct-guided-fill, use direct_revision from query.summary. Refuses before selecting any geometry if the part has changed.' },
       },
       required: ['command'], additionalProperties: false,
     },
@@ -332,7 +333,7 @@ Ref = {"node": index of the feature that made a visible body, "side": "solid"} (
   },
   {
     name: 'list_proposals',
-    description: 'The open proposals (all: true for accepted and rejected ones too, with who decided, when and why): id, title, summary, risk, and stale when the part changed since. Open Direct Ruled and Exact Thicken proposals include directReviewRevision for query.render. Open proposals that support pinned model review include modelReviewRevision for query.render. Open proposals include proposalRevision for drawing review.',
+    description: 'The open proposals (all: true for accepted and rejected ones too, with who decided, when and why): id, title, summary, risk, and stale when the part changed since. Open Direct Ruled, Guided Fill and Exact Thicken proposals include directReviewRevision for query.render. Open proposals that support pinned model review include modelReviewRevision for query.render. Open proposals include proposalRevision for drawing review.',
     input_schema: { type: 'object', properties: { all: { type: 'boolean' } }, additionalProperties: false },
   },
   {
@@ -342,7 +343,7 @@ Ref = {"node": index of the feature that made a visible body, "side": "solid"} (
   },
   {
     name: 'render_views',
-    description: 'Front, top, right and isometric views. For solid views without a section, opposite orientation shows back and left. Solids use exact hidden lines and numbered faces. The legend lists face names. Use highlight to fill faces red or section to cut along an axis. For Direct-only views, pass expectedDirectRevision. To render an open Direct Ruled or Exact Thicken candidate on a copy, also pass proposal and expectedProposalRevision. The result gives the proposal pin, baseDirectRevision and candidate geometry revision. Direct sheet views list exact IDs in directObjects. For a model proposal with modelReviewRevision, pass the base expectedRevision, proposal and its modelReviewRevision as expectedProposalRevision, without highlight or section. A verified locked-reference plate returns throughBorePlates with both openings and the exact wall names for inspection. The returned candidate.reviewRevision pins its image for inspection. imageSha256 identifies the returned PNG. A supplied pin refuses changed input.',
+    description: 'Front, top, right and isometric views. For solid views without a section, opposite orientation shows back and left. Solids use exact hidden lines and numbered faces. The legend lists face names. Use highlight to fill faces red or section to cut along an axis. For Direct-only views, pass expectedDirectRevision. To render an open Direct Ruled, Guided Fill or Exact Thicken candidate on a copy, also pass proposal and expectedProposalRevision. The result gives the proposal pin, baseDirectRevision and candidate geometry revision. Direct sheet views list exact IDs in directObjects. For a model proposal with modelReviewRevision, pass the base expectedRevision, proposal and its modelReviewRevision as expectedProposalRevision, without highlight or section. A verified locked-reference plate returns throughBorePlates with both openings and the exact wall names for inspection. The returned candidate.reviewRevision pins its image for inspection. imageSha256 identifies the returned PNG. A supplied pin refuses changed input.',
     input_schema: { type: 'object', properties: { expectedRevision: { type: 'string', pattern: '^[a-f0-9]{16}$', description: 'The revision from query.rebuild for this same part scope; omit for an unpinned solid read.' },
       expectedDirectRevision: { type: 'string', pattern: '^[a-f0-9]{64}$', description: 'The direct_revision from query.summary for Direct or candidate review.' },
       proposal: { type: 'string', description: 'An open proposal ID with directReviewRevision or modelReviewRevision from proposals.list.' },

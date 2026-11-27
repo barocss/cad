@@ -1,12 +1,15 @@
-import type { Proposal } from '../engine/schema/proposals';
+import type { Op, Proposal } from '../engine/schema/proposals';
 import { digestOf } from '../util/digest';
 import { isObj } from '../util/guards';
 import { isDirectRuledOperation } from './directRuledProposal';
+import { isDirectGuidedFillOperation } from './directGuidedFillProposal';
 import { isDirectThickenOperation } from './directThickenProposal';
+
+export const isDirectSheetOperation = (op: Op) => isDirectRuledOperation(op) || isDirectGuidedFillOperation(op);
 
 export function directReviewKind(proposal: Proposal): 'sheet' | 'solid' | undefined {
   if (proposal.status !== 'open' || !proposal.ops.length) return;
-  if (proposal.ops.every(isDirectRuledOperation)) return 'sheet';
+  if (proposal.ops.every(isDirectSheetOperation)) return 'sheet';
   if (proposal.ops.every(op => {
     if (isDirectRuledOperation(op)) return true;
     const values = op.args?.values;

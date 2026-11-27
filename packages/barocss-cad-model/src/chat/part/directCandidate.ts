@@ -24,7 +24,7 @@ export async function pinnedDirectCandidate(state: ChatState, args: Record<strin
   const kind = pending && directReviewKind(pending), pin = pending && directReviewRevision(pending);
   if (!pending || !kind || !pin || (action !== 'RENDER' && kind !== 'solid'))
     return refused('PROPOSAL_UNAVAILABLE', action !== 'RENDER' ? 'Choose a unique open Exact Thicken proposal from proposals.list.'
-      : 'Choose a unique open Direct Ruled or Exact Thicken proposal from proposals.list.');
+      : 'Choose a unique open Direct sheet or Exact Thicken proposal from proposals.list.');
   if (kind === 'sheet' && state.bodies.length)
     return refused('SCOPE', 'Use sheet and curve review on a base document with only Direct geometry to display.');
   if (pin !== expectedProposalRevision || proposalIsStale(pending, requirementEvidenceRevision(state.doc)))
