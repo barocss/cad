@@ -1,13 +1,13 @@
 # CAD roadmap — current status and execution order
 
-Updated 2026-11-28 · Priority authority: D520 · Latest delivery: D2151 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
+Updated 2026-11-28 · Priority authority: D520 · Latest delivery: D2152 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
 
 This is the only current status index. Detailed tracks define acceptance; the 34 stable row pages retain scope and issue navigation. Immutable decision notes retain results. Do not append chronological status paragraphs here. [D520 decision](notes/cad-roadmap-replan-2026-11-04/README.md) supersedes D445 execution order and historical next-item text, while retaining its safeguards and bounded proofs.
 
 ## Now and next
 
-- **Current position:** [D2151](notes/wide-major-sector-draft-2026-11-28/README.md), P5 rows 07, 16 and 30. Signed Draft Extrude admits exact radial sectors above 270°. Studio verifies the exact radial seams, signed history and fresh Open of a 306.87° sector ([#14](https://github.com/barocss/cad/issues/14)).
-- **Next MAIN:** D2152, P4 rows 20 and 24. Measure and reduce the visible chord error of the exact drafted sector rim in desktop Studio. Verify display selection and retain the original native geometry and the #608 HOLD.
+- **Current position:** [D2152](notes/drafted-sector-rim-display-2026-11-28/README.md), P4 rows 20 and 24. The exact drafted-sector rim stays within 0.25 CSS px at two tested desktop zooms. WebGPU and WebGL2 pick the same edge. Native Save and fresh Open preserve the feature ([#14](https://github.com/barocss/cad/issues/14)).
+- **Next MAIN:** D2153, P5 rows 07, 16 and 30. Extend rectangular per-face Shell to three original openings that share a corner. Qualify exact walls, collapse refusal, desktop History and native reopen ([#13](https://github.com/barocss/cad/issues/13)).
 - **Separate follow-ups:** Continue Studio App extraction in cohesive parts with affected desktop checks. [#608 Rendering](https://github.com/barocss/cad/issues/608) stays on HOLD. API inventory drift remains open. The issue tracker records [#126](https://github.com/barocss/cad/issues/126), [#613](https://github.com/barocss/cad/issues/613), [#152](https://github.com/barocss/cad/issues/152) and [#22](https://github.com/barocss/cad/issues/22) as closed.
 - **Active repository:** [barocss/cad](https://github.com/barocss/cad), based on `origin/main`. Fetch before work and preserve unexpected changes. The [migration record](../../../docs/migration/README.md) maps the former `local/cad-dev` history and issue numbers.
 - **Evidence correction:** D482 records2167 PASS/0 FAIL/2 existing SKIP in a later full-kernel run than D433. Neither result is a new full-suite PASS at this audit HEAD. [D482 record](notes/vertical-contact-refusal-2026-11-04/README.md).

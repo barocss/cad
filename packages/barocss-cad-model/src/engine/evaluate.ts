@@ -13,7 +13,7 @@ import { boughtOf, elementOf, type BodyElement } from './elements';
 import type { FaceTable } from '../assembly/mates';
 import { BarocssError, checkOutput, massPropertiesOf, reevaluate, exportStl, type CadPartOutput, brepSurfaceArea, cutPiece, evaluateCadPart, transformBrep, FACET_PREVIEW_TRIANGLES, type Brep, type CadPartFeatureProfile, type CadPartSnapshot, type FlatPattern, type GearPlacement, type RackPlacement, type SubdSummary, type CutPiece, exportStep, stepProductNameHasLoss } from '@barocss/cad';
 import { bodyMesh, canonicalSweepCapSamples, withoutNativeFaces, type DisplayEdge, type DisplayMesh } from './mesh';
-import { cylinderDisplayMesh, steppedShaftDisplayMesh } from './cylinderDisplay';
+import { cylinderDisplayMesh, draftedSectorDisplayMesh, steppedShaftDisplayMesh } from './cylinderDisplay';
 import { boreWallOffsetFrame } from '@barocss/cad/internal/bored-cap-offset';
 import { halfRingFilletReferenceRims } from '@barocss/cad/internal/quarter-rim-fillet';
 import { arcSweepDisplayMesh } from './arcSweepDisplay';
@@ -417,6 +417,9 @@ export function evaluateDoc(doc: StudioDoc, revision: number, quality = 8, refin
         || (node?.kind === 'sweep-curve' && node.mode === 'exact-straight')
         || (body.ref && uprightTubeDisplaySource(doc.nodes, body.ref.node, snapshot.outputs[0].brep))) {
         const mesh = cylinderDisplayMesh(body.mesh, snapshot.outputs[0].brep, revision);
+        if (mesh !== body.mesh) result.bodies[0] = { ...body, mesh };
+      } else if (node?.kind === 'extrude' && node.draft && source?.kind === 'sketch' && source.profile === 'loop' && !source.plane) {
+        const mesh = draftedSectorDisplayMesh(body.mesh, snapshot.outputs[0].brep, revision);
         if (mesh !== body.mesh) result.bodies[0] = { ...body, mesh };
       } else if (node?.kind === 'sweep-curve' && node.mode === 'exact') {
         const { brep } = snapshot.outputs[0];

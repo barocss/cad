@@ -195,3 +195,43 @@ test('tube packets reject forged circular support or rim ownership without chang
     assert.equal(altered.cylinderDetail, undefined);
   }
 });
+
+test('a native drafted sector refines both circular rims within one packet and keeps canonical ownership', () => {
+  const source: StudioDoc = { ...doc, nodes: [
+    { id: 'n0', kind: 'sketch', profile: 'loop', segments: [
+      { kind: 'line', start: [0, 0] },
+      { kind: 'arc', start: [10, 0], center: [0, 0], direction: 'ccw' },
+      { kind: 'line', start: [6, -8] },
+    ] },
+    { id: 'n1', kind: 'extrude', sketch: 0, height: 10, draft: -30 },
+  ] };
+  const ordinary = evaluateDoc(source, 1), refined = evaluateDoc(source, 2, 8, true);
+  assert.ok(ordinary.ok && refined.ok);
+  const [model] = ordinary.bodies, [display] = refined.bodies;
+  const { cylinderDetail, ...baseMesh } = display.mesh;
+  assert.ok(cylinderDetail?.sweep);
+  assert.deepEqual(baseMesh, model.mesh);
+  assert.equal(display.volume, model.volume);
+  assert.equal(cylinderDetail.tiers.length, 1);
+  const [detail] = cylinderDetail.tiers;
+  const bytes = detail.positions.byteLength + detail.normals.byteLength + detail.faceOfVertex.byteLength
+    + detail.indices.byteLength + detail.edgeLines.byteLength + detail.edgeOfSegment.byteLength;
+  assert.ok(bytes <= 192 * 1024);
+  assert.ok(detail.chordErrorMM < cylinderDetail.baseChordErrorMM / 9);
+
+  const facePoints = new Map<number, Set<string>>();
+  for (let at = 0; at < detail.faceOfVertex.length; at++) {
+    const face = detail.faceOfVertex[at];
+    if (!facePoints.has(face)) facePoints.set(face, new Set());
+    facePoints.get(face)!.add(detail.positions.subarray(3 * at, 3 * at + 3).join(','));
+  }
+  const rims = new Set<number>();
+  for (let at = 0; at < detail.edgeLines.length; at += 3) {
+    const edge: DisplayMesh['edges'][number] = baseMesh.edges[detail.edgeOfSegment[at / 3]];
+    if (!edge.nativeCircle) continue;
+    rims.add(edge.index);
+    const atRim = detail.edgeLines.subarray(at, at + 3).join(',');
+    assert.ok(edge.faces.every(owner => facePoints.get(owner)?.has(atRim)));
+  }
+  assert.equal(rims.size, 2);
+});
