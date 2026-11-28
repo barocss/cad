@@ -465,11 +465,11 @@ function closedRingPlaneBinding(edge: Curve, surface: Surface, tolerance: number
 }
 
 /** Bind the two native half-faces of each straight meridian side. */
-function bindClosedStraightRing(brep: Brep, tolerance: number, sectionSides: 3 | 4, shellCount: 1 | 2 | 3): Brep | undefined {
-  const facesPerShell = sectionSides * 2;
-  if (brep.bodies.length !== 1 || brep.shells.length !== shellCount
-    || brep.shells.some(shell => !shell.closed || shell.faces.length !== facesPerShell)
-    || brep.faces.length !== facesPerShell * shellCount || brep.coedges.length !== 4 * facesPerShell * shellCount) return;
+function bindClosedStraightRing(brep: Brep, tolerance: number, sidesPerShell: readonly (3 | 4)[]): Brep | undefined {
+  const faceCount = 2 * sidesPerShell.reduce<number>((sum, sides) => sum + sides, 0);
+  if (brep.bodies.length !== 1 || brep.shells.length !== sidesPerShell.length
+    || brep.shells.some((shell, i) => !shell.closed || shell.faces.length !== 2 * sidesPerShell[i])
+    || brep.faces.length !== faceCount || brep.coedges.length !== 4 * faceCount) return;
   const facesByLoop = new Map(brep.faces.flatMap(face => face.loops.map(loop => [loop, face] as const)));
   const edges = new Map(brep.edges.map(edge => [edge.id, edge])), bound = new Set<string>(), coedges: BrepCoedge[] = [];
   for (const { id, edge, sense, loop, next, prev, twin } of brep.coedges) {
@@ -697,15 +697,15 @@ function hasUnequalRadialSides([a, b, c, d]: readonly XY[], radial: 0 | 1, toler
   return pair(a, b, c, d) || pair(b, c, d, a);
 }
 
-function trapezoidalCavity(profile: ExactSweepInput['outer'], holes: NonNullable<ExactSweepInput['holes']>,
-  cx: number, cy: number, tolerance: number, refuse: Refuse): readonly ProfileSegmentInput[] {
+function rectangularRingCavity(profile: ExactSweepInput['outer'], holes: NonNullable<ExactSweepInput['holes']>,
+  cx: number, cy: number, tolerance: number, style: 'triangular' | 'trapezoidal', refuse: Refuse): readonly ProfileSegmentInput[] {
   const opening = holes.length === 1 ? rectangularLoop(holes[0]) : undefined;
-  if (!opening) return refuse('CAPABILITY', 'Exact closed-circle trapezoidal sweep accepts one axis-aligned rectangular cavity.');
+  if (!opening) return refuse('CAPABILITY', `Exact closed-circle ${style} sweep accepts one axis-aligned rectangular cavity.`);
   const points = opening.points.map(([x, y]): XY => [x - cx, y - cy]);
-  // The admitted trapezoid is convex. The whole rectangle must lie inside each inset side.
+  // The admitted outer section is convex. All four cavity corners must lie inside each inset side.
   for (const { start: [x, y], end, length } of buildProfileLoop(profile).segments) {
     if (points.some(([px, py]) => (end[0] - x) * (py - y) - (end[1] - y) * (px - x) <= 10 * tolerance * length))
-      return refuse('GEOMETRY', 'Exact closed-circle trapezoidal sweep needs strictly positive wall clearance around the opening.');
+      return refuse('GEOMETRY', `Exact closed-circle ${style} sweep needs strictly positive wall clearance around the opening.`);
   }
   return points.map(start => ({ kind: 'line', start }));
 }
@@ -715,7 +715,6 @@ function closedStraightProfileRing(id: string, outer: ExactSweepInput['outer'], 
   const corners = outer.map(segment => segment.start), [a, b, c, d = a] = corners;
   const sectionSides = outer.length === 3 ? 3 : 4, triangular = sectionSides === 3;
   const style = triangular ? 'triangular' : 'trapezoidal';
-  if (triangular && holes.length) return refuse('CAPABILITY', 'Exact closed-circle triangular sweep needs a filled triangle without holes.');
   if (triangular && rail.radius > CadNumericPolicy.coordinateAbs)
     return refuse('PARAMETER', 'Exact closed-circle sweep path radius must be at most 10000 mm.');
   const minX = Math.min(a[0], b[0], c[0], d[0]), maxX = Math.max(a[0], b[0], c[0], d[0]);
@@ -736,14 +735,14 @@ function closedStraightProfileRing(id: string, outer: ExactSweepInput['outer'], 
   const cx = minX + halfX, cy = minY + halfY, [dx, dy] = aligned.bendCentre;
   const profile: ProfileSegmentInput[] = corners.map(([x, y]) => ({ kind: 'line', start: [x - cx, y - cy] }));
   const clearance = () => refuse('PARAMETER', `Exact closed-circle ${style} sweep needs strictly positive radial clearance.`);
-  const cavity = holes.length ? trapezoidalCavity(profile, holes, cx, cy, tolerance, refuse) : undefined;
+  const cavity = holes.length ? rectangularRingCavity(profile, holes, cx, cy, tolerance, style, refuse) : undefined;
   const revolve: RevolveInput = { id, profile, axis: { origin: [dx, dy], direction: [-dy, dx] }, angle: 360, sideTags: sideTags?.outer,
     ...(cavity ? { holes: [cavity], holeTags: sideTags?.holes } : {}) };
   const ring = revolveSweepProfile(revolve, { minimum: tolerance, refuse: clearance });
-  const shellCount = cavity ? 2 : 1;
-  const brep = bindClosedStraightRing(ring, 128 * Number.EPSILON * Math.max(1, radius + extent), sectionSides, shellCount);
+  const sidesPerShell: readonly (3 | 4)[] = cavity ? [sectionSides, 4] : [sectionSides];
+  const brep = bindClosedStraightRing(ring, 128 * Number.EPSILON * Math.max(1, radius + extent), sidesPerShell);
   if (!brep) return refuse('GEOMETRY', `The exact closed-circle ${style} sweep could not bind the native ring seams.`);
-  return { axes: aligned.axes, style, shellCount, local: { brep, mass: (density: number) => revolveMassProperties(revolve, density) } };
+  return { axes: aligned.axes, style, shellCount: sidesPerShell.length, local: { brep, mass: (density: number) => revolveMassProperties(revolve, density) } };
 }
 
 function closedRectangularRing(id: string, section: JoinedSection, tolerance: number, sideTags: SideTags | undefined, refuse: Refuse,
@@ -755,7 +754,8 @@ function closedRectangularRing(id: string, section: JoinedSection, tolerance: nu
   const revolve: RevolveInput = { id, profile, axis: { origin: [dx, dy], direction: [-dy, dx] }, angle: 360, sideTags: sideTags?.outer,
     ...(holes ? { holes, holeTags: sideTags?.holes } : {}) };
   const ring = revolveSweepProfile(revolve, { minimum: tolerance, refuse: clearance });
-  const brep = bindClosedStraightRing(ring, 128 * Number.EPSILON * Math.max(1, radius + extent), 4, cavities ? 3 : opening ? 2 : 1);
+  const brep = bindClosedStraightRing(ring, 128 * Number.EPSILON * Math.max(1, radius + extent),
+    cavities ? [4, 4, 4] : opening ? [4, 4] : [4]);
   if (!brep) return refuse('GEOMETRY', 'The exact closed-circle rectangular sweep could not bind the native ring seams.');
   return { brep, mass: density => revolveMassProperties(revolve, density) };
 }

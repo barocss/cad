@@ -810,7 +810,7 @@ test('the triangle keeps the authored radial-Y frame and side IDs', () => {
   for (const tag of triangle.sideTags.outer) assert.equal(body.brep.faces.filter(face => face.name.includes(`[${tag}]`)).length, 2);
 });
 
-test('a closed triangular section refuses axis contact, unaligned roll and holes', () => {
+test('a closed triangular section refuses axis contact, unaligned roll and a circular hole', () => {
   const circle = joinedCircle();
   const refused = (code, detail, section) => assert.throws(() => evaluateCadPart(document(circle, section)),
     error => error instanceof CadPartError && error.feature === 'w' && error.code === code && detail.test(error.message));
@@ -818,7 +818,7 @@ test('a closed triangular section refuses axis contact, unaligned roll and holes
     { ...triangle, points: [[-20, -3], [20, -3], [-20, 3]] });
   refused('CAPABILITY', /triangular sweep needs the sketch axes aligned/,
     { ...triangle, plane: { origin: [0, 0, 0], normal: [0, 1, 0], xAxis: [Math.SQRT1_2, 0, Math.SQRT1_2] } });
-  refused('CAPABILITY', /triangular sweep needs a filled triangle without holes/,
+  refused('CAPABILITY', /triangular sweep accepts one axis-aligned rectangular cavity/,
     { ...triangle, sideTags: { ...triangle.sideTags, holes: [['bore']] },
       holes: [[{ kind: 'arc', center: [-1, -2], start: [-0.5, -2], direction: 'cw' }]] });
 });
@@ -960,4 +960,53 @@ test('closed trapezoid cavity requires clearance from the true sloped wall', () 
     refuse(withHoles(holes), 'CAPABILITY', /trapezoidal sweep accepts one axis-aligned rectangular cavity/);
   }
   refuse(hollowTrapezoid(40), 'PARAMETER', /trapezoidal sweep needs strictly positive radial clearance/);
+});
+
+const triangleVoid = (left, right) => lines([[left, -2], [right, -2], [right, -1], [left, -1]]);
+const hollowTriangle = holes => ({ ...triangle, holes, sideTags: { ...triangle.sideTags,
+  holes: holes.map((_, i) => i ? voidTags.map(tag => tag + i) : voidTags) } });
+
+test('closed triangular Sweep preserves the six outer and eight rectangular cavity faces', () => {
+  const path = joinedCircle(), hole = triangleVoid(-1.5, -.5), section = hollowTriangle([hole]);
+  const reversed = { ...section, points: [...section.points].reverse(), holes: [[...hole].reverse()],
+    sideTags: { outer: ['sloping-wall', 'radial-wall', 'axial-wall'], holes: [['void-upper', 'void-outer', 'void-lower', 'void-inner']] } };
+  const radialY = { ...section, points: section.points.map(([x, y]) => [y, x]),
+    holes: [lines(hole.map(({ start: [x, y] }) => [y, x]))],
+    plane: { origin: [0, 0, 0], normal: [0, 1, 0], xAxis: [0, 0, 1] } };
+  for (const profile of [section, reversed, radialY]) {
+    const snapshot = evaluateCadPart(document(path, profile)), [output] = snapshot.outputs;
+    const { brep } = output, report = checkBrep(brep, { strict: true });
+    assert.ok(report.valid, report.issues.join('\n'));
+    assert.equal(output.representation, 'curved');
+    assert.equal(report.topology[0].genus, 2);
+    assert.deepEqual(report.counts, { bodies: 1, shells: 2, faces: 14, loops: 14, edges: 28, vertices: 14, coedges: 56 });
+    assert.deepEqual(brep.shells.map(shell => shell.faces.length), [6, 8]);
+    assert.ok(report.maximumPcurveGap < 1e-8);
+    assert.ok(brep.coedges.every(use => use.pcurve));
+    // Independently revolve area 12 at radius 20 - 2/3, less area 1 at radius 19.
+    const z = (480 - 57) / 426 * (profile === radialY ? -1 : 1);
+    for (const properties of [massPropertiesOf(output), brepMassProperties(brep, 1)]) {
+      near(properties.volume, 426 * Math.PI);
+      pointNear(properties.centroid, [0, 0, z]);
+    }
+    for (const [i, shell] of brep.shells.entries()) {
+      const isolated = shellBrep(brep, shell), quadrature = brepQuadratureIntegrals(isolated, 8);
+      assert.equal(quadrature.meshed, false);
+      near(quadrature.integrals[0], (i ? -38 : 464) * Math.PI);
+      for (const tag of i ? voidTags : triangle.sideTags.outer)
+        assert.equal(isolated.faces.filter(face => face.name.includes(`[${tag}]`)).length, 2);
+    }
+    assert.deepEqual(loadCadPart(saveCadPart(snapshot)).outputs[0].brep, brep);
+  }
+});
+
+test('closed triangular cavity rejects contact, crossing and unsupported apertures', () => {
+  const path = joinedCircle();
+  const refuse = (holes, code, detail) => assert.throws(() => evaluateCadPart(document(path, hollowTriangle(holes))),
+    error => error instanceof CadPartError && error.feature === 'w' && error.code === code && detail.test(error.message));
+  for (const hole of [triangleVoid(-2, -.5), triangleVoid(-2 + 1e-8, -.5), triangleVoid(.5, 1.5)])
+    refuse([hole], 'GEOMETRY', /triangular sweep needs strictly positive wall clearance/);
+  const valid = triangleVoid(-1.5, -.5);
+  refuse([valid, triangleVoid(-1.9, -1.6)], 'CAPABILITY', /accepts one axis-aligned rectangular cavity/);
+  refuse([lines([[-1.5, -2], [-1, -2.5], [-.5, -2], [-1, -1.5]])], 'CAPABILITY', /accepts one axis-aligned rectangular cavity/);
 });

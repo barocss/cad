@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D2275: [D2275](notes/exact-closed-triangle-cavity-2026-11-29/README.md), #10. Add one exact sealed rectangular cavity to the closed circular triangular Sweep and verify the original editable profile in Studio.
+
 - D2274: [D2274](notes/step-tapered-cavity-drawing-2026-11-29/README.md), #16. Qualify both original STEP cavity contours, material hatch and current SVG in actual Studio Drawing.
 
 - D2273: [D2273](notes/browser-box-depth-match-2026-11-29/README.md), #204. Share a one-use native Box depth proposal through actual browser WebMCP and verify explicit Studio approval.

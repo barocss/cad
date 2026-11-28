@@ -1,13 +1,13 @@
 # CAD roadmap — current status and execution order
 
-Updated 2026-11-29 · Priority authority: D520 · Latest delivery: D2274 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
+Updated 2026-11-29 · Priority authority: D520 · Latest delivery: D2275 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
 
 This is the only current status index. Detailed tracks define acceptance; the 34 stable row pages retain scope and issue navigation. Immutable decision notes retain results. Do not append chronological status paragraphs here. [D520 decision](notes/cad-roadmap-replan-2026-11-04/README.md) supersedes D445 execution order and historical next-item text, while retaining its safeguards and bounded proofs.
 
 ## Now and next
 
-- **Current position:** [D2274](notes/step-tapered-cavity-drawing-2026-11-29/README.md), P2 rows 11 and 13. Both original tapered STEP cavities retain their principal Drawing section contours and material hatch in the SVG.
-- **Next MAIN:** D2275, P5 rows 07 and 30. For [#10](https://github.com/barocss/cad/issues/10), qualify one sealed rectangular cavity inside the existing exact closed triangular Sweep. Preserve the accepted filled triangle and the original wall clearance.
+- **Current position:** [D2275](notes/exact-closed-triangle-cavity-2026-11-29/README.md), P5 rows 07 and 30. The exact closed circular triangular Sweep supports one sealed rectangular cavity with original ownership and verified desktop editing.
+- **Next MAIN:** D2276, P4 rows 12 and 22. Extract the Align and opposite Flange history preview routing from Studio App. Verify current and retired previews, accepted geometry and history in the original desktop consumers for [#44](https://github.com/barocss/cad/issues/44).
 - **Separate follow-ups:** Continue Studio App extraction in cohesive parts with affected desktop checks. [#608 Rendering](https://github.com/barocss/cad/issues/608) stays on HOLD. API inventory drift remains open. The issue tracker records [#126](https://github.com/barocss/cad/issues/126), [#613](https://github.com/barocss/cad/issues/613), [#152](https://github.com/barocss/cad/issues/152) and [#22](https://github.com/barocss/cad/issues/22) as closed.
 - **Active repository:** [barocss/cad](https://github.com/barocss/cad), based on `origin/main`. Fetch before work and preserve unexpected changes. The [migration record](../../../docs/migration/README.md) maps the former `local/cad-dev` history and issue numbers.
 - **Evidence correction:** D482 records2167 PASS/0 FAIL/2 existing SKIP in a later full-kernel run than D433. Neither result is a new full-suite PASS at this audit HEAD. [D482 record](notes/vertical-contact-refusal-2026-11-04/README.md).
