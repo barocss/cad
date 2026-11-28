@@ -5,16 +5,17 @@ import { createFlow } from './flow-helper.mjs';
 import { clickModelCommand } from './model-rail-helper.mjs';
 const fixture = 'packages/barocss-cad/robustness/corpus/oracle/gear-helical-pair-crossing-intersect.json';
 const baseline = process.argv.includes('--baseline');
-const expectResult = process.argv.includes('--intersect');
+const expectResult = process.argv.includes('--intersect') || process.argv.includes('--result');
 const coincident = process.argv.includes('--coincident');
+const operation = process.argv.includes('--union') ? { kind: 'union', label: 'Union' } : { kind: 'intersect', label: 'Intersect' };
 const pins = [fixture, 'apps/cad-studio/test/helical-intersection-refusal-browser.mjs',
   'packages/barocss-cad-model/src/engine/evaluate.ts',
   'packages/barocss-cad/src/brep/analytic-boolean.ts', 'packages/barocss-cad-model/src/engine/part.ts'];
 const f = await createFlow({
-  name: expectResult ? 'helical-intersection' : 'helical-intersection-refusal', output: process.argv[2], envFrozen: 'HELICAL_PAIR_FROZEN',
+  name: `helical-${operation.kind}${expectResult ? '' : '-refusal'}`, output: process.argv[2], envFrozen: 'HELICAL_PAIR_FROZEN',
   initialFiles: pins, requiredFrozen: pins,
-  qualification: expectResult ? 'Verify the original helical Intersect result in both operand orders and after native Open.'
-    : 'Verify that the original opposite-hand helical gear Intersect refusal names the operation and preserves both originals.',
+  qualification: expectResult ? `Verify the helical ${operation.label} result in both operand orders and after native Open.`
+    : `Verify that the helical gear ${operation.label} refusal preserves both originals.`,
   limits: [coincident ? 'Both occurrences use the exact original right-hand helical gear at the original pose.'
     : 'The original corpus geometry maps to native Studio Gear authoring with generator spur-gear@0 and explicit 3 degree phase.'],
   inspectorSource: expectResult ? `
@@ -47,7 +48,7 @@ const frame = () => f.page.getByTitle('Frame all (F)', { exact: true }).click();
 const button = (name, root = f.page) => root.getByRole('button', { name, exact: true });
 const undoButtons = async () => Promise.all(['Undo', 'Redo'].map(name => button(name).isEnabled()));
 const versions = () => f.page.getByRole('complementary', { name: 'Versions panel', exact: true });
-const project = coincident ? 'Coincident helical intersection'
+const project = coincident ? 'Coincident helical ' + operation.label
   : expectResult ? 'Original helical intersection' : 'Original crossing gear inputs';
 async function projectOpen() {
   if (!(await versions().isVisible())) await button('Project and versions').click();
@@ -90,26 +91,26 @@ await f.run(async () => {
     assert.deepEqual(selected, [a, b]);
     const before = await undoButtons();
     const nativeSource = coincident && expectResult ? await f.inspect('coincident-stock-' + a, stock) : null;
-    await clickModelCommand(f.page, 'Combine', 'Intersect');
+    await clickModelCommand(f.page, 'Combine', operation.label);
     if (expectResult) {
       await f.changed(stock);
       const result = await f.doc();
       assert.deepEqual(result.nodes.slice(0, 2), stock.nodes);
-      assert.deepEqual(result.nodes[2], { id: 'n2', kind: 'intersect',
+      assert.deepEqual(result.nodes[2], { id: 'n2', kind: operation.kind,
         left: { node: a, side: 'solid' }, right: { node: b, side: 'solid' } });
       await frame();
-      const native = await verifyResult(result, 'helical-intersect-native-' + a);
+      const native = await verifyResult(result, `helical-${operation.kind}-native-${a}`);
       if (nativeSource) {
         assert.equal(nativeSource.length, 2);
         assert.deepEqual(native.report.counts, nativeSource[a].report.counts);
         near(native.mass.volume, nativeSource[a].mass.volume, 1e-7);
         native.mass.centroid.forEach((coord, axis) => near(coord, nativeSource[a].mass.centroid[axis], 1e-7));
       }
-      await f.snapshot('helical-intersect-result-' + a);
+      await f.snapshot(`helical-${operation.kind}-result-${a}`);
       await f.undo();
       await f.same(stock);
       assert.equal((await f.bodies()).bodies.length, 2);
-      if (a === 0) await f.snapshot('helical-intersect-undo');
+      if (a === 0) await f.snapshot(`helical-${operation.kind}-undo`);
       await f.redo();
       await f.same(result);
       verified.push(native);
@@ -118,7 +119,8 @@ await f.run(async () => {
       continue;
     }
     const warning = await f.waitToast(/manifold|could not|refused/i, 120000);
-    assert.match(warning, baseline ? /could not be joined into one solid/ : /Intersect could not form a solid/);
+    assert.match(warning, baseline || operation.kind === 'union' ? /could not be joined into one solid|not a manifold solid/
+      : /Intersect could not form a solid/);
     if (!coincident) assert.match(warning, a === 0 ? /has 1 uses/ : /has 3 uses/);
     await f.same(stock);
     assert.deepEqual(await undoButtons(), before);
@@ -126,7 +128,7 @@ await f.run(async () => {
     assert.equal(accepted.length, 2);
     assert.ok(accepted.every(body => Math.abs(body.volume - 6729.5331434245) < 1e-6));
     await f.page.locator('.toast').getByText('Details', { exact: true }).click();
-    await f.snapshot('intersect-refusal-' + a);
+    await f.snapshot(`${operation.kind}-refusal-${a}`);
     f.report.observations.push({ order: selected, warning, retainedBodies: accepted.length, history: before });
   }
   await projectOpen();
@@ -142,11 +144,11 @@ await f.run(async () => {
   await button('Project and versions').click();
   await frame();
   if (expectResult) {
-    const reopened = await verifyResult(saved, 'helical-intersect-reopened-native');
+    const reopened = await verifyResult(saved, `helical-${operation.kind}-reopened-native`);
     assert.equal(reopened.digest, verified[1].digest);
     near(verified[0].mass.volume, verified[1].mass.volume, 1e-7);
     verified[0].mass.centroid.forEach((coord, axis) => near(coord, verified[1].mass.centroid[axis], 1e-7));
-    await f.snapshot('helical-intersect-project-reopened');
+    await f.snapshot(`helical-${operation.kind}-project-reopened`);
   } else await f.snapshot('both-original-gears-framed');
   assert.deepEqual(f.report.downloads, []);
 });

@@ -35,7 +35,7 @@ function withId(record: Curve | Surface, id: string): Curve | Surface {
 }
 
 /** Preserve the native boundary of two exactly matching, ordered gear solids. */
-export function exactCoincidentIntersection(a: Brep, b: Brep, id: string): { brep: Brep; facePairs: ReadonlyMap<string, readonly [string, string]> } | null {
+export function exactCoincidentGear(a: Brep, b: Brep, id: string): { brep: Brep; facePairs: ReadonlyMap<string, readonly [string, string]> } | null {
   if ([a, b].some(gear => gear.source.family !== 'gear' || gear.bodies.length !== 1 || gear.shells.length !== 1
     || gear.bodies[0].kind !== 'solid' || gear.bodies[0].shells.length !== 1 || !gear.shells[0].closed
     || gear.faces.some(face => face.surface.kind !== 'surface'))) return null;

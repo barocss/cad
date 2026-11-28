@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { spurRack, checkPlacedSpurRack, spurGear, spurGearDimensions, spurGearPairNominal, spurGearCenterDistance, checkSpurGearPair, checkSpurGearRack, checkPlacedSpurGears, evaluateCadPart, evaluateSurface, isGearError, checkBrep, brepMassProperties, exportStep, importStep, outputOf } from '../dist/index.js';
+import { spurRack, checkPlacedSpurRack, spurGear, spurGearDimensions, spurGearPairNominal, spurGearCenterDistance, checkSpurGearPair, checkSpurGearRack, checkPlacedSpurGears, evaluateCadPart, evaluateSurface, isGearError, checkBrep, brepMassProperties, exportStep, importStep, outputOf, transformBrep } from '../dist/index.js';
 import { booleanAnalyticTraced } from '../dist/brep/analytic-boolean.js';
 
 // R6a.5c (issue #2167, D59): helical gears — normal module and pressure angle, helix angle and hand; the transverse
@@ -10,27 +10,36 @@ const close = (a, b, tol, what) => assert.ok(Math.abs(a - b) <= tol, `${what}: $
 const inv = p => Math.tan(p) - p, D = features => ({ format: 'barocss-cad-part', version: 1, units: 'mm', parameters: {}, features });
 const KHK1 = { normalModule: 3, teeth: 12, faceWidth: 20, helixAngle: 30, hand: 'right' }, KHK2 = { normalModule: 3, teeth: 60, faceWidth: 20, helixAngle: 30, hand: 'left' };
 
-test('Intersect keeps both source faces for exactly coincident native helical gears', () => {
+test('Union and Intersect keep both source faces for exactly coincident native helical gears', () => {
   const spec = { normalModule: 2, teeth: 18, faceWidth: 6, helixAngle: 20, hand: 'right', toothThicknessReduction: 0.05 };
   const a = spurGear(spec, { id: 'first' }).brep, b = spurGear(spec, { id: 'second' }).brep;
   const original = JSON.stringify([a, b]);
   const reference = brepMassProperties(a, 1);
   close(reference.volume, 6729.551724057286, 0.03365, 'independent involute volume');
-  for (const [left, right] of [[a, b], [b, a], [a, a]]) {
-    const { brep, complete, faceSources } = booleanAnalyticTraced(left, right, 'intersection', { id: 'identity' });
-    const topology = checkBrep(brep, { strict: true });
-    assert.ok(topology.valid, topology.issues.join('\n'));
-    assert.deepEqual(topology.counts, checkBrep(left).counts);
-    assert.equal(brep.source.id, 'identity');
-    assert.deepEqual(brep.vertices.map(vertex => vertex.point), left.vertices.map(vertex => vertex.point));
-    assert.deepEqual(brepMassProperties(brep, 1), reference);
-    assert.ok(complete);
-    for (const [i, face] of brep.faces.entries()) {
-      assert.deepEqual(faceSources.get(face.id), { sources: [{ operand: 0, faceId: left.faces[i].id },
-        { operand: 1, faceId: right.faces[i].id }], complete: true });
+  const originalTopology = checkBrep(a).counts;
+  for (const operation of ['union', 'intersection']) {
+    for (const [left, right] of [[a, b], [b, a], [a, a]]) {
+      const { brep, complete, faceSources } = booleanAnalyticTraced(left, right, operation, { id: 'identity' });
+      const topology = checkBrep(brep, { strict: true });
+      assert.ok(topology.valid, topology.issues.join('\n'));
+      assert.deepEqual(topology.counts, originalTopology);
+      assert.equal(brep.source.id, 'identity');
+      assert.deepEqual(brep.vertices.map(vertex => vertex.point), left.vertices.map(vertex => vertex.point));
+      assert.deepEqual(brepMassProperties(brep, 1), reference);
+      assert.ok(complete);
+      for (const [i, face] of brep.faces.entries()) {
+        assert.deepEqual(faceSources.get(face.id), { sources: [{ operand: 0, faceId: left.faces[i].id },
+          { operand: 1, faceId: right.faces[i].id }], complete: true });
+      }
     }
   }
   assert.equal(JSON.stringify([a, b]), original);
+  const separated = transformBrep(b, { matrix: [1, 0, 0, 0, 1, 0, 0, 0, 1], offset: [80, 0, 0] });
+  const { brep: disjoint } = booleanAnalyticTraced(a, separated, 'union');
+  const report = checkBrep(disjoint, { strict: true });
+  assert.ok(report.valid, report.issues.join('\n'));
+  assert.equal(report.counts.bodies, 2);
+  close(brepMassProperties(disjoint, 1).volume, 2 * reference.volume, 1e-7, 'separated Union volume');
 });
 
 test('the original 3 degree helical Intersect returns two native solids in either selection order', () => {
