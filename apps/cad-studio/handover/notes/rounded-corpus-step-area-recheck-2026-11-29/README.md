@@ -1,0 +1,9 @@
+# D2256 — Recheck the reported fully rounded box STEP areas
+
+P0 [row 16](../../roadmap-rows/16.md) and [row 30](../../roadmap-rows/30.md) · [#12](https://github.com/barocss/cad/issues/12) · Base `406b22b55`.
+
+- **PASS, no current reproduction.** The six original `box-fillet-all` corpus cases at R0.25, R1, R2, R3, R4.5 and R4.95 satisfy the 1e-6 relative native-to-STEP area criterion. The maximum relative difference in the six cases is 7.14e-15. All native and reopened solids pass strict geometry. Current default calculations agree with the independent planar, quarter-cylinder and octant area formula within 9.50e-7 relative. R4.95 retains the numerical approximation on both sides and remains the largest area error.
+- **PASS, reported values.** R2 now reads 3,520.778684233854 mm² after STEP and R4.5 reads 3,159.008700703115 mm². The R3 case included in D2242 remains at 3,377.769802664612 mm² after STEP. The R2 40 × 30 × 20.0004 mm rounding-boundary input reads 4,886 mm² in both representations and has 9.13e-15 relative area drift. D2242's default STEP spherical trim correction covers these receipts.
+- **PASS, actual Studio.** Headed Chrome opened the two 40 × 30 × 10 mm authored boxes at R2 and R4.5. The actual Studio STEP Export generated native bytes. Opening those bytes retained the independent areas and volumes and the Selection rows displayed 3,521 and 3,159 mm² respectively on both sides. Project Save, Close, reload and fresh Open retained the R4.5 result. There were 1,305 unchanged source pins and zero console errors.
+- **Decision.** Record the current evidence with no product source change. The wider vertex, setback and variable-radius fillet scope stays open in #12.
+- **NOT_RUN.** Full local suites for this documentation checkpoint, external importers, mobile and other blend families.
