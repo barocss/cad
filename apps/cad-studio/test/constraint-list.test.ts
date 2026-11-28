@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { ELLIPSE_POINTS, ellipseShape } from '@barocss/cad-model/sketch/ellipse';
 import { commitDimension, removeConstraint, type Polygon } from '@barocss/cad-model/sketch/rules';
-import { activeCircleDistanceRow, circleDistanceConflict, constraintListRows, edgeCircleDistanceConflict, filterConstraintList, fixedArcRadiusConflict, fixedPointDistanceConflict, opposingLengthConflict } from '../src/sketch/constraintList';
+import { activeCircleDistanceRow, circleDistanceConflict, constraintListRows, edgeCircleDistanceConflict, filterConstraintList, fixedArcRadiusConflict, fixedEdgeAxisConflict, fixedPointDistanceConflict, opposingLengthConflict } from '../src/sketch/constraintList';
 
 test('a fixed arc chord proves only radius requests below half its length', () => {
   const shape: Polygon = {
@@ -21,6 +21,32 @@ const rectangle: Polygon = {
   kind: 'polygon', points: [[0, 0], [40, 0], [40, 20], [0, 20]], closed: true, hv: { h: [0, 2], v: [1, 3] },
 };
 const ids = (rows: ReturnType<typeof constraintListRows>) => rows.map(row => row.id);
+
+test('a diagonal edge with two explicit Fix rows identifies the blocking coordinates', () => {
+  const shape: Polygon = { ...rectangle, hv: { h: [0, 2], v: [3] },
+    points: [[0, 0], [40, 0], [46, 20], [0, 20]],
+    rules: [{ kind: 'fix', point: 1, at: [40, 0] }, { kind: 'fix', point: 2, at: [46, 20] }],
+  };
+  const edge = { kind: 'edge', i: 1 } as const;
+  const horizontal = fixedEdgeAxisConflict(shape, [edge], 'horizontal');
+  const vertical = fixedEdgeAxisConflict(shape, [edge], 'vertical');
+  assert.deepEqual(vertical?.ids, ['rule:0', 'rule:1']);
+  assert.deepEqual(horizontal?.ids, vertical?.ids);
+  assert.match(vertical?.reason ?? '', /6 mm in X/);
+  assert.match(horizontal?.reason ?? '', /20 mm in Y/);
+  for (const candidate of [
+    { ...shape, rules: shape.rules!.slice(0, 1) },
+    { ...shape, rules: [...shape.rules!, shape.rules![1]] },
+    { ...shape, hv: rectangle.hv },
+    { ...shape, bulges: [0, 0.2, 0, 0] },
+    { ...shape, rules: [shape.rules![0], { kind: 'fix', point: 2, at: [40 + 1e-8, 20] }] },
+  ] satisfies Polygon[]) {
+    assert.equal(fixedEdgeAxisConflict(candidate, [edge], 'vertical'), undefined);
+  }
+  assert.equal(fixedEdgeAxisConflict(shape, [edge, { kind: 'edge', i: 3 }], 'vertical'), undefined);
+  assert.equal(fixedEdgeAxisConflict(shape, [{ ...edge, done: true }], 'vertical'), undefined);
+  assert.equal(fixedEdgeAxisConflict(shape, [edge], 'parallel'), undefined);
+});
 
 test('D1105 attributes a point distance only to the two explicit and unambiguous Fix targets', () => {
   const shape: Polygon = { ...rectangle, rules: [

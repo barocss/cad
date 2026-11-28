@@ -12,6 +12,7 @@ import {
 import { settleShape } from '@barocss/cad-model/sketch/settle';
 import type { SketchState } from '@barocss/cad-model/sketch/types';
 import { clearConstraintInspection, inspectConstraint, keepsDimensionDraft, type ConstraintComparison, type ConstraintInspection, type ConstraintInspectionStore } from '../sketch/constraintInspection';
+import { fixedEdgeAxisConflict } from '../sketch/constraintList';
 import { useStoreValue } from '../state/valueStore';
 import { duplicatePointDistance } from './sketchPresentation';
 import { ConstraintList } from './ConstraintList';
@@ -52,7 +53,9 @@ export function ConstraintTools({ shape: s, owner, conflictIds, documentScope, i
   shape: Polygon; owner: SketchState; conflictIds?: readonly string[]; documentScope: StudioDoc; inspection: ConstraintInspectionStore; picked: readonly SketchPick[];
   onShape(shape: Polygon): void; onPicked(picks: SketchPick[]): void; onEditDim(key: string | null): void;
 }) {
-  const [refused, setRefused] = useState<string | null>(null);
+  const [refusal, setRefused] = useState<string | { source: Polygon; picked: readonly SketchPick[]; reason: string; ids: readonly string[] } | null>(null);
+  const axisConflict = typeof refusal === 'object' && refusal?.source === s && refusal.picked === picked ? refusal : null;
+  const refused = typeof refusal === 'string' ? refusal : axisConflict?.reason;
   const [patternDraft, setPatternDraft] = useState<PatternDraft>({ axis: 'x', sign: 1, spacing: '10', count: '3' });
   const [patternEdits, setPatternEdits] = useState<Record<string, { count: string; spacing: string }>>({});
   const [pendingPatternConfirm, setPendingPatternConfirm] = useState<PendingPatternRemoval | null>(null);
@@ -63,7 +66,7 @@ export function ConstraintTools({ shape: s, owner, conflictIds, documentScope, i
   const comparisonReason = comparison && !comparison.result.ok ? comparison.result.reason : null;
   const cached = useRef<{ owner: SketchState; results: Map<ConstraintKind, ConstraintComparison> } | null>(null);
   useLayoutEffect(() => () => { clearConstraintInspection(inspection, owner); }, [inspection, owner, documentScope]);
-  useEffect(() => { setRefused(null); setPendingPatternConfirm(null); }, [s, picked]);
+  useEffect(() => { setRefused(null); setPendingPatternConfirm(null); }, [s, picked, documentScope]);
   const options = constraintOptions(s, picked), dim = dimensionKey(s, picked);
   const canCompare = !owner.association && !owner.done?.length && !s.construction && !s.circles?.length &&
     !s.bulges?.some(Boolean) && picked.length === 2 && picked.every(p => p.kind === 'edge');
@@ -169,7 +172,11 @@ export function ConstraintTools({ shape: s, owner, conflictIds, documentScope, i
     const r = current?.owner === owner && current.target === 'comparison' && current.kind === kind
       ? current.result : applyConstraint(s, picked, kind);
     clearConstraintInspection(inspection, owner);
-    if (!r.ok) { setRefused(r.reason); return; }
+    if (!r.ok) {
+      const fixed = fixedEdgeAxisConflict(s, picked, kind);
+      setRefused(fixed ? { ...fixed, source: s, picked } : r.reason);
+      return;
+    }
     onShape(r.shape); onPicked([]);
   };
   // A matching ellipse lists its arc-direction rows (one per arc) as one summary row.
@@ -305,7 +312,7 @@ export function ConstraintTools({ shape: s, owner, conflictIds, documentScope, i
         </div>
       )}
     </>}
-    <ConstraintList shape={s} owner={owner} conflictIds={conflictIds} documentScope={documentScope} inspection={inspection}
+    <ConstraintList shape={s} owner={owner} conflictIds={axisConflict?.ids ?? conflictIds} documentScope={documentScope} inspection={inspection}
       inspectedId={inspectedId} picked={picked} onShape={onShape} onEditDim={onEditDim} onRefuse={setRefused} />
     {resolvedRefs.length > 0 && <>
       <div className="card-title" style={{ marginTop: 10 }}>REFERENCE DIMENSIONS · {resolvedRefs.length}</div>

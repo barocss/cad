@@ -1,7 +1,7 @@
 import { rectilinearConflict } from '@barocss/cad-model/sketch/conflict';
 import { CadNumericPolicy } from '@barocss/cad';
 import { ELLIPSE_POINTS, ellipseMatches } from '@barocss/cad-model/sketch/ellipse';
-import { circlePairKeys, constraintEntries, hvOf, samePick, solveShape, type ConstraintEntry, type Polygon, type SketchPick } from '@barocss/cad-model/sketch/rules';
+import { circlePairKeys, constraintEntries, hvOf, samePick, solveShape, type ConstraintEntry, type ConstraintKind, type Polygon, type SketchPick } from '@barocss/cad-model/sketch/rules';
 
 const isSolverLength = (value: number | undefined): value is number =>
   value !== undefined && value >= 0.001 && value <= 2 * CadNumericPolicy.coordinateAbs * Math.SQRT2;
@@ -134,6 +134,28 @@ function explicitFixedPoint(shape: Polygon, point: number) {
   if (matches.length !== 1) return;
   const [fix] = matches;
   if (fix.at.length === 2 && [...fix.at].every(coordinate => Number.isFinite(coordinate) && Math.abs(coordinate) <= CadNumericPolicy.coordinateAbs)) return fix;
+}
+
+/** A straight edge with two fixed ends cannot align if the relevant coordinates differ. */
+export function fixedEdgeAxisConflict(shape: Polygon, picked: readonly SketchPick[], kind: ConstraintKind) {
+  if ((kind !== 'horizontal' && kind !== 'vertical') || !shape.closed || shape.pending || picked.length !== 1) return;
+  const [pick] = picked;
+  if (pick.kind !== 'edge' || pick.done || !Number.isSafeInteger(pick.i)) return;
+  const a = pick.i, b = (a + 1) % shape.points.length;
+  if (a <= 0 || b <= 0 || !shape.points[a] || !shape.points[b] || shape.bulges?.[a]) return;
+  const hv = hvOf(shape);
+  if (hv.h.includes(a) || hv.v.includes(a)) return;
+
+  const first = explicitFixedPoint(shape, a), second = explicitFixedPoint(shape, b);
+  if (!first || !second) return;
+  const axis = kind === 'vertical' ? 0 : 1;
+  const gap = Math.abs(second.at[axis] - first.at[axis]);
+  const margin = 8 * CadNumericPolicy.linearTolerance + 16 * Number.EPSILON * CadNumericPolicy.coordinateAbs;
+  if (gap <= margin) return;
+  return {
+    ids: [first.id, second.id],
+    reason: `Edge ${a + 1} cannot be ${kind} because fixed points ${a + 1} and ${b + 1} differ by ${Number(gap.toPrecision(15))} mm in ${axis === 0 ? 'X' : 'Y'}.`,
+  };
 }
 
 /** A circular arc's chord cannot exceed its diameter. Attribute only explicit endpoint locks. */
