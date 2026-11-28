@@ -84,8 +84,7 @@ import { DeleteDependentsDialog } from './ui/DeleteDependentsDialog';
 import { useFeatureHistory } from './state/useFeatureHistory';
 import { createStudioHistoryControls } from './state/studioHistoryControls';
 import { useDocumentHistoryActions } from './state/useDocumentHistoryActions';
-import { useAlignHistoryPreview } from './app/useAlignHistoryPreview';
-import { useOppositeFlangeRadiusPreview } from './app/useOppositeFlangeRadiusPreview';
+import { useStudioHistoryPreviews } from './app/useStudioHistoryPreviews';
 import { commitStudioModel } from './state/studioModelCommit';
 import { ModelBrowser } from './ui/ModelBrowser';
 import { RequirementsBrowser } from './ui/RequirementsBrowser';
@@ -1429,24 +1428,15 @@ export function App() {
     ...selection.edges.flatMap(e => { const n = bodies[e.body]?.mesh.edges[e.edge]?.names[0]; return n ? [{ kind: 'edge' as const, name: n }] : []; }),
     ...selection.bodies.flatMap(b => bodies[b] ? [{ kind: 'body' as const, name: bodies[b].key }] : []),
   ].slice(0, 12).filter(() => fresh), [selection, bodies, fresh]);
-  const evaluateHistoryAlign = useCallback((candidate: StudioDoc) => engine.preview(candidate, revision.current++), [engine]);
   const historyPreviewEnabled = fresh && !busy && marker === null
     && !variants.showing && !active && !sketch && !section && !ghost && !compareOverlay && !rendering && !drawing
     && !measure && !routePanelOpen && !inPlace && !cageEd.session && !skel.session && !assembly.draft && !exploded && !bodyDrag
     && previewMode === 'none';
-  const historyAlign = useAlignHistoryPreview({ doc, index: editNode, workerSession, enabled: historyPreviewEnabled }, evaluateHistoryAlign);
-  const historyPreviewRevision = useCallback(() => revision.current++, []);
-  const readFlangeHistoryRefs = useCallback((source: StudioDoc, rev: number) => engine.part(source, rev, 'refs'), [engine]);
-  const readFlangeHistoryPreview = useCallback((source: StudioDoc, rev: number) => engine.part(source, rev, 'check'), [engine]);
-  const ownsFlangePreview = useCallback((owner: {doc: StudioDoc; evaluated: StudioDoc; workerSession: number; open: object}) =>
-    docNow.current === owner.doc && evaluatedRef.current === owner.evaluated && workerSessionNow.current === owner.workerSession
-    && openIntent.current === owner.open && markerNow.current === null && !shownVariant.current, []);
-  const oppositeRadiusPreview = useOppositeFlangeRadiusPreview({ doc, evaluated, index: editNode, workerSession,
-    open: openIntent.current, enabled: historyPreviewEnabled }, historyPreviewRevision, readFlangeHistoryRefs, readFlangeHistoryPreview, ownsFlangePreview);
-  const alignPreviewBodies = historyAlign.result?.kind === 'ready' ? historyAlign.result.bodies : null;
-  const oppositeRadiusPreviewBodies = oppositeRadiusPreview.result?.result.kind === 'ready' ? oppositeRadiusPreview.result.result.bodies : null;
-  const historyPreviewBodies = (heldDraftFace.view?.kind === 'ready' ? heldDraftFace.view.bodies : null)
-    ?? alignPreviewBodies ?? oppositeRadiusPreviewBodies;
+  const { historyAlign, oppositeRadiusPreview, historyPreviewBodies, alignPreviewBodies } = useStudioHistoryPreviews({
+    model: { doc, evaluated, index: editNode, workerSession }, worker: { engine, revision },
+    live: { doc: docNow, evaluated: evaluatedRef, workerSession: workerSessionNow, open: openIntent, marker: markerNow, variant: shownVariant },
+    enabled: historyPreviewEnabled, heldBodies: heldDraftFace.view?.kind === 'ready' ? heldDraftFace.view.bodies : null,
+  });
   const shownPreviewBodies = previewBodies ?? historyPreviewBodies;
   const inspection = useStudioInspectionViews({
     model: { doc, evaluated, bodies, selected: selection.bodies },
