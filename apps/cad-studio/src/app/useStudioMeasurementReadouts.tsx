@@ -10,7 +10,7 @@ import { MeshCircleInspector } from '../ui/MeshCircleInspector';
 import { PinnedMassControls } from '../ui/PinnedMassControls';
 import type { MeasurePickFilter } from '../ui/measurePickHint';
 import type { MeasureTarget } from './measureTargets';
-import { useMeshCircleMeasurement, type MeshCircleHit } from './useMeshCircleMeasurement';
+import { useMeshCircleMeasurement, type MeshCircleHit, type MeshCircleMode } from './useMeshCircleMeasurement';
 
 export function useStudioMeasurementSession(generation: number, worker: number, project: ProjectStore | null) {
   // A null target list means the measurement tool is closed.
@@ -50,14 +50,15 @@ export function useStudioMeasurementReadouts({ session, model, live, view, mass 
     isCurrent: () => measureNativeReady.current && isCurrent(), stopMeasuring: () => setMeasure(null) });
 
   const close = () => setMeasure(null);
-  const changeCircle = (circle: boolean, targets: MeasureTarget[] | null) => {
+  const changeCircle = (circle: MeshCircleMode, targets: MeasureTarget[] | null) => {
     meshCircle.choose(circle);
     setMeasure(targets);
   };
   const panel = <>
     {view.showActive && measure && meshCircle.mode && <MeshCircleInspector state={meshCircle.state} ready={meshCircle.ready}
-      onReset={meshCircle.reset} onBack={() => changeCircle(false, [])} onClose={() => changeCircle(false, null)} />}
-    {view.showActive && measure && !meshCircle.mode && <MeasurementInspector onMeshCircle={() => changeCircle(true, [])}
+      requireStl={meshCircle.mode === 'stl'} onRequireStl={checked => changeCircle(checked ? 'stl' : 'evaluated', [])}
+      onReset={meshCircle.reset} onBack={() => changeCircle(null, [])} onClose={() => changeCircle(null, null)} />}
+    {view.showActive && measure && !meshCircle.mode && <MeasurementInspector onMeshCircle={() => changeCircle('evaluated', [])}
       pickFilter={view.pickFilter} targets={measure} items={live.items ?? []} measured={live.result}
       approximateDistance={live.approximateDistance} onClose={close} onPin={pinnedReadout.pin} />}
     {mass.show && (massPin.pinned || mass.idle) && <PinnedMassControls pinned={massPin.pinned} result={massPin.result}

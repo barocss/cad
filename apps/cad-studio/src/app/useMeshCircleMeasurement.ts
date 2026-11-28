@@ -3,7 +3,9 @@ import type { StudioDoc } from '@barocss/cad-model/engine/doc';
 import type { BodyResult } from '@barocss/cad-model/engine/evaluate';
 import type { Vec3 } from '@barocss/cad-model/engine/mesh';
 import { meshCircle } from '@barocss/cad-model/app/meshCircle';
+import { stlCornerOccurrences } from '../files/stlCornerProvenance';
 import { captureMeshVertexPick, currentMeshVertexTarget, type MeshVertexTarget } from '../viewport/vertexPick';
+export type MeshCircleMode = 'evaluated' | 'stl' | null;
 export interface MeshCircleHit { vertex?: {body:number;at:Vec3}; instance?:string; direct?:string }
 export interface MeshCircleState { points: MeshVertexTarget[]; result: ReturnType<typeof meshCircle> | null; reason: string | null }
 export const emptyMeshCircle = (): MeshCircleState => ({points:[],result:null,reason:null});
@@ -19,9 +21,9 @@ export function appendMeshCircle(state:MeshCircleState,target:MeshVertexTarget):
 /** Transient only. Owner changes invalidate synchronously, before stale callbacks can append. */
 export function useMeshCircleMeasurement(doc:StudioDoc,bodies:readonly BodyResult[],session:unknown,enabled:boolean,ready:boolean){
  const owner=useMemo(()=>({}),[doc,bodies,session,enabled,ready]);
- const [stored,setStored]=useState({owner,token:{},mode:false,state:emptyMeshCircle()});
+ const [stored,setStored]=useState({owner,token:{},mode:null as MeshCircleMode,state:emptyMeshCircle()});
  const retained=stored.owner===owner && stored.state.points.every(p=>currentMeshVertexTarget(p,doc,bodies));
- const current=retained?stored:{owner,token:{},mode:enabled&&stored.mode,state:emptyMeshCircle()};
+ const current=retained?stored:{owner,token:{},mode:enabled?stored.mode:null,state:emptyMeshCircle()};
  if(!retained)setStored(current);
  const token=current.token;
  const live=useRef({owner,token,mode:current.mode,enabled,ready});live.current={owner,token,mode:current.mode,enabled,ready};
@@ -34,13 +36,17 @@ export function useMeshCircleMeasurement(doc:StudioDoc,bodies:readonly BodyResul
   if(hit.instance||hit.direct||!hit.vertex){update({...current.state,reason:'Select a visible evaluated welded mesh vertex.'});return true;}
   const target=captureMeshVertexPick(hit.vertex,doc,bodies);
   if(!target||!currentMeshVertexTarget(target,doc,bodies)){update({...current.state,reason:'This endpoint has no current welded mesh vertex authority.'});return true;}
+  if (current.mode === 'stl' && !stlCornerOccurrences(target.doc, target.at)) {
+   update({...current.state,reason:'Original STL corners are unavailable for this endpoint.'});
+   return true;
+  }
   setStored(prev=>{
    if(prev.owner!==owner||prev.token!==token||!live.current.mode||!live.current.ready||!valid())return prev;
    const state=prev.state.points.every(p=>currentMeshVertexTarget(p,doc,bodies))?prev.state:emptyMeshCircle();
    return {...prev,state:appendMeshCircle(state,target)};
   });return true;
  };
- const restart=(mode:boolean)=>{
+ const restart=(mode:MeshCircleMode)=>{
   if(!valid())return;
   const nextToken={};
   live.current={...live.current,token:nextToken,mode};

@@ -1,13 +1,13 @@
 # CAD roadmap — current status and execution order
 
-Updated 2026-11-28 · Priority authority: D520 · Latest delivery: D2159 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
+Updated 2026-11-28 · Priority authority: D520 · Latest delivery: D2160 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
 
 This is the only current status index. Detailed tracks define acceptance; the 34 stable row pages retain scope and issue navigation. Immutable decision notes retain results. Do not append chronological status paragraphs here. [D520 decision](notes/cad-roadmap-replan-2026-11-04/README.md) supersedes D445 execution order and historical next-item text, while retaining its safeguards and bounded proofs.
 
 ## Now and next
 
-- **Current position:** [D2159](notes/agent-two-distance-chamfer-pair-2026-11-28/README.md), P1 rows 04, 09 and 16. A revision-pinned local Agent proposal creates two unequal Sketch Chamfers. Explicit Studio approval, Undo/Redo and a fresh Open preserve the exact manual result ([#324](https://github.com/barocss/cad/issues/324)).
-- **Next MAIN:** D2160, P1 rows 07 and 16. Check the current native conserved Split Body producer and authored codec against the original finite acceptance scope in [#190](https://github.com/barocss/cad/issues/190).
+- **Current position:** [D2160](notes/source-required-mesh-reference-circle-2026-11-28/README.md), P4 rows 16 and 26. Studio can require current original STL provenance for every reference-circle point. The faceted ring, three unit choices and source-loss controls pass ([#273](https://github.com/barocss/cad/issues/273)).
+- **Next MAIN:** D2161, P5 rows 07, 16 and 30. Continue [#13](https://github.com/barocss/cad/issues/13) with independent kept wall thicknesses when a three-opening Shell includes an opposite pair. The conserved Split Body native producer and codec already exist. Its distinct editor workflow stays with [#296](https://github.com/barocss/cad/issues/296).
 - **Separate follow-ups:** Continue Studio App extraction in cohesive parts with affected desktop checks. [#608 Rendering](https://github.com/barocss/cad/issues/608) stays on HOLD. API inventory drift remains open. The issue tracker records [#126](https://github.com/barocss/cad/issues/126), [#613](https://github.com/barocss/cad/issues/613), [#152](https://github.com/barocss/cad/issues/152) and [#22](https://github.com/barocss/cad/issues/22) as closed.
 - **Active repository:** [barocss/cad](https://github.com/barocss/cad), based on `origin/main`. Fetch before work and preserve unexpected changes. The [migration record](../../../docs/migration/README.md) maps the former `local/cad-dev` history and issue numbers.
 - **Evidence correction:** D482 records2167 PASS/0 FAIL/2 existing SKIP in a later full-kernel run than D433. Neither result is a new full-suite PASS at this audit HEAD. [D482 record](notes/vertical-contact-refusal-2026-11-04/README.md).

@@ -3,16 +3,27 @@ import { Button } from '@/components/ui/button';
 import type { MeshCircleState } from '../app/useMeshCircleMeasurement';
 import { stlCornerOccurrences } from '../files/stlCornerProvenance';
 import { measureQuantityText } from './quantityText';
-export function MeshCircleInspector({state,ready,onReset,onBack,onClose}:{state:MeshCircleState;ready:boolean;onReset():void;onBack():void;onClose():void}){
+interface MeshCircleInspectorProps {
+  state: MeshCircleState;
+  ready: boolean;
+  requireStl: boolean;
+  onRequireStl(checked: boolean): void;
+  onReset(): void;
+  onBack(): void;
+  onClose(): void;
+}
+
+export function MeshCircleInspector({state,ready,requireStl,onRequireStl,onReset,onBack,onClose}:MeshCircleInspectorProps){
  const value=(p:readonly number[])=>p.map(x=>measureQuantityText(x,3)).join(', ');
  const result=state.result?.ok?state.result:null;
  const fileCorners=useMemo(() => state.points.map(point => stlCornerOccurrences(point.doc, point.at)), [state.points]);
  return <aside className="card props" aria-label="Measurement" tabIndex={-1} onKeyDown={e=>{if(e.key==='Escape'){e.preventDefault();e.stopPropagation();onClose();}}}>
   <div className="card-title">REFERENCE CIRCLE (MESH)</div>
-  <p>Evaluated welded mesh vertices; reference only, not hole diameter or circularity.</p>
+  <p>Reference circle through three selected vertices. Hole diameter and circularity are unmeasured.</p>
+  <label><input type="checkbox" checked={requireStl} onChange={event => onRequireStl(event.target.checked)} /> Require STL file corners</label>
   <p className="muted">Use the All selection filter to pick edge endpoints.</p>
   <p className="muted">Current model coordinates in mm. Session only; not saved.</p>
-  <p className="muted">Not original file vertex indices; welding may merge input points.</p>
+  <p className="muted">{requireStl ? 'Use a current clean STL import. Welded file corners count as one vertex.' : 'Not original file vertex indices; welding may merge input points.'}</p>
   <p className="muted">Admission limits: minimum baseline 1e-6 mm; normalized area 1e-8; coordinate/center/radius limit 1e12 mm. These are rejection limits, not an accuracy guarantee.</p>
   {!ready&&<p role="status">Current base mesh unavailable. Close section or preview and wait for evaluation.</p>}
   <ol>{state.points.map((p,i)=>{
