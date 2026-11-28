@@ -6,8 +6,10 @@ import { qualifyMovedFlange } from './sheet-move-flange.mjs';
 import { qualifySheetRotation } from './sheet-rotate-flow.mjs';
 import { qualifyMirrorBoundary } from './sheet-mirror-study.mjs';
 import { qualifySheetDuplicate } from './sheet-copy-flow.mjs';
+import { patternFixture, qualifySheetPattern } from './sheet-pattern-flow.mjs';
 
 const mode = process.argv[3], mirrorTwice = mode === '--mirror-twice';
+const pattern = mode === '--linear-pattern' ? 'linear' : mode === '--circular-pattern' ? 'circular' : null;
 const tableBaseline = mode === '--copy-table-baseline', tableCopy = tableBaseline || mode === '--copy-table';
 const duplicate = tableCopy || mode === '--duplicate';
 const mirrorReplacement = mirrorTwice || mode === '--mirror-replacement';
@@ -29,12 +31,14 @@ const pins = [
   ...(rotate ? ['apps/cad-studio/test/sheet-rotate-flow.mjs'] : []),
   ...(mirrorStudy ? ['apps/cad-studio/test/sheet-mirror-study.mjs', 'packages/barocss-cad-model/src/app/commands.ts', 'apps/cad-studio/src/ui/Hud.tsx', 'packages/barocss-cad-model/src/engine/mirrorReplacement.ts'] : []),
   ...(duplicate ? ['apps/cad-studio/test/sheet-copy-flow.mjs'] : []),
+  ...(pattern ? ['apps/cad-studio/test/sheet-pattern-flow.mjs', 'packages/barocss-cad-model/src/app/bodyPatternCommands.ts',
+    'packages/barocss-cad-model/src/chat/features.ts'] : []),
 ];
 const f = await createFlow({
-  name: duplicate ? 'sheet-duplicate' : mirrorStudy ? 'sheet-mirror-boundary' : rotate ? 'sheet-rotate' : 'sheet-move', output: process.argv[2],
-  envFrozen: tableCopy ? 'D820_SOURCE_FROZEN' : mirrorTwice ? 'D819_SOURCE_FROZEN' : duplicate ? 'D818_SOURCE_FROZEN' : mirrorReplacement ? 'D817_SOURCE_FROZEN' : mirrorStudy ? 'D816_SOURCE_FROZEN' : rotateFlange ? 'D815_SOURCE_FROZEN' : rotate ? 'D814_SOURCE_FROZEN' : flange ? 'D813_SOURCE_FROZEN' : 'D812_SOURCE_FROZEN',
+  name: pattern ? `sheet-${pattern}-pattern` : duplicate ? 'sheet-duplicate' : mirrorStudy ? 'sheet-mirror-boundary' : rotate ? 'sheet-rotate' : 'sheet-move', output: process.argv[2],
+  envFrozen: pattern ? 'SHEET_PATTERN_FROZEN' : tableCopy ? 'D820_SOURCE_FROZEN' : mirrorTwice ? 'D819_SOURCE_FROZEN' : duplicate ? 'D818_SOURCE_FROZEN' : mirrorReplacement ? 'D817_SOURCE_FROZEN' : mirrorStudy ? 'D816_SOURCE_FROZEN' : rotateFlange ? 'D815_SOURCE_FROZEN' : rotate ? 'D814_SOURCE_FROZEN' : flange ? 'D813_SOURCE_FROZEN' : 'D812_SOURCE_FROZEN',
   initialFiles: pins, requiredFrozen: pins,
-  qualification: tableCopy ? 'Verify a valid copy-only bend table and reject a table with no applicable row.' :
+  qualification: pattern ? 'Verify independent table-backed sheets in a separate body pattern and subsequent copy-only editing.' : tableCopy ? 'Verify a valid copy-only bend table and reject a table with no applicable row.' :
     mirrorTwice ? 'Reflect one asymmetric sheet twice and verify the restored geometry and flat.' :
     duplicate ? 'Duplicate a sheet and verify the copy-only thickness edit and both flats.' :
     mirrorReplacement ? 'Apply and reopen the single reflected sheet and verify legacy Mirror.' :
@@ -43,7 +47,7 @@ const f = await createFlow({
     rotate ? 'Rotate the D546 L-bracket about X and verify folded and aligned flat geometry.' :
     flange ? 'Pick and apply a flange on the reopened translated L-bracket, save, and edit the sheet source.' :
     'Move the D546 L-bracket and check the existing folded and flat-pattern consumers.',
-  limits: [duplicate ? 'One D546 sheet, one disjoint Duplicate offset 60 mm, and a copy-only thickness edit.' :
+  limits: [pattern ? 'Source and two disjoint occurrences of one asymmetric L-bracket. Linear +60 mm spacing or Circular +90° steps about a fixed Z pivot.' : duplicate ? 'One D546 sheet, one disjoint Duplicate offset 60 mm, and a copy-only thickness edit.' :
     mirrorStudy ? 'One asymmetric L-bracket, YZ at the origin, and the current legacy Mirror plus a native control.' :
     rotate ? 'One single-body L-bracket with two through holes, explicit K, and Rotate 30° about X at the origin.' :
     'One single-body L-bracket with two through holes, explicit K, and Move by (7, -3, 11) mm.'],
@@ -54,7 +58,7 @@ import { dispatchTool } from '@barocss/cad-model/chat/tools';
 import { emptyDoc } from '@barocss/cad-model/engine/doc';
 import { evaluatePart } from '@barocss/cad-model/engine/evaluate';
 import { toPartDocument } from '@barocss/cad-model/engine/part';
-import { checkOutput, evaluateCadPart, faceGeometry, flatPattern, flatPatternOf, massPropertiesOf } from '@barocss/cad';
+import { checkOutput, evaluateCadPart, faceGeometry, flatPattern, flatPatternOf, flatPatternDxf, massPropertiesOf, writeDxf } from '@barocss/cad';
 const args = JSON.parse(process.argv[3]);
 if (args.fixture) {
   const { calls } = JSON.parse(readFileSync(args.fixture, 'utf8'));
@@ -92,6 +96,7 @@ if (args.fixture) {
       points: output.brep.vertices.map(vertex => vertex.point),
       faces: output.brep.faces.map(face => face.name), edges: output.brep.edges.map(edge => edge.name), sheet: output.sheet ?? null,
       mass: massPropertiesOf(output), flat, flatError,
+      ...(args.exportFlat && flat ? { dxf: writeDxf(flatPatternDxf(flat), { version: 'AC1015' }).text } : {}),
     };
   }
   if (args.multiple) console.log(JSON.stringify(outputs.map(readOutput)));
@@ -125,8 +130,8 @@ const button = (parent, name) => parent.getByRole('button', { name, exact: true 
 const flatDialog = () => f.page.getByRole('dialog', { name: 'Flat pattern', exact: true });
 const flatButton = () => button(f.page, 'Show the flat pattern');
 const versions = () => f.page.getByRole('complementary', { name: 'Versions panel', exact: true });
-const project = (tableCopy ? 'D820 copy bend table ' : mirrorTwice ? 'D819 double reflection ' : duplicate ? 'D818 sheet duplicate ' : mirrorReplacement ? 'D817 reflected sheet ' : mirrorStudy ? 'D816 sheet Mirror ' : rotate ? 'D814 rotated sheet ' : 'D812 moved sheet ') + randomUUID();
-const name = tableCopy ? 'D820-sheet.bcad' : mirrorTwice ? 'D819-sheet.bcad' : duplicate ? 'D818-sheet.bcad' : mirrorReplacement ? 'D817-sheet.bcad' : mirrorStudy ? 'D816-sheet.bcad' : rotate ? 'D814-sheet.bcad' : 'D812-sheet.bcad';
+const project = (pattern ? `D2167 sheet ${pattern} pattern ` : tableCopy ? 'D820 copy bend table ' : mirrorTwice ? 'D819 double reflection ' : duplicate ? 'D818 sheet duplicate ' : mirrorReplacement ? 'D817 reflected sheet ' : mirrorStudy ? 'D816 sheet Mirror ' : rotate ? 'D814 rotated sheet ' : 'D812 moved sheet ') + randomUUID();
+const name = pattern ? `D2167-${pattern}-sheet.bcad` : tableCopy ? 'D820-sheet.bcad' : mirrorTwice ? 'D819-sheet.bcad' : duplicate ? 'D818-sheet.bcad' : mirrorReplacement ? 'D817-sheet.bcad' : mirrorStudy ? 'D816-sheet.bcad' : rotate ? 'D814-sheet.bcad' : 'D812-sheet.bcad';
 const near = (a, b, tolerance = 1e-9) => assert.ok(Math.abs(a - b) <= tolerance, `${a} differs from ${b} (tolerance ${tolerance})`);
 function vectorNear(a, b, tolerance) {
   assert.equal(a.length, b.length);
@@ -198,6 +203,7 @@ async function showFlat(label) {
   await flatButton().click();
   await flatDialog().waitFor();
   await flatDialog().locator('svg[aria-label]').waitFor();
+  if (pattern) assert.equal(await button(flatDialog(), 'Export flat DXF').isEnabled(), true);
   await f.snapshot(label);
   await button(flatDialog(), 'Close the flat pattern').click();
   await flatDialog().waitFor({ state: 'hidden' });
@@ -234,11 +240,12 @@ async function projectRoundTrip(expected) {
 
 await f.run(async () => {
   f.phase = 'materialize the pinned D546 source and open its flat pattern';
-  const seed = await f.inspect('materialize-sheet', {}, {
+  const canonicalSeed = await f.inspect('materialize-sheet', {}, {
     fixture: fileURLToPath(new URL(fixture, repo)), canonical: fileURLToPath(new URL(canonical, repo)),
   });
+  assert.equal(sha256(JSON.stringify(canonicalSeed)), 'e399b53950bf73dd5eb3e148013c6190169187dd5918e84194c8bacac44c01ab');
+  const seed = pattern ? patternFixture(canonicalSeed) : canonicalSeed;
   const bytes = Buffer.from(JSON.stringify(seed));
-  assert.equal(sha256(bytes), 'e399b53950bf73dd5eb3e148013c6190169187dd5918e84194c8bacac44c01ab');
   if (mirrorStudy) {
     await qualifyMirrorBoundary(f, seed, { name, selectBody, showFlat, projectRoundTrip, replacement: mirrorReplacement, twice: mirrorTwice });
     assert.deepEqual(f.report.downloads, []);
@@ -248,6 +255,11 @@ await f.run(async () => {
   const [chooser] = await Promise.all([f.page.waitForEvent('filechooser'), button(f.page, 'Open').click()]);
   await chooser.setFiles({ name, mimeType: 'application/json', buffer: bytes });
   await f.same(seed);
+  if (pattern) {
+    await qualifySheetPattern(f, seed, { pattern, showFlat, projectRoundTrip });
+    assert.deepEqual(f.report.downloads, []);
+    return;
+  }
   const original = await checkMass('original-native', seed, centroid, 'n6');
   checkFlat(original, [3, 30, 3]);
   await selectBody();
