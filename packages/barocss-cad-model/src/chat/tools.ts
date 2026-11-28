@@ -72,9 +72,9 @@ export function proposeFollowUpRepair(state: ChatState, args: Record<string, unk
 export function proposeBrowserExtrude(state: ChatState, args: { body: string; height: number; expectedRevision: string }, evaluate: Evaluate) {
   const target = browserExtrudeTarget(state.doc, state.bodies);
   if (state.partOf || !target || target.body !== args.body || !validExtrudeDistance(args.height) ||
-    (target.node.made && !validBoxDimension(args.height)) ||
+    (target.node.made && args.height < 1) ||
     target.height === args.height || revisionOf(state.doc) !== args.expectedRevision) {
-    return Promise.resolve(fail(state, 'The browser Extrude proposal does not match the current rectangular part.'));
+    return Promise.resolve(fail(state, 'The browser Extrude proposal does not match the current part or its supported distance.'));
   }
   return proposeWith(runProposalTool, state, {
     title: `Set Extrude distance to ${args.height} mm`,

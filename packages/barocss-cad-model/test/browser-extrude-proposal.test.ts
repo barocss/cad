@@ -4,7 +4,8 @@ import { acceptProposal, previewProposal, proposeBrowserBox, proposeBrowserExtru
 import { emptyDoc, withNode, type StudioDoc } from '../src/engine/doc';
 import { evaluatePart } from '../src/engine/evaluate';
 import { revisionOf } from '../src/util/revision';
-import { isEditableBox } from '../src/app/editCommand';
+import { commandById } from '../src/app/commands';
+import { isEditableBox, isEditableCylinder } from '../src/app/editCommand';
 
 const evaluate = async (doc: StudioDoc) => evaluatePart(doc, 0);
 const neverEvaluate = async (): Promise<never> => assert.fail('A refused request must not evaluate a candidate');
@@ -69,6 +70,48 @@ async function stock(height = 10): Promise<ChatState> {
   assert.ok(result.ok);
   return { doc, bodies: result.bodies };
 }
+
+test('browser Extrude retains a standalone Cylinder command and literal circle geometry', async () => {
+  const command = commandById('cylinder');
+  assert.ok(command?.build);
+  const doc = command.build({ doc: emptyDoc(), bodies: [], selection: { faces: [], edges: [], bodies: [] } },
+    { r: 5, h: 10, x: 8, y: -3, z: 4 });
+  assert.ok(isEditableCylinder(doc.nodes, 0));
+  const evaluated = await evaluate(doc);
+  assert.ok(evaluated.ok);
+  const state: ChatState = { doc, bodies: evaluated.bodies };
+  const args = { body: state.bodies[0].key, height: 15, expectedRevision: revisionOf(doc) };
+  const refused = await proposeBrowserExtrude(state, { ...args, height: 0.5 }, neverEvaluate);
+  assert.ok(refused.isError && !refused.changed);
+  const draft = { ...doc, nodes: doc.nodes.map(node => node.kind === 'extrude' ? { ...node, draft: 3, made: undefined } : node) };
+  const drafted = await proposeBrowserExtrude({ ...state, doc: draft }, { ...args, expectedRevision: revisionOf(draft) }, neverEvaluate);
+  assert.ok(drafted.isError && !drafted.changed);
+  const waiting = await proposeBrowserExtrude(state, args, evaluate);
+  assert.ok(waiting.changed && !waiting.isError, waiting.content);
+  assert.equal(waiting.state.doc.nodes, doc.nodes);
+  const proposal = waiting.state.doc.proposals?.at(-1);
+  assert.ok(proposal);
+  const applied = await acceptProposal(waiting.state, proposal.id, evaluate);
+  assert.ok('state' in applied);
+  const [before, after] = [doc, applied.state.doc].map(current => current.nodes[1]);
+  assert.ok(before.kind === 'extrude' && before.made && after.kind === 'extrude');
+  assert.deepEqual(after, { ...before, height: 15, made: { ...before.made, values: { ...before.made.values, h: 15 } } });
+  assert.equal(applied.state.doc.nodes[0], doc.nodes[0]);
+  assert.deepEqual(applied.state.doc.outputs, doc.outputs);
+  assert.ok(isEditableCylinder(applied.state.doc.nodes, 0));
+  const acceptedVolume = applied.state.bodies[0].volume;
+  assert.ok(acceptedVolume !== null && Math.abs(acceptedVolume - 375 * Math.PI) < 1e-8);
+
+  const literal = { ...doc, nodes: [doc.nodes[0], { ...before, made: undefined }] };
+  const raw = await proposeBrowserExtrude({ ...state, doc: literal }, { ...args, height: 0.5, expectedRevision: revisionOf(literal) }, evaluate);
+  assert.ok(raw.changed && !raw.isError, raw.content);
+  const rawProposal = raw.state.doc.proposals?.at(-1);
+  assert.ok(rawProposal);
+  const preview = await previewProposal(raw.state, rawProposal.id, evaluate);
+  assert.ok('bodies' in preview);
+  const previewVolume = preview.bodies[0].volume;
+  assert.ok(previewVolume !== null && Math.abs(previewVolume - 12.5 * Math.PI) < 1e-8);
+});
 
 test('browser Extrude stages one exact value change for the user to approve', async () => {
   const state = await stock();

@@ -231,19 +231,31 @@ export function fastenerHistoryEdit(index: number, nodes: readonly ModelNode[], 
   return { command, ownerIndex, startIndex };
 }
 
-/** Check that Studio can rebuild these two authored nodes through the standard Box command. */
-export function isEditableBox(nodes: readonly ModelNode[], sketchIndex: number): boolean {
+const primitiveMinima = { box: { w: 1, d: 1, h: 1 }, cylinder: { r: 0.5, h: 1 } };
+
+function isEditablePrimitive(nodes: readonly ModelNode[], sketchIndex: number, command: keyof typeof primitiveMinima): boolean {
   const extrusion = nodes[sketchIndex + 1];
-  if (extrusion?.kind !== 'extrude' || extrusion.made?.command !== 'box' || (extrusion.made.nodes ?? 2) !== 2) return false;
+  if (extrusion?.kind !== 'extrude' || extrusion.made?.command !== command || (extrusion.made.nodes ?? 2) !== 2) return false;
   const values = extrusion.made.values;
   if (!values || (values.up !== undefined && values.up !== '+z')) return false;
-  for (const key of ['w', 'd', 'h', 'x', 'y', 'z']) {
+  const minima: Readonly<Record<string, number>> = primitiveMinima[command];
+  for (const key of [...Object.keys(minima), 'x', 'y', 'z']) {
     const value = values[key];
     if (typeof value !== 'number' && (typeof value !== 'string' || !value.trim())) return false;
     const n = Number(value);
-    if (!Number.isFinite(n) || (['w', 'd', 'h'].includes(key) && n < 1)) return false;
+    if (!Number.isFinite(n) || n < (minima[key] ?? -Infinity)) return false;
   }
   return shapeEdit(sketchIndex + 1, nodes, {}) !== null;
+}
+
+/** Check that Studio can rebuild these two authored nodes through the standard Box command. */
+export function isEditableBox(nodes: readonly ModelNode[], sketchIndex: number): boolean {
+  return isEditablePrimitive(nodes, sketchIndex, 'box');
+}
+
+/** Check that Studio can rebuild these two authored nodes through the standard Cylinder command. */
+export function isEditableCylinder(nodes: readonly ModelNode[], sketchIndex: number): boolean {
+  return isEditablePrimitive(nodes, sketchIndex, 'cylinder');
 }
 
 /** Retain the Box command after changing the extents of its original sketch. */

@@ -24,7 +24,7 @@ const proposalTools = {
   },
   Extrude: {
     name: 'cad_part_propose_extrude',
-    description: 'Propose a new positive Extrude distance in millimetres for the shared rectangular part, at least 1 mm for a Box. Use the body key and revision from cad_part_summary. A person decides in Studio.',
+    description: 'Propose a positive distance in millimetres for the shared rectangular or circular Extrude. A Box or Cylinder requires at least 1 mm. Use the body key and revision from cad_part_summary. A person decides in Studio.',
     fields: { body: { type: 'string', maxLength: 128 } as const, height: distanceField, expectedRevision: revisionField },
     invalid: 'Give a body key, a positive numeric distance in millimetres and the expected revision.',
     title: 'Allow one browser proposal for this part’s Extrude distance',
@@ -94,9 +94,9 @@ export function useBrowserPartProposal(source: BrowserPartSummarySource | undefi
             if (request.kind === 'Extrude') {
               const target = browserExtrudeTarget(snapshot.doc, snapshot.bodies);
               if (!target || target.body !== request.args.body || target.height === request.args.height)
-                return browserToolFailure('extrude_unavailable', 'Choose the current rectangular body and a different distance.');
-              if (target.node.made && !validBoxDimension(request.args.height))
-                return browserToolFailure('invalid_arguments', 'Give a Box height of at least 1 mm.');
+                return browserToolFailure('extrude_unavailable', 'Choose the current Extrude body and a different distance.');
+              if (target.node.made && request.args.height < 1)
+                return browserToolFailure('invalid_arguments', 'Give a height of at least 1 mm for a Box or Cylinder.');
             }
             submitting = true;
             try {

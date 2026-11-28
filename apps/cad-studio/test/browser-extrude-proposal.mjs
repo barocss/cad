@@ -10,11 +10,13 @@ const pins = [
   'packages/barocss-cad-model/src/chat/tools.ts', 'packages/barocss-cad-model/src/chat/part/proposals.ts',
 ];
 const firstBox = process.argv.includes('--box');
+const cylinderEdit = process.argv.includes('--cylinder');
 const f = await createFlow({
-  name: firstBox ? 'browser-box-proposal' : 'browser-extrude-proposal', output: process.argv[2], envFrozen: 'BROWSER_EXTRUDE_FROZEN',
+  name: firstBox ? 'browser-box-proposal' : cylinderEdit ? 'browser-cylinder-proposal' : 'browser-extrude-proposal',
+  output: process.argv[2], envFrozen: 'BROWSER_EXTRUDE_FROZEN',
   initialFiles: pins, requiredFrozen: pins,
   qualification: 'Call a real browser WebMCP tool and verify native Studio preview, rejection, approval, history and project persistence.',
-  limits: ['One first Box or one literal rectangular Extrude, with WebMCP and testing flags in desktop Chrome.'],
+  limits: ['One first Box, one rectangular Extrude or one standalone Cylinder, with WebMCP and testing flags in desktop Chrome.'],
   async createContext(options) {
     if (!f.browser) {
       const { chromium } = createRequire(join(process.env.PW_DIR, 'package.json'))('playwright');
@@ -29,7 +31,8 @@ const f = await createFlow({
 });
 const extrudeName = 'cad_part_propose_extrude', boxName = 'cad_part_propose_box', summaryName = 'cad_part_summary';
 const proposalName = firstBox ? boxName : extrudeName;
-const project = firstBox ? 'Browser first Box proposal' : 'Browser Extrude proposal', file = 'browser-extrude-box.bcad';
+const project = firstBox ? 'Browser first Box proposal' : cylinderEdit ? 'Browser Cylinder proposal' : 'Browser Extrude proposal';
+const file = cylinderEdit ? 'browser-cylinder.bcad' : 'browser-extrude-box.bcad';
 const box = height => ({
   format: 'barocss-cad-model', schema: 3, units: 'mm', nextId: 2, parameters: {},
   nodes: [{ kind: 'sketch', id: 'n0', profile: 'rectangle', min: [0, 0], max: [80, 50] },
@@ -241,7 +244,79 @@ async function verifyFirstBox() {
     accepted: current, revised: revisedSummary });
 }
 
-await f.run(firstBox ? verifyFirstBox : async () => {
+async function verifyCylinder() {
+  const original = { ...box(10), nodes: [
+    { kind: 'sketch', profile: 'circle', center: [8, -3], radius: 5, id: 'n0' },
+    { kind: 'extrude', sketch: 0, height: 10, from: 4, id: 'n1',
+      made: { command: 'cylinder', values: { r: 5, h: 10, x: 8, y: -3, z: 4 } } },
+  ] };
+  const assertCylinder = async height => {
+    const { nodes, outputs } = await f.doc();
+    assert.deepEqual(nodes, [original.nodes[0], { ...original.nodes[1], height,
+      made: { command: 'cylinder', values: { r: 5, h: height, x: 8, y: -3, z: 4 } } }]);
+    assert.deepEqual(outputs, original.outputs);
+    const [body] = (await f.bodies()).bodies;
+    assert.equal(body.key, 'b1');
+    assert.ok(Math.abs(body.volume - 25 * Math.PI * height) < 1e-7);
+  };
+  await f.newPage();
+  await open(original);
+  const summary = await share();
+  assert.deepEqual(summary.bodies[0].bounds, { min: [3, -8, 4], max: [13, 2, 14] });
+  await toolsReady(extrudeName, false);
+  await proposalGrant().click();
+  await toolsReady(extrudeName, true);
+  const tool = await getTool(extrudeName);
+  const args = { body: 'b1', height: 15, expectedRevision: summary.revision };
+  assert.equal((await invoke(tool, { ...args, height: 0.5 })).error.code, 'invalid_arguments');
+  assert.equal((await invoke(tool, { ...args, expectedRevision: '0000000000000000' })).error.code, 'stale_part');
+  await f.same(original);
+  const staged = await invoke(tool, args);
+  assert.deepEqual(staged, { proposal: staged.proposal, applied: false, revision: summary.revision });
+  const proposal = card(staged.proposal);
+  await proposal.waitFor();
+  await toolsReady(extrudeName, false);
+  await assert.rejects(invoke(tool, args));
+  await button('Preview', proposal).click();
+  await proposal.getByLabel('Volume change', { exact: true }).waitFor();
+  await assertCylinder(10);
+  await frame();
+  await f.snapshot('browser-cylinder-preview');
+  const beforeAccept = await f.doc();
+  await button('Accept', proposal).click();
+  await f.changed(beforeAccept);
+  await assertCylinder(15);
+  const accepted = await f.doc();
+  assert.equal(accepted.proposals[0].decided.by, 'user');
+  await frame();
+  await f.snapshot('browser-cylinder-accepted');
+  await f.undo();
+  await f.same(beforeAccept);
+  await assertCylinder(10);
+  await f.redo();
+  await f.same(accepted);
+  await assertCylinder(15);
+  await openProject();
+  await button('Save').click();
+  await versions().getByRole('list', { name: 'Project documents', exact: true }).getByText(file, { exact: true }).waitFor();
+  await button('Close project', versions()).click();
+  await versions().getByLabel('Project', { exact: true }).waitFor({ state: 'hidden' });
+  await f.page.reload();
+  await f.ready();
+  await openProject();
+  await button('Open ' + file, versions()).click();
+  await f.same(accepted);
+  await assertCylinder(15);
+  await toolsReady(extrudeName, false);
+  const reopened = await share();
+  assert.deepEqual(reopened.bodies[0].bounds, { min: [3, -8, 4], max: [13, 2, 19] });
+  await frame();
+  await f.snapshot('browser-cylinder-reopened');
+  assert.deepEqual(f.report.downloads, []);
+  f.report.observations.push({ chrome: f.browser.version(), original: summary, staged, reopened });
+}
+
+await f.run(firstBox ? verifyFirstBox : cylinderEdit ? verifyCylinder : async () => {
   const original = box(10);
   await f.newPage();
   await open(original);
@@ -346,9 +421,9 @@ await f.run(firstBox ? verifyFirstBox : async () => {
   await frame();
   await f.snapshot('browser-proposal-project-reopened');
   const cylinder = { ...original, nodes: [
-    { kind: 'sketch', id: 'n0', profile: 'circle', center: [0, 0], radius: 5 }, original.nodes[1],
+    { kind: 'sketch', id: 'n0', profile: 'circle', center: [0, 0], radius: 5 }, { ...original.nodes[1], draft: 3 },
   ] };
-  await open(cylinder, 'unsupported-cylinder.bcad');
+  await open(cylinder, 'unsupported-drafted-cylinder.bcad');
   await share();
   assert.equal(await proposalGrant().count(), 0);
   await toolsReady(proposalName, false);
