@@ -25,7 +25,7 @@ import { BrepError, buildBrep, checkBrep, lineCurve, type Brep } from '../brep/b
 import { booleanAnalytic, faceGeometry, type FaceGeometry } from '../brep/analytic-boolean.js';
 import { planHalfRingFillet, retainHalfRingFilletCharts, separateHalfRingFilletTools } from '../brep/exact-ring-intersect.js';
 import { retainSweepCircularJoinBindings } from '../brep/sweep-circular-join-bindings.js';
-import { recordSphericalCubeArea } from '../brep/spherical-cube-area.js';
+import { recordSphericalBoxArea } from '../brep/spherical-box-area.js';
 import { brepFromPrismatic, nameEdges, prismaticFromProfile } from '../features/prismatic-solid.js';
 import { revolveProfile } from '../features/revolve.js';
 import { transformBrep } from '../brep/brep-transform.js';
@@ -563,7 +563,7 @@ function finishEdges(body: Brep, names: readonly string[], size: number, kind: E
   if (kind === 'fillet' && !options.phased && !options.radii && (!options.shape || options.shape.kind === 'circular')
     && names.length === 12 && chain.size === 12 && trims.size === 12
     && convexTools.length === 12 && cornerTools.length === 8 && !concaveCorners.length && !concaveTools.length && !rings.length)
-    recordSphericalCubeArea(body, result, size);
+    recordSphericalBoxArea(body, result, size);
   return result;
   } finally { if (usedCylinder) used.cylinder = true; }
 }

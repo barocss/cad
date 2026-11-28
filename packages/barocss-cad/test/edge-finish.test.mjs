@@ -186,6 +186,8 @@ test('the exact spherical area belongs to the current complete circular cube Fil
     assert.ok(strict.valid, strict.issues.join('\n'));
     assert.equal(strict.counts.faces, 34);
     assert.ok(near(brepSurfaceArea(result), area, 1e-9));
+    const inner = side - 2 * radius;
+    assert.equal(brepSurfaceArea(result), 6 * inner ** 2 + 6 * pi * inner * radius + 4 * pi * radius ** 2);
     const quadrature = brepSurfaceArea(result, { quadratureSegments: 8 });
     assert.ok(!near(quadrature, area, 1e-9));
     assert.equal(brepSurfaceArea({ ...result }), quadrature);
@@ -194,6 +196,23 @@ test('the exact spherical area belongs to the current complete circular cube Fil
   }
   const partial = finishBrepEdges(stock, ['e.side0|e.top', 'e.side1|e.top'], 2, 'fillet', 'm');
   assert.equal(brepSurfaceArea(partial), brepSurfaceArea(partial, { quadratureSegments: 8 }));
+});
+
+test('a complete unequal cuboid Fillet measures its analytic area without changing explicit quadrature', () => {
+  const width = 40, depth = 30, height = 20.0004;
+  const stock = prism(rect(0, 0, width, depth), height, 'e');
+  const edges = stock.edges.map(edge => edge.name);
+  for (const radius of [2, 2.5]) {
+    const fillet = finishBrepEdges(stock, edges, radius, 'fillet', 'f');
+    const [a, b, c] = [width, depth, height].map(length => length - 2 * radius);
+    const expected = 2 * (a * b + b * c + c * a) + 2 * pi * radius * (a + b + c) + 4 * pi * radius ** 2;
+    const exact = brepSurfaceArea(fillet), quadrature = brepSurfaceArea(fillet, { quadratureSegments: 8 });
+    assert.ok(near(exact, expected, 1e-9));
+    assert.ok(!near(quadrature, expected, 1e-6));
+    assert.equal(brepSurfaceArea({ ...fillet }), quadrature);
+    const report = checkBrep(fillet, { strict: true });
+    assert.ok(report.valid && report.counts.faces === 34);
+  }
 });
 
 

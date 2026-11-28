@@ -5,6 +5,8 @@ import { createFlow } from './flow-helper.mjs';
 import { currentPartRevision, withMcpSession } from './mcp-browser-session.mjs';
 
 const baseline = process.argv.includes('--baseline');
+const cuboid = process.argv.includes('--cuboid');
+const partName = cuboid ? 'rounded-cuboid' : 'rounded-cube';
 const agentArea = process.argv.includes('--agent-area');
 const agentAreaBaseline = process.argv.includes('--agent-area-baseline');
 const pins = [
@@ -12,7 +14,7 @@ const pins = [
   'apps/cad-studio/src/ui/SelectionInspector.tsx',
   'packages/barocss-cad/src/blend/edge-finish.ts',
   'packages/barocss-cad/src/brep/solid-mass.ts',
-  ...(!baseline ? ['packages/barocss-cad/src/brep/spherical-cube-area.ts'] : []),
+  ...(!baseline ? ['packages/barocss-cad/src/brep/spherical-box-area.ts'] : []),
   ...(agentArea || agentAreaBaseline ? [
     'packages/barocss-cad-model/src/chat/part/query.ts',
     'packages/barocss-cad-model/src/chat/contract.ts',
@@ -35,12 +37,14 @@ console.log(JSON.stringify({ report: checkOutput(output), volume: massProperties
   digest: createHash('sha256').update(JSON.stringify(output.brep)).digest('hex') }));
 `,
 });
-const side = 20;
+// This height puts the reference R2 cuboid just below the inspector's whole-mm² rounding boundary.
+const dimensions = cuboid ? [40, 30, 20.0004] : [20, 20, 20];
+const [width, depth, height] = dimensions;
 const stock = {
   format: 'barocss-cad-model', schema: 3, units: 'mm', parameters: {}, nextId: 2,
   nodes: [
-    { id: 'n0', kind: 'sketch', profile: 'rectangle', min: [0, 0], max: [side, side] },
-    { id: 'n1', kind: 'extrude', sketch: 0, height: side },
+    { id: 'n0', kind: 'sketch', profile: 'rectangle', min: [0, 0], max: [width, depth] },
+    { id: 'n1', kind: 'extrude', sketch: 0, height },
   ],
   outputs: { b1: { node: 1, side: 'solid' } },
 };
@@ -48,12 +52,17 @@ const button = (name, scope = f.page) => scope.getByRole('button', { name, exact
 const card = () => f.page.getByRole('listitem', { name: 'Proposal P1', exact: true });
 const relative = (a, b) => Math.abs(a / b - 1);
 
-async function check(label, doc, radius) {
-  const core = side - 2 * radius;
-  const expected = {
-    volume: core ** 3 + 6 * core ** 2 * radius + 3 * Math.PI * core * radius ** 2 + 4 / 3 * Math.PI * radius ** 3,
-    area: 6 * core ** 2 + 6 * Math.PI * core * radius + 4 * Math.PI * radius ** 2,
+function measures(radius) {
+  const [a, b, c] = dimensions.map(length => length - 2 * radius);
+  const faces = a * b + a * c + b * c, edges = a + b + c;
+  return {
+    volume: a * b * c + 2 * faces * radius + Math.PI * edges * radius ** 2 + 4 / 3 * Math.PI * radius ** 3,
+    area: 2 * faces + 2 * Math.PI * edges * radius + 4 * Math.PI * radius ** 2,
   };
+}
+
+async function check(label, doc, radius) {
+  const expected = measures(radius);
   const native = await f.inspect(label, doc);
   assert.ok(native.report.valid, native.report.issues.join('\n'));
   assert.equal(native.report.counts.faces, 34);
@@ -74,8 +83,7 @@ async function check(label, doc, radius) {
 
 async function checkAgentArea(file, radius, staleRevision) {
   const original = await readFile(file);
-  const core = side - 2 * radius;
-  const expected = 6 * core ** 2 + 6 * Math.PI * core * radius + 4 * Math.PI * radius ** 2;
+  const expected = measures(radius).area;
   const receipt = await withMcpSession({ app: f.app, output: f.output, clientName: f.name }, file, `area-${radius}`, async call => {
     const expectedRevision = await currentPartRevision(call);
     const help = await call('describe', { tool: 'query', action: 'mass' });
@@ -110,16 +118,27 @@ async function checkAgentArea(file, radius, staleRevision) {
   return receipt.expectedRevision;
 }
 
+async function readArea(expected) {
+  const area = f.page.getByRole('complementary', { name: 'Selection', exact: true })
+    .locator('.kv').filter({ hasText: /^Surface area/ });
+  if (!(await area.isVisible())) {
+    const { bodies: [{ key }] } = await f.bodies();
+    await f.page.locator(`[data-browser-body-key="${key}"]`).click();
+  }
+  await area.waitFor();
+  assert.equal((await area.textContent()).replace(/[^0-9]/g, ''), String(Math.round(expected)));
+}
+
 await f.run(async () => {
   f.phase = 'Propose all twelve current native edges through local MCP';
-  const source = join(f.output, 'source-cube.bcad');
+  const source = join(f.output, partName + '-stock.bcad');
   await writeFile(source, JSON.stringify(stock));
-  const edges = await withMcpSession({ app: f.app, output: f.output, clientName: f.name }, source, 'rounded-cube', async call => {
+  const edges = await withMcpSession({ app: f.app, output: f.output, clientName: f.name }, source, partName, async call => {
     const expectedRevision = await currentPartRevision(call);
     const summary = await call('query', { action: 'summary', body: 'b1' });
     const edges = summary.bodies[0].edges.map(edge => edge.name);
     assert.equal(new Set(edges).size, 12);
-    const result = await call('proposals', { action: 'propose', title: 'Round all twelve cube edges', ops: [
+    const result = await call('proposals', { action: 'propose', title: 'Round all twelve stock edges', ops: [
       { tool: 'features', args: { action: 'command', command: 'fillet', edges, expectedRevision, values: { radius: 2 } } },
     ] });
     assert.deepEqual([result.proposal, result.applied], ['P1', false]);
@@ -127,7 +146,7 @@ await f.run(async () => {
   });
   const pending = JSON.parse(await readFile(source, 'utf8'));
   assert.deepEqual(pending.nodes, stock.nodes);
-  await f.freshOpen(source, pending, 'cube-with-pending-fillet');
+  await f.freshOpen(source, pending, partName + '-pending-fillet');
   await button('Chat').first().click();
   await button('Preview', card()).click();
   await button('Hide', card()).waitFor();
@@ -142,14 +161,18 @@ await f.run(async () => {
   assert.deepEqual([...approved.nodes[2].edges].sort(), edges.sort());
   assert.equal(approved.nodes[2].radius, 2);
   const digest = await check('radius-2', approved, 2);
-  await f.snapshot('rounded-cube-approved');
+  await f.snapshot(partName + '-approved');
   await f.undo();
   await f.same(pending);
   await f.redo();
   await f.same(approved);
-  const saved = await f.save('rounded-cube');
-  const reopened = await f.freshOpen(saved.file, approved, 'reopened-rounded-cube');
+  const saved = await f.save(partName);
+  const reopened = await f.freshOpen(saved.file, approved, 'reopened-' + partName);
   assert.equal(await check('radius-2-reopened', reopened.doc, 2), digest);
+  if (cuboid) {
+    await readArea(baseline ? 4887 : measures(2).area);
+    await f.snapshot(partName + '-r2-inspector');
+  }
   if (baseline) return;
   const firstRevision = agentArea || agentAreaBaseline ? await checkAgentArea(saved.file, 2) : undefined;
 
@@ -159,24 +182,16 @@ await f.run(async () => {
   const edited = (await f.applyEditor(approved, 'radius-2-5-applied')).doc;
   assert.equal(edited.nodes[2].radius, 2.5);
   const editedDigest = await check('radius-2-5', edited, 2.5);
-  const readArea = async () => {
-    const { bodies: [{ key }] } = await f.bodies();
-    await f.page.locator(`[data-browser-body-key="${key}"]`).click();
-    const area = f.page.getByRole('complementary', { name: 'Selection', exact: true })
-      .locator('.kv').filter({ hasText: /^Surface area/ });
-    await area.waitFor();
-    assert.equal((await area.textContent()).replace(/[^0-9]/g, ''), '2135');
-  };
-  await readArea();
-  await f.snapshot('rounded-cube-area-inspector');
+  await readArea(measures(2.5).area);
+  await f.snapshot(partName + '-area-inspector');
   await f.undo();
   await f.same(approved);
   await f.redo();
   await f.same(edited);
-  const revised = await f.save('rounded-cube-r2-5');
-  const reopenedEdit = await f.freshOpen(revised.file, edited, 'reopened-rounded-cube-r2-5');
+  const revised = await f.save(partName + '-r2-5');
+  const reopenedEdit = await f.freshOpen(revised.file, edited, 'reopened-' + partName + '-r2-5');
   assert.equal(await check('radius-2-5-reopened', reopenedEdit.doc, 2.5), editedDigest);
   if (firstRevision) await checkAgentArea(revised.file, 2.5, firstRevision);
-  await readArea();
-  await f.snapshot('reopened-rounded-cube-area-inspector');
+  await readArea(measures(2.5).area);
+  await f.snapshot('reopened-' + partName + '-area-inspector');
 });

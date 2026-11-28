@@ -1,13 +1,13 @@
 # CAD roadmap — current status and execution order
 
-Updated 2026-11-28 · Priority authority: D520 · Latest delivery: D2142 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
+Updated 2026-11-28 · Priority authority: D520 · Latest delivery: D2143 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
 
 This is the only current status index. Detailed tracks define acceptance; the 34 stable row pages retain scope and issue navigation. Immutable decision notes retain results. Do not append chronological status paragraphs here. [D520 decision](notes/cad-roadmap-replan-2026-11-04/README.md) supersedes D445 execution order and historical next-item text, while retaining its safeguards and bounded proofs.
 
 ## Now and next
 
-- **Current position:** [D2142](notes/obtuse-sector-draft-2026-11-28/README.md), P5 rows 07, 16 and 30. Exact original obtuse circular sectors support both Draft signs. Studio verifies two-span cone charts, both collapse controls, History and native reopening ([#14](https://github.com/barocss/cad/issues/14)).
-- **Next MAIN:** D2143, P5 rows 05, 16 and 30. Extend the exact default area measurement from the complete circular cube Fillet to unequal rectangular cuboids. Verify the same native geometry and actual Studio measurement ([#12](https://github.com/barocss/cad/issues/12)).
+- **Current position:** [D2143](notes/spherical-cuboid-fillet-area-2026-11-28/README.md), P5 rows 07, 24 and 30. Complete circular Fillet on an unequal original cuboid reports analytic surface area. Actual Studio and the revision-pinned Agent agree on the unchanged boundary and its reopened radius edit ([#12](https://github.com/barocss/cad/issues/12)).
+- **Next MAIN:** D2144, P1 rows 09 and 16. Add a bounded two-setback Sketch Chamfer between two orthogonal straight sides through the existing sketch constraints. Verify editing, refusal, extrusion and native Open ([#171](https://github.com/barocss/cad/issues/171)).
 - **Separate follow-ups:** Continue Studio App extraction in cohesive parts with affected desktop checks. [#608 Rendering](https://github.com/barocss/cad/issues/608) stays on HOLD. API inventory drift remains open. The issue tracker records [#126](https://github.com/barocss/cad/issues/126), [#613](https://github.com/barocss/cad/issues/613), [#152](https://github.com/barocss/cad/issues/152) and [#22](https://github.com/barocss/cad/issues/22) as closed.
 - **Active repository:** [barocss/cad](https://github.com/barocss/cad), based on `origin/main`. Fetch before work and preserve unexpected changes. The [migration record](../../../docs/migration/README.md) maps the former `local/cad-dev` history and issue numbers.
 - **Evidence correction:** D482 records2167 PASS/0 FAIL/2 existing SKIP in a later full-kernel run than D433. Neither result is a new full-suite PASS at this audit HEAD. [D482 record](notes/vertical-contact-refusal-2026-11-04/README.md).

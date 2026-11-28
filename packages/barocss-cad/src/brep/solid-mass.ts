@@ -9,7 +9,7 @@ import { recordIntegralMass, transferNativeMassBasis, unsupportedNativeMass } fr
 import { transformBrep } from './brep-transform.js';
 import { planar, tessellateBrep } from './brep-tessellate.js';
 import { brepQuadratureIntegrals } from './brep-mass-quadrature.js';
-import { sphericalCubeAreaOf } from './spherical-cube-area.js';
+import { sphericalBoxAreaOf } from './spherical-box-area.js';
 import { facetIntegrals } from '../mesh/facet-patch.js';
 import type { Brep } from './brep-core.js';
 import type { PrismaticSolid } from '../features/prismatic-solid.js';
@@ -120,7 +120,7 @@ function quadratureOf(brep: Brep, q: number): LocalQuadrature | null {
 export function brepSurfaceArea(brep: Brep, options: { readonly segmentsPerQuarter?: number; readonly quadratureSegments?: number } = {}): number {
   assertBoundaryBindings(brep);
   if (options.quadratureSegments === undefined && options.segmentsPerQuarter === undefined) {
-    const area = sphericalCubeAreaOf(brep);
+    const area = sphericalBoxAreaOf(brep);
     if (area !== undefined) return area;
   }
   const poly = polyhedralIntegrals(brep);
