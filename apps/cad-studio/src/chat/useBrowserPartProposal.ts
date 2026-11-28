@@ -1,8 +1,8 @@
 import { useLayoutEffect, useRef, useState } from 'react';
 import { CadPartLimits } from '@barocss/cad';
-import { browserExtrudeTarget, browserHoleTarget, browserProposalMinimum, canProposeBrowserPrimitive,
-  validBoxDimension, validCylinderRadius, validExtrudeDistance, validHoleDiameter } from '@barocss/cad-model/chat/browserProposalTargets';
-import { proposeBrowserBox, proposeBrowserCylinder, proposeBrowserExtrude, proposeBrowserHole, type ChatState, type Evaluate } from '@barocss/cad-model/chat/tools';
+import { browserCylinderTarget, browserExtrudeTarget, browserProposalMinimum, canProposeBrowserPrimitive,
+  validBoxDimension, validClosedShellDimensions, validCylinderRadius, validExtrudeDistance, validHoleDiameter, validShellThickness } from '@barocss/cad-model/chat/browserProposalTargets';
+import { proposeBrowserBox, proposeBrowserClosedShell, proposeBrowserCylinder, proposeBrowserExtrude, proposeBrowserHole, type ChatState, type Evaluate } from '@barocss/cad-model/chat/tools';
 import { revisionOf } from '@barocss/cad-model/util/revision';
 import type { StudioDoc } from '@barocss/cad-model/engine/doc';
 import { browserBodyField, browserRevisionField, browserToolFailure, modelContext, plainInput,
@@ -18,6 +18,7 @@ export interface BrowserPartProposalSource {
 const distanceField = { type: 'number', maximum: CadPartLimits.length } as const;
 const primitiveDimensionField = { ...distanceField, minimum: browserProposalMinimum.primitiveDimension };
 const holeDiameterField = { ...distanceField, minimum: browserProposalMinimum.holeDiameter };
+const shellThicknessField = { ...distanceField, minimum: browserProposalMinimum.shellThickness };
 const proposalTimeoutMs = 30_000;
 const proposalTools = {
   Box: {
@@ -49,11 +50,19 @@ const proposalTools = {
     invalid: 'Give a body key, a numeric diameter of at least 0.5 mm and the expected revision.',
     title: 'Allow one browser proposal for a centred through Hole',
   },
+  Shell: {
+    name: 'cad_part_propose_closed_shell',
+    description: 'Propose one closed Shell on the shared standalone Cylinder. Give the body key and revision from cad_part_summary and independent wall, floor and ceiling thicknesses in millimetres. A person decides in Studio.',
+    fields: { body: browserBodyField, wall: shellThicknessField, floor: shellThicknessField,
+      ceiling: shellThicknessField, expectedRevision: browserRevisionField },
+    invalid: 'Give a body key, numeric wall, floor and ceiling thicknesses of at least 0.1 mm and the expected revision.',
+    title: 'Allow one browser proposal for a closed Cylinder Shell',
+  },
 };
 type ProposalKind = keyof typeof proposalTools;
 const emptyPartKinds = ['Box', 'Cylinder'] as const;
 const extrusionKinds = ['Extrude'] as const;
-const cylinderKinds = ['Extrude', 'Hole'] as const;
+const cylinderKinds = ['Extrude', 'Hole', 'Shell'] as const;
 type Grant = { owner: StudioDoc; scope: object; kind: ProposalKind };
 
 function cancellableEvaluation(evaluate: Evaluate, signal: AbortSignal): Evaluate {
@@ -73,7 +82,7 @@ function cancellableEvaluation(evaluate: Evaluate, signal: AbortSignal): Evaluat
 function proposalInput(kind: ProposalKind, input: unknown, required: readonly string[]) {
   if (!plainInput(input) || Reflect.ownKeys(input).length !== required.length ||
     !required.every(key => Object.hasOwn(input, key))) return;
-  const { body, width, depth, radius, height, diameter, expectedRevision } = input;
+  const { body, width, depth, radius, height, diameter, wall, floor, ceiling, expectedRevision } = input;
   if (!validBrowserRevision(expectedRevision)) return;
   if (kind === 'Box') {
     if (validBoxDimension(width) && validBoxDimension(depth) && validBoxDimension(height))
@@ -84,6 +93,8 @@ function proposalInput(kind: ProposalKind, input: unknown, required: readonly st
   } else if (validBrowserBody(body)) {
     if (kind === 'Extrude' && validExtrudeDistance(height)) return { kind, args: { body, height, expectedRevision } };
     if (kind === 'Hole' && validHoleDiameter(diameter)) return { kind, args: { body, diameter, expectedRevision } };
+    if (kind === 'Shell' && validShellThickness(wall) && validShellThickness(floor) && validShellThickness(ceiling))
+      return { kind, args: { body, wall, floor, ceiling, expectedRevision } };
   }
 }
 
@@ -100,7 +111,7 @@ export function useBrowserPartProposal(source: BrowserPartSummarySource | undefi
   if (grant && (!same || !readShared)) setGrant(undefined);
   if (failedGrant && !failed) setFailedGrant(undefined);
   const kinds: readonly ProposalKind[] | undefined = source && (canProposeBrowserPrimitive(source.doc, source.bodies) ? emptyPartKinds :
-    browserHoleTarget(source.doc, source.bodies) ? cylinderKinds :
+    browserCylinderTarget(source.doc, source.bodies) ? cylinderKinds :
       browserExtrudeTarget(source.doc, source.bodies) ? extrusionKinds : undefined);
   const kind = grant?.kind;
   const ready = !!source?.ready && !!action;
@@ -116,9 +127,13 @@ export function useBrowserPartProposal(source: BrowserPartSummarySource | undefi
     if (kind === 'Extrude' && registrationSource &&
       browserExtrudeTarget(registrationSource.doc, registrationSource.bodies)?.node.made)
       fields.height = primitiveDimensionField;
-    if (kind === 'Hole' && registrationSource) {
-      const target = browserHoleTarget(registrationSource.doc, registrationSource.bodies);
-      if (target) fields.diameter = { ...holeDiameterField, exclusiveMaximum: target.radius * 2 };
+    if ((kind === 'Hole' || kind === 'Shell') && registrationSource) {
+      const target = browserCylinderTarget(registrationSource.doc, registrationSource.bodies);
+      if (target && kind === 'Hole') fields.diameter = { ...holeDiameterField, exclusiveMaximum: target.radius * 2 };
+      if (target && kind === 'Shell') {
+        fields.wall = { ...shellThicknessField, exclusiveMaximum: target.radius };
+        fields.floor = fields.ceiling = { ...shellThicknessField, exclusiveMaximum: target.height };
+      }
     }
     const required = Object.keys(fields);
     const controller = new AbortController();
@@ -150,12 +165,14 @@ export function useBrowserPartProposal(source: BrowserPartSummarySource | undefi
                 return browserToolFailure('extrude_unavailable', 'Choose the current Extrude body and a different distance.');
               if (target.node.made && !validBoxDimension(request.args.height))
                 return browserToolFailure('invalid_arguments', 'Give a height of at least 1 mm for a Box or Cylinder.');
-            } else if (request.kind === 'Hole') {
-              const target = browserHoleTarget(snapshot.doc, snapshot.bodies);
+            } else if (request.kind === 'Hole' || request.kind === 'Shell') {
+              const target = browserCylinderTarget(snapshot.doc, snapshot.bodies);
               if (!target || target.body !== request.args.body)
-                return browserToolFailure('hole_unavailable', 'Choose the current standalone Cylinder body.');
-              if (request.args.diameter / 2 >= target.radius)
+                return browserToolFailure(request.kind === 'Hole' ? 'hole_unavailable' : 'shell_unavailable', 'Choose the current standalone Cylinder body.');
+              if (request.kind === 'Hole' && request.args.diameter / 2 >= target.radius)
                 return browserToolFailure('invalid_arguments', 'Give a hole diameter smaller than the Cylinder outside diameter.');
+              if (request.kind === 'Shell' && !validClosedShellDimensions(request.args, target))
+                return browserToolFailure('invalid_arguments', 'Give wall, floor and ceiling thicknesses that leave a cavity inside the Cylinder.');
             }
             submitting = true;
             const call = { grant };
@@ -169,7 +186,8 @@ export function useBrowserPartProposal(source: BrowserPartSummarySource | undefi
               const pending = request.kind === 'Box' ? proposeBrowserBox(state, request.args, evaluate)
                 : request.kind === 'Cylinder' ? proposeBrowserCylinder(state, request.args, evaluate)
                 : request.kind === 'Extrude' ? proposeBrowserExtrude(state, request.args, evaluate)
-                : proposeBrowserHole(state, request.args, evaluate);
+                : request.kind === 'Hole' ? proposeBrowserHole(state, request.args, evaluate)
+                : proposeBrowserClosedShell(state, request.args, evaluate);
               const outcome = await pending.catch(() => null);
               if (!current(snapshot, signal)) return stale;
               if (deadline.aborted)

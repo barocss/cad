@@ -43,7 +43,7 @@ import { BATCHABLE, MUTATORS, PART_SCOPED, describe, unknownArguments } from './
 import { isObj, isVec3 } from '../util/guards';
 import { revisionOf } from '../util/revision';
 import { BROWSER_PROPOSAL_AUTHOR, browserExtrudeTarget, browserHoleTarget, canProposeBrowserPrimitive,
-  validBoxDimension, validCylinderRadius, validExtrudeDistance, validHoleDiameter } from './browserProposalTargets';
+  browserCylinderTarget, validBoxDimension, validClosedShellDimensions, validCylinderRadius, validExtrudeDistance, validHoleDiameter } from './browserProposalTargets';
 import { firstProblem, isRefusal } from '../engine/refusal';
 import { REFERENCE_CODES } from '../engine/schema/references';
 // ./outputs is loaded on first use: it reaches team/bundle → baseline → assembly → parts, which import this
@@ -123,6 +123,20 @@ export function proposeBrowserHole(state: ChatState, args: { body: string; diame
       values: { type: 'through', pat: 'one', d: diameter, x, y }, expectedRevision } }],
   }, evaluate, undefined, { agent: BROWSER_PROPOSAL_AUTHOR });
 }
+export function proposeBrowserClosedShell(state: ChatState, args: { body: string; wall: number; floor: number; ceiling: number; expectedRevision: string }, evaluate: Evaluate) {
+  const { body, wall, floor, ceiling, expectedRevision } = args;
+  const target = browserCylinderTarget(state.doc, state.bodies);
+  if (state.partOf || !target || target.body !== body || !validClosedShellDimensions(args, target) ||
+    revisionOf(state.doc) !== expectedRevision) {
+    return Promise.resolve(fail(state, 'The browser Shell proposal needs the current Cylinder and thicknesses that leave a cavity.'));
+  }
+  return proposeWith(runProposalTool, state, {
+    title: `Make a closed Shell with ${wall} mm wall, ${floor} mm floor and ${ceiling} mm ceiling`,
+    ops: [{ tool: 'features', args: { action: 'command', command: 'shell', bodies: [body],
+      values: { wallMode: 'separate-caps', t: wall, floorThickness: floor, ceilingThickness: ceiling }, expectedRevision } }],
+  }, evaluate, undefined, { agent: BROWSER_PROPOSAL_AUTHOR });
+}
+
 /** A proposal accepted (A4.2, A4.3): see acceptProposalWith. */
 export function acceptProposal(state: ChatState, id: string, evaluate: Evaluate, o: { by?: Decider; leaveOut?: readonly string[] } = {}) { return acceptProposalWith(runProposalTool, state, id, evaluate, o); }
 /** A stale proposal made again on the part as it is now (D41): see rebaseProposalWith. */

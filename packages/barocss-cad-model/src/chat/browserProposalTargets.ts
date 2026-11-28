@@ -1,4 +1,4 @@
-import { CadPartLimits } from '@barocss/cad';
+import { CadPartLimits, ExtrudedProfileLimits } from '@barocss/cad';
 import { isEditableBox, isEditableCylinder } from '../app/editCommand';
 import type { StudioDoc } from '../engine/doc';
 import type { BodyResult } from '../engine/evaluate';
@@ -6,7 +6,7 @@ import { featureId } from '../engine/ids';
 import { matchesFaceName } from './names';
 
 export const BROWSER_PROPOSAL_AUTHOR = 'browser';
-export const browserProposalMinimum = { primitiveDimension: 1, cylinderRadius: 0.5, holeDiameter: 0.5 } as const;
+export const browserProposalMinimum = { primitiveDimension: 1, cylinderRadius: 0.5, holeDiameter: 0.5, shellThickness: 0.1 } as const;
 
 export function validExtrudeDistance(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value) && value > 0 && value <= CadPartLimits.length;
@@ -57,8 +57,19 @@ export function browserExtrudeTarget(doc: StudioDoc, bodies: readonly BodyResult
   return { body: body.key, height: extrude.height, index: output.node, node: extrude };
 }
 
-/** The exact upper native cap of a standalone standard Cylinder. */
-export function browserHoleTarget(doc: StudioDoc, bodies: readonly BodyResult[]) {
+export function validShellThickness(value: unknown): value is number {
+  return validExtrudeDistance(value) && value >= browserProposalMinimum.shellThickness;
+}
+
+export function validClosedShellDimensions({ wall, floor, ceiling }: { wall: number; floor: number; ceiling: number },
+  { radius, height }: { radius: number; height: number }): boolean {
+  return validShellThickness(wall) && validShellThickness(floor) && validShellThickness(ceiling) &&
+    radius - wall >= ExtrudedProfileLimits.minimumRadiusMM &&
+    height - floor - ceiling >= ExtrudedProfileLimits.minimumLengthMM;
+}
+
+/** A standalone standard Cylinder with its exact upper native cap. */
+export function browserCylinderTarget(doc: StudioDoc, bodies: readonly BodyResult[]) {
   const extrusion = browserExtrudeTarget(doc, bodies);
   const [sketch] = doc.nodes;
   const [body] = bodies;
@@ -71,5 +82,12 @@ export function browserHoleTarget(doc: StudioDoc, bodies: readonly BodyResult[])
   const [cap] = hits;
   if (cap.name !== face || cap.nativePlaneName !== face || cap.nativeAxisPlane?.axis !== 'z' ||
     cap.nativeAxisPlane.at !== Number(extrusion.node.from ?? 0) + extrusion.height || cap.normal[2] < 0.999) return;
-  return { body: body.key, face, radius: Number(sketch.radius), center: [Number(sketch.center[0]), Number(sketch.center[1])] };
+  return { body: body.key, face, height: extrusion.height, radius: Number(sketch.radius), center: [Number(sketch.center[0]), Number(sketch.center[1])] };
+}
+
+export function browserHoleTarget(doc: StudioDoc, bodies: readonly BodyResult[]) {
+  const target = browserCylinderTarget(doc, bodies);
+  if (!target) return;
+  const { body, face, radius, center } = target;
+  return { body, face, radius, center };
 }
