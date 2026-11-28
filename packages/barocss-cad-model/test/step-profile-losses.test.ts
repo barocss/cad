@@ -108,3 +108,24 @@ test('the four ASCII or substituted-control profiles retain their fixed-timestam
     assert.equal(result.source, 'b46faf1dcfd84471');
   }
 });
+
+test('STEP reports omitted Direct objects in the source and shown occurrences without changing solid geometry', () => {
+  const part = box();
+  const sources = { rail: '@model rail { version:0; length-unit:mm; @curve #wire { type:nurbs; degree:1; knots:[0,0,1,1]; control-points:[[0,0,0],[5,0,0]]; weights:[1,1]; } }' };
+  const decorated: StudioDoc = { ...part, direct: { sources, objects: [{ id: 'rail', name: 'Sweep rail', source: 'rail', geometry: 'wire' }] } };
+  const message = 'Direct curves and surfaces are not included.';
+  const base = exportStudioStep(part, options), raw = JSON.stringify(decorated);
+  for (const rootScope of ['all', 'visible'] as const) {
+    const withDirect = exportStudioStep(decorated, { ...options, rootScope });
+    assert.equal(withDirect.omitted?.filter(loss => loss === message).length, 1);
+    assert.equal(base.text.split('DATA;')[1], withDirect.text.split('DATA;')[1]);
+    assert.equal(JSON.stringify(decorated), raw);
+  }
+  const hidden = { ...occurrence('hidden', decorated), hidden: true };
+  const cases: [StudioDoc, boolean][] = [
+    [{ ...part, direct: { sources, objects: [] } }, false],
+    [{ ...part, instances: [hidden] }, false],
+    [{ ...part, instances: [occurrence('shown', decorated), hidden] }, true],
+  ];
+  for (const [input, expected] of cases) assert.equal(exportStudioStep(input, options).omitted?.includes(message), expected);
+});

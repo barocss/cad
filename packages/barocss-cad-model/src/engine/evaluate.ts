@@ -812,12 +812,15 @@ function stepNativeNameLosses(breps: readonly Brep[]): string[] {
   }
   return [...(exact ? [STEP_EXACT_NAME_LOSS] : []), ...(facets ? [STEP_FACET_NAME_LOSS] : [])];
 }
+export const stepDirectGeometryLoss = 'Direct curves and surfaces are not included.';
+
 // These losses describe this exporter, not STEP's full format capabilities. They do not affect bytes or revision.
 function stepProfileLosses(doc: StudioDoc): string[] {
-  let history = false, parameters = false, labels = false, appearance = false, assembly = false, pmi = false, datums = false;
+  let history = false, parameters = false, directGeometry = false, labels = false, appearance = false, assembly = false, pmi = false, datums = false;
   const visit = (part: StudioDoc) => {
     history ||= part.nodes.some(node => node.kind !== 'import' && node.kind !== 'mesh');
     parameters ||= Object.keys(part.parameters ?? {}).length > 0;
+    directGeometry ||= !!part.direct?.objects.length;
     pmi ||= !!part.drawing;
     datums ||= !!part.references?.datums.length;
     for (const look of Object.values(part.bodies ?? {})) {
@@ -834,6 +837,7 @@ function stepProfileLosses(doc: StudioDoc): string[] {
   return [
     ...(history ? ['Native feature history is not included; STEP contains the resulting geometry.'] : []),
     ...(parameters ? ['Native parameters and expressions are not included.'] : []),
+    ...(directGeometry ? [stepDirectGeometryLoss] : []),
     ...(assembly ? ['Visible placed parts are flattened at their placements; assembly hierarchy and shared definitions are not included.'] : []),
     ...(labels ? ['User body and occurrence labels are not included; the file/product name and generated face names are separate.'] : []),
     ...(appearance ? ['Body, face and occurrence colours and materials are not included.'] : []),

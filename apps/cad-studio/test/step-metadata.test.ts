@@ -25,3 +25,21 @@ test('a following metadata-free request cannot inherit previous labels or drawin
   const plain = rectanglePart(10, 20, 5), sender = new WireSender(), receiver = new WireReceiver();
   try { const received = receiver.unpack(structuredClone(sender.pack(plain))); receiveStepMetadata(received, stepMetadata(plain)); const result = exportStudioStep(received, { name: 'plain' }); assert.doesNotMatch(result.omitted!.join(' '), /colours|User body|Drawing sheets|Named reference/); } finally { sender.dispose(); }
 });
+
+test('STEP metadata describes Direct loss for shown documents without putting Direct geometry on the wire', () => {
+  const solid = rectanglePart(10, 20, 5);
+  const leaf: StudioDoc = { ...solid, direct: { sources: { rail: 'rail source' },
+    objects: [{ id: 'rail', source: 'rail', geometry: 'circle', name: 'Sweep rail' }] } };
+  const instance = { id: 'leaf', name: 'Leaf', doc: leaf, position: [0, 0, 0], rotation: [0, 0, 0] } satisfies NonNullable<StudioDoc['instances']>[number];
+  const nested = { ...solid, instances: [instance] }, hidden = { ...solid, instances: [{ ...instance, hidden: true }] };
+  assert.equal(stepMetadata(solid).hasDirectGeometry, undefined);
+  assert.equal(stepMetadata(leaf).hasDirectGeometry, true);
+  assert.equal(stepMetadata(nested).hasDirectGeometry, true);
+  assert.equal(stepMetadata(hidden).hasDirectGeometry, undefined);
+  assert.doesNotMatch(JSON.stringify(stepMetadata(nested)), /rail source|Sweep rail/);
+  const sender = new WireSender();
+  try {
+    assert.equal(sender.pack(leaf).doc.direct, undefined);
+    assert.equal(sender.pack(nested).doc.instances?.[0].doc.direct, undefined);
+  } finally { sender.dispose(); }
+});

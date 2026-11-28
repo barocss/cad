@@ -2,7 +2,7 @@ import type { DrawingBodySelector } from '@barocss/cad-model/drawing/scope';
 import { readNativeEdgeCurve } from '@barocss/cad-model/engine/nativeEdgeCurve';
 import { editableStepCopy } from '@barocss/cad-model/engine/editableStepCopy';
 /// <reference lib="webworker" />
-import { brepsFor, deferMasses, evaluateDoc, evaluatePart, evaluatePlaced, evaluatePreview, evaluateVolumes, massOfRef, shareMeshes, exportStudioStep, stlFor, type BodyResult, type EvalResult, type PartSlot, type StudioStepRootScope } from '@barocss/cad-model/engine/evaluate';
+import { brepsFor, deferMasses, evaluateDoc, evaluatePart, evaluatePlaced, evaluatePreview, evaluateVolumes, massOfRef, shareMeshes, exportStudioStep, stepDirectGeometryLoss, stlFor, type BodyResult, type EvalResult, type PartSlot, type StudioStepRootScope } from '@barocss/cad-model/engine/evaluate';
 import { nativeMassEnvelope, type NativeMassEnvelope, type NativeMassSource } from '@barocss/cad-model/engine/nativeMassWire';
 import { MeshSender } from '@barocss/cad-model/engine/meshWire';
 import { bodyKeyOf, currentFaceEndDistance, partSnapshot, resolveAssociativeSketch } from '@barocss/cad-model/engine/part';
@@ -242,7 +242,10 @@ self.onmessage = (event: MessageEvent<WorkerRequest>) => {
     if (drawing.ok && request.options?.sections?.length) drawing.sections = sectionsCut(request.doc, request.options.sections, request.options.orientation, made);
     (self as unknown as Worker).postMessage({ id: request.id, drawing });
   } else if (request.type === 'step') {
-    (self as unknown as Worker).postMessage({ id: request.id, step: stepReply(receiveStepMetadata(request.doc, request.metadata), request.name, request.meshes, request.rootScope) });
+    const step = stepReply(receiveStepMetadata(request.doc, request.metadata), request.name, request.meshes, request.rootScope);
+    if (!('error' in step) && request.metadata.hasDirectGeometry && !step.omitted?.includes(stepDirectGeometryLoss))
+      step.omitted = [...(step.omitted ?? []), stepDirectGeometryLoss];
+    (self as unknown as Worker).postMessage({ id: request.id, step });
   } else if (request.type === 'editableStepCopy') {
     post({ id: request.id, copy: editableStepCopy(request.doc, true) });
   } else {

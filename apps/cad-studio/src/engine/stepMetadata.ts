@@ -3,11 +3,15 @@ import type { StudioDoc } from '@barocss/cad-model/engine/doc';
 export interface StepMetadata {
   bodies: StudioDoc['bodies']; drawing: StudioDoc['drawing']; references: StudioDoc['references'];
   assemblyCuts: StudioDoc['assemblyCuts'];
+  hasDirectGeometry?: true;
   instances?: { id: string; metadata: StepMetadata }[];
 }
 export function stepMetadata(doc: StudioDoc): StepMetadata {
+  const instances = doc.instances?.map(i => ({ id: i.id, metadata: stepMetadata(i.doc) }));
+  const hasDirectGeometry = !!doc.direct?.objects.length ||
+    doc.instances?.some((instance, index) => !instance.hidden && instances?.[index].metadata.hasDirectGeometry);
   return { bodies: doc.bodies, drawing: doc.drawing, references: doc.references, assemblyCuts: doc.assemblyCuts,
-    ...(doc.instances ? { instances: doc.instances.map(i => ({ id: i.id, metadata: stepMetadata(i.doc) })) } : {}) };
+    ...(hasDirectGeometry ? { hasDirectGeometry: true } : {}), ...(instances ? { instances } : {}) };
 }
 /** Restore only onto the worker's received request copy; keep its node/cache context identity. */
 export function receiveStepMetadata(doc: StudioDoc, metadata: StepMetadata): StudioDoc {
