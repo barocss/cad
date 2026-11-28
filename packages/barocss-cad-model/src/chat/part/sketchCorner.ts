@@ -1,7 +1,7 @@
 import type { ModelNode, StudioDoc } from '../../engine/doc';
 import { isRefusal } from '../../engine/refusal';
 import { chamferCorner, roundStraightCornerForEdit } from '../../sketch/corner';
-import { editChamferSetbacks, savedChamferSetback } from '../../sketch/chamferEdit';
+import { editChamferSetbacks, editTwoDistanceChamfer, savedChamferSetback, savedTwoDistanceChamfer } from '../../sketch/chamferEdit';
 import { prepareStraightCornerBatch } from '../../sketch/cornerBatch';
 import { nextIdOf } from '../../sketch/entityIds';
 import { editFilletRadii, savedFilletRadius } from '../../sketch/filletEdit';
@@ -54,6 +54,16 @@ export function sketchEditChamfers(doc: StudioDoc, index: number) {
     : [];
 }
 
+export function sketchEditTwoDistanceChamfers(doc: StudioDoc, index: number) {
+  const source = cornerSource(doc, index);
+  return source && hasSavedTags(source)
+    ? source.ids.flatMap((bevel, at) => {
+      const pair = savedTwoDistanceChamfer(source.outline, at);
+      return pair ? [{ bevel, distance: pair.incoming, outgoingDistance: pair.outgoing }] : [];
+    })
+    : [];
+}
+
 export function sketchEditFillets(doc: StudioDoc, index: number) {
   const source = cornerSource(doc, index);
   return source && hasSavedTags(source)
@@ -86,8 +96,9 @@ function requestedPairs(input: Record<string, unknown>, field: 'radius' | 'dista
   return pairs.every(sidePair) ? pairs : null;
 }
 
-function requestedSavedIds(input: Record<string, unknown>, key: string, field: 'radius' | 'distance', group: boolean): string[] | null {
-  if (Object.keys(input).some(name => name !== 'sketch' && name !== field && name !== key)) return null;
+function requestedSavedIds(input: Record<string, unknown>, key: string, field: 'radius' | 'distance', group: boolean, twoDistances: boolean): string[] | null {
+  const allowed = ['sketch', field, key, ...(twoDistances ? ['outgoingDistance'] : [])];
+  if (Object.keys(input).some(name => !allowed.includes(name))) return null;
   const value = group ? input[key] : [input[key]];
   if (!Array.isArray(value) || value.length < (group ? 2 : 1)) return null;
   const ids: unknown[] = Array.from(value);
@@ -105,8 +116,12 @@ export function editSketchCorner(doc: StudioDoc, index: number, kind: 'CHAMFER' 
   const group = isObj(input) && Object.hasOwn(input, groupSelector);
   const key = group ? groupSelector : selector;
   const saved = isObj(input) && Object.hasOwn(input, key);
+  const twoDistances = isObj(input) && Object.hasOwn(input, 'outgoingDistance');
+  const outgoing = isObj(input) && typeof input.outgoingDistance === 'number' ? input.outgoingDistance : undefined;
+  if (twoDistances && (round || group || !saved || outgoing === undefined || !Number.isFinite(outgoing)))
+    return { code: 'EDIT_INPUT', error: 'Give a finite outgoingDistance in mm only when editing one saved Chamfer by bevel ID.' };
   const pairs = !saved && isObj(input) ? requestedPairs(input, field) : null;
-  const ids = saved ? requestedSavedIds(input, key, field, group) : null;
+  const ids = saved ? requestedSavedIds(input, key, field, group, twoDistances) : null;
   if (!isObj(input) || typeof input.sketch !== 'string' || (!ids && !pairs) || typeof value !== 'number' || !Number.isFinite(value))
     return { code: 'EDIT_INPUT', error: group
       ? `Give the saved sketch ID, two or more distinct ${key} and a finite ${field} in mm. Use ${key} as the only selector.`
@@ -127,12 +142,12 @@ export function editSketchCorner(doc: StudioDoc, index: number, kind: 'CHAMFER' 
   let shape: Polygon;
   if (ids) {
     const edges = ids.map(id => source.ids.indexOf(id));
-    const sizeOf = round ? savedFilletRadius : savedChamferSetback;
-    const sizes = edges.map(edge => sizeOf(source.outline, edge));
-    if (sizes.includes(undefined))
+    const sizeOf = round ? savedFilletRadius : outgoing === undefined ? savedChamferSetback : savedTwoDistanceChamfer;
+    if (edges.some(edge => sizeOf(source.outline, edge) === undefined))
       return refuse(round ? 'FILLET' : 'BEVEL', `Use a saved ${selector} ID from query.edit_fields.`);
     const editSizes = round ? editFilletRadii : editChamferSetbacks;
-    const result = editSizes(source.outline, edges, value);
+    const result = outgoing === undefined ? editSizes(source.outline, edges, value)
+      : editTwoDistanceChamfer(source.outline, edges[0], value, outgoing);
     if ('error' in result) return refuse('GEOMETRY', result.error);
     shape = result.shape;
     if (shape === source.outline) return { node: source.node };

@@ -43,9 +43,10 @@ const sketchCornerInput = (field: 'distance' | 'radius', operation: string) => {
   const results = chamfer ? 'sketchChamfers' : 'sketchFillets';
   const groupDescription = chamfer ? 'Distinct saved Chamfer side IDs. Different starting setbacks can share one new setback.'
     : 'Distinct saved Fillet side IDs. Different starting radii can share one new radius.';
+  const twoDistanceDescription = chamfer ? ' For one bevel from sketchTwoDistanceChamfers, distance is incoming and outgoingDistance is required. Send both current or new distances.' : '';
   return {
     type: 'object',
-    description: `${operation} in sketch mm. Send it alone with index and expectedRevision. Use the sketch ID and side pairs from query.edit_fields with includeSketchCorners. To resize a saved ${name}, use its side ID from ${results} as the ${selector} selector. To resize two or more saved ${name}s together, send their side IDs as ${group}. ${groupDescription}`,
+    description: `${operation} in sketch mm. Send it alone with index and expectedRevision. Use the sketch ID and side pairs from query.edit_fields with includeSketchCorners. To resize a saved ${name}, use its side ID from ${results} as the ${selector} selector. To resize two or more saved ${name}s together, send their side IDs as ${group}. ${groupDescription}${twoDistanceDescription}`,
     additionalProperties: false,
     required: ['sketch', field],
     oneOf: [{ required: ['sides'] }, { required: ['corners'] }, { required: [selector] }, { required: [group] }],
@@ -57,6 +58,8 @@ const sketchCornerInput = (field: 'distance' | 'radius', operation: string) => {
       [group]: { type: 'array', minItems: 2, uniqueItems: true, items: { type: 'string', minLength: 1 },
         description: groupDescription },
       [field]: { type: 'number', exclusiveMinimum: 0 },
+      ...(chamfer ? { outgoingDistance: { type: 'number', exclusiveMinimum: 0,
+        description: 'Outgoing setback in sketch mm for one saved two-distance bevel. Omit for other selections.' } } : {}),
     },
   };
 };
@@ -112,7 +115,7 @@ const PART_TOOLS: ToolDefinition[] = [
   },
   {
     name: 'list_feature_edit_fields',
-    description: 'Read the current fields of one feature by index from get_part_summary. Returns field keys, values, units or options, and the current part revision. Use the key in edit_feature values and pass the revision as expectedRevision. A null numeric value is unavailable. A named parameter is the current binding. With includeSketchCorners, sketchCorners lists straight incident side pairs and points in sketch mm. When present, sketchChamfers lists saved bevel IDs and setbacks, and sketchFillets lists saved Fillet IDs and radii. The sizes are in mm. Edits and proposals still validate the value and geometry.',
+    description: 'Read the current fields of one feature by index from get_part_summary. Returns field keys, values, units or options, and the current part revision. Use the key in edit_feature values and pass the revision as expectedRevision. A null numeric value is unavailable. A named parameter is the current binding. With includeSketchCorners, sketchCorners lists straight incident side pairs and points in sketch mm. When present, sketchChamfers lists saved bevel IDs and equal setbacks, sketchTwoDistanceChamfers lists saved bevel IDs and both setbacks, and sketchFillets lists saved Fillet IDs and radii. The sizes are in mm. Edits and proposals still validate the value and geometry.',
     input_schema: { type: 'object', properties: { index: { type: 'integer', minimum: 0 }, includeSketchCorners: { type: 'boolean' } }, required: ['index'], additionalProperties: false },
   },
   {

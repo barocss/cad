@@ -1,7 +1,11 @@
 import assert from 'node:assert/strict';
+import { readFile, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { createFlow } from './flow-helper.mjs';
+import { currentPartRevision, withMcpSession } from './mcp-browser-session.mjs';
 
 const baseline = process.argv.includes('--baseline');
+const agent = process.argv.includes('--agent');
 const editBaseline = process.argv.includes('--edit-baseline');
 const edit = process.argv.includes('--edit') || editBaseline;
 const points = [[0, 0], [40, 0], [40, 30], [0, 30]];
@@ -12,11 +16,19 @@ const pins = [
   'apps/cad-studio/src/sketch/constraintInspection.ts',
   'packages/barocss-cad-model/src/sketch/corner.ts',
   'packages/barocss-cad-model/src/sketch/chamferEdit.ts',
+  ...(agent ? [
+    'apps/cad-studio/test/mcp-browser-session.mjs',
+    'packages/barocss-cad-model/src/chat/contract.ts',
+    'packages/barocss-cad-model/src/chat/toolDefinitions.ts',
+    'packages/barocss-cad-model/src/chat/part/features.ts',
+    'packages/barocss-cad-model/src/chat/part/sketchCorner.ts',
+  ] : []),
 ];
 const f = await createFlow({
   name: 'sketch-two-setback-chamfer', output: process.argv[2], envFrozen: 'TWO_SETBACK_CHAMFER_FROZEN',
   initialFiles: pins, requiredFrozen: pins,
-  qualification: 'Apply two distinct setbacks at one authored right-angle sketch corner and reopen the native extrusion.',
+  qualification: agent ? 'Propose the revision-pinned edit of a saved two-distance Chamfer and verify Studio approval, native parity and fresh Open.'
+    : 'Apply two distinct setbacks at one authored right-angle sketch corner and reopen the native extrusion.',
   inspectorSource: `
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -24,6 +36,7 @@ import { checkBrep, massPropertiesOf } from '@barocss/cad';
 import { emptyDoc, withNode } from '@barocss/cad-model/engine/doc';
 import { partSnapshot } from '@barocss/cad-model/engine/part';
 import { profileOf } from '@barocss/cad-model/sketch/loops';
+import { digestOf } from '@barocss/cad-model/util/digest';
 const doc = JSON.parse(readFileSync(process.argv[2], 'utf8'));
 if (process.argv[3] === '"seed"') {
   const profile = profileOf([{ kind: 'polygon', closed: true, points: doc.points, ids: ['e1','e2','e3','e4'],
@@ -34,7 +47,7 @@ if (process.argv[3] === '"seed"') {
   const [output] = partSnapshot(doc).outputs;
   const report = checkBrep(output.brep, { strict: true });
   assert.ok(report.valid, report.issues.join(' | '));
-  console.log(JSON.stringify({ volume: massPropertiesOf(output).volume, counts: report.counts,
+  console.log(JSON.stringify({ volume: massPropertiesOf(output).volume, hash: digestOf(output.brep), counts: report.counts,
     vertices: output.brep.vertices.map(vertex => vertex.point), faces: output.brep.faces.map(face => face.name) }));
 }
 `,
@@ -84,10 +97,108 @@ async function verifyNative(label, doc, incoming, outgoing) {
   for (const [x, y] of expected) for (const z of [0, 10]) {
     assert.ok(report.vertices.some(v => Math.hypot(v[0] - x, v[1] - y, v[2] - z) < 1e-7));
   }
-  f.report.observations.push({ label, incoming, outgoing, volume, angle: angle.value });
+  f.report.observations.push({ label, incoming, outgoing, volume, angle: angle.value, hash: report.hash });
+  return report;
+}
+
+async function verifyAgentEdit() {
+  const sourceBytes = await readFile(process.env.TWO_SETBACK_AGENT_SOURCE);
+  const source = JSON.parse(sourceBytes);
+  const manual = JSON.parse(await readFile(process.env.TWO_SETBACK_MANUAL_EDIT, 'utf8'));
+  const stagedFile = join(f.output, 'agent-working-copy.bcad');
+  await writeFile(stagedFile, sourceBytes);
+  const session = { app: f.app, output: f.output, clientName: 'two-distance-chamfer' };
+  const propose = (call, args, refused = false) => call('proposals', {
+    action: 'propose', title: 'Change only the incoming Chamfer distance to 6 mm', ops: [{ tool: 'features', args }],
+  }, refused);
+
+  f.phase = 'Discover the named bevel and stage one revision-pinned edit through local MCP';
+  const args = await withMcpSession(session, stagedFile, 'discover-and-propose', async (call, request) => {
+    const detail = await call('describe', { tool: 'features', action: 'edit' });
+    assert.equal(detail.input.properties.sketchChamfer.properties.outgoingDistance.type, 'number');
+    const query = { action: 'edit_fields', index: 0, includeSketchCorners: true };
+    const raw = await request('tools/call', { name: 'query', arguments: query });
+    const fields = JSON.parse(raw.content[0].text);
+    assert.equal(raw.isError, false);
+    assert.deepEqual(raw.structuredContent, fields);
+    assert.equal(fields.revision, await currentPartRevision(call));
+    assert.deepEqual(fields.sketchTwoDistanceChamfers, [{ bevel: 'e5', distance: 3, outgoingDistance: 4 }]);
+    assert.equal(fields.sketchChamfers, undefined);
+    assert.equal((await call('query', { action: 'edit_fields', index: 0 })).sketchTwoDistanceChamfers, undefined);
+    const sketchChamfer = { sketch: fields.id, ...fields.sketchTwoDistanceChamfers[0], distance: 6 };
+    const edit = { action: 'edit', index: fields.index, expectedRevision: fields.revision, sketchChamfer };
+    assert.match((await call('features', edit, true)).error, /propos/i);
+    for (const [patch, pattern] of [
+      [{ expectedRevision: undefined }, /expectedRevision/i],
+      [{ expectedRevision: '0000000000000000' }, /part changed/i],
+      [{ sketchChamfer: { ...sketchChamfer, bevel: 'e1' } }, /saved bevel/i],
+      [{ sketchChamfer: { ...sketchChamfer, outgoingDistance: undefined } }, /saved bevel/i],
+      [{ sketchChamfer: { ...sketchChamfer, bevel: undefined, bevels: ['e5', 'e1'] } }, /outgoingDistance/i],
+      [{ sketchChamfer: { ...sketchChamfer, distance: 40 } }, /collapse|cross/i],
+      [{ sketchChamfer: { ...sketchChamfer, distance: 3 } }, /same|already/i],
+    ]) {
+      assert.match((await propose(call, { ...edit, ...patch }, true)).error, pattern);
+      assert.deepEqual(await readFile(stagedFile), sourceBytes);
+    }
+    assert.deepEqual((await call('proposals', { action: 'list' })).proposals, []);
+    const dry = await call('features', { action: 'batch', dryRun: true, ops: [{ tool: 'features', args: edit }] });
+    assert.equal(dry.dryRun, true);
+    near(dry.change.volume, -60);
+    assert.deepEqual(dry.diff.changed.map(feature => feature.id), ['n0']);
+    assert.deepEqual(await readFile(stagedFile), sourceBytes);
+    const proposed = await propose(call, edit);
+    assert.deepEqual([proposed.proposal, proposed.applied], ['P1', false]);
+    const stagedBytes = await readFile(stagedFile);
+    assert.match((await call('proposals', { action: 'accept', id: 'P1' }, true)).error, /user accepts.*studio/i);
+    assert.deepEqual(await readFile(stagedFile), stagedBytes);
+    return edit;
+  });
+  const stagedBytes = await readFile(stagedFile);
+  const pending = JSON.parse(stagedBytes);
+  assert.deepEqual([pending.nodes, pending.outputs], [source.nodes, source.outputs]);
+  assert.equal(pending.proposals.length, 1);
+  assert.deepEqual(pending.proposals[0].ops[0].args.sketchChamfer, args.sketchChamfer);
+
+  f.phase = 'Review and approve the revision-pinned Chamfer edit in desktop Studio';
+  await f.freshOpen(stagedFile, pending, 'agent-two-distance-pending');
+  await button('Chat').first().click();
+  const card = f.page.getByRole('listitem', { name: 'Proposal P1', exact: true });
+  await button('Preview', card).click();
+  await card.getByLabel('Volume change').getByText(/^−60(?:\.0+)? mm³/).waitFor();
+  await f.same(pending);
+  await f.snapshot('agent-two-distance-preview');
+  await button('Hide', card).click();
+  await f.same(pending);
+  assert.deepEqual(await readFile(stagedFile), stagedBytes);
+  await button('Preview', card).click();
+  await button('Accept', card).click();
+  await f.changed(pending);
+  const { doc } = await f.snapshot('agent-two-distance-accepted');
+  assert.equal(doc.proposals[0].status, 'accepted');
+  const approval = doc.history.at(-1);
+  assert.deepEqual([approval.kind, approval.proposal, approval.by.agent], ['accept', 'P1', 'user']);
+  assert.deepEqual([doc.nodes, doc.outputs], [manual.nodes, manual.outputs]);
+  const native = await verifyNative('agent-two-distance-native', doc, 6, 4);
+  assert.equal(native.hash, (await f.inspect('manual-two-distance-native', manual)).hash);
+  await f.undo();
+  await f.same(pending);
+  await f.redo();
+  await f.same(doc);
+  const saved = await f.save('agent-two-distance-edit');
+  const reopened = (await f.freshOpen(saved.file, doc, 'agent-two-distance-reopened')).doc;
+  assert.deepEqual(await verifyNative('agent-two-distance-native-reopened', reopened, 6, 4), native);
+  await withMcpSession(session, saved.file, 'read-reopened', async call => {
+    const acceptedBytes = await readFile(saved.file);
+    const fields = await call('query', { action: 'edit_fields', index: 0, includeSketchCorners: true });
+    assert.notEqual(fields.revision, args.expectedRevision);
+    assert.deepEqual(fields.sketchTwoDistanceChamfers, [{ bevel: 'e5', distance: 6, outgoingDistance: 4 }]);
+    assert.match((await propose(call, args, true)).error, /part changed/i);
+    assert.deepEqual(await readFile(saved.file), acceptedBytes);
+  });
 }
 
 await f.run(async () => {
+  if (agent) return verifyAgentEdit();
   const source = await f.inspect('orthogonal-stock', { points }, 'seed');
   await f.newPage();
   await f.page.getByLabel('Model file', { exact: true }).setInputFiles({

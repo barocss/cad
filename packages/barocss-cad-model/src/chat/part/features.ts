@@ -43,7 +43,7 @@ import { bodyKeyFor, featureId } from '../../engine/ids';
 import { sweepSourceRevision } from '../sweepSource';
 import { isReferencePlaneEdit } from '../../app/offsetPlanePick';
 import { preparePairedFixedSpanHoleEdit } from '../../app/patternHoleSpacing';
-import { editSketchCorner, sketchEditChamfers, sketchEditCorners, sketchEditFillets } from './sketchCorner';
+import { editSketchCorner, sketchEditChamfers, sketchEditCorners, sketchEditFillets, sketchEditTwoDistanceChamfers } from './sketchCorner';
 import { editSavedPivotHinge, readSavedPivotHinge, savedPivotHingeKey } from './pivotHingeEdit';
 import { extrudeReviewedDraft, extrudeToReviewedFace } from './reviewedExtrude';
 import { reviewedShellWallsProblem } from './reviewedShellWalls';
@@ -522,9 +522,12 @@ async function listFeatureEditFields(state: ChatState, args: Record<string, unkn
   const label = featureLabel(nodes[index], index, nodes);
   const corners = args.includeSketchCorners === true ? { sketchCorners: sketchEditCorners(doc, index) } : {};
   const chamfers = args.includeSketchCorners === true ? sketchEditChamfers(doc, index) : [];
+  const twoDistanceChamfers = args.includeSketchCorners === true ? sketchEditTwoDistanceChamfers(doc, index) : [];
   const fillets = args.includeSketchCorners === true ? sketchEditFillets(doc, index) : [];
   return { state, content: json({ index, id: featureId(nodes, index), label, revision: revisionOf(doc), fields, ...corners,
-    ...(chamfers.length ? { sketchChamfers: chamfers } : {}), ...(fillets.length ? { sketchFillets: fillets } : {}) }),
+    ...(chamfers.length ? { sketchChamfers: chamfers } : {}),
+    ...(twoDistanceChamfers.length ? { sketchTwoDistanceChamfers: twoDistanceChamfers } : {}),
+    ...(fillets.length ? { sketchFillets: fillets } : {}) }),
     isError: false, changed: false, summary: `${fields.length} edit fields for ${label}` };
 }
 

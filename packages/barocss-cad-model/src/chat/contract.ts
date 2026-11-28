@@ -152,6 +152,7 @@ const READ: Record<string, JsonSchema | null> = {
     sketchCorners: { type: 'array', items: o({ point: { type: 'array', items: num, minItems: 2, maxItems: 2 },
       sides: { type: 'array', items: str, minItems: 2, maxItems: 2 } }, ['point', 'sides']) },
     sketchChamfers: { type: 'array', items: o({ bevel: str, distance: num }, ['bevel', 'distance']) },
+    sketchTwoDistanceChamfers: { type: 'array', items: o({ bevel: str, distance: num, outgoingDistance: num }, ['bevel', 'distance', 'outgoingDistance']) },
     sketchFillets: { type: 'array', items: o({ fillet: str, radius: num }, ['fillet', 'radius']) },
   }, ['index', 'id', 'label', 'revision', 'fields']),
   rebuild_report: o({ revision: str, evaluation: num, basis: str, evaluationTime: num, features: arr, built: num, builtTime: num, slowest: { type: ['string', 'null'] }, reused: num, mates: arr, loops: arr, limits: str }, ['revision', 'basis', 'evaluationTime', 'features', 'built', 'builtTime', 'slowest', 'reused', 'mates', 'loops', 'limits']),
