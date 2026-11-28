@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D2264: [D2264](notes/exact-closed-trapezoidal-sweep-2026-11-29/README.md), #10. Sweep one filled radial trapezoid on the native closed circle and verify its editable Studio history.
+
 - D2263: [D2263](notes/exact-closed-triangular-sweep-2026-11-29/README.md), #10. Add one exact closed circular Sweep profile for a straight filled triangular section and verify actual native history.
 
 - D2262: [D2262](notes/studio-document-adoption-2026-11-29/README.md), #44. Move accepted document installation out of App and compare actual desktop edit, history and Open.

@@ -191,8 +191,8 @@ test('closed-circle sweep keeps the path accuracy cutoff and requires one disk c
   const refused = (path, code, detail, section) => assert.throws(() => evaluateCadPart(document(path, section)),
     error => error instanceof CadPartError && error.feature === 'w' && error.code === code && detail.test(error.message));
   for (const radius of [20, 21]) refused(circle, 'PARAMETER', /larger than the profile radius/, { ...disk, radius });
-  refused(circle, 'CAPABILITY', /a disk, an aligned rectangle, or an aligned straight triangle/,
-    { id: 's', kind: 'sketch', profile: 'polygon', points: [[-1, -1], [1, -1], [2, 1], [-1, 1]] });
+  refused(circle, 'CAPABILITY', /a disk, an aligned rectangle, a straight triangle, or a radial trapezoid/,
+    { id: 's', kind: 'sketch', profile: 'polygon', points: [[-1, -1], [1, -0.8], [2, 1], [-1, 1.2]] });
   refused(makerCircle([0, 0, 0], [1, 0, 0], [0, 1, 0], 3000), 'CAPABILITY', /four rational quarter spans/);
   const a = [1 / 3, -2 / 3, -2 / 3], b = [-2 / 3, 1 / 3, -2 / 3];
   const wide = joinedCircle(10100, [0, 0, 0], scale(add(a, b), Math.SQRT1_2), scale(sub(a, b), Math.SQRT1_2));
@@ -821,4 +821,69 @@ test('a closed triangular section refuses axis contact, unaligned roll and holes
   refused('CAPABILITY', /triangular sweep needs a filled triangle without holes/,
     { ...triangle, sideTags: { ...triangle.sideTags, holes: [['bore']] },
       holes: [[{ kind: 'arc', center: [-1, -2], start: [-0.5, -2], direction: 'cw' }]] });
+});
+
+const radialTrapezoid = (width = 4) => ({ id: 's', kind: 'sketch', profile: 'polygon',
+  points: [[0, 0], [width, 0], [2, 6], [0, 6]],
+  sideTags: { outer: ['lower-radial-wall', 'sloping-wall', 'upper-radial-wall', 'axial-wall'] } });
+
+test('closed radial trapezoid preserves the original unequal sides through native replay', () => {
+  for (const width of [4, 6]) {
+    const profile = radialTrapezoid(width), path = joinedCircle();
+    const shiftedOrder = { ...profile, points: [profile.points[1], profile.points[2], profile.points[3], profile.points[0]],
+      sideTags: { outer: [...profile.sideTags.outer.slice(1), profile.sideTags.outer[0]] } };
+    const clockwise = { ...profile, points: [profile.points[0], ...profile.points.slice(1).reverse()],
+      sideTags: { outer: [...profile.sideTags.outer].reverse() } };
+    for (const section of [profile, shiftedOrder, clockwise]) {
+      const snapshot = evaluateCadPart(document(path, section)), [output] = snapshot.outputs;
+      const { brep } = output, report = checkBrep(brep, { strict: true });
+      const expected = Math.PI * (118 * width + 248 - width * width);
+      assert.ok(report.valid, report.issues.join('\n'));
+      assert.equal(report.topology[0].genus, 1);
+      assert.deepEqual(report.counts, { bodies: 1, shells: 1, faces: 8, loops: 8, edges: 16, vertices: 8, coedges: 32 });
+      near(massPropertiesOf(output).volume, expected);
+      near(brepMassProperties(brep, 1).volume, expected);
+      pointNear(massPropertiesOf(output).centroid, [0, 0, 126 * (width - 2) / (118 * width + 248 - width * width)]);
+      const joints = brep.edges.map(edge => measureBrepEdgeContinuity(brep, edge.id));
+      assert.ok(joints.every(joint => joint.status === 'measured'));
+      assert.equal(joints.filter(joint => joint.maximumAngleDegrees < 1e-5).length, 8);
+      for (const face of brep.faces) {
+        const tag = profile.sideTags.outer.find(name => face.name.includes(`[${name}]`));
+        assert.ok(tag);
+        for (const use of brep.coedges.filter(use => face.loops.includes(use.loop))) {
+          const { curve } = brep.edges.find(edge => edge.id === use.edge);
+          assert.ok(use.pcurve);
+          const [start, end] = curveDomain(curve);
+          for (const t of [start, (start + end) / 2, end]) {
+            const point = evaluateCurve(curve, t), [x, y, z] = point, radius = Math.hypot(x, y);
+            const [u, v] = evaluateCurve(use.pcurve, t);
+            pointNear(evaluateSurface(face.surface, u, v), point);
+            if (tag === 'lower-radial-wall') near(z, 3);
+            if (tag === 'upper-radial-wall') near(z, -3);
+            if (tag === 'axial-wall') near(radius, 20 - width / 2);
+            if (tag === 'sloping-wall') near(radius, 21 + (width - 2) * z / 6);
+          }
+        }
+      }
+      assert.deepEqual(loadCadPart(saveCadPart(snapshot)).outputs[0].brep, brep);
+    }
+  }
+});
+
+test('closed trapezoid supports a radial-Y frame and refuses false trapezoids, holes and axis contact', () => {
+  const path = joinedCircle(), profile = radialTrapezoid();
+  const [turned] = evaluateCadPart(document(path, { ...profile, points: profile.points.map(([x,y]) => [y,x]),
+    plane: { origin: [0, 0, 0], normal: [0, 1, 0], xAxis: [0, 0, 1] } })).outputs;
+  assert.ok(checkBrep(turned.brep, { strict: true }).valid);
+  pointNear(massPropertiesOf(turned).centroid, [0, 0, -63 / 176]);
+  near(massPropertiesOf(turned).volume, 704 * Math.PI);
+
+  const refuse = (section, code, detail) => assert.throws(() => evaluateCadPart(document(path, section)),
+    error => error instanceof CadPartError && error.feature === 'w' && error.code === code && detail.test(error.message));
+  refuse(radialTrapezoid(40), 'PARAMETER', /trapezoidal sweep needs strictly positive radial clearance/);
+  refuse({ ...profile, points: [[0, 0], [4, 0], [2, 6.00000001], [0, 6]] }, 'CAPABILITY', /or a radial trapezoid/);
+  refuse({ ...profile, points: profile.points.map(([x,y]) => [-y,x]) }, 'CAPABILITY', /or a radial trapezoid/);
+  refuse({ ...profile, sideTags: { ...profile.sideTags, holes: [['bore']] },
+    holes: [[{ kind: 'arc', center: [1, 2], start: [1.5, 2], direction: 'cw' }]] },
+    'CAPABILITY', /trapezoidal sweep needs a filled trapezoid without holes/);
 });

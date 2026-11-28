@@ -688,25 +688,46 @@ function rectangularElbowSection(rectangle: NonNullable<ReturnType<typeof rectan
     bendCentre: aligned.bendCentre, radialReach: aligned.radial === 0 ? halfX : halfY } };
 }
 
-function closedTriangularRing(id: string, outer: ExactSweepInput['outer'], initialAxes: SweepAxes,
-  rail: Pick<JoinedRail, 'toCentre' | 'radius' | 'tolerance'>, sideTags: SideTags | undefined, refuse: Refuse) {
-  const [a, b, c] = outer.map(segment => segment.start);
-  const minX = Math.min(a[0], b[0], c[0]), maxX = Math.max(a[0], b[0], c[0]);
-  const minY = Math.min(a[1], b[1], c[1]), maxY = Math.max(a[1], b[1], c[1]);
+/** Require two opposite, unequal sides at exact axial stations. The rectangle retains its own path. */
+function hasUnequalRadialSides([a, b, c, d]: readonly XY[], radial: 0 | 1, tolerance: number): boolean {
+  const axial = radial === 0 ? 1 : 0;
+  const pair = (p: XY, q: XY, r: XY, s: XY) => p[axial] === q[axial] && r[axial] === s[axial] && p[axial] !== r[axial]
+    && Math.abs(Math.abs(p[radial] - q[radial]) - Math.abs(r[radial] - s[radial])) > tolerance;
+  return pair(a, b, c, d) || pair(b, c, d, a);
+}
+
+function closedStraightProfileRing(id: string, outer: ExactSweepInput['outer'], holes: NonNullable<ExactSweepInput['holes']>,
+  initialAxes: SweepAxes, rail: Pick<JoinedRail, 'toCentre' | 'radius' | 'tolerance'>, sideTags: SideTags | undefined, refuse: Refuse) {
+  const corners = outer.map(segment => segment.start), [a, b, c, d = a] = corners;
+  const sectionSides = outer.length === 3 ? 3 : 4, triangular = sectionSides === 3;
+  const style = triangular ? 'triangular' : 'trapezoidal', section = triangular ? 'triangle' : 'trapezoid';
+  if (triangular && holes.length) return refuse('CAPABILITY', 'Exact closed-circle triangular sweep needs a filled triangle without holes.');
+  if (triangular && rail.radius > CadNumericPolicy.coordinateAbs)
+    return refuse('PARAMETER', 'Exact closed-circle sweep path radius must be at most 10000 mm.');
+  const minX = Math.min(a[0], b[0], c[0], d[0]), maxX = Math.max(a[0], b[0], c[0], d[0]);
+  const minY = Math.min(a[1], b[1], c[1], d[1]), maxY = Math.max(a[1], b[1], c[1], d[1]);
   const halfX = (maxX - minX) / 2, halfY = (maxY - minY) / 2;
-  const extent = Math.hypot(halfX, halfY);
+  const extent = Math.hypot(halfX, halfY), { radius, tolerance } = rail;
   const aligned = alignedBendFrame(initialAxes, rail, extent);
-  if (!aligned) return refuse('CAPABILITY', "Exact closed-circle triangular sweep needs the sketch axes aligned to the bend radial and binormal.");
-  // Keep the asymmetric meridian by carrying the centre of the section bounds on the rail.
-  const cx = minX + halfX, cy = minY + halfY;
-  const profile: ProfileSegmentInput[] = [a, b, c].map(([x, y]) => ({ kind: 'line', start: [x - cx, y - cy] }));
-  const { radius, tolerance } = rail, [dx, dy] = aligned.bendCentre;
-  const clearance = () => refuse('PARAMETER', 'Exact closed-circle triangular sweep needs strictly positive radial clearance.');
+  if (!aligned) {
+    if (triangular || hasUnequalRadialSides(corners, 0, tolerance) || hasUnequalRadialSides(corners, 1, tolerance))
+      return refuse('CAPABILITY', `Exact closed-circle ${style} sweep needs the sketch axes aligned to the bend radial and binormal.`);
+    return;
+  }
+  if (!triangular && !hasUnequalRadialSides(corners, aligned.radial, tolerance)) return;
+  if (holes.length) return refuse('CAPABILITY', `Exact closed-circle ${style} sweep needs a filled ${section} without holes.`);
+  if (!triangular && radius > CadNumericPolicy.coordinateAbs)
+    return refuse('PARAMETER', 'Exact closed-circle sweep path radius must be at most 10000 mm.');
+
+  // Carry the bounds centre on the rail. Preserve the authored side order and asymmetric meridian.
+  const cx = minX + halfX, cy = minY + halfY, [dx, dy] = aligned.bendCentre;
+  const profile: ProfileSegmentInput[] = corners.map(([x, y]) => ({ kind: 'line', start: [x - cx, y - cy] }));
+  const clearance = () => refuse('PARAMETER', `Exact closed-circle ${style} sweep needs strictly positive radial clearance.`);
   const revolve: RevolveInput = { id, profile, axis: { origin: [dx, dy], direction: [-dy, dx] }, angle: 360, sideTags: sideTags?.outer };
   const ring = revolveSweepProfile(revolve, { minimum: tolerance, refuse: clearance });
-  const brep = bindClosedStraightRing(ring, 128 * Number.EPSILON * Math.max(1, radius + extent), 3, 1);
-  if (!brep) return refuse('GEOMETRY', 'The exact closed-circle triangular sweep could not bind the native ring seams.');
-  return { axes: aligned.axes, local: { brep, mass: (density: number) => revolveMassProperties(revolve, density) } };
+  const brep = bindClosedStraightRing(ring, 128 * Number.EPSILON * Math.max(1, radius + extent), sectionSides, 1);
+  if (!brep) return refuse('GEOMETRY', `The exact closed-circle ${style} sweep could not bind the native ring seams.`);
+  return { axes: aligned.axes, style, local: { brep, mass: (density: number) => revolveMassProperties(revolve, density) } };
 }
 
 function closedRectangularRing(id: string, section: JoinedSection, tolerance: number, sideTags: SideTags | undefined, refuse: Refuse,
@@ -1577,18 +1598,17 @@ export function exactSweep(input: ExactSweepInput, refuse: Refuse): SweepSolid {
         return refuse('GEOMETRY', 'The exact closed-circle rectangular sweep did not produce one valid closed ring.');
       return result;
     }
-    if (outer.length === 3 && outer.every(side => side.kind === 'line')) {
-      if (holes.length) return refuse('CAPABILITY', 'Exact closed-circle triangular sweep needs a filled triangle without holes.');
-      if (closed.radius > CadNumericPolicy.coordinateAbs)
-        return refuse('PARAMETER', 'Exact closed-circle sweep path radius must be at most 10000 mm.');
-      const { local, axes } = closedTriangularRing(id, outer, frame(closed.tangent), closed, sideTags, refuse);
-      const result = place(local, axes, closed.start), report = checkBrep(result.brep, { strict: true });
-      if (!report.valid || report.topology.length !== 1 || report.topology[0].shells !== 1 || report.topology[0].genus !== 1)
-        return refuse('GEOMETRY', 'The exact closed-circle triangular sweep did not produce one valid closed ring.');
-      return result;
+    if ((outer.length === 3 || outer.length === 4) && outer.every(side => side.kind === 'line')) {
+      const straight = closedStraightProfileRing(id, outer, holes, frame(closed.tangent), closed, sideTags, refuse);
+      if (straight) {
+        const result = place(straight.local, straight.axes, closed.start), report = checkBrep(result.brep, { strict: true });
+        if (!report.valid || report.topology.length !== 1 || report.topology[0].shells !== 1 || report.topology[0].genus !== 1)
+          return refuse('GEOMETRY', `The exact closed-circle ${straight.style} sweep did not produce one valid closed ring.`);
+        return result;
+      }
     }
     if (profileRadius === undefined)
-      return refuse('CAPABILITY', 'Exact closed-circle sweep needs a disk, an aligned rectangle, or an aligned straight triangle.');
+      return refuse('CAPABILITY', 'Exact closed-circle sweep needs a disk, an aligned rectangle, a straight triangle, or a radial trapezoid.');
     const hole = circularHole(holes, 'closed-circle', refuse);
     const bore = hole && concentricBore(disk!, hole, refuse, 'closed-circle');
     const { start, tangent, toCentre, radius, tolerance } = closed;
