@@ -810,7 +810,7 @@ const allCommands: Command[] = [
     available: ctx => selectedBodies(ctx.selection).length === 1 ? ok : no('Select the faces to open (Shift-click for more), or a body to hollow closed.'),
     fields: (ctx, values) => {
       const wall: Field = { key: 't', label: 'Wall', kind: 'mm', min: 0.1 };
-      const target = boxShellSelection(ctx, true);
+      const target = boxShellSelection(ctx, 'shell');
       if (!target) {
         const body = oneBody(ctx);
         return body && canSetShellCorner(ctx.doc.nodes, refOf(body), shellOpenFaces(ctx, body))
@@ -822,7 +822,7 @@ const allCommands: Command[] = [
         ({ key: side.key, label: side.label, kind: 'mm' as const, min: 0.1 })) : [wall])];
     },
     defaults: (ctx): Values => {
-      const target = boxShellSelection(ctx, true);
+      const target = boxShellSelection(ctx, 'shell');
       if (target) return { t: 2, wallMode: 'uniform', ...Object.fromEntries(target.walls.map(side => [side.key, 2])) };
       const body = oneBody(ctx);
       return body && canSetShellCorner(ctx.doc.nodes, refOf(body), shellOpenFaces(ctx, body)) ? { t: 2, join: 'default' } : { t: 2 };

@@ -6,11 +6,12 @@ import type { Vec3 } from '../engine/mesh';
 import { refusal } from '../engine/refusal';
 
 /** Every opening and kept direction must have one original native face. */
-export function boxShellSelection(ctx: Ctx, allowClosed = false) {
+export function boxShellSelection(ctx: Ctx, command: 'shell' | 'rib') {
   const { faces, edges, bodies } = ctx.selection;
-  const closed = allowClosed && faces.length === 0 && bodies.length === 1 &&
+  const closed = command === 'shell' && faces.length === 0 && bodies.length === 1 &&
     !ctx.selection.sketches?.length && !ctx.selection.vertices?.length && !ctx.direct?.length;
-  if (edges.length || (!closed && (faces.length < 1 || faces.length > 2 || bodies.length))) return;
+  if (edges.length || (!closed && (faces.length < 1 || faces.length > (command === 'shell' ? 3 : 2) || bodies.length))) return;
+  if (faces.length === 3 && (ctx.selection.sketches?.length || ctx.selection.vertices?.length || ctx.direct?.length)) return;
   const bodyIndex = closed ? bodies[0] : faces[0].body;
   const body = ctx.bodies[bodyIndex], parent = body?.ref;
   if (!parent || parent.side !== 'solid' || body.mesh.faces.length !== 6 ||
@@ -18,7 +19,7 @@ export function boxShellSelection(ctx: Ctx, allowClosed = false) {
   const source = ctx.doc.nodes[parent.node];
   if (source?.kind !== 'extrude') return;
   const sketch = ctx.doc.nodes[source.sketch];
-  if (sketch?.kind !== 'sketch' || ((closed || faces.length === 2) && (sketch.profile !== 'rectangle' || source.draft))) return;
+  if (sketch?.kind !== 'sketch' || ((closed || faces.length >= 2) && (sketch.profile !== 'rectangle' || source.draft))) return;
   const planes = body.mesh.faces.flatMap(face => {
     const { nativePlaneName: name, nativeAlignFace: frame } = face;
     if (!name || !frame) return [];
@@ -28,9 +29,12 @@ export function boxShellSelection(ctx: Ctx, allowClosed = false) {
     return [{ name, sig }];
   });
   if (planes.length !== 6 || new Set(planes.map(plane => plane.name)).size !== 6) return;
-  const [first, second] = faces.map(({ face }) => planes.find(plane => plane.name === body.mesh.faces[face]?.nativePlaneName));
-  if (!closed && (!first || faces.length === 2 && !second)) return;
-  const sides = closed ? boxShellWalls : boxShellOpeningWalls(first?.sig.d, second?.sig.d);
+  const selected = faces.map(({ face }) => planes.find(plane => plane.name === body.mesh.faces[face]?.nativePlaneName));
+  if (selected.some(plane => !plane)) return;
+  // Store a corner in Z, X, Y order. Keep the existing order for one or two picks.
+  const axisOrder = (plane: typeof planes[number] | undefined) => [2, 0, 1].findIndex(axis => !!plane?.sig.d?.[axis]);
+  const [first, second, third] = selected.length === 3 ? selected.sort((a, b) => axisOrder(a) - axisOrder(b)) : selected;
+  const sides = closed ? boxShellWalls : boxShellOpeningWalls(first?.sig.d, second?.sig.d, third?.sig.d);
   if (!sides) return;
   const [opening, secondOpening] = first && second && sameWallNormal(second.sig.d, [0, 0, 1])
     ? [second.name, first.name] : [first?.name ?? null, second?.name];
@@ -39,14 +43,15 @@ export function boxShellSelection(ctx: Ctx, allowClosed = false) {
     return face && { ...side, name: face.name };
   });
   if (walls.every(wall => !!wall)) return {
-    parent, opening, secondOpening, walls, sigs: Object.fromEntries(planes.map(plane => [plane.name, plane.sig])),
+    parent, opening, secondOpening, thirdOpening: third?.name, walls, sigs: Object.fromEntries(planes.map(plane => [plane.name, plane.sig])),
   };
 }
 
 export function buildBoxWallShell(ctx: Ctx, values: Values) {
-  const target = boxShellSelection(ctx, true);
-  if (!target) throw refusal('BAD_REFERENCE', 'Select one original rectangular box or one or two of its distinct original faces.');
-  const { parent, opening, secondOpening, sigs } = target;
+  const target = boxShellSelection(ctx, 'shell');
+  if (!target) throw refusal('BAD_REFERENCE', 'Select one original rectangular box, one or two of its faces, or three faces sharing a corner.');
+  const { parent, opening, secondOpening, thirdOpening, sigs } = target;
   const walls = Object.fromEntries(target.walls.map(face => [face.name, Number(values[face.key])]));
-  return withNode(ctx.doc, { kind: 'shell-walls', parent, opening, ...(secondOpening === undefined ? {} : { secondOpening }), walls, sigs });
+  return withNode(ctx.doc, { kind: 'shell-walls', parent, opening, ...(secondOpening === undefined ? {} : { secondOpening }),
+    ...(thirdOpening === undefined ? {} : { thirdOpening }), walls, sigs });
 }

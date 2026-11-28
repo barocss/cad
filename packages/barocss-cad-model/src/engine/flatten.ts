@@ -109,6 +109,7 @@ function shiftNode(node: ModelNode, k: number, s: number): ModelNode {
     case 'shell': return { ...node, parent: ref(node.parent), open: node.open.map(name) };
     case 'shell-walls': return { ...node, parent: ref(node.parent), opening: node.opening === null ? null : name(node.opening),
       ...(node.secondOpening === undefined ? {} : { secondOpening: name(node.secondOpening) }),
+      ...(node.thirdOpening === undefined ? {} : { thirdOpening: name(node.thirdOpening) }),
       walls: Object.fromEntries(Object.entries(node.walls).map(([face, thickness]) => [name(face), thickness])) };
     default: return { ...node, parent: ref(node.parent) };
   }

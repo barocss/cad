@@ -225,8 +225,9 @@ export function featureOf(node: ModelNode, index: number, nodes?: readonly Model
       if (problem) throw refusal('VALUE', problem);
       return { ...at, kind: 'shell-walls', target: ref(node.parent), opening: node.opening, walls: node.walls,
         ...(node.secondOpening === undefined ? {} : { secondOpening: node.secondOpening }),
-        ...expectOf(node, [...(node.opening === null ? [] : [node.opening]),
-          ...(node.secondOpening === undefined ? [] : [node.secondOpening]), ...Object.keys(node.walls)]) };
+        ...(node.thirdOpening === undefined ? {} : { thirdOpening: node.thirdOpening }),
+        ...expectOf(node, [...[node.opening, node.secondOpening, node.thirdOpening].filter((name): name is string => typeof name === 'string'),
+          ...Object.keys(node.walls)]) };
     }
     case 'chamfer': return { ...at, kind: 'chamfer', target: ref(node.parent), edges: node.edges, distance: node.distance, ...expectOf(node, node.edges) };
     case 'sheet-base': return { ...at, kind: 'sheet-base', sketch: id(node.sketch), thickness: node.thickness, bendRadius: node.bendRadius, ...sheetK(node), ...(node.reverse ? { reverse: true } : {}) };

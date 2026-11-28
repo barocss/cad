@@ -18,16 +18,16 @@ export function reviewedShellWallsProblem(ctx: Ctx, names: NameSelection, args: 
       return 'Closed per-face Shell needs one exact original rectangular body ID, with no opening picks.';
   } else {
     const selected = faces.map(pick => ctx.bodies[pick.body]?.mesh.faces[pick.face]?.nativePlaneName);
-    if (!Array.isArray(args.faces) || names.faces.length > 2 || args.faces.length !== names.faces.length
+    if (!Array.isArray(args.faces) || names.faces.length > 3 || args.faces.length !== names.faces.length
       || faces.length !== names.faces.length || edges.length || args.point !== undefined ||
       names.faces.some(name => !selected.includes(name)
         || ctx.bodies.flatMap(body => body.mesh.faces.filter(face => face.nativePlaneName === name)).length !== 1))
       return 'Per-face Shell needs exact original native face names for its openings.';
   }
 
-  const box = boxShellSelection(ctx, closed);
+  const box = boxShellSelection(ctx, 'shell');
   if (!box) return closed ? 'Closed per-face Shell needs one exact original rectangular body ID.'
-    : 'Use one or two distinct original faces on the same box.';
+    : 'Use one or two distinct original faces or three faces sharing a corner on the same box.';
   const invalid = box.walls.filter(({ key }) => !Object.hasOwn(values, key) || !Number.isFinite(values[key]));
   if (invalid.length) return `Give a finite thickness in mm for each kept wall: ${invalid.map(({ key }) => key).join(', ')}.`;
 }
