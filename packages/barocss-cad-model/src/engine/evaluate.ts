@@ -26,7 +26,7 @@ import { friendlyCause, type FriendlyError } from './errors';
 import { bodyKeyOf, partSnapshot } from './part';
 import { bodyKey, isAnnularReplacementSource, placedBase, placedDoc, type PartInstance, type BodyRef, type ModelNode, type Side, type StudioDoc } from './doc';
 import { placementOf } from './placement';
-import { bodyKeyFor, bodyNodeOf, featureId, serialOf } from './ids';
+import { bodyKeyFor, bodyNodeOf, featureId, nodeIndexOf, serialOf } from './ids';
 import { registerPartBox, type PartBox } from './assemblyCut';
 import { boundsOf } from './bounds';
 import { evaluationKey } from './evalMemo';
@@ -329,7 +329,16 @@ const rebuildOf = (s: CadPartSnapshot): RebuildData | undefined => s.profile && 
 
 /** A failed evaluation: its refusal in words, and the time it took (every evaluation's catch). */
 function failed(revision: number, cause: unknown, t0: number, doc?: StudioDoc): EvalResult {
-  return { ok: false, revision, error: doc ? sewGapLocation(doc, cause, holeMissLocation(doc, cause, friendlyCause(cause))) : friendlyCause(cause), wallTime: (performance.now() - t0) / 1000 };
+  let error = friendlyCause(cause);
+  if (doc) {
+    if (error.code === 'GEOMETRY' && error.feature && doc.nodes[nodeIndexOf(doc.nodes, error.feature)]?.kind === 'intersect'
+      && /^B-rep: analytic Boolean: the result is not a manifold solid \(edge \d+ (?:from [^\n]+ )?has \d+ uses\b/.test(error.detail)) {
+      error = { ...error, title: 'Intersect could not form a solid',
+        hint: 'The attempted intersection contains an edge with an invalid number of adjacent faces.' };
+    }
+    error = sewGapLocation(doc, cause, holeMissLocation(doc, cause, error));
+  }
+  return { ok: false, revision, error, wallTime: (performance.now() - t0) / 1000 };
 }
 /** A part's bodies from its snapshot, its face table remembered (evaluateDoc's and evaluatePart's one path; R4 C3). */
 function partResult(doc: StudioDoc, snapshot: CadPartSnapshot, revision: number, quality: number, shopRows: readonly ShopTreeProvenance[], t0: number): Extract<EvalResult, { ok: true }> {
