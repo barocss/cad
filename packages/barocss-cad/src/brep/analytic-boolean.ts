@@ -18,6 +18,7 @@
 // operation's rule, split at shared vertices and stitched into shells; negative shells are cavities.
 // Works in binary64 with the numeric policy's tolerance at the inputs' scale.
 import { revolutionOf, profileCrossings, onPatch, patchMargin, type Revolution } from '../nurbs/surfaces/surface-revolution.js';
+import { isolatedSphereConeSeams } from './sphere-cone-seams.js';
 import { curvePiece, curveReversed } from '../nurbs/curves/curve-segment.js';
 import { BrepError, buildBrep, checkBrep, isFacetFace, lineCurve, nurbsOf as surfaceOfFace, type Brep, type BrepFace } from './brep-core.js';
 import { bindHalfRingIntersection } from './exact-ring-intersect.js';
@@ -124,6 +125,8 @@ interface GFace {
   tracedGeneralPair?: boolean;
   /** A clipped cut made against the other input by a supported sphere/cylinder surface pair. */
   sphereCylinderCut?: boolean;
+  /** A refused march omitted after the native sphere/cone seam certificate. */
+  isolatedSeam?: boolean;
   /** The source face's id. */
   id: string;
   /** Whole, natively bound cylinder joins inherited from an Exact Sweep, including their planar peers. */
@@ -927,7 +930,17 @@ function cutPair(fa: GFace, fb: GFace, tol: number, span: number, touching = fal
     // Ends of curves already found on either face (from their other neighbours) that lie on both surfaces.
     const given = [fa, fb].flatMap(f => f.cuts.flatMap(g => [0, 1].map(u => to3(f, segAtAny(g, u))))).filter(x => offSurface(fa, x, 100 * tol) <= 100 * tol && offSurface(fb, x, 100 * tol) <= 100 * tol);
     try { chains = intersectPatches(PA, PB, { step: Math.max(diag / 80, 50 * tol), tolerance: 100 * tol, ...(along.length ? { skip: onAlong, skipNear: alongWithin } : {}), ...(given.length ? { seeds: given } : {}) }); }
-    catch (e) { if (e instanceof SurfaceIntersectionError) throw new Refused(`the surfaces of ${fa.name ?? 'a face'} and ${fb.name ?? 'a face'} meet along a curve that cannot be traced (${e.message.replace(/^Surface intersection: /, '')})`); throw e; }
+    catch (e) {
+      if (!(e instanceof SurfaceIntersectionError)) throw e;
+      const detail = e.message.replace(/^Surface intersection: /, '');
+      if (detail === 'boundary bracket has no inside starting point' && A.kind === 'nurbs' && B.kind === 'nurbs' && A.rev && B.rev) {
+        const isolated = A.rev.profile.kind === 'arc'
+          ? isolatedSphereConeSeams(A, B, A.rev, B.rev, tol)
+          : isolatedSphereConeSeams(B, A, B.rev, A.rev, tol);
+        if (isolated) { fa.isolatedSeam = true; return; }
+      }
+      throw new Refused(`the surfaces of ${fa.name ?? 'a face'} and ${fb.name ?? 'a face'} meet along a curve that cannot be traced (${detail})`);
+    }
     const reach = Math.max(diag / 80, 50 * tol);
     for (const chain of chains) {
       // A chain running along such an edge is that edge again.
@@ -1717,9 +1730,11 @@ function analyticBoolean(a: Brep, b: Brep, operation: AnalyticBooleanOperation, 
   if (!touches.length) {
     const usedChord = (face: GFace) => face.surf.kind === 'cylinder' && face.surf.mappedChord;
     const curvedDifference = operation === 'difference' && A.some(f => f.sphereCylinderCut);
-    if (curvedDifference || A.some(usedChord) || B.some(usedChord)) {
+    const retainedChord = A.some(usedChord) || B.some(usedChord);
+    if (curvedDifference || retainedChord || A.some(f => f.isolatedSeam)) {
       const report = checkBrep(result, { strict: true });
-      const context = curvedDifference ? 'sphere/cylinder difference' : 'result with a retained cylinder chord';
+      const context = curvedDifference ? 'sphere/cylinder difference'
+        : retainedChord ? 'result with a retained cylinder chord' : 'result after isolated sphere/cone seam checks';
       if (!report.valid) throw new BrepError('GEOMETRY', `analytic Boolean: ${context} is not a valid manifold solid: ${report.issues[0]}`, report);
     }
     return touchChecked(result, touchedAt);

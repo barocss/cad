@@ -27,6 +27,30 @@ function seededTree(seed, index) {
   return sample.tree;
 }
 
+test('a cone tip survives Union across opposite sphere and cone seam charts', () => {
+  const tree = seededTree(20261023, 30);
+  const { document, root } = documentOf(tree);
+  const { brep: full } = outputOf(evaluateCadPart(document), root);
+  const fullReport = checkBrep(full, { strict: true });
+  assert.ok(fullReport.valid, fullReport.issues.join('\n'));
+  const fullMass = brepMassProperties(full, 1);
+  assert.ok(Math.abs(fullMass.volume - 152.9613135554384) < 0.072649);
+  fullMass.centroid.forEach((coord, axis) => assert.ok(Math.abs(coord - [1.6110245561617864, -0.07845041757443792, 1.219059162337619][axis]) < 0.002317));
+  const reduced = tree.b;
+  for (const stock of [reduced, { ...reduced, a: reduced.b, b: reduced.a }]) {
+    const part = documentOf(stock);
+    const { brep } = outputOf(evaluateCadPart(part.document), part.root);
+    const report = checkBrep(brep, { strict: true });
+    assert.ok(report.valid, report.issues.join('\n'));
+    assert.equal(report.counts.bodies, 1);
+    assert.ok(brep.vertices.some(({ point }) => Math.hypot(point[0] + 2, point[1] + 2, point[2] - 3) < 1e-7));
+    const mass = brepMassProperties(brep, 1);
+    assert.ok(Math.abs(mass.volume - 256 * Math.PI / 3 - 0.0000862693139693) < 1e-6);
+    mass.centroid.forEach((coord, axis) =>
+      assert.ok(Math.abs(coord - [-2.999999677880811, -2, -0.9999987435435087][axis]) < 5e-8));
+  }
+});
+
 test('a sphere pole outside the trimmed face does not block a wall Intersect', () => {
   const tree = seededTree(20261023, 158);
   const reduced = tree.b;
