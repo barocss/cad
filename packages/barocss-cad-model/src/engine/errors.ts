@@ -533,6 +533,8 @@ export function friendly(message: string, kind?: string): FriendlyError {
     return { title: 'Draft reaches the bore axis', hint: 'Reduce Angle or move the neutral plane to keep the bore open.', detail, ...extra };
   if (code === 'GEOMETRY' && detail.replace(/^B-rep: /, '') === 'annular bore draft: the draft reaches or crosses the outer tube wall')
     return { title: 'Draft reaches the outer tube wall', hint: 'Reduce Angle or move the neutral plane to keep material around the bore.', detail, ...extra };
+  if (code === 'GEOMETRY' && detail.replace(/^B-rep: /, '') === 'annular outer draft: the draft reaches or crosses the retained bore')
+    return { title: 'Draft reaches the retained bore', hint: 'Reduce Angle or move the neutral plane to keep material around the bore.', detail, ...extra };
   if (code === 'PARAMETER' && detail === 'The wall thicknesses leave no cavity in this box.')
     return { title: 'Wall thicknesses leave no cavity', hint: 'Reduce the thickness of one or more walls.', detail, ...extra };
   if (code === 'PARAMETER' && detail === 'The Shell floor thickness leaves no cavity height.')

@@ -347,7 +347,7 @@ test('Studio Draft selects both original bore halves and keeps the signed neutra
   assert.equal(patchValues(draft, ctx, { ...defaults, pull: '-z' }, { neutralMode: 'fixed' }).neutral, 19);
   assert.throws(() => draft.build!(ctx, { ...defaults, pull: 'x' }), /flat side faces/);
   const outer = bodies[0].mesh.faces.findIndex(candidate => candidate.name === 'n1.side0');
-  assert.equal(draft.available({ ...ctx, selection: { ...ctx.selection, faces: [{ body: 0, face: outer }] } }).ok, false);
+  assert.equal(draft.available({ ...ctx, selection: { ...ctx.selection, faces: [{ body: 0, face }, { body: 0, face: outer }] } }).ok, false);
   const accepted = draft.build!(ctx, { ...defaults, deg: 8 });
   const node = accepted.nodes[2];
   assert.ok(node.kind === 'draft');
@@ -367,6 +367,39 @@ test('Studio Draft selects both original bore halves and keeps the signed neutra
   }
   const agent = await dispatchTool({ doc, bodies }, 'features', { action: 'command', command: 'draft',
     faces: ['n1.hole0.side0'], values: { deg: 8 }, expectedRevision: revisionOf(doc) }, async next => evaluateDoc(next, 2));
+  assert.ok(agent.changed && !agent.isError, agent.content);
+  assert.deepEqual(agent.state.doc.nodes[2], node);
+});
+
+test('Studio Draft selects both original outside halves of a tube and keeps its bore and saved neutral', async () => {
+  const source = cylinderPart(12, 16), [sketch, extrusion] = source.nodes;
+  assert.ok(sketch.kind === 'sketch' && sketch.profile === 'circle' && extrusion.kind === 'extrude');
+  const doc: StudioDoc = { ...source, nodes: [{ ...sketch, center: [14, 9],
+    holes: [[{ kind: 'arc', start: [18, 9], center: [14, 9], direction: 'ccw' }]] }, { ...extrusion, from: 3 }] };
+  const bodies = bodiesOf(doc), face = bodies[0].mesh.faces.findIndex(candidate => candidate.name === 'n1.side0');
+  assert.ok(face >= 0);
+  const ctx: Ctx = { doc, bodies, selection: { bodies: [], faces: [{ body: 0, face }], edges: [] } };
+  assert.equal(draft.available(ctx).ok, true);
+  const defaults = draft.defaults!(ctx);
+  assert.equal(defaults.pull, 'z');
+  assert.equal(patchValues(draft, ctx, defaults, { neutralMode: 'fixed' }).neutral, 3);
+  const candidate = draft.build!(ctx, { ...defaults, deg: 8 });
+  const node = candidate.nodes[2];
+  assert.ok(node.kind === 'draft');
+  assert.deepEqual(node.faces, ['n1.side0#1', 'n1.side0#2']);
+  const edit = editSavedDraftCommand(candidate, 2);
+  assert.ok(edit?.defaults && edit.build);
+  const history = { ...ctx, doc: candidate };
+  const neutral = patchValues(edit, history, { ...edit.defaults(history), pull: '-z' }, { neutralMode: 'fixed' });
+  assert.equal(neutral.neutral, 19);
+  const reverse = edit.build(history, { ...neutral, deg: -8 });
+  for (const [part, radius] of [[candidate, 12 - 16 * Math.tan(8 * Math.PI / 180)],
+    [reverse, 12 + 16 * Math.tan(8 * Math.PI / 180)]] as const) {
+    const expected = Math.PI * 16 * ((144 + 12 * radius + radius * radius) / 3 - 16);
+    assert.ok(Math.abs(volume(part) - expected) < 1e-7);
+  }
+  const agent = await dispatchTool({ doc, bodies }, 'features', { action: 'command', command: 'draft',
+    faces: ['n1.side0'], values: { deg: 8 }, expectedRevision: revisionOf(doc) }, async next => evaluateDoc(next, 2));
   assert.ok(agent.changed && !agent.isError, agent.content);
   assert.deepEqual(agent.state.doc.nodes[2], node);
 });

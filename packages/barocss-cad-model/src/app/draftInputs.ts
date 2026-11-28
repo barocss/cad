@@ -35,13 +35,13 @@ function originalCylinderDraftSource(doc: StudioDoc, ref: BodyRef, axis: number)
       || typeof sketch.radius !== 'number' || !Number.isFinite(sketch.radius) || sketch.radius <= 0
       || !arc.center.every((value, i) => typeof value === 'number' && Number.isFinite(value) && value === sketch.center[i])
       || !arc.start.every(value => typeof value === 'number' && Number.isFinite(value))) return;
-    return { owner, wall: `${owner}.hole0.side`, faceCount: 6, bore: true };
+    return { owner, wall: `${owner}.side`, bore: `${owner}.hole0.side`, faceCount: 6 };
   }
   if (plane) {
     const x = exactAxis(plane.xAxis);
     if (exactAxis(plane.normal) !== axis || x < 0 || x === axis || !plane.origin.every(Number.isFinite)) return;
   } else if (axis !== 2) return;
-  return { owner, wall: `${owner}.side`, faceCount: 4, bore: false };
+  return { owner, wall: `${owner}.side`, faceCount: 4 };
 }
 
 const draftEnd = (pull: DraftPull, bottom: number, top: number) => pull.startsWith('-') ? Math.max(bottom, top) : Math.min(bottom, top);
@@ -55,7 +55,7 @@ export function originalCylinderDraftSelection(ctx: Ctx, pull: DraftPull): { fac
   const source = originalCylinderDraftSource(ctx.doc, ref, axis);
   if (!source || body.mesh.faces.length !== (source.bore ? 4 : 3)) return;
   const face = body.mesh.faces[pick.face];
-  if (!face?.name.startsWith(source.wall) || face.exact?.kind !== 'cylinder'
+  if (!face || !(face.name.startsWith(source.wall) || source.bore && face.name.startsWith(source.bore)) || face.exact?.kind !== 'cylinder'
     || exactAxis(face.exact.a) !== axis || face.nativeFaces?.length !== 2) return;
   const faces = face.nativeFaces.map(member => member.name).sort();
   if (faces[0] !== face.name + '#1' || faces[1] !== face.name + '#2') return;
@@ -104,11 +104,13 @@ function cylinderDraftBodyEnd(doc: StudioDoc, target: Brep, wall: SavedDraftWall
   const source = originalCylinderDraftSource(doc, wall.parent, axis);
   if (!source || target.bodies.length !== 1 || target.bodies[0].kind !== 'solid' || target.faces.length !== source.faceCount || wall.faces.length !== 2) return;
   const first = wall.faces.find(name => name.endsWith('#1'));
-  if (!first?.startsWith(source.wall) || !wall.faces.includes(first.slice(0, -1) + '2')) return;
+  if (!first || !wall.faces.includes(first.slice(0, -1) + '2')) return;
+  const bore = !!source.bore && first.startsWith(source.bore);
+  if (!bore && !first.startsWith(source.wall)) return;
   const sameWall = target.faces.filter(face => face.name !== undefined && wall.faces.includes(face.name));
   if (sameWall.length !== 2 || sameWall.some(face => {
     const geometry = faceGeometry(face);
-    return geometry.kind !== 'cylinder' || exactAxis(geometry.a) !== axis || source.bore && geometry.out !== -1;
+    return geometry.kind !== 'cylinder' || exactAxis(geometry.a) !== axis || source.bore !== undefined && geometry.out !== (bore ? -1 : 1);
   })) return;
   const stations = ['bottom', 'top'].map(end => {
     const surface = target.faces.find(face => face.name === source.owner + '.' + end)?.surface;

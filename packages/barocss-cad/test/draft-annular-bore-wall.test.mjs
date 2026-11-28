@@ -132,7 +132,7 @@ test('partial/mixed selection, wrong pull/neutral, axis collapse and outer conta
     const before = structuredClone(source);
     assert.throws(() => evaluateCadPart(source), error => error.code === category && pattern.test(error.message)); assert.deepEqual(source, before);
   };
-  for (const faces of [[names[0]], ['n1.hole0.side0'], [names[0], names[0]], [names[0], 'n1.top'], ['n1.side0#1', 'n1.side0#2']]) {
+  for (const faces of [[names[0]], ['n1.hole0.side0'], [names[0], names[0]], [names[0], 'n1.top'], [names[0], 'n1.side0#2']]) {
     const source = doc(); source.features.at(-1).faces = faces; refuses(source, 'CAPABILITY', /both distinct original native halves/);
   }
   for (const pull of ['x', '-x', 'y', '-y']) refuses(doc(5, pull), 'SELECTION', /signed world Z pull/);

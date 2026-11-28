@@ -15,7 +15,7 @@ import { draftBoxCorner, draftBoxHinge } from './part-box-draft.js';
 import { draftRotatedBoxHinge } from './part-rotated-box-draft.js';
 import { draftRotatedPolygonHinge, type RotatedPivotStock } from './part-rotated-polygon-draft.js';
 import { pivotPrismWall } from '../features/prism-wall-offset.js';
-import { draftAnnularBoreWallIfAdmitted, draftCircularWallIfAdmitted } from '../features/bored-cap-offset.js';
+import { draftAnnularBoreWallIfAdmitted, draftAnnularOuterWallIfAdmitted, draftCircularWallIfAdmitted } from '../features/bored-cap-offset.js';
 
 // Private structural contract. Original functions retain their caches, profiling and closure state.
 interface FaceFinishHelpers {
@@ -49,7 +49,7 @@ function originalCircularDraftStock(reference: unknown, part: Part, t: Tools): b
 }
 
 /** One literal unplaced circle with one intrinsic coaxial full-circle hole; native charts are proved separately. */
-function originalAnnularBoreDraftStock(reference: unknown, part: Part, t: Tools): boolean {
+function originalAnnularDraftStock(reference: unknown, part: Part, t: Tools): boolean {
   const owner = t.ref(reference, 'Inner circular Draft stock'), author = owner.author;
   if (author?.kind !== 'extrude' || owner.result.kind !== 'solid' || owner.result.parts.length !== 1 || owner.result.parts[0] !== part
     || (author.draft !== undefined && author.draft !== 0) || part.solid.kind !== 'upright'
@@ -296,16 +296,23 @@ export function faceFinishOperation(f: CadPartFeature & Record<string, unknown>,
       const pull = f.pull === undefined ? 'z' : f.pull as unknown;
       if (pull !== 'x' && pull !== 'y' && pull !== 'z' && pull !== '-x' && pull !== '-y' && pull !== '-z') fail('INPUT', 'pull must be x, y or z (a positive coordinate axis), or -x, -y or -z');
       const circularStock = hinge === undefined && originalCircularDraftStock(f.target, target[0], t);
-      const annularBoreStock = hinge === undefined && !circularStock && originalAnnularBoreDraftStock(f.target, target[0], t);
-      const cardinalCircle = hinge === undefined && !circularStock && !annularBoreStock ? cardinalCircularDraftStock(f.target, target[0], t) : undefined;
+      const annularStock = hinge === undefined && !circularStock && originalAnnularDraftStock(f.target, target[0], t);
+      const cardinalCircle = hinge === undefined && !circularStock && !annularStock ? cardinalCircularDraftStock(f.target, target[0], t) : undefined;
       return () => {
         if (target[0].solid.kind === 'brep' && target[0].solid.brep.faces.some(isFacetFace)) fail('CAPABILITY', 'draft on mesh faces is not supported yet (general draft and offset arrive with R11)');
-        if (annularBoreStock) {
-          if (pull !== 'z' && pull !== '-z') return fail('SELECTION', 'Inner circular wall Draft needs a signed world Z pull.');
+        if (annularStock) {
+          const original = k.namedFaceTargetBrep(t, f.target, target[0]);
+          const outer = names.every(name => original.faces.some(face => {
+            if (face.name !== name) return false;
+            const support = faceGeometry(face); return support.kind === 'cylinder' && support.out === 1;
+          }));
+          const role = outer ? 'Outer' : 'Inner';
+          if (pull !== 'z' && pull !== '-z') return fail('SELECTION', `${role} circular wall Draft needs a signed world Z pull.`);
           const box = bounds(target[0].solid), zN = neutral ?? (pull === 'z' ? box.min[2] : box.max[2]);
-          if (zN < box.min[2] || zN > box.max[2]) fail('SELECTION', 'Inner circular wall Draft neutral must lie within the original caps.');
-          const brep = draftAnnularBoreWallIfAdmitted(k.namedFaceTargetBrep(t, f.target, target[0]), names, (angle as number) * Math.PI / 180, pull, zN);
-          if (!brep) return fail('CAPABILITY', 'Inner circular wall Draft needs both distinct original native halves of one original coaxial annular extrusion.');
+          if (zN < box.min[2] || zN > box.max[2]) fail('SELECTION', `${role} circular wall Draft neutral must lie within the original caps.`);
+          const producer = outer ? draftAnnularOuterWallIfAdmitted : draftAnnularBoreWallIfAdmitted;
+          const brep = producer(original, names, (angle as number) * Math.PI / 180, pull, zN);
+          if (!brep) return fail('CAPABILITY', `${role} circular wall Draft needs both distinct original native halves of one original coaxial annular extrusion.`);
           return one({ kind: 'brep', brep });
         }
         if (circularStock) {
