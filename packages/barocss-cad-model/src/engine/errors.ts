@@ -548,6 +548,8 @@ export function friendly(message: string, kind?: string): FriendlyError {
     return { title: 'The Shell ceiling is too thick', hint: 'Reduce Ceiling thickness to leave room above the opening.', detail, ...extra };
   if (code === 'PARAMETER' && detail === 'The Shell floor and ceiling thicknesses leave no supported cavity height.')
     return { title: 'The Shell floor and ceiling leave no cavity', hint: 'Reduce Floor thickness or Ceiling thickness.', detail, ...extra };
+  if (code === 'PARAMETER' && detail === 'The Shell wall thickness leaves no supported cylindrical cavity.')
+    return { title: 'The Shell wall leaves no cylindrical cavity', hint: 'Reduce Wall to leave a supported cavity radius.', detail, ...extra };
   if (code === 'PARAMETER' && detail === 'The Shell side thickness leaves no supported L cavity.')
     return { title: 'The Shell walls leave no supported L cavity', hint: 'Choose a Wall thickness that leaves both arms open.', detail, ...extra };
   const shellCornerLimit = code === 'PARAMETER' ? /^Shell join wall thickness must be less than (\d+(?:\.\d+)?(?:e[+-]?\d+)?) mm to keep both L arms and the closed height\.$/i.exec(detail) : null;

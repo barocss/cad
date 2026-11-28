@@ -19,6 +19,37 @@ const doc: StudioDoc = {
 };
 const shell = commandById('shell')!;
 
+test('closed cylinder Shell admits two independent caps without exposing an L corner mode', async () => {
+  const stock: StudioDoc = { ...doc, nodes: [
+    { kind: 'sketch', id: 'n0', profile: 'circle', center: [14, 9], radius: 15 },
+    { kind: 'extrude', id: 'n1', sketch: 0, from: 3, height: 20 },
+  ] };
+  const original = evaluateDoc(stock, 1);
+  assert.ok(original.ok);
+  const ctx = { doc: stock, bodies: original.bodies, selection: { bodies: [0], faces: [], edges: [] } };
+  const defaults = shell.defaults!(ctx);
+  assert.equal(defaults.wallMode, 'uniform');
+  const values = { ...defaults, wallMode: 'separate-caps', t: 2, floorThickness: 3, ceilingThickness: 5 };
+  const fields = shell.fields!(ctx, values).map(field => field.key);
+  assert.deepEqual(fields, ['wallMode', 't', 'floorThickness', 'ceilingThickness']);
+  assert.throws(() => shell.build!(ctx, { ...values, join: 'sharp' }), /original upright L-shaped extrusion/);
+  const top = original.bodies[0].mesh.faces.findIndex(face => face.nativePlaneName === 'n1.top');
+  assert.ok(top >= 0);
+  const opened = { ...ctx, selection: { bodies: [], faces: [{ body: 0, face: top }], edges: [] } };
+  assert.deepEqual(shell.fields!(opened, values).map(field => field.key), ['t']);
+  assert.throws(() => shell.build!(opened, values), /no open faces/);
+  const closed = shell.build!(ctx, values), result = evaluateDoc(closed, 2);
+  assert.ok(result.ok && Math.abs(result.bodies[0].volume! - 2472 * Math.PI) < 1e-7);
+  const floor = editFields(closed.nodes, 2).find(field => field.key === 'floorThickness');
+  assert.ok(floor?.kind === 'number');
+  const edited = evaluateDoc({ ...closed, nodes: floor.set(closed.nodes, 4) }, 3);
+  assert.ok(edited.ok && Math.abs(edited.bodies[0].volume! - 2641 * Math.PI) < 1e-7);
+  const agent = await dispatchTool({ doc: stock, bodies: original.bodies }, 'features', { action: 'command', command: 'shell',
+    bodies: ['b1'], values, expectedRevision: revisionOf(stock) }, async next => evaluateDoc(next, 4));
+  assert.ok(agent.changed && !agent.isError, agent.content);
+  assert.deepEqual(agent.state.doc.nodes[2], closed.nodes[2]);
+});
+
 test('closed L Shell carries explicit corner values through History and native read', () => {
   const evaluated = evaluateDoc(doc, 1);
   assert.ok(evaluated.ok);

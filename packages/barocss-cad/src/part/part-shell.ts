@@ -7,6 +7,7 @@ import { booleanPrismatic, prismaticExtrude, type PrismaticSolid } from '../feat
 import { erodeSection } from '../features/section-offset.js';
 import { booleanCurveRegions, curveTolerance, regionMoments, segReverse, type CurveRegion2, type CurveSegment2, type XY } from '../brep/curved-arrangement.js';
 import { faceGeometry } from '../brep/analytic-boolean.js';
+import { circleOf } from '../brep/brep-tessellate.js';
 import { facetBrepFromTriangles } from '../mesh/facet-brep.js';
 import { buildProfileLoop, ExtrudedProfileLimits, type ProfileSegmentInput } from '../features/extruded-profile-solid.js';
 import { revolveProfile, revolveMassProperties, type RevolveInput } from '../features/revolve.js';
@@ -80,10 +81,13 @@ export function shellOperation(f: CadPartFeature & Record<string, unknown>, t: T
         fail('INPUT', 'Independent Shell floor and ceiling thicknesses need a closed body with no openings.');
       const capThickness = floorThickness ?? ceilingThickness, capLabel = floorThickness !== undefined ? 'floor' : 'ceiling';
       const limit = join === undefined && capThickness === undefined ? undefined : originalClosedLShellLimit(f.target, part, t);
+      const cylinder = pairedCaps ? originalClosedCylinderCaps(f.target, part, t) : undefined;
+      if (cylinder && join !== undefined)
+        fail('CAPABILITY', 'Independent cylindrical Shell caps do not support an explicit join.');
       const [targetId, output] = f.target.split('/'), capPrefix = `${targetId}.cut.`;
       const capOpening = names.length === 1 && (names[0] === `${targetId}.top` || names[0] === `${targetId}.bottom`);
       const openingSign = names[0] === `${targetId}.bottom` ? -1 : 1;
-      if (pairedCaps && limit === undefined)
+      if (pairedCaps && limit === undefined && cylinder === undefined)
         fail('CAPABILITY', 'Independent closed Shell caps need one original zero-draft upright orthogonal L extrusion.');
       if (!pairedCaps && floorThickness !== undefined && (limit === undefined || names.length !== 1 || names[0] !== `${targetId}.top`))
         fail('CAPABILITY', 'Independent Shell floor needs one original zero-draft upright orthogonal L extrusion with only its exact top cap opened.');
@@ -109,6 +113,7 @@ export function shellOperation(f: CadPartFeature & Record<string, unknown>, t: T
           if (expect) checkExpected(brep, expect, false, 'shell', fail);
         }
         if (floorThickness !== undefined && ceilingThickness !== undefined) {
+          if (cylinder) return { kind: 'solid', parts: [closedCylinderCaps(part, cylinder, thickness, floorThickness, ceilingThickness, at, fail)] };
           const original = brepOf(part, f.target), input = checkBrep(original, { strict: true });
           const stock = part.solid.kind === 'upright' ? part.solid.solid : fail('CAPABILITY', 'Independent closed Shell caps need original upright stock.');
           if (!input.valid || original.bodies.length !== 1 || original.bodies[0].kind !== 'solid' || original.shells.length !== 1
@@ -347,6 +352,106 @@ function closedLCapCavity(brep: Brep, original: Brep, stock: PrismaticSolid, z0:
       return edge && edge.curve.controlPoints.every(point => point[2] >= z0 - roundoff && point[2] <= z1 + roundoff);
     });
   }));
+}
+
+/** This admission binds the cavity to one literal, unplaced, unmodified authored circle extrusion. */
+function originalClosedCylinderCaps(reference: string, part: Part, t: Tools): { stock: PrismaticSolid; center: Readonly<XY>; radius: number } | undefined {
+  const owner = t.ref(reference, 'Shell cylinder stock'), author = owner.author;
+  if (reference !== owner.id || owner.part !== null || author?.kind !== 'extrude'
+    || owner.result.kind !== 'solid' || owner.result.parts.length !== 1 || owner.result.parts[0] !== part
+    || part.solid.kind !== 'upright' || part.history || part.moved || (author.draft !== undefined && author.draft !== 0)
+    || typeof author.height !== 'number' || !Number.isFinite(author.height) || !(author.height > 0)
+    || (author.from !== undefined && (typeof author.from !== 'number' || !Number.isFinite(author.from)))) return undefined;
+  const sketch = t.ref(author.sketch, 'Shell cylinder sketch'), source = sketch.author;
+  if (author.sketch !== sketch.id || sketch.part !== null || source?.kind !== 'sketch' || source.profile !== 'circle'
+    || source.plane !== undefined || source.holes?.length || source.regions?.length
+    || typeof source.radius !== 'number' || !Number.isFinite(source.radius) || !(source.radius > 0)
+    || !source.center.every(value => typeof value === 'number' && Number.isFinite(value))
+    || sketch.result.kind !== 'sketch' || !sketch.result.authoredCircle || sketch.result.frame
+    || sketch.result.holes?.length || sketch.result.regions?.length) return undefined;
+  const { center, radius } = sketch.result.authoredCircle, stock = part.solid.solid, slab = stock.slabs[0], from = author.from ?? 0;
+  if (radius !== source.radius || !center.every((value, axis) => value === source.center[axis])
+    || stock.slabs.length !== 1 || slab.z0 !== from || slab.z1 !== from + author.height
+    || slab.regions.length !== 1 || slab.regions[0].holes.length) return undefined;
+  const ring = slab.regions[0].outer, roundoff = 128 * Number.EPSILON * Math.max(1, radius, ...center.map(Math.abs));
+  if (!ring.length || !ring.every(segment => segment.kind === 'arc' && Math.abs(segment.r - radius) <= roundoff
+    && segment.c.every((value, axis) => value === center[axis]) && segment.sweep > 0 && !!segment.tag)
+    || Math.abs(ring.reduce((sum, segment) => sum + (segment.kind === 'arc' ? segment.sweep : 0), 0) - 2 * Math.PI) > 1e-12) return undefined;
+  return { stock, center, radius };
+}
+
+/** A blind coaxial analytic cutter keeps the two axial depths independent from the radial wall. */
+function closedCylinderCaps(part: Part, cylinder: NonNullable<ReturnType<typeof originalClosedCylinderCaps>>, thickness: number,
+  floor: number, ceiling: number, id: string, fail: Tools['fail']): Part {
+  const { stock, center, radius } = cylinder, slab = stock.slabs[0], r = radius - thickness;
+  if (!(thickness >= ExtrudedProfileLimits.minimumLengthMM && r >= ExtrudedProfileLimits.minimumRadiusMM))
+    fail('PARAMETER', 'The Shell wall thickness leaves no supported cylindrical cavity.');
+  const z0 = slab.z0 + floor, z1 = slab.z1 - ceiling;
+  if (!(slab.z1 - slab.z0 - floor - ceiling >= ExtrudedProfileLimits.minimumLengthMM
+    && z1 - z0 >= ExtrudedProfileLimits.minimumLengthMM && z0 > slab.z0 && z1 < slab.z1))
+    fail('PARAMETER', 'The Shell floor and ceiling thicknesses leave no supported cavity height.');
+  const original = brepOf(part, id), input = checkBrep(original, { strict: true });
+  if (!input.valid || original.bodies.length !== 1 || original.bodies[0].kind !== 'solid'
+    || original.shells.length !== 1 || !original.shells[0].closed || original.faces.length !== 4
+    || new Set(original.faces.map(face => face.name)).size !== 4)
+    fail('REFERENCE', 'Independent cylindrical Shell caps need one strict original cylinder.');
+  const ring = slab.regions[0].outer.map(segment => segment.kind === 'arc'
+    ? { ...segment, r, tag: `${id}.in.${segment.tag}` } : segment);
+  const hollow = prismaticExtrude([ring], z0, z1), regions = hollow.slabs[0]?.regions;
+  if (hollow.slabs.length !== 1 || regions?.length !== 1 || regions[0].holes.length
+    || !regions[0].outer.length || !regions[0].outer.every(segment => segment.kind === 'arc' && segment.r === r))
+    return fail('GEOMETRY', '[SHELL_NOT_CLOSED] independent cylindrical caps lost the circular cavity section.');
+  const cutter = { ...hollow, caps: [{ z: z0, regions, tag: `${id}.floor` }, { z: z1, regions, tag: `${id}.ceiling` }] };
+  const result: Part = { solid: { kind: 'upright', solid: booleanPrismatic(stock, cutter, 'difference') } };
+  const brep = brepOf(result, id), report = checkBrep(brep, { strict: true });
+  if (!report.valid || brep.bodies.length !== 1 || brep.bodies[0].kind !== 'solid' || brep.bodies[0].shells.length !== 2
+    || brep.shells.length !== 2 || !brep.shells.every(shell => shell.closed) || report.topology[0]?.genus !== 0
+    || report.counts.faces !== 8 || report.counts.loops !== 8 || report.counts.coedges !== 24
+    || report.counts.edges !== 12 || report.counts.vertices !== 8 || !brep.coedges.every(use => !!use.pcurve)
+    || !cylinderCapSupports(brep, original, center, radius, r, slab.z0, slab.z1, z0, z1, id))
+    fail('GEOMETRY', '[SHELL_NOT_CLOSED] independent cylindrical caps could not retain one strict cavity and the original outer supports.');
+  return { ...result, brep };
+}
+
+/** Certify actual shell ownership, opposing caps and complete native circular trims, beyond mass alone. */
+function cylinderCapSupports(brep: Brep, original: Brep, center: Readonly<XY>, radius: number, innerRadius: number,
+  lo: number, hi: number, z0: number, z1: number, id: string): boolean {
+  const [outer, inner] = brep.bodies[0].shells, roundoff = 128 * Number.EPSILON * Math.max(1, radius, ...center.map(Math.abs), Math.abs(lo), Math.abs(hi));
+  const near = (a: number, b: number) => Math.abs(a - b) <= roundoff;
+  const loops = new Map(brep.loops.map(loop => [loop.id, loop])), uses = new Map(brep.coedges.map(use => [use.id, use])), edges = new Map(brep.edges.map(edge => [edge.id, edge]));
+  if (outer === inner || new Set(brep.faces.map(face => face.name)).size !== 8
+    || brep.faces.filter(face => face.shell === outer).length !== 4 || brep.faces.filter(face => face.shell === inner).length !== 4) return false;
+  for (const face of original.faces) {
+    const matches = brep.faces.filter(candidate => candidate.name === face.name), old = faceGeometry(face), current = matches[0] && faceGeometry(matches[0]);
+    if (matches.length !== 1 || matches[0].shell !== outer || !current || old.kind !== current.kind) return false;
+    if (old.kind === 'plane' && (current.kind !== 'plane' || !old.n.every((value, axis) => near(value, current.n[axis]))
+      || !near(dot(old.n, sub(current.o, old.o)), 0))) return false;
+  }
+  for (const [shell, r, bottom, top, out] of [[outer, radius, lo, hi, 1], [inner, innerRadius, z0, z1, -1]] as const) {
+    const cylinders = brep.faces.filter(face => face.shell === shell && faceGeometry(face).kind === 'cylinder');
+    if (cylinders.length !== 2) return false;
+    for (const face of cylinders) {
+      const g = faceGeometry(face);
+      if (g.kind !== 'cylinder' || !near(g.r, r) || !near(g.c[0], center[0]) || !near(g.c[1], center[1])
+        || !near(g.a[0], 0) || !near(g.a[1], 0) || !near(Math.abs(g.a[2]), 1) || g.out !== out || face.loops.length !== 1 || face.surface.kind !== 'surface') return false;
+      const zs = face.surface.controlPoints.flat().map(point => point[2]);
+      if (!near(Math.min(...zs), bottom) || !near(Math.max(...zs), top)) return false;
+    }
+  }
+  const capSpecs = original.faces.filter(face => faceGeometry(face).kind === 'plane').map(face => {
+    const g = faceGeometry(face);
+    return { name: face.name, shell: outer, z: g.kind === 'plane' ? g.o[2] : NaN, normal: g.kind === 'plane' ? g.n[2] : NaN, r: radius };
+  }).concat([{ name: `${id}.floor`, shell: inner, z: z0, normal: 1, r: innerRadius }, { name: `${id}.ceiling`, shell: inner, z: z1, normal: -1, r: innerRadius }]);
+  return capSpecs.length === 4 && capSpecs.every(spec => {
+    const face = brep.faces.find(candidate => candidate.name === spec.name), g = face && faceGeometry(face), loop = face && loops.get(face.loops[0]);
+    return !!face && face.shell === spec.shell && face.loops.length === 1 && g?.kind === 'plane' && near(g.o[2], spec.z)
+      && near(g.n[0], 0) && near(g.n[1], 0) && g.n[2] === spec.normal && loop?.coedges.length === 2
+      && loop.coedges.every(useId => {
+        const use = uses.get(useId), edge = use && edges.get(use.edge), circle = edge && circleOf(edge.curve);
+        return !!circle && near(circle.r, spec.r) && near(circle.c[0], center[0]) && near(circle.c[1], center[1]) && near(circle.c[2], spec.z)
+          && !!edge && edge.curve.controlPoints.every(point => near(point[2], spec.z));
+      });
+  });
 }
 
 /** Authored ownership and the evaluated straight section must describe the same unplaced original L. */

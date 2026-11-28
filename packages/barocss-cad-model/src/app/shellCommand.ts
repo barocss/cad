@@ -3,7 +3,7 @@ import { refusal } from '../engine/refusal';
 import { oneBody, refOf, selectedBodies } from './bodyRef';
 import { boxShellSelection, buildBoxWallShell } from './boxShellSelection';
 import type { Command, Field, Values } from './commands';
-import { canSetClosedShellCorner, canSetShellCorner, separateShellCap, shellCornerOptions, shellOpenFaces } from './shellCorner';
+import { canSetClosedShellCaps, canSetClosedShellCorner, canSetShellCorner, separateShellCap, shellCornerOptions, shellOpenFaces } from './shellCorner';
 
 const floorField: Field = { key: 'floorThickness', label: 'Floor thickness', kind: 'mm', min: 0.1 };
 const ceilingField: Field = { key: 'ceilingThickness', label: 'Ceiling thickness', kind: 'mm', min: 0.1 };
@@ -19,14 +19,15 @@ export const shellCommand: Command = {
       const body = oneBody(ctx);
       if (!body) return [wall];
       const parent = refOf(body), open = shellOpenFaces(ctx, body);
-      if (!canSetShellCorner(ctx.doc.nodes, parent, open)) return [wall];
+      const hasCorner = canSetShellCorner(ctx.doc.nodes, parent, open);
+      if (!hasCorner && (open.length || !canSetClosedShellCaps(ctx.doc.nodes, parent))) return [wall];
       const corner: Field = { key: 'join', label: 'Inner corner', kind: 'choice', options: shellCornerOptions };
       const cap = separateShellCap(ctx.doc.nodes, parent, open);
       const separate = cap ? `separate-${cap}` : 'separate-caps';
       const mode: Field = { key: 'wallMode', label: 'Wall thickness', kind: 'choice',
         options: [{ value: 'uniform', label: 'Uniform' }, { value: separate, label: cap ? `Separate ${cap}` : 'Separate floor and ceiling' }] };
       const caps = cap === 'floor' ? [floorField] : cap === 'ceiling' ? [ceilingField] : [floorField, ceilingField];
-      return [mode, wall, corner, ...(values?.wallMode === separate ? caps : [])];
+      return [mode, wall, ...(hasCorner ? [corner] : []), ...(values?.wallMode === separate ? caps : [])];
     }
     const mode: Field = { key: 'wallMode', label: 'Wall thickness', kind: 'choice',
       options: [{ value: 'uniform', label: 'Uniform' }, { value: 'per-face', label: 'Per face' }] };
@@ -41,8 +42,9 @@ export const shellCommand: Command = {
     const parent = refOf(body), open = shellOpenFaces(ctx, body);
     const cap = separateShellCap(ctx.doc.nodes, parent, open);
     if (cap) return { t: 2, join: 'default', wallMode: 'uniform', [`${cap}Thickness`]: 2 };
-    return !open.length && canSetClosedShellCorner(ctx.doc.nodes, parent)
-      ? { t: 2, join: 'default', wallMode: 'uniform', floorThickness: 2, ceilingThickness: 2 } : { t: 2 };
+    if (open.length || !canSetClosedShellCaps(ctx.doc.nodes, parent)) return { t: 2 };
+    return { t: 2, wallMode: 'uniform', floorThickness: 2, ceilingThickness: 2,
+      ...(canSetClosedShellCorner(ctx.doc.nodes, parent) ? { join: 'default' } : {}) };
   },
   // The wall: an arrow into the body from the (first) open face; deeper is thicker.
   handles: (ctx, v) => {
@@ -62,8 +64,10 @@ export const shellCommand: Command = {
     const open = shellOpenFaces(ctx, body);
     const parent = refOf(body);
     if (v.wallMode === 'separate-caps') {
-      if (open.length || !canSetClosedShellCorner(ctx.doc.nodes, parent))
-        throw refusal('BAD_REFERENCE', 'Select one original upright L body with no open faces for a separate Shell floor and ceiling.');
+      if (open.length || !canSetClosedShellCaps(ctx.doc.nodes, parent))
+        throw refusal('BAD_REFERENCE', 'Select one original upright L or cylindrical body with no open faces for a separate Shell floor and ceiling.');
+      if (join !== undefined && !canSetClosedShellCorner(ctx.doc.nodes, parent))
+        throw refusal('BAD_REFERENCE', 'An explicit Shell inner corner needs an original upright L-shaped extrusion.');
       return withNode(ctx.doc, { kind: 'shell', parent, thickness: Number(v.t), open,
         floorThickness: Number(v.floorThickness), ceilingThickness: Number(v.ceilingThickness), ...(join === undefined ? {} : { join }) });
     }
