@@ -1,0 +1,10 @@
+# D2253 — Edit Box width from an original native vertex
+
+P5 [row 04](../../roadmap-rows/04.md) and [row 31](../../roadmap-rows/31.md) · [#629](https://github.com/barocss/cad/issues/629) · Base `6ff581af5`.
+
+- **FAIL, base.** An Agent proposal could edit a Box dimension by value. It refused the exact named native edge endpoint as the input to the edit.
+- **Decision.** A proposal for the original standalone Box can name its exact edge, the `from` or `to` endpoint on +X, and the target absolute X coordinate. It pins the current revision and uses the original editable Box footprint operation. The opposite face, depth, height, both feature IDs and the authored Box command remain. Direct calls, wrong-side, ambiguous, missing, stale, no-op and collapsed-width inputs refuse before changing the part. Leave-out restores the sketch and the Box command together. Studio approval is required.
+- **PASS, actual Studio.** Local MCP discovers the original endpoint at [14.25, −4.5, 8.125] mm and stages the target X=20.75 mm. Preview and Hide preserve the authored part. The user accepts in desktop Studio. Undo, Redo, Project Save, Close, reload and Open preserve the correct version. Node IDs and the Box editor remain available.
+- **PASS, physical geometry.** The four fixed vertices remain on X=2.25 mm. The other four vertices move from X=14.25 to X=20.75 mm with the same Y/Z coordinates. Native volume is 888 mm³ and centroid [11.5, −0.5, 5.125] mm. Strict B-rep passes. The reopened native result matches the applied result exactly.
+- **PASS, affected checks.** Node 22.19.0 reported 93 Model and 16 Studio tests, Model and Studio types, changed-file lint, and Studio production build. The final desktop run matched 1,637 frozen sources with no console error. The final tool prompt and list total is 24,953 characters within the existing 25,000-character limit. An earlier over-budget description and the test-only nullable volume assertion were corrected.
+- **NOT_RUN.** Other primitive directions, generated or assembled Box owners, free vertex deformation, live-provider execution and mobile. The broader research issue remains open.

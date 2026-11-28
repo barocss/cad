@@ -33,8 +33,10 @@ import { digestOf, requirementEvidenceRevision } from '../../util/digest';
 import { nestedParameterChecks, nestedParameterOps } from '../nestedParameterProposal';
 import { hasNestedFaceRepair, nestedFaceRepairOp, replayNestedFaceRepair, type NestedFaceRepair } from '../nestedFaceRepair';
 import { BROWSER_PROPOSAL_AUTHOR } from '../browserProposalTargets';
+import { BOX_VERTEX_WIDTH_APPROVAL, isBoxVertexWidthOperation } from './agentBoxVertexWidth';
 
 const browserApproval = 'A browser proposal needs approval by the user in Studio.';
+const boxVertexApproval = 'A Box vertex width proposal needs approval by the user in Studio.';
 
 /**
  * How far an agent may go on its own (D41), set per turn by the studio (`CAD_AUTONOMY`):
@@ -109,6 +111,7 @@ export async function proposalNeededAtL2(base: StudioDoc, cur: ChatState, evalua
 /** Why an agent may not accept this proposal at this autonomy, or null (D41). */
 export function agentMayNotAccept(p: Proposal, level: number): string | null {
   if (p.by.agent === BROWSER_PROPOSAL_AUTHOR) return browserApproval;
+  if (p.ops.some(isBoxVertexWidthOperation)) return boxVertexApproval;
   if (level < 3) return `At autonomy L${level} the user accepts proposals in the studio: tell them ${p.id} is ready.`;
   if (p.risk.approval.length) return `${p.id} always needs the user's approval (${p.risk.approval.join(', ')}).`;
   const hard = new Set(p.risk.hard_requirements_changed), breaks = (p.checks?.newly_failing ?? []).filter(x => hard.has(x));
@@ -146,6 +149,7 @@ export async function proposalOfWith(dispatch: PartRun, state: ChatState, ops: u
   const local = nested === undefined ? undefined : await nestedParameterChecks(state.doc, cur.doc, nested, evaluate);
   const risk = riskOf(state.doc, cur.doc, diff, broken.length, [...hardChanged, ...(local?.hardChanged ?? [])]);
   if (run.ops.some(isDirectThickenOperation)) risk.approval.push(DIRECT_SNAPSHOT_APPROVAL);
+  if (run.ops.some(isBoxVertexWidthOperation)) risk.approval.push(BOX_VERTEX_WIDTH_APPROVAL);
   if (local?.needsReview || faceRepair) risk.level = 'high';
   const changes = nested !== undefined || faceRepair ? String(run.results[0]?.did ?? nested) : diffLine(diff);
   // run.results also contains skipped opIds; run.ops retains only executed operations.
@@ -176,6 +180,7 @@ export async function acceptProposalWith(dispatch: PartRun, state: ChatState, id
   const p = state.doc.proposals?.find(q => q.id === id), by = o.by ?? { agent: 'user' };
   if (!p || p.status !== 'open') return { error: p ? `${id} is ${p.status} already.` : `No proposal ${id}.` };
   if (p.by.agent === BROWSER_PROPOSAL_AUTHOR && by.agent !== 'user') return { error: browserApproval };
+  if (by.agent !== 'user' && p.ops.some(isBoxVertexWidthOperation)) return { error: boxVertexApproval };
   const nested = nestedParameterOps(p.ops);
   const faceRepair = hasNestedFaceRepair(p.ops);
   if (faceRepair && (by.agent !== 'user' || p.by.agent !== 'user' || p.ops.length !== 1 || state.partOf))
@@ -328,7 +333,8 @@ export function partialDoc(base: StudioDoc, after: StudioDoc, parts: readonly Pr
     return { error: 'The Ruled surface and its Thicken must be accepted together.' };
   const out = new Set(leaveOut), nodes = [...after.nodes], boxSketches = new Set<string>();
   if (out.size && proposal) for (const [i, op] of proposal.ops.entries()) {
-    if (op.tool !== 'edit_feature' || op.args?.retainBoxCommand !== true || (op.args.part !== undefined && op.args.part !== 'base')) continue;
+    if (op.tool !== 'edit_feature' || (op.args?.part !== undefined && op.args.part !== 'base')
+      || (op.args?.retainBoxCommand !== true && !isBoxVertexWidthOperation(op))) continue;
     const sketch = proposal.orders?.[i]?.[0];
     if (!sketch) return { error: 'The proposal has no saved sketch order for its Box edit.' };
     boxSketches.add(sketch);

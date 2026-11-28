@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D2253: [D2253](notes/agent-box-vertex-width-2026-11-29/README.md), #629. Connect one original native Box corner to an explicitly approved, revision-pinned width edit.
+
 - D2252: [D2252](notes/cylinder-cap-rim-visibility-2026-11-29/README.md), #766. Restore both native cylinder rim intervals while retaining physical occlusion and the original grazing allowance.
 
 - D2251: [D2251](notes/represented-arch-mass-2026-11-29/README.md). Restore analytic mass for both represented STEP arches and verify actual Studio project reopen.

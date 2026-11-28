@@ -3,6 +3,7 @@
 import { commandById, commands, givenValues, shownFields, type Ctx, type Values } from '../../app/commands';
 import { agentRotatePivot } from './agentRotatePivot';
 import { agentVertexMove } from './agentVertexMove';
+import { boxVertexWidthSketch, hasBoxVertexWidthValues } from './agentBoxVertexWidth';
 import { canSetAgentClosedShellCaps, canSetAgentShellCap, canSetAgentShellCorner } from '../../app/shellCorner';
 import { PIVOT_FACE } from '../../app/pivotFaceCommand';
 import { isEditableBox, isEditableCylinder, updateBoxFootprint } from '../../app/editCommand';
@@ -577,6 +578,12 @@ async function editFeatureTool(state: ChatState, args: Record<string, unknown>, 
   const refusal = checkFeatureRevision(state, args.expectedRevision, 'EDIT');
   if (refusal) return refusal;
   const given = isObj(args.values) ? args.values : {};
+  if (hasBoxVertexWidthValues(given)) {
+    if (!options.proposal) return fail(state, 'Use proposals.propose and approve the Box vertex width edit in Studio.', { code: 'EDIT_INPUT' });
+    const box = boxVertexWidthSketch(state, args, given);
+    if ('error' in box) return fail(state, box.error, { code: 'EDIT_INPUT' });
+    return editFeatureTool(state, { index: 0, feature: box.feature, retainBoxCommand: true, expectedRevision: args.expectedRevision }, evaluate, options);
+  }
   const detach = Object.hasOwn(given, 'detachToDistance');
   if (detach && (given.detachToDistance !== true || args.expectedRevision === undefined || typeof args.index !== 'number'
     || args.feature !== undefined || Object.keys(given).length !== 1 || args.sketchChamfer !== undefined
