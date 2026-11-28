@@ -1,13 +1,13 @@
 # CAD roadmap — current status and execution order
 
-Updated 2026-11-28 · Priority authority: D520 · Latest delivery: D2136 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
+Updated 2026-11-28 · Priority authority: D520 · Latest delivery: D2137 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
 
 This is the only current status index. Detailed tracks define acceptance; the 34 stable row pages retain scope and issue navigation. Immutable decision notes retain results. Do not append chronological status paragraphs here. [D520 decision](notes/cad-roadmap-replan-2026-11-04/README.md) supersedes D445 execution order and historical next-item text, while retaining its safeguards and bounded proofs.
 
 ## Now and next
 
-- **Current position:** [D2136](notes/step-unicode-topology-names-2026-11-28/README.md), P2 rows 13 and 16. Printable Unicode exact face and edge names survive the actual Studio STEP bytes, an independent read and fresh Open. The wider [#16](https://github.com/barocss/cad/issues/16) scope remains open.
-- **Next MAIN:** D2137, P1 rows 09 and 16. Check recovery when two fixed straight edges refuse Parallel or Perpendicular in Sketch. Use the existing Fix rows and verify an actual click-to-recovery workflow ([#183](https://github.com/barocss/cad/issues/183)).
+- **Current position:** [D2137](notes/sketch-fixed-edge-pair-conflict-2026-11-28/README.md), P1 rows 09 and 16. Studio links the Fix rows that prevent Parallel or Perpendicular on two separately fixed straight edges. Both recover after removing one Fix and survive native reopen. [#183](https://github.com/barocss/cad/issues/183) remains open.
+- **Next MAIN:** D2138, P5 rows 07, 16 and 30. Check the missing closed rectangular Shell with independently authored wall thicknesses. Reuse the one- and two-opening box Shell path where it fits and preserve the wider surface HOLDs ([#13](https://github.com/barocss/cad/issues/13)).
 - **Separate follow-ups:** Continue Studio App extraction in cohesive parts with affected desktop checks. [#608 Rendering](https://github.com/barocss/cad/issues/608) stays on HOLD. API inventory drift remains open. The issue tracker records [#126](https://github.com/barocss/cad/issues/126), [#613](https://github.com/barocss/cad/issues/613), [#152](https://github.com/barocss/cad/issues/152) and [#22](https://github.com/barocss/cad/issues/22) as closed.
 - **Active repository:** [barocss/cad](https://github.com/barocss/cad), based on `origin/main`. Fetch before work and preserve unexpected changes. The [migration record](../../../docs/migration/README.md) maps the former `local/cad-dev` history and issue numbers.
 - **Evidence correction:** D482 records2167 PASS/0 FAIL/2 existing SKIP in a later full-kernel run than D433. Neither result is a new full-suite PASS at this audit HEAD. [D482 record](notes/vertical-contact-refusal-2026-11-04/README.md).

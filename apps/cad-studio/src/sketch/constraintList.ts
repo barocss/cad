@@ -158,6 +158,37 @@ export function fixedEdgeAxisConflict(shape: Polygon, picked: readonly SketchPic
   };
 }
 
+/** Prove a refused relationship from the targets of four distinct explicit Fix constraints. */
+export function fixedEdgePairConflict(shape: Polygon, picked: readonly SketchPick[], kind: ConstraintKind) {
+  if ((kind !== 'parallel' && kind !== 'perpendicular') || !shape.closed || shape.pending || picked.length !== 2) return;
+  const [first, second] = picked;
+  if (first.kind !== 'edge' || second.kind !== 'edge' || first.done || second.done) return;
+  const a = first.i, b = second.i, n = shape.points.length;
+  if (![a, b].every(i => Number.isSafeInteger(i) && i > 0 && i + 1 < n && !shape.bulges?.[i])
+    || Math.abs(a - b) < 2) return;
+  if (shape.rules?.some(rule => rule.kind === kind
+    && ((rule.a === a && rule.b === b) || (rule.a === b && rule.b === a)))) return;
+  const startA = explicitFixedPoint(shape, a), endA = explicitFixedPoint(shape, a + 1);
+  const startB = explicitFixedPoint(shape, b), endB = explicitFixedPoint(shape, b + 1);
+  if (!startA || !endA || !startB || !endB) return;
+
+  const ax = endA.at[0] - startA.at[0], ay = endA.at[1] - startA.at[1];
+  const bx = endB.at[0] - startB.at[0], by = endB.at[1] - startB.at[1];
+  // Fix allows 1e-7 mm in each endpoint coordinate. Bound the resulting vector error and subtraction roundoff.
+  const vectorError = 4 * CadNumericPolicy.linearTolerance + 32 * Number.EPSILON * CadNumericPolicy.coordinateAbs;
+  const lengthA = Math.hypot(ax, ay) - vectorError, lengthB = Math.hypot(bx, by) - vectorError;
+  if (!isSolverLength(lengthA) || !isSolverLength(lengthB)) return;
+  const cross = Math.abs(ax * by - ay * bx), dot = Math.abs(ax * bx + ay * by);
+  const gap = kind === 'parallel' ? Math.atan2(cross, dot) : Math.atan2(dot, cross);
+  // Include the signed-angle residual tolerance and both directions' maximum rotation.
+  const margin = vectorError / lengthA + vectorError / lengthB + 1e-9 + 64 * Number.EPSILON;
+  if (gap <= margin) return;
+  return {
+    ids: [startA.id, endA.id, startB.id, endB.id],
+    reason: `Edges ${a + 1} and ${b + 1} cannot be ${kind} with all four endpoints fixed.`,
+  };
+}
+
 /** A circular arc's chord cannot exceed its diameter. Attribute only explicit endpoint locks. */
 export function fixedArcRadiusConflict(shape: Polygon, key: string, value: number) {
   const match = /^rad(\d+)$/.exec(key);

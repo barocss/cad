@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { ELLIPSE_POINTS, ellipseShape } from '@barocss/cad-model/sketch/ellipse';
 import { commitDimension, removeConstraint, type Polygon } from '@barocss/cad-model/sketch/rules';
-import { activeCircleDistanceRow, circleDistanceConflict, constraintListRows, edgeCircleDistanceConflict, filterConstraintList, fixedArcRadiusConflict, fixedEdgeAxisConflict, fixedPointDistanceConflict, opposingLengthConflict } from '../src/sketch/constraintList';
+import { activeCircleDistanceRow, circleDistanceConflict, constraintListRows, edgeCircleDistanceConflict, filterConstraintList, fixedArcRadiusConflict, fixedEdgeAxisConflict, fixedEdgePairConflict, fixedPointDistanceConflict, opposingLengthConflict } from '../src/sketch/constraintList';
 
 test('a fixed arc chord proves only radius requests below half its length', () => {
   const shape: Polygon = {
@@ -46,6 +46,33 @@ test('a diagonal edge with two explicit Fix rows identifies the blocking coordin
   assert.equal(fixedEdgeAxisConflict(shape, [edge, { kind: 'edge', i: 3 }], 'vertical'), undefined);
   assert.equal(fixedEdgeAxisConflict(shape, [{ ...edge, done: true }], 'vertical'), undefined);
   assert.equal(fixedEdgeAxisConflict(shape, [edge], 'parallel'), undefined);
+});
+
+test('only two independently fixed straight edges with a proven angle conflict identify four Fix rows', () => {
+  const points: Polygon['points'] = [[0, 0], [40, 0], [46, 20], [10, 20], [10, 34], [0, 34]];
+  const picks = (a: number, b: number) => [{ kind: 'edge', i: a }, { kind: 'edge', i: b }] as const;
+  for (const [kind, target] of [['parallel', 3], ['perpendicular', 4]] as const) {
+    const rules = [1, 2, target, target + 1].map(point => ({ kind: 'fix' as const, point, at: points[point] }));
+    const shape: Polygon = { kind: 'polygon', points, closed: true, rules };
+    assert.deepEqual(fixedEdgePairConflict(shape, picks(1, target), kind), {
+      ids: ['rule:0', 'rule:1', 'rule:2', 'rule:3'],
+      reason: `Edges 2 and ${target + 1} cannot be ${kind} with all four endpoints fixed.`,
+    });
+    assert.deepEqual(fixedEdgePairConflict(shape, picks(target, 1), kind)?.ids, ['rule:2', 'rule:3', 'rule:0', 'rule:1']);
+    for (const candidate of [
+      { ...shape, closed: false },
+      { ...shape, bulges: [0, 0.2] },
+      { ...shape, rules: rules.slice(1) },
+      { ...shape, rules: [...rules, rules[0]] },
+      { ...shape, rules: [...rules, { kind, a: 1, b: target }] },
+      // The Fix targets permit a rotation larger than the angular residual alone.
+      { ...shape, rules: [rules[0], { ...rules[1], at: [40 + 1e-7, 20] }, rules[2], rules[3]] },
+      { ...shape, rules: [rules[0], { ...rules[1], at: [40, 0.001] }, rules[2], rules[3]] },
+    ] satisfies Polygon[]) assert.equal(fixedEdgePairConflict(candidate, picks(1, target), kind), undefined);
+    for (const other of [picks(0, target), picks(1, 2), picks(1, 5), picks(1, 1)]) {
+      assert.equal(fixedEdgePairConflict(shape, other, kind), undefined);
+    }
+  }
 });
 
 test('D1105 attributes a point distance only to the two explicit and unambiguous Fix targets', () => {

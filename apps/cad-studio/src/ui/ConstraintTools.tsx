@@ -12,7 +12,7 @@ import {
 import { settleShape } from '@barocss/cad-model/sketch/settle';
 import type { SketchState } from '@barocss/cad-model/sketch/types';
 import { clearConstraintInspection, inspectConstraint, keepsDimensionDraft, type ConstraintComparison, type ConstraintInspection, type ConstraintInspectionStore } from '../sketch/constraintInspection';
-import { fixedEdgeAxisConflict } from '../sketch/constraintList';
+import { fixedEdgeAxisConflict, fixedEdgePairConflict } from '../sketch/constraintList';
 import { useStoreValue } from '../state/valueStore';
 import { duplicatePointDistance } from './sketchPresentation';
 import { ConstraintList } from './ConstraintList';
@@ -54,8 +54,8 @@ export function ConstraintTools({ shape: s, owner, conflictIds, documentScope, i
   onShape(shape: Polygon): void; onPicked(picks: SketchPick[]): void; onEditDim(key: string | null): void;
 }) {
   const [refusal, setRefused] = useState<string | { source: Polygon; picked: readonly SketchPick[]; reason: string; ids: readonly string[] } | null>(null);
-  const axisConflict = typeof refusal === 'object' && refusal?.source === s && refusal.picked === picked ? refusal : null;
-  const refused = typeof refusal === 'string' ? refusal : axisConflict?.reason;
+  const fixedConflict = typeof refusal === 'object' && refusal?.source === s && refusal.picked === picked ? refusal : null;
+  const refused = typeof refusal === 'string' ? refusal : fixedConflict?.reason;
   const [patternDraft, setPatternDraft] = useState<PatternDraft>({ axis: 'x', sign: 1, spacing: '10', count: '3' });
   const [patternEdits, setPatternEdits] = useState<Record<string, { count: string; spacing: string }>>({});
   const [pendingPatternConfirm, setPendingPatternConfirm] = useState<PendingPatternRemoval | null>(null);
@@ -173,7 +173,7 @@ export function ConstraintTools({ shape: s, owner, conflictIds, documentScope, i
       ? current.result : applyConstraint(s, picked, kind);
     clearConstraintInspection(inspection, owner);
     if (!r.ok) {
-      const fixed = fixedEdgeAxisConflict(s, picked, kind);
+      const fixed = fixedEdgeAxisConflict(s, picked, kind) ?? fixedEdgePairConflict(s, picked, kind);
       setRefused(fixed ? { ...fixed, source: s, picked } : r.reason);
       return;
     }
@@ -312,7 +312,7 @@ export function ConstraintTools({ shape: s, owner, conflictIds, documentScope, i
         </div>
       )}
     </>}
-    <ConstraintList shape={s} owner={owner} conflictIds={axisConflict?.ids ?? conflictIds} documentScope={documentScope} inspection={inspection}
+    <ConstraintList shape={s} owner={owner} conflictIds={fixedConflict?.ids ?? conflictIds} documentScope={documentScope} inspection={inspection}
       inspectedId={inspectedId} picked={picked} onShape={onShape} onEditDim={onEditDim} onRefuse={setRefused} />
     {resolvedRefs.length > 0 && <>
       <div className="card-title" style={{ marginTop: 10 }}>REFERENCE DIMENSIONS · {resolvedRefs.length}</div>
