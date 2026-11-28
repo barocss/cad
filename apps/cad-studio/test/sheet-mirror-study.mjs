@@ -6,7 +6,7 @@ const expectGuidance = process.env.MIRROR_GUIDANCE_EXPECT === '1';
 async function guidance(f, hud, mode, label) {
   if (!expectGuidance) return;
   const text = mode === 'reflected'
-    ? 'Reflected body only supports the YZ plane at X = 0. Flat-pattern availability depends on the evaluated result.'
+    ? 'Reflected body only requires an XY, XZ or YZ plane through the origin. Flat-pattern availability depends on the evaluated result.'
     : 'Original and reflection creates a solid result without a sheet-metal flat pattern.';
   const row = hud.locator('.hud-step').filter({ hasText: text });
   await row.getByText(text, { exact: true }).waitFor();
@@ -166,26 +166,19 @@ export async function qualifyMirrorBoundary(f, seed, { name, selectBody, showFla
     volume: combined.mass.volume, centroid: combined.mass.centroid, flatError: combined.flatError, bytes: saved.length, sha256: sha256(saved) });
   if (!replacement) return;
 
-  f.phase = 'refuse reflected-only Mirror outside the origin YZ plane';
+  f.phase = 'refuse reflected-only Mirror away from the origin';
   let reflect = await openSourceMirror();
   const plane = reflect.getByLabel('Plane', { exact: true });
   const at = reflect.getByLabel('Plane at', { exact: true });
   const result = reflect.getByLabel('Result', { exact: true });
   await result.selectOption('reflected');
   await at.fill('5');
-  const refusal = reflect.getByText(/Reflected body only uses the YZ plane at X = 0/);
+  const refusal = reflect.getByText(/Reflected body only requires an XY, XZ or YZ plane through the origin/);
   await refusal.waitFor();
   assert.equal(await button(reflect, 'Apply').isDisabled(), true);
   await f.same(source);
   await guidance(f, reflect, 'reflected', 'offset-refusal-guidance');
   await f.snapshot('06-reflected-offset-refused');
-  await plane.selectOption('xz');
-  await at.fill('0');
-  await refusal.waitFor();
-  assert.equal(await button(reflect, 'Apply').isDisabled(), true);
-  await f.same(source);
-  await guidance(f, reflect, 'reflected', 'plane-refusal-guidance');
-  await f.snapshot('07-reflected-plane-refused');
 
   f.phase = 'replace the sheet with a single reflection and open its Flat dialog';
   await plane.selectOption('yz');

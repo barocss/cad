@@ -1,6 +1,6 @@
 import { splitNormalProblem } from './splitPlaneInput';
 import { eligibleFillPatternRegions, fillFeaturePatternProblem, fillRegionSnapshot } from '../engine/fillFeaturePattern';
-import { appendMirrorRecipe } from './mirrorRecipe';
+import { appendMirrorRecipe, mirrorRecipeValues } from './mirrorRecipe';
 import { bodyPatternCommands } from './bodyPatternCommands';
 import { splitOutputSide } from '../engine/splitOutput';
 import { blindDrillPointHeight } from '@barocss/cad';
@@ -916,7 +916,7 @@ const allCommands: Command[] = [
       : v.planeFace ? [{ label: 'Plane face', text: String(v.planeFace), done: true },
         { label: 'Fixed plane', text: 'Uses this face’s current plane position. Later face changes do not move the mirror plane.', done: true }] : []),
       ...(oneBody(ctx)?.sheet ? [{ label: 'Flat pattern', text: v.result === 'reflected'
-        ? 'Reflected body only supports the YZ plane at X = 0. Flat-pattern availability depends on the evaluated result.'
+        ? `${mirrorReplacementPlane} Flat-pattern availability depends on the evaluated result.`
         : 'Original and reflection creates a solid result without a sheet-metal flat pattern.', done: false }] : []),
     ],
     onPick: (ctx, v, hit) => {
@@ -937,8 +937,9 @@ const allCommands: Command[] = [
       const body = refOf(selected);
       if (v.result === 'reflected') {
         if (!selected.sheet) throw refusal('SHEET_PICK', 'Select a sheet-metal body for Reflected body only.');
-        if (v.plane !== 'yz' || Number(v.at) !== 0) throw refusal('SHEET_VALUE', mirrorReplacementPlane);
-        return withNode(ctx.doc, { kind: 'mirror', parent: body, plane: 'yz', keep: false });
+        const { plane, at } = mirrorRecipeValues(v);
+        if (at !== 0) throw refusal('SHEET_VALUE', mirrorReplacementPlane);
+        return withNode(ctx.doc, { kind: 'mirror', parent: body, plane, keep: false });
       }
       return appendMirrorRecipe(ctx.doc, body, v, !selected.sheet);
     },

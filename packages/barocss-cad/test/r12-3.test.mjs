@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { evaluateCadPart, flatPattern, checkOutput, faceGeometry, flatPatternOf, massPropertiesOf, reevaluate } from '../dist/index.js';
+import { evaluateCadPart, flatPattern, checkOutput, faceGeometry, flatPatternOf, massPropertiesOf, surfaceAreaOf, reevaluate } from '../dist/index.js';
 
 // R12.3a (D118): edge flanges and their end reliefs. Oracles from the definitions, not the construction:
 // - where the outer virtual sharp lands: on the edge (material inside), T·tan(θ/2) past it (material outside: the inner
@@ -143,7 +143,10 @@ test('R12.3a sheet Translate keeps named bends, table provenance, a flat and a s
   assert.deepEqual(original.sheet, originalReport);
 });
 
-test('R12.3a single YZ reflection carries bend-table provenance, supports a subsequent flange, upstream thickness edit, and double reflection', () => {
+for (const plane of ['yz', 'xz', 'xy']) test(`R12.3a ${plane.toUpperCase()} reflection carries bend-table provenance, supports a subsequent flange, upstream thickness edit, and double reflection`, () => {
+  const reflectionAxis = { yz: 0, xz: 1, xy: 2 }[plane];
+  const reflect = point => point.map((value, axis) => axis === reflectionAxis ? -value : value);
+  const pointClose = (value, expected, message) => value.forEach((coordinate, i) => close(coordinate, expected[i], 1e-9, message));
   const { input: { partDocument } } = JSON.parse(readFileSync(new URL('../conformance/r12/accept-l-bracket.json', import.meta.url), 'utf8'));
   const bendTable = {
     id: 'reflect-shop-table',
@@ -164,19 +167,52 @@ test('R12.3a single YZ reflection carries bend-table provenance, supports a subs
 
   const base = makeBase(1.5);
   const before = evaluateCadPart(D(base)), original = before.outputs[0], originalReport = structuredClone(original.sheet);
-  const mirror = { id: 'm', kind: 'mirror', target: 'n6', plane: 'yz', keep: false };
+  const mirror = { id: 'm', kind: 'mirror', target: 'n6', plane, keep: false };
   const afterMirror = reevaluate(before, { document: D([...base, mirror]) }), reflected = afterMirror.outputs[0];
   assert.equal(checkOutput(reflected).valid, true);
   assert.deepEqual(reflected.sheet.bendTable, bendTable);
   assert.deepEqual(reflected.sheet.bends[0].table, { table: 'reflect-shop-table', rows: [0], how: 'exact', estimate: false });
 
+  const originalMass = massPropertiesOf(original);
+  const mass = massPropertiesOf(reflected), flatMirror = flatPatternOf(reflected);
+  const allowance15 = Math.PI * 1.08, length15 = 64 + allowance15;
+  close(mass.volume, 2880 + 447 * Math.PI / 16, 1e-9, 'reflected volume');
+  close(surfaceAreaOf(reflected), 4122 + 457 * Math.PI / 8, 1e-8, 'reflected surface area');
+  pointClose(mass.centroid, reflect(originalMass.centroid), 'reflected centroid');
+  pointClose(reflected.sheet.bends[0].axis.origin, reflect([3, 30, 3]), 'reflected bend origin');
+  pointClose(reflected.sheet.bends[0].axis.direction, reflect([0, -1, 0]), 'reflected bend direction');
+  pointClose(faceGeometry(reflected.brep.faces.find(face => face.name === reflected.sheet.fixedFace)).n, reflect([-1, 0, 0]), 'reflected fixed-face normal');
+  const vertexPoints = output => output.brep.vertices.map(vertex => vertex.point);
+  vertexPoints(reflected).forEach((point, i) => pointClose(point, reflect(vertexPoints(original)[i]), 'reflected vertex'));
+  pointClose(flatMirror.box.max, [30, length15], 'reflected flat box');
+  close(flatMirror.area, 1920 + 691 * Math.PI / 40, 1e-9, 'reflected flat area');
+  const holeCentres = flat => flat.loops.filter(loop => !loop.outer).map(loop => {
+    assert.equal(loop.segments.length, 1);
+    assert.equal(loop.segments[0].kind, 'arc');
+    assert.equal(loop.segments[0].ccw, false);
+    return loop.segments[0].center;
+  }).sort((a, b) => a[1] - b[1]);
+  const holeStation = plane === 'xz' ? [[15, 10], [12, length15 - 15]] : [[18, 15], [15, length15 - 10]];
+  const centres = holeCentres(flatMirror);
+  assert.equal(centres.length, 2);
+  centres.forEach((point, i) => pointClose(point, holeStation[i], 'reflected flat hole centre'));
+  const [firstBend] = flatMirror.bends;
+  assert.equal(firstBend.direction, 'down');
+  const bendStation = 27 + allowance15 / 2;
+  firstBend.centre.forEach(point => close(point[1], plane === 'xz' ? bendStation : length15 - bendStation, 1e-9, 'bend station'));
+
   // Double reflection restores coordinates, fixed skin normal, bend axis and table provenance.
-  const twice = reevaluate(afterMirror, { document: D([...base, mirror, { id: 'm2', kind: 'mirror', target: 'm', plane: 'yz', keep: false }]) }).outputs[0];
+  const twice = reevaluate(afterMirror, { document: D([...base, mirror, { id: 'm2', kind: 'mirror', target: 'm', plane, keep: false }]) }).outputs[0];
   assert.equal(checkOutput(twice).valid, true);
   assert.deepEqual(twice.sheet.bendTable, bendTable);
   assert.deepEqual(twice.sheet.bends[0].table, { table: 'reflect-shop-table', rows: [0], how: 'exact', estimate: false });
   twice.sheet.bends[0].axis.origin.forEach((value, i) => close(value, originalReport.bends[0].axis.origin[i], 1e-12, 'double-reflected origin'));
   twice.sheet.bends[0].axis.direction.forEach((value, i) => close(value, originalReport.bends[0].axis.direction[i], 1e-12, 'double-reflected direction'));
+
+  vertexPoints(twice).forEach((point, i) => pointClose(point, vertexPoints(original)[i], 'double-reflected vertex'));
+  const restoredFlat = flatPatternOf(twice);
+  const originalCentres = holeCentres(flatPatternOf(original));
+  holeCentres(restoredFlat).forEach((point, i) => pointClose(point, originalCentres[i], 'double-reflected flat hole centre'));
 
   // Subsequent 20 mm flange on the named reflected edge + upstream thickness edit (1.5 -> 2.0 mm).
   const subsequent = { id: 'fl', kind: 'sheet-flange', target: 'm', edge: 'n0.end|n0.leg1.a', length: 20 };
@@ -192,9 +228,9 @@ test('R12.3a single YZ reflection carries bend-table provenance, supports a subs
     const s = R + thickness;
     const expectedVolume = width * (thickness * (90 - 4 * s) + Math.PI / 2 * (s ** 2 - R ** 2)) - 2 * Math.PI * bore ** 2 * thickness;
     close(massPropertiesOf(flanged).volume, expectedVolume, 1e-9, `reflected flange volume t=${thickness}`);
-    assert.ok(massPropertiesOf(flanged).centroid[0] < 0, 'reflected flange stays on -X side');
-    flanged.sheet.bends[1].axis.origin.forEach((value, i) => close(value, [-(40 - s), 30, -R][i], 1e-12, `reflected flange axis origin t=${thickness}`));
-    flanged.sheet.bends[1].axis.direction.forEach((value, i) => close(value, [0, -1, 0][i], 1e-12, `reflected flange axis direction t=${thickness}`));
+    assert.ok(massPropertiesOf(flanged).centroid[0] * reflect([1, 1, 1])[0] > 0, 'flange stays on the reflected side');
+    flanged.sheet.bends[1].axis.origin.forEach((value, i) => close(value, reflect([40 - s, 30, -R])[i], 1e-12, `reflected flange axis origin t=${thickness}`));
+    flanged.sheet.bends[1].axis.direction.forEach((value, i) => close(value, reflect([0, -1, 0])[i], 1e-12, `reflected flange axis direction t=${thickness}`));
 
     const flat = flatPatternOf(flanged);
     const allowance = Math.PI / 2 * (R + kVal * thickness), deduction = 2 * s - allowance, length = 90 - 2 * deduction;
@@ -212,8 +248,8 @@ test('R12.3a single YZ reflection carries bend-table provenance, supports a subs
       return loop.segments[0].center;
     }).sort((a, b) => a[1] - b[1]);
     assert.equal(holes.length, 2);
-    close(holes[0][0], 18, 1e-12, 'asymmetric hole keeps mirrored X station');
-    close(holes[1][0], 15, 1e-12, 'vertical leg hole X station');
+    const orderedX = plane === 'xz' ? [15, 12] : [18, 15];
+    holes.forEach((point, i) => close(point[0], orderedX[i], 1e-12, 'reflected flange hole station'));
   }
 
   // Missing row in bend table refuses cleanly without mutating the prior accepted output.
@@ -357,8 +393,6 @@ test('R12.3a an unqualified mirror, scale, pattern or union drops the sheet repo
   const base = [...plate, flange()];
   const transforms = [
     { id: 'm', kind: 'mirror', target: 'fl', plane: 'yz' },
-    { id: 'm', kind: 'mirror', target: 'fl', plane: 'xz', keep: false },
-    { id: 'm', kind: 'mirror', target: 'fl', plane: 'xy', keep: false },
     { id: 'm', kind: 'scale', target: 'fl', factor: 1 },
     { id: 'm', kind: 'linear-pattern', target: 'fl', axis: 'x', spacing: 200, count: 2 },
   ];

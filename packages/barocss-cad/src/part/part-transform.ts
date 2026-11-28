@@ -98,7 +98,7 @@ export function transformOperation(f: CadPartFeature & Record<string, unknown>, 
       const target = solids(f.target, 'target'), plane = f.plane;
       if (plane !== 'xy' && plane !== 'xz' && plane !== 'yz') fail('INPUT', 'plane must be xy, xz or yz');
       const m: BrepAffine['matrix'] = plane === 'xy' ? [1, 0, 0, 0, 1, 0, 0, 0, -1] : plane === 'xz' ? [1, 0, 0, 0, -1, 0, 0, 0, 1] : [-1, 0, 0, 0, 1, 0, 0, 0, 1];
-      if (f.keep === false && plane === 'yz') return () => carryRigidSheet(moveAll(target, m, [0, 0, 0]), brepOf, at);
+      if (f.keep === false) return () => carryRigidSheet(moveAll(target, m, [0, 0, 0]), brepOf, at);
       if (!f.keep) return () => moveAll(target, m, [0, 0, 0]);
       return () => many(target.map(p => boolean(p.solid, affine(p.solid, m, [0, 0, 0], n => n + '@m'), 'union', at)));
     }

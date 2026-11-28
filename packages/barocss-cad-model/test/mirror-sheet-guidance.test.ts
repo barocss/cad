@@ -15,7 +15,7 @@ test('Only one selected sheet body gets the flat-pattern contract, never a succe
     const steps = mirror.steps!(sheet, { plane: 'yz', at: 0, result });
     assert.equal(steps.length, 1); assert.equal(steps[0].label, 'Flat pattern'); assert.equal(steps[0].done, false);
     if (result === 'combined') assert.equal(steps[0].text, 'Original and reflection creates a solid result without a sheet-metal flat pattern.');
-    else assert.equal(steps[0].text, 'Reflected body only supports the YZ plane at X = 0. Flat-pattern availability depends on the evaluated result.');
+    else assert.equal(steps[0].text, 'Reflected body only requires an XY, XZ or YZ plane through the origin. Flat-pattern availability depends on the evaluated result.');
     assert.deepEqual(mirror.steps!(context(rectanglePart(40, 30, 10)), { result }), []);
     assert.deepEqual(mirror.steps!({ ...sheet, selection: { bodies: [], faces: [], edges: [] } }, { result }), []);
     assert.deepEqual(mirror.steps!({ ...sheet, bodies: [...sheet.bodies, ...sheet.bodies], selection: { bodies: [0, 1], faces: [], edges: [] } }, { result }), []);

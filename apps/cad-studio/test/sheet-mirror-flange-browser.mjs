@@ -7,6 +7,15 @@ import { clickModelCommand } from './model-rail-helper.mjs';
 const fixture = 'packages/barocss-cad-model/test/fixtures/sheet-l-bracket.calls.json';
 const canonical = 'packages/barocss-cad/conformance/r12/accept-l-bracket.json';
 const repo = new URL('../../../', import.meta.url);
+const plane = process.argv[3] ?? 'yz';
+const baseline = process.argv.includes('--baseline');
+const originPlane = {
+  yz: { point: [-40, 15, 0], view: 'Bottom left', sign: [-1, 1, 1] },
+  xz: { point: [40, -15, 0], view: 'Bottom right', sign: [1, -1, 1] },
+  xy: { point: [40, 15, 0], view: 'Top right', sign: [1, 1, -1] },
+}[plane];
+assert.ok(originPlane, 'Use yz, xz or xy');
+const reflect = point => point.map((value, axis) => value * originPlane.sign[axis]);
 const pins = [
   'apps/cad-studio/test/sheet-mirror-flange-browser.mjs',
   'packages/barocss-cad/src/part/part-transform.ts',
@@ -24,8 +33,8 @@ const f = await createFlow({
   requiredFrozen: pins,
   qualification: 'Verify subsequent flange, upstream thickness edit, Undo/Redo and Save/Open on a reflected sheet and a disjoint duplicate copy.',
   limits: [
-    'Asymmetric D546 L-bracket (hole n1 at [25, 18]), single YZ reflection at X = 0 (keep: false), 20 mm flange on n0.end|n0.leg1.a, thickness edit 1.5 -> 2.0 mm.',
-    'Disjoint Duplicate (offset X = 60 mm) with copy-only 20 mm flange on n7.end|n7.leg1.a while keeping original 1-bend sheet invariant.',
+    `Asymmetric D546 L-bracket (hole n1 at [25, 18]), single ${plane.toUpperCase()} reflection through the origin (keep: false), 20 mm flange on n0.end|n0.leg1.a, thickness edit 1.5 -> 2.0 mm.`,
+    ...(plane === 'yz' ? ['Disjoint Duplicate (offset X = 60 mm) with copy-only 20 mm flange on n7.end|n7.leg1.a while keeping original 1-bend sheet invariant.'] : []),
   ],
   inspectorSource: `
 import assert from 'node:assert/strict';
@@ -171,7 +180,8 @@ function checkReflectedFlanged(native, thickness) {
   assert.equal(native.bodyCount, 1);
   assert.ok(native.sheet && native.flat, JSON.stringify(native.flatError));
   near(native.mass.volume, expected.volume, expected.volume * 1e-9);
-  assert.ok(native.mass.centroid[0] < 0);
+  assert.ok(native.mass.centroid[0] * originPlane.sign[0] > 0);
+  assert.ok(native.mass.centroid[1] * originPlane.sign[1] > 0);
   assert.equal(native.sheet.thickness, thickness);
   assert.deepEqual(native.sheet.bends.map(b => b.name), ['n0.bend1', 'n8.bend']);
   const tol = 1e-11 * expected.length;
@@ -181,8 +191,8 @@ function checkReflectedFlanged(native, thickness) {
   assert.deepEqual(native.flat.bends.map(b => [b.name, b.direction]), [['n0.bend1', 'down'], ['n8.bend', 'up']]);
   const holes = native.flat.loops.filter(l => !l.outer).map(l => l.segments[0].center).sort((a, b) => a[1] - b[1]);
   assert.equal(holes.length, 2);
-  near(holes[0][0], 18, tol);
-  near(holes[1][0], 15, tol);
+  const expectedHoleXs = plane === 'yz' ? [18, 15] : plane === 'xz' ? [15, 12] : [18, 15];
+  holes.forEach((point, index) => near(point[0], expectedHoleXs[index], tol));
 }
 
 await f.run(async () => {
@@ -198,23 +208,83 @@ await f.run(async () => {
   await openSeed(seed, reflectFile);
   await selectBodyIndex(0);
 
-  f.phase = 'apply single YZ reflection (keep: false) via Mirror HUD';
-  await f.page.evaluate(() => document.activeElement?.blur());
-  await f.page.keyboard.press('m');
-  const mirrorHud = f.page.getByRole('dialog', { name: 'Mirror', exact: true });
-  await mirrorHud.waitFor();
-  await mirrorHud.getByLabel('Result', { exact: true }).selectOption('reflected');
-  await mirrorHud.getByLabel('Plane', { exact: true }).selectOption('yz');
+  f.phase = `preview single ${plane.toUpperCase()} reflection (keep: false) via Mirror HUD`;
+  async function mirrorPreview(at) {
+    await f.page.evaluate(() => document.activeElement?.blur());
+    await f.page.keyboard.press('m');
+    const hud = f.page.getByRole('dialog', { name: 'Mirror', exact: true });
+    await hud.waitFor();
+    await hud.getByLabel('Result', { exact: true }).selectOption('reflected');
+    await hud.getByLabel('Plane', { exact: true }).selectOption(plane);
+    await hud.getByLabel('Plane at', { exact: true }).fill(String(at));
+    return hud;
+  }
+  const previewReady = () => f.page.waitForFunction(() => document.querySelector('.hud .status')?.textContent.trim() === 'preview');
+  let mirrorHud = await mirrorPreview(baseline ? 0 : 5);
+  const message = baseline ? 'Reflected body only uses the YZ plane at X = 0.'
+    : 'Reflected body only requires an XY, XZ or YZ plane through the origin.';
+  await mirrorHud.locator('.hud-error').getByText(message).waitFor();
+  assert.equal(await button(mirrorHud, 'Apply').isDisabled(), true);
+  await f.same(seed);
+  await f.snapshot(baseline ? 'origin-reflection-refused' : 'non-origin-refused');
+  if (baseline) return;
   await mirrorHud.getByLabel('Plane at', { exact: true }).fill('0');
-  await f.page.waitForFunction(() => document.querySelector('.hud .status')?.textContent.trim() === 'preview');
+  await previewReady();
+  await f.same(seed);
+  await f.snapshot('00-origin-reflection-preview');
+  await button(mirrorHud, 'Cancel').click();
+  await mirrorHud.waitFor({ state: 'hidden' });
+  await f.same(seed);
+  await selectBodyIndex(0);
+  mirrorHud = await mirrorPreview(0);
+  await previewReady();
   await button(mirrorHud, 'Apply').click();
   await mirrorHud.waitFor({ state: 'hidden' });
   await f.changed(seed);
   const reflectedDoc = await f.doc();
-  assert.deepEqual(reflectedDoc.nodes.at(-1), { kind: 'mirror', parent: { node: 6, side: 'solid' }, plane: 'yz', keep: false, id: 'n7' });
+  assert.deepEqual(reflectedDoc.nodes.at(-1), { kind: 'mirror', parent: { node: 6, side: 'solid' }, plane, keep: false, id: 'n7' });
+  const base = await f.inspect('reflected', reflectedDoc, {});
+  assert.equal(base.valid, true);
+  assert.equal(base.bodyCount, 1);
+  assert.ok(base.sheet && base.flat, JSON.stringify(base.flatError));
+  const expected = baseTruth();
+  near(base.mass.volume, expected.volume);
+  near(base.flat.box.max[0], width);
+  near(base.flat.box.max[1], expected.length);
+  near(base.flat.area, expected.area);
+  assert.equal(base.sheet.fixedFace, 'n0.leg0.a');
+  assert.deepEqual(base.flat.bends.map(bend => [bend.name, bend.direction]), [['n0.bend1', 'down']]);
+  const expectedHoles = plane === 'xz' ? [[15, 10], [12, expected.length - 15]] : [[18, 15], [15, expected.length - 10]];
+  const holes = base.flat.loops.filter(loop => !loop.outer).map(loop => loop.segments[0].center).sort((a, b) => a[1] - b[1]);
+  assert.equal(holes.length, 2);
+  holes.forEach((point, index) => point.forEach((value, axis) => near(value, expectedHoles[index][axis])));
+  [base.sheet.bends[0].axis.origin, base.sheet.bends[0].axis.direction].forEach((point, index) => {
+    const expectedPoint = reflect(index === 0 ? [3, 30, 3] : [0, -1, 0]);
+    point.forEach((value, axis) => near(value, expectedPoint[axis]));
+  });
+  await selectBodyIndex(0);
+  await showFlat('00-origin-reflection-flat');
+
+  if (plane !== 'yz') {
+    f.phase = 'edit the original Mirror plane in Studio History';
+    const alternate = plane === 'xz' ? 'xy' : 'xz';
+    await f.openFeatureEditor(7, 'reflected sheet plane');
+    const field = f.editor().getByLabel('Plane', { exact: true });
+    assert.equal(await field.inputValue(), plane);
+    await field.selectOption(alternate);
+    await f.applyEditor(reflectedDoc, 'reflected-sheet-plane-change');
+    const changedPlane = await f.doc();
+    assert.deepEqual(changedPlane.nodes.at(-1), { ...reflectedDoc.nodes.at(-1), plane: alternate });
+    await f.undo();
+    await f.same(reflectedDoc);
+    await f.redo();
+    await f.same(changedPlane);
+    await f.undo();
+    await f.same(reflectedDoc);
+  }
 
   f.phase = 'pick reflected edge n0.end|n0.leg1.a in viewport and apply 20 mm Flange';
-  await pickEdgeAt([-40, 15, 0], 'Bottom left');
+  await pickEdgeAt(originPlane.point, originPlane.view);
   await clickModelCommand(f.page, 'Modify', 'Flange');
   const flangeHud = f.page.getByRole('dialog', { name: 'Flange', exact: true });
   await flangeHud.waitFor();
@@ -260,6 +330,9 @@ await f.run(async () => {
     flat15: reflectedFlanged.flat.box.max,
     flat20: reflectedThickness2.flat.box.max,
   });
+
+  assert.deepEqual(f.report.downloads, []);
+  if (plane !== 'yz') return;
 
   // Flow B: Disjoint Duplicate -> copy-only 20 mm Flange -> original invariant -> Undo/Redo -> Save/Open.
   const copyProject = 'D2027 copy flange ' + randomUUID();

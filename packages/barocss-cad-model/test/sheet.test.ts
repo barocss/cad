@@ -206,7 +206,7 @@ test('D120 a sheet on a bend table: its notes name the table and each bend\'s ro
 });
 
 
-test('a sheet Mirror has an explicit origin-YZ replacement and preserves the legacy lowering', () => {
+test('a sheet Mirror has an explicit replacement on each origin plane and preserves the legacy lowering', () => {
   const sheet = commands.find(command => command.id === 'sheet-profile')!;
   const mirror = commands.find(command => command.id === 'mirror')!;
   const empty: Ctx = { doc: emptyDoc(), bodies: [], selection: none };
@@ -216,21 +216,26 @@ test('a sheet Mirror has an explicit origin-YZ replacement and preserves the leg
   const defaults = mirror.defaults!(ctx);
   assert.equal(defaults.result, 'combined');
   const legacy = mirror.build!(ctx, { ...defaults, at: 0 });
-  const reflected = mirror.build!(ctx, { ...defaults, at: 0, result: 'reflected' });
   const combinedFeature = toPartDocument(legacy).features.at(-1);
-  const reflectedFeature = toPartDocument(reflected).features.at(-1);
   assert.equal(combinedFeature?.kind === 'mirror' && combinedFeature.keep, true);
-  assert.equal(reflectedFeature?.kind === 'mirror' && reflectedFeature.keep, false);
-  const last = reflected.nodes.at(-1);
-  assert.ok(last?.kind === 'mirror' && last.keep === false);
-  assert.equal(checkNode(last, doc.nodes, doc.parameters), null);
-  const opened = readStudioDoc(JSON.stringify(reflected));
-  assert.ok('doc' in opened, JSON.stringify(opened));
-  assert.deepEqual(opened.doc, reflected);
 
-  const invalid = { ...last, plane: 'xy' as const };
-  assert.match(checkNode(invalid, doc.nodes, doc.parameters) ?? '', /YZ plane at X = 0/);
-  assert.throws(() => toPartDocument({ ...reflected, nodes: [...doc.nodes, invalid] }), /YZ plane at X = 0/);
-  assert.throws(() => mirror.build!(ctx, { ...defaults, at: 1, result: 'reflected' }), /YZ plane at X = 0/);
-  assert.throws(() => mirror.build!(ctx, { ...defaults, plane: 'xz', at: 0, result: 'reflected' }), /YZ plane at X = 0/);
+  for (const plane of ['yz', 'xz', 'xy'] as const) {
+    const reflected = mirror.build!(ctx, { ...defaults, plane, at: 0, result: 'reflected' });
+    const feature = toPartDocument(reflected).features.at(-1);
+    assert.ok(feature?.kind === 'mirror');
+    assert.equal(feature.keep, false);
+    assert.equal(feature.plane, plane);
+    const last = reflected.nodes.at(-1);
+    assert.ok(last?.kind === 'mirror' && last.keep === false);
+    assert.equal(checkNode(last, doc.nodes, doc.parameters), null);
+    const opened = readStudioDoc(JSON.stringify(reflected));
+    assert.ok('doc' in opened, JSON.stringify(opened));
+    assert.deepEqual(opened.doc, reflected);
+
+    const invalid = { ...last, plane: 'diagonal' as typeof plane };
+    assert.match(checkNode(invalid, doc.nodes, doc.parameters) ?? '', /plane/);
+    assert.throws(() => toPartDocument({ ...reflected, nodes: [...doc.nodes, invalid] }), /plane through the origin/);
+    assert.throws(() => mirror.build!(ctx, { ...defaults, plane, at: 1, result: 'reflected' }), /plane through the origin/);
+    assert.throws(() => mirror.build!(ctx, { ...defaults, plane, at: '', result: 'reflected' }), /finite Plane at/);
+  }
 });
