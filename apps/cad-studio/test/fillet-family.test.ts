@@ -101,7 +101,7 @@ test('viewport route clears pending family Apply before rejecting hidden or miss
    const inputs: Partial<Parameters<typeof useViewportPicking>[0]> = {
      doc: ctx.doc, modelUnavailable: false, activeRef: { current: active }, sectionRef, sectionFacePickRef, halvesShownRef: { current: false },
      sectionVertexPick: { current: { pick: () => false } },
-     scene: { active, section: null, sketch: false, bodies: ctx.bodies, selection: ctx.selection, setMenu() {} },
+     scene: { active, section: null, sketch: false, bodies: ctx.bodies, commandDoc: ctx.doc, selection: ctx.selection, setMenu() {} },
      onReferenceFacePick: () => false,
      onRevolveAxisPick: () => false,
      onTransformFacePick: () => false,

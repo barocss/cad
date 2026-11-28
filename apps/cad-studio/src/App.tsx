@@ -1231,7 +1231,7 @@ export function App() {
     && !activeStore.get() && !halvesShownRef.current;
   const { onPick, picking } = useViewportPicking({ meshCirclePick, doc, modelUnavailable, nativeVertexReady, nativePlanePickState: footprintState, sectionPickRef, sectionVertexPick: sectionVertexActions, activeStore, setActive, onFilletPick: pickFillet, onReferenceFacePick: pickCommandReferenceFace, onRevolveAxisPick: pickRevolveAxis, onTransformFacePick: pickTransformFace, retargetSweep: retargetActiveSweep, measure, assembly, sectionRef, sectionFacePickRef, viewBodiesRef,
     sectionBoxRef, setSection, setSectionFacePick, setToast, activeRef, halvesShownRef, setPick, setInstanceSel, setSelection, directSel, setDirectSel, setMeasure, measureNativeReady, measureInstances, placedMeasureContextReady, pickFilterRef,
-    scene: { active, section, sketch: !!sketch, bodies, selection, setMenu } });
+    scene: { active, section, sketch: !!sketch, bodies, commandDoc, selection, setMenu } });
   const finishEdgePick = finishEdgeEditor.current ? finishEdgeEditor.pick : undefined;
   const pickProfile = picking.onPickProfile;
   const { freeSketches, innerSteps, profiles } = useStudioProfilePresentation(

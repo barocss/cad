@@ -8,6 +8,7 @@ import type { Vec3 } from '@barocss/cad-model/engine/mesh';
 import { selectedBodies, type Selection, type Values } from '@barocss/cad-model/app/commands';
 import { sweepPath } from '@barocss/cad-model/app/profileCommands';
 import { edgeChain } from '@barocss/cad-model/app/edgeChain';
+import { pivotFaceCommand } from '@barocss/cad-model/app/pivotFaceCommand';
 import type { MeasurePick } from '@barocss/cad-model/app/measure';
 import type { useAssembly } from '../assembly/useAssembly';
 import type { ExtrudeEndHit } from '../app/extrudeEndFace';
@@ -59,6 +60,7 @@ export function useViewportPicking({ meshCirclePick, doc, modelUnavailable, nati
     section: Section | null;
     sketch: boolean;
     bodies: BodyResult[];
+    commandDoc: StudioDoc;
     selection: Selection;
     setMenu(menu: ViewportMenu): void;
   };
@@ -236,9 +238,16 @@ export function useViewportPicking({ meshCirclePick, doc, modelUnavailable, nati
         hit = { face: target.face, edge: target.edge, point: null };
       }
       if (hit.face && !hit.edge && !scene.section && (nativePlanePickState.current.midpointReady || nativePlanePickState.current.insetReady)) bindMidpointPick(hit.face, doc, viewBodiesRef.current[hit.face.body]);
-      const next: Selection = hit.edge ? { faces: [], edges: [hit.edge], bodies: [] }
+      const [selectedFace] = scene.selection.faces, [selectedEdge] = scene.selection.edges;
+      const hitsSelectedMember = hit.edge
+        ? selectedEdge?.body === hit.edge.body && selectedEdge.edge === hit.edge.edge
+        : !!hit.face && selectedFace?.body === hit.face.body && selectedFace.face === hit.face.face;
+      const keepPivotPair = !scene.section && !directSel.length && hitsSelectedMember
+        && pivotFaceCommand.available({ doc: scene.commandDoc, bodies: scene.bodies, selection: scene.selection }).ok;
+      const clicked: Selection = hit.edge ? { faces: [], edges: [hit.edge], bodies: [] }
         : hit.face ? { faces: [hit.face], edges: [], bodies: [] }
         : scene.selection;
+      const next = keepPivotPair ? scene.selection : clicked;
       if (hit.edge || hit.face) {
         setSelection(next);
         setPick(hit.point);
