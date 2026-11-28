@@ -1,13 +1,13 @@
 # CAD roadmap — current status and execution order
 
-Updated 2026-11-28 · Priority authority: D520 · Latest delivery: D2194 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
+Updated 2026-11-28 · Priority authority: D520 · Latest delivery: D2195 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
 
 This is the only current status index. Detailed tracks define acceptance; the 34 stable row pages retain scope and issue navigation. Immutable decision notes retain results. Do not append chronological status paragraphs here. [D520 decision](notes/cad-roadmap-replan-2026-11-04/README.md) supersedes D445 execution order and historical next-item text, while retaining its safeguards and bounded proofs.
 
 ## Now and next
 
-- **Current position:** [D2194](notes/webmcp-proposal-worker-retry-2026-11-28/README.md), P1 rows 04 and 16. Studio Retry isolates the failed Worker session and restores proposal access through new grants and explicit approval.
-- **Next MAIN:** D2195, P1 rows 04 and 16. Add an explicit one-call browser grant for the first Cylinder in an empty part, then verify approval and the supported height revision ([#204](https://github.com/barocss/cad/issues/204)).
+- **Current position:** [D2195](notes/webmcp-first-cylinder-proposal-2026-11-28/README.md), P1 rows 04 and 16. The first Cylinder has its own browser proposal grant. Desktop Studio verifies creation, an approved height revision and project reopen.
+- **Next MAIN:** D2196, P1 rows 04 and 16. Qualify a browser proposal for a centred axial through Hole on a standalone Cylinder, using the existing native Hole command and explicit approval ([#204](https://github.com/barocss/cad/issues/204)).
 - **Separate follow-ups:** Continue Studio App extraction in cohesive parts with affected desktop checks. [#608 Rendering](https://github.com/barocss/cad/issues/608) stays on HOLD. API inventory drift remains open. The issue tracker records [#126](https://github.com/barocss/cad/issues/126), [#613](https://github.com/barocss/cad/issues/613), [#152](https://github.com/barocss/cad/issues/152) and [#22](https://github.com/barocss/cad/issues/22) as closed.
 - **Active repository:** [barocss/cad](https://github.com/barocss/cad), based on `origin/main`. Fetch before work and preserve unexpected changes. The [migration record](../../../docs/migration/README.md) maps the former `local/cad-dev` history and issue numbers.
 - **Evidence correction:** D482 records2167 PASS/0 FAIL/2 existing SKIP in a later full-kernel run than D433. Neither result is a new full-suite PASS at this audit HEAD. [D482 record](notes/vertical-contact-refusal-2026-11-04/README.md).

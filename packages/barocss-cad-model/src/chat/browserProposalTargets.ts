@@ -13,10 +13,16 @@ export function validBoxDimension(value: unknown): value is number {
   return validExtrudeDistance(value) && value >= 1;
 }
 
-export function canProposeBrowserBox(doc: StudioDoc, bodies: readonly BodyResult[]): boolean {
+export function validCylinderRadius(value: unknown): value is number {
+  return validExtrudeDistance(value) && value >= 0.5;
+}
+
+export function canProposeBrowserPrimitive(doc: StudioDoc, bodies: readonly BodyResult[]): boolean {
   return doc.nodes.length === 0 && bodies.length === 0 && Object.keys(doc.outputs).length === 0 &&
     !doc.instances?.length && !doc.direct && !doc.proposals?.some(proposal => proposal.status === 'open');
 }
+
+export const canProposeBrowserBox = canProposeBrowserPrimitive;
 
 /** One literal rectangular or circular Extrude, with its current evaluated body. */
 export function browserExtrudeTarget(doc: StudioDoc, bodies: readonly BodyResult[]) {

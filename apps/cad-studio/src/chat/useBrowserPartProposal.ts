@@ -1,6 +1,6 @@
 import { useLayoutEffect, useRef, useState } from 'react';
-import { browserExtrudeTarget, canProposeBrowserBox, validBoxDimension, validExtrudeDistance } from '@barocss/cad-model/chat/browserProposalTargets';
-import { proposeBrowserBox, proposeBrowserExtrude, type ChatState, type Evaluate } from '@barocss/cad-model/chat/tools';
+import { browserExtrudeTarget, canProposeBrowserPrimitive, validBoxDimension, validCylinderRadius, validExtrudeDistance } from '@barocss/cad-model/chat/browserProposalTargets';
+import { proposeBrowserBox, proposeBrowserCylinder, proposeBrowserExtrude, type ChatState, type Evaluate } from '@barocss/cad-model/chat/tools';
 import { revisionOf } from '@barocss/cad-model/util/revision';
 import type { StudioDoc } from '@barocss/cad-model/engine/doc';
 import { browserToolFailure, modelContext, plainInput } from './browserModelContext';
@@ -22,6 +22,13 @@ const proposalTools = {
     invalid: 'Give numeric width, depth and height of at least 1 mm and the expected revision.',
     title: 'Allow one browser proposal for the first Box',
   },
+  Cylinder: {
+    name: 'cad_part_propose_cylinder',
+    description: 'Propose the first Cylinder at the origin of the shared empty part. Give its radius and height in millimetres and the revision from cad_part_summary. A person decides in Studio.',
+    fields: { radius: distanceField, height: distanceField, expectedRevision: revisionField },
+    invalid: 'Give a numeric radius of at least 0.5 mm, a numeric height of at least 1 mm and the expected revision.',
+    title: 'Allow one browser proposal for the first Cylinder',
+  },
   Extrude: {
     name: 'cad_part_propose_extrude',
     description: 'Propose a positive distance in millimetres for the shared rectangular or circular Extrude. A Box or Cylinder requires at least 1 mm. Use the body key and revision from cad_part_summary. A person decides in Studio.',
@@ -31,15 +38,21 @@ const proposalTools = {
   },
 };
 type ProposalKind = keyof typeof proposalTools;
+const emptyPartKinds = ['Box', 'Cylinder'] as const;
+const extrusionKinds = ['Extrude'] as const;
+type Grant = { owner: StudioDoc; scope: object; kind: ProposalKind };
 
 function proposalInput(kind: ProposalKind, input: unknown, required: readonly string[]) {
   if (!plainInput(input) || Reflect.ownKeys(input).length !== required.length ||
     !required.every(key => Object.hasOwn(input, key))) return;
-  const { body, width, depth, height, expectedRevision } = input;
+  const { body, width, depth, radius, height, expectedRevision } = input;
   if (typeof expectedRevision !== 'string' || !/^[a-f0-9]{16}$/.test(expectedRevision)) return;
   if (kind === 'Box') {
     if (validBoxDimension(width) && validBoxDimension(depth) && validBoxDimension(height))
       return { kind, args: { width, depth, height, expectedRevision } };
+  } else if (kind === 'Cylinder') {
+    if (validCylinderRadius(radius) && validBoxDimension(height))
+      return { kind, args: { radius, height, expectedRevision } };
   } else if (typeof body === 'string' && body.length > 0 && body.length <= 128 && validExtrudeDistance(height)) {
     return { kind, args: { body, height, expectedRevision } };
   }
@@ -49,7 +62,7 @@ export function useBrowserPartProposal(source: BrowserPartSummarySource | undefi
   action: BrowserPartProposalSource | undefined, readShared: boolean) {
   const api = modelContext();
   const owner = source?.doc, scope = source?.scope;
-  const [grant, setGrant] = useState<{ owner: StudioDoc; scope: object }>();
+  const [grant, setGrant] = useState<Grant>();
   const [failed, setFailed] = useState(false);
   const enabled = !!grant;
   const same = grant?.owner === owner && grant?.scope === scope;
@@ -57,12 +70,13 @@ export function useBrowserPartProposal(source: BrowserPartSummarySource | undefi
     setGrant(undefined);
     setFailed(false);
   }
-  const kind = source && (canProposeBrowserBox(source.doc, source.bodies) ? 'Box' :
-    browserExtrudeTarget(source.doc, source.bodies) ? 'Extrude' : undefined);
-  const ready = !!source?.ready && !!action && !!kind;
-  const active = enabled && same && readShared && ready;
-  const live = useRef({ source, action, active });
-  live.current = { source, action, active };
+  const kinds: readonly ProposalKind[] | undefined = source && (canProposeBrowserPrimitive(source.doc, source.bodies) ? emptyPartKinds :
+    browserExtrudeTarget(source.doc, source.bodies) ? extrusionKinds : undefined);
+  const kind = grant?.kind;
+  const ready = !!source?.ready && !!action;
+  const active = enabled && same && readShared && ready && !!kind && !!kinds?.includes(kind);
+  const live = useRef({ source, action, grant, active });
+  live.current = { source, action, grant, active };
 
   useLayoutEffect(() => {
     if (!active || !api || !grant || !kind) return;
@@ -72,7 +86,7 @@ export function useBrowserPartProposal(source: BrowserPartSummarySource | undefi
     let submitting = false, used = false;
     const stale = browserToolFailure('stale_part', 'The proposal grant or the current part has changed.');
     const current = (snapshot: BrowserPartSummarySource, signal?: AbortSignal) =>
-      !signal?.aborted && !controller.signal.aborted && live.current.active &&
+      !signal?.aborted && !controller.signal.aborted && live.current.active && live.current.grant === grant &&
       live.current.source?.doc === snapshot.doc && live.current.source.scope === snapshot.scope &&
       live.current.source.bodies === snapshot.bodies && snapshot.isCurrent() && !!live.current.action?.isIdle();
     const register = async () => {
@@ -102,9 +116,10 @@ export function useBrowserPartProposal(source: BrowserPartSummarySource | undefi
             try {
               const { doc, bodies } = snapshot;
               const state: ChatState = { doc, bodies, approvalRequired: true };
-              const outcome = await (request.kind === 'Box'
-                ? proposeBrowserBox(state, request.args, evaluateWith.evaluate)
-                : proposeBrowserExtrude(state, request.args, evaluateWith.evaluate)).catch(() => null);
+              const pending = request.kind === 'Box' ? proposeBrowserBox(state, request.args, evaluateWith.evaluate)
+                : request.kind === 'Cylinder' ? proposeBrowserCylinder(state, request.args, evaluateWith.evaluate)
+                : proposeBrowserExtrude(state, request.args, evaluateWith.evaluate);
+              const outcome = await pending.catch(() => null);
               if (!current(snapshot, signal)) return stale;
               const proposal = outcome?.state.doc.proposals?.at(-1);
               if (!outcome || outcome.isError || !outcome.changed || !proposal)
@@ -131,13 +146,14 @@ export function useBrowserPartProposal(source: BrowserPartSummarySource | undefi
     return () => controller.abort();
   }, [active, api, grant, kind]);
 
-  if (!api || !owner || !scope || !readShared || !kind) return;
+  if (!api || !owner || !scope || !readShared || !kinds) return;
   return {
-    kind, title: proposalTools[kind].title, enabled, ready, failed,
-    toggle() {
+    options: kinds.map(choice => ({ kind: choice, title: proposalTools[choice].title, enabled: same && grant?.kind === choice })),
+    ready, failed,
+    toggle(choice: ProposalKind) {
       if (enabled) live.current.active = false;
       setFailed(false);
-      setGrant(enabled ? undefined : { owner, scope });
+      setGrant(same && grant?.kind === choice ? undefined : { owner, scope, kind: choice });
     },
   };
 }

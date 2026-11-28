@@ -42,7 +42,7 @@ import { ASSEMBLY_CHANGES, PROPOSAL_HANDLERS, acceptProposalWith, autonomy, chan
 import { BATCHABLE, MUTATORS, PART_SCOPED, describe, unknownArguments } from './toolDefinitions';
 import { isObj, isVec3 } from '../util/guards';
 import { revisionOf } from '../util/revision';
-import { BROWSER_PROPOSAL_AUTHOR, browserExtrudeTarget, canProposeBrowserBox, validBoxDimension, validExtrudeDistance } from './browserProposalTargets';
+import { BROWSER_PROPOSAL_AUTHOR, browserExtrudeTarget, canProposeBrowserPrimitive, validBoxDimension, validCylinderRadius, validExtrudeDistance } from './browserProposalTargets';
 import { firstProblem, isRefusal } from '../engine/refusal';
 import { REFERENCE_CODES } from '../engine/schema/references';
 // ./outputs is loaded on first use: it reaches team/bundle → baseline → assembly → parts, which import this
@@ -84,7 +84,7 @@ export function proposeBrowserExtrude(state: ChatState, args: { body: string; he
 
 export function proposeBrowserBox(state: ChatState, args: { width: number; depth: number; height: number; expectedRevision: string }, evaluate: Evaluate) {
   const { width, depth, height, expectedRevision } = args;
-  if (state.partOf || !canProposeBrowserBox(state.doc, state.bodies) || ![width, depth, height].every(validBoxDimension) ||
+  if (state.partOf || !canProposeBrowserPrimitive(state.doc, state.bodies) || ![width, depth, height].every(validBoxDimension) ||
     revisionOf(state.doc) !== expectedRevision) {
     return Promise.resolve(fail(state, 'The browser Box proposal needs the current empty part and three supported dimensions.'));
   }
@@ -92,6 +92,19 @@ export function proposeBrowserBox(state: ChatState, args: { width: number; depth
     title: `Create Box ${width} × ${depth} × ${height} mm`,
     ops: [{ tool: 'features', args: { action: 'command', command: 'box',
       values: { w: width, d: depth, h: height, x: 0, y: 0, z: 0 }, expectedRevision } }],
+  }, evaluate, undefined, { agent: BROWSER_PROPOSAL_AUTHOR });
+}
+
+export function proposeBrowserCylinder(state: ChatState, args: { radius: number; height: number; expectedRevision: string }, evaluate: Evaluate) {
+  const { radius, height, expectedRevision } = args;
+  if (state.partOf || !canProposeBrowserPrimitive(state.doc, state.bodies) || !validCylinderRadius(radius) ||
+    !validBoxDimension(height) || revisionOf(state.doc) !== expectedRevision) {
+    return Promise.resolve(fail(state, 'The browser Cylinder proposal needs the current empty part and supported radius and height.'));
+  }
+  return proposeWith(runProposalTool, state, {
+    title: `Create Cylinder R${radius} × ${height} mm`,
+    ops: [{ tool: 'features', args: { action: 'command', command: 'cylinder',
+      values: { r: radius, h: height, x: 0, y: 0, z: 0 }, expectedRevision } }],
   }, evaluate, undefined, { agent: BROWSER_PROPOSAL_AUTHOR });
 }
 /** A proposal accepted (A4.2, A4.3): see acceptProposalWith. */

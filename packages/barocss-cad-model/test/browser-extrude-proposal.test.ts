@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { acceptProposal, previewProposal, proposeBrowserBox, proposeBrowserExtrude, runTool, type ChatState } from '../src/chat/tools';
+import { acceptProposal, previewProposal, proposeBrowserBox, proposeBrowserCylinder, proposeBrowserExtrude, runTool, type ChatState } from '../src/chat/tools';
 import { emptyDoc, withNode, type StudioDoc } from '../src/engine/doc';
 import { evaluatePart } from '../src/engine/evaluate';
 import { revisionOf } from '../src/util/revision';
@@ -70,6 +70,32 @@ async function stock(height = 10): Promise<ChatState> {
   assert.ok(result.ok);
   return { doc, bodies: result.bodies };
 }
+
+test('browser Cylinder stages a replayable round part at the origin', async () => {
+  const source: ChatState = { doc: emptyDoc(), bodies: [] };
+  const args = { radius: 5, height: 10, expectedRevision: revisionOf(source.doc) };
+  for (const invalid of [{ ...args, radius: 0.49 }, { ...args, height: 0.99 }, { ...args, expectedRevision: '0000000000000000' }]) {
+    const refused = await proposeBrowserCylinder(source, invalid, neverEvaluate);
+    assert.ok(refused.isError && !refused.changed);
+    assert.equal(refused.state, source);
+  }
+  const waiting = await proposeBrowserCylinder(source, args, evaluate);
+  assert.ok(waiting.changed && !waiting.isError, waiting.content);
+  assert.equal(waiting.state.doc.nodes, source.doc.nodes);
+  const proposal = waiting.state.doc.proposals?.at(-1);
+  assert.ok(proposal && proposal.status === 'open');
+  assert.equal(proposal.by.agent, 'browser');
+  assert.deepEqual(await acceptProposal(waiting.state, proposal.id, neverEvaluate, { by: { agent: 'chat' } }),
+    { error: 'A browser proposal needs approval by the user in Studio.' });
+  const accepted = await acceptProposal(waiting.state, proposal.id, evaluate);
+  assert.ok('state' in accepted);
+  assert.ok(isEditableCylinder(accepted.state.doc.nodes, 0));
+  const [body] = accepted.state.bodies;
+  const bounds = { min: [-5, -5, 0], max: [5, 5, 10] };
+  for (const side of ['min', 'max'] as const)
+    body.mesh.bounds[side].forEach((value, axis) => assert.ok(Math.abs(value - bounds[side][axis]) < 1e-10));
+  assert.ok(body.volume !== null && Math.abs(body.volume - 250 * Math.PI) < 1e-8);
+});
 
 test('browser Extrude retains a standalone Cylinder command and literal circle geometry', async () => {
   const command = commandById('cylinder');

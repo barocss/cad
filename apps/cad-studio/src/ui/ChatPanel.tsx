@@ -206,10 +206,10 @@ export function ChatPanel(props: ChatPanelProps) {
           aria-label="Share part summary and plane measurements with browser tools"
           title="Share this part's read-only summary and plane measurements with browser tools" aria-pressed={browserSummary.enabled}
           disabled={!browserSummary.ready && !browserSummary.enabled} onClick={browserSummary.toggle}>WebMCP</Button>}
-        {browserProposal && <Button type="button" size="xs" variant={browserProposal.enabled ? 'default' : 'outline'}
-          aria-label={`Allow one browser ${browserProposal.kind} proposal`} title={browserProposal.title}
-          aria-pressed={browserProposal.enabled} disabled={!browserProposal.ready && !browserProposal.enabled}
-          onClick={browserProposal.toggle}>Propose</Button>}
+        {browserProposal?.options.map(option => <Button key={option.kind} type="button" size="xs" variant={option.enabled ? 'default' : 'outline'}
+          aria-label={`Allow one browser ${option.kind} proposal`} title={option.title}
+          aria-pressed={option.enabled} disabled={!browserProposal.ready && !option.enabled}
+          onClick={() => browserProposal.toggle(option.kind)}>{option.kind === 'Extrude' ? 'Propose' : option.kind}</Button>)}
         <select className="chat-autonomy" aria-label="Autonomy" title={AUTONOMY_TIPS[autonomy - 1]} value={autonomy} disabled={running}
           onChange={e => chat.setAutonomy(Number(e.currentTarget.value))}>
           {AUTONOMY_TIPS.map((t, i) => <option key={i} value={i + 1} title={t}>L{i + 1}</option>)}</select>
