@@ -13,11 +13,12 @@ import type { StudioNotice } from '../app/studioNotice';
 import type { EngineClient, ProposalOverlay } from '../engine/client';
 import type { Lanes } from '../engine/lanes';
 import { useProposalDrawingCallouts } from './useProposalDrawingCallouts';
+import type { WorkHistory } from './workOwnership';
 import { placedProposalPreview, type PlacedProposalPreview } from '../viewport/instanceEvaluation';
 interface ProposalPreviewOptions {
   model: { doc: StudioDoc; bodies: BodyResult[]; instances: Parameters<typeof placedProposalPreview>[2]; marker: number | null; active: boolean; sketch: boolean };
   worker: { engine: EngineClient; lanes: Lanes; session: number; currentSession(): number; nextRevision(): number };
-  changes: { commit(next: StudioDoc): boolean; currentDoc(): StudioDoc; undo: readonly { doc: StudioDoc }[];
+  changes: { commit(next: StudioDoc): boolean; currentDoc(): StudioDoc; undo: readonly Pick<WorkHistory<StudioDoc>, 'doc' | 'documentBoundary'>[];
     setPreviewBodies: Dispatch<SetStateAction<BodyResult[] | null>> };
   chatRowFiles: RefObject<PersonRowFiles | undefined>;
   displayDirect?: typeof directDisplay;
@@ -83,8 +84,12 @@ export function useProposalPreview({ model, worker, changes, chatRowFiles, displ
   const rebaseIt = async (p: Proposal) => {
     if (active || sketch || marker !== null) return;
     setProposalBusy(true);
+    // The boundary entry belongs to the previous file, even when its contents match a proposal pin.
+    let first = changes.undo.length;
+    while (first > 0 && !changes.undo[first - 1].documentBoundary) first--;
+    const history = changes.undo.slice(first).map(entry => entry.doc);
     const r = await (await import('@barocss/cad-model/chat/tools')).rebaseProposal(
-      { doc, bodies, rowFiles: chatRowFiles.current }, p.id, partEval, { agent: 'user' }, changes.undo.map(entry => entry.doc),
+      { doc, bodies, rowFiles: chatRowFiles.current }, p.id, partEval, { agent: 'user' }, history,
     );
     setProposalBusy(false);
     if (doc !== currentDoc() || session !== currentSession()) return;

@@ -434,3 +434,42 @@ test('autonomy L2, the owner\'s option b (D41): values of one feature or of para
     assert.ok(!(await runTool(turn, HOLE.tool, { ...HOLE.args, values: { d: 4, x: 30, y: 10 } }, evaluate)).isError);
   } finally { if (was === undefined) delete process.env.CAD_AUTONOMY; else process.env.CAD_AUTONOMY = was; }
 });
+
+test('a three-opening Shell can rebase only an unchanged original stock with a retained Studio review', async () => {
+  const plate = rectanglePart(40, 30, 20);
+  const original = withNode(withNode(plate, { kind: 'sketch', profile: 'rectangle', min: [55, 0], max: [65, 10] }),
+    { kind: 'extrude', sketch: 2, height: 5 });
+  const args = { command: 'shell', faces: ['n1.side0', 'n1.top', 'n1.side1'], expectedRevision: revisionOf(original),
+    values: { wallMode: 'per-face', leftWall: 3, backWall: 4, bottomWall: 2 } };
+  const pending = await runTool(await stateOf(original), 'propose', { title: 'Remove an original box corner',
+    ops: [{ tool: 'run_command', args }] }, evaluate);
+  assert.ok(!pending.isError, pending.content);
+  const { doc } = pending.state, [first, target, second, other] = doc.nodes;
+  assert.ok(target.kind === 'extrude' && other.kind === 'extrude');
+  const changed = await stateOf({ ...doc, nodes: [first, target, second, { ...other, height: 8 }] });
+  const actor = { agent: 'user' };
+  const lost = await rebaseProposal(changed, 'P1', evaluate, actor);
+  assert.ok('error' in lost && /Undo history/.test(lost.error));
+  const changedSource = await stateOf({ ...changed.doc, nodes: [first, { ...target, height: 21 }, second, changed.doc.nodes[3]] });
+  const unsafe = await rebaseProposal(changedSource, 'P1', evaluate, actor, [doc]);
+  assert.ok('error' in unsafe && /original Shell stock changed/.test(unsafe.error));
+  const hidden = await stateOf({ ...changed.doc, bodies: { b1: { hidden: true } } });
+  assert.ok('error' in await rebaseProposal(hidden, 'P1', evaluate, actor, [doc]));
+  const nonUser = await rebaseProposal(changed, 'P1', evaluate, { agent: 'chat' }, [doc]);
+  assert.ok('error' in nonUser);
+
+  const rebased = await rebaseProposal(changed, 'P1', evaluate, actor, [doc]);
+  assert.ok('state' in rebased, JSON.stringify(rebased));
+  assert.equal(rebased.state.doc.nodes, changed.doc.nodes);
+  const [proposal] = rebased.state.doc.proposals!;
+  assert.equal(proposal.status, 'open');
+  assert.deepEqual(proposal.ops[0].args, { ...args, expectedRevision: revisionOf(changed.doc) });
+  assert.match(agentMayNotAccept(proposal, 4) ?? '', /always needs the user's approval/);
+  assert.ok('error' in await acceptProposal(rebased.state, 'P1', evaluate, { by: { agent: 'chat' } }));
+  const accepted = await acceptProposal(rebased.state, 'P1', evaluate);
+  assert.ok('state' in accepted, JSON.stringify(accepted));
+  assert.deepEqual(accepted.state.doc.nodes.slice(0, 4), changed.doc.nodes);
+  const shell = accepted.state.doc.nodes[4];
+  assert.ok(shell.kind === 'shell-walls' && shell.thirdOpening === 'n1.side0');
+  for (const volume of [800, 6684]) assert.ok(accepted.state.bodies.some(body => Math.abs(body.volume! - volume) < 1e-7));
+});

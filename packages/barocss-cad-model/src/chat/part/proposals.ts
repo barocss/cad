@@ -13,6 +13,7 @@ import { directReviewRevision, isDirectSheetOperation } from '../directProposalR
 import { attachedRibProposal } from '../attachedRibProposalReview';
 import { lockedPlateProposal } from '../lockedPlateProposalReview';
 import { cornerBatchProposal, rebindReviewedFilletBatch, reviewedCornerBatchEvidence, savedChamferResizeProposal } from '../cornerProposalReview';
+import { REBASED_SHELL_APPROVAL, rebindReviewedCornerShell } from '../cornerShellProposalRebase';
 import { boredWallProposal } from '../modelProposalReview';
 import { pairedElbowInletProposal, pairedElbowOutletProposal } from '../pairedElbowOutletProposalReview';
 import { pairedElbowInletPlaneProposal, pairedElbowOutletPlaneProposal } from '../pairedElbowOutletPlaneProposalReview';
@@ -176,6 +177,8 @@ export async function acceptProposalWith(dispatch: PartRun, state: ChatState, id
     return { error: 'A nested face repair needs selection and approval by the user in Studio.' };
   if (nested !== undefined && by.agent !== 'user') return { error: 'A nested parameter proposal always needs the user’s approval in Studio.' };
   if (nested !== undefined && (p.ops.length !== 1 || state.partOf)) return { error: 'Use a root proposal with one nested parameter operation.' };
+  if (by.agent !== 'user' && p.risk.approval.includes(REBASED_SHELL_APPROVAL))
+    return { error: 'Rebased Shell openings need approval by the user in Studio.' };
   const before = requirementEvidenceRevision(state.doc);
   if (proposalIsStale(p, before)) return { error: nested !== undefined || faceRepair ? staleNested(p) : `${id} has no current proposal revision: rebase it and look at the result before accepting.`, stale: true };
   const run = await runOps(faceRepair ? replayNestedFaceRepair : dispatch, { ...state, policy: undefined }, p.ops, evaluate);
@@ -230,10 +233,14 @@ export async function rebaseProposalWith(dispatch: PartRun, state: ChatState, id
   if (!proposalIsStale(p, revision)) return { error: `${id} was made on the part as it is: nothing to rebase.` };
   if (nestedParameterOps(p.ops) !== undefined || hasNestedFaceRepair(p.ops)) return { error: staleNested(p) };
   const now = modelHash(state.doc);
-  const refreshed = by.agent === 'user' && !state.partOf ? rebindReviewedFilletBatch(state.doc, p, reviewHistory) : undefined;
+  const canRefresh = by.agent === 'user' && !state.partOf;
+  const refreshed = canRefresh ? rebindReviewedFilletBatch(state.doc, p, reviewHistory) : undefined;
   if (refreshed && 'error' in refreshed) return { error: refreshed.error };
+  const shell = canRefresh ? rebindReviewedCornerShell(state.doc, p, reviewHistory) : undefined;
+  if (shell && 'error' in shell) return { error: shell.error };
   // (O133: its ops' feature indices and the ids it made itself moved to the part as it is, when it says what they named.)
-  let ops = refreshed ? [refreshed.op] : p.ops;
+  const rebound = refreshed ?? shell;
+  let ops = rebound ? [rebound.op] : p.ops;
   if (p.orders?.length === p.ops.length) {
     const moved = await moveOpsWith(dispatch, state, ops, p.orders, evaluate);
     if ('error' in moved) return { error: `${id} no longer applies: ${moved.error}` };
@@ -245,9 +252,12 @@ export async function rebaseProposalWith(dispatch: PartRun, state: ChatState, id
   if ('fail' in made) return { error: `${id} no longer applies: ${errorOf(made.fail)}` };
   if (refreshed && !reviewedCornerBatchEvidence(state.doc, made.cur.doc, refreshed.edit))
     return { error: 'The rebased Fillets could not be verified on both original corner targets. Make a new proposal on the current model.' };
-  const approval = 'rebased sketch corner targets';
-  const risk = refreshed || p.risk.approval.includes(approval)
-    ? { ...made.risk, approval: [...new Set([...made.risk.approval, approval])] } : made.risk;
+  const sketchApproval = 'rebased sketch corner targets';
+  const approval = [
+    ...(refreshed || p.risk.approval.includes(sketchApproval) ? [sketchApproval] : []),
+    ...(shell || p.risk.approval.includes(REBASED_SHELL_APPROVAL) ? [REBASED_SHELL_APPROVAL] : []),
+  ];
+  const risk = approval.length ? { ...made.risk, approval: [...new Set([...made.risk.approval, ...approval])] } : made.risk;
   const rebased = { original: p.rebased?.original ?? p.base, from: p.base, at: new Date().toISOString(), risk_was: p.rebased?.risk_was ?? p.risk };
   const q: Proposal = { ...p, base: now, base_evidence_revision: revision, ops: made.ops, orders: made.orders, risk, summary: made.summary, rebased, ...(made.checks ? { checks: made.checks } : {}) };
   if (!made.checks) delete q.checks;
