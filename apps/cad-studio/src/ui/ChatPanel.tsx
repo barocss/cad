@@ -207,9 +207,10 @@ export function ChatPanel(props: ChatPanelProps) {
           title="Share this part's read-only summary and plane measurements with browser tools" aria-pressed={browserSummary.enabled}
           disabled={!browserSummary.ready && !browserSummary.enabled} onClick={browserSummary.toggle}>WebMCP</Button>}
         {browserProposal?.options.map(option => <Button key={option.kind} type="button" size="xs" variant={option.enabled ? 'default' : 'outline'}
-          aria-label={`Allow one browser ${option.kind} proposal`} title={option.title}
-          aria-pressed={option.enabled} disabled={!browserProposal.ready && !option.enabled}
-          onClick={() => browserProposal.toggle(option.kind)}>{option.kind === 'Extrude' ? 'Propose' : option.kind}</Button>)}
+          aria-label={`Allow one browser ${option.kind} proposal`}
+          title={option.pending ? 'Cancel this browser proposal evaluation' : option.title}
+          aria-pressed={option.enabled} aria-busy={option.pending || undefined} disabled={!browserProposal.ready && !option.enabled}
+          onClick={() => browserProposal.toggle(option.kind)}>{option.pending ? 'Evaluating…' : option.kind === 'Extrude' ? 'Propose' : option.kind}</Button>)}
         <select className="chat-autonomy" aria-label="Autonomy" title={AUTONOMY_TIPS[autonomy - 1]} value={autonomy} disabled={running}
           onChange={e => {
             browserProposal?.revoke();

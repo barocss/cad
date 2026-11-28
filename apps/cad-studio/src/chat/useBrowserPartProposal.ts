@@ -93,6 +93,7 @@ export function useBrowserPartProposal(source: BrowserPartSummarySource | undefi
   const owner = source?.doc, scope = source?.scope;
   const [grant, setGrant] = useState<Grant>();
   const [failedGrant, setFailedGrant] = useState<Grant>();
+  const [pendingCall, setPendingCall] = useState<{ grant: Grant }>();
   const enabled = !!grant;
   const same = grant?.owner === owner && grant?.scope === scope;
   const failed = !!failedGrant && failedGrant.owner === owner && failedGrant.scope === scope && readShared;
@@ -157,6 +158,8 @@ export function useBrowserPartProposal(source: BrowserPartSummarySource | undefi
                 return browserToolFailure('invalid_arguments', 'Give a hole diameter smaller than the Cylinder outside diameter.');
             }
             submitting = true;
+            const call = { grant };
+            setPendingCall(call);
             try {
               const { doc, bodies } = snapshot;
               const state: ChatState = { doc, bodies, approvalRequired: true };
@@ -181,6 +184,7 @@ export function useBrowserPartProposal(source: BrowserPartSummarySource | undefi
               return { proposal: proposal.id, applied: false, revision: expectedRevision };
             } finally {
               submitting = false;
+              setPendingCall(previous => previous === call ? undefined : previous);
             }
           },
         }, { signal: controller.signal });
@@ -198,7 +202,12 @@ export function useBrowserPartProposal(source: BrowserPartSummarySource | undefi
 
   if (!api || !owner || !scope || !readShared || !kinds) return;
   return {
-    options: kinds.map(choice => ({ kind: choice, title: proposalTools[choice].title, enabled: same && grant?.kind === choice })),
+    options: kinds.map(choice => ({
+      kind: choice,
+      title: proposalTools[choice].title,
+      enabled: same && grant?.kind === choice,
+      pending: active && pendingCall?.grant === grant && kind === choice,
+    })),
     ready, failed,
     revoke() {
       live.current.active = false;

@@ -1,13 +1,13 @@
 # CAD roadmap — current status and execution order
 
-Updated 2026-11-28 · Priority authority: D520 · Latest delivery: D2207 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
+Updated 2026-11-28 · Priority authority: D520 · Latest delivery: D2208 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
 
 This is the only current status index. Detailed tracks define acceptance; the 34 stable row pages retain scope and issue navigation. Immutable decision notes retain results. Do not append chronological status paragraphs here. [D520 decision](notes/cad-roadmap-replan-2026-11-04/README.md) supersedes D445 execution order and historical next-item text, while retaining its safeguards and bounded proofs.
 
 ## Now and next
 
-- **Current position:** [D2207](notes/webmcp-published-input-constraints-2026-11-28/README.md), P1 rows 04 and 16. The six Chrome WebMCP schemas publish the validated input bounds, and real Chrome refuses malformed inputs and old revisions without changing the model.
-- **Next MAIN:** D2208, P1 rows 04 and 16. Show in-progress browser proposal evaluation on its existing grant control. Verify explicit revocation, a late result, duplicate refusal and one approved retry in desktop Studio ([#204](https://github.com/barocss/cad/issues/204)).
+- **Current position:** [D2208](notes/webmcp-visible-proposal-progress-2026-11-28/README.md), P1 rows 04 and 16. The browser grant displays its active evaluation and can revoke it in place. A fresh grant keeps its own status through late delivery and one approved retry.
+- **Next MAIN:** D2209, P1 rows 04 and 16. Verify the built Studio WebMCP flow without development probes and document how to grant, cancel, approve and reopen a proposal ([#204](https://github.com/barocss/cad/issues/204)).
 - **Separate follow-ups:** Continue Studio App extraction in cohesive parts with affected desktop checks. [#608 Rendering](https://github.com/barocss/cad/issues/608) stays on HOLD. API inventory drift remains open. The issue tracker records [#126](https://github.com/barocss/cad/issues/126), [#613](https://github.com/barocss/cad/issues/613), [#152](https://github.com/barocss/cad/issues/152) and [#22](https://github.com/barocss/cad/issues/22) as closed.
 - **Active repository:** [barocss/cad](https://github.com/barocss/cad), based on `origin/main`. Fetch before work and preserve unexpected changes. The [migration record](../../../docs/migration/README.md) maps the former `local/cad-dev` history and issue numbers.
 - **Evidence correction:** D482 records2167 PASS/0 FAIL/2 existing SKIP in a later full-kernel run than D433. Neither result is a new full-suite PASS at this audit HEAD. [D482 record](notes/vertical-contact-refusal-2026-11-04/README.md).

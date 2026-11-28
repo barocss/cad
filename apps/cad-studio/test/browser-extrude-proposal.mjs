@@ -563,10 +563,13 @@ await f.run(axialHole ? verifyAxialHole : firstBox ? verifyFirstBox : firstCylin
   const policyInput = { ...pendingInput, height: 17 };
   const oldPolicy = await getTool(proposalName);
   await holdProposal(oldPolicy, policyInput);
+  await proposalGrant().filter({ hasText: 'Evaluating…' }).waitFor();
+  assert.equal(await proposalGrant().getAttribute('aria-busy'), 'true');
   const autonomy = chat().getByRole('combobox', { name: 'Autonomy', exact: true });
   assert.equal(await autonomy.inputValue(), '2');
   await autonomy.selectOption('1');
   await toolsReady(proposalName, false);
+  assert.equal(await proposalGrant().getAttribute('aria-busy'), null);
   await autonomy.selectOption('2');
   await toolsReady(proposalName, false);
   await releaseProposal();
