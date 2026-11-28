@@ -20,6 +20,7 @@ import { useStudioKeyboard } from './app/useStudioKeyboard';
 import { useFilletEndpointDisplay } from './state/useFilletEndpointDisplay';
 import { createCommandReferencePicking, type CommandPickScope } from './app/commandReferencePicking';
 import { retireStudioNotice, type StudioNotice } from './app/studioNotice';
+import { useStudioPartInsertion } from './app/studioPartInsertion';
 import { filletStationInputKey } from './app/filletEndpoints';
 import { readFilletPickedEdgeHighlight, type FilletPickedEdgeRequest } from './app/filletPickedEdgeHighlight';
 import { useSketchReopenCamera } from './sketch/useSketchReopenCamera';
@@ -94,7 +95,7 @@ import { useRouteBundleEditor } from './state/useRouteBundleEditor';
 import { prepareCutPatternLaunch } from './app/commandLaunchContext';
 import { prepareStudioFeatureCommand, useStudioCommandEntry } from './app/useStudioCommandEntry';
 import { moveRenderAppearance } from './app/moveRenderAppearance';
-import { curvePatternInputKey, curvePatternDocumentProblem, directCommandDocument, insertedCurvePartProblem, prepareDirectCurveCandidate, type DirectCurveEdit } from './app/directCurveCandidate';
+import { curvePatternInputKey, curvePatternDocumentProblem, directCommandDocument, prepareDirectCurveCandidate, type DirectCurveEdit } from './app/directCurveCandidate';
 import { createRoundedInsetHistoryEdit, LINKED_INSET_EXTRUDE } from './app/roundedInsetCommand';
 import { ReferenceDecisions } from './ui/ReferenceDecisions';
 import { useRobotExports } from './robot/useRobotExports';
@@ -131,7 +132,6 @@ import { scheduleProjectOpenFit } from './app/projectOpenFit';
 import { prepareSignedFinishOpen, verifyStoredNativeOpen } from './files/documentFile';
 import type { SectionPick } from './viewport/useSectionSelection';
 import { useViewportSelectionPresentation } from './viewport/useViewportSelectionPresentation';
-import type { PartInstance } from '@barocss/cad-model/engine/doc';
 import { usePlacedCandidatePreview } from './viewport/usePlacedCandidatePreview';
 import { usePlacedBodyEvaluation, type PlacedBodyMap } from './app/usePlacedBodyEvaluation';
 import { acceptedPlacedSketchSnaps } from './viewport/placedSketchSnaps';
@@ -154,7 +154,6 @@ import { NestedPartPanel } from './ui/NestedPartPanel';
 import { snapshotInstanceIsolation, type SketchState, type ViewportHandle } from './viewport/Viewport';
 import { countRender, onBlockRender } from './devRenders';
 import { AssemblyCutHud } from './ui/AssemblyCutHud';
-import { nextInstanceId } from '@barocss/cad-model/assembly/takenIds';
 import { AssemblyStepsPanel } from './ui/AssemblyStepsPanel';
 import { STEPS_COMMAND, shownSelection as litSelection } from './app/assemblySteps';
 import { useAssemblyStepReview } from './app/useAssemblyStepReview';
@@ -173,7 +172,6 @@ import { useViewportBodyDetails } from './state/useViewportBodyDetails';
 import { useInstanceGizmo } from './assembly/useInstanceGizmo';
 import type { CamOptions } from './viewport/camDisplay';
 import { withPrintPreviewSettings, type PrintPreviewPatch } from './viewport/printSettings';
-import { refusal } from '@barocss/cad-model/engine/refusal';
 import { StudioNoticeStack } from './ui/StudioNoticeStack';
 import { InPlaceEditStatus } from './ui/InPlaceEditStatus';
 import { FlatPatternDialog } from './ui/FlatPatternDialog';
@@ -207,7 +205,6 @@ import { indexedDbBlobStore } from './ui/blobStore';
 // (The recovery copy's blobs kept in this browser's IndexedDB: the store set before the studio reads or writes one — PKG-g2.)
 setBlobStore(indexedDbBlobStore());
 import { convexHull } from '@barocss/cad';
-import { readStudioFile } from '@barocss/cad-model/engine/container';
 import { ParametersPanel } from './ui/ParametersPanel';
 import { LibraryPanel } from './ui/LibraryPanel';
 import { CagePanel } from './ui/CagePanel';
@@ -247,7 +244,6 @@ import { useStudioHeldReferences } from './app/useStudioHeldReferences';
 import { resolveShopRows } from '@barocss/cad-model/engine/shopRows';
 import { openAccepted, type InPlaceSession } from './app/editInPlace';
 import { editInPlaceActions } from './app/editInPlaceActions';
-import { freshPartId, revisionOf } from '@barocss/cad-model/assembly/definitions';
 import { BASE } from '@barocss/cad-model/assembly/mates';
 import type { DirectGeometry } from '@barocss/cad-model/engine/direct';
 import { directNow, loadDirect } from '@barocss/cad-model/engine/directModule';
@@ -1021,23 +1017,10 @@ export function App() {
   // The CPU section clips the dragged placement. Other views use the viewport's preview matrix.
   const { instancesPlaced, instancePoseMap, cpuInstanceSection, instancesShown } = useScenePoses(doc, sceneInstanceBodies, bodies, jointFk, explode, section, sketch, gpuSection, instDrag, excludedSectionInstances);
   const instancePreview = cpuInstanceSection ? null : dragPreview;
-  // (`source`: what the instance names as its file — CG6: `./<path>` for a project document, storage/linked.ts.)
-  const insertPart = async (file: File, source = file.name) => {
-    try {
-      const read = await readStudioFile(new Uint8Array(await file.arrayBuffer()));
-      if ('error' in read) throw new Error(read.error);
-      const parsed = read.doc;
-      const pathProblem = insertedCurvePartProblem(parsed);
-      if (pathProblem) throw new Error(pathProblem);
-      if (parsed.schema === 4 || Object.prototype.hasOwnProperty.call(parsed, 'routeBundles')) throw refusal('BAD_REFERENCE', 'Route bundle: inserting a linked route document as a part is not supported. Detach the bundle first.');
-      const list = doc.instances ?? [], newId = nextInstanceId(doc, 'inst');
-      // Placed to the right of everything shown.
-      const right = Math.max(0, ...bodies.map(b => b.mesh.bounds.max[0]), ...[...instanceBodies.values()].flatMap(v => v.bodies.map(b => b.mesh.bounds.max[0])));
-      const inst: PartInstance = { id: newId, name: file.name.replace(/\.(bcad|json)$/i, ''), doc: { ...parsed, render: undefined, direct: undefined }, position: [Math.ceil(right + 20), 0, 0], rotation: [0, 0, 0], part: { id: freshPartId(doc), rev: revisionOf(parsed), source } };
-      if (!commitInstances([...list, inst], [inst.id])) return; setSelection(emptySel); setDirectSel([]);
-      setTimeout(() => viewport.current?.fit(), 600);
-    } catch (e) { setToast({ title: 'Could not insert this part', hint: e instanceof Error ? e.message : String(e), detail: '' }); }
-  };
+  const insertPart = useStudioPartInsertion({
+    doc, bodies, instanceBodies, commitInstances, setNotice: setToast,
+    clearSelection: () => { setSelection(emptySel); setDirectSel([]); }, fit: () => viewport.current?.fit(),
+  });
   const { play, animatedAt, videoBusy, recordVideo, exportImage } = useRenderPlayback({ render, rendering, state: { time, setTime, playing, setPlaying, turnFrom }, viewport, fileName, onNotice: setToast });
 
   const { rememberOpener, restoreOpener, holeCloseFocus } = useStudioCommandEntry(openIntent, activeStore.get, restoreEditorFocusAfterClose);
