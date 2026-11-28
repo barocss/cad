@@ -5,12 +5,19 @@ import { createFlow } from './flow-helper.mjs';
 import { currentPartRevision, withMcpSession } from './mcp-browser-session.mjs';
 
 const baseline = process.argv.includes('--baseline');
+const agentArea = process.argv.includes('--agent-area');
+const agentAreaBaseline = process.argv.includes('--agent-area-baseline');
 const pins = [
   'apps/cad-studio/test/rounded-cube-area-browser.mjs',
   'apps/cad-studio/src/ui/SelectionInspector.tsx',
   'packages/barocss-cad/src/blend/edge-finish.ts',
   'packages/barocss-cad/src/brep/solid-mass.ts',
   ...(!baseline ? ['packages/barocss-cad/src/brep/spherical-cube-area.ts'] : []),
+  ...(agentArea || agentAreaBaseline ? [
+    'packages/barocss-cad-model/src/chat/part/query.ts',
+    'packages/barocss-cad-model/src/chat/contract.ts',
+    'packages/barocss-cad-model/src/chat/tools-v2.json',
+  ] : []),
 ];
 const f = await createFlow({
   name: 'rounded-cube-area', output: process.argv[2], envFrozen: 'ROUNDED_CUBE_AREA_FROZEN',
@@ -65,6 +72,44 @@ async function check(label, doc, radius) {
   return native.digest;
 }
 
+async function checkAgentArea(file, radius, staleRevision) {
+  const original = await readFile(file);
+  const core = side - 2 * radius;
+  const expected = 6 * core ** 2 + 6 * Math.PI * core * radius + 4 * Math.PI * radius ** 2;
+  const receipt = await withMcpSession({ app: f.app, output: f.output, clientName: f.name }, file, `area-${radius}`, async call => {
+    const expectedRevision = await currentPartRevision(call);
+    const help = await call('describe', { tool: 'query', action: 'mass' });
+    const compact = await call('query', { action: 'mass' });
+    const body = compact.bodies[0];
+    assert.equal(body.area, Number(expected.toFixed(3)));
+    const request = { action: 'mass', bodies: [body.body], areaPrecision: 'full', expectedRevision };
+    if (agentAreaBaseline) {
+      assert.equal(help.input.properties.areaPrecision, undefined);
+      assert.ok(relative(body.area, expected) > 1e-9);
+      const refused = await call('query', request, true);
+      assert.match(refused.error, /areaPrecision|expectedRevision/i);
+      return { expectedRevision, compact: body.area, refused };
+    }
+    assert.deepEqual(help.input.properties.areaPrecision.enum, ['full']);
+    const missing = await call('query', { ...request, expectedRevision: undefined }, true);
+    assert.equal(missing.code, 'MASS_INPUT');
+    if (staleRevision) {
+      assert.notEqual(staleRevision, expectedRevision);
+      const stale = await call('query', { ...request, expectedRevision: staleRevision }, true);
+      assert.deepEqual([stale.code, stale.revision], ['MASS_STALE', expectedRevision]);
+      assert.equal(stale.bodies, undefined);
+    }
+    const native = await call('query', request);
+    assert.equal(native.revision, expectedRevision);
+    assert.ok(relative(native.bodies[0].area, expected) < 1e-9);
+    assert.deepEqual(native.bodies[0], { ...body, area: native.bodies[0].area, area_basis: 'native surfaces' });
+    return { expectedRevision, compact: body.area, native: native.bodies[0].area };
+  });
+  assert.deepEqual(await readFile(file), original);
+  f.report.observations.push({ radius, agent: receipt });
+  return receipt.expectedRevision;
+}
+
 await f.run(async () => {
   f.phase = 'Propose all twelve current native edges through local MCP';
   const source = join(f.output, 'source-cube.bcad');
@@ -106,6 +151,7 @@ await f.run(async () => {
   const reopened = await f.freshOpen(saved.file, approved, 'reopened-rounded-cube');
   assert.equal(await check('radius-2-reopened', reopened.doc, 2), digest);
   if (baseline) return;
+  const firstRevision = agentArea || agentAreaBaseline ? await checkAgentArea(saved.file, 2) : undefined;
 
   f.phase = 'Edit radius in the reopened part and verify the current surface area';
   await f.openFeatureEditor(2, 'Fillet radius');
@@ -130,6 +176,7 @@ await f.run(async () => {
   const revised = await f.save('rounded-cube-r2-5');
   const reopenedEdit = await f.freshOpen(revised.file, edited, 'reopened-rounded-cube-r2-5');
   assert.equal(await check('radius-2-5-reopened', reopenedEdit.doc, 2.5), editedDigest);
+  if (firstRevision) await checkAgentArea(revised.file, 2.5, firstRevision);
   await readArea();
   await f.snapshot('reopened-rounded-cube-area-inspector');
 });

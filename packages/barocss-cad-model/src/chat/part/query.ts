@@ -16,6 +16,7 @@ import { beadAccounting } from '../../frames/beadAccounting';
 import { type ChatState, type Evaluate, type ToolOutcome, type PartHandler, type CallOptions, v3, json, describeBodies, features, fail, strings } from '../toolKit';
 import { r3Signed as r3 } from '../../util/round';
 import { isObj } from '../../util/guards';
+import { revisionOf } from '../../util/revision';
 import { variabilityView } from '../variability';
 import { featureId } from '../../engine/ids';
 import { directInspectionRevision, visibleDirectGeometry } from '../sweepSource';
@@ -118,14 +119,35 @@ async function fitClearanceTool(state: ChatState, args: Record<string, unknown>)
   } catch (e) { if (e instanceof FitError) return fail(state, e.message); throw e; }
 }
 async function massPropertiesTool(state: ChatState, args: Record<string, unknown>): Promise<ToolOutcome> {
+  const { areaPrecision, expectedRevision, expectedDirectRevision } = args;
+  const fullArea = areaPrecision === 'full';
+  if (areaPrecision !== undefined && !fullArea)
+    return fail(state, 'Set areaPrecision to full or leave it out for the compact reply.', { code: 'MASS_INPUT' });
+  let revision: string | undefined, directRevision: string | undefined;
+  if (fullArea || expectedRevision !== undefined) {
+    if (typeof expectedRevision !== 'string' || !/^[a-f0-9]{16}$/.test(expectedRevision))
+      return fail(state, 'Use the current expectedRevision from query.rebuild for the same part.', { code: 'MASS_INPUT' });
+    revision = revisionOf(state.doc);
+    if (revision !== expectedRevision)
+      return fail(state, 'The part changed since the requested revision. Read the current part again.', { code: 'MASS_STALE', revision, expectedRevision });
+  }
+  // Some Model features depend on live Direct curves, which the Model revision excludes.
+  if (expectedDirectRevision !== undefined || (fullArea && state.doc.direct?.objects.length)) {
+    if (typeof expectedDirectRevision !== 'string' || !/^[a-f0-9]{64}$/.test(expectedDirectRevision))
+      return fail(state, 'For a part with Direct geometry, pass expectedDirectRevision from query.summary in the base part scope.', { code: 'MASS_INPUT' });
+    directRevision = directInspectionRevision(state.doc);
+    if (directRevision !== expectedDirectRevision)
+      return fail(state, 'The Direct geometry changed. Read the current part again.', { code: 'MASS_STALE', direct_revision: directRevision, expectedDirectRevision });
+  }
   const keys = strings(args.bodies), shown = keys.length ? state.bodies.filter(b => keys.includes(b.key)) : state.bodies;
   if (keys.length && shown.length !== keys.length) return fail(state, `No body ${keys.filter(k => !state.bodies.some(b => b.key === k)).join(', ')} (bodies: ${state.bodies.map(b => b.key).join(', ')}).`);
-  const out = massProperties(state.doc, shown);
+  const out = massProperties(state.doc, shown, fullArea ? 'full' : 'compact');
   const accounting = beadAccounting(state.doc, state.bodies);
   const note = out.some(b => b.unresolved_material !== undefined || b.material_invalid)
     ? 'An unset or unresolved material uses an aluminium estimate. Set the material before using its mass.'
     : out.some(b => b.assumed) ? 'a body without a material is taken as aluminium: set its material before using its mass' : undefined;
-  return { state, content: json({ bodies: out, ...(accounting ? { beadAccounting: accounting } : {}), ...(note ? { note } : {}) }), isError: false, changed: false, summary: `${accounting && !accounting.complete ? 'incomplete welded-part accounting; ' : ''}mass of ${out.length} reported bodies` };
+  return { state, content: json({ bodies: out, ...(revision ? { revision } : {}), ...(directRevision ? { direct_revision: directRevision } : {}),
+    ...(accounting ? { beadAccounting: accounting } : {}), ...(note ? { note } : {}) }), isError: false, changed: false, summary: `${accounting && !accounting.complete ? 'incomplete welded-part accounting; ' : ''}mass of ${out.length} reported bodies` };
 }
 /** O10: the part built from nothing, each feature timed (the studio's Rebuild panel shows the last evaluation instead). */
 async function rebuildReportTool(state: ChatState): Promise<ToolOutcome> {

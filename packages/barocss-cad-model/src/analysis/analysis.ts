@@ -27,14 +27,19 @@ export function materialFact(doc: StudioDoc, b: BodyResult) {
 }
 
 /** Mass properties of bodies: volume, area, mass (its material's density), centroid, inertia about it, box. */
-export function massProperties(doc: StudioDoc, bodies: readonly BodyResult[]): Record<string, unknown>[] {
+export function massProperties(doc: StudioDoc, bodies: readonly BodyResult[], areaPrecision: 'compact' | 'full' = 'compact'): Record<string, unknown>[] {
   return bodies.map(b => {
     const resolved = bodyMaterialOf(doc, b);
     const mat = describeMaterial(resolved), rho = resolved.material.density;
     // (The kernel's inertia is for aluminium, 2.70 g/cm³: scaled to the body's density — as (x · ρ) / 2.7, an order kept
     // apart from app/mass's x · (ρ / 2.7), which rounds differently.)
     const inertia = b.inertia?.map(row => row.map(x => Number((x * rho / KERNEL_DENSITY).toPrecision(6))));
-    return { body: b.key, ...mat, volume: b.volume === null ? null : r3(b.volume), area: r3(b.area ?? b.mesh.faces.reduce((a, f) => a + f.area, 0)), ...(b.areaBasis === 'exact' ? {} : { area_basis: 'the display mesh\'s triangles (the kernel could not integrate it): a little low on curved faces' }),
+    const area = b.area ?? b.mesh.faces.reduce((sum, face) => sum + face.area, 0);
+    const areaBasis = b.areaBasis === 'exact'
+      ? areaPrecision === 'full' ? 'native surfaces' : undefined
+      : 'the display mesh\'s triangles (the kernel could not integrate it): a little low on curved faces';
+    return { body: b.key, ...mat, volume: b.volume === null ? null : r3(b.volume),
+      area: areaPrecision === 'full' ? area : r3(area), ...(areaBasis ? { area_basis: areaBasis } : {}),
       mass: b.volume === null ? null : r3(massGOf(b.volume, rho)),
       // (O179: a volume from the mesh is said so, with its bound and the mass's — never shown as exact.)
       ...(b.volumeBasis ? { volume_basis: { method: b.volumeBasis.method, bound: b.volumeBasis.bound === null ? null : r3(b.volumeBasis.bound), massBound: b.volumeBasis.bound === null ? null : r3(massGOf(b.volumeBasis.bound, rho)), note: 'the display mesh\'s volume (the kernel could not integrate it): within the bound of the exact, an estimate' } } : {}),

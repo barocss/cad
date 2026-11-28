@@ -128,7 +128,7 @@ const READ: Record<string, JsonSchema | null> = {
     unknown: { type: 'array', items: str },
   }, ['calibration', 'parts', 'evidence', 'unknown']),
   measure: o({ label: str, area: num, length: num, radius: num, distance: num, from: arr, to: arr, angle: num, normalDistance: num, resolved: arr }),
-  mass_properties: o({ bodies: arr, note: str }, ['bodies']),
+  mass_properties: o({ bodies: arr, note: str, revision: str, direct_revision: str }, ['bodies']),
   interference: o({ pairs: arr, note: str }, ['pairs']),
   section: o({ axis: str, at: num, cut: arr }, ['axis', 'at', 'cut']),
   wall_thickness: o({ body: str, thinnest: num, at: arr, face: str, note: str }, ['body']),

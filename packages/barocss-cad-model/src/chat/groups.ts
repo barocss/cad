@@ -43,7 +43,7 @@ export const GROUPS: Record<string, Group> = {
       summary: ['get_part_summary', 'body?, page? — features and persistent geometry names'],
       inspect: ['inspect', 'faces?, edges?, curve?, surface?, guidedFill? — native detail and review pins'],
       measure: ['measure', 'a, b? — a face or edge, or the distance and angle between two'],
-      mass: ['mass_properties', 'bodies?'],
+      mass: ['mass_properties', 'bodies? — describe for full area'],
       interference: ['interference', 'bodies? — overlap and clearance'],
       section: ['section', 'axis, at'],
       native_joints: ['list_native_joints', 'body'],

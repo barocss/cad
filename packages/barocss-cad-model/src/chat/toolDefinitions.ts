@@ -260,8 +260,13 @@ Ref = {"node": index of the feature that made a visible body, "side": "solid"} (
   },
   {
     name: 'mass_properties',
-    description: 'Each body\'s volume, surface area, mass by its material (none set: aluminium, said as assumed), centroid, inertia about it (kg·m²) and box.',
-    input_schema: { type: 'object', properties: { bodies: { ...nameList, description: 'Body keys (default: all).' } }, additionalProperties: false },
+    description: 'Each body\'s volume, surface area, mass by its material (none set: aluminium, said as assumed), centroid, inertia about it (kg·m²) and box. Surface area is in mm². areaPrecision full reports the current area before output rounding and identifies its source. Use the Model revision from query.rebuild and, with Direct geometry, the Direct revision from query.summary in the same part.',
+    input_schema: { type: 'object', properties: {
+      bodies: { ...nameList, description: 'Body keys (default: all).' },
+      areaPrecision: { type: 'string', enum: ['full'] },
+      expectedRevision: { type: 'string', description: 'Model revision from query.rebuild.' },
+      expectedDirectRevision: { type: 'string', description: 'Direct revision from query.summary.' },
+    }, additionalProperties: false },
   },
   {
     name: 'interference',
