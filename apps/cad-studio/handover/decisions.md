@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D2243: [D2243](notes/typed-disconnected-shell-refusal-2026-11-29/README.md), #13. Publish the existing Shell refusal code and verify the disconnected and adjacent wall cases.
+
 - D2242: [D2242](notes/rounded-step-default-area-2026-11-29/README.md), #16. Integrate the original qualified sphere boundaries for default surface area and verify the two rounded-box STEP replays in Studio.
 
 - D2241: [D2241](notes/blind-drill-cone-projection-2026-11-29/README.md), #775. Bind the native cone at an interior generator point and verify true silhouettes and Top drawing ink.

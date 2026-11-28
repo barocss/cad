@@ -254,7 +254,7 @@ test('four original openings retain each exact connected two-wall box angle', ()
 test('four original openings refuse disconnected pairs, invalid ownership and cavity collapse', () => {
   for (const pair of names) {
     assert.throws(() => evaluateCadPart(doc(fourOpeningsExcept(pair))),
-      error => error.code === 'CAPABILITY' && /SHELL_DISCONNECTED/.test(error.message));
+      error => error.code === 'SHELL_DISCONNECTED' && error.details.category === 'CAPABILITY' && /opposite retained walls disconnected/.test(error.message));
   }
   const feature = fourOpeningsExcept([names[0][0], names[1][0]]);
   const snapshot = evaluateCadPart(doc(feature)), saved = saveCadPart(snapshot);
