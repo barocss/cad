@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D2277: [D2277](notes/gearbox-gland-rim-reconstruction-2026-11-29/README.md), #780. Restore the original no-pcurve gland rim in raw projection, SVG, CPU PNG and actual Studio Drawing.
+
 - D2276: [D2276](notes/app-history-preview-routing-2026-11-29/README.md), #44. Extract Align and opposite Flange preview routing and compare the original desktop state and native outputs.
 
 - D2275: [D2275](notes/exact-closed-triangle-cavity-2026-11-29/README.md), #10. Add one exact sealed rectangular cavity to the closed circular triangular Sweep and verify the original editable profile in Studio.

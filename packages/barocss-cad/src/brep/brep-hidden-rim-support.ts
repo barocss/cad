@@ -1,5 +1,5 @@
 // Private permission for native probes on complete convex cylinder/cap rims.
-// Exact edge bindings restrict this support to the original native rim.
+// Whole boundary bindings restrict this support to the original native rim.
 import { binary64Dyadic } from '../core/dyadic.js';
 import { add, cross, dot, len, scale, sub, unit as normalize } from '../core/vec3.js';
 import type { Curve, Point } from '../types.js';
@@ -131,13 +131,48 @@ function planePcurveMatches(edge: BrepEdge, plane: BrepFace, use: Use, charge: C
     && len(sub(c.controlPoints[k], add(origin, add(scale(u, s), scale(v, t))))) <= error * Math.max(1, Math.abs(s), Math.abs(t)));
 }
 
+/** Same B-spline basis and a bounded perturbation of all positive rational coefficients. */
+function reconstructedBoundary(edge: Curve, boundary: Curve, reversed: boolean, limit: number): number | undefined {
+  if (edge.degree !== boundary.degree || edge.controlPoints.length !== boundary.controlPoints.length
+    || edge.knots.length !== boundary.knots.length || edge.weights.length !== boundary.weights.length) return;
+  const degree = edge.degree, domain = (knots: readonly number[]) =>
+    knots.slice(0, degree + 1).every(knot => knot === 0) && knots.slice(-degree - 1).every(knot => knot === 1);
+  if (!domain(edge.knots) || !domain(boundary.knots)) return;
+  const index = (i: number, count: number) => reversed ? count - 1 - i : i;
+  // Check reflections both ways so a rounded parameter change cannot pass as a reversal.
+  if (edge.knots.some((knot, i, all) => {
+    const other = boundary.knots[index(i, all.length)];
+    return reversed ? knot !== 1 - other || other !== 1 - knot : knot !== other;
+  })) return;
+  let minimumWeight = Infinity, weightError = 0;
+  for (const [i, weight] of edge.weights.entries()) {
+    const other = boundary.weights[index(i, edge.weights.length)];
+    if (!(Number.isFinite(weight) && Number.isFinite(other) && weight > 0 && other > 0)) return;
+    minimumWeight = Math.min(minimumWeight, weight, other);
+    weightError = Math.max(weightError, Math.abs(weight - other));
+  }
+  if (!(weightError <= 8 * Number.EPSILON * minimumWeight)) return;
+  const origin = boundary.controlPoints[0];
+  let separation = 0, reach = 0;
+  for (const [i, point] of edge.controlPoints.entries()) {
+    const other = boundary.controlPoints[index(i, boundary.controlPoints.length)];
+    separation = Math.max(separation, len(sub(point, other)));
+    reach = Math.max(reach, len(sub(other, origin)));
+  }
+  // Positive basis weights bound the pole error by their maximum. Changing the weights adds
+  // at most the control hull diameter times the weight error over the smallest denominator.
+  const residual = separation + (2 * reach) * (weightError / minimumWeight);
+  if (residual <= limit) return residual;
+}
+
 interface RimChart {
   base: Circle; height: number; span: number; positionError: number;
   point(p: Point): Point;
   vector(v: Point): Point;
 }
 /** Only whole, bijective, four-boundary cylinder charts can certify an own-surface hit. */
-function completeCylinderChart(body: Brep, face: BrepFace, context: ConvexRimContext): RimChart | null {
+function completeCylinderChart(body: Brep, face: BrepFace, context: ConvexRimContext,
+  reconstruction?: { rim: BrepEdge; table: Topology }): RimChart | null {
   const S = face.surface, { charge } = context;
   if (S.kind !== 'surface' || S.degreeU !== 2 || S.degreeV !== 1 || S.controlPoints[0].length !== 2 || face.loops.length !== 1) return null;
   charge(body.loops.length + body.coedges.length + body.edges.length + body.vertices.length + 16 * S.controlPoints.length);
@@ -165,16 +200,35 @@ function completeCylinderChart(body: Brep, face: BrepFace, context: ConvexRimCon
   if (!(span > 0 && span <= 2 * Math.PI)) return null;
   const [u0, u1] = [S.knotsU[S.degreeU], S.knotsU[S.knotsU.length - S.degreeU - 1]];
   const corners: readonly (readonly Point[])[] = [ [[u0, 0, 0], [u0, 1, 0]], [[u1, 0, 0], [u1, 1, 0]], [[u0, 0, 0], [u1, 0, 0]], [[u0, 1, 0], [u1, 1, 0]] ];
-  const occupied = new Set<number>();
+  const occupied = new Set<number>(), reconstructionLimit = 8 * Number.EPSILON * magnitude;
+  let reconstructedEnd = false, residual = 0;
   for (let k = 0; k < 4; k++) {
     const use = uses.get(loop.coedges[k]);
     if (!use || use.loop !== loop.id || use.next !== loop.coedges[(k + 1) % 4] || use.prev !== loop.coedges[(k + 3) % 4]) return null;
     const edge = edges.get(use.edge); if (!edge) return null;
-    const c = edge.curve, matches: { side: number; direction: 1 | -1 }[] = [];
+    if (reconstruction) {
+      charge(24);
+      const { table } = reconstruction, pair = table.uses.get(edge.id);
+      if (pair?.length !== 2) return null;
+      const peer = pair.find(entry => entry.coedge !== use);
+      if (!peer) return null;
+      const { coedge: twin, loop: other } = peer, otherFace = table.faces.get(other.face);
+      const next = uses.get(loop.coedges[(k + 1) % 4]), nextEdge = next && edges.get(next.edge);
+      if (use.twin !== twin.id || twin.twin !== use.id || twin.sense === use.sense || use.pcurve || twin.pcurve
+        || !otherFace || otherFace === face || !table.faceLoops.get(otherFace)?.has(other.id)
+        || !next || !nextEdge || edge.vertices[use.sense === 'forward' ? 1 : 0] !== nextEdge.vertices[next.sense === 'forward' ? 0 : 1]) return null;
+    }
+    const c = edge.curve, matches: { side: number; direction: 1 | -1; distance?: number }[] = [];
     for (let side = 0; side < 4; side++) {
       charge(c.controlPoints.length * 8 + c.knots.length + c.weights.length + 16);
       const boundary = iso[side]; let direction: 1 | -1 | undefined;
-      if (boundary.degree === 2) direction = circularBoundaryDirection(c, boundary, 0);
+      if (reconstruction) {
+        charge(c.controlPoints.length * 8 + c.knots.length + c.weights.length);
+        const forward = reconstructedBoundary(c, boundary, false, reconstructionLimit);
+        const backward = reconstructedBoundary(c, boundary, true, reconstructionLimit);
+        if (forward !== undefined) matches.push({ side, direction: 1, distance: forward });
+        if (backward !== undefined) matches.push({ side, direction: -1, distance: backward });
+      } else if (boundary.degree === 2) direction = circularBoundaryDirection(c, boundary, 0);
       else if (c.degree === 1 && c.controlPoints.length === 2 && c.weights.length === 2 && unit(c.knots)
         && c.weights[0] > 0 && c.weights[0] === c.weights[1]) {
         const same = (reverse: boolean) => c.controlPoints.every((p, n) => p.every((x, d) => x === boundary.controlPoints[reverse ? 1 - n : n][d]));
@@ -183,9 +237,21 @@ function completeCylinderChart(body: Brep, face: BrepFace, context: ConvexRimCon
       if (direction) matches.push({ side, direction });
     }
     if (matches.length !== 1) return null;
-    const { side, direction } = matches[0]; if (occupied.has(side)) return null; occupied.add(side);
+    const { side, direction, distance } = matches[0]; if (occupied.has(side)) return null; occupied.add(side);
     if (direction * (use.sense === 'forward' ? 1 : -1) !== SIDE_TRAVERSAL[side] * (face.sense === 'forward' ? 1 : -1)) return null;
-    for (const end of ENDS) if (!vertices.get(edge.vertices[end])?.point.every((x, d) => x === c.controlPoints[end ? c.controlPoints.length - 1 : 0][d])) return null;
+    if (reconstruction && distance !== undefined) {
+      if (edge === reconstruction.rim && side >= 2) reconstructedEnd = true;
+      residual = Math.max(residual, distance);
+      for (const end of ENDS) {
+        const vertex = vertices.get(edge.vertices[end]), point = c.controlPoints[end ? c.controlPoints.length - 1 : 0];
+        if (!vertex) return null;
+        const separation = len(sub(vertex.point, point));
+        if (!(separation <= reconstructionLimit)) return null;
+        residual = Math.max(residual, separation);
+      }
+    } else {
+      for (const end of ENDS) if (!vertices.get(edge.vertices[end])?.point.every((x, d) => x === c.controlPoints[end ? c.controlPoints.length - 1 : 0][d])) return null;
+    }
     const pc = use.pcurve;
     if (pc) {
       const a = c.knots[c.degree], b = c.knots[c.knots.length - c.degree - 1];
@@ -194,13 +260,14 @@ function completeCylinderChart(body: Brep, face: BrepFace, context: ConvexRimCon
         || pc.controlPoints.length !== 2 || !pc.controlPoints.every((p, n) => p.every((x, d) => x === corners[side][direction === 1 ? n : 1 - n][d]))) return null;
     }
   }
+  if (reconstruction && !reconstructedEnd) return null;
   const axis = normalize(delta);
   if (Math.abs(dot(base.e1, axis)) > 512 * Number.EPSILON || Math.abs(dot(base.e2, axis)) > 512 * Number.EPSILON) return null;
   const e1 = normalize(sub(base.e1, scale(axis, dot(axis, base.e1)))), e2 = cross(axis, e1);
   const vector = (p: Point): Point => [dot(p, e1), dot(p, e2), dot(p, axis)];
   const point = (p: Point): Point => vector(sub(p, base.c));
   return { base: { ...base, c: [0,0,0], e1: vector(base.e1), e2: vector(base.e2) }, height, span,
-    positionError: 4 * error, point, vector };
+    positionError: 4 * error + 2 * residual, point, vector };
 }
 
 /** A native point and a proved forward hit: never a global visible permission. */
@@ -261,15 +328,21 @@ export function convexCylinderRimSupport(toward: Point, context: ConvexRimContex
     if (table.fronts.has(edge)) return table.fronts.get(edge)!;
     const use = cylinder === a ? ua : ub, planeUse = plane === a ? ua : ub;
     const planeBound = planePcurveMatches(edge, plane, planeUse, charge);
-    const chart = planeBound ? completeCylinderChart(body, cylinder, context) : null;
+    const exact = planeBound ? completeCylinderChart(body, cylinder, context) : null;
+    const exactEnd = !!exact && wholeEnd(edge, cylinder, use, charge);
+    // Stored Boolean boundaries may have roundoff in their duplicated coefficients and no pcurves.
+    const chart = exactEnd ? exact : !use.coedge.pcurve && !planeUse.coedge.pcurve
+      ? completeCylinderChart(body, cylinder, context, { rim: edge, table }) : null;
     let result: Front | null = null;
-    if (chart && wholeEnd(edge, cylinder, use, charge)) {
+    if (chart) {
       const n = chart.vector(planeGeometry.n), cap = n[2] < 0 ? -1 : 1;
       if (Math.abs(n[0]) <= 512 * Number.EPSILON && Math.abs(n[1]) <= 512 * Number.EPSILON
         && Math.abs(n[2] - cap) <= 512 * Number.EPSILON) {
         const center = chart.point(circle.c), ray = chart.vector(toward);
-        result = Object.assign((point: Point) => front(point, circle.c, toward),
-          { nativeHidden: (point: Point, epsilon: number) => nativeRimHidden(chart, center, cap, ray, chart.point(point), epsilon) });
+        const margin = exactEnd ? 0 : chart.positionError * len(toward);
+        result = Object.assign((point: Point) => front(point, circle.c, toward)
+          && (margin === 0 || dot(sub(point, circle.c), toward) > margin),
+        { nativeHidden: (point: Point, epsilon: number) => nativeRimHidden(chart, center, cap, ray, chart.point(point), epsilon) });
       }
     }
     table.fronts.set(edge, result); return result;

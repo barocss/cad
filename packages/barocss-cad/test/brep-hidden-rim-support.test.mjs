@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { brepFromPrismatic, checkBrep, evaluateCadPart, faceGeometry, mergeBreps, projectBrepHiddenLines,
+import { brepFromPrismatic, checkBrep, evaluateCadPart, faceGeometry, massPropertiesOf, mergeBreps, projectBrepHiddenLines,
   prismaticExtrude, transformBrep } from '../dist/index.js';
 import { convexCylinderRimSupport } from '../dist/brep/brep-hidden-rim-support.js';
 import { circleOf } from '../dist/brep/brep-tessellate.js';
@@ -131,5 +131,76 @@ test('malformed pcurve, cylinder and topology owners do not receive a native rim
     const body = structuredClone(source), next = usesOf(body, positive);
     mutate(body,next);
     assert.equal(prove()(body,next.edge,...next.faces),null);
+  }
+});
+
+const gearbox = JSON.parse(readFileSync(new URL('../conformance/r12c/accept-gearbox-shaft.json', import.meta.url)));
+const glandFront = 'g/n8.bottom|n8.side0#2', glandRear = 'g/n8.bottom|n8.side0#1';
+const glandPoint = angle => pointAt(angle, 80);
+
+test('the original gland keeps its no-pcurve outer rim connected without losing real cover', () => {
+  const source = gearbox.input.partDocument, sourceBytes = JSON.stringify(source);
+  const { outputs } = evaluateCadPart(source);
+  assert.equal(source.features.length, 11);
+  assert.deepEqual(outputs.map(output => output.id), ['n0','n2','n3','n4','n5','n6','n9','n10']);
+  for (const [i, output] of outputs.entries()) {
+    const expected = gearbox.expect.outputs[i], props = massPropertiesOf(output);
+    assert.ok(checkBrep(output.brep, { strict: true }).valid);
+    assert.ok(Math.abs(props.volume - expected.volume.value) <= expected.volume.relTol * expected.volume.value);
+    assert.ok(props.centroid.every((value, axis) => Math.abs(value - expected.centroid.value[axis]) <= expected.centroid.absTol));
+  }
+  const gland = outputs[6].brep, bytes = JSON.stringify(gland), glandOptions = { segmentsPerQuarter: 12, prefixes: ['g/'] };
+  assert.equal(gland.faces.length, 12);
+  assert.ok(usesOf(gland, glandFront).uses.every(use => !use.pcurve));
+  const frame = projectBrepHiddenLines([gland], view, glandOptions);
+  const intervalsFront = intervals(frame,glandFront), intervalsRear = intervals(frame,glandRear);
+  for (let j = 0; j <= 64; j++) {
+    assert.ok(visible(intervalsFront, tangent * j/64), 'Original front rim reaches the tangent generator');
+    assert.equal(visible(intervalsRear, tangent - Math.PI - 0.005 - 0.04 * j/64), false, 'Rear rim stays hidden');
+  }
+  const join = projected(frame,glandPoint(tangent));
+  const ring = frame.edges.find(edge => edge.name === glandFront);
+  const rimEnds = ring.pieces.filter(piece => piece.visible && piece.curve.kind === 'arc')
+    .flatMap(({curve}) => [curve.t0,curve.t1].map(t => curve.center.map((v, i) => v + curve.u[i] * Math.cos(t) + curve.v[i] * Math.sin(t))));
+  assert.ok(rimEnds.some(point => Math.hypot(...relative(point,join)) < 1e-7));
+  assert.ok(frame.edges.filter(edge => edge.cylinder && Math.abs(edge.cylinder.radius - 35) < 1e-8).some(edge => edge.pieces.some(piece =>
+    piece.visible && piece.curve.kind === 'line' && [piece.curve.a,piece.curve.b].some(p => Math.hypot(...relative(p,join)) < 1e-7))));
+
+  const coverLoop = [[-.3,-.3],[.3,-.3],[.3,.3],[-.3,.3]].map((a,i,all) => ({kind:'line',a,b:all[(i+1)%all.length]}));
+  const cover = brepFromPrismatic(prismaticExtrude([coverLoop],0,1),{id:'gland-cover'});
+  const matrix = [0,1,2].flatMap(i => [frame.right[i],frame.up[i],frame.toward[i]]);
+  const offset = glandPoint(front).map((v,i) => v+3*frame.toward[i]);
+  const foreground = transformBrep(cover,{matrix,offset});
+  assert.ok(checkBrep(foreground,{strict:true}).valid);
+  const covered = projectBrepHiddenLines([gland,foreground],view,{...glandOptions,prefixes:['g/','cover/']});
+  assert.ok(visible(intervalsFront,front));
+  assert.equal(visible(intervals(covered,glandFront),front),false);
+  assert.equal(JSON.stringify(gland),bytes);
+  assert.equal(JSON.stringify(source),sourceBytes);
+});
+
+test('gland reconstruction refuses unmatched coefficients, pcurves and other boundary owners', () => {
+  const source = evaluateCadPart(gearbox.input.partDocument).outputs.find(output => output.id === 'n9').brep;
+  const certify = (body, owner) => convexCylinderRimSupport([0.51,-0.78,0.44], {
+    circle: circleOf, primitive: face => faceGeometry(face), inPlane: () => true, charge: () => {},
+  })(body,owner.edge,...owner.faces);
+  const generator = body => body.edges.find(edge => edge.name === 'n8.side0#1|n8.side0#2#1');
+  const peer = (body, owner) => body.coedges.find(use => use.edge === generator(body).id
+    && !owner.cylinder.loops.includes(use.loop));
+  assert.ok(certify(source, usesOf(source,glandFront))?.nativeHidden);
+  for (const mutate of [
+    body => { for (const point of generator(body).curve.controlPoints) point[0] += 1e-8; },
+    body => { generator(body).curve.weights[1] += 1e-8; },
+    (_body,owner) => { owner.cap.pcurve = structuredClone(owner.edge.curve); },
+    (body,owner) => { body.loops.find(loop => loop.id === peer(body,owner).loop).face = 'missing-face'; },
+    (body,owner) => {
+      const use = peer(body,owner), loop = body.loops.find(item => item.id === use.loop);
+      body.coedges.push({...use,id:'extra-generator-use'});
+      loop.coedges.push('extra-generator-use');
+    },
+  ]) {
+    const body = structuredClone(source), owner = usesOf(body,glandFront);
+    mutate(body,owner);
+    assert.equal(certify(body,owner),null);
   }
 });
