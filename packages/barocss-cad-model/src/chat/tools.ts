@@ -42,7 +42,8 @@ import { ASSEMBLY_CHANGES, PROPOSAL_HANDLERS, acceptProposalWith, autonomy, chan
 import { BATCHABLE, MUTATORS, PART_SCOPED, describe, unknownArguments } from './toolDefinitions';
 import { isObj, isVec3 } from '../util/guards';
 import { revisionOf } from '../util/revision';
-import { BROWSER_PROPOSAL_AUTHOR, browserExtrudeTarget, canProposeBrowserPrimitive, validBoxDimension, validCylinderRadius, validExtrudeDistance } from './browserProposalTargets';
+import { BROWSER_PROPOSAL_AUTHOR, browserExtrudeTarget, browserHoleTarget, canProposeBrowserPrimitive,
+  validBoxDimension, validCylinderRadius, validExtrudeDistance, validHoleDiameter } from './browserProposalTargets';
 import { firstProblem, isRefusal } from '../engine/refusal';
 import { REFERENCE_CODES } from '../engine/schema/references';
 // ./outputs is loaded on first use: it reaches team/bundle → baseline → assembly → parts, which import this
@@ -105,6 +106,21 @@ export function proposeBrowserCylinder(state: ChatState, args: { radius: number;
     title: `Create Cylinder R${radius} × ${height} mm`,
     ops: [{ tool: 'features', args: { action: 'command', command: 'cylinder',
       values: { r: radius, h: height, x: 0, y: 0, z: 0 }, expectedRevision } }],
+  }, evaluate, undefined, { agent: BROWSER_PROPOSAL_AUTHOR });
+}
+
+export function proposeBrowserHole(state: ChatState, args: { body: string; diameter: number; expectedRevision: string }, evaluate: Evaluate) {
+  const { body, diameter, expectedRevision } = args;
+  const target = browserHoleTarget(state.doc, state.bodies);
+  if (state.partOf || !target || target.body !== body || !validHoleDiameter(diameter) ||
+    diameter / 2 >= target.radius || revisionOf(state.doc) !== expectedRevision) {
+    return Promise.resolve(fail(state, 'The browser Hole proposal needs the current Cylinder and a supported diameter smaller than its outside diameter.'));
+  }
+  const [x, y] = target.center;
+  return proposeWith(runProposalTool, state, {
+    title: `Make a centred Ø${diameter} mm through Hole`,
+    ops: [{ tool: 'features', args: { action: 'command', command: 'hole', faces: [target.face],
+      values: { type: 'through', pat: 'one', d: diameter, x, y }, expectedRevision } }],
   }, evaluate, undefined, { agent: BROWSER_PROPOSAL_AUTHOR });
 }
 /** A proposal accepted (A4.2, A4.3): see acceptProposalWith. */

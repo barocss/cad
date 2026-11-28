@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { acceptProposal, previewProposal, proposeBrowserBox, proposeBrowserCylinder, proposeBrowserExtrude, runTool, type ChatState } from '../src/chat/tools';
+import { checkBrep } from '@barocss/cad';
+import { acceptProposal, previewProposal, proposeBrowserBox, proposeBrowserCylinder, proposeBrowserExtrude, proposeBrowserHole, runTool, type ChatState } from '../src/chat/tools';
 import { emptyDoc, withNode, type StudioDoc } from '../src/engine/doc';
-import { evaluatePart } from '../src/engine/evaluate';
+import { evaluatePart, partBreps } from '../src/engine/evaluate';
 import { revisionOf } from '../src/util/revision';
 import { commandById } from '../src/app/commands';
 import { isEditableBox, isEditableCylinder } from '../src/app/editCommand';
@@ -95,6 +96,62 @@ test('browser Cylinder stages a replayable round part at the origin', async () =
   for (const side of ['min', 'max'] as const)
     body.mesh.bounds[side].forEach((value, axis) => assert.ok(Math.abs(value - bounds[side][axis]) < 1e-10));
   assert.ok(body.volume !== null && Math.abs(body.volume - 250 * Math.PI) < 1e-8);
+});
+
+test('browser Hole stages a native axial through cut on a translated Cylinder', async () => {
+  const command = commandById('cylinder');
+  assert.ok(command?.build);
+  const doc = command.build({ doc: emptyDoc(), bodies: [], selection: { faces: [], edges: [], bodies: [] } },
+    { r: 5, h: 10, x: 8, y: -3, z: 4 });
+  const evaluated = await evaluate(doc);
+  assert.ok(evaluated.ok);
+  const state: ChatState = { doc, bodies: evaluated.bodies };
+  const args = { body: state.bodies[0].key, diameter: 4, expectedRevision: revisionOf(doc) };
+  const unknown = { ...state, bodies: [{ ...state.bodies[0], topology: undefined }] };
+  const rectangle = await stock();
+  for (const [version, fields] of [
+    [state, { ...args, diameter: 0.49 }], [state, { ...args, diameter: 10 }],
+    [state, { ...args, body: 'other' }], [state, { ...args, expectedRevision: '0000000000000000' }],
+    [unknown, args], [rectangle, { ...args, expectedRevision: revisionOf(rectangle.doc) }],
+  ] as const) {
+    const refused = await proposeBrowserHole(version, fields, neverEvaluate);
+    assert.ok(refused.isError && !refused.changed);
+    assert.equal(refused.state, version);
+  }
+  const waiting = await proposeBrowserHole(state, args, evaluate);
+  assert.ok(waiting.changed && !waiting.isError, waiting.content);
+  assert.equal(waiting.state.doc.nodes, doc.nodes);
+  assert.equal(waiting.state.bodies, state.bodies);
+  const proposal = waiting.state.doc.proposals?.at(-1);
+  assert.ok(proposal && proposal.status === 'open');
+  assert.deepEqual(await acceptProposal(waiting.state, proposal.id, neverEvaluate, { by: { agent: 'chat' } }),
+    { error: 'A browser proposal needs approval by the user in Studio.' });
+  const preview = await previewProposal(waiting.state, proposal.id, evaluate);
+  assert.ok('bodies' in preview);
+  const applied = await acceptProposal(waiting.state, proposal.id, evaluate);
+  assert.ok('state' in applied);
+  const [sketch, extrusion, hole] = applied.state.doc.nodes;
+  assert.deepEqual([sketch, extrusion], doc.nodes);
+  assert.ok(hole?.kind === 'hole');
+  assert.deepEqual(hole.center, [8, -3]);
+  assert.deepEqual(hole.parent, { node: 1, side: 'solid' });
+  assert.equal(hole.radius, 2);
+  assert.equal(hole.face, 'n1.top');
+  assert.equal(hole.depth, undefined);
+  assert.equal(proposal.ops[0].args?.command, 'hole');
+  for (const bodies of [preview.bodies, applied.state.bodies]) {
+    assert.equal(bodies.length, 1);
+    const [body] = bodies;
+    assert.ok(body.volume !== null && Math.abs(body.volume - 210 * Math.PI) < 1e-8);
+    assert.deepEqual(body.topology, { kind: 'solid', bodyCount: 1, openShells: 0, boundaryEdges: 0 });
+  }
+  const [result] = partBreps(applied.state.doc);
+  const native = checkBrep(result.brep, { strict: true });
+  assert.ok(native.valid, native.issues.join('\n'));
+  assert.equal(native.topology.length, 1);
+  assert.equal(native.topology[0].genus, 1);
+  assert.equal(result.brep.faces.length, 6);
+  assert.equal(result.brep.edges.length, 12);
 });
 
 test('browser Extrude retains a standalone Cylinder command and literal circle geometry', async () => {

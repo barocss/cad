@@ -12,12 +12,14 @@ const pins = [
 const firstBox = process.argv.includes('--box');
 const cylinderEdit = process.argv.includes('--cylinder');
 const firstCylinder = process.argv.includes('--first-cylinder');
+const axialHole = process.argv.includes('--hole');
 const f = await createFlow({
-  name: firstBox ? 'browser-box-proposal' : firstCylinder || cylinderEdit ? 'browser-cylinder-proposal' : 'browser-extrude-proposal',
+  name: axialHole ? 'browser-hole-proposal' : firstBox ? 'browser-box-proposal' :
+    firstCylinder || cylinderEdit ? 'browser-cylinder-proposal' : 'browser-extrude-proposal',
   output: process.argv[2], envFrozen: 'BROWSER_EXTRUDE_FROZEN',
   initialFiles: pins, requiredFrozen: pins,
   qualification: 'Call a real browser WebMCP tool and verify native Studio preview, rejection, approval, history and project persistence.',
-  limits: ['One first Box, one first Cylinder, or one standalone Extrude height change, with WebMCP and testing flags in desktop Chrome.'],
+  limits: ['First Box, first Cylinder, standalone Extrude height change or centred through Hole with WebMCP testing flags in desktop Chrome.'],
   async createContext(options) {
     if (!f.browser) {
       const { chromium } = createRequire(join(process.env.PW_DIR, 'package.json'))('playwright');
@@ -31,16 +33,22 @@ const f = await createFlow({
   },
 });
 const extrudeName = 'cad_part_propose_extrude', boxName = 'cad_part_propose_box',
-  cylinderName = 'cad_part_propose_cylinder', summaryName = 'cad_part_summary';
+  cylinderName = 'cad_part_propose_cylinder', holeName = 'cad_part_propose_hole', summaryName = 'cad_part_summary';
 const proposalName = firstBox ? boxName : extrudeName;
-const project = firstBox ? 'Browser first Box proposal' : firstCylinder || cylinderEdit ? 'Browser Cylinder proposal' : 'Browser Extrude proposal';
-const file = firstCylinder || cylinderEdit ? 'browser-cylinder.bcad' : 'browser-extrude-box.bcad';
+const project = axialHole ? 'Browser Hole proposal' : firstBox ? 'Browser first Box proposal' :
+  firstCylinder || cylinderEdit ? 'Browser Cylinder proposal' : 'Browser Extrude proposal';
+const file = axialHole ? 'browser-hole.bcad' : firstCylinder || cylinderEdit ? 'browser-cylinder.bcad' : 'browser-extrude-box.bcad';
 const box = height => ({
   format: 'barocss-cad-model', schema: 3, units: 'mm', nextId: 2, parameters: {},
   nodes: [{ kind: 'sketch', id: 'n0', profile: 'rectangle', min: [0, 0], max: [80, 50] },
     { kind: 'extrude', id: 'n1', sketch: 0, height }],
   outputs: { b1: { node: 1, side: 'solid' } },
 });
+const cylinder = (height, x, y, z) => ({ ...box(height), nodes: [
+  { kind: 'sketch', profile: 'circle', center: [x, y], radius: 5, id: 'n0' },
+  { kind: 'extrude', sketch: 0, height, ...(z ? { from: z } : {}), id: 'n1',
+    made: { command: 'cylinder', values: { r: 5, h: height, x, y, z } } },
+] });
 const button = (name, scope = f.page) => scope.getByRole('button', { name, exact: true });
 const chat = () => f.page.getByRole('complementary', { name: 'Chat', exact: true });
 const versions = () => f.page.getByRole('complementary', { name: 'Versions panel', exact: true });
@@ -102,6 +110,18 @@ async function openProject() {
   await versions().getByRole('textbox', { name: 'Browser project name', exact: true }).fill(project);
   await button('Project in this browser', versions()).click();
   await versions().getByLabel('Project', { exact: true }).waitFor();
+}
+
+async function saveAndReopenProject(projectFile) {
+  await openProject();
+  await button('Save').click();
+  await versions().getByRole('list', { name: 'Project documents', exact: true }).getByText(projectFile, { exact: true }).waitFor();
+  await button('Close project', versions()).click();
+  await versions().getByLabel('Project', { exact: true }).waitFor({ state: 'hidden' });
+  await f.page.reload();
+  await f.ready();
+  await openProject();
+  await button('Open ' + projectFile, versions()).click();
 }
 
 async function assertBox(height) {
@@ -250,10 +270,7 @@ async function verifyCylinder() {
   const [x, y, z] = firstCylinder ? [0, 0, 0] : [8, -3, 4];
   const bounds = height => ({ min: [x - 5, y - 5, z], max: [x + 5, y + 5, z + height] });
   const record = height => ({ command: 'cylinder', values: { r: 5, h: height, x, y, z } });
-  const original = { ...box(10), nodes: [
-    { kind: 'sketch', profile: 'circle', center: [x, y], radius: 5, id: 'n0' },
-    { kind: 'extrude', sketch: 0, height: 10, ...(z ? { from: z } : {}), id: 'n1', made: record(10) },
-  ] };
+  const original = cylinder(10, x, y, z);
   const assertCylinder = async height => {
     const { nodes, outputs } = await f.doc();
     assert.deepEqual(nodes, [original.nodes[0], { ...original.nodes[1], height, made: record(height) }]);
@@ -349,16 +366,7 @@ async function verifyCylinder() {
   await f.redo();
   await f.same(accepted);
   await assertCylinder(15);
-  await openProject();
-  await button('Save').click();
-  const projectFile = firstCylinder ? 'Untitled.bcad' : file;
-  await versions().getByRole('list', { name: 'Project documents', exact: true }).getByText(projectFile, { exact: true }).waitFor();
-  await button('Close project', versions()).click();
-  await versions().getByLabel('Project', { exact: true }).waitFor({ state: 'hidden' });
-  await f.page.reload();
-  await f.ready();
-  await openProject();
-  await button('Open ' + projectFile, versions()).click();
+  await saveAndReopenProject(firstCylinder ? 'Untitled.bcad' : file);
   await f.same(accepted);
   await assertCylinder(15);
   await toolsReady(extrudeName, false);
@@ -370,7 +378,94 @@ async function verifyCylinder() {
   f.report.observations.push({ chrome: f.browser.version(), original: summary, staged, reopened });
 }
 
-await f.run(firstBox ? verifyFirstBox : firstCylinder || cylinderEdit ? verifyCylinder : async () => {
+async function verifyAxialHole() {
+  await f.newPage();
+  const source = cylinder(10, 8, -3, 4);
+  await open(source);
+  const summary = await share();
+  await toolsReady(holeName, false);
+  await proposalGrant().click();
+  await toolsReady(extrudeName, true);
+  const oldExtrude = await getTool(extrudeName);
+  await proposalGrant('Hole').click();
+  await toolsReady(extrudeName, false);
+  await toolsReady(holeName, true);
+  const args = { body: 'b1', diameter: 4, expectedRevision: summary.revision };
+  await assert.rejects(invoke(oldExtrude, { body: args.body, height: 15, expectedRevision: summary.revision }));
+  const tool = await getTool(holeName);
+  for (const [input, code] of [
+    [{ ...args, diameter: '4' }, 'invalid_arguments'], [{ ...args, diameter: 0.49 }, 'invalid_arguments'],
+    [{ ...args, diameter: 10 }, 'invalid_arguments'], [{ ...args, x: 0 }, 'invalid_arguments'],
+    [{ ...args, body: 'other' }, 'hole_unavailable'], [{ ...args, expectedRevision: '0000000000000000' }, 'stale_part'],
+  ]) assert.equal((await invoke(tool, input)).error.code, code);
+  await f.same(source);
+  const checkVolume = async coefficient => {
+    const { bodies } = await f.bodies();
+    assert.equal(bodies.length, 1);
+    assert.ok(Math.abs(bodies[0].volume - coefficient * Math.PI) < 1e-7);
+  };
+  const stage = async handle => {
+    const staged = await invoke(handle, args);
+    assert.deepEqual(staged, { proposal: staged.proposal, applied: false, revision: summary.revision });
+    await toolsReady(holeName, false);
+    await assert.rejects(invoke(handle, args));
+    const proposal = card(staged.proposal);
+    await proposal.waitFor();
+    return { staged, proposal };
+  };
+  const first = await stage(tool);
+  await button('Preview', first.proposal).click();
+  const delta = first.proposal.getByLabel('Volume change', { exact: true });
+  await delta.waitFor();
+  assert.match(await delta.textContent(), /[−-]125[.,]66/);
+  await checkVolume(250);
+  await button('Top').click();
+  await frame();
+  await f.snapshot('browser-hole-preview');
+  const waiting = await f.doc();
+  await button('Reject', first.proposal).click();
+  await f.changed(waiting);
+  const rejected = await f.doc();
+  assert.deepEqual(rejected.nodes, source.nodes);
+  await checkVolume(250);
+  await button('Show decided proposals').click();
+  await first.proposal.getByText(/rejected by user/).waitFor();
+  await f.snapshot('browser-hole-rejected');
+  assert.equal((await share()).revision, summary.revision);
+  await proposalGrant('Hole').click();
+  await toolsReady(holeName, true);
+  const { staged, proposal } = await stage(await getTool(holeName));
+  const beforeAccept = await f.doc();
+  await button('Accept', proposal).click();
+  await f.changed(beforeAccept);
+  const accepted = await f.doc();
+  const hole = accepted.nodes.at(-1);
+  assert.deepEqual(accepted.nodes.slice(0, -1), source.nodes);
+  assert.deepEqual([hole.kind, hole.center, hole.face, hole.radius, hole.depth], ['hole', [8, -3], 'n1.top', 2, undefined]);
+  assert.equal(accepted.proposals.at(-1).ops[0].args.command, 'hole');
+  assert.equal(accepted.proposals.at(-1).decided.by, 'user');
+  await checkVolume(210);
+  await f.snapshot('browser-hole-accepted');
+  await f.undo();
+  await f.same(beforeAccept);
+  await checkVolume(250);
+  await f.redo();
+  await f.same(accepted);
+  await checkVolume(210);
+  await saveAndReopenProject(file);
+  await f.same(accepted);
+  await checkVolume(210);
+  await toolsReady(holeName, false);
+  const reopened = await share();
+  assert.equal(await proposalGrant('Hole').count(), 0);
+  await button('Top').click();
+  await frame();
+  await f.snapshot('browser-hole-reopened');
+  assert.deepEqual(f.report.downloads, []);
+  f.report.observations.push({ chrome: f.browser.version(), original: summary, staged, reopened });
+}
+
+await f.run(axialHole ? verifyAxialHole : firstBox ? verifyFirstBox : firstCylinder || cylinderEdit ? verifyCylinder : async () => {
   const original = box(10);
   await f.newPage();
   await open(original);

@@ -1,6 +1,7 @@
 import { useLayoutEffect, useRef, useState } from 'react';
-import { browserExtrudeTarget, canProposeBrowserPrimitive, validBoxDimension, validCylinderRadius, validExtrudeDistance } from '@barocss/cad-model/chat/browserProposalTargets';
-import { proposeBrowserBox, proposeBrowserCylinder, proposeBrowserExtrude, type ChatState, type Evaluate } from '@barocss/cad-model/chat/tools';
+import { browserExtrudeTarget, browserHoleTarget, canProposeBrowserPrimitive,
+  validBoxDimension, validCylinderRadius, validExtrudeDistance, validHoleDiameter } from '@barocss/cad-model/chat/browserProposalTargets';
+import { proposeBrowserBox, proposeBrowserCylinder, proposeBrowserExtrude, proposeBrowserHole, type ChatState, type Evaluate } from '@barocss/cad-model/chat/tools';
 import { revisionOf } from '@barocss/cad-model/util/revision';
 import type { StudioDoc } from '@barocss/cad-model/engine/doc';
 import { browserToolFailure, modelContext, plainInput } from './browserModelContext';
@@ -14,6 +15,7 @@ export interface BrowserPartProposalSource {
 
 const revisionField = { type: 'string', maxLength: 16 } as const;
 const distanceField = { type: 'number' } as const;
+const bodyField = { type: 'string', maxLength: 128 } as const;
 const proposalTools = {
   Box: {
     name: 'cad_part_propose_box',
@@ -32,20 +34,28 @@ const proposalTools = {
   Extrude: {
     name: 'cad_part_propose_extrude',
     description: 'Propose a positive distance in millimetres for the shared rectangular or circular Extrude. A Box or Cylinder requires at least 1 mm. Use the body key and revision from cad_part_summary. A person decides in Studio.',
-    fields: { body: { type: 'string', maxLength: 128 } as const, height: distanceField, expectedRevision: revisionField },
+    fields: { body: bodyField, height: distanceField, expectedRevision: revisionField },
     invalid: 'Give a body key, a positive numeric distance in millimetres and the expected revision.',
     title: 'Allow one browser proposal for this part’s Extrude distance',
+  },
+  Hole: {
+    name: 'cad_part_propose_hole',
+    description: 'Propose one centred axial through Hole on the shared standalone Cylinder. Give the body key and revision from cad_part_summary and a diameter in millimetres smaller than the outside diameter. A person decides in Studio.',
+    fields: { body: bodyField, diameter: distanceField, expectedRevision: revisionField },
+    invalid: 'Give a body key, a numeric diameter of at least 0.5 mm and the expected revision.',
+    title: 'Allow one browser proposal for a centred through Hole',
   },
 };
 type ProposalKind = keyof typeof proposalTools;
 const emptyPartKinds = ['Box', 'Cylinder'] as const;
 const extrusionKinds = ['Extrude'] as const;
+const cylinderKinds = ['Extrude', 'Hole'] as const;
 type Grant = { owner: StudioDoc; scope: object; kind: ProposalKind };
 
 function proposalInput(kind: ProposalKind, input: unknown, required: readonly string[]) {
   if (!plainInput(input) || Reflect.ownKeys(input).length !== required.length ||
     !required.every(key => Object.hasOwn(input, key))) return;
-  const { body, width, depth, radius, height, expectedRevision } = input;
+  const { body, width, depth, radius, height, diameter, expectedRevision } = input;
   if (typeof expectedRevision !== 'string' || !/^[a-f0-9]{16}$/.test(expectedRevision)) return;
   if (kind === 'Box') {
     if (validBoxDimension(width) && validBoxDimension(depth) && validBoxDimension(height))
@@ -53,8 +63,9 @@ function proposalInput(kind: ProposalKind, input: unknown, required: readonly st
   } else if (kind === 'Cylinder') {
     if (validCylinderRadius(radius) && validBoxDimension(height))
       return { kind, args: { radius, height, expectedRevision } };
-  } else if (typeof body === 'string' && body.length > 0 && body.length <= 128 && validExtrudeDistance(height)) {
-    return { kind, args: { body, height, expectedRevision } };
+  } else if (typeof body === 'string' && body.length > 0 && body.length <= bodyField.maxLength) {
+    if (kind === 'Extrude' && validExtrudeDistance(height)) return { kind, args: { body, height, expectedRevision } };
+    if (kind === 'Hole' && validHoleDiameter(diameter)) return { kind, args: { body, diameter, expectedRevision } };
   }
 }
 
@@ -71,7 +82,8 @@ export function useBrowserPartProposal(source: BrowserPartSummarySource | undefi
     setFailed(false);
   }
   const kinds: readonly ProposalKind[] | undefined = source && (canProposeBrowserPrimitive(source.doc, source.bodies) ? emptyPartKinds :
-    browserExtrudeTarget(source.doc, source.bodies) ? extrusionKinds : undefined);
+    browserHoleTarget(source.doc, source.bodies) ? cylinderKinds :
+      browserExtrudeTarget(source.doc, source.bodies) ? extrusionKinds : undefined);
   const kind = grant?.kind;
   const ready = !!source?.ready && !!action;
   const active = enabled && same && readShared && ready && !!kind && !!kinds?.includes(kind);
@@ -111,6 +123,12 @@ export function useBrowserPartProposal(source: BrowserPartSummarySource | undefi
                 return browserToolFailure('extrude_unavailable', 'Choose the current Extrude body and a different distance.');
               if (target.node.made && request.args.height < 1)
                 return browserToolFailure('invalid_arguments', 'Give a height of at least 1 mm for a Box or Cylinder.');
+            } else if (request.kind === 'Hole') {
+              const target = browserHoleTarget(snapshot.doc, snapshot.bodies);
+              if (!target || target.body !== request.args.body)
+                return browserToolFailure('hole_unavailable', 'Choose the current standalone Cylinder body.');
+              if (request.args.diameter / 2 >= target.radius)
+                return browserToolFailure('invalid_arguments', 'Give a hole diameter smaller than the Cylinder outside diameter.');
             }
             submitting = true;
             try {
@@ -118,7 +136,8 @@ export function useBrowserPartProposal(source: BrowserPartSummarySource | undefi
               const state: ChatState = { doc, bodies, approvalRequired: true };
               const pending = request.kind === 'Box' ? proposeBrowserBox(state, request.args, evaluateWith.evaluate)
                 : request.kind === 'Cylinder' ? proposeBrowserCylinder(state, request.args, evaluateWith.evaluate)
-                : proposeBrowserExtrude(state, request.args, evaluateWith.evaluate);
+                : request.kind === 'Extrude' ? proposeBrowserExtrude(state, request.args, evaluateWith.evaluate)
+                : proposeBrowserHole(state, request.args, evaluateWith.evaluate);
               const outcome = await pending.catch(() => null);
               if (!current(snapshot, signal)) return stale;
               const proposal = outcome?.state.doc.proposals?.at(-1);

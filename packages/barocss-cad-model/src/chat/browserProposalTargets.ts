@@ -2,6 +2,8 @@ import { CadPartLimits } from '@barocss/cad';
 import { isEditableBox, isEditableCylinder } from '../app/editCommand';
 import type { StudioDoc } from '../engine/doc';
 import type { BodyResult } from '../engine/evaluate';
+import { featureId } from '../engine/ids';
+import { matchesFaceName } from './names';
 
 export const BROWSER_PROPOSAL_AUTHOR = 'browser';
 
@@ -14,6 +16,10 @@ export function validBoxDimension(value: unknown): value is number {
 }
 
 export function validCylinderRadius(value: unknown): value is number {
+  return validExtrudeDistance(value) && value >= 0.5;
+}
+
+export function validHoleDiameter(value: unknown): value is number {
   return validExtrudeDistance(value) && value >= 0.5;
 }
 
@@ -48,4 +54,21 @@ export function browserExtrudeTarget(doc: StudioDoc, bodies: readonly BodyResult
       Math.abs(base) > CadPartLimits.length || (extrude.made && !isEditableCylinder(doc.nodes, 0))) return;
   } else return;
   return { body: body.key, height: extrude.height, index: output.node, node: extrude };
+}
+
+/** The exact upper native cap of a standalone standard Cylinder. */
+export function browserHoleTarget(doc: StudioDoc, bodies: readonly BodyResult[]) {
+  const extrusion = browserExtrudeTarget(doc, bodies);
+  const [sketch] = doc.nodes;
+  const [body] = bodies;
+  if (!extrusion || extrusion.node.made?.command !== 'cylinder' || sketch?.kind !== 'sketch' || sketch.profile !== 'circle' ||
+    body.topology?.kind !== 'solid' || body.topology.bodyCount !== 1 || body.topology.openShells !== 0 ||
+    body.topology.boundaryEdges !== 0) return;
+  const face = featureId(doc.nodes, extrusion.index) + '.top';
+  const hits = body.mesh.faces.filter(candidate => matchesFaceName(candidate, face));
+  if (hits.length !== 1) return;
+  const [cap] = hits;
+  if (cap.name !== face || cap.nativePlaneName !== face || cap.nativeAxisPlane?.axis !== 'z' ||
+    cap.nativeAxisPlane.at !== Number(extrusion.node.from ?? 0) + extrusion.height || cap.normal[2] < 0.999) return;
+  return { body: body.key, face, radius: Number(sketch.radius), center: [Number(sketch.center[0]), Number(sketch.center[1])] };
 }
