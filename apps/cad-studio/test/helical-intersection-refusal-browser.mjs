@@ -25,10 +25,18 @@ const stock = {
   outputs: { b0: { node: 0, side: 'solid' }, b1: { node: 1, side: 'solid' } },
 };
 const frame = () => f.page.getByTitle('Frame all (F)', { exact: true }).click();
-const button = name => f.page.getByRole('button', { name, exact: true });
+const button = (name, root = f.page) => root.getByRole('button', { name, exact: true });
 const undoButtons = async () => Promise.all(['Undo', 'Redo'].map(name => button(name).isEnabled()));
+const versions = () => f.page.getByRole('complementary', { name: 'Versions panel', exact: true });
+const project = 'Original crossing gear inputs';
+async function projectOpen() {
+  if (!(await versions().isVisible())) await button('Project and versions').click();
+  await versions().getByRole('textbox', { name: 'Browser project name', exact: true }).fill(project);
+  await button('Project in this browser', versions()).click();
+  await versions().getByLabel('Project', { exact: true }).waitFor();
+}
 await f.run(async () => {
-  const file = join(f.output, 'original-helical-pair.bcad');
+  const filename = 'original-helical-pair.bcad', file = join(f.output, filename);
   await writeFile(file, JSON.stringify(stock));
   for (const [a, b] of [[0, 1], [1, 0]]) {
     await f.freshOpen(file, stock, 'original-gear-inputs-' + a);
@@ -51,8 +59,18 @@ await f.run(async () => {
     await f.snapshot('intersect-refusal-' + a);
     f.report.observations.push({ order: selected, warning, retainedBodies: accepted.length, history: before });
   }
-  const saved = await f.save('originals-after-refusal');
-  await f.freshOpen(saved.file, stock, 'both-original-gears-reopened');
+  await projectOpen();
+  await button('Save').click();
+  await versions().getByRole('list', { name: 'Project documents', exact: true }).getByText(filename, { exact: true }).waitFor();
+  await button('Close project', versions()).click();
+  await versions().getByLabel('Project', { exact: true }).waitFor({ state: 'hidden' });
+  await f.page.reload();
+  await f.ready();
+  await projectOpen();
+  await button('Open ' + filename, versions()).click();
+  await f.same(stock);
+  await button('Project and versions').click();
   await frame();
   await f.snapshot('both-original-gears-framed');
+  assert.deepEqual(f.report.downloads, []);
 });
