@@ -25,6 +25,7 @@ import { readFilletPickedEdgeHighlight } from './app/filletPickedEdgeHighlight';
 import { useSketchReopenCamera } from './sketch/useSketchReopenCamera';
 import { useBrowserActions } from './app/useBrowserActions';
 import { useStudioCommandSession } from './state/useStudioCommandSession';
+import { useStudioPreferences } from './app/useStudioPreferences';
 import { useStudioCommandApply } from './state/useStudioCommandApply';
 import { sketchOffsetTarget } from './app/sketchOffsetTarget';
 import { useStudioReferenceReview } from './app/useStudioReferenceReview';
@@ -576,7 +577,8 @@ export function App() {
   // (G24: the drawing's annotations on the model, session only, and the one picked.)
   const [pmiEnabled, setPmiEnabled] = useState(false);
   const [isolatedInstances, setIsolatedInstances] = useState<readonly string[] | undefined>();
-  const [theme, setTheme] = useState<'dark' | 'light'>(() => { try { return (localStorage.getItem('cad-studio-theme') as 'dark' | 'light') || 'dark'; } catch { return 'dark'; } });
+  const { theme, setTheme, pickFilter, pickFilterRef, cyclePickFilter, snapStep, cycleSnapStep, browserOpen,
+    setBrowserOpen, toggleBrowser, material, setMaterial } = useStudioPreferences(viewport);
   /** A surface analysis look on the bodies (modelling view only). */
   const [analysis, setAnalysis] = useState<'zebra' | 'curvature' | 'overhang' | null>(null);
   // (G6: an analysis map on the bodies — IM4 wall thickness; IM2 draft and CNC access when their data lands — and its value under the pointer.)
@@ -600,12 +602,7 @@ export function App() {
   /** Bodies whose features the browser lists under them (by key). */
   const [expanded, setExpanded] = useState<string[]>([]);
   const [help, setHelp] = useState(false);
-  /** The grid step (mm): sketch points, placing, gizmo moves and dimension arrows (0: off). */
-  /** The selection filter (kept between visits). */
-  const [pickFilter, setPickFilter] = useState<'all' | 'face' | 'edge' | 'body'>(() => { try { const v = localStorage.getItem('studio.pick'); return v === 'face' || v === 'edge' || v === 'body' ? v : 'all'; } catch { return 'all'; } });
-  const pickFilterRef = useRef(pickFilter); pickFilterRef.current = pickFilter;
   const [objectSnapKinds, setObjectSnapKinds] = useState(defaultObjectSnapKinds);
-  const [snapStep, setSnapStep] = useState(() => { try { const v = Number(localStorage.getItem('studio.snap') ?? '1'); return [1, 0.5, 0.1, 5, 10, 0].includes(v) ? v : 1; } catch { return 1; } });
   /** The history chip right-clicked: its menu (edit, edit sketch, roll back here, delete). */
   const [historyMenu, setHistoryMenu] = useState<HistoryMenuTarget | null>(null);
   /**
@@ -647,7 +644,6 @@ export function App() {
   const activeRef = useRef<Active | null>(null);
   /** The body whose browser row the pointer is on (lit in the viewport). */
   const [rowHover, setRowHover] = useState<number | null>(null);
-  const [browserOpen, setBrowserOpen] = useState(() => { try { return localStorage.getItem('cad-studio.browser') !== 'closed'; } catch { return true; } });
   const measurementSession = useStudioMeasurementSession(docGeneration, workerSession, project.view.store);
   const { measure, setMeasure, meshCirclePick, measurementFocus, setMeasurementFocus,
     measureNativeReady, pinnedFaces, clearPinnedFaces } = measurementSession;
@@ -660,8 +656,6 @@ export function App() {
   const cageInputActive = modelEditorInput && !!cageEd.session;
   const sketch3dInputActive = modelEditorInput && !cageInputActive;
   const skel = useSkeletonEditor(doc, useCallback((next: StudioDoc) => commitRef.current(next), []), useCallback((title: string, hint: string) => setToast({ title, hint, detail: '' }), []), snapStep, sketch3dInputActive);
-  const [material, setMaterial] = useState<string>(() => { try { return localStorage.getItem('studio.material') ?? 'al6061'; } catch { return 'al6061'; } });
-  useEffect(() => { try { localStorage.setItem('studio.material', material); } catch { /* storage unavailable */ } }, [material]);
   const [lastMs, setLastMs] = useState(0);
   // (The same time for the drag preview's whole-part cost, read while dragging: roadmap 20 ①.)
   const lastEvalMs = useRef(0);
@@ -674,7 +668,6 @@ export function App() {
   const requestNativeOpen = useRef<(accept: () => void, focus: HTMLElement | null) => void>(() => {});
   requestNativeOpen.current = (accept, focus) => workspaceModeExit.switchWhenReady(accept, { originFocus: focus });
 
-  useEffect(() => { document.documentElement.dataset.theme = theme; viewport.current?.setTheme(theme); try { localStorage.setItem('cad-studio-theme', theme); } catch { /* storage unavailable */ } }, [theme]);
   useEffect(() => { viewport.current?.setAo(ao); }, [ao]);
 
   // (Render settings do not change the model: nodes, parameters and consumed direct paths re-evaluate it.)
@@ -1929,7 +1922,7 @@ export function App() {
   });
   const browserPanel = (
       <ModelBrowser ref={referenceBrowser} model={{ doc, evaluated, namesDoc, bodies, generation: docGeneration, fresh, busy }} actions={browserActions}
-        state={{ open: browserOpen, setOpen: setBrowserOpen, blocked: browserActions.revealBlocked, onCollapse: clearReferencePreview }}
+        state={{ open: browserOpen, toggle: toggleBrowser, blocked: browserActions.revealBlocked, onCollapse: clearReferencePreview }}
         geometry={{
           bodies: { selection, rows: { expanded, setExpanded, renaming, setRenaming, editNode, setRowHover },
             changes: { commit, commitVisibility: commitBodyVisibility, setSelection, setDirectSel, setInstanceSel,
@@ -2224,7 +2217,7 @@ export function App() {
         view={{ ortho, sketching: !!sketch, wheelZoom: modelWheelZoom, sketchReopenCamera, fitActiveSketch: sketchActions.fitActiveSketch, ao, setAo, theme, setTheme, rendering, printing: !!printing, viewBackend }}
         section={{ section, documentSession: docGeneration, setSection, sectionHatchOn, setSectionHatchOn, sectionBox, sectionFacePick, setSectionFacePick, sketchSection, cameraEye, sectionExclusion: sectionExclusionControls, vertexMove: sectionVertex.controls }}
         analysis={{ analysis, setAnalysis, mapKind, setMapKind, mapLegend, mapScope, mapHover, setMapHover, mouldResult, mouldSpread, setMouldSpread }}
-        picking={{ pickFilter, setPickFilter, snapStep, setSnapStep, setSelection }} explodeStore={explodeStore} />
+        picking={{ pickFilter, cyclePickFilter, snapStep, cycleSnapStep, setSelection }} explodeStore={explodeStore} />
 
       {palette && <Palette ctx={ctx} execution={{ showingVariant: variants.showing, fresh, busy }} onRun={start} onClose={() => setPalette(false)} extra={PALETTE_EXTRA} />}
       {help && <ShortcutHelp onClose={() => setHelp(false)} />}

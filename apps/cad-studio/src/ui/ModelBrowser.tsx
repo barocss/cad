@@ -1,4 +1,4 @@
-import { Profiler, type ComponentProps, type Dispatch, type ReactNode, type Ref, type SetStateAction } from 'react';
+import { Profiler, type ComponentProps, type ReactNode, type Ref } from 'react';
 import { ToolIconButton } from '@/components/ui/tool-button';
 import { BODY_REVEAL_SCOPE } from '../app/bodyBrowserReveal';
 import { NO_CUTS, NO_INSTANCES } from '../app/studioConstants';
@@ -15,7 +15,7 @@ import { Icon } from './atoms';
 interface ModelBrowserProps {
   ref: Ref<HTMLElement>;
   model: ComponentProps<typeof BodyBrowserRows>['model'] & { generation: number };
-  state: { open: boolean; setOpen: Dispatch<SetStateAction<boolean>>; blocked: string | null; onCollapse(): void };
+  state: { open: boolean; toggle(): void; blocked: string | null; onCollapse(): void };
   actions: Pick<ReturnType<typeof useBrowserActions>, 'reveal' | 'queryOwner' | 'selectQueryMatches' | 'isolationAction'>;
   geometry: {
     bodies: Pick<ComponentProps<typeof BodyBrowserRows>, 'selection' | 'rows' | 'changes'>;
@@ -30,7 +30,7 @@ interface ModelBrowserProps {
 
 export function ModelBrowser({ ref, model, state, actions, geometry, children }: ModelBrowserProps) {
   const { doc, bodies, generation, fresh, busy } = model;
-  const { open, setOpen, blocked, onCollapse } = state;
+  const { open, toggle, blocked, onCollapse } = state;
   const { reveal, queryOwner, selectQueryMatches, isolationAction } = actions;
   const count = bodies.length;
   return <Profiler id="outliner" onRender={onBlockRender}>
@@ -40,10 +40,7 @@ export function ModelBrowser({ ref, model, state, actions, geometry, children }:
           onPointerDown={reveal.pointerDown} onClick={reveal.reveal}><Icon name="search" small /></ToolIconButton>
         <ToolIconButton data-reference-return size="tiny" aria-label={open ? 'Collapse the browser' : 'Expand the browser'} onClick={() => {
           if (open) onCollapse();
-          setOpen(current => {
-            try { localStorage.setItem('cad-studio.browser', current ? 'closed' : 'open'); } catch { /* private mode */ }
-            return !current;
-          });
+          toggle();
         }}><Icon name={open ? 'left_panel_close' : 'left_panel_open'} small /></ToolIconButton>
       </div>
       {reveal.feedback && <div role="status" className="small muted" aria-label="Find selection in Browser">{reveal.feedback}</div>}

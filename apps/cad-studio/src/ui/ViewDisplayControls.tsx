@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { fmt, type StudioDoc } from '@barocss/cad-model/engine/doc';
 import type { Selection } from '@barocss/cad-model/app/commands';
 import { CAD_DISPLAY_MODES, emptySel } from '../app/studioConstants';
+import type { PickFilter } from '../app/useStudioPreferences';
 import { onBlockRender } from '../devRenders';
 import type { ViewportHandle } from '../viewport/Viewport';
 import { lineDisplayMode, type DisplayMode } from '../viewport/renderer';
@@ -22,7 +23,6 @@ type StateSetter<T> = Dispatch<SetStateAction<T>>;
 type SectionProps = ComponentProps<typeof SectionBar>;
 type AnalysisMode = 'zebra' | 'curvature' | 'overhang' | null;
 type AnalysisMap = MapKind | 'parting' | 'halves' | null;
-type PickFilter = 'all' | 'face' | 'edge' | 'body';
 
 function keepViewToggleKeys(event: KeyboardEvent<HTMLButtonElement>) {
   if (event.key === ' ' || event.key === 'Enter') event.stopPropagation();
@@ -90,9 +90,9 @@ export interface ViewAnalysisControls {
 
 export interface ViewPickingControls {
   pickFilter: PickFilter;
-  setPickFilter: StateSetter<PickFilter>;
+  cyclePickFilter(): void;
   snapStep: number;
-  setSnapStep: StateSetter<number>;
+  cycleSnapStep(): void;
   setSelection(selection: Selection): void;
 }
 
@@ -117,7 +117,7 @@ export function ViewDisplayControls({ inspection, doc, viewport, cornerRight, di
   const aoAvailable = !lineDisplayMode(effectiveDisplayMode), aoActive = aoAvailable && ao;
   const { section, documentSession, setSection, sectionHatchOn, setSectionHatchOn, sectionBox, sectionFacePick, setSectionFacePick, sketchSection, cameraEye, sectionExclusion, vertexMove } = sectionState;
   const { analysis, setAnalysis, mapKind, setMapKind, mapLegend, mapScope, mapHover, setMapHover, mouldResult, mouldSpread, setMouldSpread } = analysisState;
-  const { pickFilter, setPickFilter, snapStep, setSnapStep, setSelection } = picking;
+  const { pickFilter, cyclePickFilter, snapStep, cycleSnapStep, setSelection } = picking;
   const [sketchCameraProblem, setSketchCameraProblem] = useState<{ doc: StudioDoc; message: string } | null>(null);
   const sketchCameraAction = (action: () => void) => {
     if (document.activeElement?.matches('input, textarea, select') || document.activeElement?.closest('[contenteditable="true"], [role="textbox"]')) {
@@ -204,10 +204,10 @@ export function ViewDisplayControls({ inspection, doc, viewport, cornerRight, di
         </div>
         {(doc.instances?.length ?? 0) > 0 && <ExplodeButton store={explodeStore} />}
         <Button size="sm" variant="secondary" className="chip snap" aria-label="Selection filter" data-tip="Selection filter" data-tip-desc="What a click picks: anything, or only faces, edges or whole bodies (click for the next)"
-          onClick={() => setPickFilter(f => { const all = ['all', 'face', 'edge', 'body'] as const, n = all[(all.indexOf(f) + 1) % all.length]; try { localStorage.setItem('studio.pick', n); } catch { /* private mode */ } return n; })}>
+          onClick={cyclePickFilter}>
           <Icon name="ads_click" small />{({ all: 'Pick all', face: 'Faces', edge: 'Edges', body: 'Bodies' } as const)[pickFilter]}</Button>
         <Button size="sm" variant="secondary" className="chip snap" aria-label="Grid snap" data-tip="Grid snap" data-tip-desc="Sketch points, placing and moves land on this step: click for the next (1, 0.5, 0.1, 5, 10 mm, off)"
-          onClick={() => setSnapStep(s => { const steps = [1, 0.5, 0.1, 5, 10, 0], n = steps[(steps.indexOf(s) + 1) % steps.length]; try { localStorage.setItem('studio.snap', String(n)); } catch { /* private mode */ } return n; })}>
+          onClick={cycleSnapStep}>
           <Icon name="adjust" small />{snapStep ? `Grid ${fmt(snapStep)} mm` : 'Grid off'}</Button>
         <span className="chip mono">mm</span>
       </div></Profiler>;
