@@ -5,15 +5,16 @@ import { createFlow } from './flow-helper.mjs';
 
 const pins = [
   'apps/cad-studio/test/browser-extrude-proposal.mjs', 'apps/cad-studio/src/App.tsx',
-  'apps/cad-studio/src/chat/browserModelContext.ts', 'apps/cad-studio/src/chat/useBrowserExtrudeProposal.ts',
-  'apps/cad-studio/src/ui/ChatPanel.tsx', 'packages/barocss-cad-model/src/chat/browserExtrude.ts',
+  'apps/cad-studio/src/chat/browserModelContext.ts', 'apps/cad-studio/src/chat/useBrowserPartProposal.ts',
+  'apps/cad-studio/src/ui/ChatPanel.tsx', 'packages/barocss-cad-model/src/chat/browserProposalTargets.ts',
   'packages/barocss-cad-model/src/chat/tools.ts', 'packages/barocss-cad-model/src/chat/part/proposals.ts',
 ];
+const firstBox = process.argv.includes('--box');
 const f = await createFlow({
-  name: 'browser-extrude-proposal', output: process.argv[2], envFrozen: 'BROWSER_EXTRUDE_FROZEN',
+  name: firstBox ? 'browser-box-proposal' : 'browser-extrude-proposal', output: process.argv[2], envFrozen: 'BROWSER_EXTRUDE_FROZEN',
   initialFiles: pins, requiredFrozen: pins,
   qualification: 'Call a real browser WebMCP tool and verify native Studio preview, rejection, approval, history and project persistence.',
-  limits: ['One literal rectangular Extrude, with WebMCP and testing flags in desktop Chrome.'],
+  limits: ['One first Box or one literal rectangular Extrude, with WebMCP and testing flags in desktop Chrome.'],
   async createContext(options) {
     if (!f.browser) {
       const { chromium } = createRequire(join(process.env.PW_DIR, 'package.json'))('playwright');
@@ -26,8 +27,9 @@ const f = await createFlow({
     return context;
   },
 });
-const proposalName = 'cad_part_propose_extrude', summaryName = 'cad_part_summary';
-const project = 'Browser Extrude proposal', file = 'browser-extrude-box.bcad';
+const extrudeName = 'cad_part_propose_extrude', boxName = 'cad_part_propose_box', summaryName = 'cad_part_summary';
+const proposalName = firstBox ? boxName : extrudeName;
+const project = firstBox ? 'Browser first Box proposal' : 'Browser Extrude proposal', file = 'browser-extrude-box.bcad';
 const box = height => ({
   format: 'barocss-cad-model', schema: 3, units: 'mm', nextId: 2, parameters: {},
   nodes: [{ kind: 'sketch', id: 'n0', profile: 'rectangle', min: [0, 0], max: [80, 50] },
@@ -38,7 +40,7 @@ const button = (name, scope = f.page) => scope.getByRole('button', { name, exact
 const chat = () => f.page.getByRole('complementary', { name: 'Chat', exact: true });
 const versions = () => f.page.getByRole('complementary', { name: 'Versions panel', exact: true });
 const readGrant = () => button('Share part summary and plane measurements with browser tools', chat());
-const proposalGrant = () => button('Allow one browser Extrude proposal', chat());
+const proposalGrant = (kind = firstBox ? 'Box' : 'Extrude') => button(`Allow one browser ${kind} proposal`, chat());
 const card = id => f.page.getByRole('listitem', { name: 'Proposal ' + id, exact: true });
 const frame = () => f.page.getByTitle('Frame all (F)', { exact: true }).click();
 const toolsReady = (name, present) => f.page.waitForFunction(async ([name, present]) =>
@@ -100,14 +102,146 @@ async function openProject() {
 async function assertBox(height) {
   await f.ready();
   const { nodes, outputs } = await f.doc();
-  assert.deepEqual(nodes, box(height).nodes);
+  const expected = box(height).nodes;
+  if (firstBox) expected[1].made = { command: 'box', values: { w: 80, d: 50, h: height, x: 0, y: 0, z: 0 } };
+  assert.deepEqual(nodes, expected);
   assert.deepEqual(outputs, box(height).outputs);
   const [body] = (await f.bodies()).bodies;
   assert.equal(body.key, 'b1');
   assert.ok(Math.abs(body.volume - 80 * 50 * height) < 1e-7);
 }
 
-await f.run(async () => {
+async function verifyFirstBox() {
+  await f.newPage();
+  await button('New part').click();
+  await f.page.waitForFunction(() => window.__studioDoc.nodes.length === 0);
+  await f.ready();
+  const original = await f.doc();
+  const acceptedBodyCount = async count => assert.equal((await f.bodies()).bodies.length, count);
+  const summary = await share();
+  assert.deepEqual(summary.bodies, []);
+  assert.equal(summary.featureCount, 0);
+  await toolsReady(boxName, false);
+  await toolsReady(extrudeName, false);
+  assert.equal(await proposalGrant().getAttribute('aria-pressed'), 'false');
+  await proposalGrant().click();
+  await toolsReady(boxName, true);
+  await toolsReady(extrudeName, false);
+  const tool = await getTool(boxName);
+  const input = { width: 80, depth: 50, height: 10, expectedRevision: summary.revision };
+  for (const [args, code] of [
+    [{ ...input, width: '80' }, 'invalid_arguments'],
+    [{ ...input, depth: 0.5 }, 'invalid_arguments'],
+    [{ ...input, height: -10 }, 'invalid_arguments'],
+    [{ ...input, x: 8 }, 'invalid_arguments'],
+    [{ ...input, expectedRevision: '0000000000000000' }, 'stale_part'],
+  ]) assert.equal((await invoke(tool, args)).error.code, code);
+  await f.same(original);
+
+  const requests = await Promise.allSettled([invoke(tool, input), invoke(tool, input)]);
+  const replies = requests.filter(result => result.status === 'fulfilled').map(result => result.value);
+  assert.equal(replies.filter(reply => reply.applied === false).length, 1);
+  const first = replies.find(reply => reply.applied === false);
+  const firstCard = card(first.proposal);
+  assert.deepEqual(first, { proposal: first.proposal, applied: false, revision: summary.revision });
+  await toolsReady(boxName, false);
+  await assert.rejects(invoke(tool, input));
+  await firstCard.waitFor();
+  const waiting = await f.doc();
+  assert.deepEqual({ ...waiting, proposals: undefined, history: undefined }, { ...original, proposals: undefined, history: undefined });
+  assert.equal(waiting.proposals.length, 1);
+  assert.equal(waiting.proposals[0].by.agent, 'browser');
+  assert.deepEqual(waiting.history.map(({ kind, proposal }) => ({ kind, proposal })), [{ kind: 'proposal', proposal: first.proposal }]);
+  await acceptedBodyCount(0);
+  await button('Preview', firstCard).click();
+  await firstCard.getByLabel('Volume change', { exact: true }).getByText(/40000|40[,. ]000/).waitFor();
+  await acceptedBodyCount(0);
+  await frame();
+  await f.snapshot('browser-first-box-preview');
+  await button('Reject', firstCard).click();
+  await f.page.waitForFunction(() => window.__studioDoc.proposals[0].status === 'rejected');
+  await acceptedBodyCount(0);
+  await button('Show decided proposals').click();
+  await firstCard.getByText(/rejected by user/).waitFor();
+  await f.snapshot('browser-first-box-rejected');
+
+  assert.equal((await share()).revision, summary.revision);
+  await proposalGrant().click();
+  await toolsReady(boxName, true);
+  const second = await invoke(await getTool(boxName), input);
+  await card(second.proposal).waitFor();
+  const beforeAccept = await f.doc();
+  assert.deepEqual(beforeAccept.nodes, []);
+  await acceptedBodyCount(0);
+  await button('Accept', card(second.proposal)).click();
+  await f.changed(beforeAccept);
+  await assertBox(10);
+  await frame();
+  const applied = await f.doc();
+  assert.equal(applied.proposals[1].decided.by, 'user');
+  await f.snapshot('browser-first-box-accepted');
+  await button('Undo').click();
+  await f.same(beforeAccept);
+  await acceptedBodyCount(0);
+  await button('Redo').click();
+  await f.same(applied);
+  await assertBox(10);
+
+  await toolsReady(extrudeName, false);
+  assert.equal(await proposalGrant('Box').count(), 0);
+  await openProject();
+  await button('Save').click();
+  const projectFile = 'Untitled.bcad';
+  await versions().getByRole('list', { name: 'Project documents', exact: true }).getByText(projectFile, { exact: true }).waitFor();
+  await button('Close project', versions()).click();
+  await versions().getByLabel('Project', { exact: true }).waitFor({ state: 'hidden' });
+  await f.page.reload();
+  await f.ready();
+  await openProject();
+  await button('Open ' + projectFile, versions()).click();
+  await f.same(applied);
+  await assertBox(10);
+  await frame();
+  await toolsReady(boxName, false);
+  await toolsReady(extrudeName, false);
+  await f.snapshot('browser-first-box-project-reopened');
+
+  const current = await share();
+  assert.deepEqual(current.bodies[0].bounds, { min: [0, 0, 0], max: [80, 50, 10] });
+  assert.equal(current.bodies[0].volume, 40000);
+  assert.equal(await proposalGrant('Box').count(), 0);
+  await proposalGrant('Extrude').click();
+  await toolsReady(extrudeName, true);
+  await toolsReady(boxName, false);
+  const editTool = await getTool(extrudeName);
+  const editArgs = { body: current.bodies[0].key, height: 15, expectedRevision: current.revision };
+  assert.equal((await invoke(editTool, { ...editArgs, height: 0.5 })).error.code, 'invalid_arguments');
+  const edit = await invoke(editTool, editArgs);
+  await card(edit.proposal).waitFor();
+  const beforeEdit = await f.doc();
+  await assertBox(10);
+  await button('Accept', card(edit.proposal)).click();
+  await f.changed(beforeEdit);
+  await assertBox(15);
+  const revised = await f.doc();
+  assert.equal(revised.proposals[2].decided.by, 'user');
+  await frame();
+  await f.snapshot('browser-first-box-edited');
+  await button('Undo').click();
+  await f.same(beforeEdit);
+  await assertBox(10);
+  await button('Redo').click();
+  await f.same(revised);
+  await assertBox(15);
+  const revisedSummary = await share();
+  assert.deepEqual(revisedSummary.bodies[0].bounds, { min: [0, 0, 0], max: [80, 50, 15] });
+  assert.equal(revisedSummary.bodies[0].volume, 60000);
+  assert.deepEqual(f.report.downloads, []);
+  f.report.observations.push({ chrome: f.browser.version(), original: summary, first, second, duplicate: replies,
+    accepted: current, revised: revisedSummary });
+}
+
+await f.run(firstBox ? verifyFirstBox : async () => {
   const original = box(10);
   await f.newPage();
   await open(original);

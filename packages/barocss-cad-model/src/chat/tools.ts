@@ -42,7 +42,7 @@ import { ASSEMBLY_CHANGES, PROPOSAL_HANDLERS, acceptProposalWith, autonomy, chan
 import { BATCHABLE, MUTATORS, PART_SCOPED, describe, unknownArguments } from './toolDefinitions';
 import { isObj, isVec3 } from '../util/guards';
 import { revisionOf } from '../util/revision';
-import { BROWSER_EXTRUDE_AUTHOR, browserExtrudeTarget, validExtrudeDistance } from './browserExtrude';
+import { BROWSER_PROPOSAL_AUTHOR, browserExtrudeTarget, canProposeBrowserBox, validBoxDimension, validExtrudeDistance } from './browserProposalTargets';
 import { firstProblem, isRefusal } from '../engine/refusal';
 import { REFERENCE_CODES } from '../engine/schema/references';
 // ./outputs is loaded on first use: it reaches team/bundle → baseline → assembly → parts, which import this
@@ -72,13 +72,27 @@ export function proposeFollowUpRepair(state: ChatState, args: Record<string, unk
 export function proposeBrowserExtrude(state: ChatState, args: { body: string; height: number; expectedRevision: string }, evaluate: Evaluate) {
   const target = browserExtrudeTarget(state.doc, state.bodies);
   if (state.partOf || !target || target.body !== args.body || !validExtrudeDistance(args.height) ||
+    (target.node.made && !validBoxDimension(args.height)) ||
     target.height === args.height || revisionOf(state.doc) !== args.expectedRevision) {
     return Promise.resolve(fail(state, 'The browser Extrude proposal does not match the current rectangular part.'));
   }
   return proposeWith(runProposalTool, state, {
     title: `Set Extrude distance to ${args.height} mm`,
     ops: [{ tool: 'features', args: { action: 'edit', index: target.index, values: { h: args.height }, expectedRevision: args.expectedRevision } }],
-  }, evaluate, undefined, { agent: BROWSER_EXTRUDE_AUTHOR });
+  }, evaluate, undefined, { agent: BROWSER_PROPOSAL_AUTHOR });
+}
+
+export function proposeBrowserBox(state: ChatState, args: { width: number; depth: number; height: number; expectedRevision: string }, evaluate: Evaluate) {
+  const { width, depth, height, expectedRevision } = args;
+  if (state.partOf || !canProposeBrowserBox(state.doc, state.bodies) || ![width, depth, height].every(validBoxDimension) ||
+    revisionOf(state.doc) !== expectedRevision) {
+    return Promise.resolve(fail(state, 'The browser Box proposal needs the current empty part and three supported dimensions.'));
+  }
+  return proposeWith(runProposalTool, state, {
+    title: `Create Box ${width} × ${depth} × ${height} mm`,
+    ops: [{ tool: 'features', args: { action: 'command', command: 'box',
+      values: { w: width, d: depth, h: height, x: 0, y: 0, z: 0 }, expectedRevision } }],
+  }, evaluate, undefined, { agent: BROWSER_PROPOSAL_AUTHOR });
 }
 /** A proposal accepted (A4.2, A4.3): see acceptProposalWith. */
 export function acceptProposal(state: ChatState, id: string, evaluate: Evaluate, o: { by?: Decider; leaveOut?: readonly string[] } = {}) { return acceptProposalWith(runProposalTool, state, id, evaluate, o); }

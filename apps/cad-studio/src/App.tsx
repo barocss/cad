@@ -2268,7 +2268,7 @@ export function App() {
         content={rendering || drawing ? null : <Suspense fallback={null}><ChatPanel versions={inPlace ? undefined : project.chat} scope={inPlace}
         browserSummary={{ doc, bodies, scope: browserSummaryOpen, ready: browserSummaryReady,
           isCurrent: () => ownsEvaluatedSource() && openIntent.current === browserSummaryOpen && !project.opening() }}
-        browserExtrude={proposalBusy ? undefined : { isIdle: browserProposalIdle, evaluate: partEval,
+        browserProposal={proposalBusy ? undefined : { isIdle: browserProposalIdle, evaluate: partEval,
           stage: next => browserProposalIdle() && commit(next, false, false, true) }}
         approvalAttachment={approvalAttachments.selected} onClearApprovalAttachment={approvalAttachments.clear}
         faceDiagnosis={faceDiagnosis.selected} onClearFaceDiagnosis={faceDiagnosis.clear}

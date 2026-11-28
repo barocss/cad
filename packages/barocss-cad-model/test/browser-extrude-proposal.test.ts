@@ -1,12 +1,66 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { acceptProposal, previewProposal, proposeBrowserExtrude, runTool, type ChatState } from '../src/chat/tools';
+import { acceptProposal, previewProposal, proposeBrowserBox, proposeBrowserExtrude, runTool, type ChatState } from '../src/chat/tools';
 import { emptyDoc, withNode, type StudioDoc } from '../src/engine/doc';
 import { evaluatePart } from '../src/engine/evaluate';
 import { revisionOf } from '../src/util/revision';
+import { isEditableBox } from '../src/app/editCommand';
 
 const evaluate = async (doc: StudioDoc) => evaluatePart(doc, 0);
 const neverEvaluate = async (): Promise<never> => assert.fail('A refused request must not evaluate a candidate');
+
+test('browser Box stages one origin-aligned solid in an empty part', async () => {
+  const state: ChatState = { doc: emptyDoc(), bodies: [] };
+  const expectedRevision = revisionOf(state.doc);
+  const args = { width: 80, depth: 50, height: 10, expectedRevision };
+  const outcome = await proposeBrowserBox(state, args, evaluate);
+  assert.ok(outcome.changed && !outcome.isError, outcome.content);
+  const waiting = outcome.state;
+  const proposal = waiting.doc.proposals?.at(-1);
+  assert.ok(proposal && proposal.status === 'open');
+  assert.equal(proposal.by.agent, 'browser');
+  assert.equal(waiting.doc.nodes, state.doc.nodes);
+  assert.equal(waiting.bodies, state.bodies);
+  assert.equal(revisionOf(waiting.doc), expectedRevision);
+
+  for (const [version, fields] of [
+    [waiting, args],
+    [await stock(), args],
+    [state, { ...args, width: NaN }],
+    [state, { ...args, depth: 0.5 }],
+    [state, { ...args, height: Infinity }],
+    [state, { ...args, expectedRevision: '0000000000000000' }],
+  ] as const) {
+    const refused = await proposeBrowserBox(version, fields, neverEvaluate);
+    assert.ok(refused.isError && !refused.changed);
+    assert.equal(refused.state, version);
+  }
+  assert.deepEqual(await acceptProposal(waiting, proposal.id, neverEvaluate, { by: { agent: 'chat' } }),
+    { error: 'A browser proposal needs approval by the user in Studio.' });
+  const preview = await previewProposal(waiting, proposal.id, evaluate);
+  assert.ok('bodies' in preview);
+  const applied = await acceptProposal(waiting, proposal.id, evaluate);
+  assert.ok('state' in applied);
+  assert.equal(applied.state.doc.proposals?.at(-1)?.decided?.by, 'user');
+  for (const bodies of [preview.bodies, applied.state.bodies]) {
+    assert.equal(bodies.length, 1);
+    assert.equal(bodies[0].volume, 40000);
+    assert.deepEqual(bodies[0].mesh.bounds, { min: [0, 0, 0], max: [80, 50, 10] });
+  }
+  const box = applied.state;
+  const edit = { body: box.bodies[0].key, height: 15, expectedRevision: revisionOf(box.doc) };
+  const belowMinimum = await proposeBrowserExtrude(box, { ...edit, height: 0.5 }, neverEvaluate);
+  assert.ok(belowMinimum.isError && !belowMinimum.changed);
+  const next = await proposeBrowserExtrude(box, edit, evaluate);
+  assert.ok(next.changed && !next.isError, next.content);
+  const editProposal = next.state.doc.proposals?.at(-1);
+  assert.ok(editProposal);
+  const revised = await acceptProposal(next.state, editProposal.id, evaluate);
+  assert.ok('state' in revised);
+  assert.ok(isEditableBox(revised.state.doc.nodes, 0));
+  assert.deepEqual(revised.state.doc.nodes.map(node => node.id), box.doc.nodes.map(node => node.id));
+  assert.equal(revised.state.bodies[0].volume, 60000);
+});
 
 async function stock(height = 10): Promise<ChatState> {
   const sketch = withNode(emptyDoc(), { kind: 'sketch', profile: 'rectangle', min: [0, 0], max: [40, 30] });

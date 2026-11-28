@@ -1,14 +1,24 @@
 import { CadPartLimits } from '@barocss/cad';
+import { isEditableBox } from '../app/editCommand';
 import type { StudioDoc } from '../engine/doc';
 import type { BodyResult } from '../engine/evaluate';
 
-export const BROWSER_EXTRUDE_AUTHOR = 'browser';
+export const BROWSER_PROPOSAL_AUTHOR = 'browser';
 
 export function validExtrudeDistance(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value) && value > 0 && value <= CadPartLimits.length;
 }
 
-/** One native, literal rectangular Extrude. A browser grant never identifies a feature by index alone. */
+export function validBoxDimension(value: unknown): value is number {
+  return validExtrudeDistance(value) && value >= 1;
+}
+
+export function canProposeBrowserBox(doc: StudioDoc, bodies: readonly BodyResult[]): boolean {
+  return doc.nodes.length === 0 && bodies.length === 0 && Object.keys(doc.outputs).length === 0 &&
+    !doc.instances?.length && !doc.direct && !doc.proposals?.some(proposal => proposal.status === 'open');
+}
+
+/** One literal rectangular Extrude or a replayable Box, with its evaluated body. */
 export function browserExtrudeTarget(doc: StudioDoc, bodies: readonly BodyResult[]) {
   if (doc.nodes.length !== 2 || bodies.length !== 1 || Object.keys(doc.outputs).length !== 1 ||
     doc.instances?.length || doc.direct || doc.proposals?.some(p => p.status === 'open')) return;
@@ -20,7 +30,7 @@ export function browserExtrudeTarget(doc: StudioDoc, bodies: readonly BodyResult
     ![...sketch.min, ...sketch.max].every(value => typeof value === 'number' && Number.isFinite(value)) ||
     !(Number(sketch.min[0]) < Number(sketch.max[0]) && Number(sketch.min[1]) < Number(sketch.max[1]))) return;
   if (extrude.kind !== 'extrude' || extrude.sketch !== 0 || !validExtrudeDistance(extrude.height) ||
-    Object.keys(extrude).some(key => !['id', 'kind', 'sketch', 'height', 'from', 'draft'].includes(key)) ||
-    (extrude.from ?? 0) !== 0 || (extrude.draft ?? 0) !== 0) return;
-  return { body: body.key, height: extrude.height, index: output.node };
+    Object.keys(extrude).some(key => !['id', 'kind', 'sketch', 'height', 'from', 'draft', 'made'].includes(key)) ||
+    (extrude.from ?? 0) !== 0 || (extrude.draft ?? 0) !== 0 || (extrude.made && !isEditableBox(doc.nodes, 0))) return;
+  return { body: body.key, height: extrude.height, index: output.node, node: extrude };
 }

@@ -3,7 +3,7 @@
 import { commandById, commands, givenValues, shownFields, type Ctx, type Values } from '../../app/commands';
 import { canSetAgentShellCorner, canSetAgentShellFloor } from '../../app/shellCorner';
 import { PIVOT_FACE } from '../../app/pivotFaceCommand';
-import { updateBoxFootprint } from '../../app/editCommand';
+import { isEditableBox, updateBoxFootprint } from '../../app/editCommand';
 import { editFields, type BindableField } from '../../app/editFields';
 import { editSavedOffsetFaceCommand } from '../../app/offsetFaceEdit';
 import { currentOffsetBody } from '../../app/nativeOffsetFace';
@@ -645,7 +645,11 @@ async function editFeatureTool(state: ChatState, args: Record<string, unknown>, 
           if (Math.abs(v) > limit)
             return fail(state, `The existing Smooth Turn takes an angle from −${limit}° to +${limit}°.`, { code: 'EDIT_INPUT' });
         }
-        next = f.set(next, v);
+        if (key === 'h' && v >= 1 && Object.keys(given).length === 1 &&
+          node.kind === 'extrude' && node.made?.command === 'box' && isEditableBox(nodes, index - 1)) {
+          const { made } = node;
+          next[index] = { ...node, height: v, made: { ...made, values: { ...made.values, h: v } } };
+        } else next = f.set(next, v);
       }
       else if (f.kind === 'choice') { if (!f.options.some(o => o.value === v)) return fail(state, `"${key}" is one of ${f.options.map(o => o.value).join(', ')}.`); next = f.set(next, String(v)); }
       else next = f.set(next, Boolean(v));

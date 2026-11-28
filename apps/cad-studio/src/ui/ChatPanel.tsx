@@ -13,7 +13,7 @@ import { ACCEPT, imageUrl, prepareImage, type ChatImage } from '../chat/images';
 import { AUTONOMY_TIPS, useStudioChat } from '../chat/useStudioChat';
 import { START_CHAT_COMMAND } from '../chat/client';
 import { useBrowserPartSummary, type BrowserPartSummarySource } from '../chat/useBrowserPartSummary';
-import { useBrowserExtrudeProposal, type BrowserExtrudeProposalSource } from '../chat/useBrowserExtrudeProposal';
+import { useBrowserPartProposal, type BrowserPartProposalSource } from '../chat/useBrowserPartProposal';
 import { compactLocalPaths } from '../chat/localPathDisplay';
 import type { StudioMessage } from '../chat/transport';
 import { isLocalTaskRunHost, type SavedTaskRunPlan, type TaskRunChatOutput, type TaskRunCheckpointRequest, type TaskRunFindingSelection, type TaskRunLaunch, type TaskRunReplanSelection, type TaskRunReviewRequest, type TaskRunStatus } from '../chat/taskRunOffer';
@@ -34,7 +34,7 @@ const toolLabel = (name: string, input: unknown) => { const a = input && typeof 
 
 export interface ChatPanelProps {
   browserSummary?: BrowserPartSummarySource;
-  browserExtrude?: BrowserExtrudeProposalSource;
+  browserProposal?: BrowserPartProposalSource;
   approvalAttachment?: import('../chat/useApprovalEvidenceAttachment').ApprovalEvidenceAttachment;
   onClearApprovalAttachment?(attachment: NonNullable<ChatPanelProps['approvalAttachment']>): void;
   faceDiagnosis?: import('../chat/useFaceDiagnosisAttachment').FaceDiagnosisAttachment;
@@ -108,7 +108,7 @@ interface RunStatuses {
 export function ChatPanel(props: ChatPanelProps) {
   const chat = useStudioChat(props), { status, autonomy, messages, running } = chat;
   const browserSummary = useBrowserPartSummary(props.browserSummary);
-  const browserExtrude = useBrowserExtrudeProposal(props.browserSummary, props.browserExtrude, !!browserSummary?.enabled);
+  const browserProposal = useBrowserPartProposal(props.browserSummary, props.browserProposal, !!browserSummary?.enabled);
   useEffect(() => { props.onRunning?.(running); return () => props.onRunning?.(false); }, [running]);
   const [text, setText] = useState('');
   const [taskFinding, setTaskFinding] = useState<TaskRunFindingSelection>();
@@ -206,10 +206,10 @@ export function ChatPanel(props: ChatPanelProps) {
           aria-label="Share part summary and plane measurements with browser tools"
           title="Share this part's read-only summary and plane measurements with browser tools" aria-pressed={browserSummary.enabled}
           disabled={!browserSummary.ready && !browserSummary.enabled} onClick={browserSummary.toggle}>WebMCP</Button>}
-        {browserExtrude && <Button type="button" size="xs" variant={browserExtrude.enabled ? 'default' : 'outline'}
-          aria-label="Allow one browser Extrude proposal" title="Allow one browser proposal for this part’s Extrude distance"
-          aria-pressed={browserExtrude.enabled} disabled={!browserExtrude.ready && !browserExtrude.enabled}
-          onClick={browserExtrude.toggle}>Propose</Button>}
+        {browserProposal && <Button type="button" size="xs" variant={browserProposal.enabled ? 'default' : 'outline'}
+          aria-label={`Allow one browser ${browserProposal.kind} proposal`} title={browserProposal.title}
+          aria-pressed={browserProposal.enabled} disabled={!browserProposal.ready && !browserProposal.enabled}
+          onClick={browserProposal.toggle}>Propose</Button>}
         <select className="chat-autonomy" aria-label="Autonomy" title={AUTONOMY_TIPS[autonomy - 1]} value={autonomy} disabled={running}
           onChange={e => chat.setAutonomy(Number(e.currentTarget.value))}>
           {AUTONOMY_TIPS.map((t, i) => <option key={i} value={i + 1} title={t}>L{i + 1}</option>)}</select>
@@ -217,7 +217,7 @@ export function ChatPanel(props: ChatPanelProps) {
         <button className="tool small" aria-label="Close chat" title="Close" onClick={props.onClose}><Icon name="close" small /></button>
       </div>
       <div className="chat-log" ref={log} aria-live="polite">
-        {(browserSummary?.failed || browserExtrude?.failed) && <div className="chat-msg notice" role="status">Browser tools are unavailable.</div>}
+        {(browserSummary?.failed || browserProposal?.failed) && <div className="chat-msg notice" role="status">Browser tools are unavailable.</div>}
         {status && !enabled && <div className="chat-setup" role="note">
           <b>Chat is off.</b>
           {status.reason ? <span>{status.reason}</span> : <>
