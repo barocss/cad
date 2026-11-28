@@ -80,7 +80,7 @@ import { createStudioHistoryControls } from './state/studioHistoryControls';
 import { useDocumentHistoryActions } from './state/useDocumentHistoryActions';
 import { useAlignHistoryPreview } from './app/useAlignHistoryPreview';
 import { useOppositeFlangeRadiusPreview } from './app/useOppositeFlangeRadiusPreview';
-import { carrySketchSelection } from './state/profileSelection';
+import { commitStudioModel } from './state/studioModelCommit';
 import { ModelBrowser } from './ui/ModelBrowser';
 import { RequirementsBrowser } from './ui/RequirementsBrowser';
 import { DesignHistory } from './ui/DesignHistory';
@@ -139,9 +139,9 @@ import { supportsPlacedBoxSnapRotation } from './viewport/placedBoxSnap';
 import { contentKey } from '@barocss/cad-model/engine/evalMemo';
 import { bearingFaceInput } from './app/bearingEdit';
 import { usePlacedBearingEditor } from './app/usePlacedBearingEditor';
-import { carryOver, featureLabel, fmt, prefixDoc, starterDoc, type StudioDoc } from '@barocss/cad-model/engine/doc';
+import { featureLabel, fmt, prefixDoc, starterDoc, type StudioDoc } from '@barocss/cad-model/engine/doc';
 import { featureId, nextSerial } from '@barocss/cad-model/engine/ids';
-import { captureSignatures, type Problem as RefProblem } from '@barocss/cad-model/engine/references';
+import type { Problem as RefProblem } from '@barocss/cad-model/engine/references';
 import type { BodyResult } from '@barocss/cad-model/engine/evaluate';
 import type { FriendlyError } from '@barocss/cad-model/engine/errors';
 import type { Vec3 } from '@barocss/cad-model/engine/mesh';
@@ -796,38 +796,12 @@ export function App() {
 
   /** The document as it is, kept for undo (redo is gone once something new is done). */
   const pushUndo = () => { undoFor.current = { entry: { doc: docNow.current, marker: markerNow.current }, scope: replacement.current?.scope ?? acceptanceScope, base: doc, beforeInput: evaluatedRef.current }; };
-  // (`capture`: references this change wrote were picked on the bodies shown; a whole document replaced was not.
-  // `whole`: a new or opened document, nothing of the one before carried into it.)
-  // A proposal replay uses the authored document, so its result needs no fields from the evaluated copy.
-  const commit = useCallback((next: StudioDoc, capture = true, whole = false, authored = false) => {
-    if (!canChangeDocument()) return false;
-    // Counted as the History bar shows them: sketches are part of the feature made from them.
-    const nextFeatureIds = marker !== null ? new Set(next.nodes.map((_, i) => featureId(next.nodes, i))) : null;
-    const dropped = !whole && marker !== null && nextFeatureIds ? doc.nodes.slice(marker).filter((n, i) => n.kind !== 'sketch' && n.kind !== 'driven-sketch' && !nextFeatureIds.has(featureId(doc.nodes, marker + i))).length : 0;
-    // Commands build on the evaluated document, which follows the model only: what they leave as it was
-    // there (every field but the model's own: engine/doc.ts carryOver) is the document's newest.
-    const was = evaluatedRef.current;
-    if (!whole && !authored) next = carryOver(next, was, doc);
-    // (References written by this change get their signatures from the bodies they were picked on, engine/references.ts.)
-    if (capture) next = captureSignatures(next, bodies);
-    pushUndo();
-    if (!setDoc(next, whole)) return false;
-    setMarker(null); setDirty(true); setEditNode(null);
-    const hasBodies = Object.keys(next.outputs).length > 0;
-    if (!hasBodies) { setBodies([]); claimBodies.current = true; }
-    if (whole) {
-      if (!hasBodies) setSelection(emptySel);
-    } else {
-      setSelection(current => {
-        const carried = carrySketchSelection(current, doc, next);
-        if (hasBodies) return carried;
-        const { sketches } = carried;
-        return sketches?.length ? { ...emptySel, sketches } : emptySel;
-      });
-    }
-    if (dropped > 0) setToast({ title: `Removed ${dropped} later feature${dropped > 1 ? 's' : ''}`, hint: 'You added a feature while rolled back. Undo restores them.', detail: '' });
-    return true;
-  }, [doc, marker, bodies, acceptanceScope]);
+  const commit = useCallback((next: StudioDoc, capture = true, whole = false, authored = false) => commitStudioModel({
+    next, mode: { capture, whole, authored },
+    source: { doc, marker, bodies, evaluated: () => evaluatedRef.current },
+    changes: { canChangeDocument, pushUndo, setDoc, setMarker, setDirty, setEditNode, setSelection, setToast,
+      retireBodies: () => { setBodies([]); claimBodies.current = true; } },
+  }), [doc, marker, bodies, acceptanceScope]);
   commitRef.current = commit; cageEdRef.current = cageEd;
   const fitTableRequest = useRef<object | null>(null);
   const commitFitTables = async (next: StudioDoc) => {
