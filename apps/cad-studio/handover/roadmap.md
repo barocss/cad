@@ -1,13 +1,13 @@
 # CAD roadmap — current status and execution order
 
-Updated 2026-11-28 · Priority authority: D520 · Latest delivery: D2188 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
+Updated 2026-11-28 · Priority authority: D520 · Latest delivery: D2189 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
 
 This is the only current status index. Detailed tracks define acceptance; the 34 stable row pages retain scope and issue navigation. Immutable decision notes retain results. Do not append chronological status paragraphs here. [D520 decision](notes/cad-roadmap-replan-2026-11-04/README.md) supersedes D445 execution order and historical next-item text, while retaining its safeguards and bounded proofs.
 
 ## Now and next
 
-- **Current position:** [D2188](notes/prismatic-crescent-compatibility-2026-11-28/README.md), rows 16 and 30. The P0 investigation identifies the retained D195 prismatic crescent contract. Actual Studio reopens the exact tangent result, and the nearby positive-wall control is strict valid.
-- **Next MAIN:** D2189, P1 rows 16 and 30. Classify the plane and cylinder contact in seed 20261023 case 15. Preserve the typed refusal for true self-contact and repair a valid-manifold false refusal if reproduced ([#7](https://github.com/barocss/cad/issues/7)).
+- **Current position:** [D2189](notes/connected-cylinder-plane-contact-2026-11-28/README.md), P1 rows 16 and 30. Case 15 is one globally connected solid with local self-contact. Studio retains the typed refusal and applies the strict-valid gap control.
+- **Next MAIN:** D2190, P1 rows 16 and 30. Classify the tangent planar wall in seed 20261023 case 56. Repair a valid-manifold false refusal if reproduced ([#7](https://github.com/barocss/cad/issues/7)).
 - **Separate follow-ups:** Continue Studio App extraction in cohesive parts with affected desktop checks. [#608 Rendering](https://github.com/barocss/cad/issues/608) stays on HOLD. API inventory drift remains open. The issue tracker records [#126](https://github.com/barocss/cad/issues/126), [#613](https://github.com/barocss/cad/issues/613), [#152](https://github.com/barocss/cad/issues/152) and [#22](https://github.com/barocss/cad/issues/22) as closed.
 - **Active repository:** [barocss/cad](https://github.com/barocss/cad), based on `origin/main`. Fetch before work and preserve unexpected changes. The [migration record](../../../docs/migration/README.md) maps the former `local/cad-dev` history and issue numbers.
 - **Evidence correction:** D482 records2167 PASS/0 FAIL/2 existing SKIP in a later full-kernel run than D433. Neither result is a new full-suite PASS at this audit HEAD. [D482 record](notes/vertical-contact-refusal-2026-11-04/README.md).
