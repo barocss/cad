@@ -89,13 +89,12 @@ export function useBrowserPartProposal(source: BrowserPartSummarySource | undefi
   const api = modelContext();
   const owner = source?.doc, scope = source?.scope;
   const [grant, setGrant] = useState<Grant>();
-  const [failed, setFailed] = useState(false);
+  const [failedGrant, setFailedGrant] = useState<Grant>();
   const enabled = !!grant;
   const same = grant?.owner === owner && grant?.scope === scope;
-  if (grant && (!same || !readShared)) {
-    setGrant(undefined);
-    setFailed(false);
-  }
+  const failed = !!failedGrant && failedGrant.owner === owner && failedGrant.scope === scope && readShared;
+  if (grant && (!same || !readShared)) setGrant(undefined);
+  if (failedGrant && !failed) setFailedGrant(undefined);
   const kinds: readonly ProposalKind[] | undefined = source && (canProposeBrowserPrimitive(source.doc, source.bodies) ? emptyPartKinds :
     browserHoleTarget(source.doc, source.bodies) ? cylinderKinds :
       browserExtrudeTarget(source.doc, source.bodies) ? extrusionKinds : undefined);
@@ -176,7 +175,7 @@ export function useBrowserPartProposal(source: BrowserPartSummarySource | undefi
       } catch {
         if (!controller.signal.aborted) {
           controller.abort();
-          setFailed(true);
+          setFailedGrant(grant);
           setGrant(current => current === grant ? undefined : current);
         }
       }
@@ -192,11 +191,11 @@ export function useBrowserPartProposal(source: BrowserPartSummarySource | undefi
     revoke() {
       live.current.active = false;
       setGrant(undefined);
-      setFailed(false);
+      setFailedGrant(undefined);
     },
     toggle(choice: ProposalKind) {
       if (enabled) live.current.active = false;
-      setFailed(false);
+      setFailedGrant(undefined);
       setGrant(same && grant?.kind === choice ? undefined : { owner, scope, kind: choice });
     },
   };
