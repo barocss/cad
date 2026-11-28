@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D2257: [D2257](notes/agent-box-reference-width-2026-11-29/README.md), #629. Match the original Box width to an exact second Box corner through local Agent proposal and Studio approval.
+
 - D2256: [D2256](notes/rounded-corpus-step-area-recheck-2026-11-29/README.md), #12. Recheck the six corpus STEP area reports and the two actual Studio exports after D2242.
 
 - D2255: [D2255](notes/exact-axial-oring-outline-2026-11-29/README.md), #778. Draw the complete original O-ring equators axially and keep sampled output when exact visible replacement is incomplete.

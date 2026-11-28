@@ -1,13 +1,13 @@
 # CAD roadmap — current status and execution order
 
-Updated 2026-11-29 · Priority authority: D520 · Latest delivery: D2256 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
+Updated 2026-11-29 · Priority authority: D520 · Latest delivery: D2257 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
 
 This is the only current status index. Detailed tracks define acceptance; the 34 stable row pages retain scope and issue navigation. Immutable decision notes retain results. Do not append chronological status paragraphs here. [D520 decision](notes/cad-roadmap-replan-2026-11-04/README.md) supersedes D445 execution order and historical next-item text, while retaining its safeguards and bounded proofs.
 
 ## Now and next
 
-- **Current position:** [D2256](notes/rounded-corpus-step-area-recheck-2026-11-29/README.md), P0 rows 16 and 30. The six original rounded-box STEP area cases pass on current main. Studio native and STEP readback agree for R2 and R4.5.
-- **Next MAIN:** D2257, P5 rows 04 and 31. For [#629](https://github.com/barocss/cad/issues/629), use an exact native corner of a second independent Box as the target X plane for the source Box width intent. Verify explicit Studio approval and byte-identical stationary geometry.
+- **Current position:** [D2257](notes/agent-box-reference-width-2026-11-29/README.md), P5 rows 04 and 31. A local Agent proposal matches the first original Box width to a second native Box corner. Studio approval and fresh Open preserve both Box commands and the stationary reference.
+- **Next MAIN:** D2258, P5 rows 07 and 31. For [#629](https://github.com/barocss/cad/issues/629), use two actual native viewport corner picks to open a preview of the same authored Box width edit. Reuse the existing command session and verify Cancel and Apply in Studio.
 - **Separate follow-ups:** Continue Studio App extraction in cohesive parts with affected desktop checks. [#608 Rendering](https://github.com/barocss/cad/issues/608) stays on HOLD. API inventory drift remains open. The issue tracker records [#126](https://github.com/barocss/cad/issues/126), [#613](https://github.com/barocss/cad/issues/613), [#152](https://github.com/barocss/cad/issues/152) and [#22](https://github.com/barocss/cad/issues/22) as closed.
 - **Active repository:** [barocss/cad](https://github.com/barocss/cad), based on `origin/main`. Fetch before work and preserve unexpected changes. The [migration record](../../../docs/migration/README.md) maps the former `local/cad-dev` history and issue numbers.
 - **Evidence correction:** D482 records2167 PASS/0 FAIL/2 existing SKIP in a later full-kernel run than D433. Neither result is a new full-suite PASS at this audit HEAD. [D482 record](notes/vertical-contact-refusal-2026-11-04/README.md).

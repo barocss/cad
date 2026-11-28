@@ -68,3 +68,65 @@ test('a box vertex edit refuses direct, stale, non-native, wrong side and no-op 
     assert.equal(result.state.doc,state.doc);
   }
 });
+
+async function independentBoxes() {
+  const first = await originalBox();
+  const second = await dispatchTool(first, 'features', {
+    action: 'command', command: 'box', values: { x: 32.75, y: 9, z: -2, w: 7, d: 5, h: 4 },
+  }, evaluate);
+  assert.ok(second.changed && !second.isError, second.content);
+  return second.state;
+}
+
+const referenceValues = {
+  boxVertexEdge: values.boxVertexEdge, boxVertexEndpoint: values.boxVertexEndpoint,
+  boxTargetVertexEdge: 'n3.bottom|n3.side0', boxTargetVertexEndpoint: 'from',
+};
+
+test('a second native Box corner supplies the width plane and the reference stays unchanged', async () => {
+  const state = await independentBoxes();
+  const result = await dispatchTool(state, 'proposals', propose({ ...edit(state.doc), values: referenceValues }), evaluate);
+  assert.ok(!result.isError && result.changed, result.content);
+  assert.deepEqual(result.state.doc.nodes, state.doc.nodes);
+  assert.ok('error' in await acceptProposal(result.state, 'P1', evaluate, { by: { agent: 'chat' } }));
+  const preview = await previewProposal(result.state, 'P1', evaluate);
+  assert.ok(!('error' in preview));
+  const skipped = await acceptProposal(result.state, 'P1', evaluate, { leaveOut: ['n1'] });
+  assert.ok(!('error' in skipped));
+  assert.deepEqual(skipped.state.doc.nodes, state.doc.nodes);
+  const accepted = await acceptProposal(result.state, 'P1', evaluate);
+  assert.ok(!('error' in accepted));
+  const { doc, bodies } = accepted.state;
+  assert.deepEqual(doc.nodes, preview.doc.nodes);
+  assert.deepEqual(doc.nodes.map(node => node.id), state.doc.nodes.map(node => node.id));
+  assert.deepEqual(doc.nodes.slice(2), state.doc.nodes.slice(2));
+  assert.equal(JSON.stringify(partBreps(doc)[1]), JSON.stringify(partBreps(state.doc)[1]));
+  assert.ok(isEditableBox(doc.nodes, 0) && isEditableBox(doc.nodes, 2));
+  assert.equal(partBreps(doc)[0].brep.vertices.filter(v => v.point[0] === 32.75).length, 4);
+  assert.equal(partBreps(doc)[0].brep.vertices.filter(v => v.point[0] === 2.25).length, 4);
+  const source = bodies.find(body => body.ref?.node === 1);
+  assert.ok(typeof source?.volume === 'number' && Math.abs(source.volume - 1464) < 1e-9);
+});
+
+test('a Box target rejects ambiguous modes, stale revisions and both incorrect owners', async () => {
+  const state = await independentBoxes();
+  const request = { ...edit(state.doc), values: referenceValues };
+  const neverEvaluate = () => assert.fail('Invalid endpoint requests must refuse before evaluation.');
+  const direct = await dispatchTool(state, 'features', request, neverEvaluate);
+  assert.ok(direct.isError && !direct.changed);
+  const incomplete = { ...referenceValues, boxTargetVertexEndpoint: undefined };
+  for (const replacement of [
+    { ...request, index: 2 }, { ...request, expectedRevision: '0000000000000000' },
+    { ...request, values: { ...referenceValues, boxMaxX: 32.75 } }, { ...request, values: incomplete },
+    { ...request, values: { ...referenceValues, boxVertexEdge: referenceValues.boxTargetVertexEdge } },
+    { ...request, values: { ...referenceValues, boxTargetVertexEdge: referenceValues.boxVertexEdge } },
+    { ...request, values: { ...referenceValues, boxTargetVertexEndpoint: 'midpoint' } },
+  ]) {
+    const result = await dispatchTool(state, 'proposals', propose(replacement), neverEvaluate);
+    assert.ok(result.isError && !result.changed, JSON.stringify(replacement));
+    assert.equal(result.state.doc, state.doc);
+  }
+  const lone = await originalBox();
+  const missing = await dispatchTool(lone, 'proposals', propose({ ...request, expectedRevision: revisionOf(lone.doc) }), neverEvaluate);
+  assert.ok(missing.isError && !missing.changed);
+});

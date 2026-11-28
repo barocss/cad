@@ -23,7 +23,7 @@ export const GROUPS: Record<string, Group> = {
     actions: {
       command: ['run_command', 'command, values?, faces?, edges?, bodies?, point?, expectedRevision?'],
       add: ['add_features', 'features: [node] — raw feature nodes (sketches, extrudes, revolves, sweeps, lofts, …)'],
-      edit: ['edit_feature', 'index, values? | feature?, expectedRevision? — detachToDistance:true fixes Extrude length; Box proposal: boxVertexEdge, boxVertexEndpoint, boxMaxX'],
+      edit: ['edit_feature', 'index, values? | feature?, expectedRevision? — detachToDistance:true fixes Extrude length; Box vertex proposal: absolute X or second Box vertex (see describe)'],
       parameters: ['set_parameters', 'add?, set?, rename?, bind?, remove? — named parameters; bind a feature\'s value to one'],
       load_rows: ['load_rows', 'kind, file, part?, feature? — rows from the person’s conversation file'],
       delete: ['delete_feature', 'index, expectedRevision?'],

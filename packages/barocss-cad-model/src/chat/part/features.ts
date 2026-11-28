@@ -578,11 +578,12 @@ async function editFeatureTool(state: ChatState, args: Record<string, unknown>, 
   const refusal = checkFeatureRevision(state, args.expectedRevision, 'EDIT');
   if (refusal) return refusal;
   const given = isObj(args.values) ? args.values : {};
+  let boxFeature: ModelNode | undefined;
   if (hasBoxVertexWidthValues(given)) {
     if (!options.proposal) return fail(state, 'Use proposals.propose and approve the Box vertex width edit in Studio.', { code: 'EDIT_INPUT' });
     const box = boxVertexWidthSketch(state, args, given);
     if ('error' in box) return fail(state, box.error, { code: 'EDIT_INPUT' });
-    return editFeatureTool(state, { index: 0, feature: box.feature, retainBoxCommand: true, expectedRevision: args.expectedRevision }, evaluate, options);
+    boxFeature = box.feature;
   }
   const detach = Object.hasOwn(given, 'detachToDistance');
   if (detach && (given.detachToDistance !== true || args.expectedRevision === undefined || typeof args.index !== 'number'
@@ -614,7 +615,7 @@ async function editFeatureTool(state: ChatState, args: Record<string, unknown>, 
   if ((chamfer || round) && ((chamfer && round) || args.expectedRevision === undefined || args.feature !== undefined
     || args.values !== undefined || args.retainBoxCommand !== undefined))
     return fail(state, 'Pass only index, expectedRevision and one sketch corner edit.', { code: 'EDIT_INPUT' });
-  const retainBox = args.retainBoxCommand === true;
+  const retainBox = boxFeature !== undefined || args.retainBoxCommand === true;
   if (args.retainBoxCommand !== undefined && (!retainBox || args.feature === undefined || args.values !== undefined || nodes.length !== 2 || index !== 0))
     return fail(state, 'Retaining the Box command requires a replacement sketch for one standard Box.');
   if (editWallDistance) return editReviewedWallDistance(state, index, given[savedWallDistanceKey], evaluate, options);
@@ -639,11 +640,12 @@ async function editFeatureTool(state: ChatState, args: Record<string, unknown>, 
     if (result.node === nodes[index]) return fail(state,
       round ? 'The selected Fillets already have this radius.' : 'The selected Chamfers already have this distance.', { code: 'EDIT_INPUT' });
     next = dropStaleMade(nodes, nodes.map((node, at) => at === index ? result.node : node));
-  } else if (args.feature !== undefined) {
-    const why = checkNode(args.feature, nodes.slice(0, index), state.doc.parameters, state.doc.frames?.sections, state.partOf ? null : state.doc.instances ?? []);
+  } else if (boxFeature !== undefined || args.feature !== undefined) {
+    const replacement = boxFeature ?? args.feature;
+    const why = checkNode(replacement, nodes.slice(0, index), state.doc.parameters, state.doc.frames?.sections, state.partOf ? null : state.doc.instances ?? []);
     if (why) return fail(state, `Feature ${index}: ${why}`);
     // (The replacement is the same feature: it keeps its id, so the names of its faces stay.)
-    next = nodes.map((n, i) => i === index ? { ...withFollowed(state.doc, args.feature as ModelNode), id: n.id } : n);
+    next = nodes.map((n, i) => i === index ? { ...withFollowed(state.doc, replacement as ModelNode), id: n.id } : n);
     if (retainBox) {
       const updated = updateBoxFootprint(nodes, next, index);
       if (updated === next) return fail(state, 'Change a Box extent while retaining its minimum corner and command limits.');
