@@ -1,13 +1,13 @@
 # CAD roadmap — current status and execution order
 
-Updated 2026-11-28 · Priority authority: D520 · Latest delivery: D2186 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
+Updated 2026-11-28 · Priority authority: D520 · Latest delivery: D2187 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
 
 This is the only current status index. Detailed tracks define acceptance; the 34 stable row pages retain scope and issue navigation. Immutable decision notes retain results. Do not append chronological status paragraphs here. [D520 decision](notes/cad-roadmap-replan-2026-11-04/README.md) supersedes D445 execution order and historical next-item text, while retaining its safeguards and bounded proofs.
 
 ## Now and next
 
-- **Current position:** [D2186](notes/opposite-sphere-cone-seams-2026-11-28/README.md), P1 rows 16 and 30. The original cone and sphere Union preserves its small tip and passes strict native and desktop checks.
-- **Next MAIN:** D2187, P1 rows 16 and 30. Diagnose the one-use edge in the final Difference of seed 20261023 case 53 and prove the expected closed result ([#7](https://github.com/barocss/cad/issues/7)).
+- **Current position:** [D2187](notes/crossing-cylinder-return-branch-2026-11-28/README.md), P1 rows 16 and 30. The original cylinder Difference preserves the return branch at a trim crossing and passes strict native and desktop checks.
+- **Next MAIN:** D2188, P0 rows 16 and 30. The two-cylinder reduction of seed 20261023 case 92 returns an invalid native Difference at internal tangency. Reproduce it in Studio and refuse the invalid result while retaining the adjacent valid cases ([#7](https://github.com/barocss/cad/issues/7)).
 - **Separate follow-ups:** Continue Studio App extraction in cohesive parts with affected desktop checks. [#608 Rendering](https://github.com/barocss/cad/issues/608) stays on HOLD. API inventory drift remains open. The issue tracker records [#126](https://github.com/barocss/cad/issues/126), [#613](https://github.com/barocss/cad/issues/613), [#152](https://github.com/barocss/cad/issues/152) and [#22](https://github.com/barocss/cad/issues/22) as closed.
 - **Active repository:** [barocss/cad](https://github.com/barocss/cad), based on `origin/main`. Fetch before work and preserve unexpected changes. The [migration record](../../../docs/migration/README.md) maps the former `local/cad-dev` history and issue numbers.
 - **Evidence correction:** D482 records2167 PASS/0 FAIL/2 existing SKIP in a later full-kernel run than D433. Neither result is a new full-suite PASS at this audit HEAD. [D482 record](notes/vertical-contact-refusal-2026-11-04/README.md).

@@ -27,6 +27,30 @@ function seededTree(seed, index) {
   return sample.tree;
 }
 
+test('a crossing-cylinder Difference keeps the return branch near the closed-loop endpoint', () => {
+  const tree = seededTree(20261023, 53);
+  const stock = tree.a.a.a, cylinder = tree.b.a.child.leaf;
+  const tool = { leaf: { ...cylinder, move: [cylinder.move[0] + 2 * tree.b.a.pattern.spacing, cylinder.move[1], cylinder.move[2]] } };
+  const reduced = { op: 'difference', a: stock, b: tool };
+  const { document, root } = documentOf(reduced);
+  const { brep } = outputOf(evaluateCadPart(document), root);
+  const report = checkBrep(brep, { strict: true });
+  assert.ok(report.valid, report.issues.join('\n'));
+  assert.equal(report.counts.bodies, 1);
+  const mass = brepMassProperties(brep, 1);
+  assert.ok(Math.abs(mass.volume - 92.93564368142091) < 1e-6);
+  mass.centroid.forEach((coord, axis) =>
+    assert.ok(Math.abs(coord - [3.4019588015348092, 0.4232480693159547, 0.1981904664160408][axis]) < 1e-7));
+  const original = documentOf(tree);
+  const { brep: full } = outputOf(evaluateCadPart(original.document), original.root);
+  const fullReport = checkBrep(full, { strict: true });
+  assert.ok(fullReport.valid, fullReport.issues.join('\n'));
+  const fullMass = brepMassProperties(full, 1);
+  assert.ok(Math.abs(fullMass.volume - 122.30036355311371) < 0.138152);
+  fullMass.centroid.forEach((coord, axis) =>
+    assert.ok(Math.abs(coord - [2.3342120904456323, -2.842454718339994, 1.0795587348964213][axis]) < 0.004005));
+});
+
 test('a cone tip survives Union across opposite sphere and cone seam charts', () => {
   const tree = seededTree(20261023, 30);
   const { document, root } = documentOf(tree);

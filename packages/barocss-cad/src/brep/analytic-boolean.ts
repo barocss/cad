@@ -1177,7 +1177,10 @@ function cutPair(fa: GFace, fb: GFace, tol: number, span: number, touching = fal
       const firstUp = disc(zeros[0] + 1e-6) > 0, ordered = firstUp ? zeros : [...zeros.slice(1), zeros[0] + TWO_PI];
       for (let k = 0; k < ordered.length; k += 2) {
         const ta = ordered[k], tb = ordered[k + 1], mid = (ta + tb) / 2, half = (tb - ta) / 2;
-        paramCuts(psi => point(mid - half * Math.cos(psi), Math.sin(psi) >= 0 ? 1 : -1), 0, TWO_PI);
+        const at = (psi: number) => point(mid - half * Math.cos(psi), Math.sin(psi) >= 0 ? 1 : -1);
+        // Keep each return branch open for trim lookup at the loop's coincident start and end.
+        paramCuts(at, 0, Math.PI);
+        paramCuts(at, Math.PI, TWO_PI);
       }
       return;
     }
