@@ -1,5 +1,5 @@
 import { buildProfileLoop, ExtrudedProfileLimits, isExtrudedProfileError } from '@barocss/cad';
-import { chamferCorner, roundStraightCornerForEdit } from './corner';
+import { canChamferWithTwoSetbacks, chamferCorner, roundStraightCornerForEdit } from './corner';
 import { nextIdOf, withIds } from './entityIds';
 import { arcOf, outlineSegments, type P2 } from './profile';
 import type { Polygon } from './rules';
@@ -31,12 +31,14 @@ function tangentToCarrier(center: P2, contact: P2, tip: P2, end: P2): boolean {
 }
 
 /** Stage the selected straight-corner edits and accept them only if the complete outline can settle. */
-export function prepareStraightCornerBatch(source: Polygon, operation: Operation, corners: readonly number[], value: number, firstId = 1): Result {
+export function prepareStraightCornerBatch(source: Polygon, operation: Operation, corners: readonly number[], value: number, firstId = 1, outgoing?: number): Result {
   const n = source.points.length;
   const ordered = [...new Set(corners)].sort((a, b) => a - b);
   if (!source.closed || source.pending || source.construction || source.spline || source.ellipse || source.circles?.length
     || n < 3 || !ordered.length || ordered.some(i => !Number.isInteger(i) || i < 0 || i >= n))
     return { error: 'Select corners on one independent closed outline.' };
+  if (outgoing !== undefined && (operation !== 'chamfer' || ordered.length !== 2 || ordered.some(i => !canChamferWithTwoSetbacks(source, i))))
+    return { error: 'Two chamfer distances need two perpendicular corners on one outline.' };
 
   const existing = Array.from(source.ids ?? []).filter(id => id !== '');
   if ((source.ids && source.ids.length !== n) || new Set(existing).size !== existing.length
@@ -48,12 +50,13 @@ export function prepareStraightCornerBatch(source: Polygon, operation: Operation
   const [base] = withIds([source], from) as [Polygon];
   const finishFrom = from + n - existing.length;
 
-  const edit = operation === 'fillet' ? roundStraightCornerForEdit : chamferCorner;
-  const first = edit(base, ordered[0], value);
+  const edit = operation === 'fillet' ? (shape: Polygon, index: number) => roundStraightCornerForEdit(shape, index, value)
+    : (shape: Polygon, index: number) => chamferCorner(shape, index, value, outgoing);
+  const first = edit(base, ordered[0]);
   if ('error' in first) return first;
   const local = new Map<number, Corner>();
   for (const [offset, i] of ordered.entries()) {
-    const planned = offset === 0 ? first : edit(base, i, value);
+    const planned = offset === 0 ? first : edit(base, i);
     if ('error' in planned) return planned;
     const { points, bulges } = planned.shape;
     local.set(i, { from: points[i], to: points[i + 1], bulge: bulges?.[i] ?? 0 });
@@ -67,7 +70,7 @@ export function prepareStraightCornerBatch(source: Polygon, operation: Operation
   let draft = first.shape;
   const at = ordered.map((i, offset) => i + offset);
   for (const index of at.slice(1)) {
-    const staged = edit(draft, index, value);
+    const staged = edit(draft, index);
     if ('error' in staged) return staged;
     draft = staged.shape;
   }
@@ -83,14 +86,14 @@ export function prepareStraightCornerBatch(source: Polygon, operation: Operation
       const incoming = candidate.points[j];
       if (distance(incoming, corner?.from ?? tip) > tolerance) return geometryError;
       if (corner) {
-        const outgoing = candidate.points[j + 1], bulge = candidate.bulges?.[j] ?? 0;
-        if (distance(outgoing, corner.to) > tolerance || Math.abs(bulge - corner.bulge) > 1e-9) return geometryError;
+        const outgoingPoint = candidate.points[j + 1], bulge = candidate.bulges?.[j] ?? 0;
+        if (distance(outgoingPoint, corner.to) > tolerance || Math.abs(bulge - corner.bulge) > 1e-9) return geometryError;
         if (operation === 'fillet') {
-          const arc = arcOf(incoming, outgoing, bulge);
+          const arc = arcOf(incoming, outgoingPoint, bulge);
           if (!(Math.abs(arc.radius - value) <= tolerance)
             || !tangentToCarrier(arc.center, incoming, tip, source.points[(i - 1 + n) % n])
-            || !tangentToCarrier(arc.center, outgoing, tip, source.points[next])) return geometryError;
-        } else if (Math.abs(distance(incoming, tip) - value) > tolerance || Math.abs(distance(outgoing, tip) - value) > tolerance) {
+            || !tangentToCarrier(arc.center, outgoingPoint, tip, source.points[next])) return geometryError;
+        } else if (Math.abs(distance(incoming, tip) - value) > tolerance || Math.abs(distance(outgoingPoint, tip) - (outgoing ?? value)) > tolerance) {
           return geometryError;
         }
         j++;

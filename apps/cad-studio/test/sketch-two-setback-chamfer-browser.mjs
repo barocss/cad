@@ -5,6 +5,7 @@ import { createFlow } from './flow-helper.mjs';
 import { currentPartRevision, withMcpSession } from './mcp-browser-session.mjs';
 
 const baseline = process.argv.includes('--baseline');
+const batch = process.argv.includes('--batch');
 const agent = process.argv.includes('--agent');
 const editBaseline = process.argv.includes('--edit-baseline');
 const edit = process.argv.includes('--edit') || editBaseline;
@@ -15,6 +16,7 @@ const pins = [
   'apps/cad-studio/src/sketch/cornerDraft.ts',
   'apps/cad-studio/src/sketch/constraintInspection.ts',
   'packages/barocss-cad-model/src/sketch/corner.ts',
+  ...(batch ? ['packages/barocss-cad-model/src/sketch/cornerBatch.ts'] : []),
   'packages/barocss-cad-model/src/sketch/chamferEdit.ts',
   ...(agent ? [
     'apps/cad-studio/test/mcp-browser-session.mjs',
@@ -28,7 +30,8 @@ const f = await createFlow({
   name: 'sketch-two-setback-chamfer', output: process.argv[2], envFrozen: 'TWO_SETBACK_CHAMFER_FROZEN',
   initialFiles: pins, requiredFrozen: pins,
   qualification: agent ? 'Propose the revision-pinned edit of a saved two-distance Chamfer and verify Studio approval, native parity and fresh Open.'
-    : 'Apply two distinct setbacks at one authored right-angle sketch corner and reopen the native extrusion.',
+    : batch ? 'Apply two distinct setbacks together at two right-angle corners of the same outline.'
+      : 'Apply two distinct setbacks at one authored right-angle sketch corner and reopen the native extrusion.',
   inspectorSource: `
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -40,7 +43,7 @@ import { digestOf } from '@barocss/cad-model/util/digest';
 const doc = JSON.parse(readFileSync(process.argv[2], 'utf8'));
 if (process.argv[3] === '"seed"') {
   const profile = profileOf([{ kind: 'polygon', closed: true, points: doc.points, ids: ['e1','e2','e3','e4'],
-    hv: { h: [0, 2], v: [1, 3] }, lengths: { 2: 40, 3: 30 } }]);
+    hv: { h: [0, 2], v: [1, 3] }, lengths: doc.batch ? { 3: 30 } : { 2: 40, 3: 30 } }]);
   assert.ok('node' in profile);
   console.log(JSON.stringify(withNode(withNode(emptyDoc(), profile.node), { kind: 'extrude', sketch: 0, height: 10 })));
 } else {
@@ -71,29 +74,42 @@ async function editSketch() {
 
 async function startChamfer() {
   await f.worldClick(points[1]);
+  if (batch) {
+    await f.page.keyboard.down('Shift');
+    try { await f.worldClick(points[2]); } finally { await f.page.keyboard.up('Shift'); }
+  }
   const tools = f.sketchPanel().getByRole('group', { name: 'Corner tools', exact: true });
   await button('Chamfer', tools).click();
   await panel().waitFor();
+  if (batch) assert.deepEqual(await f.page.locator('.sk-corner-target').evaluateAll(items => items.map(item => item.dataset.cornerIndex)), ['1', '2']);
 }
 
 async function verifyNative(label, doc, incoming, outgoing) {
   const outline = doc.nodes[0].outline;
-  const expected = cut(incoming, outgoing);
+  const expected = batch ? [[0, 0], [40 - incoming, 0], [40, outgoing], [40, 30 - incoming], [40 - outgoing, 30], [0, 30]]
+    : cut(incoming, outgoing);
   for (const [i, [x, y]] of expected.entries()) {
     near(outline.points[i][0], x);
     near(outline.points[i][1], y);
   }
-  assert.deepEqual(doc.nodes[0].sideTags.outer, ['e1', 'e5', 'e2', 'e3', 'e4']);
+  assert.deepEqual(doc.nodes[0].sideTags.outer, batch ? ['e1', 'e5', 'e2', 'e6', 'e3', 'e4'] : ['e1', 'e5', 'e2', 'e3', 'e4']);
   near(outline.lengths[1], Math.hypot(incoming, outgoing));
   const angle = outline.rules.find(rule => rule.kind === 'angle' && rule.a === 0 && rule.b === 1);
   near(angle.value, 180 - Math.atan2(outgoing, incoming) * 180 / Math.PI);
+  if (batch) {
+    near(outline.lengths[3], Math.hypot(incoming, outgoing));
+    near(outline.lengths[5], 30);
+    near(outline.rules.find(rule => rule.kind === 'angle' && rule.a === 2 && rule.b === 3).value, angle.value);
+    near(outline.points[3][1] - outline.points[2][1], 30 - incoming - outgoing);
+  }
   const report = await f.inspect(label, doc);
-  const volume = (40 * 30 - incoming * outgoing / 2) * 10;
+  const volume = (40 * 30 - incoming * outgoing * (batch ? 1 : 0.5)) * 10;
   near(report.volume, volume);
   near((await f.bodies()).bodies[0].volume, volume);
-  assert.equal(report.counts.faces, 7);
-  assert.equal(report.counts.vertices, 10);
+  assert.equal(report.counts.faces, batch ? 8 : 7);
+  assert.equal(report.counts.vertices, batch ? 12 : 10);
   assert.ok(report.faces.includes('n1.side[e5]'));
+  if (batch) assert.ok(report.faces.includes('n1.side[e6]'));
   for (const [x, y] of expected) for (const z of [0, 10]) {
     assert.ok(report.vertices.some(v => Math.hypot(v[0] - x, v[1] - y, v[2] - z) < 1e-7));
   }
@@ -199,7 +215,7 @@ async function verifyAgentEdit() {
 
 await f.run(async () => {
   if (agent) return verifyAgentEdit();
-  const source = await f.inspect('orthogonal-stock', { points }, 'seed');
+  const source = await f.inspect('orthogonal-stock', { points, batch }, 'seed');
   await f.newPage();
   await f.page.getByLabel('Model file', { exact: true }).setInputFiles({
     name: 'two-setback-stock.bcad', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(source)),
@@ -223,7 +239,8 @@ await f.run(async () => {
   await preview().waitFor();
   await f.same(source);
   await f.snapshot('two-setback-preview');
-  await field('Outgoing distance').fill('30');
+  await field('Outgoing distance').fill(batch ? '27' : '30');
+  if (batch) await panel().getByRole('alert').getByText(/shared edge/i).waitFor();
   assert.equal(await button('Apply', panel()).isDisabled(), true);
   await preview().waitFor({ state: 'hidden' });
   await f.same(source);
@@ -247,6 +264,7 @@ await f.run(async () => {
   const saved = await f.save('two-setback-chamfer');
   const reopened = (await f.freshOpen(saved.file, accepted, 'two-setback-reopened')).doc;
   await verifyNative('two-setback-native-reopened', reopened, 3, 4);
+  if (batch) return;
 
   if (edit) {
     f.phase = 'Select the saved right-angle bevel and inspect its edit affordance';

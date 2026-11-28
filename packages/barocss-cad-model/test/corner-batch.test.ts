@@ -105,3 +105,37 @@ test('batch edits handle the wraparound side and allocate only missing and inser
   if ('error' in fresh) assert.fail(fresh.error);
   assert.deepEqual(fresh.shape.ids, ['e9', 'e1', 'e2', 'e3', 'e4', 'e5', 'e6', 'e7', 'e10', 'e8']);
 });
+
+test('two unequal setbacks retain a shared carrier and opposite turn directions', () => {
+  const source: Polygon = { ...notch, hv: { h: [0, 2, 4, 6], v: [1, 3, 5, 7] } };
+  const before = structuredClone(source);
+  const result = prepareStraightCornerBatch(source, 'chamfer', [4, 3], 3, 1, 4);
+  if ('error' in result) assert.fail(result.error);
+  const { shape } = result;
+  assert.deepEqual(result, prepareStraightCornerBatch(source, 'chamfer', [3, 4], 3, 1, 4));
+  assert.deepEqual(shape.points.slice(3, 7), [[41, 40], [38, 36], [38, 18], [34, 15]]);
+  assert.deepEqual(shape.ids, ['e1', 'e2', 'e3', 'e9', 'e4', 'e10', 'e5', 'e6', 'e7', 'e8']);
+  assert.deepEqual(shape.lengths, { 0: 60, 3: 5, 5: 5 });
+  assert.deepEqual(shape.rules?.[0], source.rules?.[0]);
+  for (const [edge, beforeDirection] of [[3, [-1, 0]], [5, [0, -1]]] as const) {
+    const [a, b] = [shape.points[edge], shape.points[edge + 1]];
+    const cross = beforeDirection[0] * (b[1] - a[1]) - beforeDirection[1] * (b[0] - a[0]);
+    assert.equal(Math.sign(cross), edge === 3 ? 1 : -1);
+  }
+  const profile = profileOf([shape]);
+  if ('error' in profile) assert.fail(profile.error);
+  const [body] = partSnapshot(withNode(withNode(emptyDoc(), profile.node), { kind: 'extrude', sketch: 0, height: 10 })).outputs;
+  assert.ok(checkBrep(body.brep, { strict: true }).valid);
+  for (const id of ['e9', 'e10']) {
+    const wall = body.brep.faces.find(face => face.name === `n1.side[${id}]`);
+    assert.ok(wall && faceGeometry(wall).kind === 'plane');
+  }
+  const collapse = prepareStraightCornerBatch(source, 'chamfer', [3, 4], 14, 1, 11);
+  assert.ok('error' in collapse && /shared edge/.test(collapse.error));
+  const underMinimum = prepareStraightCornerBatch(source, 'chamfer', [3, 4], 13.99995, 1, 11);
+  assert.ok('error' in underMinimum && /shared edge/.test(underMinimum.error));
+  const lock: Polygon = { ...source, lengths: { ...source.lengths, 3: 25 } };
+  assert.ok('error' in prepareStraightCornerBatch(lock, 'chamfer', [3, 4], 3, 1, 4));
+  assert.ok('error' in prepareStraightCornerBatch(source, 'chamfer', [2, 3, 4], 3, 1, 4));
+  assert.deepEqual(source, before);
+});

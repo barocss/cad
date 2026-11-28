@@ -98,14 +98,16 @@ function tagCornerSegment(owner: SketchState, shape: Polygon, corner: number, op
 export function prepareSketchCorners(owner: SketchState, source: Polygon, doc: StudioDoc,
   operation: SketchCornerOperation, corners: readonly number[], input: string, outgoing?: string): SketchCornerResult {
   if (corners.length === 1) return prepareSketchCorner(owner, source, doc, operation, corners[0], input, outgoing);
-  if (outgoing !== undefined) return { error: 'Select one perpendicular corner on an independent outline.' };
+  if (outgoing !== undefined && (operation !== 'chamfer' || !allowsTwoSetbackChamfer(owner, source, doc, corners)))
+    return { error: 'Select two perpendicular corners on one independent outline.' };
   const stored = owner.editNode === undefined ? undefined : doc.nodes[owner.editNode];
   if (owner.association || owner.base || owner.band || source.circles?.length || source.construction
     || (stored?.kind === 'sketch' && (stored.on || stored.profile === 'band'))
     || owner.done?.some(item => !item.construction && item.kind !== 'bezier'))
     return { error: 'Edit several corners on one independent outline.' };
   const value = input.trim() === '' ? NaN : Number(input);
-  const result = prepareStraightCornerBatch(source, operation, corners, value, nextIdOf([source, ...(owner.done ?? [])]));
+  const second = outgoing === undefined ? undefined : outgoing.trim() === '' ? NaN : Number(outgoing);
+  const result = prepareStraightCornerBatch(source, operation, corners, value, nextIdOf([source, ...(owner.done ?? [])]), second);
   if ('error' in result) return result;
   const { joined, hasUnsafeId } = cornerFinishInputs(owner, result.display);
   if (hasUnsafeId) return { error: 'This sketch has no available side IDs for the corner edits and its other shapes.' };
@@ -117,7 +119,8 @@ export function prepareSketchCorners(owner: SketchState, source: Polygon, doc: S
 }
 
 export function allowsTwoSetbackChamfer(owner: SketchState, source: Polygon, doc: StudioDoc, corners: readonly number[]): boolean {
-  return corners.length === 1 && independentCornerOutline(owner, source, doc) && canChamferWithTwoSetbacks(source, corners[0]);
+  return (corners.length === 1 || corners.length === 2 && !source.circles?.length)
+    && independentCornerOutline(owner, source, doc) && corners.every(corner => canChamferWithTwoSetbacks(source, corner));
 }
 
 export function prepareSketchCorner(owner: SketchState, source: Polygon, doc: StudioDoc,
