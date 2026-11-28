@@ -251,12 +251,11 @@ test('restoring the original ends keeps the exact coordinates lost by the rotate
   }
 });
 
-test('rotated quarter admission refuses a one-ULP mismatch, major arcs beyond 270 degrees and both collapse directions', () => {
+test('rotated quarter admission refuses a one-ULP mismatch and both collapse directions', () => {
   const center = [0, 0], start = [8, 6], end = [-6, 8];
   const nearRight = [-6 + 4 * Number.EPSILON, 8];
   assert.equal(Math.hypot(...nearRight), Math.hypot(...start));
-  for (const profile of [quadrant(center, start, nearRight), quadrant(center, start, [0, 10], 'cw')])
-    assert.throws(() => make(10, { profile }), /not tangent/);
+  assert.throws(() => make(10, { profile: quadrant(center, start, nearRight) }), /not tangent/);
   for (const draft of [30, -70])
     assert.throws(() => make(draft, { profile: quadrant(center, start, end) }), /closes the quarter-disk/);
 });
@@ -352,8 +351,9 @@ test('three-quarter Draft retains exact rotated authored endpoints and refuses u
   assert.throws(() => make(10, { profile: quadrant([0, 0], [8, 6], [6 + 4 * Number.EPSILON, -8]) }), /not tangent/);
 });
 
-function reflexSectionIntegral(slope, steps) {
-  const sums = [0, 0, 0, 0], angle = 2 * Math.PI - Math.atan2(4, -3);
+function reflexSectionIntegral(slope, steps, radialCosine = -0.6) {
+  const sums = [0, 0, 0, 0], angle = 2 * Math.PI - Math.acos(radialCosine);
+  const cotangent = (1 + radialCosine) / Math.sin(angle);
   const add = (cross, mx, my, a, b) => [
     cross + a[0] * b[1] - a[1] * b[0],
     mx + (b[1] - a[1]) * (a[0] ** 2 + a[0] * b[0] + b[0] ** 2) / 3,
@@ -363,7 +363,7 @@ function reflexSectionIntegral(slope, steps) {
     const z = 10 * i / steps, d = slope * z, r = 10 - d;
     const start = Math.asin(d / r), end = angle - start;
     const point = theta => [r * Math.cos(theta), r * Math.sin(theta)];
-    const corner = [-d / 2, d], sinMoment = t => Math.sin(t) - Math.sin(t) ** 3 / 3;
+    const corner = [cotangent * d, d], sinMoment = t => Math.sin(t) - Math.sin(t) ** 3 / 3;
     const cosMoment = t => -Math.cos(t) + Math.cos(t) ** 3 / 3;
     // Green integrals around the exact two supporting lines and the original offset circle.
     const arc = [r ** 2 * (end - start), r ** 3 * (sinMoment(end) - sinMoment(start)),
@@ -426,6 +426,59 @@ test('a reflex Draft preserves exact translated rotated ends and refuses unsuppo
     assert.ok(brep.vertices.some(({ point }) => point[0] === start[0] && point[1] === start[1] && point[2] === 2));
 
   for (const draft of [30, -84]) assert.throws(() => make(draft, { profile: source }), /closes the reflex sector/);
-  for (const end of [[-6 + 4 * Number.EPSILON, -8], [6, -8]])
+  for (const end of [[-6 + 4 * Number.EPSILON, -8], [-10, 0]])
     assert.throws(() => make(10, { profile: quadrant([0, 0], [10, 0], end) }), /not tangent/);
+});
+
+test('the 307 degree sector retains two exact radial walls and the wide cone trims for both signs', () => {
+  const source = quadrant([0, 0], [10, 0], [6, -8]);
+  for (const draft of [10, -30]) {
+    const brep = make(draft, { profile: source }), slope = Math.tan(draft * Math.PI / 180);
+    const checked = checkBrep(brep, { strict: true });
+    assert.ok(checked.valid, checked.issues.join('\n'));
+    assert.deepEqual(checked.counts, { bodies: 1, shells: 1, faces: 6, loops: 6, coedges: 24, edges: 12, vertices: 8 });
+    assert.equal(checked.topology[0].genus, 0);
+    for (const segmentsPerQuarter of [4, 8, 16])
+      assert.equal(openEdgesByBody(brep, tessellateBrep(brep, { segmentsPerQuarter })), 0);
+
+    for (const [name, plane] of [['e.side0|e.side1#1', p => p[1]], ['e.side1#2|e.side2', p => -0.8 * p[0] - 0.6 * p[1]]]) {
+      const { curve } = brep.edges.find(edge => edge.name === name);
+      assert.deepEqual([curve.degree, curve.weights], [2, [1, 1, 1]]);
+      for (let i = 0; i <= 24; i++) {
+        const p = evaluateCurve(curve, i / 24), d = slope * p[2];
+        near(plane(p), d);
+        near(Math.hypot(p[0], p[1]), 10 - d);
+      }
+    }
+    const { curve: corner } = brep.edges.find(edge => edge.name === 'e.side0|e.side2');
+    const mid = evaluateCurve(corner, 0.5);
+    near(mid[0], -10 * slope); near(mid[1], 5 * slope);
+    const charts = brep.faces.filter(face => face.name.startsWith('e.side1#'));
+    assert.deepEqual(charts.map(face => face.surface.controlPoints.length), [5, 5]);
+    for (const { surface } of charts) for (const u of [0.125, 0.5, 0.875]) for (const v of [0, 0.4, 1]) {
+      const [x, y, z] = evaluateSurface(surface, u, v);
+      near(Math.hypot(x, y), 10 - slope * z);
+    }
+    const [volume, ...moments] = reflexSectionIntegral(slope, 8192, 0.6);
+    const mass = brepMassProperties(brep, 1);
+    near(mass.volume, volume, volume * 1e-10);
+    mass.centroid.forEach((value, axis) => near(value, moments[axis] / volume, 1e-8));
+  }
+  for (const draft of [20, -40]) assert.throws(() => make(draft, { profile: source }), /closes the reflex sector/);
+});
+
+test('wide major Draft keeps distinct exact ends near a full circle and in a translated rotated source', () => {
+  const rotated = quadrant([2, -3], [8, 5], [12, -3]);
+  const nearFull = quadrant([0, 0], [401, 0], [399, -40]);
+  const reversed = rotated.map((segment, i) => ({
+    ...segment, start: rotated[(i + 1) % rotated.length].start, ...(segment.kind === 'arc' ? { direction: 'cw' } : {}),
+  })).reverse();
+  for (const source of [rotated, reversed, nearFull]) for (const draft of [10, -30]) {
+    const brep = make(draft, { profile: source, z0: 2, z1: 12 });
+    const report = checkBrep(brep, { strict: true });
+    assert.ok(report.valid, report.issues.join('\n'));
+    for (const { start } of source)
+      assert.ok(brep.vertices.some(({ point }) => point[0] === start[0] && point[1] === start[1] && point[2] === 2));
+  }
+  assert.throws(() => make(10, { profile: quadrant([0, 0], [10, 0], [6 + 4 * Number.EPSILON, -8]) }), /not tangent/);
 });

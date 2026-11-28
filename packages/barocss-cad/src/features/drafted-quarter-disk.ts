@@ -47,7 +47,7 @@ export function draftRadialSector(profile: readonly ProfileSegment[], names: rea
   const obtuse = radialDot < 0n;
   const minorSweep = obtuse ? arc.sweep > Math.PI / 2 && arc.sweep < Math.PI : arc.sweep > 0 && arc.sweep < Math.PI / 2;
   const minor = minorSweep && radialDot !== 0n && radialCross > 0n && sameRadius;
-  const reflex = obtuse && radialCross < 0n && sameRadius && arc.sweep > Math.PI && arc.sweep < 3 * Math.PI / 2;
+  const reflex = radialDot !== 0n && radialCross < 0n && sameRadius && arc.sweep > Math.PI && arc.sweep < 2 * Math.PI;
   if (!quadrant && !reflexQuarter && !minor && !reflex) return;
   const profileName = reflexQuarter ? 'three-quarter-disk' : reflex ? 'reflex sector'
     : quadrant ? 'quarter-disk' : obtuse ? 'obtuse sector' : 'acute sector';
@@ -78,6 +78,9 @@ export function draftRadialSector(profile: readonly ProfileSegment[], names: rea
   // Use the authored major arc's bisector rather than the principal angle between the rays.
   const signedHalfAngle = Math.atan2(s, c) / 2;
   const midAngle = reflexQuarter ? 3 * Math.PI / 4 : quadrant ? Math.PI / 4 : reflex ? Math.PI + signedHalfAngle : signedHalfAngle;
+  const topAngle = Math.atan2(d, q), topSweep = midAngle - topAngle;
+  if (reflex && !obtuse && !(midAngle > 3 * Math.PI / 4 && midAngle < Math.PI && topSweep > 0 && topSweep < Math.PI))
+    fail('the drafted reflex sector cannot retain distinct arc endpoints');
   const bisectorX = quadrant ? Math.SQRT1_2 : Math.cos(midAngle);
   const bisectorY = quadrant ? Math.SQRT1_2 : Math.sin(midAngle);
   const lastWallPoint = (along: number, across: number, z: number): Point =>
@@ -100,9 +103,8 @@ export function draftRadialSector(profile: readonly ProfileSegment[], names: rea
     return segmentCurve({ kind: 'arc', center: [0, 0], radius: size, start: [a[0], a[1]],
       end: [b[0], b[1]], startAngle, sweep, length: size * sweep }, a[2], key);
   };
-  const topAngle = Math.atan2(d, q);
   const bottomArcs = [arcAt('be1', 'b1', 'b2', radius, 0, midAngle), arcAt('be2', 'b2', 'b3', radius, midAngle, midAngle)];
-  const topArcs = [arcAt('te1', 't1', 't2', r, topAngle, midAngle - topAngle), arcAt('te2', 't2', 't3', r, midAngle, midAngle - topAngle)];
+  const topArcs = [arcAt('te1', 't1', 't2', r, topAngle, topSweep), arcAt('te2', 't2', 't3', r, midAngle, topSweep)];
   for (const j of sides.keys()) {
     const next = (j + 1) % 4;
     edge('be' + j, 'b' + j, 'b' + next, bottom, sides[j], bottomArcs[j - 1]);
