@@ -4,6 +4,7 @@ import { matchesFaceName } from '@barocss/cad-model/chat/names';
 import type { StudioDoc } from '@barocss/cad-model/engine/doc';
 import type { BodyResult } from '@barocss/cad-model/engine/evaluate';
 import { revisionOf } from '@barocss/cad-model/util/revision';
+import { browserToolFailure as readFailure, modelContext, plainInput } from './browserModelContext';
 
 export interface BrowserPartSummarySource {
   doc: StudioDoc;
@@ -13,30 +14,9 @@ export interface BrowserPartSummarySource {
   isCurrent(): boolean;
 }
 
-interface ModelContext {
-  registerTool(tool: {
-    name: string;
-    description: string;
-    inputSchema: { type: 'object'; properties: Record<string, { type: 'string'; enum?: string[]; maxLength?: number }>;
-      required?: string[]; additionalProperties: false };
-    annotations: { readOnlyHint: true };
-    execute(input: unknown, options?: { signal?: AbortSignal }): Promise<unknown>;
-  }, options: { signal: AbortSignal }): Promise<void>;
-}
-
 interface PartSummary {
   feature_count: number;
   bodies: { key: string; volume: number | null; bounds: { min: number[]; max: number[] }; face_count: number; edge_count: number }[];
-}
-
-function modelContext() {
-  if (!window.isSecureContext) return;
-  try {
-    const api = (document as Document & { modelContext?: ModelContext }).modelContext;
-    if (typeof api?.registerTool === 'function') return api;
-  } catch {
-    // A browser or its Permissions Policy can deny access to the API.
-  }
 }
 
 const directions = {
@@ -45,12 +25,6 @@ const directions = {
 } as const;
 type Direction = keyof typeof directions;
 type PlaneMeasurement = { body: string; first: Direction; second: Direction; expectedRevision: string };
-
-function plainInput(input: unknown): input is Record<string, unknown> {
-  if (typeof input !== 'object' || input === null) return false;
-  const prototype = Object.getPrototypeOf(input);
-  return prototype === Object.prototype || prototype === null;
-}
 
 function isDirection(value: unknown): value is Direction {
   return typeof value === 'string' && Object.hasOwn(directions, value);
@@ -72,8 +46,6 @@ function planeName(body: BodyResult, direction: Direction) {
   const name = faces.length === 1 ? faces[0].nativePlaneName : undefined;
   if (name && body.mesh.faces.filter(face => matchesFaceName(face, name)).length === 1) return name;
 }
-
-const readFailure = (code: string, message: string) => ({ error: { code, message } });
 
 async function readPart(doc: StudioDoc, bodies: BodyResult[], query: Record<string, unknown>) {
   const outcome = await runTool({ doc, bodies, approvalRequired: true }, 'query', query, async () => null).catch(() => null);

@@ -2132,6 +2132,10 @@ export function App() {
   const browserSummaryReady = fresh && !busy && !workerFailure && marker === null && shownDoc === doc
     && !inPlace && !doc.instances?.length && !doc.direct && !sketch && !active && !section && !chatRunning
     && !previewBodies && !workingComparison && !ghost && !project.opening();
+  const browserProposalIdle = () => openIntent.current === browserSummaryOpen && ownsEvaluatedSource() &&
+    !project.opening() && !inPlaceNow.current && !shownVariant.current && !nodeEditorDraft.current &&
+    !activeStore.get() && !sectionRef.current && !parameterEditNow.current && !cageEdRef.current?.session &&
+    !workEditRefusal(workOwnership.current, acceptanceScope, workCompletion.current);
 
   return (
     <div className={'studio' + (historyLayout.visible ? ' has-history' : '') + (historyLayout.row.stacked ? ' history-stacked' : '') + (historyLayout.row.cramped ? ' stage-cramped' : '')} style={{ '--history-left': historyLeft + 'px', '--strip-w': chatColumnShown ? '0px' : CHAT_STRIP + 'px', '--dock-strip-w': dockEdge + 'px', '--chat-col-w': (chatColumnShown ? layout.chatShown : CHAT_STRIP) + 'px', '--rail-w': sketch || rendering || drawing ? '44px' : '116px' } as CSSProperties}>
@@ -2271,6 +2275,8 @@ export function App() {
         content={rendering || drawing ? null : <Suspense fallback={null}><ChatPanel versions={inPlace ? undefined : project.chat} scope={inPlace}
         browserSummary={{ doc, bodies, scope: browserSummaryOpen, ready: browserSummaryReady,
           isCurrent: () => ownsEvaluatedSource() && openIntent.current === browserSummaryOpen && !project.opening() }}
+        browserExtrude={proposalBusy ? undefined : { isIdle: browserProposalIdle, evaluate: partEval,
+          stage: next => browserProposalIdle() && commit(next, false, false, true) }}
         approvalAttachment={approvalAttachments.selected} onClearApprovalAttachment={approvalAttachments.clear}
         faceDiagnosis={faceDiagnosis.selected} onClearFaceDiagnosis={faceDiagnosis.clear}
         taskRun={inPlace ? undefined : { reopened: reopenedTaskRun, decided: decidedTaskRun, sourceKey: project.taskSourceKey, export: exportTaskRun, start: startTaskRun, stop: stopTaskRun, refresh: refreshTaskRun, rebuild: rebuildTaskRun, observe: observeTaskRunStatus, openCheckpoint: openTaskRunCheckpoint, openBaseline: openTaskRunBaseline, readApproval: readTaskRunApproval, checkWorkingApproval, prepareWorkingRepair, prepareTaskReplacement, workingVersion: saveAcceptanceScope, review: reviewTaskRun, modelViewBlocked: !reviewView }} onRunning={setChatRunning} onRowFiles={files => { if (files === chatRowFiles.current || (files && !isPersonRowFiles(files))) return; revokePersonRowFiles(chatRowFiles.current); chatRowFiles.current = files; }} base={() => prefixDoc(doc, marker ?? doc.nodes.length)} evaluate={d => engine.part(d, revision.current++, 'agent').then(r => r.ok ? r.bodies : null)} check={partEval}

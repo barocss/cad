@@ -32,6 +32,9 @@ import { isObj } from '../../util/guards';
 import { digestOf, requirementEvidenceRevision } from '../../util/digest';
 import { nestedParameterChecks, nestedParameterOps } from '../nestedParameterProposal';
 import { hasNestedFaceRepair, nestedFaceRepairOp, replayNestedFaceRepair, type NestedFaceRepair } from '../nestedFaceRepair';
+import { BROWSER_EXTRUDE_AUTHOR } from '../browserExtrude';
+
+const browserApproval = 'A browser proposal needs approval by the user in Studio.';
 
 /**
  * How far an agent may go on its own (D41), set per turn by the studio (`CAD_AUTONOMY`):
@@ -105,6 +108,7 @@ export async function proposalNeededAtL2(base: StudioDoc, cur: ChatState, evalua
 }
 /** Why an agent may not accept this proposal at this autonomy, or null (D41). */
 export function agentMayNotAccept(p: Proposal, level: number): string | null {
+  if (p.by.agent === BROWSER_EXTRUDE_AUTHOR) return browserApproval;
   if (level < 3) return `At autonomy L${level} the user accepts proposals in the studio: tell them ${p.id} is ready.`;
   if (p.risk.approval.length) return `${p.id} always needs the user's approval (${p.risk.approval.join(', ')}).`;
   const hard = new Set(p.risk.hard_requirements_changed), breaks = (p.checks?.newly_failing ?? []).filter(x => hard.has(x));
@@ -171,6 +175,7 @@ export interface Decider { agent: string; model?: string }
 export async function acceptProposalWith(dispatch: PartRun, state: ChatState, id: string, evaluate: Evaluate, o: { by?: Decider; leaveOut?: readonly string[] } = {}): Promise<{ state: ChatState; leftOut: string[] } | { error: string; stale?: true }> {
   const p = state.doc.proposals?.find(q => q.id === id), by = o.by ?? { agent: 'user' };
   if (!p || p.status !== 'open') return { error: p ? `${id} is ${p.status} already.` : `No proposal ${id}.` };
+  if (p.by.agent === BROWSER_EXTRUDE_AUTHOR && by.agent !== 'user') return { error: browserApproval };
   const nested = nestedParameterOps(p.ops);
   const faceRepair = hasNestedFaceRepair(p.ops);
   if (faceRepair && (by.agent !== 'user' || p.by.agent !== 'user' || p.ops.length !== 1 || state.partOf))
@@ -399,6 +404,7 @@ async function acceptProposalTool(state: ChatState, args: Record<string, unknown
   if (state.partOf) return fail(state, 'A placed part always needs the user\'s approval. Propose the edit from the assembly and name the part in the operation.');
   const id = String(args.id ?? ''), p = state.doc.proposals?.find(q => q.id === id);
   if (!p || p.status !== 'open') return fail(state, p ? `${id} is ${p.status} already.` : `No proposal "${id}"; open: ${(state.doc.proposals ?? []).filter(q => q.status === 'open').map(q => q.id).join(', ') || 'none'}.`);
+  if (p.by.agent === BROWSER_EXTRUDE_AUTHOR) return fail(state, browserApproval);
   if (nestedParameterOps(p.ops) !== undefined) return fail(state, 'A nested parameter proposal always needs the user’s approval in Studio.');
   if (hasNestedFaceRepair(p.ops)) return fail(state, 'A nested face repair needs selection and approval by the user in Studio.');
   const env = typeof process !== 'undefined' ? process.env : undefined, by = { agent: 'chat', ...(env?.CAD_MODEL ? { model: env.CAD_MODEL } : {}) };

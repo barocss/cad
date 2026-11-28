@@ -41,6 +41,8 @@ import { VERSION_HANDLERS } from '../versions/tools';
 import { ASSEMBLY_CHANGES, PROPOSAL_HANDLERS, acceptProposalWith, autonomy, changesPart, previewProposalWith, proposalNeededAtL2, proposalOfWith, proposeWith, rebaseProposalWith, type Decider } from './part/proposals';
 import { BATCHABLE, MUTATORS, PART_SCOPED, describe, unknownArguments } from './toolDefinitions';
 import { isObj, isVec3 } from '../util/guards';
+import { revisionOf } from '../util/revision';
+import { BROWSER_EXTRUDE_AUTHOR, browserExtrudeTarget, validExtrudeDistance } from './browserExtrude';
 import { firstProblem, isRefusal } from '../engine/refusal';
 import { REFERENCE_CODES } from '../engine/schema/references';
 // ./outputs is loaded on first use: it reaches team/bundle → baseline → assembly → parts, which import this
@@ -65,6 +67,18 @@ export function proposalOf(state: ChatState, ops: unknown, evaluate: Evaluate) {
 /** Create a user-reviewable repair only after its candidate passes the caller's fresh checks. */
 export function proposeFollowUpRepair(state: ChatState, args: Record<string, unknown>, evaluate: Evaluate, repair: NonNullable<Parameters<typeof proposeWith>[4]>) {
   return proposeWith(runProposalTool, state, args, evaluate, repair);
+}
+
+export function proposeBrowserExtrude(state: ChatState, args: { body: string; height: number; expectedRevision: string }, evaluate: Evaluate) {
+  const target = browserExtrudeTarget(state.doc, state.bodies);
+  if (state.partOf || !target || target.body !== args.body || !validExtrudeDistance(args.height) ||
+    target.height === args.height || revisionOf(state.doc) !== args.expectedRevision) {
+    return Promise.resolve(fail(state, 'The browser Extrude proposal does not match the current rectangular part.'));
+  }
+  return proposeWith(runProposalTool, state, {
+    title: `Set Extrude distance to ${args.height} mm`,
+    ops: [{ tool: 'features', args: { action: 'edit', index: target.index, values: { h: args.height }, expectedRevision: args.expectedRevision } }],
+  }, evaluate, undefined, { agent: BROWSER_EXTRUDE_AUTHOR });
 }
 /** A proposal accepted (A4.2, A4.3): see acceptProposalWith. */
 export function acceptProposal(state: ChatState, id: string, evaluate: Evaluate, o: { by?: Decider; leaveOut?: readonly string[] } = {}) { return acceptProposalWith(runProposalTool, state, id, evaluate, o); }
