@@ -3,8 +3,8 @@
 // grows). A straight wall becomes a sloping plane, an arc a cone patch about the arc's centre. Tangent
 // joints stay tangent; two straight walls meet in a sloping edge through their offset lines' meeting
 // point. One circular arc and its chord have exact parabolic joints in either draft direction when
-// their original circle and stable chord frame can be proved. An original minor circular sector or
-// a three-quarter disk has exact joins at its two radial walls. Other non-tangent curved joints and
+// their original circle and stable chord frame can be proved. Qualified original circular sectors
+// through 270° have exact joins at their two radial walls. Other non-tangent curved joints and
 // drafts steep enough to collapse a wall are refused.
 import { BrepError, buildBrep, loopVectorArea, surfaceNormalAtCentre, type Brep } from '../brep/brep-core.js';
 import { sideName } from '../document/side-names.js';

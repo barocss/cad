@@ -42,19 +42,22 @@ export function draftRadialSector(profile: readonly ProfileSegment[], names: rea
       && bx - cx === -dy && by - cy === dx
     : arc.sweep > 0 && arc.sweep < Math.PI && vx === -uy && vy === ux;
   const reflexQuarter = arc.sweep > Math.PI && arc.sweep < 2 * Math.PI && vx === uy && vy === -ux;
-  const radialDot = ux * vx + uy * vy;
+  const radialDot = ux * vx + uy * vy, radialCross = ux * vy - uy * vx;
+  const sameRadius = ux * ux + uy * uy === vx * vx + vy * vy;
   const obtuse = radialDot < 0n;
   const minorSweep = obtuse ? arc.sweep > Math.PI / 2 && arc.sweep < Math.PI : arc.sweep > 0 && arc.sweep < Math.PI / 2;
-  if (!quadrant && !reflexQuarter && !(minorSweep && radialDot !== 0n
-    && ux * vy - uy * vx > 0n && ux * ux + uy * uy === vx * vx + vy * vy)) return;
-  const profileName = reflexQuarter ? 'three-quarter-disk' : quadrant ? 'quarter-disk' : obtuse ? 'obtuse sector' : 'acute sector';
+  const minor = minorSweep && radialDot !== 0n && radialCross > 0n && sameRadius;
+  const reflex = obtuse && radialCross < 0n && sameRadius && arc.sweep > Math.PI && arc.sweep < 3 * Math.PI / 2;
+  if (!quadrant && !reflexQuarter && !minor && !reflex) return;
+  const profileName = reflexQuarter ? 'three-quarter-disk' : reflex ? 'reflex sector'
+    : quadrant ? 'quarter-disk' : obtuse ? 'obtuse sector' : 'acute sector';
   const c = quadrant || reflexQuarter ? 0 : (x * (bx - cx) + y * (by - cy)) / radius;
   const s = reflexQuarter ? -1 : quadrant ? 1 : (x * (by - cy) - y * (bx - cx)) / radius;
   if (!cardinal || !quadrant) {
     const size = Math.max(1, radius, Math.abs(ax), Math.abs(ay), Math.abs(bx), Math.abs(by), Math.abs(cx), Math.abs(cy));
     const roundoff = 64 * Number.EPSILON * size;
     if (!Number.isFinite(x) || !Number.isFinite(y) || Math.abs(x * x + y * y - 1) > 16 * Number.EPSILON
-      || (!quadrant && !reflexQuarter && !(s > 0 && (obtuse ? c > -1 && c < 0 : c > 0)))
+      || (!quadrant && !reflexQuarter && !((reflex ? s < 0 : s > 0) && (obtuse ? c > -1 && c < 0 : c > 0)))
       || Math.abs(c * c + s * s - 1) > 32 * Number.EPSILON
       || Math.hypot(cx + radius * x - ax, cy + radius * y - ay) > roundoff
       || Math.hypot(cx + radius * (x * c - y * s) - bx, cy + radius * (y * c + x * s) - by) > roundoff)
@@ -73,7 +76,8 @@ export function draftRadialSector(profile: readonly ProfileSegment[], names: rea
     fail(`the draft closes the ${profileName} at or before the top (steeper than the profile allows)`);
 
   // Use the authored major arc's bisector rather than the principal angle between the rays.
-  const midAngle = reflexQuarter ? 3 * Math.PI / 4 : quadrant ? Math.PI / 4 : Math.atan2(s, c) / 2;
+  const signedHalfAngle = Math.atan2(s, c) / 2;
+  const midAngle = reflexQuarter ? 3 * Math.PI / 4 : quadrant ? Math.PI / 4 : reflex ? Math.PI + signedHalfAngle : signedHalfAngle;
   const bisectorX = quadrant ? Math.SQRT1_2 : Math.cos(midAngle);
   const bisectorY = quadrant ? Math.SQRT1_2 : Math.sin(midAngle);
   const lastWallPoint = (along: number, across: number, z: number): Point =>
