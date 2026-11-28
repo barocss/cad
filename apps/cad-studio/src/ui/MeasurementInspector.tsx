@@ -12,7 +12,7 @@ import { Button } from '@/components/ui/button';
 import { ToolIconButton } from '@/components/ui/tool-button';
 import { Icon } from './atoms';
 import { measurePickHint, type MeasurePickFilter } from './measurePickHint';
-import { measureQuantityText } from './quantityText';
+import { measureQuantityText, quantityText } from './quantityText';
 import { measureSecondaryText, useMeasureSecondaryUnit } from './measureSecondaryUnits';
 import { measureAxesBasis } from '../app/measureProvenance';
 import type { MeasureTarget } from '../app/measureTargets';
@@ -90,10 +90,11 @@ function InterferenceResults({ doc, bodies, clashes, setSelection }: Omit<Interf
   };
   const pair = ({ a, b, volume }: { a: string; b: string; volume?: number }) => {
     const ia = bodies.findIndex(body => body.key === a), ib = bodies.findIndex(body => body.key === b);
+    const volumeText = volume === undefined ? undefined : fmt(Math.round(volume * 10) / 10);
     return <button type="button" key={JSON.stringify([a, b])} className="ol clash" disabled={ia < 0 || ib < 0}
       onClick={() => setSelection({ faces: [], edges: [], bodies: [ia, ib] })}>
       <Icon name="warning" small />{label(ia, a)}{volume === undefined ? ' and ' : ' ∩ '}{label(ib, b)}
-      {volume !== undefined && <span className="muted"> · {fmt(Math.round(volume * 10) / 10)} mm³</span>}
+      {volume !== undefined && <span className="muted"> · {volumeText === '0' ? quantityText(volume) : volumeText} mm³</span>}
     </button>;
   };
   return <>

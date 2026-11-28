@@ -42,3 +42,13 @@ test('actual Inspector retains partial/failure/empty truth and exposes default o
   assert.match(render({ ...report, failures: [], clashes: [] }), /No bodies overlap/);
   assert.doesNotMatch(render('busy'), /Interference order/); assert.match(render('busy'), /Checking/);
 });
+
+test('Inspector preserves small positive volumes and the usual display precision', () => {
+  const report: InterferenceReport = { checked: ['a', 'b', 'c'], pairs: 3,
+    clashes: [{ a: 'a', b: 'b', volume: 0.01 }, { a: 'a', b: 'c', volume: 0.34 }, { a: 'b', b: 'c', volume: 0.001 }], failures: [] };
+  const html = render(report);
+  assert.match(html, /0\.01 mm³/);
+  assert.match(html, /0\.3 mm³/);
+  assert.match(html, /1\.00e-3 mm³/);
+  assert.doesNotMatch(html, / · 0 mm³/);
+});
