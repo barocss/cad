@@ -85,11 +85,12 @@ function sidePair(value: unknown): value is [string, string] {
     && typeof value[1] === 'string' && value[1].length > 0 && value[0] !== value[1];
 }
 
-function requestedPairs(input: Record<string, unknown>, field: 'radius' | 'distance'): [string, string][] | null {
+function requestedPairs(input: Record<string, unknown>, field: 'radius' | 'distance', twoDistances: boolean): [string, string][] | null {
   const single = Object.hasOwn(input, 'sides'), batch = Object.hasOwn(input, 'corners');
   if (single === batch) return null;
   const key = single ? 'sides' : 'corners';
-  if (Object.keys(input).some(name => name !== 'sketch' && name !== field && name !== key)) return null;
+  const allowed = ['sketch', field, key, ...(twoDistances ? ['outgoingDistance'] : [])];
+  if (Object.keys(input).some(name => !allowed.includes(name))) return null;
   if (single) return sidePair(input.sides) ? [input.sides] : null;
   if (!Array.isArray(input.corners) || input.corners.length < 2) return null;
   const pairs: unknown[] = Array.from(input.corners);
@@ -118,9 +119,9 @@ export function editSketchCorner(doc: StudioDoc, index: number, kind: 'CHAMFER' 
   const saved = isObj(input) && Object.hasOwn(input, key);
   const twoDistances = isObj(input) && Object.hasOwn(input, 'outgoingDistance');
   const outgoing = isObj(input) && typeof input.outgoingDistance === 'number' ? input.outgoingDistance : undefined;
-  if (twoDistances && (round || group || !saved || outgoing === undefined || !Number.isFinite(outgoing)))
-    return { code: 'EDIT_INPUT', error: 'Give a finite outgoingDistance in mm only when editing one saved Chamfer by bevel ID.' };
-  const pairs = !saved && isObj(input) ? requestedPairs(input, field) : null;
+  const pairs = !saved && isObj(input) ? requestedPairs(input, field, twoDistances) : null;
+  if (twoDistances && (round || group || (!saved && pairs?.length !== 2) || outgoing === undefined || !Number.isFinite(outgoing)))
+    return { code: 'EDIT_INPUT', error: 'Give a finite outgoingDistance in mm for one saved Chamfer by bevel ID or two original perpendicular corners.' };
   const ids = saved ? requestedSavedIds(input, key, field, group, twoDistances) : null;
   if (!isObj(input) || typeof input.sketch !== 'string' || (!ids && !pairs) || typeof value !== 'number' || !Number.isFinite(value))
     return { code: 'EDIT_INPUT', error: group
@@ -152,7 +153,7 @@ export function editSketchCorner(doc: StudioDoc, index: number, kind: 'CHAMFER' 
     shape = result.shape;
     if (shape === source.outline) return { node: source.node };
   } else if (targets.size > 1) {
-    const result = prepareStraightCornerBatch(source.outline, kind === 'ROUND' ? 'fillet' : 'chamfer', [...targets], value, source.nextId);
+    const result = prepareStraightCornerBatch(source.outline, kind === 'ROUND' ? 'fillet' : 'chamfer', [...targets], value, source.nextId, outgoing);
     if ('error' in result) return refuse('GEOMETRY', result.error);
     shape = result.display;
   } else {

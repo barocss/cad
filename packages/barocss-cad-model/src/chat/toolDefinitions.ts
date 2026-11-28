@@ -43,7 +43,7 @@ const sketchCornerInput = (field: 'distance' | 'radius', operation: string) => {
   const results = chamfer ? 'sketchChamfers' : 'sketchFillets';
   const groupDescription = chamfer ? 'Distinct saved Chamfer side IDs. Different starting setbacks can share one new setback.'
     : 'Distinct saved Fillet side IDs. Different starting radii can share one new radius.';
-  const twoDistanceDescription = chamfer ? ' For one bevel from sketchTwoDistanceChamfers, distance is incoming and outgoingDistance is required. Send both current or new distances.' : '';
+  const twoDistanceDescription = chamfer ? ' For one bevel from sketchTwoDistanceChamfers, send both distances. To add Chamfers at two original perpendicular corners, send those side pairs as corners. In both cases distance is incoming and outgoingDistance is outgoing.' : '';
   return {
     type: 'object',
     description: `${operation} in sketch mm. Send it alone with index and expectedRevision. Use the sketch ID and side pairs from query.edit_fields with includeSketchCorners. To resize a saved ${name}, use its side ID from ${results} as the ${selector} selector. To resize two or more saved ${name}s together, send their side IDs as ${group}. ${groupDescription}${twoDistanceDescription}`,
@@ -59,7 +59,7 @@ const sketchCornerInput = (field: 'distance' | 'radius', operation: string) => {
         description: groupDescription },
       [field]: { type: 'number', exclusiveMinimum: 0 },
       ...(chamfer ? { outgoingDistance: { type: 'number', exclusiveMinimum: 0,
-        description: 'Outgoing setback in sketch mm for one saved two-distance bevel. Omit for other selections.' } } : {}),
+        description: 'Outgoing setback in sketch mm for one saved bevel or two original perpendicular corners. Omit for other selections.' } } : {}),
     },
   };
 };

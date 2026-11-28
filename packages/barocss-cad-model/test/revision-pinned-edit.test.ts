@@ -188,3 +188,33 @@ test('pinned sketch corner groups resolve distinct side pairs and refuse the ent
     assert.deepEqual(accepted.state.doc.nodes[1], before.doc.nodes[1]);
   }
 });
+
+test('a pinned two-distance Chamfer command applies only to two original corner pairs', async () => {
+  const plate = stock(), original = plate.nodes[0];
+  assert.ok(original.kind === 'sketch' && original.profile === 'rectangle');
+  const doc: StudioDoc = { ...plate, nodes: [{ ...original, sideTags: { outer: ['e1', 'e2', 'e3', 'e4'] } }, plate.nodes[1]] };
+  const before = await stateOf(doc);
+  const corners = [['e2', 'e3'], ['e1', 'e2']];
+  const chamfer = { sketch: 'n0', corners, distance: 3, outgoingDistance: 4 };
+  const args = { action: 'edit', index: 0, expectedRevision: revisionOf(doc), sketchChamfer: chamfer };
+  const neverEvaluate = async (): Promise<never> => assert.fail('A refused two-distance Chamfer must not evaluate.');
+  for (const [patch, code] of [
+    [{ sides: corners[0], corners: undefined }, 'EDIT_INPUT'],
+    [{ bevels: ['e1', 'e2'], corners: undefined }, 'EDIT_INPUT'],
+    [{ corners: [...corners, ['e3', 'e4']] }, 'EDIT_INPUT'],
+    [{ corners: [corners[0], [...corners[0]].reverse()] }, 'EDIT_SKETCH_CHAMFER_CORNER'],
+    [{ outgoingDistance: Infinity }, 'EDIT_INPUT'],
+    [{ outgoingDistance: 17 }, 'EDIT_SKETCH_CHAMFER_GEOMETRY'],
+  ] as const) {
+    const refused = await dispatchTool(before, 'features', { ...args, sketchChamfer: { ...chamfer, ...patch } }, neverEvaluate);
+    assert.ok(refused.isError && !refused.changed && refused.state === before, refused.content);
+    assert.equal(JSON.parse(refused.content).code, code, refused.content);
+  }
+  const edited = await dispatchTool(before, 'features', args, evaluate);
+  assert.ok(!edited.isError && edited.changed, edited.content);
+  assert.ok(Math.abs(edited.state.bodies[0].volume! - 6304) < 1e-7);
+  const result = edited.state.doc.nodes[0];
+  assert.ok(result.kind === 'sketch' && result.profile === 'polygon');
+  assert.deepEqual(result.points, [[0, 0], [37, 0], [40, 4], [40, 17], [36, 20], [0, 20]]);
+  assert.deepEqual(result.sideTags?.outer, ['e1', 'e5', 'e2', 'e6', 'e3', 'e4']);
+});
