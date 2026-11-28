@@ -6,6 +6,7 @@ import { curveDomain, curveEvaluator, surfaceDomain, surfaceEvaluator } from '..
 import type { Brep, BrepFace } from './brep-core.js';
 import type { Point, Surface } from '../types.js';
 import { add, cross, dist, dot, sub, unit } from '../core/vec3.js';
+import { balancedQuadraticStations } from './balanced-quadratic-stations.js';
 
 /** Every polyline edge vertex of a facet face is one of its patch's vertices (exactly). */
 function facetEdgesOnPatch(face: BrepFace, P: Float64Array, maps: Maps, add: (kind: string, detail: string) => void): void {
@@ -126,9 +127,12 @@ export function planarScaleSliver(brep: Brep): string | undefined {
         tolerance = Math.max(tolerance, edge.tolerance);
         const at = curveEvaluator(edge.curve), [a, b] = curveDomain(edge.curve);
         const count = edge.curve.degree === 1 && edge.curve.controlPoints.length === 2 ? SAMPLES_LINE : SAMPLES_CURVE;
+        const balanced = balancedQuadraticStations(edge.curve, count);
         let last: Point | undefined;
         for (let k = 0; k < count; k++) {
-          const t = k / (count - 1), p = at(c.sense === 'forward' ? a + (b - a) * t : b - (b - a) * t);
+          const f = k / (count - 1);
+          const t = c.sense === 'forward' ? balanced?.[k] ?? a + (b - a) * f : balanced?.[count - 1 - k] ?? b - (b - a) * f;
+          const p = at(t);
           if (last) perimeter += dist(last, p);
           if (k < count - 1) ring.push(mapper.uv(p, null));
           last = p;
@@ -167,12 +171,15 @@ export function strictGeometry(brep: Brep, maps: Maps, size: number, add: (kind:
         faceTol = Math.max(faceTol, e.tolerance);
         const start = c.sense === 'forward' ? e.vertices[0] : e.vertices[1];
         const at = curveEvaluator(e.curve), [t0, t1] = curveDomain(e.curve), line = e.curve.degree === 1 && e.curve.controlPoints.length === 2, n = line ? SAMPLES_LINE : SAMPLES_CURVE;
+        const balanced = mapper.planar ? balancedQuadraticStations(e.curve, n) : undefined;
         // Edges stay within their own tolerance of the surface, or 1e-6 of the model where that is larger
         // (traced intersections are fitted to that).
         const limit = Math.max(10 * e.tolerance, 1e-6 * Math.max(1, size));
         let last: Point | null = null, hint: XY | null = null;
         for (let k = 0; k < n; k++) {
-          const f = k / (n - 1), t = c.sense === 'forward' ? t0 + (t1 - t0) * f : t1 - (t1 - t0) * f, p = at(t), q = mapper.uv(p, hint), gap = mapper.gap(p, q);
+          const f = k / (n - 1);
+          const t = c.sense === 'forward' ? balanced?.[k] ?? t0 + (t1 - t0) * f : balanced?.[n - 1 - k] ?? t1 - (t1 - t0) * f;
+          const p = at(t), q = mapper.uv(p, hint), gap = mapper.gap(p, q);
           hint = q;
           if (gap > maximumEdgeSurfaceGapMM) maximumEdgeSurfaceGapMM = gap;
           if (gap > limit) { add('geometry', `edge ${e.id} is ${gap.toExponential(2)} mm off the surface of face ${face.id}`); break; }
@@ -254,9 +261,12 @@ function sampledRings(face: BrepFace, maps: Maps, mapper: Mapper, curveSamples: 
     for (const cid of loop.coedges) {
       const c = maps.coedges.get(cid), e = c && maps.edges.get(c.edge); if (!c || !e) continue;
       const at = curveEvaluator(e.curve), [t0, t1] = curveDomain(e.curve), n = e.curve.degree === 1 && e.curve.controlPoints.length === 2 ? SAMPLES_LINE : curveSamples;
+      const balanced = mapper.planar ? balancedQuadraticStations(e.curve, n) : undefined;
       let hint: XY | null = null;
       for (let k = 0; k < n - 1; k++) {
-        const f = k / (n - 1), q = mapper.uv(at(c.sense === 'forward' ? t0 + (t1 - t0) * f : t1 - (t1 - t0) * f), hint);
+        const f = k / (n - 1);
+        const t = c.sense === 'forward' ? balanced?.[k] ?? t0 + (t1 - t0) * f : balanced?.[n - 1 - k] ?? t1 - (t1 - t0) * f;
+        const q = mapper.uv(at(t), hint);
         hint = q; ring.push([q[0] * mapper.ku, q[1] * mapper.kv]); mark.push(k === 0 ? (c.sense === 'forward' ? e.vertices[0] : e.vertices[1]) : null);
       }
     }
