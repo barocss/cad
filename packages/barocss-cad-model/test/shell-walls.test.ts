@@ -224,3 +224,32 @@ test('the revision-pinned local Shell tool keeps both original lateral openings 
   assert.ok(collapse.isError && !collapse.changed && collapse.state.doc === doc, collapse.content);
   assert.match(collapse.content, /leave no cavity/i);
 });
+
+test('the local Shell tool requires one explicit current body key and six finite closed-wall values', async () => {
+  const doc = rectanglePart(40, 30, 20), original = evaluateDoc(doc, 1);
+  assert.ok(original.ok);
+  const state = { doc, bodies: original.bodies }, evaluate = async (candidate: StudioDoc) => evaluateDoc(candidate, 1);
+  const current = await dispatchTool(state, 'query', { action: 'rebuild' }, evaluate);
+  assert.ok(!current.isError, current.content);
+  const values = { wallMode: 'per-face', leftWall: 3, rightWall: 5, frontWall: 2, backWall: 4, bottomWall: 2, topWall: 3 };
+  const args = { action: 'command', command: 'shell', expectedRevision: JSON.parse(current.content).revision, bodies: ['b1'], values };
+  for (const [input, reason] of [
+    [{ bodies: [] }, /one exact original rectangular body ID/],
+    [{ bodies: ['b1', 'b1'] }, /one exact original rectangular body ID/],
+    [{ point: [1, 2, 3] }, /one exact original rectangular body ID/],
+    [{ faces: ['n1.top'] }, /one exact original rectangular body ID/],
+    [{ values: { ...values, topWall: Infinity } }, /topWall/],
+    [{ values: { ...values, topWall: undefined } }, /topWall/],
+  ] as const) {
+    const refused = await dispatchTool(state, 'features', { ...args, ...input }, evaluate);
+    assert.ok(refused.isError && !refused.changed && refused.state.doc === doc, refused.content);
+    assert.match(refused.content, reason);
+  }
+  const result = await dispatchTool(state, 'features', args, evaluate);
+  assert.ok(result.changed && !result.isError, result.content);
+  const feature = result.state.doc.nodes[2];
+  assert.ok(feature.kind === 'shell-walls');
+  assert.equal(feature.opening, null);
+  assert.equal(Object.keys(feature.sigs).length, 6);
+  assert.ok(Math.abs(result.state.bodies[0].volume! - 12480) < 1e-7);
+});

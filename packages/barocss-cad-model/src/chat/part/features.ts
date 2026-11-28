@@ -1,7 +1,6 @@
 // The v2 `features` group's handlers (R3, moved verbatim from chat/tools.ts's runPartTool): the feature tree's
 // commands, raw nodes, edits and deletes, materials, and the person's rows (stock, frame stock, sections, welds).
 import { commandById, commands, givenValues, shownFields, type Ctx, type Values } from '../../app/commands';
-import { boxShellSelection } from '../../app/boxShellSelection';
 import { canSetAgentShellCorner } from '../../app/shellCorner';
 import { PIVOT_FACE } from '../../app/pivotFaceCommand';
 import { updateBoxFootprint } from '../../app/editCommand';
@@ -47,6 +46,7 @@ import { preparePairedFixedSpanHoleEdit } from '../../app/patternHoleSpacing';
 import { editSketchCorner, sketchEditChamfers, sketchEditCorners, sketchEditFillets } from './sketchCorner';
 import { editSavedPivotHinge, readSavedPivotHinge, savedPivotHingeKey } from './pivotHingeEdit';
 import { extrudeReviewedDraft, extrudeToReviewedFace } from './reviewedExtrude';
+import { reviewedShellWallsProblem } from './reviewedShellWalls';
 
 /** Commands the chat can run (the ones that build; sketch-mode and measure UI actions are tools of their own). */
 // (Loft takes sketches picked in the studio, Align a face clicked there; chat writes a loft node with
@@ -154,7 +154,7 @@ export const COMMAND_DOCS: Record<string, { selection: string; values: Record<st
   shell: { selection: 'Choose distinct faces to open on one body, or choose one body for a closed hollow. For an original full capsule Revolve, use one or both complete hemisphere names from query.summary. Pass expectedRevision from query.rebuild for the reviewed part.', values: {
     t: 'uniform wall thickness in mm',
     join: 'default | sharp | arc. Sharp and Round need expectedRevision from query.rebuild and one exact original upright L body ID or its single original end cap name.',
-    wallMode: 'uniform | per-face. For per-face, give expectedRevision from query.rebuild and exact original faces of an upright rectangular extrusion. Choose one or two distinct original faces as openings. Give a thickness for every kept wall.',
+    wallMode: 'uniform | per-face. Give expectedRevision from query.rebuild. For a closed rectangular Shell, name its original body and supply all six thicknesses. For an open Shell, name one or two distinct original opening faces and supply the kept wall thicknesses.',
     bottomWall: 'bottom thickness in mm', frontWall: 'front thickness in mm', rightWall: 'right thickness in mm',
     backWall: 'back thickness in mm', leftWall: 'left thickness in mm', topWall: 'top thickness in mm',
   } },
@@ -333,21 +333,8 @@ async function runCommandTool(state: ChatState, args: Record<string, unknown>, e
     cutSource = { source, target: featureId(state.doc.nodes, body.ref.node), body: body.key };
   }
   if (perFaceShell) {
-    if (args.expectedRevision === undefined)
-      return fail(state, 'Per-face Shell needs expectedRevision from query.rebuild for the same part.', { code: 'COMMAND_INPUT' });
-    const names = sel.names.faces;
-    const selected = selection.faces.map(pick => state.bodies[pick.body]?.mesh.faces[pick.face]?.nativePlaneName);
-    if (!Array.isArray(args.faces) || names.length < 1 || names.length > 2 || args.faces.length !== names.length
-      || selection.faces.length !== names.length || selection.edges.length || selection.bodies.length || args.point !== undefined
-      || names.some(name => !selected.includes(name)
-        || state.bodies.flatMap(body => body.mesh.faces.filter(face => face.nativePlaneName === name)).length !== 1))
-      return fail(state, 'Per-face Shell needs exact original native face names for its openings.', { code: 'COMMAND_INPUT' });
-    const box = boxShellSelection(ctx);
-    if (!box)
-      return fail(state, 'Use one or two distinct original faces on the same box.', { code: 'COMMAND_INPUT' });
-    const invalid = box.walls.filter(({ key }) => !Object.hasOwn(given, key) || !Number.isFinite(given[key]));
-    if (invalid.length)
-      return fail(state, `Give a finite thickness in mm for each kept wall: ${invalid.map(({ key }) => key).join(', ')}.`, { code: 'COMMAND_INPUT' });
+    const problem = reviewedShellWallsProblem(ctx, sel.names, args, given);
+    if (problem) return fail(state, problem, { code: 'COMMAND_INPUT' });
   }
   const avail = cmd.available(ctx);
   if (!avail.ok) return fail(state, `${cmd.label} can’t run: ${avail.reason}`);
