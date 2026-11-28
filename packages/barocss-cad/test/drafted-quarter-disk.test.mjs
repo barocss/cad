@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import test from 'node:test';
-import { brepMassProperties, checkBrep, draftedExtrusion, evaluateCurve, tessellateBrep } from '../dist/index.js';
+import { brepMassProperties, checkBrep, draftedExtrusion, evaluateCurve, evaluateSurface, tessellateBrep } from '../dist/index.js';
 import { openEdgesByBody } from '../scripts/rb/stages.mjs';
 
 const profile = [
@@ -154,6 +154,51 @@ test('an acute sector remains exact when the input frame is translated, rotated 
     near(mass.centroid[1], -3 + 0.6 * 5.864593902445914 + 0.8 * 2.932296951222957, 1e-8);
     near(mass.centroid[2], 2 + 3.7603125905175845, 1e-8);
   }
+});
+
+test('both signs on an exact obtuse sector keep the radial supports and wider rational cone charts', () => {
+  const source = quadrant([0, 0], [10, 0], [-6, 8]);
+  for (const [draft, volume, centroid] of [
+    [10, 773.5198964485744, [2.417811750791495, 4.83562350158299, 4.322380418026143]],
+    [-10, 1515.677845967478, [2.394522516890421, 4.789045033780842, 5.46943742025017]],
+    [-45, 4368.499298670564, [2.3056378222904006, 4.611275644580801, 6.460613919704703]],
+  ]) {
+    const brep = make(draft, { profile: source }), slope = Math.tan(draft * Math.PI / 180);
+    const report = checkBrep(brep, { strict: true, pcurveSamples: 13 });
+    assert.ok(report.valid && report.maximumEdgeSurfaceGap < 1e-10, report.issues.join('\n'));
+    assert.deepEqual(report.counts, { bodies: 1, shells: 1, faces: 6, loops: 6, coedges: 24, edges: 12, vertices: 8 });
+    assert.equal(report.topology[0].genus, 0);
+    assert.deepEqual(brep.vertices.find(vertex => vertex.id === 'b3').point, [-6, 8, 0]);
+    const cone = brep.faces.filter(face => face.name.includes('side1#'));
+    assert.equal(cone.length, 2);
+    for (const { surface } of cone) {
+      assert.equal(surface.controlPoints.length, draft === -45 ? 5 : 3);
+      assert.ok(surface.weights.every(row => row.every(weight => weight > 0)));
+      for (const u of [0.15, 0.4, 0.5, 0.6, 0.85]) {
+        for (const v of [0.1, 0.5, 0.9]) {
+          const [x, y, z] = evaluateSurface(surface, u, v);
+          near(Math.hypot(x, y), 10 - slope * z);
+        }
+      }
+    }
+    for (const [key, distance] of [['se1', (x, y) => y], ['se3', (x, y) => 0.8 * x + 0.6 * y]]) {
+      const { curve } = brep.edges.find(edge => edge.id === key);
+      assert.deepEqual([curve.degree, curve.weights], [2, [1, 1, 1]]);
+      for (let j = 0; j <= 24; j++) {
+        const [x, y, z] = evaluateCurve(curve, j / 24);
+        near(distance(x, y), slope * z);
+        near(Math.hypot(x, y), 10 - slope * z);
+      }
+    }
+    for (const segmentsPerQuarter of [4, 8, 16]) {
+      assert.equal(openEdgesByBody(brep, tessellateBrep(brep, { segmentsPerQuarter })), 0);
+    }
+    const mass = brepMassProperties(brep, 1);
+    near(mass.volume, volume, 1e-10 * volume);
+    for (const [i, value] of centroid.entries()) near(mass.centroid[i], value, 1e-8);
+  }
+  for (const draft of [30, -84]) assert.throws(() => make(draft, { profile: source }), /closes the obtuse sector/);
+  assert.throws(() => make(10, { profile: quadrant([0, 0], [10, 0], [-6, 8 + 2 ** -49]) }), /not tangent/);
 });
 
 test('both signed Drafts on a noncardinal quarter disk match rotated native supports and mass', () => {

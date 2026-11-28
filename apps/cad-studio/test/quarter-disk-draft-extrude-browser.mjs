@@ -2,9 +2,10 @@ import assert from 'node:assert/strict';
 import { createFlow } from './flow-helper.mjs';
 
 const baseline = process.argv.includes('--baseline');
-const rotated = process.argv.includes('--rotated');
+const obtuse = process.argv.includes('--obtuse');
+const rotated = process.argv.includes('--rotated') && !obtuse;
 const acute = process.argv.includes('--acute');
-const caseName = acute ? 'acute-sector' : 'quarter-disk';
+const caseName = obtuse ? 'obtuse-sector' : acute ? 'acute-sector' : 'quarter-disk';
 const pins = [
   'apps/cad-studio/test/quarter-disk-draft-extrude-browser.mjs',
   'packages/barocss-cad/src/features/drafted-extrusion.ts',
@@ -37,7 +38,7 @@ console.log(JSON.stringify({
   }),
   faces: brep.faces.map(face => {
     const { u, v } = surfaceDomain(face.surface);
-    return { name: face.name, kind: faceGeometry(face).kind, points: [0.21,0.43,0.79].flatMap(a => [0.1,0.5,0.9]
+    return { name: face.name, kind: faceGeometry(face).kind, uPoles: face.surface.controlPoints.length, points: [0.21,0.43,0.79].flatMap(a => [0.1,0.5,0.9]
       .map(b => evaluateSurface(face.surface, u[0]+a*(u[1]-u[0]), v[0]+b*(v[1]-v[0])))) };
   }),
 }));
@@ -45,10 +46,11 @@ console.log(JSON.stringify({
 });
 const radius = 10, height = 10;
 const arcStart = rotated ? [8, 6] : [10, 0];
-const arcEnd = acute ? (rotated ? [0, 10] : [6, 8]) : (rotated ? [-6, 8] : [0, 10]);
-const halfAngle = acute ? Math.atan2(4, 3) / 2 : Math.PI / 4;
-const cotangent = acute ? 2 : 1;
-const lastWallDistance = (x, y) => acute ? 0.8 * x - 0.6 * y : x;
+const arcEnd = obtuse ? [-6, 8] : acute ? (rotated ? [0, 10] : [6, 8]) : (rotated ? [-6, 8] : [0, 10]);
+const halfAngle = obtuse ? Math.atan2(4, -3) / 2 : acute ? Math.atan2(4, 3) / 2 : Math.PI / 4;
+const cotangent = obtuse ? 0.5 : acute ? 2 : 1;
+const lastWallDistance = (x, y) => obtuse ? 0.8 * x + 0.6 * y : acute ? 0.8 * x - 0.6 * y : x;
+const outward = obtuse ? -45 : -10;
 const inSketchFrame = ([x, y, z]) => rotated ? [(4 * x + 3 * y) / 5, (-3 * x + 4 * y) / 5, z] : [x, y, z];
 const seed = {
   format: 'barocss-cad-model', schema: 3, units: 'mm', parameters: {}, nextId: 1,
@@ -87,6 +89,7 @@ async function check(label, doc, angle) {
   assert.equal(result.faces.filter(face => face.kind === 'plane').length, 4);
   const cone = result.faces.filter(face => face.kind !== 'plane');
   assert.equal(cone.length, 2);
+  if (obtuse && angle === outward) assert.deepEqual(cone.map(face => face.uPoles), [5, 5]);
   for (const face of cone) for (const [x, y, z] of face.points) near(Math.hypot(x, y), radius - slope * z);
   const joins = result.seams.filter(seam => seam.degree === 2);
   assert.equal(joins.length, 2);
@@ -149,22 +152,23 @@ await f.run(async () => {
   f.phase = 'Refuse collapse and edit to a signed outward Draft';
   await f.openFeatureEditor(1, 'Draft Extrude');
   const editor = f.editor(), draft = field('Draft', editor);
-  for (const [angle, suffix] of acute ? [[20, 'inward'], [-40, 'outward']] : [[30, '']]) {
+  const collapseAngles = obtuse ? [[30, 'inward'], [-84, 'outward']] : acute ? [[20, 'inward'], [-40, 'outward']] : [[30, '']];
+  for (const [angle, suffix] of collapseAngles) {
     await draft.fill(String(angle));
     await button('Apply', editor).click();
     await editor.locator('.hud-error-title').waitFor();
     await f.same(first);
     await f.snapshot(caseName + '-collapse-refused' + (suffix ? '-' + suffix : ''));
   }
-  await draft.fill('-10');
+  await draft.fill(String(outward));
   const second = (await f.applyEditor(first, 'outward-' + caseName)).doc;
-  assert.deepEqual(second.nodes[1], { ...first.nodes[1], draft: -10 });
-  const digest = await check('outward-draft', second, -10);
+  assert.deepEqual(second.nodes[1], { ...first.nodes[1], draft: outward });
+  const digest = await check('outward-draft', second, outward);
   await f.undo();
   await f.same(first);
   await f.redo();
   await f.same(second);
   const saved = await f.save(caseName + '-draft');
   const reopened = (await f.freshOpen(saved.file, second, caseName + '-draft-reopened')).doc;
-  assert.equal(await check('outward-native-reopen', reopened, -10), digest);
+  assert.equal(await check('outward-native-reopen', reopened, outward), digest);
 });

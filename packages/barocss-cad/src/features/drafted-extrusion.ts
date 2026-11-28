@@ -3,7 +3,7 @@
 // grows). A straight wall becomes a sloping plane, an arc a cone patch about the arc's centre. Tangent
 // joints stay tangent; two straight walls meet in a sloping edge through their offset lines' meeting
 // point. One circular arc and its chord have exact parabolic joints in either draft direction when
-// their original circle and stable chord frame can be proved. An original acute sector or quadrant has
+// their original circle and stable chord frame can be proved. An original minor circular sector has
 // exact joins at its two radial walls. Other non-tangent curved joints and
 // drafts steep enough to collapse a wall are refused.
 import { BrepError, buildBrep, loopVectorArea, surfaceNormalAtCentre, type Brep } from '../brep/brep-core.js';

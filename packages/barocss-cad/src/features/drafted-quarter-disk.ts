@@ -22,7 +22,7 @@ function radialVectors(arc: Arc): readonly [bigint, bigint, bigint, bigint] {
   return [ax - cx, ay - cy, bx - cx, by - cy];
 }
 
-/** Offset the two exact radial lines and one circular arc of an acute sector or quadrant. */
+/** Offset two exact radial lines and an original minor circular arc. */
 export function draftRadialSector(profile: readonly ProfileSegment[], names: readonly string[], z0: number, z1: number,
   slope: number, id: string, tag: string, fail: (detail: string) => never): Brep | undefined {
   if (profile.length !== 3) return;
@@ -41,26 +41,30 @@ export function draftRadialSector(profile: readonly ProfileSegment[], names: rea
       && cx + dx === ax && cy + dy === ay && cx - dy === bx && cy + dx === by
       && bx - cx === -dy && by - cy === dx
     : arc.sweep > 0 && arc.sweep < Math.PI && vx === -uy && vy === ux;
-  if (!quadrant && !(arc.sweep > 0 && arc.sweep < Math.PI / 2 && ux * vx + uy * vy > 0n
+  const radialDot = ux * vx + uy * vy;
+  const obtuse = radialDot < 0n;
+  const minorSweep = obtuse ? arc.sweep > Math.PI / 2 && arc.sweep < Math.PI : arc.sweep > 0 && arc.sweep < Math.PI / 2;
+  if (!quadrant && !(minorSweep && radialDot !== 0n
     && ux * vy - uy * vx > 0n && ux * ux + uy * uy === vx * vx + vy * vy)) return;
+  const profileName = quadrant ? 'quarter-disk' : obtuse ? 'obtuse sector' : 'acute sector';
   const c = quadrant ? 0 : (x * (bx - cx) + y * (by - cy)) / radius;
   const s = quadrant ? 1 : (x * (by - cy) - y * (bx - cx)) / radius;
   if (!cardinal || !quadrant) {
     const size = Math.max(1, radius, Math.abs(ax), Math.abs(ay), Math.abs(bx), Math.abs(by), Math.abs(cx), Math.abs(cy));
     const roundoff = 64 * Number.EPSILON * size;
     if (!Number.isFinite(x) || !Number.isFinite(y) || Math.abs(x * x + y * y - 1) > 16 * Number.EPSILON
-      || (!quadrant && !(c > 0 && s > 0))
+      || (!quadrant && !(s > 0 && (obtuse ? c > -1 && c < 0 : c > 0)))
       || Math.abs(c * c + s * s - 1) > 32 * Number.EPSILON
       || Math.hypot(cx + radius * x - ax, cy + radius * y - ay) > roundoff
       || Math.hypot(cx + radius * (x * c - y * s) - bx, cy + radius * (y * c + x * s) - by) > roundoff)
-      fail(quadrant ? 'the quarter disk does not have a stable radial frame' : 'the acute sector does not have a stable radial frame');
+      fail(`the ${profileName} does not have a stable radial frame`);
   }
 
-  const profileName = quadrant ? 'quarter-disk' : 'acute sector';
   const h = z1 - z0, d = slope * h, r = radius - d;
   if (!(d < 0 ? r > radius : d > 0 && r < radius)) fail(`the angle is too small to move the ${profileName} walls`);
   const q = Math.sqrt(radius * (radius - 2 * d));
-  const cotangent = (1 + c) / s;
+  // The equivalent ratio avoids subtractive cancellation as an obtuse angle approaches a half turn.
+  const cotangent = obtuse ? s / (1 - c) : (1 + c) / s;
   const corner = cotangent * d;
   const limit = linearToleranceMM(Math.max(radius, h, Math.abs(cx), Math.abs(cy), Math.abs(z0), Math.abs(z1)));
   // The two radial walls must still meet inside the circle, for either sign of the draft.
