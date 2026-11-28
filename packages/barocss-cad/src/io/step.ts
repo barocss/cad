@@ -25,14 +25,14 @@ const real = (x: number): string => {
 };
 const escapeStepText = (s: string) => s.replace(/\\/g, '\\\\').replace(/'/g, "''");
 const text = (s: string) => `'${escapeStepText(s).replace(/[^\x20-\x7e]/g, '_')}'`;
-const replaceProductNameControls = (s: string) => s.replace(/[\p{Cc}\p{Cs}]/gu, '_');
+const replaceNameControls = (s: string) => s.replace(/[\p{Cc}\p{Cs}]/gu, '_');
 
-/** Whether the STEP product and header names replace any characters. */
-export const stepProductNameHasLoss = (s: string): boolean => replaceProductNameControls(s) !== s;
+/** Whether a name loses characters under the Unicode profile used by STEP product and exact topology names. */
+export const stepProductNameHasLoss = (s: string): boolean => replaceNameControls(s) !== s;
 
 /** Part 21 extended four-octet characters keep the file's existing ASCII encoding level. */
-function productNameText(s: string): string {
-  const printable = escapeStepText(replaceProductNameControls(s));
+function unicodeNameText(s: string): string {
+  const printable = escapeStepText(replaceNameControls(s));
   const encoded = printable.replace(/[^\x20-\x7e]+/gu, run => {
     const scalars = Array.from(run, glyph => glyph.codePointAt(0)!.toString(16).toUpperCase().padStart(8, '0')).join('');
     return `\\X4\\${scalars}\\X0\\`;
@@ -123,7 +123,7 @@ export function exportStep(input: Brep | readonly Brep[] | { readonly id: string
   const appContext = add_(`APPLICATION_CONTEXT('core data for automotive mechanical design processes')`);
   add_(`APPLICATION_PROTOCOL_DEFINITION('international standard','automotive_design',2000,${appContext})`);
   const productContext = add_(`PRODUCT_CONTEXT('',${appContext},'mechanical')`);
-  const productLabel = productNameText(name);
+  const productLabel = unicodeNameText(name);
   const product = add_(`PRODUCT(${productLabel},${productLabel},'',(${productContext}))`);
   add_(`PRODUCT_RELATED_PRODUCT_CATEGORY('part',$,(${product}))`);
   const formation = add_(`PRODUCT_DEFINITION_FORMATION('','',${product})`);
@@ -179,7 +179,7 @@ export function exportStep(input: Brep | readonly Brep[] | { readonly id: string
       const [a, b] = c.controlPoints, d = sub(b as Point, a as Point), l = len(d);
       geometry = add_(`LINE('',${point(a)},${add_(`VECTOR('',${direction(unit(d))},${real(l)})`)})`);
     } else geometry = bsplineCurve(c, add_, point);
-    edgeId.set(e.id, add_(`EDGE_CURVE(${text(e.name ?? '')},${vertexId.get(e.vertices[0])},${vertexId.get(e.vertices[1])},${geometry},.T.)`));
+    edgeId.set(e.id, add_(`EDGE_CURVE(${unicodeNameText(e.name ?? '')},${vertexId.get(e.vertices[0])},${vertexId.get(e.vertices[1])},${geometry},.T.)`));
   }
 
   // A STEP void references an outward CLOSED_SHELL. Its .F. wrapper restores the native cavity direction.
@@ -200,7 +200,7 @@ export function exportStep(input: Brep | readonly Brep[] | { readonly id: string
       const loop = add_(`EDGE_LOOP('',(${edges.join(',')}))`);
       return add_(`${l.kind === 'outer' ? 'FACE_OUTER_BOUND' : 'FACE_BOUND'}('',${loop},${voidShell ? '.F.' : '.T.'})`);
     });
-    faceId.set(f.id, add_(`ADVANCED_FACE(${text(f.name ?? '')},(${bounds.join(',')}),${surface},${sameSense !== voidShell ? '.T.' : '.F.'})`));
+    faceId.set(f.id, add_(`ADVANCED_FACE(${unicodeNameText(f.name ?? '')},(${bounds.join(',')}),${surface},${sameSense !== voidShell ? '.T.' : '.F.'})`));
   }
 
   // Bodies: the first shell is the outer one, any further shells are cavities.
@@ -223,7 +223,7 @@ export function exportStep(input: Brep | readonly Brep[] | { readonly id: string
 
   const stamp = options.timestamp ?? new Date().toISOString().slice(0, 19);
   const description = (options.description?.length ? options.description : ['BaroCSS CAD part']).map(text).join(',');
-  return ['ISO-10303-21;', 'HEADER;', `FILE_DESCRIPTION((${description}),'2;1');`, `FILE_NAME(${productNameText(name + '.step')},${text(stamp)},(''),(''),'BaroCSS CAD','BaroCSS CAD','');`,
+  return ['ISO-10303-21;', 'HEADER;', `FILE_DESCRIPTION((${description}),'2;1');`, `FILE_NAME(${unicodeNameText(name + '.step')},${text(stamp)},(''),(''),'BaroCSS CAD','BaroCSS CAD','');`,
     `FILE_SCHEMA(('${meshRep ? AP242 : AP214}'));`, 'ENDSEC;', 'DATA;', ...lines, 'ENDSEC;', 'END-ISO-10303-21;', ''].join('\n');
 }
 
@@ -246,7 +246,7 @@ function writeValidationProperties(breps: readonly Brep[], add_: (e: string) => 
     } else qualifiedBox = false;
   }
   if (!(volume > 0)) return;
-  const property = (what: string, representation: string) => { const def = add_(`PROPERTY_DEFINITION('geometric validation property',${productNameText(`${what} of ${name}`)},${shape})`); add_(`PROPERTY_DEFINITION_REPRESENTATION(${def},${representation})`); };
+  const property = (what: string, representation: string) => { const def = add_(`PROPERTY_DEFINITION('geometric validation property',${unicodeNameText(`${what} of ${name}`)},${shape})`); add_(`PROPERTY_DEFINITION_REPRESENTATION(${def},${representation})`); };
   // Plain derived units keep the mm powers readable by the declared AP214 profile and OCCT's unit select.
   const volumeUnit = add_(`DERIVED_UNIT((${add_(`DERIVED_UNIT_ELEMENT(${mm},3.)`)}))`), areaUnit = add_(`DERIVED_UNIT((${add_(`DERIVED_UNIT_ELEMENT(${mm},2.)`)}))`);
   property('volume', add_(`REPRESENTATION('volume',(${add_(`MEASURE_REPRESENTATION_ITEM('volume measure',VOLUME_MEASURE(${real(volume)}),${volumeUnit})`)}),${context})`));

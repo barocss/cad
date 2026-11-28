@@ -66,7 +66,7 @@ export async function openImportedFile(file: File, { doc, ownership, worker, mes
         if (unit.to !== 1) for (let k = 0; k < n; k++) next = withNode(next, { kind: 'scale', parent: { node: 0, side: n > 1 ? `part${k}` as Side : 'solid' }, factor: unit.to, pivot: [0, 0, 0] });
         onOpened(next, name, () => {
           const vol = read.bodies.reduce((t, b) => t + (b.volume ?? 0), 0) * unit.to ** 3;
-          setToast({ title: 'STEP opened', hint: `${n} solid${n === 1 ? '' : 's'}, ${unit.declared ? `in ${unit.name}` : 'no length unit declared (read as millimetres)'}${unit.to !== 1 ? `, scaled ×${unit.to} to millimetres` : ''}; ${quantityText(vol, Math.round(vol).toLocaleString('en-US'))} mm³ in all. Only the solids come in (no colours, names or assembly structure).`, detail: '' });
+          setToast({ title: 'STEP opened', hint: `${n} solid${n === 1 ? '' : 's'}, ${unit.declared ? `in ${unit.name}` : 'no length unit declared (read as millimetres)'}${unit.to !== 1 ? `, scaled ×${unit.to} to millimetres` : ''}; ${quantityText(vol, Math.round(vol).toLocaleString('en-US'))} mm³ in all. Product and body labels, colours and assembly structure are omitted.`, detail: '' });
         });
         return;
       }

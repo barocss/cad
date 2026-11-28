@@ -776,15 +776,22 @@ function stepNameLosses(name: string): string[] {
     ? ['Control characters and invalid Unicode in the STEP header file name and product name are replaced with underscores.']
     : [];
 }
-const STEP_NATIVE_NAME_LOSS = 'Non-ASCII and control characters in native face and edge names are not retained in this STEP file.';
-const OUTSIDE_STEP_NATIVE_ASCII = /[^\x20-\x7e]/;
-/** Only selected native name fields: no ids, source text or writer-conversion policy. */
+const STEP_EXACT_NAME_LOSS = 'Control characters and invalid Unicode in native STEP face and edge names are replaced with underscores.';
+const STEP_FACET_NAME_LOSS = 'Non-ASCII and control characters in face and edge names on mesh bodies are not retained in this STEP file.';
+/** The exact writer preserves Unicode. Mesh bodies still follow the existing facet writer and conversion policy. */
 function stepNativeNameLosses(breps: readonly Brep[]): string[] {
+  let exact = false, facets = false;
+  const outsideAscii = /[^\x20-\x7e]/;
   for (const brep of breps) {
-    for (const face of brep.faces) if (OUTSIDE_STEP_NATIVE_ASCII.test(face.name ?? '')) return [STEP_NATIVE_NAME_LOSS];
-    for (const edge of brep.edges) if (OUTSIDE_STEP_NATIVE_ASCII.test(edge.name ?? '')) return [STEP_NATIVE_NAME_LOSS];
+    if (brep.faces.some(face => face.surface.kind === 'facets')) {
+      const lossy = ({ name }: { name?: string }) => outsideAscii.test(name ?? '');
+      facets ||= brep.faces.some(lossy) || brep.edges.some(lossy);
+    } else {
+      const lossy = ({ name }: { name?: string }) => stepProductNameHasLoss(name ?? '');
+      exact ||= brep.faces.some(lossy) || brep.edges.some(lossy);
+    }
   }
-  return [];
+  return [...(exact ? [STEP_EXACT_NAME_LOSS] : []), ...(facets ? [STEP_FACET_NAME_LOSS] : [])];
 }
 // These losses describe this exporter, not STEP's full format capabilities. They do not affect bytes or revision.
 function stepProfileLosses(doc: StudioDoc): string[] {

@@ -4,7 +4,7 @@ import { evaluateCadPart, exportStep } from '@barocss/cad';
 import { emptyDoc, withNode, type StudioDoc, type PartInstance } from '../src/engine/doc';
 import { exportStudioStep, partBreps } from '../src/engine/evaluate';
 
-const loss = 'Non-ASCII and control characters in native face and edge names are not retained in this STEP file.';
+const loss = 'Control characters and invalid Unicode in native STEP face and edge names are replaced with underscores.';
 const headerLoss = 'Control characters and invalid Unicode in the STEP header file name and product name are replaced with underscores.';
 const options = { name: 'exchange', timestamp: '2026-11-02T00:00:00' };
 const generated = evaluateCadPart({ format: 'barocss-cad-part', version: 1, units: 'mm', parameters: {}, features: [
@@ -13,7 +13,7 @@ const generated = evaluateCadPart({ format: 'barocss-cad-part', version: 1, unit
 ] }).outputs[0].brep;
 const ordinary = { ...generated, faces: generated.faces.map((face, index) => index ? face : { ...face, name: 'ordinary' }) };
 // N304 5.2, 6.4.3.1 and 8.2.2 permit raw UTF-8 string characters with implementation level 4;1.
-// Only label tokens/header level change; no Unicode directive decoding or new geometry is introduced.
+// Only label tokens and the declared encoding level change in this fixture.
 const seed = exportStep(ordinary, { name: 'ordinary', timestamp: options.timestamp })
   .replace("FILE_DESCRIPTION(('BaroCSS CAD part'),'2;1');", "FILE_DESCRIPTION(('BaroCSS CAD part'),'4;1');");
 assert.ok(seed.includes("FILE_DESCRIPTION(('BaroCSS CAD part'),'4;1');"), 'The raw UTF-8 fixture declares implementation level 4;1');
@@ -30,26 +30,36 @@ function nativeNames(doc: StudioDoc): { faces: string[]; edges: string[] } {
 function occurrence(doc: StudioDoc, hidden = false): PartInstance {
   return { id: 'instance', name: 'Assembly part', doc, position: [50, 0, 0], rotation: [0, 0, 0], part: { id: 'source', rev: '1' }, ...(hidden ? { hidden: true } : {}) };
 }
-const plain = imported(seed), utf = imported(faceStep("'Face-é'"));
+const plain = imported(seed), utf = imported(faceStep("'면 😀'"));
+const control = imported(faceStep("'Face\tA'"));
 
-test('an included native UTF-8 face name gets one truthful report while output and authored data retain their existing policy', () => {
+test('a native Unicode face name stays exact through STEP and does not report a loss', () => {
   const before = structuredClone(utf);
-  assert.ok(nativeNames(utf).faces.includes('n0.Face-é'), 'The real native field exists before the writer');
+  assert.ok(nativeNames(utf).faces.includes('n0.면 😀'));
   const result = exportStudioStep(utf, options);
-  assert.deepEqual(result.omitted, [loss]);
-  assert.ok(result.text.includes("ADVANCED_FACE('n0.Face-_',"));
+  assert.equal(result.omitted, undefined);
+  assert.ok(result.text.includes("ADVANCED_FACE('n0.\\X4\\0000BA74\\X0\\ \\X4\\0001F600\\X0\\',"));
+  assert.ok(nativeNames(imported(result.text)).faces.includes('n0.n0.면 😀'));
   assert.deepEqual(utf, before);
   assert.equal(exportStudioStep(plain, options).omitted, undefined);
 });
 
-test('an actual retained native edge name is covered by the same single report', () => {
+test('a native Unicode edge name also survives STEP without a loss', () => {
   const match = seed.match(/EDGE_CURVE\('([^']*)',/)!;
   const text = seed.replace(match[0], "EDGE_CURVE('Edge-é',");
   const doc = imported(text);
   assert.ok(nativeNames(doc).edges.includes('n0.Edge-é'), 'The public native read retains the selected edge name');
   const result = exportStudioStep(doc, options);
+  assert.equal(result.omitted, undefined);
+  assert.ok(result.text.includes("EDGE_CURVE('n0.Edge-\\X4\\000000E9\\X0\\',"));
+  assert.ok(nativeNames(imported(result.text)).edges.includes('n0.n0.Edge-é'));
+});
+
+test('a native control character is replaced and reported once', () => {
+  assert.ok(nativeNames(control).faces.includes('n0.Face\tA'));
+  const result = exportStudioStep(control, options);
   assert.deepEqual(result.omitted, [loss]);
-  assert.ok(result.text.includes("EDGE_CURVE('n0.Edge-_',"));
+  assert.ok(result.text.includes("ADVANCED_FACE('n0.Face_A',"));
 });
 
 test('printable literal names and header-only control replacement do not invent native name loss', () => {
@@ -75,14 +85,14 @@ test('ignored input header, product, surface and curve names do not become nativ
 });
 
 test('hidden occurrences are excluded, visible occurrences included, and base look.hidden is not an export filter', () => {
-  const hidden: StudioDoc = { ...plain, instances: [occurrence(utf, true)] };
+  const hidden: StudioDoc = { ...plain, instances: [occurrence(control, true)] };
   const hiddenResult = exportStudioStep(hidden, options);
   assert.equal(hiddenResult.omitted, undefined);
   assert.equal((hiddenResult.text.match(/=MANIFOLD_SOLID_BREP\(/g) ?? []).length, 1);
-  const visible = exportStudioStep({ ...plain, instances: [occurrence(utf)] }, options);
+  const visible = exportStudioStep({ ...plain, instances: [occurrence(control)] }, options);
   assert.ok(visible.omitted?.includes(loss));
   assert.equal(visible.omitted?.filter(value => value === loss).length, 1);
-  const baseHidden = exportStudioStep({ ...utf, bodies: { b0: { hidden: true } } }, options);
+  const baseHidden = exportStudioStep({ ...control, bodies: { b0: { hidden: true } } }, options);
   assert.deepEqual(baseHidden.omitted, [loss]);
   assert.equal((baseHidden.text.match(/=MANIFOLD_SOLID_BREP\(/g) ?? []).length, 1);
   const labelOnly = exportStudioStep({ ...plain, bodies: { b0: { name: 'Visible-é' } } }, options);

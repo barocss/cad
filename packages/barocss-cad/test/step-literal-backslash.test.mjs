@@ -58,6 +58,21 @@ test('literal ASCII backslash pairs decode once and repeated round-trips do not 
   }
 });
 
+test('X4 runs, literal X4 text, and doubled quotes round-trip together without changing topology', () => {
+  const label = String.raw`O'Brien 면😀\X4\0001F600\X0\Ø`;
+  const face = String.raw`'O''Brien \X4\0000BA740001F600\X0\\\X4\\0001F600\\X0\\\X4\000000D8\X0\'`;
+  const body = named(label);
+  body.edges[0].name = '모서리 Ø';
+  const text = exportStep(body, options);
+  assert.ok(text.includes('ADVANCED_FACE(' + face + ','));
+  assert.ok(text.includes(String.raw`EDGE_CURVE('\X4\0000BAA80000C11C0000B9AC\X0\ \X4\000000D8\X0\',`));
+  const roundTrip = importStep(text);
+  assert.equal(roundTrip.faces[0].name, label);
+  assert.ok(roundTrip.edges.some(edge => edge.name === body.edges[0].name));
+  assert.deepEqual(vertexPoints(roundTrip), vertexPoints(native));
+  assert.deepEqual(stepValidationProperties(text), properties);
+});
+
 test('the shared mesh-only reader retains one literal slash per writer-encoded pair', () => {
   const c = cases[3];
   const text = `ISO-10303-21;
@@ -75,13 +90,15 @@ END-ISO-10303-21;
   assert.equal(meshes[0].indices.length, 6);
 });
 
-test('opaque adjacent directives and mixed escape-looking values stay whole without Unicode qualification', () => {
+test('unsupported or malformed directives and mixed escape-looking values stay whole', () => {
   const bs = String.fromCharCode(92);
   const opaque = [
     bs + 'PE' + bs + bs + 'S' + bs + '*',
     bs + 'X2' + bs + '0041' + bs + 'X0' + bs + bs + 'X2' + bs + '0042' + bs + 'X0' + bs,
     'mixed' + bs + bs + 'literal ' + bs + 'q tail',
     'unknown' + bs + 'q' + bs + 'X2' + bs + '0041' + bs + 'X0' + bs + 'tail',
+    ...['', '0001F60', '0001F60g', '00110000', '0000D800', '0000009F'].map(unit => 'literal' + bs + bs + ' ' + bs + 'X4' + bs + unit + bs + 'X0' + bs),
+    String.raw`\X4\0001F600\X0\mixed\q`,
     // Legacy opaque metadata compatibility only, not valid-standard or Unicode qualification.
     String.fromCharCode(233) + bs + bs + 'literal',
     'control' + String.fromCharCode(9) + bs + bs + 'literal',

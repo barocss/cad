@@ -84,19 +84,32 @@ function dataSection(source: string, singleSection: boolean): string {
   }
   return refuse('no DATA section');
 }
-/** Decode only the existing writer's printable-ASCII, paired-backslash literal profile.
- * Mixed or opaque directive-looking strings stay whole; no recursive or Unicode interpretation. */
-function literalBackslashes(value: string): string {
-  for (let i = 0; i < value.length; i++) {
-    const code = value.charCodeAt(i);
-    if (code < 32 || code > 126) return value;
-    if (code !== 92) continue;
-    let end = i + 1;
-    while (value.charCodeAt(end) === 92) end++;
-    if ((end - i) % 2) return value;
-    i = end - 1;
+/** Decode the ASCII writer profile once. An unsupported directive keeps the full string opaque. */
+function decodeStepText(value: string): string {
+  if (!value.includes('\\') || /[^\x20-\x7e]/.test(value)) return value;
+  const parts: string[] = [];
+  let cursor = 0;
+  for (let slash = value.indexOf('\\'); slash >= 0; slash = value.indexOf('\\', cursor)) {
+    parts.push(value.slice(cursor, slash));
+    if (value[slash + 1] === '\\') {
+      parts.push('\\');
+      cursor = slash + 2;
+      continue;
+    }
+    if (!value.startsWith('\\X4\\', slash)) return value;
+    const start = slash + 4, end = value.indexOf('\\X0\\', start);
+    if (end <= start || (end - start) % 8) return value;
+    for (let i = start; i < end; i += 8) {
+      const unit = value.slice(i, i + 8);
+      if (!/^[0-9A-F]{8}$/.test(unit)) return value;
+      const scalar = Number.parseInt(unit, 16);
+      if (scalar < 0xa0 || scalar > 0x10ffff || (scalar >= 0xd800 && scalar <= 0xdfff)) return value;
+      parts.push(String.fromCodePoint(scalar));
+    }
+    cursor = end + 4;
   }
-  return value.replace(/\\\\/g, '\\');
+  parts.push(value.slice(cursor));
+  return parts.join('');
 }
 /** Called only on one scalar NUM token: an exponent cannot make a nonzero mantissa zero. */
 function zeroMantissa(token: string): boolean {
@@ -116,9 +129,9 @@ function parseData(source: string, strictRecords = false): Map<number, Entity> {
     const c = s[i];
     if (c === '(') { i++; const list: Value[] = []; ws(); if (s[i] === ')') { i++; return list; } for (;;) { ws(); const start = i, item = value(); if (offsetArgs && list.length === 2 && typeof item === 'number' && zeroMantissa(s.slice(start, i))) zeroOffsetArgs.add(list); list.push(item); ws(); if (s[i] === ',') { i++; continue; } if (s[i] === ')') { i++; return list; } refuse(`bad list near ${s.slice(i, i + 20)}`); } }
     if (c === "'") {
-      // A doubled quote is one quote; literal backslashes use only the bounded writer profile.
+      // A doubled quote is one quote; decode backslashes and Unicode in one pass.
       let t = ''; i++;
-      for (;;) { const q = s.indexOf("'", i); if (q < 0) refuse('unterminated string'); t += s.slice(i, q); if (s[q + 1] === "'") { t += "'"; i = q + 2; continue; } i = q + 1; return literalBackslashes(t); }
+      for (;;) { const q = s.indexOf("'", i); if (q < 0) refuse('unterminated string'); t += s.slice(i, q); if (s[q + 1] === "'") { t += "'"; i = q + 2; continue; } i = q + 1; return decodeStepText(t); }
     }
     if (c === '#') { i++; const m = sticky(REF, s, i); if (!m) return refuse('bad instance reference'); i += m[0].length; return { ref: Number(m[0]) }; }
     if (c === '.') { const m = sticky(ENUM, s, i); if (!m) refuse('bad enumeration'); i += m![0].length; return { enum: m![1] }; }
