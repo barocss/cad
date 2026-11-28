@@ -1,5 +1,5 @@
 import type { StudioDoc } from '@barocss/cad-model/engine/doc';
-import { chamferCorner, roundCorner } from '@barocss/cad-model/sketch/corner';
+import { canChamferWithTwoSetbacks, chamferCorner, roundCorner } from '@barocss/cad-model/sketch/corner';
 import { editChamferSetbacks, savedChamferSetback } from '@barocss/cad-model/sketch/chamferEdit';
 import { prepareStraightCornerBatch } from '@barocss/cad-model/sketch/cornerBatch';
 import { nextIdOf, withIds } from '@barocss/cad-model/sketch/entityIds';
@@ -89,8 +89,9 @@ function tagCornerSegment(owner: SketchState, shape: Polygon, corner: number, op
 }
 
 export function prepareSketchCorners(owner: SketchState, source: Polygon, doc: StudioDoc,
-  operation: SketchCornerOperation, corners: readonly number[], input: string): SketchCornerResult {
-  if (corners.length === 1) return prepareSketchCorner(owner, source, doc, operation, corners[0], input);
+  operation: SketchCornerOperation, corners: readonly number[], input: string, outgoing?: string): SketchCornerResult {
+  if (corners.length === 1) return prepareSketchCorner(owner, source, doc, operation, corners[0], input, outgoing);
+  if (outgoing !== undefined) return { error: 'Select one perpendicular corner on an independent outline.' };
   const stored = owner.editNode === undefined ? undefined : doc.nodes[owner.editNode];
   if (owner.association || owner.base || owner.band || source.circles?.length || source.construction
     || (stored?.kind === 'sketch' && (stored.on || stored.profile === 'band'))
@@ -108,8 +109,14 @@ export function prepareSketchCorners(owner: SketchState, source: Polygon, doc: S
   return result;
 }
 
+export function allowsTwoSetbackChamfer(owner: SketchState, source: Polygon, doc: StudioDoc, corners: readonly number[]): boolean {
+  return corners.length === 1 && independentCornerOutline(owner, source, doc) && canChamferWithTwoSetbacks(source, corners[0]);
+}
+
 export function prepareSketchCorner(owner: SketchState, source: Polygon, doc: StudioDoc,
-  operation: SketchCornerOperation, corner: number, input: string): SketchCornerResult {
+  operation: SketchCornerOperation, corner: number, input: string, outgoing?: string): SketchCornerResult {
+  if (outgoing !== undefined && (operation !== 'chamfer' || !allowsTwoSetbackChamfer(owner, source, doc, [corner])))
+    return { error: 'Select one perpendicular corner on an independent outline.' };
   const stored = owner.editNode === undefined ? undefined : doc.nodes[owner.editNode];
   const value = input.trim() === '' ? NaN : Number(input);
   let shape: Polygon | string;
@@ -127,7 +134,8 @@ export function prepareSketchCorner(owner: SketchState, source: Polygon, doc: St
     if (owner.association || owner.base || owner.band || (stored?.kind === 'sketch' && (stored.on || stored.profile === 'band')) ||
       owner.done?.some(item => !item.construction && item.kind !== 'bezier') || source.construction)
       return { error: 'Chamfer one independent material outline.' };
-    const result = chamferCorner(source, corner, value);
+    const next = outgoing === undefined ? undefined : outgoing.trim() === '' ? NaN : Number(outgoing);
+    const result = chamferCorner(source, corner, value, next);
     if ('error' in result) return result;
     shape = tagCornerSegment(owner, result.shape, corner, 'chamfer');
     if (typeof shape === 'string') return { error: shape };

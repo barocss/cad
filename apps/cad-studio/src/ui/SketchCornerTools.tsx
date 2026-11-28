@@ -4,7 +4,7 @@ import type { Polygon } from '@barocss/cad-model/sketch/rules';
 import type { SketchState } from '@barocss/cad-model/sketch/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { prepareSavedSketchCorners, prepareSketchCorners, type SavedSketchCorners, type SketchCornerAction } from '../sketch/cornerDraft';
+import { allowsTwoSetbackChamfer, prepareSavedSketchCorners, prepareSketchCorners, type SavedSketchCorners, type SketchCornerAction } from '../sketch/cornerDraft';
 import type { ConstraintInspectionStore } from '../sketch/constraintInspection';
 import { useStoreValue } from '../state/valueStore';
 import { Icon } from './atoms';
@@ -34,13 +34,14 @@ export function SketchCornerTools({ owner, source, doc, corners, resize, inspect
   const choices = resizeTool ? [resize?.edges.length === 1 ? resizeTool : { ...resizeTool, label: resizeTool.label + 's' }] : tools;
   const tool = choices.find(item => item.operation === draft?.operation);
   const result = draft?.result;
-  const preview = (operation: SketchCornerAction, value: string) => {
+  const modeAvailable = tool?.operation === 'chamfer' && allowsTwoSetbackChamfer(owner, source, doc, corners);
+  const preview = (operation: SketchCornerAction, value: string, outgoing?: string) => {
     const next = operation === 'fillet' || operation === 'chamfer'
-      ? prepareSketchCorners(owner, source, doc, operation, corners, value)
+      ? prepareSketchCorners(owner, source, doc, operation, corners, value, outgoing)
       : resize?.operation === operation && prepareSavedSketchCorners(owner, source, doc, resize, value);
     if (!next) return;
     inspection.set({
-      target: 'corner', owner, input: 'focus', doc, operation, resize, value,
+      target: 'corner', owner, input: 'focus', doc, operation, resize, value, outgoing,
       corners: resize ? resize.edges.flatMap(edge => [edge, (edge + 1) % source.points.length]) : corners,
       result: next,
     });
@@ -51,6 +52,18 @@ export function SketchCornerTools({ owner, source, doc, corners, resize, inspect
     inspection.set(null);
     onApply(accepted);
   };
+  const valueField = (name: string, value: string, change: (next: string) => void, primary = false) =>
+    <label className={FIELD}><span>{name}</span>
+      <span className={NUM}><Input key={`${tool?.operation}:${name}`} type="number" step="any" autoFocus={primary}
+        min={tool?.operation === 'fillet' ? 0.1 : 0} value={value} placeholder={mixedSize ? 'Mixed' : undefined} aria-label={name} data-sketch-action
+        onChange={event => change(event.target.value)}
+        onKeyDown={event => {
+          if (event.key !== 'Enter') return;
+          event.preventDefault();
+          event.stopPropagation();
+          apply();
+        }} /><em>mm</em></span>
+    </label>;
   return <>
     <div className="mb-1 flex gap-1" role="group" aria-label="Corner tools">
       {choices.map(item => <Button key={item.operation} type="button" data-sketch-action
@@ -61,17 +74,18 @@ export function SketchCornerTools({ owner, source, doc, corners, resize, inspect
       </Button>)}
     </div>
     {draft && tool && <div className="mb-1" role="group" aria-label={tool.label}>
-      <label className={FIELD}><span>{tool.field}</span>
-        <span className={NUM}><Input key={tool.operation} type="number" step="any" autoFocus
-          min={tool.operation === 'fillet' ? 0.1 : 0} value={draft.value} placeholder={mixedSize ? 'Mixed' : undefined} aria-label={tool.field} data-sketch-action
-          onChange={event => preview(tool.operation, event.target.value)}
-          onKeyDown={event => {
-            if (event.key !== 'Enter') return;
-            event.preventDefault();
-            event.stopPropagation();
-            apply();
-          }} /><em>mm</em></span>
-      </label>
+      {modeAvailable && <label className={FIELD}><span>Distance mode</span>
+        <select className="h-7 rounded-md border border-input bg-card px-2 text-xs" data-sketch-action
+          aria-label="Distance mode" value={draft.outgoing === undefined ? 'equal' : 'two'}
+          onChange={event => preview('chamfer', draft.value, event.target.value === 'two' ? draft.value : undefined)}>
+          <option value="equal">Equal</option>
+          <option value="two">Two distances</option>
+        </select>
+      </label>}
+      {valueField(draft.outgoing === undefined ? tool.field : 'Incoming distance', draft.value,
+        value => preview(tool.operation, value, draft.outgoing), true)}
+      {draft.outgoing !== undefined && valueField('Outgoing distance', draft.outgoing,
+        value => preview(tool.operation, draft.value, value))}
       {result && 'error' in result && <div className="sk-status open" role="alert"><i />{result.error}</div>}
       <div className="hud-actions justify-end">
         <Button type="button" variant="ghost" data-sketch-action onKeyDown={ownKeyboard}

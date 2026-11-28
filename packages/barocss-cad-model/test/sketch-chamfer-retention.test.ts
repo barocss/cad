@@ -3,7 +3,7 @@ import test from 'node:test';
 import { checkBrep, faceGeometry, massPropertiesOf } from '@barocss/cad';
 import { emptyDoc, withNode } from '../src/engine/doc';
 import { partSnapshot } from '../src/engine/part';
-import { chamferCorner } from '../src/sketch/corner';
+import { canChamferWithTwoSetbacks, chamferCorner } from '../src/sketch/corner';
 import { prepareStraightCornerBatch } from '../src/sketch/cornerBatch';
 import { profileOf } from '../src/sketch/loops';
 import { dragOutlinePoint } from '../src/sketch/pointDrag';
@@ -26,6 +26,52 @@ function created(source: Polygon, corner: number): Polygon {
   if ('error' in result) assert.fail(result.error);
   return result.shape;
 }
+
+test('two orthogonal Chamfer setbacks are measured in outline order and survive sketch serialization', () => {
+  const source = rectangle(), before = structuredClone(source);
+  assert.ok(canChamferWithTwoSetbacks(source, 1));
+  for (const [first, second] of [[3, 4], [4, 3]]) {
+    const result = chamferCorner(source, 1, first, second);
+    if ('error' in result) assert.fail(result.error);
+    assert.deepEqual(result.shape.points, [[0, 0], [40 - first, 0], [40, second], [40, 30], [0, 30]]);
+    assert.equal(result.shape.lengths?.[1], 5);
+    const saved = profileOf([result.shape]);
+    if ('error' in saved) assert.fail(saved.error);
+    const opened = sketchShapes(saved.node).shape;
+    assert.equal(opened?.kind, 'polygon');
+    assert.deepEqual(opened.lengths, result.shape.lengths);
+    assert.deepEqual(opened.rules, result.shape.rules);
+    const body = partSnapshot(withNode(withNode(emptyDoc(), saved.node), { kind: 'extrude', sketch: 0, height: 10 })).outputs[0];
+    assert.ok(checkBrep(body.brep, { strict: true }).valid);
+    near(massPropertiesOf(body).volume, 11940);
+  }
+  assert.deepEqual(source, before);
+  assert.deepEqual(chamferCorner(source, 1, 5, 5), chamferCorner(source, 1, 5));
+  assert.match(JSON.stringify(chamferCorner(source, 1, 3, 30)), /shorter than its edge/);
+  assert.match(JSON.stringify(chamferCorner({ ...source, lengths: { 0: 40 } }, 1, 3, 4)), /trimmed lengths/);
+  const unconstrained = { ...source, hv: { h: [], v: [] } };
+  assert.equal(canChamferWithTwoSetbacks(unconstrained, 1), false);
+  assert.match(JSON.stringify(chamferCorner(unconstrained, 1, 3, 4)), /perpendicular/);
+});
+
+test('two setbacks keep the same cyclic ownership at reflex and clockwise wraparound corners', () => {
+  const reversed: Polygon = { kind: 'polygon', closed: true, points: [[0, 0], [0, 30], [40, 30], [40, 0]],
+    hv: { h: [1, 3], v: [0, 2] } };
+  for (const [source, corner, tips] of [
+    [notch(), 4, [[38, 18], [34, 15]]],
+    [reversed, 0, [[3, 0], [0, 4]]],
+  ] as const) {
+    const result = chamferCorner(source, corner, 3, 4);
+    if ('error' in result) assert.fail(result.error);
+    assert.deepEqual(result.shape.points.slice(corner, corner + 2), tips);
+    const angle = result.shape.rules!.find(rule => rule.kind === 'angle');
+    assert.ok(angle?.kind === 'angle');
+    near(angle.value, 180 - Math.atan2(4, 3) * 180 / Math.PI);
+    const term = ruleTerms([angle], result.shape.points, result.shape.bulges!).constraints[0];
+    assert.equal(term.kind, 'signed-angle');
+    if (term.kind === 'signed-angle') near(term.angle, -Math.atan2(4, 3));
+  }
+});
 
 function nativeBevels(shape: Polygon, corners: readonly [number, number][], expectedVolume?: number) {
   const saved = profileOf([shape]);

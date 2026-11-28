@@ -104,31 +104,49 @@ function tangentToCarrier(center: P2, contact: P2, corner: P2, other: P2, tolera
     && Math.abs(dx * y - dy * x) <= tolerance && Math.abs(tangentError) <= tolerance;
 }
 
-/** Shorten the two straight carriers by the same setback and join their new ends. */
-export function chamferCorner(s: Polygon, i: number, distance: number): { shape: Polygon } | { error: string } {
+function perpendicularCarriers(s: Polygon, incoming: number, outgoing: number, hv = hvOf(s)): boolean {
+  return (hv.h.includes(incoming) && hv.v.includes(outgoing)) || (hv.v.includes(incoming) && hv.h.includes(outgoing))
+    || !!s.rules?.some(rule => rule.kind === 'perpendicular' &&
+      ((rule.a === incoming && rule.b === outgoing) || (rule.a === outgoing && rule.b === incoming)));
+}
+
+/** Independent setbacks require a single corner held by two perpendicular straight carriers. */
+export function canChamferWithTwoSetbacks(s: Polygon, i: number): boolean {
+  const n = s.points.length, prev = (i - 1 + n) % n;
+  return s.closed && !s.pending && n >= 3 && Number.isInteger(i) && i >= 0 && i < n &&
+    !s.bulges?.[prev] && !s.bulges?.[i] && perpendicularCarriers(s, prev, i);
+}
+
+/** Join the trimmed carrier ends. A second setback applies to the outgoing edge in outline order. */
+export function chamferCorner(s: Polygon, i: number, distance: number, outgoingDistance?: number): { shape: Polygon } | { error: string } {
   const n = s.points.length;
   // Outline settlement can snap points to the 1e-6 mm grid.
   const grid = 1e-6, tolerance = 2 * grid, minimum = ExtrudedProfileLimits.minimumLengthMM;
   if (!s.closed || s.pending || n < 3 || !Number.isInteger(i) || i < 0 || i >= n)
     return { error: 'Select a corner on a closed outline.' };
-  if (!Number.isFinite(distance) || distance <= tolerance)
+  const outgoingSetback = outgoingDistance === undefined ? distance : outgoingDistance;
+  if (!Number.isFinite(distance) || distance <= tolerance || !Number.isFinite(outgoingSetback) || outgoingSetback <= tolerance)
     return { error: 'Enter a positive chamfer distance that the sketch can resolve.' };
   const prev = (i - 1 + n) % n;
   if (s.bulges?.[prev] || s.bulges?.[i])
     return { error: 'Select a corner between two straight edges.' };
+  const hv = hvOf(s);
+  const orthogonal = perpendicularCarriers(s, prev, i, hv);
+  if (outgoingDistance !== undefined && !orthogonal)
+    return { error: 'Two chamfer distances need perpendicular straight edges.' };
   const p = s.points[i], a = s.points[prev], b = s.points[(i + 1) % n];
   const u = unitFrom(p, a), v = unitFrom(p, b);
   if (!u || !v || Math.abs(turn(u.direction, v.direction)) <= 1e-6)
     return { error: 'The edges do not form a usable corner.' };
-  if (Math.min(u.length, v.length) - distance < minimum)
-    return { error: 'The chamfer distance must be shorter than both edges.' };
+  if (Math.min(u.length - distance, v.length - outgoingSetback) < minimum)
+    return { error: outgoingDistance === undefined ? 'The chamfer distance must be shorter than both edges.'
+      : 'Each chamfer distance must be shorter than its edge.' };
 
   const A: P2 = [p[0] + u.direction[0] * distance, p[1] + u.direction[1] * distance];
-  const B: P2 = [p[0] + v.direction[0] * distance, p[1] + v.direction[1] * distance];
+  const B: P2 = [p[0] + v.direction[0] * outgoingSetback, p[1] + v.direction[1] * outgoingSetback];
   const delta = (x: P2, y: P2) => Math.hypot(x[0] - y[0], x[1] - y[1]);
   if (delta(A, B) < minimum) return { error: 'The bevel would be too short to keep as a separate edge.' };
 
-  const hv = hvOf(s);
   const candidate = replaceCorner({ ...s, hv }, i, A, B, 0, true);
   const angleAtCorner = s.rules?.find(rule => rule.kind === 'angle' &&
     ((rule.a === prev && rule.b === i) || (rule.a === i && rule.b === prev)));
@@ -138,14 +156,14 @@ export function chamferCorner(s: Polygon, i: number, distance: number): { shape:
   if ((angleAtCorner && obliqueAngle === undefined) || s.tangents?.includes(i) || (s.rules?.length ?? 0) !== (candidate.rules?.length ?? 0) ||
     s.lengths?.[prev] !== undefined || s.lengths?.[i] !== undefined)
     return { error: 'Remove the constraints on this corner or the trimmed lengths before chamfering.' };
-  const perpendicularCarriers = s.rules?.some(rule => rule.kind === 'perpendicular' &&
-    ((rule.a === prev && rule.b === i) || (rule.a === i && rule.b === prev)));
-  if (perpendicularCarriers || (hv.h.includes(prev) && hv.v.includes(i)) || (hv.v.includes(prev) && hv.h.includes(i))) {
-    // Orthogonal carriers leave two independent setback freedoms. The bevel's
-    // length and its 135° joint angle hold both, including the opposite turn at a reflex corner.
-    // The native angle rule takes its sign from this seed; no pointer constraint is persisted.
-    candidate.lengths = { ...candidate.lengths, [i]: distance * Math.SQRT2 };
-    candidate.rules = [...(candidate.rules ?? []), { kind: 'angle', a: i === 0 ? n : prev, b: i, value: 135 }];
+  if (orthogonal) {
+    // Length and the incoming joint angle determine the two setbacks. The solver takes the turn sign from the outline.
+    const equal = outgoingSetback === distance;
+    candidate.lengths = { ...candidate.lengths, [i]: equal ? distance * Math.SQRT2 : Math.hypot(distance, outgoingSetback) };
+    candidate.rules = [...(candidate.rules ?? []), {
+      kind: 'angle', a: i === 0 ? n : prev, b: i,
+      value: equal ? 135 : 180 - Math.atan2(outgoingSetback, distance) * 180 / Math.PI,
+    }];
   } else if (obliqueAngle !== undefined) {
     // The carried angle holds the two lines. These two dimensions retain equal setbacks.
     candidate.lengths = { ...candidate.lengths, [i]: delta(A, B) };
@@ -154,7 +172,8 @@ export function chamferCorner(s: Polygon, i: number, distance: number): { shape:
   const { shape, error } = settleShape(candidate, s);
   if (error || shape?.kind !== 'polygon') return { error: error ?? 'The chamfer could not be settled.' };
   if (shape.points.some((point, j) => delta(point, candidate.points[j]) > grid) ||
-    [shape.points[i], shape.points[i + 1]].some(point => Math.abs(delta(point, p) - distance) > tolerance) ||
+    Math.abs(delta(shape.points[i], p) - distance) > tolerance ||
+    Math.abs(delta(shape.points[i + 1], p) - outgoingSetback) > tolerance ||
     shape.bulges?.some((bulge, j) => Math.abs(bulge - (candidate.bulges?.[j] ?? 0)) > 1e-9) ||
     shape.circles?.some((circle, j) => delta(circle.c, s.circles![j].c) > grid))
     return { error: 'The chamfer would move other sketch geometry or lose the requested distance.' };

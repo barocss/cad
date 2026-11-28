@@ -13,7 +13,7 @@ export type ConstraintInspection = {
   | { target: 'comparison'; kind: ConstraintKind; result: ConstraintComparison }
   | { target: 'mobility'; entity: SketchPick }
   | { target: 'corner'; doc: StudioDoc; operation: SketchCornerAction; corners: readonly number[];
-    resize?: SavedSketchCorners; value: string; result: SketchCornerResult }
+    resize?: SavedSketchCorners; value: string; outgoing?: string; result: SketchCornerResult }
 );
 
 export type ConstraintInspectionStore = ValueStore<ConstraintInspection | null>;
