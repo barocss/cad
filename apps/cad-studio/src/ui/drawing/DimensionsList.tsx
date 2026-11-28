@@ -1,8 +1,8 @@
 // The drawing's DIMENSIONS (O16: split from DrawingWorkspace, on shadcn's components): each with its value, kind and view; Auto-dimension.
 import { useId } from 'react';
 import { dimensionLine } from '@barocss/cad-model/drawing/sheet';
-import { presetFor } from '@barocss/cad-model/drawing/standard';
-import { isDetailRef, isViewId, type CircleSeparationMode, type LinearArrowSide, type LinearExtensionJog, type DrawingSettings } from '@barocss/cad-model/drawing/types';
+import { MAX_PRECISION, presetFor } from '@barocss/cad-model/drawing/standard';
+import { dimensionDecimalsAvailable, isDetailRef, isViewId, type CircleSeparationMode, type LinearArrowSide, type LinearExtensionJog, type DrawingSettings } from '@barocss/cad-model/drawing/types';
 import type { CrossingBreakCandidate } from '@barocss/cad-model/drawing/crossingBreak';
 import type { useDrawingSheet } from '../useDrawingSheet';
 import { Icon } from '../atoms';
@@ -18,6 +18,8 @@ export interface DimensionsListProps {
   scope: Sheet['scope'];
   settings: DrawingSettings;
   selected: string | null;
+  decimalsReady?: boolean;
+  onDecimals?(id: string, value: number | undefined): void;
   extensionReady?: boolean;
   arrowReady?: boolean;
   onArrow?(id: string, side: 'a' | 'b', placement: LinearArrowSide | 'auto'): void;
@@ -46,7 +48,7 @@ export interface DimensionsListProps {
 
 export function DimensionsList({
   sheet, views, layout, scope, settings, occurrenceReasons, onReattach, onReselectChamfer, onReselectRadialThickness, onReselectCylinderDiameter, onReselectCircleSeparation, onCircleSeparationMode, selected, onSelect, remove, autoDimension,
-  extensionReady = false, arrowReady = false, onArrow, crossingBreakReady = false, crossingBreakCandidates = [], onCrossingBreak,
+  decimalsReady = false, onDecimals, extensionReady = false, arrowReady = false, onArrow, crossingBreakReady = false, crossingBreakCandidates = [], onCrossingBreak,
   extensionJogReady = false, onExtensionJog, onExtension, onExtensionPreview,
   foreshortenMovingId = null, onForeshorten, onForeshortenMove, onForeshortenRemove,
 }: DimensionsListProps) {
@@ -73,6 +75,18 @@ export function DimensionsList({
               }}>
               <b>{r.ok ? dimensionLine(r, presetFor(settings)) : 'lost'}</b><span>{r.dim.kind === 'linear' ? r.dim.orient : r.dim.kind} · {r.dim.view}</span>
             </button>
+            {selected === r.dim.id && dimensionDecimalsAvailable(r.dim, settings) && !assembly && onDecimals &&
+              <label className="small" style={{ flexBasis: '100%', order: 2 }}>
+                Decimal places
+                <NativeSelect aria-label="Decimal places" value={r.dim.displayDecimals ?? ''} disabled={!r.ok || !decimalsReady}
+                  onChange={event => {
+                    const next = event.currentTarget.value;
+                    onDecimals(r.dim.id, next === '' ? undefined : Number(next));
+                  }}>
+                  <option value="">Sheet default</option>
+                  {Array.from({ length: MAX_PRECISION + 1 }, (_, n) => <option key={n} value={n}>{n}</option>)}
+                </NativeSelect>
+              </label>}
             {selected === r.dim.id && r.dim.kind === 'linear' && !r.dim.auto && ['front', 'top', 'right'].includes(r.dim.view) && scope.kind === 'part' && onExtension && <div role="group" aria-label={`Extension lines ${r.dim.id}`} style={{ flexBasis: '100%', order: 2, display: 'flex', flexWrap: 'wrap', gap: 4 }}>
               <span className="small" style={{ flexBasis: '100%' }}>A and B identify the saved reference endpoints, not left and right.</span>
               {([undefined, 'a', 'b'] as const).map(side => <Button key={side ?? 'both'} variant="ghost" size="xs"

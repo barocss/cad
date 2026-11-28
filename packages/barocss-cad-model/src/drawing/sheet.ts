@@ -25,7 +25,7 @@ import { VIEWS, scaleLabel, sectionDepth, sectionFrame, toSheet, type Orientatio
 import type { DrawingDatum, DrawingFrame, DrawingNote, DrawingSection, DrawingSettings, DrawingTable, DrawingViews, SectionViewId, Tolerance, ViewId, XY } from './types';
 import { tableLayout, tableSize, type TableContent, type TableLayout } from './table';
 import type { TableCell } from './types';
-import { VIEW_IDS, detailLetter, isDetailRef, isSectionRef, isViewId, sameSection, sectionHatchVisibilitySupported, sectionLetter, sectionsOf, type DetailRef, type DimView, type SectionRef } from './types';
+import { VIEW_IDS, detailLetter, dimensionDecimalsAvailable, isDetailRef, isSectionRef, isViewId, precisionOk, sameSection, sectionHatchVisibilitySupported, sectionLetter, sectionsOf, type DetailRef, type DimView, type SectionRef } from './types';
 import { clipProjectionToDisk, clipRingsToDisk, detailScale, type DetailParent, type DrawingDetail } from './detail';
 import { clipProjectionOutside, clipRingsOutside } from './breaks';
 import { applyLinearCrossingBreaks, type CrossingBreakEvaluation } from './crossingBreak';
@@ -347,7 +347,7 @@ export function buildSheet(views: DrawingViews, layout: SheetLayout, settings: D
       if (current !== undefined && current !== (d.count ?? 1))
         return patternProblem('The hole pattern quantity changed or cannot be verified.');
     }
-    return withShownText(resolved, meta.callout, p);
+    return withShownText(resolved, meta.callout, p, settings);
   });
   for (const r of inViews) if (r.ok) {
     const marks = dimensionMarks(layout.views[r.dim.view as ViewId], r, p, settings.scope?.kind !== 'assembly');
@@ -1140,7 +1140,13 @@ export function dimensionText(r: Extract<Resolved, { ok: true }>, callout?: (edg
   return r.dim.count ? `${r.dim.count}× ${base.replace(/^\d+× /, '')}` : base;
 }
 /** A resolved dimension with the text the sheet prints: its value in the drawing's unit, and on a dual drawing `alt`, the same in the other (11 ③b; an angle never converts). */
-export function withShownText(r: Extract<Resolved, { ok: true }>, callout: ((edge: string, diameter?: number, f?: LengthFormat) => string | null) | undefined, p: StandardPreset): Resolved {
+export function withShownText(r: Extract<Resolved, { ok: true }>, callout: ((edge: string, diameter?: number, f?: LengthFormat) => string | null) | undefined, p: StandardPreset, settings?: DrawingSettings): Resolved {
+  const decimals = r.dim.displayDecimals;
+  if (precisionOk(decimals) && dimensionDecimalsAvailable(r.dim, settings ?? p)) {
+    const text = r.kind === 'angle' ? `${r.value.toFixed(decimals)}°`
+      : formatLength(r.value, { ...p, precision: { ...p.precision, [p.units]: decimals } });
+    return { ...r, text, alt: undefined, shownPrecision: undefined, fractionFallback: undefined };
+  }
   // (A dimension with a tolerance prints at the tolerance's decimals: the dimension gains zeros, ASME Y14.5 §1.6.2.)
   const tol = r.kind !== 'angle' && r.dim.tol && r.dim.tol.kind !== 'fit' ? r.dim.tol : null;
   const shownPrecision: UnitPrecision = {};

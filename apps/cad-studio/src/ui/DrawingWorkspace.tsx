@@ -75,7 +75,7 @@ import { drawingOccurrencePath } from '@barocss/cad-model/drawing/dimensionRefer
 import { diameterRims } from './drawing/diameterRims';
 import { Button } from '@/components/ui/button';
 import { BreaksList } from './drawing/BreaksList';
-import { VIEW_IDS, annotatedDetailLetters, detailLetter, isDetailRef, isSectionRef, isViewId, nextSectionId, reservedDetailLetters, sameSection, sectionLetter, sectionsOf, withSections, readLinearArrowPlacement, type CentreRef, type CircleSeparationMode, type CylinderFaceRef, type DrawingArcCenterline, type DrawingBisectorCenterline, type DrawingCenterMarkGroup, type DrawingCenterOfMass, type DrawingEdgeCondition, type DrawingHoleTable, type DrawingHoleTableMember, type DrawingInspectionItem, type DrawingOrdinateGroup, type DrawingRevisionMarker, type DrawingVirtualSharp, type EdgeConditionDirection, type EdgeConditionSign, type LinearArrowSide, type DimView, type DimPoint, type DrawingNote, type EdgeRef, type DrawingDimension, type DrawingSettings, type DrawingViews, type SectionViewId, type Vec3, type ViewId, type XY } from '@barocss/cad-model/drawing/types';
+import { VIEW_IDS, annotatedDetailLetters, detailLetter, dimensionDecimalsAvailable, isDetailRef, isSectionRef, isViewId, nextSectionId, precisionOk, reservedDetailLetters, sameSection, sectionLetter, sectionsOf, withSections, readLinearArrowPlacement, type CentreRef, type CircleSeparationMode, type CylinderFaceRef, type DrawingArcCenterline, type DrawingBisectorCenterline, type DrawingCenterMarkGroup, type DrawingCenterOfMass, type DrawingEdgeCondition, type DrawingHoleTable, type DrawingHoleTableMember, type DrawingInspectionItem, type DrawingOrdinateGroup, type DrawingRevisionMarker, type DrawingVirtualSharp, type EdgeConditionDirection, type EdgeConditionSign, type LinearArrowSide, type DimView, type DimPoint, type DrawingNote, type EdgeRef, type DrawingDimension, type DrawingSettings, type DrawingViews, type SectionViewId, type Vec3, type ViewId, type XY } from '@barocss/cad-model/drawing/types';
 import { downloadBytes } from './files';
 import { ShortcutHelp } from './ShortcutHelp';
 import { today, useDrawingSheet } from './useDrawingSheet';
@@ -2893,6 +2893,15 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
   const liveExtensionOwner = useRef(extensionOwner); liveExtensionOwner.current = extensionOwner;
   const [extensionPreview, setExtensionPreview] = useState<{ owner: object; side: 'a' | 'b' } | null>(null);
   const extensionResolved = sheet?.dimensions.find(r => r.dim === selDim);
+  const decimalsReady = extensionReady && tool === 'select' && !drag && !pending && !!extensionResolved?.ok;
+  const changeDimensionDecimals = (id: string, value: number | undefined) => {
+    if (liveExtensionOwner.current !== extensionOwner || !decimalsReady || scope.kind !== 'part' || !selDim || selDim.id !== id
+      || !dimensionDecimalsAvailable(selDim, settings) || wholeSettings.dimensions.filter(d => d.id === id).length !== 1
+      || value === selDim.displayDecimals || (value !== undefined && !precisionOk(value))) return;
+    const { displayDecimals: _previous, ...ordinary } = selDim; void _previous;
+    const next = value === undefined ? ordinary : { ...ordinary, displayDecimals: value };
+    if (commitDims(settings.dimensions.map(d => d === selDim ? next : d))) setMessage(null);
+  };
   const supportedExtension = selDim?.kind === 'linear' && !selDim.auto && ['front', 'top', 'right'].includes(selDim.view) && scope.kind === 'part';
   const radiusReady = extensionReady && !!selDim && foreshortenSupported(selDim, scope.kind)
     && extensionResolved?.ok && extensionResolved.kind === 'radius';
@@ -3431,7 +3440,8 @@ export function DrawingWorkspace({ engine, doc: sourceDoc, bodies: sourceBodies,
 
         <TolerancingList suggestions={suggestions} settings={settings} views={views} onChange={onChange} acceptEvery={acceptEvery} />
 
-        <DimensionsList foreshortenMovingId={currentRadiusMove?.dim.id} onForeshorten={id => { editRadius(id, 'add'); }}
+        <DimensionsList decimalsReady={decimalsReady} onDecimals={changeDimensionDecimals}
+          foreshortenMovingId={currentRadiusMove?.dim.id} onForeshorten={id => { editRadius(id, 'add'); }}
           onForeshortenMove={id => { if (radiusReady && selDim?.id === id && radiusPlacement && !radiusPlacement.hidden && !radiusPlacement.breaks?.length) {
             cancel(); setDrag(null); setTool('select'); setRadiusMove({ owner: extensionOwner, dim: selDim }); svg.current?.focus();
           } }} onForeshortenRemove={id => { setRadiusMove(null); editRadius(id, 'remove'); }} extensionReady={extensionReady} arrowReady={arrowReady} onArrow={changeArrow} crossingBreakReady={arrowReady} crossingBreakCandidates={crossingBreakCandidates} onCrossingBreak={changeCrossingBreak} extensionJogReady={arrowReady} onExtensionJog={changeExtensionJog} onExtension={changeExtension} onExtensionPreview={previewExtension} sheet={sheet} views={views} layout={layout} scope={scope} settings={settings} occurrenceReasons={lossByDimension} onReattach={startReattachment} onReselectChamfer={startChamferReselect} onReselectRadialThickness={startRadialThicknessReselect} onReselectCylinderDiameter={startCylinderDiameterReselect} onReselectCircleSeparation={startCircleSeparationReselect} onCircleSeparationMode={changeCircleSeparationMode} selected={selDim?.id ?? null} onSelect={id => { selectAnnotationRow('dimension', id); setNoteDraft(null); }} remove={id => removeAnnotation({ kind: 'dimension', id })} autoDimension={autoDimension} />

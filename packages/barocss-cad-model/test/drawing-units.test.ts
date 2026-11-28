@@ -6,6 +6,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { brepsFor } from '../src/engine/evaluate';
 import { emptyDoc, starterDoc, type StudioDoc } from '../src/engine/doc';
+import { assertSavedDrawingDocument } from '../src/engine/savedDrawing';
 import { encodeStudioFile, readStudioFile } from '../src/engine/container';
 import { commands, type Ctx } from '../src/app/commands';
 import { projectViews } from '../src/drawing/project';
@@ -373,4 +374,52 @@ test('weld symbols on the sheet are in the drawing\'s unit and keep the estimate
   assert.ok(weld(build({})), 'the symbol is drawn'); assert.ok(texts(weld(build({}))!).includes('6.35*'), texts(weld(build({}))!).join());
   assert.ok(texts(weld(build({ units: 'inch' }))!).includes('.250*'), texts(weld(build({ units: 'inch' }))!).join());
   assert.ok(texts(weld(build({ units: 'mm', precision: { mm: 0 } }))!).includes('6*'));
+});
+
+test('an ordinary manual display override stays local and defers to special sheet or dimension formats', () => {
+  const plain = drawing().settings.dimensions.find(dim => dim.id === 'plain')!;
+  const override = { ...plain, displayDecimals: 6 };
+  const input = { dimensions: [override], frames: [] };
+  const fallback = { ...input, dimensions: [plain] };
+  const millimetres = sheetOf(input).sheet.dimensions[0];
+  const unmarked = sheetOf(fallback).sheet.dimensions[0];
+  assert.ok(millimetres.ok && unmarked.ok);
+  assert.equal(millimetres.text, '64.498062');
+  assert.equal(millimetres.value, unmarked.value);
+  const inches = sheetOf({ ...input, units: 'inch' }).sheet.dimensions[0];
+  assert.ok(inches.ok);
+  assert.equal(inches.text, '2.539294');
+  assert.equal(inches.value, millimetres.value);
+  assert.deepEqual(texts(groupOf(sheetOf({ ...input, dimensions: [{ ...override, displayDecimals: 0 }] }).sheet, plain.id)), ['64']);
+
+  const specialFormats: Partial<DrawingSettings>[] = [
+    { ...input, dual: true },
+    { ...input, units: 'inch', inchFraction: 16 },
+    { ...input, frames: drawing().settings.frames },
+    { ...input, dimensions: [{ ...override, tol: { kind: 'symmetric', value: 0.05 } }] },
+    { ...input, dimensions: [{ ...override, basic: true }] },
+  ];
+  for (const alternate of specialFormats) {
+    const unmarkedAlternate = { ...alternate, dimensions: alternate.dimensions!.map(({ displayDecimals: _displayDecimals, ...dim }) => dim) };
+    assert.deepEqual(texts(groupOf(sheetOf(alternate).sheet, plain.id)), texts(groupOf(sheetOf(unmarkedAlternate).sheet, plain.id)));
+  }
+});
+
+test('native Drawing keeps a valid local decimal override and refuses malformed or misowned input', async () => {
+  const plain = drawing().settings.dimensions.find(dim => dim.id === 'plain')!;
+  const valid = { ...plain, displayDecimals: 0 };
+  const doc = starterDoc();
+  const withDimensions = (dimensions: unknown[]) => ({ ...doc, drawing: { ...defaultDrawing(), dimensions } });
+  const reopened = await readStudioFile(encodeStudioFile({ ...doc, drawing: { ...defaultDrawing(), dimensions: [valid] } }));
+  assert.ok('doc' in reopened);
+  assert.deepEqual(reopened.doc.drawing?.dimensions, [valid]);
+  for (const dimensions of [
+    ...[-1, 7, 1.5, Infinity, '3', null].map(value => [{ ...plain, displayDecimals: value }]),
+    [{ ...valid, auto: true }],
+    [{ ...valid, view: 'section:A' }],
+    [{ ...valid, kind: 'diameter' }],
+    [plain, valid],
+  ]) {
+    assert.throws(() => assertSavedDrawingDocument(withDimensions(dimensions)), /Display decimals require/);
+  }
 });

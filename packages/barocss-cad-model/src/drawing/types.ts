@@ -9,7 +9,7 @@ import type { Sig } from '../engine/references';
 import { isVec3 } from '../util/guards';
 import { readDetails, type DrawingDetail } from './detail';
 import { readBreaks, type DrawingBreak } from './breaks';
-import { MAX_PRECISION, inchFractionOk, type DrawingStandard, type DrawingUnits, type InchFractionDenominator, type UnitPrecision } from './standard';
+import { MAX_PRECISION, inchFractionOk, type DrawingStandard, type DrawingUnits, type InchFractionDenominator, type UnitPrecision, type UnitSettings } from './standard';
 import { foreshortenOk, isOrthographicView, type ForeshortenedRadius } from './foreshorten';
 export type { ForeshortenedRadius } from './foreshorten';
 import { readDatums, type DrawingFace, type DrawingFaceRef } from './datums';
@@ -217,7 +217,11 @@ export interface CircleSeparationDimensionData {
   place: XY;
 }
 
-export type DrawingDimension = ({ tol?: Tolerance; count?: number; auto?: true; basic?: true }) & (
+export type DrawingDimension = ({
+  tol?: Tolerance; count?: number; auto?: true; basic?: true;
+  /** Explicit decimal places for an ordinary manually placed dimension. The nominal remains exact. */
+  displayDecimals?: number;
+}) & (
   | { id: string; view: DimView; kind: 'linear'; a: DimPoint; b: DimPoint; orient: 'horizontal' | 'vertical' | 'aligned'; place: XY; /** Hide only this reference role’s extension line; omitted means both visible. */ hideExtension?: 'a' | 'b'; arrowPlacement?: LinearArrowPlacement; /** Optional sheet-mm break on this linear dimension line where it crosses one verified sibling linear dimension line. */ crossingBreak?: LinearCrossingBreak; /** Optional display-only jog on one extension line ('a' or 'b'); measured endpoints and value stay unchanged. */ extensionJog?: LinearExtensionJog }
   | { id: string; view: DimView; kind: 'diameter'; edge: string; near: Vec3; place: XY; sig?: Sig; was?: string }
   | { id: string; view: DimView; kind: 'radius'; edge: string; near: Vec3; place: XY; sig?: Sig; was?: string; /** Optional foreshortened display origin in view model coordinates (mm); true radius and center remain native. */ foreshorten?: ForeshortenedRadius }
@@ -598,6 +602,18 @@ function readSections(raw: unknown): DrawingSection[] | null {
   return out.length ? out : null;
 }
 /** Decimal places kept where each is a whole number 0 to 6 (mm then inch); none valid: none. */
+export function manualDecimalDimension(dim: { kind?: unknown; view?: unknown; auto?: unknown; mode?: unknown }): boolean {
+  return dim.auto === undefined && isDimView(dim.view) && isOrthographicView(dim.view)
+    && (dim.kind === 'linear' || (dim.kind === 'angle' && dim.mode === undefined));
+}
+
+/** Special display styles keep their own formatting. The saved decimal choice can become active again. */
+export function dimensionDecimalsAvailable(dim: DrawingDimension, settings: UnitSettings & Pick<DrawingSettings, 'frames' | 'scope'>): boolean {
+  return manualDecimalDimension(dim) && !dim.tol && !dim.basic && dim.count === undefined
+    && settings.scope?.kind !== 'assembly' && !settings.frames?.some(frame => frame.dim === dim.id)
+    && !settings.dual && !(settings.units === 'inch' && settings.inchFraction !== undefined);
+}
+
 export const precisionOk = (x: unknown): x is number => typeof x === 'number' && Number.isInteger(x) && x >= 0 && x <= MAX_PRECISION;
 function readPrecision(raw: unknown): UnitPrecision | null {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
@@ -634,7 +650,7 @@ export function readDrawing(raw: unknown): DrawingSettings {
     ...(typeof r.revision === 'string' && r.revision ? { revision: r.revision.slice(0, 6) } : {}),
     ...(typeof r.revisedModel === 'string' ? { revisedModel: r.revisedModel } : {}),
     dimensions: Array.isArray(r.dimensions) ? r.dimensions.filter(x => x && typeof x.id === 'string' && isDimView(x.view) && (x.kind !== 'pcd' || ringOk(x.ring)) && (x.kind !== 'arc-length' || (x.auto !== true && isOrthographicView(x.view) && isXY(x.place) && edgeRefOk((x as { arc?: unknown }).arc))) && (x.kind !== 'chamfer' || (x.auto !== true && isOrthographicView(x.view) && isXY(x.place) && edgeRefOk((x as { chamfer?: unknown }).chamfer) && edgeRefOk((x as { adjacent?: unknown }).adjacent))) && (x.kind !== 'radial-thickness' || (x.auto !== true && isOrthographicView(x.view) && isXY(x.place) && edgeRefOk((x as { first?: unknown }).first) && edgeRefOk((x as { second?: unknown }).second))) && (x.kind !== 'cylinder-diameter' || (x.auto !== true && isOrthographicView(x.view) && isXY(x.place) && cylinderFaceRefOk((x as { cylinder?: unknown }).cylinder))) && (x.kind !== 'circle-separation' || (x.auto !== true && isOrthographicView(x.view) && isXY(x.place) && ((x as { mode?: unknown }).mode === 'min' || (x as { mode?: unknown }).mode === 'max') && edgeRefOk((x as { first?: unknown }).first) && edgeRefOk((x as { second?: unknown }).second))) && (x.kind !== 'linear' || ((x.a?.at !== 'pcd' || ringOk(x.a.ring)) && (x.b?.at !== 'pcd' || ringOk(x.b.ring)) && (x.a?.at !== 'virtual-sharp' || (isOrthographicView(x.view) && edgeRefOk(x.a) && edgeRefOk(x.a.second))) && (x.b?.at !== 'virtual-sharp' || (isOrthographicView(x.view) && edgeRefOk(x.b) && edgeRefOk(x.b.second))) && (x.a?.at !== 'com' || (isOrthographicView(x.view) && comPointOk(x.a))) && (x.b?.at !== 'com' || (isOrthographicView(x.view) && comPointOk(x.b)))))).map(x => {
-      const { tol, count, auto, basic, foreshorten, arrowPlacement, crossingBreak, extensionJog, ...rest } = x as DrawingDimension & { foreshorten?: unknown; arrowPlacement?: unknown; crossingBreak?: unknown; extensionJog?: unknown }; const t = x.kind === 'chamfer' ? null : readTolerance(tol);
+      const { tol, count, auto, basic, foreshorten, arrowPlacement, crossingBreak, extensionJog, displayDecimals, ...rest } = x as DrawingDimension & { foreshorten?: unknown; arrowPlacement?: unknown; crossingBreak?: unknown; extensionJog?: unknown }; const t = x.kind === 'chamfer' ? null : readTolerance(tol);
       const arrows = x.kind === 'linear' && auto !== true && isOrthographicView(x.view) ? readLinearArrowPlacement(arrowPlacement) : undefined;
       const cBreak = x.kind === 'linear' && auto !== true && isOrthographicView(x.view) ? readLinearCrossingBreak(crossingBreak) : undefined;
       const extJog = x.kind === 'linear' && auto !== true && isOrthographicView(x.view) ? readLinearExtensionJog(extensionJog) : undefined;
@@ -642,7 +658,8 @@ export function readDrawing(raw: unknown): DrawingSettings {
         ? { origin: [foreshorten.origin[0], foreshorten.origin[1]] as XY } : null;
       const allowCount = x.kind !== 'chamfer' && Number.isInteger(count) && count! >= 2 && count! <= 999;
       const allowBasic = x.kind !== 'chamfer' && basic === true;
-      return { ...rest, ...(t ? { tol: t } : {}), ...(allowCount ? { count } : {}), ...(auto === true ? { auto: true } : {}), ...(allowBasic ? { basic: true } : {}), ...(fs ? { foreshorten: fs } : {}), ...(arrows ? { arrowPlacement: arrows } : {}), ...(cBreak ? { crossingBreak: cBreak } : {}), ...(extJog ? { extensionJog: extJog } : {}) } as DrawingDimension;
+      const decimals = manualDecimalDimension(x) && precisionOk(displayDecimals) ? { displayDecimals } : {};
+      return { ...rest, ...(t ? { tol: t } : {}), ...(allowCount ? { count } : {}), ...(auto === true ? { auto: true } : {}), ...(allowBasic ? { basic: true } : {}), ...(fs ? { foreshorten: fs } : {}), ...(arrows ? { arrowPlacement: arrows } : {}), ...(cBreak ? { crossingBreak: cBreak } : {}), ...(extJog ? { extensionJog: extJog } : {}), ...decimals } as DrawingDimension;
     }) : [],
     ...(Array.isArray(r.views) && r.views.includes('front') && r.views.includes('top') ? { views: VIEW_IDS.filter(v => r.views!.includes(v)) } : {}),
     ...(readRoom(r.room) ? { room: readRoom(r.room)! } : {}),
