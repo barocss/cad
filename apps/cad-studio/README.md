@@ -28,7 +28,7 @@ Use a secure Studio page in a browser with WebMCP support. Open **Chat** and cli
 
 Studio shows the proposal controls that match the shared part. **Box** and **Cylinder** can propose the first solid. **Propose** can change the distance of a supported Extrude. **Hole** can propose a centered through hole on a standalone Cylinder.
 
-Click one proposal control to allow one proposal. Click the highlighted control again to revoke it, including while it shows **Evaluating…**. When a proposal appears, use **Preview**, then **Accept** or **Reject**. Use **Save** to keep the result. After reopening the document, click **WebMCP** again if you want to share it.
+Click one proposal control to allow one proposal. Click the highlighted control again to revoke it, including while it shows **Evaluating…**. If the browser tool loses a response, check **Proposals** before you grant another request. When a proposal appears, use **Preview**, then **Accept** or **Reject**. Use **Save** to keep the result. After reopening the document, click **WebMCP** again if you want to share it.
 
 ## Development
 
