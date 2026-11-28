@@ -1,13 +1,13 @@
 # CAD roadmap — current status and execution order
 
-Updated 2026-11-29 · Priority authority: D520 · Latest delivery: D2251 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
+Updated 2026-11-29 · Priority authority: D520 · Latest delivery: D2252 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
 
 This is the only current status index. Detailed tracks define acceptance; the 34 stable row pages retain scope and issue navigation. Immutable decision notes retain results. Do not append chronological status paragraphs here. [D520 decision](notes/cad-roadmap-replan-2026-11-04/README.md) supersedes D445 execution order and historical next-item text, while retaining its safeguards and bounded proofs.
 
 ## Now and next
 
-- **Current position:** [D2251](notes/represented-arch-mass-2026-11-29/README.md), P0 rows 16 and 30. The same closed STEP arch solids recover the analytic volume and centroid in native quadrature and actual Studio reopen.
-- **Next MAIN:** D2252, P2 rows 11 and 30. Reproduce the paired missing front rim and stray rear arc on main for [#766](https://github.com/barocss/cad/issues/766). Compare both arcs with the existing independent visibility evidence.
+- **Current position:** [D2252](notes/cylinder-cap-rim-visibility-2026-11-29/README.md), P2 rows 11 and 30. The original bearing assembly restores the front rim and suppresses the false rear arc in main projection and actual Studio Drawing.
+- **Next MAIN:** D2253, P5 rows 04 and 31. For [#629](https://github.com/barocss/cad/issues/629), bind one exact selected native vertex of an original authored box to a revision-pinned Agent feature dimension edit. Verify the opposite face stays fixed through explicit Studio approval, History and fresh Open.
 - **Separate follow-ups:** Continue Studio App extraction in cohesive parts with affected desktop checks. [#608 Rendering](https://github.com/barocss/cad/issues/608) stays on HOLD. API inventory drift remains open. The issue tracker records [#126](https://github.com/barocss/cad/issues/126), [#613](https://github.com/barocss/cad/issues/613), [#152](https://github.com/barocss/cad/issues/152) and [#22](https://github.com/barocss/cad/issues/22) as closed.
 - **Active repository:** [barocss/cad](https://github.com/barocss/cad), based on `origin/main`. Fetch before work and preserve unexpected changes. The [migration record](../../../docs/migration/README.md) maps the former `local/cad-dev` history and issue numbers.
 - **Evidence correction:** D482 records2167 PASS/0 FAIL/2 existing SKIP in a later full-kernel run than D433. Neither result is a new full-suite PASS at this audit HEAD. [D482 record](notes/vertical-contact-refusal-2026-11-04/README.md).

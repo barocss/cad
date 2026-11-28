@@ -8,7 +8,7 @@ import type { Brep, BrepCoedge } from './brep-core.js';
 import { circleOf } from './brep-tessellate.js';
 
 /** Compare the complete rational coefficients, allowing only reconstruction roundoff and edge reversal. */
-function directionOf(edge: Curve, boundary: Curve, roundoff: number): 1 | -1 | undefined {
+export function circularBoundaryDirection(edge: Curve, boundary: Curve, roundoff: number): 1 | -1 | undefined {
   if (edge.degree !== 2 || boundary.degree !== 2 || edge.knots.length !== boundary.knots.length
     || edge.controlPoints.length !== boundary.controlPoints.length || edge.weights.length !== boundary.weights.length) return;
   const [a, b] = curveDomain(edge), [c, d] = curveDomain(boundary);
@@ -33,7 +33,7 @@ function circularBinding(edge: Curve, surface: Surface, roundoff: number): Curve
   const bind = (degree: number, knots: number[], points: Point[], weights: number[], fixed: number,
     domain: readonly [number, number], varying: 'u' | 'v') => {
     const boundary: Curve = { kind: 'curve', id: 'boundary', degree, knots, controlPoints: points, weights };
-    const direction = directionOf(edge, boundary, roundoff);
+    const direction = circularBoundaryDirection(edge, boundary, roundoff);
     if (!direction) return;
     const range = direction === 1 ? domain : [domain[1], domain[0]];
     const point = (at: number): Point => varying === 'u' ? [at, fixed, 0] : [fixed, at, 0];
@@ -101,7 +101,7 @@ export function retainSweepCircularJoinBindings(source: Brep, result: Brep): Bre
   });
   const pairs = result.edges.flatMap(edge => {
     const matches = originals.flatMap(original => {
-      const direction = directionOf(edge.curve, original.edge.curve, roundoff);
+      const direction = circularBoundaryDirection(edge.curve, original.edge.curve, roundoff);
       return direction ? [{ original, direction }] : [];
     });
     return matches.length === 1 ? [{ edge, original: matches[0].original, direction: matches[0].direction }] : [];

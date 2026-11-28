@@ -15,6 +15,7 @@ import { authoredBrepEdgeRadii } from './authored-circle-nominal.js';
 import type { Brep } from './brep-core.js';
 import { sharedConeMeridianNormal } from './brep-hidden-cone-meridian.js';
 import { createNativeLoftProbe, tracksNativeLoftOutline, type NativeLoftMesh, type NativeLoftProbe } from './brep-hidden-native-loft.js';
+import { convexCylinderRimSupport } from './brep-hidden-rim-support.js';
 import { circleOf, tessellateBrep, tessellateBrepWithEdgeParameters } from './brep-tessellate.js';
 import { hiddenGeneratorAlias, type HiddenGenerator, type HiddenGeneratorRun } from './brep-hidden-alias.js';
 import type { Point } from '../types.js';
@@ -85,6 +86,7 @@ interface Candidate {
   s0: number; s1: number; at(s: number): Point; out(s0: number, s1: number): ProjectedCurve;
   /** Where visibility is tested at s (default `at`): a circle's chord on the tessellation, so its own faces' facets do not stand in front of it. */
   probe?(s: number): Point;
+  rimHidden?(s: number): boolean;
   /** Sample parameters (increasing, from s0 to s1). */
   samples(): number[];
   /** Depth margin below which a nearer face does not hide this curve. */
@@ -138,6 +140,19 @@ export function projectBrepHiddenLines(breps: readonly Brep[], view: HiddenLineV
   const perQuarter = options.segmentsPerQuarter ?? 12;
   const meshSources = breps.map(b => meshOf(b, perQuarter)), meshes = meshSources.map(source => source.mesh);
   const nativeLoftProbe = createNativeLoftProbe(breps, P, toward);
+  const rimBudget = new Error('Native rim binding budget exhausted');
+  let rimBindingWork = 0, rimQueryWork = 0;
+  const proveRim = convexCylinderRimSupport(toward, {
+    circle: circleOf,
+    primitive: face => { const g = geometryOfFace(face); return g.kind === 'other' ? null : g; },
+    inPlane: (circle, plane) => {
+      const bound = 256 * Number.EPSILON * Math.max(1, circle.r, len(circle.c), len(plane.o));
+      return Math.abs(dot(sub(circle.c, plane.o), plane.n)) <= bound
+        && Math.abs(dot(circle.e1, plane.n)) <= 256 * Number.EPSILON
+        && Math.abs(dot(circle.e2, plane.n)) <= 256 * Number.EPSILON;
+    },
+    charge: count => { rimBindingWork += count; if (rimBindingWork > 2_000_000) throw rimBudget; },
+  });
   const lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
   for (const m of meshes) {
     const X = m.positions;
@@ -276,13 +291,26 @@ export function projectBrepHiddenLines(breps: readonly Brep[], view: HiddenLineV
           let k = 0; while (k < ps.length - 2 && ps[k + 1] < s) k++;
           const d = ps[k + 1] - ps[k]; return lerp3(poly[k], poly[k + 1], d > 0 ? Math.min(1, Math.max(0, (s - ps[k]) / d)) : 0);
         };
+        const eps = 1e-5 * size;
+        const stepsCount = Math.max(Math.ceil(extent * total / h), Math.ceil(total / (Math.PI / 32)));
+        const work = 32 * (Math.min(4000, stepsCount) + 1);
+        let rim: ReturnType<typeof proveRim> = null;
+        if (fs.length === 2 && rimQueryWork + work <= 500_000 && rimBindingWork <= 2_000_000) {
+          const A = faceById.get(fs[0]), B = faceById.get(fs[1]);
+          if (A && B) try { rim = proveRim(brep, edge, A, B); } catch (cause) { if (cause !== rimBudget) throw cause; }
+          if (rim) rimQueryWork += work;
+        }
+        const nativeHidden = rim?.nativeHidden;
+        const front = rim;
         const nominalRadius = authoredRadii?.get(edge.id);
         const projectedCircle: ProjectedCircle = { center: circle.c, radius: circle.r, normal, full, sweep: total };
         if (nominalRadius !== undefined) projectedCircle.nominalRadius = nominalRadius;
         into.push({ name, ...tangent, kind: kind === 'silhouette' ? 'silhouette' : 'circle', ends: full ? null : [a, b],
-          circle: projectedCircle, s0: 0, s1: total, eps: 1e-5 * size, at, probe,
+          circle: projectedCircle, s0: 0, s1: total, eps, at,
+          probe: front ? s => { const p = at(s); return front(p) ? p : probe(s); } : probe,
+          rimHidden: nativeHidden ? s => nativeHidden(at(s), eps) : undefined,
           out: (s0, s1) => arcOut(C, U, V, theta(s0), theta(s1)),
-          samples: () => steps(0, total, Math.max(Math.ceil(extent * total / h), Math.ceil(total / (Math.PI / 32)))) });
+          samples: () => steps(0, total, stepsCount) });
         continue;
       }
       const poly: Point[] = []; for (let k = 0; k < pts.length; k += 3) poly.push([pts[k], pts[k + 1], pts[k + 2]]);
@@ -397,7 +425,7 @@ export function projectBrepHiddenLines(breps: readonly Brep[], view: HiddenLineV
         }, P, minRun);
       }
     }
-    return intervals(c, s => !hidden((c.probe ?? c.at)(s), c), P, minRun);
+    return intervals(c, s => !c.rimHidden?.(s) && !hidden((c.probe ?? c.at)(s), c), P, minRun);
   };
   const visibleRuns = new Map<Candidate, [number, number, boolean][]>();
   for (const c of candidates) {

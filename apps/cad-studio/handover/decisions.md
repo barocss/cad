@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D2252: [D2252](notes/cylinder-cap-rim-visibility-2026-11-29/README.md), #766. Restore both native cylinder rim intervals while retaining physical occlusion and the original grazing allowance.
+
 - D2251: [D2251](notes/represented-arch-mass-2026-11-29/README.md). Restore analytic mass for both represented STEP arches and verify actual Studio project reopen.
 
 - D2250: [D2250](notes/represented-native-cap-stations-2026-11-29/README.md), #777. Keep the full elevated and inserted cap representations through strict validation, mesh, projection and Studio reopen.
