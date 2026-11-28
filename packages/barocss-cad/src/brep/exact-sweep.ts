@@ -444,8 +444,8 @@ function bindClosedRing(brep: Brep, tolerance: number, shellCount: 1 | 2): Brep 
   return { ...brep, coedges };
 }
 
-/** Map a trimmed line or rational circle into the rectangle ring's affine planar wall chart. */
-function closedRectanglePlaneBinding(edge: Curve, surface: Surface, tolerance: number): Curve | undefined {
+/** Map a trimmed line or rational circle into an affine planar chart. */
+function closedRingPlaneBinding(edge: Curve, surface: Surface, tolerance: number): Curve | undefined {
   if (surface.degreeU !== 1 || surface.degreeV !== 1 || surface.controlPoints.length !== 2
     || surface.controlPoints[0].length !== 2 || surface.weights.some(row => row.some(weight => weight !== surface.weights[0][0]))) return;
   const [[o, pv], [pu, puv]] = surface.controlPoints, a = sub(pu, o), b = sub(pv, o);
@@ -464,11 +464,12 @@ function closedRectanglePlaneBinding(edge: Curve, surface: Surface, tolerance: n
   return { ...edge, id: 'pcurve', controlPoints };
 }
 
-/** Preserve both canonical edge charts on the four annular half-walls and four cylinder half-walls. */
-function bindClosedRectangle(brep: Brep, tolerance: number, shellCount: 1 | 2 | 3): Brep | undefined {
+/** Bind the two native half-faces of each straight meridian side. */
+function bindClosedStraightRing(brep: Brep, tolerance: number, sectionSides: 3 | 4, shellCount: 1 | 2 | 3): Brep | undefined {
+  const facesPerShell = sectionSides * 2;
   if (brep.bodies.length !== 1 || brep.shells.length !== shellCount
-    || brep.shells.some(shell => !shell.closed || shell.faces.length !== 8)
-    || brep.faces.length !== 8 * shellCount || brep.coedges.length !== 32 * shellCount) return;
+    || brep.shells.some(shell => !shell.closed || shell.faces.length !== facesPerShell)
+    || brep.faces.length !== facesPerShell * shellCount || brep.coedges.length !== 4 * facesPerShell * shellCount) return;
   const facesByLoop = new Map(brep.faces.flatMap(face => face.loops.map(loop => [loop, face] as const)));
   const edges = new Map(brep.edges.map(edge => [edge.id, edge])), bound = new Set<string>(), coedges: BrepCoedge[] = [];
   for (const { id, edge, sense, loop, next, prev, twin } of brep.coedges) {
@@ -476,7 +477,7 @@ function bindClosedRectangle(brep: Brep, tolerance: number, shellCount: 1 | 2 | 
     if (!face || face.surface.kind !== 'surface' || !curve) return;
     const planar = faceGeometry(face).kind === 'plane';
     const match = planar ? undefined : ringChartEdge(curve, face.surface, tolerance);
-    const pcurve = planar ? closedRectanglePlaneBinding(curve, face.surface, tolerance) : match?.pcurve;
+    const pcurve = planar ? closedRingPlaneBinding(curve, face.surface, tolerance) : match?.pcurve;
     if (!pcurve || match && bound.has(`${face.id}/${match.side}`)) return;
     if (match) bound.add(`${face.id}/${match.side}`);
     coedges.push({ id, edge, sense, loop, next, prev, twin, pcurve });
@@ -658,27 +659,54 @@ function pairedRectangularApertures(rectangle: NonNullable<ReturnType<typeof rec
   return { profiles: [profiles[0], profiles[1]], clearance: Math.min(clearance, web) };
 }
 
-/** A canonical bend frame can keep the section's roll only along the radial and binormal directions. */
+/** Preserve an authored roll that matches the bend radial and binormal axes. */
+function alignedBendFrame([x, y, tangent]: SweepAxes, { toCentre, radius, tolerance }: Pick<JoinedRail, 'toCentre' | 'radius' | 'tolerance'>,
+  extent: number): { axes: SweepAxes; bendCentre: XY; radial: 0 | 1 } | undefined {
+  const inward = unit(sub(toCentre, scale(tangent, dot(toCentre, tangent))));
+  const signX = Math.sign(dot(inward, x)), signY = Math.sign(dot(inward, y));
+  const radialX = scale(inward, signX), radialY = scale(inward, signY);
+  const alignment = Math.min(CadNumericPolicy.relativeComparison, tolerance / extent);
+  if (len(sub(x, radialX)) <= alignment) return {
+    axes: [radialX, unit(cross(tangent, radialX)), tangent],
+    bendCentre: [signX * radius, 0], radial: 0,
+  };
+  if (len(sub(y, radialY)) <= alignment) return {
+    axes: [unit(cross(radialY, tangent)), radialY, tangent],
+    bendCentre: [0, signY * radius], radial: 1,
+  };
+}
+
 function rectangularElbowSection(rectangle: NonNullable<ReturnType<typeof rectangleSection>>,
   holes: NonNullable<ExactSweepInput['holes']>, axes: SweepAxes,
   rail: Pick<JoinedRail, 'toCentre' | 'radius' | 'tolerance'>, refuse: Refuse,
   style = holes.length ? 'rectangular duct' : 'rectangular elbow'): { section: JoinedSection; axes: SweepAxes } {
-  const [x, y, tangent] = axes, { toCentre, radius, tolerance } = rail, { halfX, halfY, profile } = rectangle;
-  const inward = unit(sub(toCentre, scale(tangent, dot(toCentre, tangent))));
-  const signX = Math.sign(dot(inward, x)), signY = Math.sign(dot(inward, y));
-  const radialX = scale(inward, signX), radialY = scale(inward, signY);
-  const alignment = Math.min(CadNumericPolicy.relativeComparison, tolerance / Math.hypot(halfX, halfY));
-  const opening = holes.length ? rectangularOpening(rectangle, holes, tolerance, refuse) : undefined;
-  const common = { profile, opening, extent: Math.max(halfX, halfY), edgeCount: opening ? 8 as const : 4 as const };
-  if (len(sub(x, radialX)) <= alignment) return {
-    axes: [radialX, unit(cross(tangent, radialX)), tangent],
-    section: { ...common, bendCentre: [signX * radius, 0], radialReach: halfX },
-  };
-  if (len(sub(y, radialY)) <= alignment) return {
-    axes: [unit(cross(radialY, tangent)), radialY, tangent],
-    section: { ...common, bendCentre: [0, signY * radius], radialReach: halfY },
-  };
-  return refuse('CAPABILITY', `Exact ${style} sweep needs the rectangle's original axes aligned to the bend radial and binormal.`);
+  const { halfX, halfY, profile } = rectangle;
+  const opening = holes.length ? rectangularOpening(rectangle, holes, rail.tolerance, refuse) : undefined;
+  const aligned = alignedBendFrame(axes, rail, Math.hypot(halfX, halfY));
+  if (!aligned) return refuse('CAPABILITY', `Exact ${style} sweep needs the rectangle's original axes aligned to the bend radial and binormal.`);
+  return { axes: aligned.axes, section: { profile, opening, extent: Math.max(halfX, halfY), edgeCount: opening ? 8 : 4,
+    bendCentre: aligned.bendCentre, radialReach: aligned.radial === 0 ? halfX : halfY } };
+}
+
+function closedTriangularRing(id: string, outer: ExactSweepInput['outer'], initialAxes: SweepAxes,
+  rail: Pick<JoinedRail, 'toCentre' | 'radius' | 'tolerance'>, sideTags: SideTags | undefined, refuse: Refuse) {
+  const [a, b, c] = outer.map(segment => segment.start);
+  const minX = Math.min(a[0], b[0], c[0]), maxX = Math.max(a[0], b[0], c[0]);
+  const minY = Math.min(a[1], b[1], c[1]), maxY = Math.max(a[1], b[1], c[1]);
+  const halfX = (maxX - minX) / 2, halfY = (maxY - minY) / 2;
+  const extent = Math.hypot(halfX, halfY);
+  const aligned = alignedBendFrame(initialAxes, rail, extent);
+  if (!aligned) return refuse('CAPABILITY', "Exact closed-circle triangular sweep needs the sketch axes aligned to the bend radial and binormal.");
+  // Keep the asymmetric meridian by carrying the centre of the section bounds on the rail.
+  const cx = minX + halfX, cy = minY + halfY;
+  const profile: ProfileSegmentInput[] = [a, b, c].map(([x, y]) => ({ kind: 'line', start: [x - cx, y - cy] }));
+  const { radius, tolerance } = rail, [dx, dy] = aligned.bendCentre;
+  const clearance = () => refuse('PARAMETER', 'Exact closed-circle triangular sweep needs strictly positive radial clearance.');
+  const revolve: RevolveInput = { id, profile, axis: { origin: [dx, dy], direction: [-dy, dx] }, angle: 360, sideTags: sideTags?.outer };
+  const ring = revolveSweepProfile(revolve, { minimum: tolerance, refuse: clearance });
+  const brep = bindClosedStraightRing(ring, 128 * Number.EPSILON * Math.max(1, radius + extent), 3, 1);
+  if (!brep) return refuse('GEOMETRY', 'The exact closed-circle triangular sweep could not bind the native ring seams.');
+  return { axes: aligned.axes, local: { brep, mass: (density: number) => revolveMassProperties(revolve, density) } };
 }
 
 function closedRectangularRing(id: string, section: JoinedSection, tolerance: number, sideTags: SideTags | undefined, refuse: Refuse,
@@ -690,7 +718,7 @@ function closedRectangularRing(id: string, section: JoinedSection, tolerance: nu
   const revolve: RevolveInput = { id, profile, axis: { origin: [dx, dy], direction: [-dy, dx] }, angle: 360, sideTags: sideTags?.outer,
     ...(holes ? { holes, holeTags: sideTags?.holes } : {}) };
   const ring = revolveSweepProfile(revolve, { minimum: tolerance, refuse: clearance });
-  const brep = bindClosedRectangle(ring, 128 * Number.EPSILON * Math.max(1, radius + extent), cavities ? 3 : opening ? 2 : 1);
+  const brep = bindClosedStraightRing(ring, 128 * Number.EPSILON * Math.max(1, radius + extent), 4, cavities ? 3 : opening ? 2 : 1);
   if (!brep) return refuse('GEOMETRY', 'The exact closed-circle rectangular sweep could not bind the native ring seams.');
   return { brep, mass: density => revolveMassProperties(revolve, density) };
 }
@@ -1549,8 +1577,18 @@ export function exactSweep(input: ExactSweepInput, refuse: Refuse): SweepSolid {
         return refuse('GEOMETRY', 'The exact closed-circle rectangular sweep did not produce one valid closed ring.');
       return result;
     }
+    if (outer.length === 3 && outer.every(side => side.kind === 'line')) {
+      if (holes.length) return refuse('CAPABILITY', 'Exact closed-circle triangular sweep needs a filled triangle without holes.');
+      if (closed.radius > CadNumericPolicy.coordinateAbs)
+        return refuse('PARAMETER', 'Exact closed-circle sweep path radius must be at most 10000 mm.');
+      const { local, axes } = closedTriangularRing(id, outer, frame(closed.tangent), closed, sideTags, refuse);
+      const result = place(local, axes, closed.start), report = checkBrep(result.brep, { strict: true });
+      if (!report.valid || report.topology.length !== 1 || report.topology[0].shells !== 1 || report.topology[0].genus !== 1)
+        return refuse('GEOMETRY', 'The exact closed-circle triangular sweep did not produce one valid closed ring.');
+      return result;
+    }
     if (profileRadius === undefined)
-      return refuse('CAPABILITY', 'Exact closed-circle sweep needs one circular disk or one bend-aligned rectangular section.');
+      return refuse('CAPABILITY', 'Exact closed-circle sweep needs a disk, an aligned rectangle, or an aligned straight triangle.');
     const hole = circularHole(holes, 'closed-circle', refuse);
     const bore = hole && concentricBore(disk!, hole, refuse, 'closed-circle');
     const { start, tangent, toCentre, radius, tolerance } = closed;
@@ -1834,7 +1872,7 @@ export function exactPerpendicularAnnularSweepReceipt(brep: Brep,
       for (const use of pair) {
         const face = owners.get(use.loop), actual = use.pcurve;
         if (!face || face.surface.kind !== 'surface' || !actual) return;
-        const expected = face === start[0] || face === end[0] ? closedRectanglePlaneBinding(edge.curve, face.surface, roundoff)
+        const expected = face === start[0] || face === end[0] ? closedRingPlaneBinding(edge.curve, face.surface, roundoff)
           : ringChartEdge(edge.curve, face.surface, roundoff)?.pcurve;
         if (!expected || actual.degree !== expected.degree || actual.knots.length !== expected.knots.length
           || actual.controlPoints.length !== expected.controlPoints.length || actual.weights.length !== expected.weights.length
