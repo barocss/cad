@@ -43,7 +43,7 @@ import { BATCHABLE, MUTATORS, PART_SCOPED, describe, unknownArguments } from './
 import { isObj, isVec3 } from '../util/guards';
 import { revisionOf } from '../util/revision';
 import { BROWSER_PROPOSAL_AUTHOR, browserExtrudeTarget, browserHoleTarget, canProposeBrowserPrimitive,
-  browserCylinderTarget, validBoxDimension, validClosedShellDimensions, validCylinderRadius, validExtrudeDistance, validHoleDiameter } from './browserProposalTargets';
+  browserBoxWidthValues, type BrowserBoxReferenceSide, browserCylinderTarget, validBoxDimension, validClosedShellDimensions, validCylinderRadius, validExtrudeDistance, validHoleDiameter } from './browserProposalTargets';
 import { firstProblem, isRefusal } from '../engine/refusal';
 import { REFERENCE_CODES } from '../engine/schema/references';
 // ./outputs is loaded on first use: it reaches team/bundle → baseline → assembly → parts, which import this
@@ -134,6 +134,19 @@ export function proposeBrowserClosedShell(state: ChatState, args: { body: string
     title: `Make a closed Shell with ${wall} mm wall, ${floor} mm floor and ${ceiling} mm ceiling`,
     ops: [{ tool: 'features', args: { action: 'command', command: 'shell', bodies: [body],
       values: { wallMode: 'separate-caps', t: wall, floorThickness: floor, ceilingThickness: ceiling }, expectedRevision } }],
+  }, evaluate, undefined, { agent: BROWSER_PROPOSAL_AUTHOR });
+}
+
+export function proposeBrowserBoxWidth(state: ChatState, args: { body: string; referenceBody: string;
+  referenceSide: BrowserBoxReferenceSide; expectedRevision: string }, evaluate: Evaluate) {
+  const { body, referenceBody, referenceSide, expectedRevision } = args;
+  const match = browserBoxWidthValues(state.doc, state.bodies, body, referenceBody, referenceSide);
+  if (state.partOf || !match || revisionOf(state.doc) !== expectedRevision) {
+    return Promise.resolve(fail(state, 'The browser width proposal needs two current original Boxes and a different supported width.'));
+  }
+  return proposeWith(runProposalTool, state, {
+    title: `Match Box width to X=${match.targetX} mm`,
+    ops: [{ tool: 'features', args: { action: 'edit', index: 0, values: match.values, expectedRevision } }],
   }, evaluate, undefined, { agent: BROWSER_PROPOSAL_AUTHOR });
 }
 

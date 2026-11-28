@@ -1,8 +1,9 @@
 import { useLayoutEffect, useRef, useState } from 'react';
 import { CadPartLimits } from '@barocss/cad';
-import { browserCylinderTarget, browserExtrudeTarget, browserProposalMinimum, canProposeBrowserPrimitive,
+import { browserBoxReferenceSides, browserBoxWidthTargets, browserCylinderTarget, browserExtrudeTarget, browserProposalMinimum,
+  canProposeBrowserPrimitive, isBrowserBoxReferenceSide,
   validBoxDimension, validClosedShellDimensions, validCylinderRadius, validExtrudeDistance, validHoleDiameter, validShellThickness } from '@barocss/cad-model/chat/browserProposalTargets';
-import { proposeBrowserBox, proposeBrowserClosedShell, proposeBrowserCylinder, proposeBrowserExtrude, proposeBrowserHole, type ChatState, type Evaluate } from '@barocss/cad-model/chat/tools';
+import { proposeBrowserBox, proposeBrowserBoxWidth, proposeBrowserClosedShell, proposeBrowserCylinder, proposeBrowserExtrude, proposeBrowserHole, type ChatState, type Evaluate } from '@barocss/cad-model/chat/tools';
 import { revisionOf } from '@barocss/cad-model/util/revision';
 import type { StudioDoc } from '@barocss/cad-model/engine/doc';
 import { browserBodyField, browserRevisionField, browserToolFailure, modelContext, plainInput,
@@ -50,6 +51,14 @@ const proposalTools = {
     invalid: 'Give a body key, a numeric diameter of at least 0.5 mm and the expected revision.',
     title: 'Allow one browser proposal for a centred through Hole',
   },
+  'Box width': {
+    name: 'cad_part_propose_box_width_match',
+    description: 'Propose matching the first original Box’s right side to the left or right side of the second original Box. Use both body keys and the revision from cad_part_summary. A person decides in Studio.',
+    fields: { body: browserBodyField, referenceBody: browserBodyField,
+      referenceSide: { type: 'string' as const, enum: [...browserBoxReferenceSides] }, expectedRevision: browserRevisionField },
+    invalid: 'Give the source and reference body keys, the reference side left or right, and the expected revision.',
+    title: 'Allow one browser proposal to match Box width',
+  },
   Shell: {
     name: 'cad_part_propose_closed_shell',
     description: 'Propose one closed Shell on the shared standalone Cylinder. Give the body key and revision from cad_part_summary and independent wall, floor and ceiling thicknesses in millimetres. A person decides in Studio.',
@@ -62,6 +71,7 @@ const proposalTools = {
 type ProposalKind = keyof typeof proposalTools;
 const emptyPartKinds = ['Box', 'Cylinder'] as const;
 const extrusionKinds = ['Extrude'] as const;
+const boxWidthKinds = ['Box width'] as const;
 const cylinderKinds = ['Extrude', 'Hole', 'Shell'] as const;
 type Grant = { owner: StudioDoc; scope: object; kind: ProposalKind };
 
@@ -82,7 +92,7 @@ function cancellableEvaluation(evaluate: Evaluate, signal: AbortSignal): Evaluat
 function proposalInput(kind: ProposalKind, input: unknown, required: readonly string[]) {
   if (!plainInput(input) || Reflect.ownKeys(input).length !== required.length ||
     !required.every(key => Object.hasOwn(input, key))) return;
-  const { body, width, depth, radius, height, diameter, wall, floor, ceiling, expectedRevision } = input;
+  const { body, referenceBody, referenceSide, width, depth, radius, height, diameter, wall, floor, ceiling, expectedRevision } = input;
   if (!validBrowserRevision(expectedRevision)) return;
   if (kind === 'Box') {
     if (validBoxDimension(width) && validBoxDimension(depth) && validBoxDimension(height))
@@ -91,6 +101,8 @@ function proposalInput(kind: ProposalKind, input: unknown, required: readonly st
     if (validCylinderRadius(radius) && validBoxDimension(height))
       return { kind, args: { radius, height, expectedRevision } };
   } else if (validBrowserBody(body)) {
+    if (kind === 'Box width' && validBrowserBody(referenceBody) && isBrowserBoxReferenceSide(referenceSide))
+      return { kind, args: { body, referenceBody, referenceSide, expectedRevision } };
     if (kind === 'Extrude' && validExtrudeDistance(height)) return { kind, args: { body, height, expectedRevision } };
     if (kind === 'Hole' && validHoleDiameter(diameter)) return { kind, args: { body, diameter, expectedRevision } };
     if (kind === 'Shell' && validShellThickness(wall) && validShellThickness(floor) && validShellThickness(ceiling))
@@ -111,7 +123,8 @@ export function useBrowserPartProposal(source: BrowserPartSummarySource | undefi
   if (grant && (!same || !readShared)) setGrant(undefined);
   if (failedGrant && !failed) setFailedGrant(undefined);
   const kinds: readonly ProposalKind[] | undefined = source && (canProposeBrowserPrimitive(source.doc, source.bodies) ? emptyPartKinds :
-    browserCylinderTarget(source.doc, source.bodies) ? cylinderKinds :
+    browserBoxWidthTargets(source.doc, source.bodies) ? boxWidthKinds :
+      browserCylinderTarget(source.doc, source.bodies) ? cylinderKinds :
       browserExtrudeTarget(source.doc, source.bodies) ? extrusionKinds : undefined);
   const kind = grant?.kind;
   const ready = !!source?.ready && !!action;
@@ -187,6 +200,7 @@ export function useBrowserPartProposal(source: BrowserPartSummarySource | undefi
                 : request.kind === 'Cylinder' ? proposeBrowserCylinder(state, request.args, evaluate)
                 : request.kind === 'Extrude' ? proposeBrowserExtrude(state, request.args, evaluate)
                 : request.kind === 'Hole' ? proposeBrowserHole(state, request.args, evaluate)
+                : request.kind === 'Box width' ? proposeBrowserBoxWidth(state, request.args, evaluate)
                 : proposeBrowserClosedShell(state, request.args, evaluate);
               const outcome = await pending.catch(() => null);
               if (!current(snapshot, signal)) return stale;

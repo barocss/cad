@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { checkBrep } from '@barocss/cad';
-import { acceptProposal, previewProposal, proposeBrowserBox, proposeBrowserClosedShell, proposeBrowserCylinder, proposeBrowserExtrude, proposeBrowserHole, runTool, type ChatState } from '../src/chat/tools';
+import { acceptProposal, dispatchTool, previewProposal, proposeBrowserBox, proposeBrowserBoxWidth, proposeBrowserClosedShell, proposeBrowserCylinder, proposeBrowserExtrude, proposeBrowserHole, runTool, type ChatState } from '../src/chat/tools';
 import { emptyDoc, withNode, type StudioDoc } from '../src/engine/doc';
 import { evaluatePart, partBreps } from '../src/engine/evaluate';
 import { canonical, revisionOf } from '../src/util/revision';
@@ -307,4 +307,43 @@ test('browser Extrude stages one exact value change for the user to approve', as
   assert.ok('state' in applied);
   assert.equal(applied.state.bodies[0].volume, 18000);
   assert.equal(applied.state.doc.proposals?.at(-1)?.decided?.by, 'user');
+});
+
+test('browser Box width resolves both reference X sides and requires explicit approval', async () => {
+  let stock: ChatState = { doc: emptyDoc(), bodies: [] };
+  for (const values of [
+    { x: 2.25, y: -4.5, z: 2.125, w: 12, d: 8, h: 6 },
+    { x: 32.75, y: 9, z: -2, w: 7, d: 5, h: 4 },
+  ]) {
+    const authored = await dispatchTool(stock, 'features', { action: 'command', command: 'box', values }, evaluate);
+    assert.ok(authored.changed && !authored.isError, authored.content);
+    stock = authored.state;
+  }
+  const args = { body: 'b1', referenceBody: 'b3', referenceSide: 'left' as const, expectedRevision: revisionOf(stock.doc) };
+  for (const bad of [{ ...args, body: 'b3' }, { ...args, referenceBody: 'b1' }, { ...args, expectedRevision: '0000000000000000' }]) {
+    const refusal = await proposeBrowserBoxWidth(stock, bad, neverEvaluate);
+    assert.ok(refusal.isError && !refusal.changed);
+    assert.equal(refusal.state, stock);
+  }
+  for (const [referenceSide, targetX] of [['left', 32.75], ['right', 39.75]] as const) {
+    const staged = await proposeBrowserBoxWidth(stock, { ...args, referenceSide }, evaluate);
+    assert.ok(staged.changed && !staged.isError, staged.content);
+    assert.equal(staged.state.doc.nodes, stock.doc.nodes);
+    const proposal = staged.state.doc.proposals?.at(-1);
+    assert.ok(proposal && proposal.status === 'open');
+    assert.equal(proposal.by.agent, 'browser');
+    const secondGrant = await proposeBrowserBoxWidth(staged.state, args, neverEvaluate);
+    assert.ok(secondGrant.isError && !secondGrant.changed);
+    assert.ok('error' in await acceptProposal(staged.state, proposal.id, neverEvaluate, { by: { agent: 'chat' } }));
+    const approved = await acceptProposal(staged.state, proposal.id, evaluate);
+    assert.ok('state' in approved);
+    const { doc, bodies } = approved.state;
+    assert.deepEqual(doc.nodes.slice(2), stock.doc.nodes.slice(2));
+    assert.deepEqual(partBreps(doc)[1], partBreps(stock.doc)[1]);
+    assert.ok(isEditableBox(doc.nodes, 0) && isEditableBox(doc.nodes, 2));
+    const result = bodies.find(b => b.key === 'b1');
+    assert.equal(result?.mesh.bounds.min[0], 2.25);
+    assert.equal(result?.mesh.bounds.max[0], targetX);
+    assert.ok(Math.abs((result?.volume ?? 0) - (targetX - 2.25) * 8 * 6) < 1e-9);
+  }
 });

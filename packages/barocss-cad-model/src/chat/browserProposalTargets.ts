@@ -1,5 +1,7 @@
 import { CadPartLimits, ExtrudedProfileLimits } from '@barocss/cad';
 import { isEditableBox, isEditableCylinder } from '../app/editCommand';
+import { nativeSolidLine } from '../app/nativeSolidLine';
+import { isOriginalBoxCorner, originalBox, type OriginalBox } from '../app/originalBoxCorners';
 import type { StudioDoc } from '../engine/doc';
 import type { BodyResult } from '../engine/evaluate';
 import { featureId } from '../engine/ids';
@@ -90,4 +92,47 @@ export function browserHoleTarget(doc: StudioDoc, bodies: readonly BodyResult[])
   if (!target) return;
   const { body, face, radius, center } = target;
   return { body, face, radius, center };
+}
+
+export const browserBoxReferenceSides = ['left', 'right'] as const;
+export type BrowserBoxReferenceSide = typeof browserBoxReferenceSides[number];
+
+export function isBrowserBoxReferenceSide(value: unknown): value is BrowserBoxReferenceSide {
+  return value === 'left' || value === 'right';
+}
+
+/** The browser can share this operation only for the two current original authored Boxes. */
+export function browserBoxWidthTargets(doc: StudioDoc, bodies: readonly BodyResult[]) {
+  if (doc.nodes.length !== 4 || bodies.length !== 2 || Object.keys(doc.outputs).length !== 2 || doc.instances?.length
+    || doc.direct || doc.proposals?.some(p => p.status === 'open')) return;
+  const first = bodies.find(body => body.ref?.node === 1), second = bodies.find(body => body.ref?.node === 3);
+  const source = originalBox(doc.nodes, 0), reference = originalBox(doc.nodes, 2);
+  if (!first || !second || first.key === second.key || !source || !reference) return;
+  if (first.ref?.side !== 'solid' || second.ref?.side !== 'solid' || doc.outputs[first.key]?.node !== 1
+    || doc.outputs[second.key]?.node !== 3 || doc.outputs[first.key].side !== 'solid' || doc.outputs[second.key].side !== 'solid') return;
+  return { first, second, source, reference };
+}
+
+function nativeBoxCornerOnX(body: BodyResult, box: OriginalBox, x: number) {
+  for (const [index, candidate] of body.mesh.edges.entries()) {
+    if (candidate.a[0] !== x && candidate.b[0] !== x) continue;
+    const edge = nativeSolidLine(body, index);
+    if (!edge) continue;
+    if (edge.a[0] === x && isOriginalBoxCorner(box, edge.a)) return { edge: edge.names[0], endpoint: 'from' };
+    if (edge.b[0] === x && isOriginalBoxCorner(box, edge.b)) return { edge: edge.names[0], endpoint: 'to' };
+  }
+}
+
+export function browserBoxWidthValues(doc: StudioDoc, bodies: readonly BodyResult[], body: string,
+  referenceBody: string, side: BrowserBoxReferenceSide) {
+  const targets = browserBoxWidthTargets(doc, bodies);
+  if (!targets || targets.first.key !== body || targets.second.key !== referenceBody || !isBrowserBoxReferenceSide(side)) return;
+  const sourceX = targets.source.sketch.max[0], fixedX = targets.source.sketch.min[0];
+  const targetX = (side === 'left' ? targets.reference.sketch.min : targets.reference.sketch.max)[0];
+  if (typeof sourceX !== 'number' || typeof fixedX !== 'number' || typeof targetX !== 'number'
+    || targetX === sourceX || !validBoxDimension(targetX - fixedX)) return;
+  const source = nativeBoxCornerOnX(targets.first, targets.source, sourceX);
+  const reference = nativeBoxCornerOnX(targets.second, targets.reference, targetX);
+  if (source && reference) return { targetX, values: { boxVertexEdge: source.edge, boxVertexEndpoint: source.endpoint,
+    boxTargetVertexEdge: reference.edge, boxTargetVertexEndpoint: reference.endpoint } };
 }

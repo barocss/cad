@@ -1,13 +1,13 @@
 # CAD roadmap — current status and execution order
 
-Updated 2026-11-29 · Priority authority: D520 · Latest delivery: D2260 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
+Updated 2026-11-29 · Priority authority: D520 · Latest delivery: D2261 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
 
 This is the only current status index. Detailed tracks define acceptance; the 34 stable row pages retain scope and issue navigation. Immutable decision notes retain results. Do not append chronological status paragraphs here. [D520 decision](notes/cad-roadmap-replan-2026-11-04/README.md) supersedes D445 execution order and historical next-item text, while retaining its safeguards and bounded proofs.
 
 ## Now and next
 
-- **Current position:** [D2260](notes/drawing-tolerance-pdf-closeout-2026-11-29/README.md), P2 rows 11 and 25. The original symmetric tolerance and H7 PDF acceptance matches current desktop Studio and independent PDF readback.
-- **Next MAIN:** D2261, P5 rows 04 and 31. For [#204](https://github.com/barocss/cad/issues/204), stage a revision-pinned Box width match from two original shared Box bodies through a one-use browser grant and explicit Studio approval.
+- **Current position:** [D2261](notes/browser-box-width-match-2026-11-29/README.md), P5 rows 04 and 31. A browser Agent with a one-use grant can propose the native two-Box width match. Studio user approval and native fresh Open preserve the reference Box.
+- **Next MAIN:** D2262, P0/P4 rows 12 and 22. Extract accepted document installation from Studio App and verify that edit, Undo/Redo and a later native Open preserve the existing document and work ownership.
 - **Separate follow-ups:** Continue Studio App extraction in cohesive parts with affected desktop checks. [#608 Rendering](https://github.com/barocss/cad/issues/608) stays on HOLD. API inventory drift remains open. The issue tracker records [#126](https://github.com/barocss/cad/issues/126), [#613](https://github.com/barocss/cad/issues/613), [#152](https://github.com/barocss/cad/issues/152) and [#22](https://github.com/barocss/cad/issues/22) as closed.
 - **Active repository:** [barocss/cad](https://github.com/barocss/cad), based on `origin/main`. Fetch before work and preserve unexpected changes. The [migration record](../../../docs/migration/README.md) maps the former `local/cad-dev` history and issue numbers.
 - **Evidence correction:** D482 records2167 PASS/0 FAIL/2 existing SKIP in a later full-kernel run than D433. Neither result is a new full-suite PASS at this audit HEAD. [D482 record](notes/vertical-contact-refusal-2026-11-04/README.md).
