@@ -1,13 +1,13 @@
 # CAD roadmap — current status and execution order
 
-Updated 2026-11-28 · Priority authority: D520 · Latest delivery: D2210 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
+Updated 2026-11-28 · Priority authority: D520 · Latest delivery: D2211 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
 
 This is the only current status index. Detailed tracks define acceptance; the 34 stable row pages retain scope and issue navigation. Immutable decision notes retain results. Do not append chronological status paragraphs here. [D520 decision](notes/cad-roadmap-replan-2026-11-04/README.md) supersedes D445 execution order and historical next-item text, while retaining its safeguards and bounded proofs.
 
 ## Now and next
 
-- **Current position:** [D2210](notes/webmcp-staged-proposal-response-loss-2026-11-28/README.md), P1 rows 04 and 16. A staged browser proposal survived a lost client response and refused retries under its consumed grant. Studio approved and reopened the one proposal.
-- **Next MAIN:** D2211, P1 rows 04 and 16. Verify the development module reload path and check [#204](https://github.com/barocss/cad/issues/204) against its original acceptance scope. Close it if the adapter meets that scope, then return to the next unheld modeling feature.
+- **Current position:** [D2211](notes/webmcp-module-reload-closeout-review-2026-11-28/README.md), P1 rows 04 and 16. Vite module reload resets the grants, and reopen restores the approved revision. [#204](https://github.com/barocss/cad/issues/204) remains open for the original browser autonomy policy.
+- **Next MAIN:** D2212, P5 rows 07 and 30. Evaluate and implement the compatible combination of an independent floor thickness with the existing explicit corner mode on the original top-open L Shell ([#13](https://github.com/barocss/cad/issues/13)).
 - **Separate follow-ups:** Continue Studio App extraction in cohesive parts with affected desktop checks. [#608 Rendering](https://github.com/barocss/cad/issues/608) stays on HOLD. API inventory drift remains open. The issue tracker records [#126](https://github.com/barocss/cad/issues/126), [#613](https://github.com/barocss/cad/issues/613), [#152](https://github.com/barocss/cad/issues/152) and [#22](https://github.com/barocss/cad/issues/22) as closed.
 - **Active repository:** [barocss/cad](https://github.com/barocss/cad), based on `origin/main`. Fetch before work and preserve unexpected changes. The [migration record](../../../docs/migration/README.md) maps the former `local/cad-dev` history and issue numbers.
 - **Evidence correction:** D482 records2167 PASS/0 FAIL/2 existing SKIP in a later full-kernel run than D433. Neither result is a new full-suite PASS at this audit HEAD. [D482 record](notes/vertical-contact-refusal-2026-11-04/README.md).
