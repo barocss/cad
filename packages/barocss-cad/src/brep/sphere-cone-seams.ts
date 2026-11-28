@@ -1,4 +1,4 @@
-import { add, cross, dot, len, scale, sub } from '../core/vec3.js';
+import { add, cross, dot, len, scale, sub, unit } from '../core/vec3.js';
 import type { Revolution } from '../nurbs/surfaces/surface-revolution.js';
 import type { Point, Surface } from '../types.js';
 
@@ -30,6 +30,25 @@ function matchesHalfTurn(surface: Surface, roundoff: number, profile: 'sphere' |
       return weight > 0 && Math.abs(weight / first - HALF_CIRCLE_WEIGHTS[u] * weights[v]) <= UNIT_ROUNDOFF
         && len(sub(p as Point, point(u, v))) <= roundoff;
     }));
+}
+
+/** Recognize the complete rational tensor of a hemisphere, including all interior poles and weights. */
+export function sphericalHalfTurnFrame(surface: Surface): { centre: Point; radius: number; inside: Point; orientation: number } | undefined {
+  if (surface.degreeU !== 2 || surface.degreeV !== 2 || surface.controlPoints.length !== 5
+    || surface.controlPoints.some(row => row.length !== 5)) return;
+  const [bottom, , equator, , top] = surface.controlPoints[0];
+  const radius = len(sub(top, bottom)) / 2;
+  const centre = add(bottom, scale(sub(top, bottom), 0.5));
+  const roundoff = UNIT_ROUNDOFF * Math.max(1, ...surface.controlPoints.flat(2).map(Math.abs));
+  if (!(radius > 0) || !(roundoff < radius * 1e-9)) return;
+  const pole = unit(sub(top, bottom)), start = unit(sub(equator, centre)), inside = unit(sub(surface.controlPoints[2][2], centre));
+  if (Math.abs(dot(pole, start)) > UNIT_ROUNDOFF || Math.abs(dot(pole, inside)) > UNIT_ROUNDOFF
+    || Math.abs(dot(start, inside)) > UNIT_ROUNDOFF) return;
+  const directions = [start, add(start, inside), inside, sub(inside, start), scale(start, -1)];
+  if (!matchesHalfTurn(surface, roundoff, 'sphere', (u, v) =>
+    add(centre, add(scale(pole, radius * SPHERE_HEIGHTS[v]), scale(directions[u], radius * SPHERE_RADII[v]))))) return;
+  const orientation = Math.sign(dot(cross(pole, start), inside));
+  return { centre, radius, inside, orientation };
 }
 
 function sideOf(hull: PatchHull, axis: number, plane: number, roundoff: number): -1 | 0 | 1 {

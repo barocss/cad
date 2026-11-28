@@ -10,6 +10,7 @@ import { transformBrep } from './brep-transform.js';
 import { planar, tessellateBrep } from './brep-tessellate.js';
 import { brepQuadratureIntegrals } from './brep-mass-quadrature.js';
 import { sphericalBoxAreaOf } from './spherical-box-area.js';
+import { sphericalTrimAreas } from './spherical-trim-area.js';
 import { facetIntegrals } from '../mesh/facet-patch.js';
 import type { Brep } from './brep-core.js';
 import type { PrismaticSolid } from '../features/prismatic-solid.js';
@@ -97,12 +98,13 @@ function quadrature(brep: Brep, q: number): LocalQuadrature | null {
   byQ.set(q, out);
   return out;
 }
-function quadratureOf(brep: Brep, q: number): LocalQuadrature | null {
+function quadratureOf(brep: Brep, q: number, sphericalAreas?: ReadonlyMap<string, number>): LocalQuadrature | null {
   try {
     // Miss only: the original identity owns the cache. UV pcurves, knots, weights and tolerances are unchanged.
     const origin = quadratureOrigin(brep), local = origin ? transformBrep(brep, { matrix: [1, 0, 0, 0, 1, 0, 0, 0, 1], offset: [-origin[0], -origin[1], -origin[2]] }) : brep;
     // (Integrated without the tessellation, the result does not depend on q: no second pass.)
-    const coarse = brepQuadratureIntegrals(local, q), fine = coarse?.meshed ? brepQuadratureIntegrals(local, 2 * q) : coarse;
+    const coarse = brepQuadratureIntegrals(local, q, sphericalAreas);
+    const fine = coarse?.meshed ? brepQuadratureIntegrals(local, 2 * q, sphericalAreas) : coarse;
     if (!coarse || !fine) return null;
     if (!coarse.meshed) return { integrals: coarse.integrals, origin };
     // Richardson per kind of meshed face: those with a pole err with the square of the step, the others (their
@@ -119,13 +121,16 @@ function quadratureOf(brep: Brep, q: number): LocalQuadrature | null {
  */
 export function brepSurfaceArea(brep: Brep, options: { readonly segmentsPerQuarter?: number; readonly quadratureSegments?: number } = {}): number {
   assertBoundaryBindings(brep);
-  if (options.quadratureSegments === undefined && options.segmentsPerQuarter === undefined) {
+  const defaults = options.quadratureSegments === undefined && options.segmentsPerQuarter === undefined;
+  if (defaults) {
     const area = sphericalBoxAreaOf(brep);
     if (area !== undefined) return area;
   }
   const poly = polyhedralIntegrals(brep);
   if (poly) return poly[10];
-  const q = options.quadratureSegments ?? 8, Q = q > 0 ? quadrature(brep, q) : null;
+  const q = options.quadratureSegments ?? 8;
+  const sphericalAreas = defaults ? sphericalTrimAreas(brep) : undefined;
+  const Q = sphericalAreas?.size ? quadratureOf(brep, q, sphericalAreas) : q > 0 ? quadrature(brep, q) : null;
   if (Q && Q.integrals[10] > 0) return Q.integrals[10];
   const curved = brep.faces.some(f => f.surface.kind === 'surface' && (f.surface.degreeU > 1 || f.surface.degreeV > 1));
   const mesh = tessellateBrep(brep, { segmentsPerQuarter: curved ? options.segmentsPerQuarter ?? 64 : 1 }), p = mesh.positions, ix = mesh.indices;

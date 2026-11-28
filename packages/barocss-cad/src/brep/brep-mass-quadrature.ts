@@ -146,7 +146,7 @@ type Maps = { loops: Map<string, Brep['loops'][number]>; coedges: Map<string, Br
  * with the square of the step (surfaces with a pole), `cubed` the rest (within `integrals` too); `dropped` the trims' strips
  * left unintegrated (each such face held to its vector area to 1e-9).
  */
-export function brepQuadratureIntegrals(brep: Brep, segmentsPerQuarter: number): { integrals: number[]; meshed: boolean; squared?: number[]; cubed?: number[]; dropped?: number } | null {
+export function brepQuadratureIntegrals(brep: Brep, segmentsPerQuarter: number, sphericalAreas?: ReadonlyMap<string, number>): { integrals: number[]; meshed: boolean; squared?: number[]; cubed?: number[]; dropped?: number } | null {
   assertBoundaryBindings(brep);
   const maps: Maps = { loops: new Map(brep.loops.map(l => [l.id, l])), coedges: new Map(brep.coedges.map(c => [c.id, c])), edges: new Map(brep.edges.map(e => [e.id, e])) };
   const I = Array(11).fill(0) as number[], rest = new Set<string>();
@@ -298,7 +298,9 @@ export function brepQuadratureIntegrals(brep: Brep, segmentsPerQuarter: number):
     dropped += sink.dropped;
     const part = pole ? squared : cubed;
     curved.forEach((x, k) => { part[k] += x; });
-    part[10] += sink.area;
+    const sphericalArea = sphericalAreas?.get(face.faceId);
+    if (sphericalArea === undefined) part[10] += sink.area;
+    else I[10] += sphericalArea;
   }
   return { integrals: fromCentre(I.map((x, k) => x + squared[k] + cubed[k])), meshed: true, squared: fromCentre(squared), cubed: fromCentre(cubed), dropped };
 }

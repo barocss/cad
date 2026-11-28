@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { sphericalTrimAreas } from '../dist/brep/spherical-trim-area.js';
 import { finishBrepEdges, revolveProfile, brepFromPrismatic, prismaticFromProfile, transformBrep, checkBrep, tessellateBrep, brepMassProperties, brepSurfaceArea, BrepError, evaluateCadPart, massPropertiesOf, checkOutput, surfaceAreaOf } from '../dist/index.js';
 import { openEdgesByBody } from '../scripts/rb/stages.mjs';
 
@@ -190,9 +191,9 @@ test('the exact spherical area belongs to the current complete circular cube Fil
     assert.equal(brepSurfaceArea(result), 6 * inner ** 2 + 6 * pi * inner * radius + 4 * pi * radius ** 2);
     const quadrature = brepSurfaceArea(result, { quadratureSegments: 8 });
     assert.ok(!near(quadrature, area, 1e-9));
-    assert.equal(brepSurfaceArea({ ...result }), quadrature);
+    assert.ok(near(brepSurfaceArea({ ...result }), area, 1e-9));
     const moved = transformBrep(result, { matrix: [1, 0, 0, 0, 1, 0, 0, 0, 1], offset: [11, 13, 17] });
-    assert.equal(brepSurfaceArea(moved), brepSurfaceArea(moved, { quadratureSegments: 8 }));
+    assert.ok(near(brepSurfaceArea(moved), area, 1e-9));
   }
   const partial = finishBrepEdges(stock, ['e.side0|e.top', 'e.side1|e.top'], 2, 'fillet', 'm');
   assert.equal(brepSurfaceArea(partial), brepSurfaceArea(partial, { quadratureSegments: 8 }));
@@ -209,10 +210,28 @@ test('a complete unequal cuboid Fillet measures its analytic area without changi
     const exact = brepSurfaceArea(fillet), quadrature = brepSurfaceArea(fillet, { quadratureSegments: 8 });
     assert.ok(near(exact, expected, 1e-9));
     assert.ok(!near(quadrature, expected, 1e-6));
-    assert.equal(brepSurfaceArea({ ...fillet }), quadrature);
+    assert.ok(near(brepSurfaceArea({ ...fillet }), expected, 1e-9));
     const report = checkBrep(fillet, { strict: true });
     assert.ok(report.valid && report.counts.faces === 34);
   }
+});
+
+test('the sphere boundary area requires the entire carrier tensor and each native trim', () => {
+  const stock = prism(rect(0, 0, 30, 20), 12, 'e');
+  const r = 3, fillet = finishBrepEdges(stock, stock.edges.map(edge => edge.name), r, 'fillet', 'f');
+  const areas = sphericalTrimAreas(fillet);
+  assert.equal(areas.size, 16);
+  assert.ok(near([...areas.values()].reduce((sum, area) => sum + area, 0), 4 * pi * r ** 2, 1e-9));
+  const changed = structuredClone(fillet);
+  const face = changed.faces.find(face => areas.has(face.id));
+  face.surface.controlPoints[1][1][0] += 1e-4;
+  assert.equal(sphericalTrimAreas(changed).has(face.id), false);
+
+  const trim = structuredClone(fillet);
+  const loop = trim.loops.find(loop => loop.id === face.loops[0]);
+  const use = trim.coedges.find(use => use.id === loop.coedges[0]);
+  trim.edges.find(edge => edge.id === use.edge).curve.controlPoints[1][0] += 1e-4;
+  assert.equal(sphericalTrimAreas(trim).has(face.id), false);
 });
 
 

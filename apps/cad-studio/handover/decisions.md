@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D2242: [D2242](notes/rounded-step-default-area-2026-11-29/README.md), #16. Integrate the original qualified sphere boundaries for default surface area and verify the two rounded-box STEP replays in Studio.
+
 - D2241: [D2241](notes/blind-drill-cone-projection-2026-11-29/README.md), #775. Bind the native cone at an interior generator point and verify true silhouettes and Top drawing ink.
 
 - D2240: [D2240](notes/agent-cardinal-edge-rotate-2026-11-29/README.md). Reuse exact cardinal-edge admission for a local Agent Rotate proposal and verify approval, fixed endpoints and native project reopen.
