@@ -1,3 +1,4 @@
+import { useStudioDirectCommit } from './state/useStudioDirectCommit';
 import { useStudioSheetPatterns } from './app/useStudioSheetPatterns';
 import { useStudioEvaluatedSource, useStudioModelEvaluation, type RouteEvaluationHandoff, type StudioParameterEdit } from './state/useStudioModelEvaluation';
 import { useStudioWorkerRecovery } from './state/useStudioWorkerRecovery';
@@ -96,7 +97,7 @@ import { useRouteBundleEditor } from './state/useRouteBundleEditor';
 import { prepareCutPatternLaunch } from './app/commandLaunchContext';
 import { prepareStudioFeatureCommand, useStudioCommandEntry } from './app/useStudioCommandEntry';
 import { moveRenderAppearance } from './app/moveRenderAppearance';
-import { curvePatternInputKey, curvePatternDocumentProblem, directCommandDocument, prepareDirectCurveCandidate, type DirectCurveEdit } from './app/directCurveCandidate';
+import { curvePatternInputKey, curvePatternDocumentProblem, directCommandDocument } from './app/directCurveCandidate';
 import { createRoundedInsetHistoryEdit, LINKED_INSET_EXTRUDE } from './app/roundedInsetCommand';
 import { ReferenceDecisions } from './ui/ReferenceDecisions';
 import { useRobotExports } from './robot/useRobotExports';
@@ -122,12 +123,11 @@ import { createStudioAssemblyCommits, createStudioAssemblyFeatureActions } from 
 import type { Active } from './app/commandState';
 import { useStudioShapePlacement } from './app/useStudioShapePlacement';
 import { emptySel, NO_INSTANCES, BROWSER_PLACEMENT, PALETTE_EXTRA } from './app/studioConstants';
-import { routeMessage } from './app/routeSession';
 import { CursorReadout } from './ui/CursorReadout';
 import { revokePersonRowFiles, isPersonRowFiles, type PersonRowFiles } from '@barocss/cad-model/engine/rowFiles';
 import { Profiler, Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties } from 'react';
 import { EngineClient } from './engine/client';
-import { beginWork, createWorkOwnership, finishWork, reserveAcceptedChange, workEditRefusal, type WorkHistory } from './state/workOwnership';
+import { createWorkOwnership, finishWork, reserveAcceptedChange, workEditRefusal, type WorkHistory } from './state/workOwnership';
 import type { OpenScope } from './state/openOwnership';
 import { scheduleProjectOpenFit } from './app/projectOpenFit';
 import { prepareSignedFinishOpen, verifyStoredNativeOpen } from './files/documentFile';
@@ -213,7 +213,6 @@ import { useCageEditor } from './subd/useCageEditor';
 import { SKETCH3D_COMMAND, useSkeletonEditor } from './skeleton/useSkeletonEditor';
 import { SkeletonPanel } from './ui/SkeletonPanel';
 import { RouteBundlePanel } from './ui/RouteBundlePanel';
-import { assertRouteBundleDocument } from '@barocss/cad-model/engine/routeBundle';
 import { loadUserLibraries, setLibraryStore } from '@barocss/cad-model/library/libraries';
 import { browserStore } from './ui/browserStore';
 import { processProfile } from '@barocss/cad-model/library/materials';
@@ -246,7 +245,6 @@ import { resolveShopRows } from '@barocss/cad-model/engine/shopRows';
 import { openAccepted, type InPlaceSession } from './app/editInPlace';
 import { editInPlaceActions } from './app/editInPlaceActions';
 import { BASE } from '@barocss/cad-model/assembly/mates';
-import type { DirectGeometry } from '@barocss/cad-model/engine/direct';
 import { directNow, loadDirect } from '@barocss/cad-model/engine/directModule';
 import { boundsOf } from '@barocss/cad-model/engine/bounds';
 import { defaultRender, type RenderCamera, type RenderSettings } from '@barocss/cad-model/engine/render';
@@ -816,40 +814,17 @@ export function App() {
     setDirty(true);
     return true;
   }, [doc, marker, acceptanceScope]);
-  const stageFeatureCandidate = useCallback((candidate: { next: StudioDoc; input: StudioDoc; failureTitle?: string; roundedInset?: 'create' | 'edit' | 'detach' }, select?: string[]) => {
-    if (bodiesFor !== evaluatedRef.current || !massReady || shownVariant.current) { setToast({ title: candidate.failureTitle ?? 'Direct geometry not changed', hint: 'Wait for the accepted part and its mass results to finish evaluating.', detail: '' }); return; }
-    const edit = { ...candidate, kind: 'direct' as const, request: ++parameterRequest.current, base: doc, baseInput: evaluatedRef.current,
-      accept: (accepted: StudioDoc) => { if (commit(accepted, false, false, !!candidate.roundedInset) && select) setDirectSel(select); } };
-    // Reserve before React renders so a second edit cannot change the accepted input.
-    workOwnership.current = beginWork(workOwnership.current, doc, candidate.input, true);
-    parameterEditNow.current = edit; setParameterEdit(edit); setBusy(true);
-  }, [doc, bodiesFor, massReady, commit]);
+  const { stageFeatureCandidate, commitDirect } = useStudioDirectCommit({
+    model: { doc, marker, acceptanceScope, bodiesFor, fresh, busy, massReady, workerFailure },
+    current: { doc: docNow, evaluated: evaluatedRef, shown: shownDocNow, marker: markerNow, variant: shownVariant,
+      inPlace: inPlaceNow, active: activeStore.get, opening: project.opening, ownsEvaluatedSource, referenceProblems: referenceProblems.current },
+    work: { ownership: workOwnership, request: parameterRequest, edit: parameterEditNow, setEdit: setParameterEdit, setBusy },
+    changes: { canChangeDocument, commit, pushUndo, setDoc, setDirty, setDirectSel, setToast },
+  });
   const applyRoundedInsetEdit = createRoundedInsetHistoryEdit({
     doc, index: editNode, canChangeDocument, ready: () => markerNow.current === null && !shownVariant.current && fresh && !busy,
     stage: stageFeatureCandidate, notice: setToast,
   });
-  /** One undoable change of the direct geometry (the model stays as evaluated). */
-  const commitDirect = useCallback((next: DirectGeometry, select?: string[], edit?: DirectCurveEdit) => {
-    if (!canChangeDocument()) return false;
-    try { assertRouteBundleDocument({ ...doc, direct: next }); }
-    catch (error) { setToast({ title: 'Direct geometry not changed', hint: `${routeMessage(error)} Detach the route bundle before editing a bound member.`, detail: '' }); return false; }
-    try {
-      // The advisory belongs to the current, displayed Model, not a stale or rolled-back authoring snapshot.
-      const currentEdit = edit && fresh && !busy && !workerFailure && docNow.current === doc && shownDocNow.current === doc
-        && ownsEvaluatedSource() && markerNow.current === null && !shownVariant.current && !inPlaceNow.current
-        && !activeStore.get() && !parameterEditNow.current && !project.opening() && !referenceProblems.current.get(doc)?.length
-        ? edit : undefined;
-      const candidate = prepareDirectCurveCandidate(doc, next, currentEdit);
-      if (candidate) {
-        stageFeatureCandidate(candidate, select);
-        return false;
-      }
-    } catch (error) { setToast({ title: 'Direct geometry not changed', hint: routeMessage(error), detail: '' }); return false; }
-    pushUndo();
-    if (!setDoc({ ...doc, direct: next })) return false; setDirty(true);
-    if (select) setDirectSel(select);
-    return true;
-  }, [doc, marker, acceptanceScope, stageFeatureCandidate, fresh, busy, workerFailure, ownsEvaluatedSource, activeStore, project.opening]);
   // The direct tools load when the document first has direct geometry (state: re-render once they are in).
   const [directReady, setDirectReady] = useState(() => !!directNow());
   useEffect(() => { if (doc.direct?.objects.length && !directReady) void loadDirect().then(() => setDirectReady(true)); }, [doc.direct, directReady]);
