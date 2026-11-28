@@ -198,3 +198,42 @@ test('a separate ceiling binds the original bottom, carries History and rejects 
   assert.ok(Math.abs(outcome.state.bodies[0].volume! - (12000 - 336 * 17)) < 1e-7);
   assert.ok(Math.abs(rebuilt.bodies[0].volume! - (12000 - 336 * 16)) < 1e-7);
 });
+
+test('a closed L Shell edits both cap thicknesses and reviews the same native result through the Agent', async () => {
+  const evaluated = evaluateDoc(doc, 1);
+  assert.ok(evaluated.ok);
+  const selection = { bodies: [0], faces: [], edges: [] };
+  const ctx = { doc, bodies: evaluated.bodies, selection };
+  const values = { wallMode: 'separate-caps', t: 2, floorThickness: 3, ceilingThickness: 4, join: 'sharp' };
+  const fields = shell.fields!(ctx, values);
+  assert.deepEqual(fields.map(field => field.key), ['wallMode', 't', 'join', 'floorThickness', 'ceilingThickness']);
+  const built = shell.build!(ctx, values), node = built.nodes[2];
+  assert.ok(node.kind === 'shell');
+  assert.deepEqual([node.open, node.floorThickness, node.ceilingThickness], [[], 3, 4]);
+  const history = editFields(built.nodes, 2);
+  const floor = history.find(field => field.key === 'floorThickness');
+  const ceiling = history.find(field => field.key === 'ceilingThickness');
+  assert.ok(floor?.kind === 'number' && ceiling?.kind === 'number');
+  const edited = { ...built, nodes: floor.set(ceiling.set(built.nodes, 5), 4) };
+  const reopened = readStudioDoc(JSON.stringify(edited));
+  assert.ok('doc' in reopened && reopened.doc.schema === doc.schema);
+  assert.deepEqual(reopened.doc.nodes[2], { ...node, floorThickness: 4, ceilingThickness: 5 });
+  const result = evaluateDoc(reopened.doc, 2);
+  assert.ok(result.ok && Math.abs(result.bodies[0].volume! - (12000 - 336 * 11)) < 1e-7);
+  const invalid = { ...built, nodes: [...doc.nodes, { ...node, open: ['n1.top'] }] };
+  assert.ok('error' in readStudioDoc(JSON.stringify(invalid)));
+
+  const state = { doc, bodies: evaluated.bodies };
+  const request = { action: 'command', command: 'shell', bodies: ['b1'], values, expectedRevision: revisionOf(doc) };
+  for (const args of [{ ...request, expectedRevision: undefined }, { ...request, expectedRevision: '0'.repeat(16) },
+    { ...request, faces: ['n1.top'] }, { ...request, bodies: ['b1', 'b1'] },
+    { ...request, values: { ...values, ceilingThickness: '4' } }, { ...request, values: { ...values, floorThickness: undefined } }]) {
+    const refused = await dispatchTool(state, 'features', args, async () => assert.fail('an unqualified cap pair must not evaluate'));
+    assert.ok(refused.isError && !refused.changed, refused.content);
+    assert.equal(refused.state.doc, doc);
+  }
+  const outcome = await dispatchTool(state, 'features', request, async next => evaluateDoc(next, 2));
+  assert.ok(!outcome.isError && outcome.changed, outcome.content);
+  assert.deepEqual(outcome.state.doc.nodes[2], node);
+  assert.ok(Math.abs(outcome.state.bodies[0].volume! - (12000 - 336 * 13)) < 1e-7);
+});

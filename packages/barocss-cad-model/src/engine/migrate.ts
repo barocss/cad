@@ -85,7 +85,8 @@ export function readStudioDoc(text: string): { doc: StudioDoc; notes: string[] }
       return { error: 'A separate Shell floor needs a positive finite thickness.' };
     }
     if (record(node) && node.kind === 'shell' && Object.hasOwn(node, 'ceilingThickness')) {
-      if (Object.hasOwn(node, 'floorThickness')) return { error: 'A Shell can set one separate cap thickness.' };
+      if (Object.hasOwn(node, 'floorThickness') && (!Array.isArray(node.open) || node.open.length))
+        return { error: 'A Shell with separate floor and ceiling thickness needs no open faces.' };
       if (typeof node.ceilingThickness !== 'number' || !Number.isFinite(node.ceilingThickness) || node.ceilingThickness <= 0)
         return { error: 'A separate Shell ceiling needs a positive finite thickness.' };
     }

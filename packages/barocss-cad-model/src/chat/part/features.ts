@@ -154,9 +154,9 @@ export const COMMAND_DOCS: Record<string, { selection: string; values: Record<st
   shell: { selection: 'Choose distinct faces to open on one body, or choose one body for a closed hollow. For an original full capsule Revolve, use one or both complete hemisphere names from query.summary. Pass expectedRevision from query.rebuild for the reviewed part.', values: {
     t: 'uniform wall thickness in mm',
     join: 'default | sharp | arc. Sharp and Round need expectedRevision from query.rebuild and one exact original upright L body ID or its single original end cap name.',
-    wallMode: 'uniform | per-face | separate-floor | separate-ceiling. Give expectedRevision from query.rebuild. For a closed rectangular Shell, name its original body and supply all six thicknesses. For an open rectangular Shell, name one or two original faces, three original faces sharing a corner or including an opposite pair, or four original faces leaving two adjacent walls. Give every kept wall thickness. For separate-floor, name the single exact original top cap of an upright L extrusion and supply t and floorThickness. For separate-ceiling, name the single exact original bottom cap and supply t and ceilingThickness. The inner corner can be Default, Sharp, or Round.',
-    floorThickness: 'positive literal floor thickness in mm for separate-floor mode',
-    ceilingThickness: 'positive literal ceiling thickness in mm for separate-ceiling mode',
+    wallMode: 'uniform | per-face | separate-floor | separate-ceiling | separate-caps. Give expectedRevision from query.rebuild. For a closed rectangular Shell, name its original body and supply all six thicknesses. For an open rectangular Shell, name one or two original faces, three original faces sharing a corner or including an opposite pair, or four original faces leaving two adjacent walls. Give every kept wall thickness. For separate-floor, name the single exact original top cap of an upright L extrusion and supply t and floorThickness. For separate-ceiling, name the single exact original bottom cap and supply t and ceilingThickness. For separate-caps, name one original upright L body and supply t, floorThickness, and ceilingThickness. The inner corner can be Default, Sharp, or Round.',
+    floorThickness: 'positive literal floor thickness in mm for separate-floor or separate-caps',
+    ceilingThickness: 'positive literal ceiling thickness in mm for separate-ceiling or separate-caps',
     bottomWall: 'bottom thickness in mm', frontWall: 'front thickness in mm', rightWall: 'right thickness in mm',
     backWall: 'back thickness in mm', leftWall: 'left thickness in mm', topWall: 'top thickness in mm',
   } },
@@ -275,6 +275,7 @@ async function runCommandTool(state: ChatState, args: Record<string, unknown>, e
   const point = Array.isArray(args.point) && args.point.length === 3 ? args.point.map(Number) as [number, number, number] : undefined;
   let given = isObj(args.values) ? args.values : {};
   const perFaceShell = cmd.id === 'shell' && given.wallMode === 'per-face';
+  const separateShellCaps = cmd.id === 'shell' && given.wallMode === 'separate-caps';
   const separateShellCap = cmd.id === 'shell'
     ? given.wallMode === 'separate-floor' ? 'floor' : given.wallMode === 'separate-ceiling' ? 'ceiling' : undefined
     : undefined;
@@ -285,6 +286,13 @@ async function runCommandTool(state: ChatState, args: Record<string, unknown>, e
       !canSetAgentShellCap({ doc: state.doc, bodies: state.bodies, selection }, args.faces, separateShellCap)) {
       return fail(state, `A separate Shell ${separateShellCap} needs a revision, one exact original upright L ${opening} face and a positive numeric ${separateShellCap} thickness.`, { code: 'COMMAND_INPUT' });
     }
+  }
+  if (separateShellCaps) {
+    const caps = [given.floorThickness, given.ceilingThickness];
+    if (state.partOf || args.expectedRevision === undefined || args.faces !== undefined || args.edges !== undefined || args.point !== undefined
+      || caps.some(value => typeof value !== 'number' || !Number.isFinite(value) || value <= 0)
+      || !canSetAgentShellCorner({ doc: state.doc, bodies: state.bodies, selection }, args.bodies, undefined))
+      return fail(state, 'Separate Shell floor and ceiling need a revision, one exact original upright L body ID and two positive numeric thicknesses.', { code: 'COMMAND_INPUT' });
   }
   if (cmd.id === 'shell' && (given.join === 'sharp' || given.join === 'arc')) {
     if (args.expectedRevision === undefined)
@@ -352,7 +360,7 @@ async function runCommandTool(state: ChatState, args: Record<string, unknown>, e
   const avail = cmd.available(ctx);
   if (!avail.ok) return fail(state, `${cmd.label} can’t run: ${avail.reason}`);
   const fieldMode: Values | undefined = cmd.id === 'sweep-curve' ? { representation: String(given.representation) }
-    : perFaceShell || separateShellCap ? { wallMode: String(given.wallMode) } : undefined;
+    : perFaceShell || separateShellCap || separateShellCaps ? { wallMode: String(given.wallMode) } : undefined;
   const fields = cmd.fields?.(ctx, fieldMode) ?? [];
   const bad = Object.keys(given).filter(k => !fields.some(f => f.key === k));
   if (bad.length) return fail(state, `${cmd.label} has no value ${bad.map(k => `"${k}"`).join(', ')}; its values are ${fields.map(f => `${f.key} (${f.label})`).join(', ') || 'none'}.`);
