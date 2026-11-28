@@ -251,11 +251,11 @@ test('restoring the original ends keeps the exact coordinates lost by the rotate
   }
 });
 
-test('rotated quarter admission refuses a one-ULP mismatch, major arcs and both collapse directions', () => {
+test('rotated quarter admission refuses a one-ULP mismatch, nonquadrant major arcs and both collapse directions', () => {
   const center = [0, 0], start = [8, 6], end = [-6, 8];
   const nearRight = [-6 + 4 * Number.EPSILON, 8];
   assert.equal(Math.hypot(...nearRight), Math.hypot(...start));
-  for (const profile of [quadrant(center, start, nearRight), quadrant(center, start, end, 'cw')])
+  for (const profile of [quadrant(center, start, nearRight), quadrant(center, start, [-8, 6], 'cw')])
     assert.throws(() => make(10, { profile }), /not tangent/);
   for (const draft of [30, -70])
     assert.throws(() => make(draft, { profile: quadrant(center, start, end) }), /closes the quarter-disk/);
@@ -275,4 +275,79 @@ test('the cardinal quarter and established oblique chord retain their exact nati
     assert.equal(nativeHash(make(draft)), quarterHash);
     assert.equal(nativeHash(make(draft, { profile: chord, z1: 50 })), chordHash);
   }
+});
+
+function threeQuarterIntegral(slope, steps) {
+  const sums = [0, 0, 0];
+  for (let i = 0; i <= steps; i++) {
+    const z = 10 * i / steps, d = slope * z, r = 10 - d, q = Math.sqrt(r ** 2 - d ** 2);
+    // Subtract the circular corner on x >= -d and y <= d from the whole disk.
+    const notchArea = r ** 2 * (Math.PI / 4 + Math.atan2(d, q)) + d * (d + q);
+    const area = Math.PI * r ** 2 - notchArea;
+    const notchMoment = q ** 3 / 3 + d * q ** 2 / 2 - d ** 3 / 6;
+    const w = i === 0 || i === steps ? 1 : i % 2 ? 4 : 2;
+    sums[0] += w * area;
+    sums[1] -= w * notchMoment;
+    sums[2] += w * z * area;
+  }
+  return sums.map(sum => sum * 10 / (3 * steps));
+}
+
+test('the 270 degree sector drafts both signs with a reflex cap and exact radial seams', () => {
+  const source = quadrant([0, 0], [10, 0], [0, -10]);
+  for (const draft of [10, -30, -60]) {
+    const brep = make(draft, { profile: source }), slope = Math.tan(draft * Math.PI / 180);
+    const report = checkBrep(brep, { strict: true });
+    assert.ok(report.valid, report.issues.join('\n'));
+    assert.deepEqual(report.counts, { bodies: 1, shells: 1, faces: 6, loops: 6, coedges: 24, edges: 12, vertices: 8 });
+    assert.equal(report.topology[0].genus, 0);
+    for (const segmentsPerQuarter of [4, 8, 16])
+      assert.equal(openEdgesByBody(brep, tessellateBrep(brep, { segmentsPerQuarter })), 0);
+
+    for (const [name, axis, sign] of [['e.side0|e.side1#1', 1, 1], ['e.side1#2|e.side2', 0, -1]]) {
+      const { curve } = brep.edges.find(edge => edge.name === name);
+      assert.deepEqual([curve.degree, curve.weights], [2, [1, 1, 1]]);
+      for (let i = 0; i <= 24; i++) {
+        const p = evaluateCurve(curve, i / 24), d = slope * p[2];
+        near(p[axis], sign * d);
+        near(Math.hypot(p[0], p[1]), 10 - d);
+      }
+    }
+    const corner = brep.edges.find(edge => edge.name === 'e.side0|e.side2');
+    const middle = evaluateCurve(corner.curve, 0.5);
+    near(middle[0], -5 * slope);
+    near(middle[1], 5 * slope);
+
+    const charts = brep.faces.filter(face => face.name.startsWith('e.side1#'));
+    assert.deepEqual(charts.map(face => face.surface.controlPoints.length), [5, 5]);
+    for (const { surface } of charts) for (const u of [0.125, 0.375, 0.5, 0.625, 0.875]) for (const v of [0, 0.4, 1]) {
+      const [x, y, z] = evaluateSurface(surface, u, v);
+      near(Math.hypot(x, y), 10 - slope * z);
+    }
+    const [volume, xMoment, zMoment] = threeQuarterIntegral(slope, 8192);
+    [volume, xMoment, zMoment].forEach((value, axis) => near(value, threeQuarterIntegral(slope, 4096)[axis], 1e-7));
+    const mass = brepMassProperties(brep, 1);
+    near(mass.volume, volume, volume * 1e-10);
+    mass.centroid.forEach((value, axis) => near(value, [xMoment / volume, -xMoment / volume, zMoment / volume][axis], 1e-8));
+  }
+});
+
+test('three-quarter Draft retains exact rotated authored endpoints and refuses unsupported or collapsed input', () => {
+  const source = quadrant([2, -3], [10, 3], [8, -11]);
+  const reversed = source.map((segment, i) => ({
+    ...segment, start: source[(i + 1) % source.length].start, ...(segment.kind === 'arc' ? { direction: 'cw' } : {}),
+  })).reverse();
+  const sideTags = ['first', 'arc', 'last'];
+  for (const [profile, tags] of [[source, sideTags], [reversed, [...sideTags].reverse()]]) {
+    const brep = make(-30, { profile, sideTags: tags, z0: 2, z1: 12 });
+    assert.ok(checkBrep(brep, { strict: true }).valid);
+    assert.deepEqual(brep.faces.map(face => face.name).sort(), [
+      'e.bottom', 'e.side[arc]#1', 'e.side[arc]#2', 'e.side[first]', 'e.side[last]', 'e.top',
+    ]);
+    for (const { start } of profile)
+      assert.ok(brep.vertices.some(({ point }) => point[0] === start[0] && point[1] === start[1] && point[2] === 2));
+  }
+  const next = quadrant([0, 0], [8, 6], [6, -8]);
+  for (const draft of [23, -68]) assert.throws(() => make(draft, { profile: next }), /closes the three-quarter-disk/);
+  assert.throws(() => make(10, { profile: quadrant([0, 0], [8, 6], [6 + 4 * Number.EPSILON, -8]) }), /not tangent/);
 });

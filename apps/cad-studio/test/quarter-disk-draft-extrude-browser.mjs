@@ -3,13 +3,14 @@ import { createFlow } from './flow-helper.mjs';
 
 const baseline = process.argv.includes('--baseline');
 const obtuse = process.argv.includes('--obtuse');
+const reflex = process.argv.includes('--reflex');
 const rotated = process.argv.includes('--rotated') && !obtuse;
 const acute = process.argv.includes('--acute');
-const caseName = obtuse ? 'obtuse-sector' : acute ? 'acute-sector' : 'quarter-disk';
+const caseName = reflex ? 'three-quarter-disk' : obtuse ? 'obtuse-sector' : acute ? 'acute-sector' : 'quarter-disk';
 const pins = [
   'apps/cad-studio/test/quarter-disk-draft-extrude-browser.mjs',
   'packages/barocss-cad/src/features/drafted-extrusion.ts',
-  ...(!baseline || rotated ? ['packages/barocss-cad/src/features/drafted-quarter-disk.ts'] : []),
+  ...(!baseline || rotated || reflex ? ['packages/barocss-cad/src/features/drafted-quarter-disk.ts'] : []),
   'packages/barocss-cad/src/part/part-profile-solid.ts',
 ];
 const f = await createFlow({
@@ -46,11 +47,11 @@ console.log(JSON.stringify({
 });
 const radius = 10, height = 10;
 const arcStart = rotated ? [8, 6] : [10, 0];
-const arcEnd = obtuse ? [-6, 8] : acute ? (rotated ? [0, 10] : [6, 8]) : (rotated ? [-6, 8] : [0, 10]);
-const halfAngle = obtuse ? Math.atan2(4, -3) / 2 : acute ? Math.atan2(4, 3) / 2 : Math.PI / 4;
-const cotangent = obtuse ? 0.5 : acute ? 2 : 1;
-const lastWallDistance = (x, y) => obtuse ? 0.8 * x + 0.6 * y : acute ? 0.8 * x - 0.6 * y : x;
-const outward = obtuse ? -45 : -10;
+const arcEnd = reflex ? (rotated ? [6, -8] : [0, -10]) : obtuse ? [-6, 8] : acute ? (rotated ? [0, 10] : [6, 8]) : (rotated ? [-6, 8] : [0, 10]);
+const halfAngle = reflex ? 3 * Math.PI / 4 : obtuse ? Math.atan2(4, -3) / 2 : acute ? Math.atan2(4, 3) / 2 : Math.PI / 4;
+const cotangent = reflex ? -1 : obtuse ? 0.5 : acute ? 2 : 1;
+const lastWallDistance = (x, y) => reflex ? -x : obtuse ? 0.8 * x + 0.6 * y : acute ? 0.8 * x - 0.6 * y : x;
+const outward = reflex ? -30 : obtuse ? -45 : -10;
 const inSketchFrame = ([x, y, z]) => rotated ? [(4 * x + 3 * y) / 5, (-3 * x + 4 * y) / 5, z] : [x, y, z];
 const seed = {
   format: 'barocss-cad-model', schema: 3, units: 'mm', parameters: {}, nextId: 1,
@@ -89,7 +90,7 @@ async function check(label, doc, angle) {
   assert.equal(result.faces.filter(face => face.kind === 'plane').length, 4);
   const cone = result.faces.filter(face => face.kind !== 'plane');
   assert.equal(cone.length, 2);
-  if (obtuse && angle === outward) assert.deepEqual(cone.map(face => face.uPoles), [5, 5]);
+  if (reflex || (obtuse && angle === outward)) assert.deepEqual(cone.map(face => face.uPoles), [5, 5]);
   for (const face of cone) for (const [x, y, z] of face.points) near(Math.hypot(x, y), radius - slope * z);
   const joins = result.seams.filter(seam => seam.degree === 2);
   assert.equal(joins.length, 2);
@@ -152,7 +153,7 @@ await f.run(async () => {
   f.phase = 'Refuse collapse and edit to a signed outward Draft';
   await f.openFeatureEditor(1, 'Draft Extrude');
   const editor = f.editor(), draft = field('Draft', editor);
-  const collapseAngles = obtuse ? [[30, 'inward'], [-84, 'outward']] : acute ? [[20, 'inward'], [-40, 'outward']] : [[30, '']];
+  const collapseAngles = reflex ? [[30, 'inward'], [-70, 'outward']] : obtuse ? [[30, 'inward'], [-84, 'outward']] : acute ? [[20, 'inward'], [-40, 'outward']] : [[30, '']];
   for (const [angle, suffix] of collapseAngles) {
     await draft.fill(String(angle));
     await button('Apply', editor).click();

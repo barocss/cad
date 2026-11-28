@@ -1,13 +1,13 @@
 # CAD roadmap — current status and execution order
 
-Updated 2026-11-28 · Priority authority: D520 · Latest delivery: D2148 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
+Updated 2026-11-28 · Priority authority: D520 · Latest delivery: D2149 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
 
 This is the only current status index. Detailed tracks define acceptance; the 34 stable row pages retain scope and issue navigation. Immutable decision notes retain results. Do not append chronological status paragraphs here. [D520 decision](notes/cad-roadmap-replan-2026-11-04/README.md) supersedes D445 execution order and historical next-item text, while retaining its safeguards and bounded proofs.
 
 ## Now and next
 
-- **Current position:** [D2148](notes/studio-working-version-comparison-2026-11-28/README.md), P4 row 12. The saved-to-working geometric comparison lives outside App. Studio verifies saved-versus-working target selection, Hide, Project Open and unchanged native version bytes.
-- **Next MAIN:** D2149, P5 rows 07, 16 and 30. Extend exact signed Draft Extrude to an original 270° circular sector with two perpendicular radial walls. Verify native joins, refusal, History and Studio Open ([#14](https://github.com/barocss/cad/issues/14)).
+- **Current position:** [D2149](notes/three-quarter-disk-draft-2026-11-28/README.md), P5 rows 07, 16 and 30. Exact signed Draft Extrude supports a 270° circular sector. Studio verifies signed edits and native Open with two exact radial joins ([#14](https://github.com/barocss/cad/issues/14)).
+- **Next MAIN:** D2150, P5 rows 07, 16 and 30. Extend signed Draft Extrude to exact nonorthogonal major circular sectors between 180° and 270°, starting with the 233.13° complement of the qualified obtuse minor arc ([#14](https://github.com/barocss/cad/issues/14)).
 - **Separate follow-ups:** Continue Studio App extraction in cohesive parts with affected desktop checks. [#608 Rendering](https://github.com/barocss/cad/issues/608) stays on HOLD. API inventory drift remains open. The issue tracker records [#126](https://github.com/barocss/cad/issues/126), [#613](https://github.com/barocss/cad/issues/613), [#152](https://github.com/barocss/cad/issues/152) and [#22](https://github.com/barocss/cad/issues/22) as closed.
 - **Active repository:** [barocss/cad](https://github.com/barocss/cad), based on `origin/main`. Fetch before work and preserve unexpected changes. The [migration record](../../../docs/migration/README.md) maps the former `local/cad-dev` history and issue numbers.
 - **Evidence correction:** D482 records2167 PASS/0 FAIL/2 existing SKIP in a later full-kernel run than D433. Neither result is a new full-suite PASS at this audit HEAD. [D482 record](notes/vertical-contact-refusal-2026-11-04/README.md).
