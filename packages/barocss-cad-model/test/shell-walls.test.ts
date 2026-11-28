@@ -282,7 +282,7 @@ test('a corner Shell preserves three original opening names and refuses ambiguou
   }
   const duplicate = { ...ctx, selection: { ...ctx.selection, faces: picks(['n1.top', 'n1.side1', 'n1.top']) } };
   assert.equal(shell.fields?.(duplicate, values).some(field => field.key === 'wallMode'), false);
-  assert.throws(() => shell.build!(duplicate, values), /three distinct faces/);
+  assert.throws(() => shell.build!(duplicate, values), /four distinct faces/);
   const staleSignature = { ...feature, sigs: { ...feature.sigs, 'n1.side0': feature.sigs['n1.side2'], 'n1.side2': feature.sigs['n1.side0'] } };
   const stale = evaluateDoc({ ...built, nodes: [...built.nodes.slice(0, 2), staleSignature] }, 3);
   assert.ok(!stale.ok && /REFERENCE_MOVED/.test(stale.error.detail));
@@ -334,4 +334,51 @@ test('three openings with an opposite pair have one canonical manual and revisio
   assert.deepEqual(tool.state.doc.nodes[2], feature);
   const collapse = await dispatchTool(state, 'features', { ...args, values: { ...values, rightWall: 37 } }, evaluate);
   assert.ok(collapse.isError && !collapse.changed && collapse.state.doc === doc, collapse.content);
+});
+
+test('four original openings retain two named walls in manual, native file and local Agent paths', async () => {
+  const doc = rectanglePart(40, 30, 20), original = evaluateDoc(doc, 1);
+  assert.ok(original.ok);
+  const shell = commandById('shell')!;
+  const names = ['n1.bottom', 'n1.side2', 'n1.top', 'n1.side1'];
+  const picks = (faces: string[]) => faces.map(name => {
+    const face = original.bodies[0].mesh.faces.findIndex(candidate => candidate.nativePlaneName === name);
+    assert.ok(face >= 0, name);
+    return { body: 0, face };
+  });
+  const values = { wallMode: 'per-face', leftWall: 3, frontWall: 4 };
+  const selection = { faces: picks(names), bodies: [], edges: [] };
+  const ctx = { doc, bodies: original.bodies, selection };
+  const built = shell.build!(ctx, values), feature = built.nodes[2];
+  assert.ok(feature.kind === 'shell-walls');
+  assert.deepEqual([feature.opening, feature.secondOpening, feature.thirdOpening, feature.fourthOpening],
+    ['n1.top', 'n1.bottom', 'n1.side1', 'n1.side2']);
+  assert.deepEqual(feature, shell.build!({ ...ctx, selection: { ...selection, faces: [...selection.faces].reverse() } }, values).nodes[2]);
+  assert.deepEqual(editFields(built.nodes, 2).map(field => field.key), ['frontWall', 'leftWall']);
+  const loaded = readStudioDoc(JSON.stringify(built));
+  assert.ok('doc' in loaded);
+  assert.deepEqual(loaded.doc.nodes[2], feature);
+  const result = evaluateDoc(loaded.doc, 2);
+  assert.ok(result.ok && Math.abs(result.bodies[0].volume! - 4760) < 1e-7);
+
+  const opposite = ['n1.top', 'n1.bottom', 'n1.side0', 'n1.side2'];
+  assert.throws(() => shell.build!({ ...ctx, selection: { ...selection, faces: picks(opposite) } },
+    { ...values, rightWall: 4 }), /SHELL_DISCONNECTED/);
+  for (const patch of [
+    { fourthOpening: undefined }, { thirdOpening: undefined }, { fourthOpening: feature.opening },
+    { fourthOpening: 'n1.side0', walls: { 'n1.side3': 3, 'n1.side1': 4 }, thirdOpening: 'n1.side2' },
+  ]) {
+    const malformed: unknown = { ...built, nodes: [...built.nodes.slice(0, 2), { ...feature, ...patch }] };
+    assert.ok('error' in readStudioDoc(JSON.stringify(malformed)));
+  }
+
+  const state = { doc, bodies: original.bodies }, evaluate = async (candidate: StudioDoc) => evaluateDoc(candidate, 1);
+  const expectedRevision = JSON.parse((await dispatchTool(state, 'query', { action: 'rebuild' }, evaluate)).content).revision;
+  const args = { action: 'command', command: 'shell', expectedRevision, faces: names, values };
+  const tool = await dispatchTool(state, 'features', args, evaluate);
+  assert.ok(tool.changed && !tool.isError, tool.content);
+  assert.deepEqual(tool.state.doc.nodes[2], feature);
+  const refused = await dispatchTool(state, 'features', { ...args, faces: opposite, values: { wallMode: 'per-face', leftWall: 3, rightWall: 4 } }, evaluate);
+  assert.ok(refused.isError && !refused.changed && refused.state.doc === doc, refused.content);
+  assert.match(refused.content, /SHELL_DISCONNECTED/);
 });

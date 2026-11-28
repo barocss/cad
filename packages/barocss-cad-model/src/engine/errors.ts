@@ -47,6 +47,8 @@ const rules: { code?: string | readonly string[]; text?: RegExp; title: string; 
   { text: /\[FACE_THREAD_RELIEF\]/,
     title: 'Thread needs a relief groove', hint: 'Use a positive Relief groove where an external thread stops inside the face or at a shoulder.' },
   { code: 'DRAFT_ANGLE', ...DRAFT_ANGLE_HELP },
+  { code: 'SHELL_DISCONNECTED', title: 'Shell would leave two disconnected walls',
+    hint: 'Choose the openings so the two retained walls meet.' },
   { text: /(?:^|: )Scale cannot preserve valid geometry for this body\./,
     title: 'Scale would lose usable geometry',
     hint: 'Increase Factor and try again. The usable factor depends on this body and pivot; there is no single minimum for every part.' },

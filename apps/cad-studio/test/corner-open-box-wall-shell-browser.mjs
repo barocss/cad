@@ -8,21 +8,23 @@ import { clickModelCommand } from './model-rail-helper.mjs';
 const baseline = process.argv.includes('--baseline');
 const agent = process.argv.includes('--agent');
 const channel = process.argv.includes('--channel');
+const four = process.argv.includes('--four');
 const pins = ['packages/barocss-cad-model/src/app/boxShellSelection.ts', 'packages/barocss-cad-model/src/engine/shellWalls.ts',
   'packages/barocss-cad/src/part/part-box-shell.ts', 'packages/barocss-cad/src/part/part-shell.ts'];
 const f = await createFlow({
   name: 'corner-open-box-wall-shell', output: process.argv[2], envFrozen: 'CORNER_OPEN_BOX_WALL_SHELL_FROZEN',
-  qualification: 'Open three original rectangular box faces and edit the other three walls.',
-  limits: [channel ? 'An original 40×30×20 mm box opens Top, Bottom and Front.' : 'An original 40×30×20 mm box opens Top, Front and Right.'],
+  qualification: four ? 'Open four original rectangular box faces and edit the two intersecting walls.'
+    : 'Open three original rectangular box faces and edit the other three walls.',
+  limits: [four ? 'An original 40×30×20 mm box opens Top, Bottom, Right and Back.' : channel ? 'An original 40×30×20 mm box opens Top, Bottom and Front.' : 'An original 40×30×20 mm box opens Top, Front and Right.'],
   initialFiles: pins, requiredFrozen: pins,
   inspectorSource: `
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { partSnapshot } from '@barocss/cad-model/engine/part';
-import { checkBrep, faceGeometry, massPropertiesOf } from '@barocss/cad';
+import { checkBrep, faceGeometry, massPropertiesOf, surfaceAreaOf } from '@barocss/cad';
 const output = partSnapshot(JSON.parse(readFileSync(process.argv[2], 'utf8'))).outputs[0];
 const { brep } = output, report = checkBrep(brep, { strict: true, pcurveSamples: 7 });
-console.log(JSON.stringify({ mass: massPropertiesOf(output), valid: report.valid, counts: report.counts,
+console.log(JSON.stringify({ mass: massPropertiesOf(output), area: surfaceAreaOf(output), valid: report.valid, counts: report.counts,
   closed: brep.shells.map(shell => shell.closed), pcurves: brep.coedges.filter(use => use.pcurve).length,
   supports: Object.fromEntries(brep.faces.map(face => [face.name, faceGeometry(face)])),
   digest: createHash('sha256').update(JSON.stringify(brep)).digest('hex') }));
@@ -36,14 +38,20 @@ const stock = {
 const button = (name, scope = f.page) => scope.getByRole('button', { name, exact: true });
 const hud = () => f.page.getByRole('dialog', { name: 'Shell', exact: true });
 const view = async name => {
-  if (name === 'Bottom') {
+  if (name === 'Bottom' || name === 'Back' || name === 'Left') {
     await button('View cube directions', f.page.getByRole('group', { name: 'View cube', exact: true })).click();
     await f.page.getByRole('menuitem', { name, exact: true }).click();
-    await f.page.locator('.view-cube .vc-label').getByText('BOTTOM', { exact: true }).waitFor();
+    await f.page.locator('.view-cube .vc-label').getByText(name.toUpperCase(), { exact: true }).waitFor();
   } else await button(name, f.page.locator('.views')).click();
 };
 const frame = () => f.page.getByTitle('Frame all (F)', { exact: true }).click();
 const near = (a, b) => assert.ok(Number.isFinite(a) && Math.abs(a - b) < 1e-7, `${a} versus ${b}`);
+
+async function preferFaces() {
+  const filter = button('Selection filter');
+  for (let i = 0; i < 6 && !(await filter.innerText()).includes('Faces'); i++) await filter.click();
+  assert.match(await filter.innerText(), /Faces/);
+}
 
 async function pick(viewName, point, count) {
   await view(viewName);
@@ -56,14 +64,15 @@ async function pick(viewName, point, count) {
 }
 
 const originalDimensions = [40, 30, 20];
-const opened = channel ? ['n1.top', 'n1.bottom', 'n1.side0'] : ['n1.top', 'n1.side1', 'n1.side0'];
-const kept = [
-  { label: 'Left wall', name: 'n1.side3', axis: 0, high: false, thickness: 3, key: 'leftWall' },
+const opened = four ? ['n1.top', 'n1.bottom', 'n1.side1', 'n1.side2'] : channel ? ['n1.top', 'n1.bottom', 'n1.side0'] : ['n1.top', 'n1.side1', 'n1.side0'];
+const left = { label: 'Left wall', name: 'n1.side3', axis: 0, high: false, thickness: 3, key: 'leftWall' };
+const kept = four ? [left, { label: 'Front wall', name: 'n1.side0', axis: 1, high: false, thickness: 4, key: 'frontWall' }] : [
+  left,
   { label: 'Back wall', name: 'n1.side2', axis: 1, high: true, thickness: 4, key: 'backWall' },
   channel ? { label: 'Right wall', name: 'n1.side1', axis: 0, high: true, thickness: 5, key: 'rightWall' }
     : { label: 'Bottom wall', name: 'n1.bottom', axis: 2, high: false, thickness: 2, key: 'bottomWall' },
 ];
-const editedWall = kept.at(-1), editedWidth = channel ? 8 : 6;
+const editedWall = kept.at(-1), editedWidth = four || channel ? 8 : 6;
 const thickness = (wall, width) => wall === editedWall ? width : wall.thickness;
 const wallValues = Object.fromEntries(kept.map(wall => [wall.key, wall.thickness]));
 const originalVolume = 40 * 30 * 20;
@@ -77,14 +86,15 @@ const volumeOf = box => box.reduce((volume, [low, high]) => volume * (high - low
 async function prove(label, doc, width) {
   const native = await f.inspect(label, doc), node = doc.nodes[2];
   assert.equal(node.kind, 'shell-walls');
-  assert.deepEqual([node.opening, node.secondOpening, node.thirdOpening], opened);
+  assert.deepEqual([node.opening, node.secondOpening, node.thirdOpening, node.fourthOpening].filter(Boolean), opened);
   assert.deepEqual(node.walls, Object.fromEntries(kept.map(wall => [wall.name, thickness(wall, width)])));
   assert.equal(Object.keys(node.sigs).length, 6);
-  const faces = channel ? 10 : 11, edges = channel ? 24 : 25;
+  const faces = four ? 8 : channel ? 10 : 11, edges = four ? 18 : channel ? 24 : 25;
   assert.deepEqual([native.valid, native.closed, native.pcurves], [true, [true], 2 * edges]);
-  assert.deepEqual(native.counts, { bodies: 1, shells: 1, faces, loops: faces, coedges: 2 * edges, edges, vertices: 16 });
+  assert.deepEqual(native.counts, { bodies: 1, shells: 1, faces, loops: faces, coedges: 2 * edges, edges, vertices: four ? 12 : 16 });
   const cavity = cavityFor(width), removed = volumeOf(cavity), volume = originalVolume - removed;
   const centroid = originalDimensions.map((dimension, axis) => (originalVolume * dimension - removed * (cavity[axis][0] + cavity[axis][1])) / (2 * volume));
+  if (four) near(native.area, 2 * (volume / 20) + 2 * (40 + 30) * 20);
   const visible = (await f.bodies()).bodies[0];
   for (const result of [native.mass, visible]) {
     near(result.volume, volume);
@@ -138,14 +148,18 @@ await f.run(async () => {
   await writeFile(file, JSON.stringify(stock));
   if (agent) return approve(file);
   await f.freshOpen(file, stock, 'original');
-  const filter = button('Selection filter');
-  for (let i = 0; i < 6 && !(await filter.innerText()).includes('Faces'); i++) await filter.click();
-  assert.match(await filter.innerText(), /Faces/);
+  await preferFaces();
   if (await button('Ortho').getAttribute('aria-pressed') !== 'true') await button('Ortho').click();
-  f.phase = 'pick the three original Shell openings';
+  f.phase = 'pick the original Shell openings';
   await pick('Top', [20, 12, 20], 1);
-  await pick('Front', [20, 0, 8], 2);
-  await (channel ? pick('Bottom', [20, 12, 0], 3) : pick('Right', [40, 12, 8], 3));
+  if (four) {
+    await pick('Bottom', [20, 12, 0], 2);
+    await pick('Right', [40, 12, 8], 3);
+    await pick('Back', [20, 30, 8], 4);
+  } else {
+    await pick('Front', [20, 0, 8], 2);
+    await (channel ? pick('Bottom', [20, 12, 0], 3) : pick('Right', [40, 12, 8], 3));
+  }
   await view('Iso');
   await frame();
   const launch = () => clickModelCommand(f.page, 'Modify', 'Shell');
@@ -160,7 +174,9 @@ await f.run(async () => {
   async function preview() {
     await mode().selectOption('per-face');
     for (const { label, thickness } of kept) await hud().getByLabel(label, { exact: true }).fill(String(thickness));
-    for (const name of ['Top wall', 'Front wall', channel ? 'Bottom wall' : 'Right wall']) assert.equal(await hud().getByLabel(name, { exact: true }).count(), 0);
+    const unkept = four ? ['Top wall', 'Bottom wall', 'Right wall', 'Back wall']
+      : ['Top wall', 'Front wall', channel ? 'Bottom wall' : 'Right wall'];
+    for (const name of unkept) assert.equal(await hud().getByLabel(name, { exact: true }).count(), 0);
     await hud().locator('.status').getByText('preview', { exact: true }).waitFor();
   }
   f.phase = 'preview Cancel and retry Apply';
@@ -178,7 +194,7 @@ await f.run(async () => {
   await f.snapshot('corner-shell-applied');
 
   await f.openFeatureEditor(2, 'wall thickness refusal');
-  await f.editor().getByLabel(editedWall.label, { exact: true }).fill(channel ? '37' : '20');
+  await f.editor().getByLabel(editedWall.label, { exact: true }).fill(four ? '30' : channel ? '37' : '20');
   await button('Apply', f.editor()).click();
   await f.editor().locator('.hud-error').waitFor();
   await f.same(created);
@@ -203,4 +219,21 @@ await f.run(async () => {
   await f.openFeatureEditor(2, 'verify reopened wall fields');
   assert.equal(await f.editor().getByLabel(editedWall.label, { exact: true }).inputValue(), String(editedWidth));
   await f.snapshot('corner-shell-reopened-history');
+  if (!four) return;
+
+  f.phase = 'refuse opposite retained walls before creating another feature';
+  await f.freshOpen(file, stock, 'disconnected-wall-stock');
+  await preferFaces();
+  await pick('Top', [20, 12, 20], 1);
+  await pick('Bottom', [20, 12, 0], 2);
+  await pick('Front', [20, 0, 8], 3);
+  await pick('Back', [20, 30, 8], 4);
+  await view('Iso');
+  await frame();
+  await launch();
+  await mode().selectOption('per-face');
+  await hud().locator('.hud-error').getByText('Shell would leave two disconnected walls', { exact: true }).waitFor();
+  assert.equal(await button('Apply', hud()).isDisabled(), true);
+  await f.same(stock);
+  await f.snapshot('opposite-retained-walls-refused');
 });

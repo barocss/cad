@@ -1,13 +1,13 @@
 # CAD roadmap — current status and execution order
 
-Updated 2026-11-28 · Priority authority: D520 · Latest delivery: D2167 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
+Updated 2026-11-28 · Priority authority: D520 · Latest delivery: D2168 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
 
 This is the only current status index. Detailed tracks define acceptance; the 34 stable row pages retain scope and issue navigation. Immutable decision notes retain results. Do not append chronological status paragraphs here. [D520 decision](notes/cad-roadmap-replan-2026-11-04/README.md) supersedes D445 execution order and historical next-item text, while retaining its safeguards and bounded proofs.
 
 ## Now and next
 
-- **Current position:** [D2167](notes/separate-sheet-pattern-ownership-2026-11-28/README.md), P1 rows 07, 08 and 16. Separate Linear and Circular sheet patterns retain copied rules. Only the selected last body receives the follow-on Flange and thickness edit. Its flat and all original bodies survive fresh Open ([#198](https://github.com/barocss/cad/issues/198)).
-- **Next MAIN:** D2168, P5 rows 07, 16 and 30. Add exact per-face Shell with four original box openings when the two retained walls meet. Verify opposite-wall refusal, native geometry and actual Studio editing ([#13](https://github.com/barocss/cad/issues/13)).
+- **Current position:** [D2168](notes/four-opening-box-wall-shell-2026-11-28/README.md), P5 rows 07, 16 and 30. Per-face Shell opens four original rectangular-box faces and retains two independently editable adjacent walls. Opposite kept walls refuse, and desktop History and Open pass ([#13](https://github.com/barocss/cad/issues/13)).
+- **Next MAIN:** D2169, P4 rows 16 and 20. Extract the active command session from Studio App and verify current Fillet station inputs and the existing full-preview approval flow in desktop Studio.
 - **Separate follow-ups:** Continue Studio App extraction in cohesive parts with affected desktop checks. [#608 Rendering](https://github.com/barocss/cad/issues/608) stays on HOLD. API inventory drift remains open. The issue tracker records [#126](https://github.com/barocss/cad/issues/126), [#613](https://github.com/barocss/cad/issues/613), [#152](https://github.com/barocss/cad/issues/152) and [#22](https://github.com/barocss/cad/issues/22) as closed.
 - **Active repository:** [barocss/cad](https://github.com/barocss/cad), based on `origin/main`. Fetch before work and preserve unexpected changes. The [migration record](../../../docs/migration/README.md) maps the former `local/cad-dev` history and issue numbers.
 - **Evidence correction:** D482 records2167 PASS/0 FAIL/2 existing SKIP in a later full-kernel run than D433. Neither result is a new full-suite PASS at this audit HEAD. [D482 record](notes/vertical-contact-refusal-2026-11-04/README.md).
@@ -43,7 +43,7 @@ P0 findings that can lose work, export stale geometry or misattribute results ta
 
 ## GitHub requirement and issue inventory
 
-- GitHub lists 161 open issues in the November 28 inventory, checked after the [#203 closeout](https://github.com/barocss/cad/issues/203#issuecomment-7234355186). The [closeout queue](roadmap-tracks/18-issue-closeout.md) retains the evidence and unresolved acceptance for tracked items.
+- GitHub lists 160 open issues in the November 28 inventory, checked after the [#198 closeout](https://github.com/barocss/cad/issues/198#issuecomment-7234431405). The [closeout queue](roadmap-tracks/18-issue-closeout.md) retains the evidence and unresolved acceptance for tracked items.
 
 The [November 20 routing snapshot](notes/open-issue-routing-2026-11-20/README.md) covers all 229 open issues in the standalone CAD repository. It links each issue to a primary route and identifies model-version tracking for agent visual review as the next AI workflow to measure (#324).
 

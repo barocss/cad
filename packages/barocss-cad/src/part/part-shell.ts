@@ -15,7 +15,7 @@ import { unsupportedNativeMass } from '../internal/native-si-mass-state.js';
 import { withCavities } from '../brep/brep-glue.js';
 import { generalShell } from '../blend/general-shell.js';
 import { closedLShellWallLimit } from '../features/closed-l-shell-profile.js';
-import { closedBoxShellWithWalls, threeOpeningBoxShellWithWalls, twoOpeningBoxShellWithWalls, boxShellWallLimit, boxShellWithWalls } from './part-box-shell.js';
+import { closedBoxShellWithWalls, threeOrFourOpeningBoxShellWithWalls, twoOpeningBoxShellWithWalls, boxShellWallLimit, boxShellWithWalls } from './part-box-shell.js';
 import { openRevolvedCapsuleShell } from './part-capsule-shell.js';
 import { offsetCavity, offsetShell, smoothOffsetBody } from '../blend/offset-cavity.js';
 import { regionShell } from '../blend/region-shell.js';
@@ -118,7 +118,7 @@ export function shellOperation(f: CadPartFeature & Record<string, unknown>, t: T
       const target = solids(f.target, 'target'), part = target[0];
       if (target.length !== 1 || t.featureKind(f.target) !== 'extrude' || part.solid.kind !== 'upright')
         return fail('CAPABILITY', 'Per-face Shell needs one original upright box extrusion.');
-      const { opening, secondOpening, thirdOpening, walls } = f;
+      const { opening, secondOpening, thirdOpening, fourthOpening, walls } = f;
       if ((opening !== null && (typeof opening !== 'string' || !opening)) || !isRecord(walls))
         return fail('INPUT', 'Per-face Shell needs an opening name or an explicit closed mode and a map of wall thicknesses.');
       if (secondOpening !== undefined && (opening === null || typeof secondOpening !== 'string' || !secondOpening || secondOpening === opening))
@@ -126,6 +126,9 @@ export function shellOperation(f: CadPartFeature & Record<string, unknown>, t: T
       if (thirdOpening !== undefined && (opening === null || secondOpening === undefined || typeof thirdOpening !== 'string'
         || !thirdOpening || thirdOpening === opening || thirdOpening === secondOpening))
         return fail('INPUT', 'Per-face Shell needs three distinct original opening names.');
+      if (fourthOpening !== undefined && (thirdOpening === undefined || typeof fourthOpening !== 'string'
+        || !fourthOpening || fourthOpening === opening || fourthOpening === secondOpening || fourthOpening === thirdOpening))
+        return fail('INPUT', 'Per-face Shell needs four distinct original opening names.');
       if (opening === null || secondOpening !== undefined) {
         const parent = t.ref(f.target, 'Per-face Shell stock').author;
         const sketch = parent?.kind === 'extrude' ? t.ref(parent.sketch, 'Per-face Shell sketch') : undefined;
@@ -134,7 +137,8 @@ export function shellOperation(f: CadPartFeature & Record<string, unknown>, t: T
           || sketch.result.kind !== 'sketch' || sketch.result.holes?.length || sketch.result.regions?.length)
           return fail('CAPABILITY', opening === null ? 'Closed per-face Shell needs one original zero-draft rectangular extrusion.'
             : thirdOpening === undefined ? 'Two-opening per-face Shell needs one original zero-draft rectangular extrusion.'
-              : 'Three-opening per-face Shell needs one original zero-draft rectangular extrusion.');
+              : fourthOpening === undefined ? 'Three-opening per-face Shell needs one original zero-draft rectangular extrusion.'
+                : 'Four-opening per-face Shell needs one original zero-draft rectangular extrusion.');
       }
       const stock = part.solid.solid, expect = expectOf(f, fail);
       return () => {
@@ -146,7 +150,8 @@ export function shellOperation(f: CadPartFeature & Record<string, unknown>, t: T
         const { solid, brep } = opening === null ? closedBoxShellWithWalls(stock, original, walls, at, fail)
           : secondOpening === undefined ? boxShellWithWalls(stock, original, opening, walls, at, fail)
             : thirdOpening === undefined ? twoOpeningBoxShellWithWalls(stock, original, [opening, secondOpening], walls, at, fail)
-              : threeOpeningBoxShellWithWalls(stock, original, [opening, secondOpening, thirdOpening], walls, at, fail);
+              : threeOrFourOpeningBoxShellWithWalls(stock, original,
+                fourthOpening === undefined ? [opening, secondOpening, thirdOpening] : [opening, secondOpening, thirdOpening, fourthOpening], walls, at, fail);
         return { kind: 'solid', parts: [{ solid: { kind: 'upright', solid }, brep }] };
       };
     }

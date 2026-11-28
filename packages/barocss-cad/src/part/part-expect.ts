@@ -39,7 +39,7 @@ export function storedNames(f: { readonly kind: string } & Record<string, unknow
   if (f.kind === 'offset-face' || f.kind === 'delete-face' || f.kind === 'replace-face') return { names: typeof f.face === 'string' ? [f.face] : [], edges: false };
   if (f.kind === 'shell-walls') return {
     names: f.walls && typeof f.walls === 'object'
-      ? [...[f.opening, f.secondOpening, f.thirdOpening].filter((name): name is string => typeof name === 'string'), ...Object.keys(f.walls)] : [],
+      ? [...[f.opening, f.secondOpening, f.thirdOpening, f.fourthOpening].filter((name): name is string => typeof name === 'string'), ...Object.keys(f.walls)] : [],
     edges: false,
   };
   const list = f.kind === 'fillet' || f.kind === 'chamfer' ? f.edges : f.kind === 'shell' ? f.open : f.kind === 'draft' || f.kind === 'full-round' || f.kind === 'face-fillet' || f.kind === 'profile-relief' || f.kind === 'cylindrical-wrap' ? f.faces : undefined;

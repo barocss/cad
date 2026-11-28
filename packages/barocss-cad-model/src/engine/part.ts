@@ -226,7 +226,8 @@ export function featureOf(node: ModelNode, index: number, nodes?: readonly Model
       return { ...at, kind: 'shell-walls', target: ref(node.parent), opening: node.opening, walls: node.walls,
         ...(node.secondOpening === undefined ? {} : { secondOpening: node.secondOpening }),
         ...(node.thirdOpening === undefined ? {} : { thirdOpening: node.thirdOpening }),
-        ...expectOf(node, [...[node.opening, node.secondOpening, node.thirdOpening].filter((name): name is string => typeof name === 'string'),
+        ...(node.fourthOpening === undefined ? {} : { fourthOpening: node.fourthOpening }),
+        ...expectOf(node, [...[node.opening, node.secondOpening, node.thirdOpening, node.fourthOpening].filter((name): name is string => typeof name === 'string'),
           ...Object.keys(node.walls)]) };
     }
     case 'chamfer': return { ...at, kind: 'chamfer', target: ref(node.parent), edges: node.edges, distance: node.distance, ...expectOf(node, node.edges) };

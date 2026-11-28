@@ -27,6 +27,7 @@ function removablePickedEdgeCount(ctx: Ctx): number | null {
 
 /** Explain only owned build refusals whose command and selection prove the recovery. */
 export function commandBuildFailure(command: string, cause: unknown, ctx?: Ctx): FriendlyError {
+  if (command === 'shell' && isRefusal(cause, 'SHELL_DISCONNECTED')) return friendlyCause(cause);
   if (command === 'fillet' && ctx && isRefusal(cause, 'FILLET_CHAIN')
     && cause.message === '[FILLET_CHAIN] An interior radius needs one original straight edge.') {
     const count = removablePickedEdgeCount(ctx);
