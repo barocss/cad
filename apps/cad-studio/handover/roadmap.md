@@ -1,13 +1,13 @@
 # CAD roadmap — current status and execution order
 
-Updated 2026-11-29 · Priority authority: D520 · Latest delivery: D2238 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
+Updated 2026-11-29 · Priority authority: D520 · Latest delivery: D2239 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
 
 This is the only current status index. Detailed tracks define acceptance; the 34 stable row pages retain scope and issue navigation. Immutable decision notes retain results. Do not append chronological status paragraphs here. [D520 decision](notes/cad-roadmap-replan-2026-11-04/README.md) supersedes D445 execution order and historical next-item text, while retaining its safeguards and bounded proofs.
 
 ## Now and next
 
-- **Current position:** [D2238](notes/linked-spur-gear-contact-2026-11-29/README.md), P5 rows 07 and 30. The default linked spur pair passes the tooth-period interference check in desktop Studio. A separately phased pair intersects, with an independent finite common-material witness.
-- **Next MAIN:** D2239, P5 rows 07 and 30. Qualify Shell on the two opposite caps of one original upright circular extrusion. Check exact annular rims and independent material volume. Correct the supported path if the existing result fails.
+- **Current position:** [D2239](notes/cylinder-two-open-shell-2026-11-29/README.md), P5 rows 07 and 30. The existing Shell opens both original Cylinder ends. Studio confirms exact annular rims and the edited volume after project reopen.
+- **Next MAIN:** D2240, P1 rows 04 and 31. Connect the D2235 cardinal edge Rotate workflow to a revision-pinned local Agent proposal. Bind the current native edge, use the existing Rotate node, and verify Preview and explicit approval in Studio.
 - **Separate follow-ups:** Continue Studio App extraction in cohesive parts with affected desktop checks. [#608 Rendering](https://github.com/barocss/cad/issues/608) stays on HOLD. API inventory drift remains open. The issue tracker records [#126](https://github.com/barocss/cad/issues/126), [#613](https://github.com/barocss/cad/issues/613), [#152](https://github.com/barocss/cad/issues/152) and [#22](https://github.com/barocss/cad/issues/22) as closed.
 - **Active repository:** [barocss/cad](https://github.com/barocss/cad), based on `origin/main`. Fetch before work and preserve unexpected changes. The [migration record](../../../docs/migration/README.md) maps the former `local/cad-dev` history and issue numbers.
 - **Evidence correction:** D482 records2167 PASS/0 FAIL/2 existing SKIP in a later full-kernel run than D433. Neither result is a new full-suite PASS at this audit HEAD. [D482 record](notes/vertical-contact-refusal-2026-11-04/README.md).
