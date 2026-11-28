@@ -201,8 +201,9 @@ import { InsetSourceReview } from './ui/InsetSourceReview';
 import { MidpointSketchReview } from './ui/MidpointSketchReview';
 import { StudioSketchInspector } from './ui/StudioSketchInspector';
 import { Timeline } from './ui/Timeline';
-import { clearRecovery, keepRecovery, offerRecovery, settleRecovery, type Recovery } from './app/recovery';
-import { blobStats, collectRecoveryBlobs, evictBlobs, loadRecoveryBlobs, saveRecoveryBlobs, setBlobStore } from '@barocss/cad-model/engine/blobs';
+import { keepRecovery } from './app/recovery';
+import { createStudioRecoveryActions, useStudioRecoveryOffer } from './app/studioRecoveryActions';
+import { blobStats, evictBlobs, saveRecoveryBlobs, setBlobStore } from '@barocss/cad-model/engine/blobs';
 import { indexedDbBlobStore } from './ui/blobStore';
 // (The recovery copy's blobs kept in this browser's IndexedDB: the store set before the studio reads or writes one — PKG-g2.)
 setBlobStore(indexedDbBlobStore());
@@ -491,7 +492,7 @@ export function App() {
   const currentDocumentIdentity = useCallback(() => ({ fileName: fileNameNow.current, dirty: dirtyNow.current }), []);
   /** Unsaved work kept from an earlier visit, offered back once. */
   // (The copy offered is set aside until answered: this session's copies do not write over it, O-log flow-39 note.)
-  const [recovery, setRecovery] = useState<Recovery | null>(() => offerRecovery());
+  const { offer: recovery, pending: recoveryRequest, dismiss: dismissRecovery } = useStudioRecoveryOffer();
   // Keep a recovery copy a moment after each change while unsaved; none once saved. When the browser cannot keep it
   // (the document too large for its storage, or storage refused), the older copy is removed and that is said once for
   // the document (until a copy is written again).
@@ -1417,9 +1418,9 @@ export function App() {
     if (!import.meta.env.DEV) return;
     (window as unknown as { __studioLayoutReset: () => void }).__studioLayoutReset = () => {
       layout.setChatOpen(false); layout.setChatWidth(CHAT_DEFAULT); layout.setDockSheet(false);
-      setToast(null); setRecovery(null); setCascade(null); setMeshAsk(null); setRepairAsk(null); clearStepAsk();
+      setToast(null); dismissRecovery(); setCascade(null); setMeshAsk(null); setRepairAsk(null); clearStepAsk();
     };
-  }, [layout.setChatOpen, layout.setChatWidth, layout.setDockSheet]);
+  }, [layout.setChatOpen, layout.setChatWidth, layout.setDockSheet, dismissRecovery]);
   const historyControls = createStudioHistoryControls({
     document: { current: doc, undo, redo, replay: (forward, event) => workspaceModeExit.switchWhenReady(() => {
       setEditNode(null);
@@ -2043,6 +2044,13 @@ export function App() {
     template: { setFileName, fit: () => viewport.current?.fit() },
     versions: { open: versionsOpen, toggle: () => setVersionsOpen(open => !open), cancelCandidateReview: cancelLocalCandidateReview },
   });
+  const recoveryActions = createStudioRecoveryActions({
+    offer: recovery, pending: recoveryRequest,
+    owner: { onOpenIntent: beginOpenIntent, currentOpenScope, isOpenCurrent },
+    blocked: sessionBlocked, replace: next => replaceDoc(next, 'project') && docNow.current === next,
+    dirtyDocument: () => dirtyNow.current ? docNow.current : null, dismiss: dismissRecovery,
+    setFileName, fit: () => viewport.current?.fit(), notice: setToast,
+  });
   const canExportIges = !!doc.direct?.objects.some(object => !object.hidden);
   const exportIges = async () => {
     try { downloadBytes(new TextEncoder().encode((await loadDirect()).directIGES(doc.direct!, fileName)), `${fileName}.igs`, 'model/iges'); }
@@ -2163,15 +2171,7 @@ export function App() {
       {flatPattern && <FlatPatternDialog {...flatPattern} />}
       {!workerFailure && <MeshFileDialogs controller={meshImport}><ModelExportDialogs controller={modelExports} /></MeshFileDialogs>}
       <StudioNoticeStack recovery={recovery} notice={workerFailure || (!cascade && !meshAsk && !repairAsk && !stepAsk && !stlAsk) ? toast : null}
-        restoreRecovery={async () => {
-          if (!recovery || sessionBlocked('restoring unsaved work')) return;
-          const missing = await loadRecoveryBlobs(recovery.doc);
-          if (missing.length) { setToast({ title: 'Could not restore', hint: `The copy's mesh data is gone from this browser (${missing.length} array${missing.length > 1 ? 's' : ''}). Open the mesh file again.`, detail: '' }); clearRecovery(); setRecovery(null); return; }
-          // Restore the document through the same replacement path used by New and Open.
-          replaceDoc(recovery.doc, 'project'); if (docNow.current !== recovery.doc) return;
-          setFileName(recovery.fileName); settleRecovery(); setRecovery(null); setTimeout(() => viewport.current?.fit(), 300);
-        }}
-        discardRecovery={() => { settleRecovery(); setRecovery(null); void collectRecoveryBlobs(dirty ? doc : null); }}
+        restoreRecovery={recoveryActions.restore} discardRecovery={recoveryActions.discard}
         dismissNotice={workerFailure ? undefined : () => setToast(null)}>
         <DeleteDependentsDialog request={cascade} onCancel={() => setCascade(null)} onDelete={deleteCascade} />
       </StudioNoticeStack>

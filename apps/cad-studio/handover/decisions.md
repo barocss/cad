@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D2244: [D2244](notes/recovery-later-open-ownership-2026-11-29/README.md), #170. Preserve a newer Open when a previous recovery request resolves, and confirm explicit retry in Studio.
+
 - D2243: [D2243](notes/typed-disconnected-shell-refusal-2026-11-29/README.md), #13. Publish the existing Shell refusal code and verify the disconnected and adjacent wall cases.
 
 - D2242: [D2242](notes/rounded-step-default-area-2026-11-29/README.md), #16. Integrate the original qualified sphere boundaries for default surface area and verify the two rounded-box STEP replays in Studio.
