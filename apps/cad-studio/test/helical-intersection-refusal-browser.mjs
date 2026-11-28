@@ -6,6 +6,7 @@ import { clickModelCommand } from './model-rail-helper.mjs';
 const fixture = 'packages/barocss-cad/robustness/corpus/oracle/gear-helical-pair-crossing-intersect.json';
 const baseline = process.argv.includes('--baseline');
 const expectResult = process.argv.includes('--intersect');
+const coincident = process.argv.includes('--coincident');
 const pins = [fixture, 'apps/cad-studio/test/helical-intersection-refusal-browser.mjs',
   'packages/barocss-cad-model/src/engine/evaluate.ts',
   'packages/barocss-cad/src/brep/analytic-boolean.ts', 'packages/barocss-cad-model/src/engine/part.ts'];
@@ -14,7 +15,8 @@ const f = await createFlow({
   initialFiles: pins, requiredFrozen: pins,
   qualification: expectResult ? 'Verify the original helical Intersect result in both operand orders and after native Open.'
     : 'Verify that the original opposite-hand helical gear Intersect refusal names the operation and preserves both originals.',
-  limits: ['The original corpus geometry maps to native Studio Gear authoring with generator spur-gear@0 and explicit 3 degree phase.'],
+  limits: [coincident ? 'Both occurrences use the exact original right-hand helical gear at the original pose.'
+    : 'The original corpus geometry maps to native Studio Gear authoring with generator spur-gear@0 and explicit 3 degree phase.'],
   inspectorSource: expectResult ? `
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
@@ -30,8 +32,9 @@ console.log(JSON.stringify(outputs.map(output => ({
 });
 const original = JSON.parse(await readFile(join(f.repo, fixture), 'utf8'));
 const corpus = original.input.partDocument.features;
-const expected = original.expect.outputs[0];
-const nodes = corpus.slice(0, 2).map((gear, i) => ({
+const expected = coincident ? { bodies: 1, topology: [{ shells: 1, genus: 0 }],
+  volume: { value: 6729.551724057286, relTol: 5e-6 }, centroid: { value: [0, 0, 3], absTol: 1e-6 } } : original.expect.outputs[0];
+const nodes = (coincident ? [corpus[0], corpus[0]] : corpus.slice(0, 2)).map((gear, i) => ({
   id: `n${i}`, kind: 'gear', module: gear.normalModule, helixAngle: gear.helixAngle, hand: gear.hand,
   teeth: gear.teeth, faceWidth: gear.faceWidth, thicknessReduction: gear.thicknessReduction,
   center: [0, 0], generator: gear.generator, ...(gear.mesh ? { mesh: { gear: 0, phase: gear.mesh.phase } } : {}),
@@ -44,7 +47,8 @@ const frame = () => f.page.getByTitle('Frame all (F)', { exact: true }).click();
 const button = (name, root = f.page) => root.getByRole('button', { name, exact: true });
 const undoButtons = async () => Promise.all(['Undo', 'Redo'].map(name => button(name).isEnabled()));
 const versions = () => f.page.getByRole('complementary', { name: 'Versions panel', exact: true });
-const project = expectResult ? 'Original helical intersection' : 'Original crossing gear inputs';
+const project = coincident ? 'Coincident helical intersection'
+  : expectResult ? 'Original helical intersection' : 'Original crossing gear inputs';
 async function projectOpen() {
   if (!(await versions().isVisible())) await button('Project and versions').click();
   await versions().getByRole('textbox', { name: 'Browser project name', exact: true }).fill(project);
@@ -85,6 +89,7 @@ await f.run(async () => {
     const selected = await f.page.evaluate(() => window.__studioSelection.selection.bodies);
     assert.deepEqual(selected, [a, b]);
     const before = await undoButtons();
+    const nativeSource = coincident && expectResult ? await f.inspect('coincident-stock-' + a, stock) : null;
     await clickModelCommand(f.page, 'Combine', 'Intersect');
     if (expectResult) {
       await f.changed(stock);
@@ -94,6 +99,12 @@ await f.run(async () => {
         left: { node: a, side: 'solid' }, right: { node: b, side: 'solid' } });
       await frame();
       const native = await verifyResult(result, 'helical-intersect-native-' + a);
+      if (nativeSource) {
+        assert.equal(nativeSource.length, 2);
+        assert.deepEqual(native.report.counts, nativeSource[a].report.counts);
+        near(native.mass.volume, nativeSource[a].mass.volume, 1e-7);
+        native.mass.centroid.forEach((coord, axis) => near(coord, nativeSource[a].mass.centroid[axis], 1e-7));
+      }
       await f.snapshot('helical-intersect-result-' + a);
       await f.undo();
       await f.same(stock);
@@ -108,7 +119,7 @@ await f.run(async () => {
     }
     const warning = await f.waitToast(/manifold|could not|refused/i, 120000);
     assert.match(warning, baseline ? /could not be joined into one solid/ : /Intersect could not form a solid/);
-    assert.match(warning, a === 0 ? /has 1 uses/ : /has 3 uses/);
+    if (!coincident) assert.match(warning, a === 0 ? /has 1 uses/ : /has 3 uses/);
     await f.same(stock);
     assert.deepEqual(await undoButtons(), before);
     const accepted = (await f.bodies()).bodies;

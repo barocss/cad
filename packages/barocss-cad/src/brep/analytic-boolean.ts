@@ -22,6 +22,7 @@ import { curvePiece, curveReversed } from '../nurbs/curves/curve-segment.js';
 import { BrepError, buildBrep, checkBrep, isFacetFace, lineCurve, nurbsOf as surfaceOfFace, type Brep, type BrepFace } from './brep-core.js';
 import { bindHalfRingIntersection } from './exact-ring-intersect.js';
 import { bindHalfRectangularDuctIntersection } from './exact-rectangular-duct-intersect.js';
+import { exactCoincidentIntersection } from './exact-coincident-intersection.js';
 import { affinePlaneBinding } from './affine-plane-binding.js';
 import { facetPlane } from '../mesh/facet-patch.js';
 import { circleOf, polesOf, tessellateBrep } from './brep-tessellate.js';
@@ -1576,6 +1577,18 @@ function analyticBoolean(a: Brep, b: Brep, operation: AnalyticBooleanOperation, 
   const tol = linearToleranceMM(scale) * 10, span = 4 * scale + 1;
   if (options.edgeFitTolerance !== undefined && !(Number.isFinite(options.edgeFitTolerance) && options.edgeFitTolerance > 0)) throw new BrepError('INPUT', 'analytic Boolean: edge fit tolerance must be positive and finite');
   const edgeFit = options.edgeFitTolerance === undefined ? undefined : Math.min(tol / 4, options.edgeFitTolerance);
+  if (operation === 'intersection' && !exactDomainMap) {
+    const identity = exactCoincidentIntersection(a, b, id);
+    if (identity) {
+      if (trace) {
+        const faceSources = new Map<string, BooleanFaceSourceSet>();
+        for (const [face, [first, second]] of identity.facePairs)
+          faceSources.set(face, { complete: true, sources: [{ operand: 0, faceId: first }, { operand: 1, faceId: second }] });
+        trace.results.set(identity.brep, { complete: true, faceSources });
+      }
+      return identity.brep;
+    }
+  }
   const A = facesOf(a, 0, tol, exactDomainMap), B = facesOf(b, 1, tol, exactDomainMap);
   if (trace) { registerFaceSources(A, trace); registerFaceSources(B, trace); }
   // 1. Cuts.
