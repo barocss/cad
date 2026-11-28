@@ -10,6 +10,7 @@ import { headOf, isLinearSavedSequence, readVersion, snapshotKeyOf, versionsOf }
 import type { Conflict, Resolutions, Side } from '@barocss/cad-model/versions/merge';
 import { canKeepInBrowser, canPickFolder } from './access';
 import type { ProjectActions } from './useProject';
+import { currentComparisonVersion, type VersionComparison } from './useWorkingVersionComparison';
 import { linkedPath } from './linked';
 import { DockSection } from '../layout/DockSection';
 import { ROW } from '../ui/panelStyles';
@@ -25,17 +26,6 @@ import { approvedRequirementComparison } from '@barocss/cad-model/versions/appro
 import type { PrepareFaceRepair } from './SavedFaceReferenceRepair';
 import { MergeConflictChoices } from './MergeConflictChoices';
 import { DrawingDimensionComparison } from './DrawingDimensionComparison';
-
-type ComparedVersion = { id: string; doc: StudioDoc; snapshot: string };
-export type VersionComparison = ComparedVersion & {
-  store: NonNullable<ProjectActions['view']['store']>; path: string;
-  target?: ComparedVersion;
-};
-/** A comparison source still belongs to this project, document and branch. */
-export function currentComparisonVersion(view: ProjectActions['view'], comparing: VersionComparison | null, list?: ReturnType<typeof versionsOf>) {
-  if (!comparing || !view.log || comparing.store !== view.store || comparing.path !== view.part) return undefined;
-  return (list ?? versionsOf(view.log)).find(item => item.id === comparing.id && item.snapshot === comparing.snapshot);
-}
 
 const KIND = { folder: 'folder', browser: 'in this browser', memory: 'in memory', cloud: 'cloud' } as const;
 const when = (at: string) => new Date(at).toLocaleString();

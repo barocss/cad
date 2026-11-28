@@ -4,19 +4,23 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createFlow, sha256 } from './flow-helper.mjs';
 
+const compare = process.argv.includes('--compare');
 const fixture = join(import.meta.dirname, 'fixtures', 'bracket.bcad');
 const pins = [
   'apps/cad-studio/test/project-named-version-restore-browser.mjs', 'apps/cad-studio/test/fixtures/bracket.bcad',
   'apps/cad-studio/handover/roadmap-tracks/16-b08-evidence-ledger.md',
   'apps/cad-studio/src/storage/useProject.ts', 'apps/cad-studio/src/storage/project.ts', 'apps/cad-studio/src/storage/VersionsPanel.tsx',
   'packages/barocss-cad-model/src/versions/log.ts',
+  'apps/cad-studio/src/App.tsx',
+  ...(process.argv.includes('--comparison-hook') ? ['apps/cad-studio/src/storage/useWorkingVersionComparison.ts'] : []),
 ];
 
 const f = await createFlow({
   name: 'project-named-version-restore', envFrozen: 'D764_SOURCE_FROZEN', output: process.argv[2],
-  qualification: 'B08-01 named version, dirty Restore, explicit Save and current geometry',
+  qualification: compare ? 'Working and saved comparisons keep their correct overlay owner, native version bytes and fresh project Open.'
+    : 'B08-01 named version, dirty Restore, explicit Save and current geometry',
   initialFiles: pins, requiredFrozen: pins,
-  limits: ['One rectangular extrusion, one named version, one browser project. Branch and autosave failure groups are separate.'],
+  limits: ['One rectangular extrusion and one browser project. Branch and autosave failure groups are separate.'],
   inspectorSource: String.raw`
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -43,6 +47,8 @@ print(json.dumps({"status":"PASS","height":h,"volume":360*h}))
     dirty: !!document.querySelector('[aria-label="Unsaved changes"]'),
     versions: [...document.querySelectorAll('[aria-label="Versions"] > li')].map(row => row.getAttribute('aria-label')),
     activePath: document.querySelector('[aria-label="Project documents"] [data-active="true"]')?.textContent ?? null,
+    comparison: document.querySelector('[aria-label="Compared changes"]')?.textContent ?? null,
+    overlay: window.__studioCompareOverlay?.() ?? null,
   }),
 });
 
@@ -128,6 +134,68 @@ await f.run(async () => {
   const newer = await binding('saved-H8', 8, false);
   const newerBytes = await readPart();
   assert.deepEqual(JSON.parse(newerBytes), newer);
+
+  if (compare) {
+    f.phase = 'Create a second saved version and a later working revision';
+    await versions.getByLabel('Version name', { exact: true }).fill('Reference height 8');
+    await versions.getByRole('button', { name: 'Make version', exact: true }).click();
+    await versions.getByLabel('Version Reference height 8', { exact: true }).waitFor();
+    await editHeight(10, newer);
+    await save();
+    const working = await f.doc(), storedLog = await readLog(), storedPart = await readPart();
+    const storedSnapshots = await Promise.all(JSON.parse(storedLog).versions.map(v => readNative(['.barocss', 'snapshots', v.snapshot + '.bcad'])));
+    assert.equal(working.nodes[1].height, 10);
+    const toggle = () => versions.getByRole('button', { name: 'Compare ' + versionName, exact: true }).click();
+    const noOverlay = () => page.waitForFunction(() => window.__studioCompareOverlay?.() === null);
+    const workingOverlay = () => page.waitForFunction(() => {
+      const result = window.__studioCompareOverlay?.();
+      return result?.method === 'boolean' && Math.abs(result.added - 1440) < 1e-7 && (result.removed === 0 || result.removed === null);
+    });
+    const changes = () => versions.getByRole('status', { name: 'Compared changes', exact: true });
+
+    f.phase = 'Switch between working geometry and a saved version';
+    await toggle();
+    await workingOverlay();
+    assert.match(await changes().innerText(), /From the version to the working document/);
+    const visible = await f.snapshot('working-comparison');
+    assert.equal(visible.bodies.bodies[0].volume, 3600);
+    const target = versions.getByLabel('Compare to', { exact: true });
+    await target.selectOption({ label: 'Reference height 8' });
+    await noOverlay();
+    assert.match(await changes().innerText(), /Reference height 6 → Reference height 8 · saved versions/);
+    await f.same(working);
+    await f.snapshot('saved-comparison');
+    await target.selectOption({ label: 'Working document' });
+    await workingOverlay();
+
+    f.phase = 'Hide and then close the project while its comparison is visible';
+    await toggle();
+    await noOverlay();
+    await changes().waitFor({ state: 'hidden' });
+    await f.same(working);
+    await f.snapshot('hidden-comparison');
+    await toggle();
+    await workingOverlay();
+    await versions.getByRole('button', { name: 'Close project', exact: true }).click();
+    await noOverlay();
+    await page.reload();
+    await f.ready();
+    await attach();
+    await versions.getByRole('button', { name: 'Open ' + file, exact: true }).click();
+    await f.same(working);
+    await noOverlay();
+    await changes().waitFor({ state: 'hidden' });
+    await f.snapshot('project-reopened');
+    assert.equal(await readPart(), storedPart);
+    assert.equal(await readLog(), storedLog);
+    for (const [index, v] of JSON.parse(storedLog).versions.entries()) {
+      assert.equal(await readNative(['.barocss', 'snapshots', v.snapshot + '.bcad']), storedSnapshots[index]);
+    }
+    f.report.observations.push({ workingVolume: 3600, added: 1440, method: 'boolean',
+      workingSHA256: sha256(storedPart), versionLogSHA256: sha256(storedLog), snapshots: storedSnapshots.map(sha256) });
+    return;
+  }
+
   await versions.getByRole('button', { name: 'Restore ' + versionName, exact: true }).click();
   await f.same(baseline);
   await dirty.waitFor();

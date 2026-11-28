@@ -125,7 +125,7 @@ import { routeMessage } from './app/routeSession';
 import { CursorReadout } from './ui/CursorReadout';
 import { revokePersonRowFiles, isPersonRowFiles, type PersonRowFiles } from '@barocss/cad-model/engine/rowFiles';
 import { Profiler, Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties } from 'react';
-import { EngineClient, type ProposalOverlay } from './engine/client';
+import { EngineClient } from './engine/client';
 import { beginWork, createWorkOwnership, finishWork, reserveAcceptedChange, workEditRefusal, type WorkHistory } from './state/workOwnership';
 import type { OpenScope } from './state/openOwnership';
 import { scheduleProjectOpenFit } from './app/projectOpenFit';
@@ -141,7 +141,6 @@ import { bearingFaceInput } from './app/bearingEdit';
 import { usePlacedBearingEditor } from './app/usePlacedBearingEditor';
 import { carryOver, featureLabel, fmt, prefixDoc, starterDoc, type StudioDoc } from '@barocss/cad-model/engine/doc';
 import { featureId, nextSerial } from '@barocss/cad-model/engine/ids';
-import { modelHash } from '@barocss/cad-model/chat/spec';
 import { captureSignatures, type Problem as RefProblem } from '@barocss/cad-model/engine/references';
 import type { BodyResult } from '@barocss/cad-model/engine/evaluate';
 import type { FriendlyError } from '@barocss/cad-model/engine/errors';
@@ -183,7 +182,8 @@ import { useVariants } from './state/useVariants';
 import { VariantsPanel } from './ui/VariantsPanel';
 // (CG6: a project — a folder or one kept in this browser — its documents' versions and branches: src/storage/.)
 import { useProject } from './storage/useProject';
-import { VersionsPanel, currentComparisonVersion, type VersionComparison } from './storage/VersionsPanel';
+import { VersionsPanel } from './storage/VersionsPanel';
+import { useWorkingVersionComparison } from './storage/useWorkingVersionComparison';
 import type { CheckpointReview } from './files/taskCheckpoint';
 import { isLocalTaskRunHost, retiresTaskRunReview, type TaskRunLaunch, type TaskRunStatus } from './chat/taskRunOffer';
 import { useApprovalEvidenceAttachment } from './chat/useApprovalEvidenceAttachment';
@@ -552,14 +552,9 @@ export function App() {
   const [reopenedTaskRun, setReopenedTaskRun] = useState<TaskRunLaunch>();
   const [decidedTaskRun, setDecidedTaskRun] = useState<TaskRunStatus>();
   const [checkpointReview, setCheckpointReview] = useState<CheckpointReview | null>(null);
-  const [compareBase, setCompareBase] = useState<VersionComparison | null>(null);
   const approvalAttachmentsEnabled = !inPlace && isLocalTaskRunHost(window.location.hostname);
   const approvalAttachments = useApprovalEvidenceAttachment(approvalAttachmentsEnabled,
     () => project.opening() ? undefined : project.taskSourceKey());
-  const [versionDiff, setVersionDiff] = useState<{ source: VersionComparison; doc: StudioDoc; overlay: ProposalOverlay } | null>(null);
-  const workingComparison = useMemo(() => compareBase && !compareBase.target && currentComparisonVersion(project.view, compareBase) ? compareBase : null,
-    [compareBase, project.view]);
-  const compareOverlay = versionDiff?.source === workingComparison && versionDiff.doc === doc ? versionDiff.overlay : null;
   useEffect(() => { void project.loadRecent(); }, []);
   useEffect(() => {
     if (!dirty || inPlace) return;
@@ -691,6 +686,7 @@ export function App() {
   const lastEvalMs = useRef(0);
   const [menu, setMenu] = useState<ViewportMenu | null>(null);
   const revision = useRef(1);
+  const { compareBase, setCompareBase, workingComparison, compareOverlay } = useWorkingVersionComparison(doc, project.view, engine, lanes, revision);
   const bearingEditor = usePlacedBearingEditor({ doc, instanceSel, editNode, engine, lanes, revision, onNotice: setToast });
   const { instanceEdit, setInstanceEdit, scope: bearingEditScope } = bearingEditor;
   const evaluateVersion = useCallback((input: StudioDoc) => engine.part(input, revision.current++, 'read'), [engine]);
@@ -1500,14 +1496,6 @@ export function App() {
   routeContext.current = { blocked: busy || !fresh || !!parameterEdit || marker !== null || !!shownVariant.current || !!active || !!sketch || rendering || drawing || !!measure || !!assembly.draft || !!cageEd.session || !!skel.session || !!ghost };
   const footprintReady = nativeVertexReady && !routeContext.current.blocked && !routePanelOpen && !bodyDrag;
   useEffect(() => routeEditor.discardBlocked(), [busy, fresh, parameterEdit, marker, active, sketch, rendering, drawing, measure, assembly.draft, cageEd.session, skel.session, ghost, doc]);
-  // (CG6: a version compared with the working document — its geometry's difference on the same overlay, version → working.)
-  useEffect(() => {
-    if (!workingComparison) { setVersionDiff(null); return; }
-    const at = revision.current++, key = `version:${workingComparison.id}`;
-    void lanes.run('version-diff', { revision: at, source: key }, () => engine.proposalDiff(workingComparison.doc, doc, at, { revision: modelHash(doc), proposal: key }))
-      .then(reply => { if (!reply.stale) setVersionDiff('error' in reply.result ? null : { source: workingComparison, doc, overlay: reply.result }); });
-    return () => lanes.cancel('version-diff');
-  }, [workingComparison, doc]);
   const { setRequirement, answerQuestions, acceptAll, refTool, addDrawingFile, addReferenceFile, placeRef, removeRef, confirmBrief } =
     useSpecificationActions({ doc, bodies, commit, engine, revision, setToast, setChat, setChatOutbox });
   const { showWorkspace, requestWorkspace, requestSketchWorkspace } = createWorkspaceNavigation({
