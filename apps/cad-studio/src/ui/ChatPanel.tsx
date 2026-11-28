@@ -200,8 +200,8 @@ export function ChatPanel(props: ChatPanelProps) {
       <div className="card-title">CHAT <span className="muted">{status?.model ?? ''}</span>
         <span className="grow" />
         {browserSummary && <Button type="button" size="xs" variant={browserSummary.enabled ? 'default' : 'outline'}
-          aria-label="Share part summary with browser tools"
-          title="Share this part's read-only summary with browser tools" aria-pressed={browserSummary.enabled}
+          aria-label="Share part summary and plane measurements with browser tools"
+          title="Share this part's read-only summary and plane measurements with browser tools" aria-pressed={browserSummary.enabled}
           disabled={!browserSummary.ready && !browserSummary.enabled} onClick={browserSummary.toggle}>WebMCP</Button>}
         <select className="chat-autonomy" aria-label="Autonomy" title={AUTONOMY_TIPS[autonomy - 1]} value={autonomy} disabled={running}
           onChange={e => chat.setAutonomy(Number(e.currentTarget.value))}>
