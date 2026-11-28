@@ -63,7 +63,7 @@ const renderViewsTool: PartHandler = async (state, args, evaluate, _options, dis
     const { image, ...views } = review.result;
     const duct = 'rectangularDuct' in review.geometry ? review.geometry.rectangularDuct : undefined;
     const intersection = 'rectangularDuctIntersection' in review.geometry ? review.geometry.rectangularDuctIntersection : undefined;
-    const label = duct
+    const label = 'trapezoidalCavityEdit' in review.geometry ? 'Trapezoidal Sweep cavity edit' : duct
       ? ('closedCavities' in duct && duct.closedCavities ? 'Closed duct with two sealed cavities' : `Rectangular ${duct.pathKind ?? 'S-bend'} duct`)
       : intersection ? ('centroid' in intersection
         ? `${intersection.offset === 0 ? 'Centered' : 'Offset'} two-cavity duct Intersect` : 'Offset rectangular duct Intersect')

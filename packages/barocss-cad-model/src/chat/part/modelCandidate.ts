@@ -12,6 +12,7 @@ import { pairedElbowInletPlaneProposal, pairedElbowOutletPlaneProposal, reviewed
 import { pairedTiltedInletProposal, pairedTiltedOppositeCapProposal, pairedTiltedOutletProposal, reviewedPairedTiltedInletEvidence, reviewedPairedTiltedOppositeCapEvidence, reviewedPairedTiltedOutletEvidence } from '../pairedTiltedOutletProposalReview';
 import { proposalIsStale } from '../proposals';
 import { perpendicularAnnularOutletProposal, reviewedPerpendicularAnnularOutletEvidence } from '../perpendicularAnnularOutletProposalReview';
+import { trapezoidalCavityProposal, reviewedTrapezoidalCavityEvidence } from '../trapezoidalCavityProposalReview';
 import { rectangularDuctProposal, reviewedRectangularDuctEvidence } from '../rectangularDuctProposalReview';
 import { rectangularDuctIntersectionProposal, reviewedRectangularDuctIntersectionEvidence } from '../rectangularDuctIntersectionProposalReview';
 import { fail, type ChatState, type Evaluate, type PartRun } from '../toolKit';
@@ -50,6 +51,7 @@ export async function reviewModelCandidate(state: ChatState, args: Record<string
     return refuse('MODEL_REVIEW_BASE_STALE', 'The base part changed. Read query.rebuild and proposals.list before reviewing again.');
   const matches = (state.doc.proposals ?? []).filter(entry => entry.id === proposal);
   const pending = matches.length === 1 ? matches[0] : undefined;
+  const cavityEdit = pending && trapezoidalCavityProposal(state.doc, pending);
   const rib = pending && attachedRibProposal(state.doc, pending);
   const lockedPlate = pending && lockedPlateProposal(state.doc, pending);
   const boreEdit = pending && boredWallProposal(state.doc, pending);
@@ -66,7 +68,7 @@ export async function reviewModelCandidate(state: ChatState, args: Record<string
   const tiltedOutlet = pending && pairedTiltedOutletProposal(state.doc, pending);
   const tiltedInlet = pending && !tiltedOutlet ? pairedTiltedInletProposal(state.doc, pending) : undefined;
   const tiltedOpposite = pending && !tiltedOutlet && !tiltedInlet ? pairedTiltedOppositeCapProposal(state.doc, pending) : undefined;
-  const proposalRevision = rib?.revision ?? lockedPlate?.revision ?? boreEdit?.revision ?? cornerEdit?.revision ?? resizeEdit?.revision ?? duct?.revision ?? ductCut?.revision ??
+  const proposalRevision = cavityEdit?.revision ?? rib?.revision ?? lockedPlate?.revision ?? boreEdit?.revision ?? cornerEdit?.revision ?? resizeEdit?.revision ?? duct?.revision ?? ductCut?.revision ??
     outlet?.revision ?? inlet?.revision ?? outletPlane?.revision ?? inletPlane?.revision ?? tiltedOutlet?.revision ?? tiltedInlet?.revision ?? tiltedOpposite?.revision ?? annularOutlet?.revision;
   if (!pending || !proposalRevision)
     return refuse('MODEL_REVIEW_UNAVAILABLE', 'Choose a unique open proposal with a modelReviewRevision from proposals.list.');
@@ -75,7 +77,8 @@ export async function reviewModelCandidate(state: ChatState, args: Record<string
 
   const preview = await previewProposalWith(dispatch, state, proposal, evaluate);
   if ('error' in preview) return refuse('MODEL_REVIEW_REPLAY_FAILED', preview.error);
-  const evidence = rib ? reviewedAttachedRibEvidence(state.doc, preview.doc, rib)
+  const evidence = cavityEdit ? reviewedTrapezoidalCavityEvidence(state.doc, preview.doc, cavityEdit)
+    : rib ? reviewedAttachedRibEvidence(state.doc, preview.doc, rib)
     : lockedPlate ? reviewedLockedPlateEvidence(preview.doc, preview.bodies, lockedPlate.reference)
     : boreEdit ? boredWallEvidence(preview.doc, boreEdit)
     : cornerEdit ? reviewedCornerBatchEvidence(state.doc, preview.doc, cornerEdit)

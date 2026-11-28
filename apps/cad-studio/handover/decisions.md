@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D2267: [D2267](notes/agent-trapezoidal-cavity-review-2026-11-29/README.md), #324. Pin one sealed trapezoidal Sweep cavity edit to exact native wall evidence and Studio approval.
+
 - D2266: [D2266](notes/exact-trapezoidal-sweep-cavity-2026-11-29/README.md), #10. Carry one enclosed rectangular cavity with an exact closed trapezoidal Sweep and preserve its authored placement.
 
 - D2265: [D2265](notes/closed-trapezoid-inner-rim-fillet-2026-11-29/README.md), #12. Verify the original complete inner-rim Fillet after a closed trapezoidal Sweep and an upstream width edit.

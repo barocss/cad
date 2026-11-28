@@ -18,6 +18,7 @@ import { boredWallProposal } from '../modelProposalReview';
 import { pairedElbowInletProposal, pairedElbowOutletProposal } from '../pairedElbowOutletProposalReview';
 import { pairedElbowInletPlaneProposal, pairedElbowOutletPlaneProposal } from '../pairedElbowOutletPlaneProposalReview';
 import { pairedTiltedInletProposal, pairedTiltedOppositeCapProposal, pairedTiltedOutletProposal } from '../pairedTiltedOutletProposalReview';
+import { trapezoidalCavityProposal } from '../trapezoidalCavityProposalReview';
 import { rectangularDuctProposal } from '../rectangularDuctProposalReview';
 import { perpendicularAnnularOutletProposal } from '../perpendicularAnnularOutletProposalReview';
 import { rectangularDuctIntersectionProposal } from '../rectangularDuctIntersectionProposalReview';
@@ -443,7 +444,7 @@ async function listProposalsTool(state: ChatState, args: Record<string, unknown>
     const { ops, ...details } = p;
     const direct = directReviewRevision(p);
     const model = state.partOf ? undefined
-      : boredWallProposal(state.doc, p)?.revision ?? cornerBatchProposal(state.doc, p)?.revision
+      : trapezoidalCavityProposal(state.doc, p)?.revision ?? boredWallProposal(state.doc, p)?.revision ?? cornerBatchProposal(state.doc, p)?.revision
         ?? savedChamferResizeProposal(state.doc, p)?.revision ?? rectangularDuctProposal(state.doc, p)?.revision
         ?? rectangularDuctIntersectionProposal(state.doc, p)?.revision ?? pairedElbowOutletProposal(state.doc, p)?.revision
         ?? pairedElbowInletProposal(state.doc, p)?.revision ?? pairedElbowOutletPlaneProposal(state.doc, p)?.revision
