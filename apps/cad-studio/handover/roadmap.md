@@ -1,13 +1,13 @@
 # CAD roadmap — current status and execution order
 
-Updated 2026-11-28 · Priority authority: D520 · Latest delivery: D2165 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
+Updated 2026-11-28 · Priority authority: D520 · Latest delivery: D2166 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
 
 This is the only current status index. Detailed tracks define acceptance; the 34 stable row pages retain scope and issue navigation. Immutable decision notes retain results. Do not append chronological status paragraphs here. [D520 decision](notes/cad-roadmap-replan-2026-11-04/README.md) supersedes D445 execution order and historical next-item text, while retaining its safeguards and bounded proofs.
 
 ## Now and next
 
-- **Current position:** [D2165](notes/sheet-principal-origin-reflections-2026-11-28/README.md), P1 rows 07, 08 and 16. Reflected-only Sheet Mirror carries the flat and subsequent Flange through every principal origin plane. History and fresh Open pass for XZ and XY ([#198](https://github.com/barocss/cad/issues/198)).
-- **Next MAIN:** D2166, P1 rows 07, 16 and 20. Reconcile the exact sketch–Extrude–Fillet acceptance in [#203](https://github.com/barocss/cad/issues/203) and check any missing handle, prefix-versus-full preview and single-commit behavior in desktop Studio.
+- **Current position:** [D2166](notes/full-extrude-preview-approval-2026-11-28/README.md), P1 rows 07, 16 and 20. The complete Extrude and downstream Fillet candidate commits once after a slow prefix, with exact numeric parity and fresh Open ([#203](https://github.com/barocss/cad/issues/203)).
+- **Next MAIN:** D2167, P1 rows 07, 08 and 16. Qualify the existing separate Linear and Circular sheet patterns and copy-only follow-on editing to resolve the remaining finite [#198](https://github.com/barocss/cad/issues/198) acceptance.
 - **Separate follow-ups:** Continue Studio App extraction in cohesive parts with affected desktop checks. [#608 Rendering](https://github.com/barocss/cad/issues/608) stays on HOLD. API inventory drift remains open. The issue tracker records [#126](https://github.com/barocss/cad/issues/126), [#613](https://github.com/barocss/cad/issues/613), [#152](https://github.com/barocss/cad/issues/152) and [#22](https://github.com/barocss/cad/issues/22) as closed.
 - **Active repository:** [barocss/cad](https://github.com/barocss/cad), based on `origin/main`. Fetch before work and preserve unexpected changes. The [migration record](../../../docs/migration/README.md) maps the former `local/cad-dev` history and issue numbers.
 - **Evidence correction:** D482 records2167 PASS/0 FAIL/2 existing SKIP in a later full-kernel run than D433. Neither result is a new full-suite PASS at this audit HEAD. [D482 record](notes/vertical-contact-refusal-2026-11-04/README.md).

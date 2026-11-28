@@ -5,6 +5,7 @@ import { clickModelCommand } from './model-rail-helper.mjs';
 
 const [output, mode] = process.argv.slice(2);
 const baseline = mode === '--baseline';
+const verifyApproval = mode === '--prefix-approval';
 const pins = [
   'apps/cad-studio/test/failed-feature-preview-browser.mjs',
   'apps/cad-studio/src/state/useCommandPreview.ts',
@@ -17,8 +18,10 @@ const pins = [
 ];
 const f = await createFlow({
   name: 'failed-feature-preview', output, envFrozen: 'D749_SOURCE_FROZEN', initialFiles: pins, requiredFrozen: pins,
-  qualification: baseline ? 'Reproduce a missing failed feature in the current Studio HUD' : 'Verify the failed feature in the current Studio HUD',
-  limits: ['Desktop ordinary box and horizontal circular edge fillet. Reply holds alter delivery time only.'],
+  qualification: baseline ? 'Reproduce a missing failed feature in the current Studio HUD'
+    : verifyApproval ? 'Verify exact handle and numeric parity, prefix ownership, and one queued commit for a Fillet-dependent Extrude'
+      : 'Verify the failed feature in the current Studio HUD',
+  limits: ['Desktop rectangular Extrude with one original straight top-edge Fillet. Reply holds alter delivery time only.'],
   inspectorSource: `
 import assert from 'node:assert/strict';
 import { CadPartError, evaluateCadPart } from '@barocss/cad';
@@ -64,7 +67,7 @@ function observePreviews() {
   let nextHold = false, held = null;
   worker.postMessage = function (request, ...args) {
     if (request?.type === 'preview') {
-      const record = { id: request.id, revision: request.revision,
+      const record = { id: request.id, revision: request.revision, nodeCount: request.doc?.ids?.length,
         nodes: (request.doc?.added ?? []).map(([, node]) => ({ id: node.id, kind: node.kind, height: node.height, radius: node.radius })) };
       pending.set(request.id, { worker: this, record, hold: nextHold });
       records.push(record);
@@ -132,10 +135,7 @@ await f.run(async () => {
   const distance = () => hud().getByLabel('Distance', { exact: true });
   const apply = () => hud().getByRole('button', { name: 'Apply', exact: true });
   const failure = () => page.locator('.hud-error-feature');
-  const showEdit = async () => {
-    await button('Iso').click();
-    await page.getByTitle('Frame all (F)', { exact: true }).click();
-    await f.openFeatureEditor(1);
+  const dragDistance = async (pixels, steps = 1) => {
     const handle = page.locator('g.gizmo-handle[data-handle="h"]');
     await handle.waitFor({ state: 'visible' });
     const [root, head] = await handle.evaluate(g => [g.querySelector('circle'), g.querySelector('polygon')].map(node => {
@@ -146,7 +146,13 @@ await f.run(async () => {
     assert.ok(len > 0);
     await page.mouse.move(...head);
     await page.mouse.down();
-    await page.mouse.move(head[0] + 10 * delta[0] / len, head[1] + 10 * delta[1] / len, { steps: 4 });
+    await page.mouse.move(head[0] + pixels * delta[0] / len, head[1] + pixels * delta[1] / len, { steps });
+  };
+  const showEdit = async () => {
+    await button('Iso').click();
+    await page.getByTitle('Frame all (F)', { exact: true }).click();
+    await f.openFeatureEditor(1);
+    await dragDistance(10, 4);
     await page.mouse.up();
     await distance().waitFor();
     await status('preview');
@@ -248,6 +254,8 @@ await f.run(async () => {
   await distance().fill('4');
   assert.equal((await held()).error.feature, 'n41');
   await button('New part').click();
+  const discard = page.getByRole('dialog', { name: 'Discard feature changes?', exact: true });
+  await discard.getByRole('button', { name: 'Discard changes', exact: true }).click();
   await page.waitForFunction(() => window.__studioDoc.nodes.length === 0);
   await hud().waitFor({ state: 'hidden' });
   await f.ready();
@@ -286,15 +294,76 @@ await f.run(async () => {
   await open(fixture.doc);
   await showEdit();
   await setDistance(4, 'refused');
-  await setDistance(12, 'preview');
-  assert.equal(await failure().count(), 0);
-  await apply().click();
-  await hud().waitFor({ state: 'hidden' });
-  await f.changed(fixture.doc);
-  const accepted = await f.snapshot('valid-extrude-retry-applied');
-  assert.equal(accepted.doc.nodes[1].height, 12);
-  assert.deepEqual(accepted.doc.nodes[2], fixture.doc.nodes[2]);
-  assert.ok(Math.abs(accepted.bodies.bodies[0].volume - (12480 + 480 * Math.PI)) < 1e-7);
+  let accepted;
+  if (verifyApproval) {
+    f.phase = 'choose a genuine slow full preview on the current Extrude edit';
+    await arm();
+    await distance().fill('16');
+    const warmFull = await held();
+    assert.equal(warmFull.ok, true);
+    assert.equal(warmFull.nodeCount, 3);
+    await page.waitForTimeout(160);
+    await release();
+    await status('preview');
+
+    f.phase = 'drag the original Extrude handle and keep the prefix provisional';
+    await arm();
+    await dragDistance(24);
+    const prefix = await held();
+    assert.equal(prefix.nodeCount, 2);
+    assert.equal(prefix.ok, true);
+    const draggedHeight = Number(await distance().inputValue());
+    assert.ok(Number.isFinite(draggedHeight) && draggedHeight > 8 && draggedHeight !== 16);
+    await page.evaluate(() => { window.__d749.release(); window.__d749.arm(); });
+    const complete = await held();
+    assert.equal(complete.nodeCount, 3);
+    assert.equal(complete.ok, true);
+    assert.ok(complete.revision > prefix.revision);
+    await page.mouse.up();
+    await status('evaluating…');
+    const pending = await f.snapshot('rolled-extrude-awaits-the-full-part');
+    assert.equal(pending.applyDisabled, true);
+    assert.deepEqual(pending.doc, fixture.doc);
+    await page.evaluate(() => document.activeElement?.blur());
+    await page.keyboard.press('Enter');
+    await page.keyboard.press('Enter');
+    assert.deepEqual(await f.doc(), fixture.doc);
+    assert.equal(await apply().isDisabled(), true);
+    await release();
+    await hud().waitFor({ state: 'hidden' });
+    await f.changed(fixture.doc);
+    accepted = await f.snapshot('one-queued-full-part-commit');
+    assert.equal(accepted.doc.nodes[1].height, draggedHeight);
+    assert.deepEqual(accepted.doc.nodes[2], fixture.doc.nodes[2]);
+    const expectedVolume = 1200 * draggedHeight - 30 * 8 ** 2 * (1 - Math.PI / 4);
+    assert.ok(Math.abs(accepted.bodies.bodies[0].volume - expectedVolume) < 1e-7);
+    await f.undo();
+    await f.same(fixture.doc);
+    await f.redo();
+    await f.same(accepted.doc);
+    await f.undo();
+    await f.same(fixture.doc);
+
+    f.phase = 'verify numeric and dragged candidates are identical';
+    await showEdit();
+    await setDistance(draggedHeight, 'preview');
+    await apply().click();
+    await hud().waitFor({ state: 'hidden' });
+    await f.same(accepted.doc);
+    const typed = await f.snapshot('same-full-part-from-typed-distance');
+    assert.deepEqual(typed.bodies.bodies, accepted.bodies.bodies);
+    f.report.observations.push({ draggedHeight, expectedVolume, warmFull, prefix, complete });
+  } else {
+    await setDistance(12, 'preview');
+    assert.equal(await failure().count(), 0);
+    await apply().click();
+    await hud().waitFor({ state: 'hidden' });
+    await f.changed(fixture.doc);
+    accepted = await f.snapshot('valid-extrude-retry-applied');
+    assert.equal(accepted.doc.nodes[1].height, 12);
+    assert.deepEqual(accepted.doc.nodes[2], fixture.doc.nodes[2]);
+    assert.ok(Math.abs(accepted.bodies.bodies[0].volume - (12480 + 480 * Math.PI)) < 1e-7);
+  }
   await f.undo();
   await f.same(fixture.doc);
   await f.redo();
