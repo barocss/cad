@@ -13,6 +13,7 @@ import { deleteFaceCommand } from './deleteFaceCommand';
 import { replaceFaceCommand } from './replaceFaceCommand';
 import { pivotFaceCommand } from './pivotFaceCommand';
 import { rotateCommand } from './rotateCommand';
+import { moveCommand } from './moveCommand';
 import { sheetCommands } from './sheetCommands';
 import { frameCommands } from './frameCommands';
 import { primitives, puck } from './primitives';
@@ -65,7 +66,7 @@ export interface VertexSel { body: number; at: [number, number, number] }
 export interface Selection { faces: FaceSel[]; edges: EdgeSel[]; bodies: number[]; sketches?: number[]; profileRegions?: { sketch: number; indices: number[] }; vertices?: VertexSel[] }
 /** `direct`: the direct curves and surfaces picked (their ids). */
 /** placedPartCount overrides the evaluated document for assembly-only availability after metadata-only edits. */
-export interface Ctx { rectangularCutSource?: BodyRef; splitSourceBounds?: { doc: StudioDoc; index: number; bounds: { min: [number, number, number]; max: [number, number, number] }; isCurrent(): boolean }; placedPartCount?: number; splitPlanePick?: FaceSel; rotateVertex?: VertexSel; viewportEndFace?: true; extrudeJoin?: ExtrudeJoinEvidence; extrudeJoinLooks?: Pick<StudioDoc, 'bodies'> & { nameOf?(body: BodyResult): string }; sewSnapshot?: SewSnapshot; thickenSnapshot?: ThickenSnapshot; fillPatternRegion?: FillFeaturePatternRegion; fillPatternAnchor?: readonly [number, number]; curvePatternPath?: CurveFeaturePatternPath; doc: StudioDoc; bodies: BodyResult[]; selection: Selection; pick?: [number, number, number]; holeSnapStep?: number; direct?: string[]; bearingAssembly?: BearingAssemblyInput }
+export interface Ctx { rectangularCutSource?: BodyRef; splitSourceBounds?: { doc: StudioDoc; index: number; bounds: { min: [number, number, number]; max: [number, number, number] }; isCurrent(): boolean }; placedPartCount?: number; splitPlanePick?: FaceSel; rotateVertex?: VertexSel; moveVertices?: readonly [VertexSel, VertexSel]; viewportEndFace?: true; extrudeJoin?: ExtrudeJoinEvidence; extrudeJoinLooks?: Pick<StudioDoc, 'bodies'> & { nameOf?(body: BodyResult): string }; sewSnapshot?: SewSnapshot; thickenSnapshot?: ThickenSnapshot; fillPatternRegion?: FillFeaturePatternRegion; fillPatternAnchor?: readonly [number, number]; curvePatternPath?: CurveFeaturePatternPath; doc: StudioDoc; bodies: BodyResult[]; selection: Selection; pick?: [number, number, number]; holeSnapStep?: number; direct?: string[]; bearingAssembly?: BearingAssemblyInput }
 
 export type Values = Record<string, number | string>;
 /** `when`: shown (and required) only for these values. */
@@ -139,6 +140,7 @@ export interface HandleSpec {
 }
 
 export { centreOf, refOf, selectedBodies };
+export { cornerOf } from './moveCommand';
 
 /**
  * A selection carried onto newly evaluated bodies: each face, edge and body to the one of the same body
@@ -199,10 +201,6 @@ function priorRectangularCutProblem(ctx: Ctx, label: string) {
   return why ? coded('BAD_REFERENCE', why) : null;
 }
 
-/** The current display bounds corner; Move arithmetic must not quantize authored coordinates. */
-export function cornerOf(b: BodyResult | null | undefined): [number, number, number] {
-  return b ? [...b.mesh.bounds.min] as [number, number, number] : [0, 0, 0];
-}
 /** The hole axis and entry side of a face normal along ±X, ±Y or ±Z. */
 function holeAxis(n: readonly number[]): { axis: Axis; side: 'min' | 'max' } | null {
   const k = [0, 1, 2].find(i => Math.abs(Math.abs(n[i]) - 1) < 1e-6);
@@ -810,24 +808,7 @@ const allCommands: Command[] = [
   // Sketch a profile beside the axis; finishing it offers the revolve (about the sketch's Y axis by default).
   // Sketch the bottom section; finishing it lofts it to a top section above.
   // Sketch a section; finishing it sweeps it along a run, a bend and a run.
-  {
-    id: 'move', label: 'Move', icon: 'cad-move', hint: 'Move a body: drag the arrows, or type Δ or a position', shortcut: 'G', group: 'modify', keywords: 'translate position',
-    available: ctx => oneBody(ctx) ? ok : no('Select one body to move.'),
-    // By Δ, or to a position: where the body's box corner (its least X, Y, Z) lands; each pair follows the other.
-    fields: () => [{ key: 'x', label: 'ΔX', kind: 'mm' }, { key: 'y', label: 'ΔY', kind: 'mm' }, { key: 'z', label: 'ΔZ', kind: 'mm' },
-      { key: 'ax', label: 'To X', kind: 'mm' }, { key: 'ay', label: 'To Y', kind: 'mm' }, { key: 'az', label: 'To Z', kind: 'mm' }],
-    // Nothing moved until a value is typed or the gizmo dragged.
-    defaults: ctx => { const m = cornerOf(oneBody(ctx)); return { x: 0, y: 0, z: 0, ax: m[0], ay: m[1], az: m[2] }; },
-    derive: (ctx, v, changed) => {
-      const m = cornerOf(oneBody(ctx)), out = { ...v };
-      ['x', 'y', 'z'].forEach((k, i) => {
-        if (changed.includes('a' + k)) out[k] = Number(v['a' + k]) - m[i];
-        else out['a' + k] = m[i] + Number(v[k]);
-      });
-      return out;
-    },
-    build: (ctx, v) => withNode(ctx.doc, { kind: 'translate', parent: refOf(oneBody(ctx)!), offset: [Number(v.x), Number(v.y), Number(v.z)] }),
-  },
+  moveCommand,
   rotateCommand,
   {
     id: 'scale', label: 'Scale', icon: 'cad-scale', hint: 'Grow or shrink a body about its centre: drag the gizmo’s cube or type the factor', group: 'modify', keywords: 'resize enlarge shrink factor',

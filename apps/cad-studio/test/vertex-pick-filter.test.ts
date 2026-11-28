@@ -1,9 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { resolveSketchLaunchVertices } from '../src/sketch/sketchLaunch';
-import { bindNativeVertexPick, currentNativeVertexPoints, currentSolidVertexPick, nativeVertexWitness, pickVertex } from '../src/viewport/vertexPick';
-import { rectanglePart } from '@barocss/cad-model/engine/doc';
+import { bindNativeVertexPick, currentNativeVertexPoints, currentSolidMoveVertices, currentSolidVertexPick, nativeVertexWitness, pickVertex } from '../src/viewport/vertexPick';
+import { rectanglePart, withNode } from '@barocss/cad-model/engine/doc';
 import { evaluatePart } from '@barocss/cad-model/engine/evaluate';
+import { moveCommand } from '@barocss/cad-model/app/moveCommand';
 import { rotateCommand } from '@barocss/cad-model/app/rotateCommand';
 
 // Same collision class as D539: a valid outer edge hit and a different inner
@@ -122,6 +123,43 @@ test('Rotate accepts one current native solid vertex and keeps the saved pivot n
   assert.ok(node?.kind === 'rotate');
   assert.deepEqual(node.pivot, [60, 30, 10]);
   assert.deepEqual(node.parent, body.ref);
+});
+
+test('Move reads the two current native vertices in selection order and only moves their source', () => {
+  const original = rectanglePart(10, 6, 4);
+  const withSketch = withNode(original, { kind: 'sketch', profile: 'rectangle', min: [20, 5], max: [30, 11] });
+  const doc = withNode(withSketch, { kind: 'extrude', sketch: 2, from: 2, height: 4 });
+  const evaluated = evaluatePart(doc, 1);
+  assert.ok(evaluated.ok);
+  const { bodies } = evaluated;
+  assert.equal(bodies.length, 2);
+  const vertices = [[10, 6, 4], [20, 5, 6]].map((point, i) => {
+    const { mesh } = bodies[i];
+    const matches = (candidate: readonly number[]) => candidate.every((value, j) => value === point[j]);
+    const edge = mesh.edges.find(edge => edge.nativeVertices && (matches(edge.a) || matches(edge.b)));
+    assert.ok(edge);
+    const pick = pickVertex('all', i, [edge], 0, 0, at => matches(at) ? [0, 0] : [20, 0], undefined, { mesh, edge: edge.index });
+    assert.ok(pick);
+    assert.ok(nativeVertexWitness(pick, mesh));
+    bindNativeVertexPick(pick, doc);
+    return pick;
+  });
+  const moveVertices = currentSolidMoveVertices(doc, bodies, vertices);
+  assert.deepEqual(moveVertices, vertices);
+  assert.equal(currentSolidMoveVertices({ ...doc }, bodies, vertices), undefined);
+  assert.equal(currentSolidMoveVertices(doc, bodies, [vertices[0], { ...vertices[1] }]), undefined);
+  assert.equal(currentSolidMoveVertices(doc, bodies, [vertices[0], vertices[0]]), undefined);
+  assert.equal(currentSolidMoveVertices(doc, [...bodies].reverse(), vertices), undefined);
+  const ctx = { doc, bodies, moveVertices, selection: { bodies: [], faces: [], edges: [], vertices } };
+  assert.equal(moveCommand.available(ctx).ok, true);
+  assert.equal(moveCommand.available({ ...ctx, selection: { ...ctx.selection, vertices: [...vertices].reverse() } }).ok, false);
+  const values = moveCommand.defaults!(ctx);
+  assert.deepEqual(values, { x: 10, y: -1, z: 2, ax: 20, ay: 5, az: 6 });
+  assert.equal(moveCommand.derive!(ctx, { ...values, ax: 23 }, ['ax']).x, 13);
+  const node = moveCommand.build!(ctx, values).nodes.at(-1);
+  assert.ok(node?.kind === 'translate');
+  assert.deepEqual(node.parent, bodies[0].ref);
+  assert.deepEqual(node.offset, [10, -1, 2]);
 });
 
 test('a Section corner reads only an unchanged native pointer witness from its visible mesh', () => {

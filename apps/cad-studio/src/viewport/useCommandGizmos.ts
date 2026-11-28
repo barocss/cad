@@ -9,6 +9,7 @@ import type { Vec3 } from '@barocss/cad-model/engine/mesh';
 import { patchValues, refOf, selectedBodies, type Ctx, type Selection, type Values } from '@barocss/cad-model/app/commands';
 import { editCommand, featureOfPick } from '@barocss/cad-model/app/editCommand';
 import { OFFSET_FACE_EDIT } from '@barocss/cad-model/app/offsetFaceEdit';
+import { moveBodyIndex, moveVertexPair } from '@barocss/cad-model/app/moveCommand';
 import { rotateBodyIndex } from '@barocss/cad-model/app/rotateCommand';
 import type { Active } from '../app/commandState';
 import type { FeatureHandle, ScalarHandleDraft, TransformGizmo } from './gizmo';
@@ -32,9 +33,9 @@ export function useCommandGizmos({ model, command, context, drag, splitSource, h
   // Move and Rotate gizmos on the selected body: while dragged it follows at once (a renderer transform
   // of the evaluated body); let go, the kernel preview of the values runs.
   const dragFrom = useRef<Values | null>(null);
-  const transformBodies = active && (active.cmd.id === 'move' || active.cmd.id === 'scale') ? selectedBodies(active.ctx.selection) : [];
-  const cmdBody = active?.cmd.id === 'rotate' ? rotateBodyIndex(active.ctx)
-    : transformBodies.length === 1 ? transformBodies[0] : undefined;
+  const scaleBodies = active?.cmd.id === 'scale' ? selectedBodies(active.ctx.selection) : [];
+  const cmdBody = active?.cmd.id === 'move' ? moveBodyIndex(active.ctx) : active?.cmd.id === 'rotate' ? rotateBodyIndex(active.ctx)
+    : scaleBodies.length === 1 ? scaleBodies[0] : undefined;
   const gizmo: TransformGizmo | null = active && cmdBody !== undefined && bodies[cmdBody] ? (() => {
     const { min, max } = bodies[cmdBody].mesh.bounds, values = active.values;
     const begin = () => dragFrom.current ?? (dragFrom.current = values);
@@ -45,7 +46,8 @@ export function useCommandGizmos({ model, command, context, drag, splitSource, h
     };
     if (active.cmd.id === 'move') {
       const v: Vec3 = [Number(values.x), Number(values.y), Number(values.z)];
-      return { origin: [(min[0] + max[0]) / 2 + v[0], (min[1] + max[1]) / 2 + v[1], max[2] + v[2]], move: [0, 1, 2],
+      const point = moveVertexPair(active.ctx)?.[0].at ?? [(min[0] + max[0]) / 2, (min[1] + max[1]) / 2, max[2]];
+      return { origin: [point[0] + v[0], point[1] + v[1], point[2] + v[2]], move: [0, 1, 2],
         onMove: (delta, done) => {
           const from = begin(), raw: Vec3 = [Number(from.x) + delta[0], Number(from.y) + delta[1], Number(from.z) + delta[2]];
           // Lined up with the other bodies' sides and middles when it comes close (2 % of its size, at least 1 mm).

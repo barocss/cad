@@ -33,7 +33,7 @@ import { bodyTopologyCounts } from './ui/bodyTopologyLabel';
 import { viewportRecoveryToast } from './viewport/viewportRecovery';
 import { useSpecificationActions } from './state/useSpecificationActions';
 import { useViewportPicking, type ViewportMenu } from './viewport/useViewportPicking';
-import { currentSolidVertexPick } from './viewport/vertexPick';
+import { currentSolidMoveVertices, currentSolidVertexPick } from './viewport/vertexPick';
 import { useViewportHoleRegions } from './viewport/useViewportHoleRegions';
 import { isOutlinePickIssue, studioSketchViewportActions } from './viewport/studioSketchViewportActions';
 import { sewPreviewDirect } from './viewport/sewPreviewDirect';
@@ -740,8 +740,9 @@ export function App() {
   const bodiesRef = useRef(bodies); bodiesRef.current = bodies;
   const nativeVertexReady = fresh && !busy && marker === null && !inPlace && !doc.instances?.length &&
     !active && !rendering && !drawing && !section && previewMode === 'none';
-  const rotateVertex = nativeVertexReady && shownDoc === doc ? currentSolidVertexPick(doc, bodies, selection.vertices) : undefined;
-  const ctx: Ctx = { doc: commandDoc, placedPartCount: doc.instances?.length ?? 0, bodies, selection, rotateVertex, pick: pick ?? undefined, direct: directSel, bearingAssembly: { root: doc, owner: 'base' } };
+  const nativePicks = nativeVertexReady && shownDoc === doc ? selection.vertices : undefined;
+  const ctx: Ctx = { doc: commandDoc, placedPartCount: doc.instances?.length ?? 0, bodies, selection, pick: pick ?? undefined, direct: directSel,
+    rotateVertex: currentSolidVertexPick(doc, bodies, nativePicks), moveVertices: currentSolidMoveVertices(doc, bodies, nativePicks), bearingAssembly: { root: doc, owner: 'base' } };
   const { evaluatedRef, source: evaluatedSource, ownsEvaluatedSource } = useStudioEvaluatedSource(
     { doc, evaluated, workerSession, marker }, { docNow, workOwnership, workerSessionNow, markerNow });
   const interference = useInterferenceCheck(evaluatedSource, ownsEvaluatedSource, engine,

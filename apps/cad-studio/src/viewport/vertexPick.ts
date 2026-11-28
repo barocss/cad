@@ -50,10 +50,20 @@ export function bindNativeVertexPick(pick: VertexPick, doc: StudioDoc): void {
 }
 
 export function currentSolidVertexPick(doc: StudioDoc, bodies: readonly BodyResult[], picks?: readonly VertexPick[]): VertexPick | undefined {
-  if (picks?.length !== 1) return;
-  const [pick] = picks, body = bodies[pick.body], owner = nativeOwners.get(pick);
-  if (body?.ref && body.topology?.kind === 'solid' && body.topology.bodyCount === 1
-    && owner?.doc === doc && !owner.source.sectionVertices && nativeVertexWitness(pick, body.mesh)) return pick;
+  return picks?.length === 1 && ownsSolidVertex(doc, bodies, picks[0]) ? picks[0] : undefined;
+}
+
+export function currentSolidMoveVertices(doc: StudioDoc, bodies: readonly BodyResult[], picks?: readonly VertexPick[]): readonly [VertexPick, VertexPick] | undefined {
+  if (picks?.length !== 2) return;
+  const [source, destination] = picks;
+  if (source.body !== destination.body && ownsSolidVertex(doc, bodies, source) && ownsSolidVertex(doc, bodies, destination))
+    return [source, destination];
+}
+
+function ownsSolidVertex(doc: StudioDoc, bodies: readonly BodyResult[], pick: VertexPick): boolean {
+  const body = bodies[pick.body], owner = nativeOwners.get(pick);
+  return !!body?.ref && body.topology?.kind === 'solid' && body.topology.bodyCount === 1
+    && owner?.doc === doc && !owner.source.sectionVertices && !!nativeVertexWitness(pick, body.mesh);
 }
 
 /** Resolve the original ordered endpoints of the current body. View-only or older picks have no authority here. */
