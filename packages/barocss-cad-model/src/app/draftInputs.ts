@@ -46,22 +46,33 @@ function originalCylinderDraftSource(doc: StudioDoc, ref: BodyRef, axis: number)
 
 const draftEnd = (pull: DraftPull, bottom: number, top: number) => pull.startsWith('-') ? Math.max(bottom, top) : Math.min(bottom, top);
 
-/** A pick of the complete native wall on original circular or coaxial annular stock. */
+function draftWallRole(source: NonNullable<ReturnType<typeof originalCylinderDraftSource>>, name: string) {
+  if (source.bore && name.startsWith(source.bore)) return 'bore';
+  if (name.startsWith(source.wall)) return 'outside';
+}
+
+/** Complete picked walls on original circular or coaxial annular stock. */
 export function originalCylinderDraftSelection(ctx: Ctx, pull: DraftPull): { faces: string[]; end: number } | undefined {
-  if (ctx.selection.faces.length !== 1) return;
+  const picks = ctx.selection.faces;
+  if (!picks.length || picks.length > 2 || picks.some(pick => pick.body !== picks[0].body)) return;
   const direction = pull.slice(-1), axis = 'xyz'.indexOf(direction);
-  const pick = ctx.selection.faces[0], body = ctx.bodies[pick.body], ref = body?.ref;
+  const body = ctx.bodies[picks[0].body], ref = body?.ref;
   if (!ref || body.topology?.bodyCount !== 1) return;
   const source = originalCylinderDraftSource(ctx.doc, ref, axis);
   if (!source || body.mesh.faces.length !== (source.bore ? 4 : 3)) return;
-  const face = body.mesh.faces[pick.face];
-  if (!face || !(face.name.startsWith(source.wall) || source.bore && face.name.startsWith(source.bore)) || face.exact?.kind !== 'cylinder'
-    || exactAxis(face.exact.a) !== axis || face.nativeFaces?.length !== 2) return;
-  const faces = face.nativeFaces.map(member => member.name).sort();
-  if (faces[0] !== face.name + '#1' || faces[1] !== face.name + '#2') return;
+  const roles = new Set<string>(), faces: string[] = [];
+  for (const pick of picks) {
+    const face = body.mesh.faces[pick.face], role = face && draftWallRole(source, face.name);
+    if (!role || roles.has(role) || face.exact?.kind !== 'cylinder'
+      || exactAxis(face.exact.a) !== axis || face.nativeFaces?.length !== 2) return;
+    const pair = face.nativeFaces.map(member => member.name).sort();
+    if (pair[0] !== face.name + '#1' || pair[1] !== face.name + '#2') return;
+    roles.add(role);
+    faces.push(...pair);
+  }
   const [bottom, top] = ['bottom', 'top'].map(cap => body.mesh.faces.find(candidate => candidate.nativePlaneName === source.owner + '.' + cap)?.nativeAxisPlane);
   if (bottom?.axis !== direction || top?.axis !== direction) return;
-  return { faces, end: draftEnd(pull, bottom.at, top.at) };
+  return { faces: faces.sort(), end: draftEnd(pull, bottom.at, top.at) };
 }
 
 export const draftInputs = (): Field[] => [
@@ -102,14 +113,16 @@ interface SavedDraftWall { parent: BodyRef; faces: readonly string[] }
 
 function cylinderDraftBodyEnd(doc: StudioDoc, target: Brep, wall: SavedDraftWall, pull: DraftPull, axis: number): number | undefined {
   const source = originalCylinderDraftSource(doc, wall.parent, axis);
-  if (!source || target.bodies.length !== 1 || target.bodies[0].kind !== 'solid' || target.faces.length !== source.faceCount || wall.faces.length !== 2) return;
-  const first = wall.faces.find(name => name.endsWith('#1'));
-  if (!first || !wall.faces.includes(first.slice(0, -1) + '2')) return;
-  const bore = !!source.bore && first.startsWith(source.bore);
-  if (!bore && !first.startsWith(source.wall)) return;
+  if (!source || target.bodies.length !== 1 || target.bodies[0].kind !== 'solid' || target.faces.length !== source.faceCount
+    || (wall.faces.length !== 2 && !(source.bore && wall.faces.length === 4))) return;
+  const first = wall.faces.filter(name => name.endsWith('#1'));
+  const roles = first.map(name => draftWallRole(source, name));
+  if (first.length * 2 !== wall.faces.length || roles.some(role => !role) || new Set(roles).size !== roles.length
+    || first.some(name => !wall.faces.includes(name.slice(0, -1) + '2'))) return;
   const sameWall = target.faces.filter(face => face.name !== undefined && wall.faces.includes(face.name));
-  if (sameWall.length !== 2 || sameWall.some(face => {
+  if (sameWall.length !== wall.faces.length || sameWall.some(face => {
     const geometry = faceGeometry(face);
+    const bore = !!face.name && draftWallRole(source, face.name) === 'bore';
     return geometry.kind !== 'cylinder' || exactAxis(geometry.a) !== axis || source.bore !== undefined && geometry.out !== (bore ? -1 : 1);
   })) return;
   const stations = ['bottom', 'top'].map(end => {

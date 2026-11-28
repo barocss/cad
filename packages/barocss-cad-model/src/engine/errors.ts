@@ -529,12 +529,14 @@ export function friendly(message: string, kind?: string): FriendlyError {
   if (code === 'GEOMETRY' && detail.replace(/^B-rep: /, '') === 'circular wall draft: the draft reaches or crosses the cylinder axis')
     return { title: 'Draft reaches the cylinder axis',
       hint: 'Reduce Angle or move the neutral plane so both caps keep a positive radius.', detail, ...extra };
-  if (code === 'GEOMETRY' && detail.replace(/^B-rep: /, '') === 'annular bore draft: the draft reaches or crosses the bore axis')
+  if (code === 'GEOMETRY' && /^(?:B-rep: )?annular (?:bore|walls) draft: the draft reaches or crosses the bore axis$/.test(detail))
     return { title: 'Draft reaches the bore axis', hint: 'Reduce Angle or move the neutral plane to keep the bore open.', detail, ...extra };
   if (code === 'GEOMETRY' && detail.replace(/^B-rep: /, '') === 'annular bore draft: the draft reaches or crosses the outer tube wall')
     return { title: 'Draft reaches the outer tube wall', hint: 'Reduce Angle or move the neutral plane to keep material around the bore.', detail, ...extra };
   if (code === 'GEOMETRY' && detail.replace(/^B-rep: /, '') === 'annular outer draft: the draft reaches or crosses the retained bore')
     return { title: 'Draft reaches the retained bore', hint: 'Reduce Angle or move the neutral plane to keep material around the bore.', detail, ...extra };
+  if (code === 'GEOMETRY' && detail.replace(/^B-rep: /, '') === 'annular walls draft: the drafted inner and outer walls reach or cross each other')
+    return { title: 'Drafted tube walls meet', hint: 'Reduce Angle or move the neutral plane to keep material between the walls.', detail, ...extra };
   if (code === 'PARAMETER' && detail === 'The wall thicknesses leave no cavity in this box.')
     return { title: 'Wall thicknesses leave no cavity', hint: 'Reduce the thickness of one or more walls.', detail, ...extra };
   if (code === 'PARAMETER' && detail === 'The Shell floor thickness leaves no cavity height.')

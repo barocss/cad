@@ -721,6 +721,79 @@ export function draftAnnularBoreWallIfAdmitted(brep: Brep, faceNames: readonly s
   return candidate;
 }
 
+/** Combine the two certified same-original edits, then bind both cap loops to the final outer charts. */
+export function draftAnnularWallsIfAdmitted(brep: Brep, faceNames: readonly string[], angle: number, pull: 'z' | '-z', neutral?: number): Brep | undefined {
+  if (faceNames.length !== 4 || new Set(faceNames).size !== 4 || brep.faces.length !== stockCounts.annular[0]) return undefined;
+  const outerNames: string[] = [], innerNames: string[] = [];
+  for (const name of faceNames) {
+    const matches = brep.faces.filter(face => face.name === name);
+    if (matches.length !== 1) return undefined;
+    const support = faceGeometry(matches[0]);
+    if (support.kind !== 'cylinder') return undefined;
+    (support.out === 1 ? outerNames : innerNames).push(name);
+  }
+  if (outerNames.length !== 2 || innerNames.length !== 2) return undefined;
+  const admitted = admittedCircularWall(brep, outerNames[0]);
+  if (!admitted?.bore || !admitted.faces.every(name => outerNames.includes(name))) return undefined;
+  const { stock, bore } = admitted, sign = pull === 'z' ? 1 : -1, zN = neutral ?? (sign === 1 ? stock.lo : stock.hi);
+  if ((pull !== 'z' && pull !== '-z') || !Number.isFinite(angle) || angle === 0 || Math.abs(angle) >= Math.PI / 4
+    || !Number.isFinite(zN) || zN < stock.lo || zN > stock.hi)
+    throw new BrepError('INPUT', 'annular walls draft: use a nonzero angle below 45 degrees and a neutral within the original caps');
+  const slope = sign * Math.tan(angle), outerAt = (z: number) => stock.radius - slope * (z - zN), innerAt = (z: number) => bore.radius + slope * (z - zN);
+  const stations = [stock.lo, stock.hi], extent = Math.max(geometryScaleMM(brep.vertices.map(vertex => vertex.point)), ...stations.flatMap(z => [Math.abs(outerAt(z)), Math.abs(innerAt(z))]));
+  const tolerance = linearToleranceMM(extent), separation = dist(bore.center, [stock.center[0], stock.center[1], stock.lo]);
+  if (stations.some(z => !Number.isFinite(innerAt(z)) || !(innerAt(z) > tolerance)))
+    throw new BrepError('GEOMETRY', 'annular walls draft: the draft reaches or crosses the bore axis');
+  if (stations.some(z => !Number.isFinite(outerAt(z)) || !(outerAt(z) - innerAt(z) > separation + tolerance)))
+    throw new BrepError('GEOMETRY', 'annular walls draft: the drafted inner and outer walls reach or cross each other');
+  // Neither candidate consumes the other's conical output. Their disjoint native edits share one original proof.
+  const outer = draftAnnularOuterWallIfAdmitted(brep, outerNames, angle, pull, zN), inner = draftAnnularBoreWallIfAdmitted(brep, innerNames, angle, pull, zN);
+  if (!outer || !inner) return undefined;
+  const merge = <T extends { readonly id: string }>(base: readonly T[], first: readonly T[], second: readonly T[]): T[] => {
+    if (first.length !== base.length || second.length !== base.length)
+      throw new BrepError('GEOMETRY', 'annular walls draft: the native correspondence changed');
+    const a = byId(first), b = byId(second);
+    return base.map(original => {
+      const left = a.get(original.id), right = b.get(original.id);
+      if (!left || !right || left !== original && right !== original)
+        throw new BrepError('GEOMETRY', 'annular walls draft: the native edits do not have disjoint owners');
+      return left === original ? right : left;
+    });
+  };
+  const edges = merge(brep.edges, outer.edges, inner.edges), faces = merge(brep.faces, outer.faces, inner.faces), vertices = merge(brep.vertices, outer.vertices, inner.vertices);
+  const edgeById = byId(edges), originalEdges = byId(brep.edges), capTrims = new Map<string, (point: Point) => Point>();
+  for (const cap of [stock.bottom, stock.top]) {
+    const finalCap = faces.find(face => face.id === cap.id)!, surface = finalCap.surface;
+    if (surface.kind !== 'surface') throw new BrepError('GEOMETRY', 'annular walls draft: a cap lost its native chart');
+    const changed = finalCap !== cap || brep.coedges.some(use => cap.loops.includes(use.loop) && edgeById.get(use.edge) !== originalEdges.get(use.edge));
+    if (!changed) continue; // Keep a shared neutral cap and all its original trims exact.
+    const poles = surface.controlPoints.flat(), min: XY = [Math.min(...poles.map(point => point[0])), Math.min(...poles.map(point => point[1]))];
+    const max: XY = [Math.max(...poles.map(point => point[0])), Math.max(...poles.map(point => point[1]))];
+    for (const loop of cap.loops) capTrims.set(loop, capProjection(min, max, cap === stock.top));
+  }
+  const candidate: Brep = { ...brep, edges, faces, vertices,
+    coedges: brep.coedges.map(use => {
+      const project = capTrims.get(use.loop);
+      return project && use.pcurve ? { ...use, pcurve: { ...use.pcurve, controlPoints: edgeById.get(use.edge)!.curve.controlPoints.map(project) } } : use;
+    }) };
+  // The component receipts prove the conical charts. Remeasure the final rim owners after correspondence and UV merging.
+  const loops = new Map(brep.loops.map(loop => [loop.id, loop])), uses = byId(brep.coedges);
+  const nextExtent = geometryScaleMM([...vertices.map(vertex => vertex.point), ...edges.flatMap(edge => edge.curve.controlPoints)]);
+  const roundoff = 128 * Number.EPSILON * Math.max(1, nextExtent);
+  for (const cap of [stock.bottom, stock.top]) for (const loopId of cap.loops) {
+    const loop = loops.get(loopId)!, z = cap === stock.bottom ? stock.lo : stock.hi, radius = loop.kind === 'outer' ? outerAt(z) : innerAt(z);
+    const center: Point = loop.kind === 'outer' ? [stock.center[0], stock.center[1], z] : [bore.center[0], bore.center[1], z];
+    if (loop.coedges.length !== 2 || loop.coedges.some(useId => {
+      const edge = edgeById.get(uses.get(useId)!.edge)!, circle = circleOf(edge.curve);
+      return !level(edge, z) || !circle || Math.abs(circle.r - radius) > roundoff || dist(circle.c, center) > roundoff;
+    })) throw new BrepError('GEOMETRY', 'annular walls draft: the final circular cap boundaries could not be preserved');
+  }
+  const report = checkBrep(candidate, { strict: true });
+  if (!report.valid || report.topology[0]?.genus !== 1)
+    throw new BrepError('GEOMETRY', `annular walls draft: the drafted solid is invalid: ${report.issues[0] ?? 'unexpected genus'}`, report);
+  return candidate;
+}
+
 /** Change one through-bore radius while keeping the stock supports and native boundary ownership. */
 export function offsetBoreWallIfAdmitted(brep: Brep, faceName: string, distance: number): Brep | undefined {
   const admitted = admittedBoreWall(brep, faceName);
