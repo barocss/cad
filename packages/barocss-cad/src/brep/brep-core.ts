@@ -1,4 +1,5 @@
 import { faceBoundaryContradiction } from './brep-boundary-binding-internal.js';
+import { indexOpenBodyGenus, openBodyGenus } from './brep-open-genus-internal.js';
 // One shared boundary representation (B-rep) for every modeling body family — step 1 of the
 // brep-core plan: the data structure, one checker, and adapters from the existing result types.
 //
@@ -42,13 +43,17 @@ export interface Brep {
   readonly loops: readonly BrepLoop[]; readonly coedges: readonly BrepCoedge[]; readonly edges: readonly BrepEdge[]; readonly vertices: readonly BrepVertex[];
 }
 
-export interface BrepBodyTopology { readonly body: string; readonly vertices: number; readonly edges: number; readonly faces: number; readonly loops: number; readonly shells: number; readonly genus: number }
+export interface BrepBodyTopology {
+  readonly body: string; readonly vertices: number; readonly edges: number; readonly faces: number; readonly loops: number; readonly shells: number;
+  /** Sum of shell genera. Null when an open body's incidence does not certify connected orientable manifold shells. Closed bodies retain their numerical Euler diagnostic. */
+  readonly genus: number | null;
+}
 export interface BrepCheckReport {
   readonly valid: boolean;
   /** First problems found (at most 32), as `kind: detail`. Empty when valid. */
   readonly issues: readonly string[];
   readonly counts: { readonly bodies: number; readonly shells: number; readonly faces: number; readonly loops: number; readonly coedges: number; readonly edges: number; readonly vertices: number };
-  /** Euler–Poincaré per body: V − E + F − (L − F) = 2(S − G), solved for the genus G. */
+  /** Euler–Poincaré per body: V − E + F − (L − F) = 2(S − G) − B, with B the boundary cycle count of certified manifold shells. */
   readonly topology: readonly BrepBodyTopology[];
   readonly maximumVertexGap: number; readonly maximumPcurveGap: number;
   /** With `strict`: the largest distance of an edge's sample from a surface of a face using it (else 0). */
@@ -322,13 +327,15 @@ export function checkBrep(brep: Brep, options: { readonly pcurveSamples?: number
   }
 
   // Euler–Poincaré per body.
+  let openGenusIndex: ReturnType<typeof indexOpenBodyGenus> | undefined;
   const topology: BrepBodyTopology[] = brep.bodies.map(b => {
     const bodyShells = b.shells.map(s => shells.get(s)).filter((s): s is BrepShell => !!s), bodyFaces = bodyShells.flatMap(s => s.faces.map(f => faces.get(f)).filter((f): f is BrepFace => !!f));
     const bodyLoops = bodyFaces.flatMap(f => f.loops), bodyCoedges = bodyLoops.flatMap(l => loops.get(l)?.coedges ?? []).map(c => coedges.get(c)).filter((c): c is BrepCoedge => !!c);
     const bodyEdges = new Set(bodyCoedges.map(c => c.edge)), bodyVertices = new Set([...bodyEdges].flatMap(e => edges.get(e)?.vertices ?? []));
     const V = bodyVertices.size, E = bodyEdges.size, F = bodyFaces.length, L = bodyLoops.length, S = bodyShells.length;
-    const genus = S - (V - E + F - (L - F)) / 2;
-    if (b.kind === 'solid' && bodyShells.every(s => s.closed) && !(Number.isInteger(genus) && genus >= 0)) add('topology', `body ${b.id} fails Euler–Poincaré (V ${V}, E ${E}, F ${F}, L ${L}, S ${S})`);
+    const closedGenus = S - (V - E + F - (L - F)) / 2, closed = bodyShells.every(s => s.closed);
+    if (b.kind === 'solid' && closed && !(Number.isInteger(closedGenus) && closedGenus >= 0)) add('topology', `body ${b.id} fails Euler–Poincaré (V ${V}, E ${E}, F ${F}, L ${L}, S ${S})`);
+    const genus = closed ? closedGenus : openBodyGenus(b, openGenusIndex ??= indexOpenBodyGenus(brep, { shells, faces, loops, coedges, edges, vertices, usesOfEdge, endingAt }));
     return { body: b.id, vertices: V, edges: E, faces: F, loops: L, shells: S, genus };
   });
 

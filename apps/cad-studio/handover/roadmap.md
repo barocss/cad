@@ -1,13 +1,13 @@
 # CAD roadmap — current status and execution order
 
-Updated 2026-11-28 · Priority authority: D520 · Latest delivery: D2213 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
+Updated 2026-11-28 · Priority authority: D520 · Latest delivery: D2214 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
 
 This is the only current status index. Detailed tracks define acceptance; the 34 stable row pages retain scope and issue navigation. Immutable decision notes retain results. Do not append chronological status paragraphs here. [D520 decision](notes/cad-roadmap-replan-2026-11-04/README.md) supersedes D445 execution order and historical next-item text, while retaining its safeguards and bounded proofs.
 
 ## Now and next
 
-- **Current position:** [D2213](notes/interference-small-positive-volume-2026-11-28/README.md), P0 rows 15 and 16. Interference displays a 0.01 mm³ native overlap as positive and retains raw ordering and original pair selection.
-- **Next MAIN:** D2214, P0 rows 16 and 30. Reproduce the fractional genus reported for a valid open sheet on current main. Correct the open-sheet report and verify the closed-solid controls ([#770](https://github.com/barocss/cad/issues/770)).
+- **Current position:** [D2214](notes/open-sheet-boundary-genus-2026-11-28/README.md), P0 rows 16 and 30. Open B-rep sheets report boundary-corrected genus, and the native Studio Band and closed-source controls pass.
+- **Next MAIN:** D2215, P1 rows 07 and 16. Fix the radius-order guidance in SubD Torus and Tube History. Verify clear radius and subdivision refusals, recovery and Cancel in Studio ([#767](https://github.com/barocss/cad/issues/767)).
 - **Separate follow-ups:** Continue Studio App extraction in cohesive parts with affected desktop checks. [#608 Rendering](https://github.com/barocss/cad/issues/608) stays on HOLD. API inventory drift remains open. The issue tracker records [#126](https://github.com/barocss/cad/issues/126), [#613](https://github.com/barocss/cad/issues/613), [#152](https://github.com/barocss/cad/issues/152) and [#22](https://github.com/barocss/cad/issues/22) as closed.
 - **Active repository:** [barocss/cad](https://github.com/barocss/cad), based on `origin/main`. Fetch before work and preserve unexpected changes. The [migration record](../../../docs/migration/README.md) maps the former `local/cad-dev` history and issue numbers.
 - **Evidence correction:** D482 records2167 PASS/0 FAIL/2 existing SKIP in a later full-kernel run than D433. Neither result is a new full-suite PASS at this audit HEAD. [D482 record](notes/vertical-contact-refusal-2026-11-04/README.md).

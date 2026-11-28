@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { buildBrep, lineCurve, checkBrep, evaluateCadPart, checkOutput } from '../dist/index.js';
 
 // A sheet of one planar face bounded by line edges through `pts` (in order), on the plane z = 0 unless `surface` is given.
@@ -81,9 +82,11 @@ test('strict L0: a loop through one vertex twice, or a hole touching its outer l
   // Two triangles meeting at v0 (5, 5), one loop through it twice: the crescent ring's shape (prismatic solids).
   const eight = checkBrep(loopSheet([[5, 5], [0, 0], [10, 0], [10, 10], [0, 10]], [[0, 1, 2, 0, 3, 4]]), { strict: true });
   assert.equal(eight.valid, true, eight.issues.join('; '));
+  assert.equal(eight.topology[0].genus, null, 'a pinched boundary does not have an orientable manifold genus');
   // A square with a triangular hole whose corner is v1 (5, 0), a vertex of the square's side.
   const hole = checkBrep(loopSheet([[0, 0], [5, 0], [10, 0], [10, 10], [0, 10], [4, 3], [6, 3]], [[0, 1, 2, 3, 4], [1, 5, 6]]), { strict: true });
   assert.equal(hole.valid, true, hole.issues.join('; '));
+  assert.equal(hole.topology[0].genus, null, 'touching boundary components keep their validity without an invented genus');
   // Still touches: the loop crossing itself at v0 (its two passes alternate about it); the hole's corner a vertex of its
   // own at the same point (identity decides, never nearness); the hole's corner inside the square's side; v0 passed
   // three times.
@@ -93,6 +96,97 @@ test('strict L0: a loop through one vertex twice, or a hole touching its outer l
     ['inside a segment', loopSheet([[0, 0], [10, 0], [10, 10], [0, 10], [4, 3], [6, 3], [5, 0]], [[0, 1, 2, 3], [6, 4, 5]])],
     ['three passes', loopSheet([[5, 5], [0, 0], [4, 0], [6, 0], [10, 0], [10, 10], [0, 10]], [[0, 1, 2, 0, 3, 4, 0, 5, 6]])],
   ]) { const r = checkBrep(b, { strict: true }); assert.ok(r.issues.some(i => touch.test(i)), `${name}: ${r.issues.join('; ')}`); }
+});
+
+// Exact unit rectangles sharing complete native edges, with no geometric tolerance used to join topology.
+function cellSheet(cells, separateShells = false) {
+  const vertices = new Map(), edges = new Map();
+  const faces = cells.map(([x, y], i) => {
+    const p = [[x, y, 0], [x + 1, y, 0], [x + 1, y + 1, 0], [x, y + 1, 0]], ids = p.map(point => `v${point[0]}_${point[1]}`);
+    p.forEach((point, k) => vertices.set(ids[k], { id: ids[k], point }));
+    const uses = ids.map((start, k) => {
+      const end = ids[(k + 1) % 4], pair = [start, end].sort(), id = pair.join('__');
+      if (!edges.has(id)) edges.set(id, { id, vertices: pair, curve: lineCurve(id, vertices.get(pair[0]).point, vertices.get(pair[1]).point) });
+      return { edge: id, sense: start === pair[0] ? 'forward' : 'reversed' };
+    });
+    return { id: `f${i}`, surface: { kind: 'surface', id: `p${i}`, degreeU: 1, degreeV: 1, knotsU: [0, 0, 1, 1], knotsV: [0, 0, 1, 1],
+      controlPoints: [[p[0], p[3]], [p[1], p[2]]], weights: [[1, 1], [1, 1]] }, sense: 'forward', loops: [{ kind: 'outer', uses }] };
+  });
+  const shells = separateShells ? faces.map((face, i) => ({ id: `s${i}`, closed: false, faces: [face] })) : [{ id: 's', closed: false, faces }];
+  return buildBrep({ source: { family: 'test-open-genus', id: 'rectangles' }, vertices: [...vertices.values()], edges: [...edges.values()], bodies: [{ id: 'b', kind: 'sheet', shells }] });
+}
+
+function storedSheet(name, keep = () => true, declaredClosed = false) {
+  const brep = JSON.parse(readFileSync(new URL(`./fixtures/legacy-inputs/${name}.json`, import.meta.url), 'utf8'));
+  brep.faces = brep.faces.filter(face => keep(face, brep));
+  const faceIds = new Set(brep.faces.map(face => face.id));
+  brep.loops = brep.loops.filter(loop => faceIds.has(loop.face));
+  const loopIds = new Set(brep.loops.map(loop => loop.id));
+  brep.coedges = brep.coedges.filter(use => loopIds.has(use.loop));
+  const useIds = new Set(brep.coedges.map(use => use.id));
+  for (const use of brep.coedges) if (!useIds.has(use.twin)) use.twin = null;
+  const edgeIds = new Set(brep.coedges.map(use => use.edge)); brep.edges = brep.edges.filter(edge => edgeIds.has(edge.id));
+  const vertexIds = new Set(brep.edges.flatMap(edge => edge.vertices)); brep.vertices = brep.vertices.filter(vertex => vertexIds.has(vertex.id));
+  for (const shell of brep.shells) { shell.faces = shell.faces.filter(id => faceIds.has(id)); shell.closed = declaredClosed; }
+  for (const body of brep.bodies) body.kind = 'sheet';
+  return brep;
+}
+
+test('open orientable sheets report boundary-corrected genus for a disk, adjacent rectangles and holes', () => {
+  const adjacent = cellSheet([[0, 0], [1, 0]]);
+  const annulus = loopSheet([[0, 0], [10, 0], [10, 10], [0, 10], [2, 2], [2, 8], [8, 8], [8, 2]], [[0, 1, 2, 3], [4, 5, 6, 7]]);
+  const twoHoles = loopSheet([[0, 0], [10, 0], [10, 10], [0, 10], [1, 1], [1, 3], [3, 3], [3, 1], [6, 6], [6, 8], [8, 8], [8, 6]], [[0, 1, 2, 3], [4, 5, 6, 7], [8, 9, 10, 11]]);
+  for (const brep of [sheet(square), adjacent, annulus, twoHoles]) for (const strict of [false, true]) {
+    const before = structuredClone(brep), report = checkBrep(brep, { strict });
+    assert.equal(report.valid, true, report.issues.join('; ')); assert.equal(report.topology[0].genus, 0);
+    assert.deepEqual(brep, before, 'reporting does not mutate native input');
+    assert.equal(JSON.parse(JSON.stringify(report)).topology[0].genus, 0);
+  }
+  assert.deepEqual(checkBrep(adjacent).topology[0], { body: 'b', vertices: 6, edges: 7, faces: 2, loops: 2, shells: 1, genus: 0 });
+  adjacent.bodies[0].kind = 'solid';
+  const openSolid = checkBrep(adjacent, { strict: true });
+  assert.equal(openSolid.valid, true, openSolid.issues.join('; ')); assert.equal(openSolid.topology[0].genus, 0, 'body kind alone does not invent a boundary cap');
+});
+
+test('periodic native cylinder sheet keeps a paired same-face seam and two single-edge boundary circles', () => {
+  const brep = storedSheet('brep-cylinder', face => face.id.endsWith('_wall'));
+  const report = checkBrep(brep, { strict: true });
+  assert.equal(report.valid, true, report.issues.join('; '));
+  assert.deepEqual(report.topology[0], { body: 'circle-prism', vertices: 2, edges: 3, faces: 1, loops: 1, shells: 1, genus: 0 });
+  assert.equal(brep.edges.filter(edge => edge.vertices[0] === edge.vertices[1]).length, 2);
+  const seamUses = brep.coedges.filter(use => use.twin !== null); assert.equal(seamUses.length, 2);
+  const unpaired = structuredClone(brep);
+  for (const use of unpaired.coedges) use.twin = null;
+  const uncertain = checkBrep(unpaired, { strict: true });
+  assert.equal(uncertain.valid, true, uncertain.issues.join('; '));
+  assert.equal(uncertain.topology[0].genus, null, 'two unpaired uses are not free boundary edges');
+});
+
+test('closed sheets retain numerical genus regardless of the closed tag; a punctured handle retains genus one', () => {
+  for (const declaredClosed of [false, true]) for (const [name, genus] of [['brep-cube', 0], ['brep-hole-plate', 1]]) {
+    const report = checkBrep(storedSheet(name, undefined, declaredClosed), { strict: true });
+    assert.equal(report.valid, true, report.issues.join('; ')); assert.equal(report.topology[0].genus, genus);
+  }
+  const plate = storedSheet('brep-hole-plate');
+  const removed = plate.faces.find(face => face.loops.length === 1 && plate.loops.find(loop => loop.id === face.loops[0]).coedges.length === 4);
+  assert.ok(removed, 'stored genus-one plate has a disk face');
+  const punctured = storedSheet('brep-hole-plate', face => face.id !== removed.id), report = checkBrep(punctured, { strict: true });
+  assert.equal(report.valid, true, report.issues.join('; ')); assert.equal(report.topology[0].genus, 1);
+});
+
+test('multiple open shells sum their genera; shared or disconnected incidence remains undefined without new validity errors', () => {
+  const disjoint = checkBrep(cellSheet([[0, 0], [3, 0]], true), { strict: true });
+  assert.equal(disjoint.valid, true, disjoint.issues.join('; ')); assert.equal(disjoint.topology[0].shells, 2); assert.equal(disjoint.topology[0].genus, 0);
+  const touching = checkBrep(cellSheet([[0, 0], [1, 1]], true), { strict: true });
+  assert.equal(touching.valid, true, touching.issues.join('; ')); assert.equal(touching.topology[0].genus, null);
+  assert.equal(JSON.parse(JSON.stringify(touching)).topology[0].genus, null);
+  const disconnected = checkBrep(cellSheet([[0, 0], [3, 0]]));
+  assert.equal(disconnected.valid, false); assert.ok(disconnected.issues.some(issue => /is not connected/.test(issue)));
+  assert.equal(disconnected.topology[0].genus, null);
+  const duplicate = cellSheet([[0, 0]]); duplicate.vertices.push(structuredClone(duplicate.vertices[0]));
+  const invalid = checkBrep(duplicate); assert.equal(invalid.valid, false); assert.equal(invalid.topology[0].genus, null);
+  const dangling = cellSheet([[0, 0]]); dangling.coedges[0].twin = dangling.coedges[0].id;
+  const broken = checkBrep(dangling); assert.equal(broken.valid, false); assert.equal(broken.topology[0].genus, null);
 });
 
 test('strict L0 at a pole: an edge along a sphere patch\'s meridian from its pole is on it (no false gap)', () => {
