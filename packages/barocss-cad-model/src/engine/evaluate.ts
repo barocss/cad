@@ -23,6 +23,7 @@ import { loftDisplayMesh, smoothTurnDisplayMesh } from './loftDisplay';
 import { hasExternalScrewSections, smoothScrewWindingRule } from '../app/smoothLoftTurn';
 import { lumpTouches } from './lumps';
 import { friendlyCause, type FriendlyError } from './errors';
+import type { Datum } from './schema/references';
 import { bodyKeyOf, partSnapshot } from './part';
 import { bodyKey, isAnnularReplacementSource, placedBase, placedDoc, type PartInstance, type BodyRef, type ModelNode, type Side, type StudioDoc } from './doc';
 import { placementOf } from './placement';
@@ -782,7 +783,13 @@ export interface StudioStepScope {
   occurrences: number;
   nativeBodies: number;
 }
-export interface StudioStep { text: string; source: string; omitted?: string[]; scope: StudioStepScope }
+export interface StudioStep {
+  text: string;
+  source: string;
+  omitted?: string[];
+  omittedRootDatums?: readonly Pick<Datum, 'id' | 'name' | 'kind'>[];
+  scope: StudioStepScope;
+}
 function stepNameLosses(name: string): string[] {
   return stepProductNameHasLoss(name)
     ? ['Control characters and invalid Unicode in the STEP header file name and product name are replaced with underscores.']
@@ -896,7 +903,9 @@ export function exportStudioStep(doc: StudioDoc, options: StudioStepOptions): St
   // This inspects only our writer's fixed record; text() removes newlines from names.
   // A quoted product name therefore cannot forge a whole bbox record.
   if (!/^#\d+=REPRESENTATION\('bounding box',\(#\d+,#\d+\),#\d+\);$/m.test(text)) omitted.push('Bounding-box validation is not included in this STEP file.');
-  return omitted.length ? { text, source, omitted, scope } : { text, source, scope };
+  const omittedRootDatums = doc.references?.datums.map(({ id, name, kind }) => ({ id, name, kind }));
+  return { text, source, ...(omitted.length ? { omitted } : {}), scope,
+    ...(omittedRootDatums?.length ? { omittedRootDatums } : {}) };
 }
 
 /** Return null for unavailable tessellation. A Float32 serialization refusal must stop export instead of triggering a fallback. */

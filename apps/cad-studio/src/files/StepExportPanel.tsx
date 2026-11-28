@@ -71,6 +71,12 @@ export function StepExportPanel({ controller }: { controller: ModelExportControl
       {summary && <p className="muted" aria-label="STEP included bodies">{summary}</p>}
       <div className="ol-head">What this file leaves out</div>
       {step.losses.length ? <ul aria-label="STEP loss report">{step.losses.map(loss => <li key={loss}>{loss}</li>)}</ul> : <p>No additional losses reported for this input.</p>}
+      {!!step.omittedRootDatums?.length && <details className="muted">
+        <summary>Show omitted root reference datums</summary>
+        <ul aria-label="Omitted root reference datums">
+          {step.omittedRootDatums.map(datum => <li key={datum.id}>{datum.name} · {datum.id} · {datum.kind}</li>)}
+        </ul>
+      </details>}
       <p className="muted">Geometry profile: no semantic PMI or named datum system transfer. The file/product name and generated face names are separate from user labels.</p>
       <p className="muted" aria-label="STEP continuity inspection">{stepContinuityNotice}</p>
     </>}

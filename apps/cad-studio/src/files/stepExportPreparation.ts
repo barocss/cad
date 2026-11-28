@@ -3,8 +3,20 @@ import type { StudioStep, StudioStepRootScope } from '@barocss/cad-model/engine/
 import type { StudioDoc } from '@barocss/cad-model/engine/doc';
 export type StepMeshes = 'auto' | 'tessellated' | 'planar';
 export interface StepOwner { doc: StudioDoc; shown: StudioDoc; evaluated: StudioDoc; name: string; fresh: boolean; hasBody: boolean; hasMeshes: boolean; hasVisibleMeshes: boolean }
-export interface StepPreview { name: string; meshes: StepMeshes; rootScope: StudioStepRootScope; hasMeshes: boolean; stage: 'preparing' | 'ready' | 'error'; profile: string; losses: readonly string[]; error?: string; size?: number; scope?: StudioStep['scope'] }
-type StepResult = { text: string; omitted?: string[]; scope?: StudioStep['scope'] } | { error: string };
+export interface StepPreview {
+  name: string;
+  meshes: StepMeshes;
+  rootScope: StudioStepRootScope;
+  hasMeshes: boolean;
+  stage: 'preparing' | 'ready' | 'error';
+  profile: string;
+  losses: readonly string[];
+  omittedRootDatums?: StudioStep['omittedRootDatums'];
+  error?: string;
+  size?: number;
+  scope?: StudioStep['scope'];
+}
+type StepResult = Pick<StudioStep, 'text' | 'omitted' | 'omittedRootDatums'> & { scope?: StudioStep['scope'] } | { error: string };
 interface Options {
   current(): StepOwner;
   step(doc: StudioDoc, name: string, meshes: StepMeshes, rootScope: StudioStepRootScope): Promise<StepResult>;
@@ -41,7 +53,9 @@ export function createStepPreparation(options: Options) {
         publish({ ...pending, stage: 'error', error: 'Prepared STEP geometry does not match the selected root body scope.' }); return;
       }
       bytes = new TextEncoder().encode(result.text);
-      publish({ ...pending, stage: 'ready', profile: profile(result.text), losses: [...(result.omitted ?? [])], size: bytes.byteLength, scope: result.scope ? { ...result.scope } : undefined });
+      publish({ ...pending, stage: 'ready', profile: profile(result.text), losses: [...(result.omitted ?? [])],
+        ...(result.omittedRootDatums?.length ? { omittedRootDatums: result.omittedRootDatums } : {}),
+        size: bytes.byteLength, scope: result.scope ? { ...result.scope } : undefined });
     } catch (error) {
       if (generation !== ticket) return;
       if (!sameOwner(owner, options.current())) { cancel(); return; }

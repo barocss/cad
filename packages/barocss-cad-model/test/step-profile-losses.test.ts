@@ -31,9 +31,27 @@ test('drawing semantic PMI and named reference datums are conditional losses, in
   const referenced: StudioDoc = { ...part, references: { version: 1, references: [], keepouts: [], datums: [{ id: 'datum1', name: 'Inspection origin', kind: 'plane', origin: [0, 0, 0], normal: [0, 0, 1], xAxis: [1, 0, 0] }] } };
   const nested = exportStudioStep({ ...emptyDoc(), instances: [occurrence('datumPart', referenced)] }, options);
   assert.match(nested.omitted!.join(' '), /Named reference datums and their coordinate systems/);
+  assert.equal(nested.omittedRootDatums, undefined);
   const absent = exportStudioStep(part, options).omitted!.join(' '); assert.doesNotMatch(absent, /semantic PMI|Named reference datums/);
 });
 
+
+test('root STEP loss identifies each exact datum without changing the geometry section', () => {
+  const plain = box();
+  const datums: NonNullable<StudioDoc['references']>['datums'] = [
+    { id: 'D1', name: 'Setup', kind: 'plane', origin: [10, 20, 30], normal: [1, 0, 0], xAxis: [0, 1, 0] },
+    { id: 'D2', name: 'Setup', kind: 'axis', origin: [4, 5, 6], direction: [0, 1, 0] },
+    { id: 'D3', name: 'Inspection point', kind: 'point', origin: [7, 8, 9] },
+  ];
+  const source: StudioDoc = { ...plain, references: { version: 1, references: [], datums, keepouts: [] } };
+  const before = JSON.stringify(source);
+  const base = exportStudioStep(plain, options), current = exportStudioStep(source, options);
+  assert.equal(base.omittedRootDatums, undefined);
+  assert.deepEqual(current.omittedRootDatums, datums.map(({ id, name, kind }) => ({ id, name, kind })));
+  assert.notEqual(base.source, current.source);
+  assert.equal(base.text.split('DATA;')[1], current.text.split('DATA;')[1]);
+  assert.equal(JSON.stringify(source), before);
+});
 
 /** Same actual plain-import fixture and timestamp used by the pre-fix D421 export baseline. */
 function nameFixture(): StudioDoc {

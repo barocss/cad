@@ -29,9 +29,8 @@ function publicFields({ text, source, omitted }: StudioStep) {
 function matches(doc: StudioDoc, name = 'exchange') {
   const before = JSON.stringify(doc), expected = exportStudioStep(doc, { name, timestamp });
   const result = fixedClock(() => report(part(name, doc)));
-  const { scope, ...publicReport } = expected;
-  assert.ok(scope.nativeBodies >= 0, 'Studio scope remains separate from the public Part report contract');
-  assert.deepEqual(result, publicReport);
+  assert.ok(expected.scope.nativeBodies >= 0, 'The Studio report includes its own scope');
+  assert.deepEqual(result, publicFields(expected));
   assert.equal(JSON.stringify(doc), before);
   return result;
 }
@@ -67,10 +66,10 @@ test('plain imported STEP does not invent an empty omissions list or feature los
   assert.equal(result.omitted, undefined);
   assert.ok(!Object.hasOwn(result, 'omitted'));
 });
-test('non-ASCII export names preserve the existing name-loss report and requested name policy', () => {
+test('the public report preserves printable Unicode export names without a loss', () => {
   const result = matches(box(), 'München');
-  assert.ok(result.omitted?.some(item => item.includes('header file name')));
-  assert.ok(result.text.includes("PRODUCT('M_nchen','M_nchen'"));
+  assert.equal(result.omitted?.some(item => item.includes('header file name')), false);
+  assert.ok(result.text.includes("PRODUCT('M\\X4\\000000FC\\X0\\nchen','M\\X4\\000000FC\\X0\\nchen'"));
 });
 test('infill omission is forwarded rather than presented as a loss-free file', () => {
   const doc = withNode(box(), { kind: 'mesh', name: 'infill', unit: 'mm', role: 'infill', positions: [0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1], indices: [0, 2, 1, 0, 1, 3, 1, 2, 3, 2, 0, 3] });
@@ -151,7 +150,7 @@ test('Model report performs one existing export, with no discarded second file',
   assert.ok(directTicks > 0, 'The real exporter must use the default file clock');
   assert.equal(reportTicks, directTicks, 'Reporting must not export once for text and again for losses');
 });
-test('native face-name loss from the actual imported geometry reaches the public report', () => {
+test('native printable Unicode face names survive the public STEP export report', () => {
   const native = partBreps(box())[0].brep;
   const named = { ...native, faces: native.faces.map((face, i) => i ? face : { ...face, name: 'ordinary' }) };
   const seed = exportStep(named, { name: 'seed', timestamp })
@@ -160,7 +159,9 @@ test('native face-name loss from the actual imported geometry reaches the public
   assert.ok(seed.includes("ADVANCED_FACE('é',"));
   const doc = withNode(emptyDoc(), { kind: 'import', name: 'named.step', step: seed });
   assert.ok(partBreps(doc)[0].brep.faces.some(face => face.name === 'n0.é'), 'The importer retains the native name under its existing node namespace');
-  assert.ok(matches(doc).omitted?.some(item => item.includes('native face and edge names')));
+  const result = matches(doc);
+  assert.ok(!result.omitted?.some(item => item.includes('native face and edge names')));
+  assert.ok(result.text.includes("ADVANCED_FACE('n0.\\X4\\000000E9\\X0\\',"));
 });
 test('the existing native sphere missing-bbox validation warning reaches the public report', async () => {
   const { massTranslationSphereStep } = await import(resolve(import.meta.dirname, '../../barocss-cad/test/brep-mass-translation-fixtures.mjs')) as { massTranslationSphereStep(options?: { radius?: number }): string };
