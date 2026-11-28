@@ -1,9 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { resolveSketchLaunchVertices } from '../src/sketch/sketchLaunch';
-import { bindNativeVertexPick, currentNativeVertexPoints, nativeVertexWitness, pickVertex } from '../src/viewport/vertexPick';
+import { bindNativeVertexPick, currentNativeVertexPoints, currentSolidVertexPick, nativeVertexWitness, pickVertex } from '../src/viewport/vertexPick';
 import { rectanglePart } from '@barocss/cad-model/engine/doc';
 import { evaluatePart } from '@barocss/cad-model/engine/evaluate';
+import { rotateCommand } from '@barocss/cad-model/app/rotateCommand';
 
 // Same collision class as D539: a valid outer edge hit and a different inner
 // corner within the existing 7 px screen radius after zooming out.
@@ -91,6 +92,36 @@ test('orthographic vertex overlap uses camera depth and leaves separated endpoin
   assert.deepEqual(pickVertex('all', 0, [edge], 0.02, 0, project, undefined, source)?.at, rear);
   const separated = (point: readonly number[]) => [point[2] / 2, 0, point[2] / 10];
   assert.deepEqual(pickVertex('all', 0, [edge], 5, 0, separated, undefined, source, true)?.at, rear);
+});
+
+test('Rotate accepts one current native solid vertex and keeps the saved pivot numeric', () => {
+  const doc = rectanglePart(60, 30, 10), evaluated = evaluatePart(doc, 1);
+  assert.ok(evaluated.ok);
+  const [body] = evaluated.bodies, { mesh } = body;
+  const face = mesh.faces.find(face => face.normal[2] > 0.99)!.index;
+  const pick = pickVertex('all', 0, mesh.edges, 60, 30, point => point.slice(0, 2), undefined, { mesh, face });
+  assert.ok(pick);
+  assert.equal(currentSolidVertexPick(doc, [body], [pick]), undefined);
+  bindNativeVertexPick(pick, doc);
+  const rotateVertex = currentSolidVertexPick(doc, [body], [pick]);
+  assert.equal(rotateVertex, pick);
+  assert.equal(currentSolidVertexPick({ ...doc }, [body], [pick]), undefined);
+  assert.equal(currentSolidVertexPick(doc, [{ ...body, mesh: { ...mesh } }], [pick]), undefined);
+  assert.equal(currentSolidVertexPick(doc, [body], [{ ...pick }]), undefined);
+  assert.equal(currentSolidVertexPick(doc, [body], [pick, pick]), undefined);
+
+  const selection = { bodies: [], faces: [], edges: [], vertices: [pick] };
+  const ctx = { doc, bodies: [body], selection, rotateVertex };
+  assert.equal(rotateCommand.available(ctx).ok, true);
+  assert.equal(rotateCommand.available({ ...ctx, rotateVertex: undefined }).ok, false);
+  assert.equal(rotateCommand.available({ ...ctx, selection: { ...selection, vertices: [{ ...pick }] } }).ok, false);
+  const defaults = rotateCommand.defaults!(ctx);
+  assert.deepEqual([defaults.px, defaults.py, defaults.pz], [60, 30, 10]);
+  const applied = rotateCommand.build!(ctx, { ...defaults, angle: 30 });
+  const node = applied.nodes.at(-1);
+  assert.ok(node?.kind === 'rotate');
+  assert.deepEqual(node.pivot, [60, 30, 10]);
+  assert.deepEqual(node.parent, body.ref);
 });
 
 test('a Section corner reads only an unchanged native pointer witness from its visible mesh', () => {

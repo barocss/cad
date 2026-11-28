@@ -9,6 +9,7 @@ import type { Vec3 } from '@barocss/cad-model/engine/mesh';
 import { patchValues, refOf, selectedBodies, type Ctx, type Selection, type Values } from '@barocss/cad-model/app/commands';
 import { editCommand, featureOfPick } from '@barocss/cad-model/app/editCommand';
 import { OFFSET_FACE_EDIT } from '@barocss/cad-model/app/offsetFaceEdit';
+import { rotateBodyIndex } from '@barocss/cad-model/app/rotateCommand';
 import type { Active } from '../app/commandState';
 import type { FeatureHandle, ScalarHandleDraft, TransformGizmo } from './gizmo';
 import { alignMove, previewMatrix } from '@barocss/cad-model/assembly/drag';
@@ -31,7 +32,9 @@ export function useCommandGizmos({ model, command, context, drag, splitSource, h
   // Move and Rotate gizmos on the selected body: while dragged it follows at once (a renderer transform
   // of the evaluated body); let go, the kernel preview of the values runs.
   const dragFrom = useRef<Values | null>(null);
-  const cmdBody = active && (active.cmd.id === 'move' || active.cmd.id === 'rotate' || active.cmd.id === 'scale') && selectedBodies(active.ctx.selection).length === 1 ? selectedBodies(active.ctx.selection)[0] : undefined;
+  const transformBodies = active && (active.cmd.id === 'move' || active.cmd.id === 'scale') ? selectedBodies(active.ctx.selection) : [];
+  const cmdBody = active?.cmd.id === 'rotate' ? rotateBodyIndex(active.ctx)
+    : transformBodies.length === 1 ? transformBodies[0] : undefined;
   const gizmo: TransformGizmo | null = active && cmdBody !== undefined && bodies[cmdBody] ? (() => {
     const { min, max } = bodies[cmdBody].mesh.bounds, values = active.values;
     const begin = () => dragFrom.current ?? (dragFrom.current = values);

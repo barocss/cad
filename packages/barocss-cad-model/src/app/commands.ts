@@ -12,6 +12,7 @@ import { profileCommands, type ExtrudeJoinEvidence } from './profileCommands';
 import { deleteFaceCommand } from './deleteFaceCommand';
 import { replaceFaceCommand } from './replaceFaceCommand';
 import { pivotFaceCommand } from './pivotFaceCommand';
+import { rotateCommand } from './rotateCommand';
 import { sheetCommands } from './sheetCommands';
 import { frameCommands } from './frameCommands';
 import { primitives, puck } from './primitives';
@@ -59,12 +60,13 @@ import { holeCircleCentreProblem, holeRowSpacingProblem } from './holePatternInp
 
 export interface FaceSel { body: number; face: number }
 export interface EdgeSel { body: number; edge: number }
+export interface VertexSel { body: number; at: [number, number, number] }
 /** `sketches`: finished sketches picked as profiles (node indices; see app/profiles.ts). */
 /** `vertices`: corners picked (ends of edges), by body and position. */
-export interface Selection { faces: FaceSel[]; edges: EdgeSel[]; bodies: number[]; sketches?: number[]; profileRegions?: { sketch: number; indices: number[] }; vertices?: { body: number; at: [number, number, number] }[] }
+export interface Selection { faces: FaceSel[]; edges: EdgeSel[]; bodies: number[]; sketches?: number[]; profileRegions?: { sketch: number; indices: number[] }; vertices?: VertexSel[] }
 /** `direct`: the direct curves and surfaces picked (their ids). */
 /** placedPartCount overrides the evaluated document for assembly-only availability after metadata-only edits. */
-export interface Ctx { rectangularCutSource?: BodyRef; splitSourceBounds?: { doc: StudioDoc; index: number; bounds: { min: [number, number, number]; max: [number, number, number] }; isCurrent(): boolean }; placedPartCount?: number; splitPlanePick?: FaceSel; viewportEndFace?: true; extrudeJoin?: ExtrudeJoinEvidence; extrudeJoinLooks?: Pick<StudioDoc, 'bodies'> & { nameOf?(body: BodyResult): string }; sewSnapshot?: SewSnapshot; thickenSnapshot?: ThickenSnapshot; fillPatternRegion?: FillFeaturePatternRegion; fillPatternAnchor?: readonly [number, number]; curvePatternPath?: CurveFeaturePatternPath; doc: StudioDoc; bodies: BodyResult[]; selection: Selection; pick?: [number, number, number]; holeSnapStep?: number; direct?: string[]; bearingAssembly?: BearingAssemblyInput }
+export interface Ctx { rectangularCutSource?: BodyRef; splitSourceBounds?: { doc: StudioDoc; index: number; bounds: { min: [number, number, number]; max: [number, number, number] }; isCurrent(): boolean }; placedPartCount?: number; splitPlanePick?: FaceSel; rotateVertex?: VertexSel; viewportEndFace?: true; extrudeJoin?: ExtrudeJoinEvidence; extrudeJoinLooks?: Pick<StudioDoc, 'bodies'> & { nameOf?(body: BodyResult): string }; sewSnapshot?: SewSnapshot; thickenSnapshot?: ThickenSnapshot; fillPatternRegion?: FillFeaturePatternRegion; fillPatternAnchor?: readonly [number, number]; curvePatternPath?: CurveFeaturePatternPath; doc: StudioDoc; bodies: BodyResult[]; selection: Selection; pick?: [number, number, number]; holeSnapStep?: number; direct?: string[]; bearingAssembly?: BearingAssemblyInput }
 
 export type Values = Record<string, number | string>;
 /** `when`: shown (and required) only for these values. */
@@ -893,16 +895,7 @@ const allCommands: Command[] = [
     },
     build: (ctx, v) => withNode(ctx.doc, { kind: 'translate', parent: refOf(oneBody(ctx)!), offset: [Number(v.x), Number(v.y), Number(v.z)] }),
   },
-  {
-    id: 'rotate', label: 'Rotate', icon: 'cad-rotate', hint: 'Turn a body about an axis through its centre', shortcut: 'R', group: 'modify', keywords: 'turn spin',
-    available: ctx => oneBody(ctx) ? ok : no('Select one body to rotate.'),
-    fields: () => [{ key: 'axis', label: 'Axis', kind: 'choice', options: [{ value: 'z', label: 'Z' }, { value: 'x', label: 'X' }, { value: 'y', label: 'Y' }] },
-      { key: 'angle', label: 'Angle', kind: 'deg', min: -360, max: 360, step: 15 },
-      { key: 'px', label: 'Pivot X', kind: 'mm' }, { key: 'py', label: 'Pivot Y', kind: 'mm' }, { key: 'pz', label: 'Pivot Z', kind: 'mm' }],
-    // About the axis through the body's centre (where the gizmo sits); nothing turned until typed or dragged.
-    defaults: ctx => { const c = centreOf(oneBody(ctx)); return { axis: 'z', angle: 0, px: c[0], py: c[1], pz: c[2] }; },
-    build: (ctx, v) => withNode(ctx.doc, { kind: 'rotate', parent: refOf(oneBody(ctx)!), axis: v.axis as Axis, angle: Number(v.angle), pivot: [Number(v.px), Number(v.py), Number(v.pz)] }),
-  },
+  rotateCommand,
   {
     id: 'scale', label: 'Scale', icon: 'cad-scale', hint: 'Grow or shrink a body about its centre: drag the gizmo’s cube or type the factor', group: 'modify', keywords: 'resize enlarge shrink factor',
     available: ctx => oneBody(ctx) ? ok : no('Select one body to scale.'),

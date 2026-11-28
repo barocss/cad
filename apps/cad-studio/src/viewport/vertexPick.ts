@@ -1,4 +1,5 @@
 import { lookOf } from '@barocss/cad-model/app/bodies';
+import type { VertexSel } from '@barocss/cad-model/app/commands';
 import type { StudioDoc } from '@barocss/cad-model/engine/doc';
 import type { BodyResult } from '@barocss/cad-model/engine/evaluate';
 import type { SectionVertexIds } from './sectionEdgePick';
@@ -7,7 +8,7 @@ import type { DisplayMesh, Vec3 } from '@barocss/cad-model/engine/mesh';
 type PickFilter = 'all' | 'face' | 'edge' | 'body';
 type EdgeEnds = { a: readonly number[]; b: readonly number[]; index?: number; faces?: readonly number[]; nativeVertices?: readonly [string, string]; meshVertices?: readonly [string, string] };
 type NativePickSource = { mesh: DisplayMesh; sectionVertices?: SectionVertexIds } & ({ face: number } | { edge: number });
-type VertexPick = { body: number; at: Vec3 };
+type VertexPick = VertexSel;
 
 const meshOwners = new WeakMap<VertexPick, { id: string; mesh: DisplayMesh; at: Vec3 }>();
 export interface MeshVertexTarget { doc: StudioDoc; body: string; mesh: DisplayMesh; id: string; at: Vec3 }
@@ -46,6 +47,13 @@ export function nativeVertexWitness(pick: VertexPick, mesh: DisplayMesh) {
 export function bindNativeVertexPick(pick: VertexPick, doc: StudioDoc): void {
   const owner = nativeOwners.get(pick);
   if (owner) owner.doc = doc;
+}
+
+export function currentSolidVertexPick(doc: StudioDoc, bodies: readonly BodyResult[], picks?: readonly VertexPick[]): VertexPick | undefined {
+  if (picks?.length !== 1) return;
+  const [pick] = picks, body = bodies[pick.body], owner = nativeOwners.get(pick);
+  if (body?.ref && body.topology?.kind === 'solid' && body.topology.bodyCount === 1
+    && owner?.doc === doc && !owner.source.sectionVertices && nativeVertexWitness(pick, body.mesh)) return pick;
 }
 
 /** Resolve the original ordered endpoints of the current body. View-only or older picks have no authority here. */

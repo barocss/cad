@@ -33,6 +33,7 @@ import { bodyTopologyCounts } from './ui/bodyTopologyLabel';
 import { viewportRecoveryToast } from './viewport/viewportRecovery';
 import { useSpecificationActions } from './state/useSpecificationActions';
 import { useViewportPicking, type ViewportMenu } from './viewport/useViewportPicking';
+import { currentSolidVertexPick } from './viewport/vertexPick';
 import { useViewportHoleRegions } from './viewport/useViewportHoleRegions';
 import { isOutlinePickIssue, studioSketchViewportActions } from './viewport/studioSketchViewportActions';
 import { sewPreviewDirect } from './viewport/sewPreviewDirect';
@@ -737,7 +738,10 @@ export function App() {
   const namesDoc = fresh || !bodiesFor ? doc : bodiesFor;
 
   const bodiesRef = useRef(bodies); bodiesRef.current = bodies;
-  const ctx: Ctx = { doc: commandDoc, placedPartCount: doc.instances?.length ?? 0, bodies, selection, pick: pick ?? undefined, direct: directSel, bearingAssembly: { root: doc, owner: 'base' } };
+  const nativeVertexReady = fresh && !busy && marker === null && !inPlace && !doc.instances?.length &&
+    !active && !rendering && !drawing && !section && previewMode === 'none';
+  const rotateVertex = nativeVertexReady && shownDoc === doc ? currentSolidVertexPick(doc, bodies, selection.vertices) : undefined;
+  const ctx: Ctx = { doc: commandDoc, placedPartCount: doc.instances?.length ?? 0, bodies, selection, rotateVertex, pick: pick ?? undefined, direct: directSel, bearingAssembly: { root: doc, owner: 'base' } };
   const { evaluatedRef, source: evaluatedSource, ownsEvaluatedSource } = useStudioEvaluatedSource(
     { doc, evaluated, workerSession, marker }, { docNow, workOwnership, workerSessionNow, markerNow });
   const interference = useInterferenceCheck(evaluatedSource, ownsEvaluatedSource, engine,
@@ -996,8 +1000,6 @@ export function App() {
     draft: { fontUpload, hudValues, setRestart },
   });
 
-  const nativeVertexReady = fresh && !busy && marker === null && !inPlace && !doc.instances?.length &&
-    !active && !rendering && !drawing && !section && previewMode === 'none';
   const start = useCallback((cmd: Command, initial?: Values) => {
     const request = ++projectionRequest.current;
     cancelNativeReview();
@@ -1051,12 +1053,13 @@ export function App() {
       canUseEarlier: marker === null && !inPlaceNow.current && fresh && !busy });
     if ('notice' in cut) { setToast(cut.notice); return; }
     const avail = family ? filletLaunchAvailability(ctx, family) : cmd.available(ctx);
-    if (!avail.ok) { setToast({ title: `${cmd.label} can’t run here`, hint: avail.reason, detail: '' }); return; }
+    if (!avail.ok) { setToast({ title: `${cmd.label} can’t run here`, hint: avail.reason, detail: '', inputPick: cmd }); return; }
     if (variants.showing) { setToast({ title: `${cmd.label} can’t run here`, hint: `Showing ${variants.showing}: show the master to edit.`, detail: '' }); return; }
     if (cmd === LINKED_INSET_EXTRUDE && (markerNow.current !== null || inPlaceNow.current || !fresh || busy)) {
       setToast({ title: 'Linked inset not started', hint: 'Show the latest History of a standalone part.', detail: '' });
       return;
     }
+    setToast(current => current?.inputPick === cmd ? null : current);
     if (cmd.id === SKETCH3D_COMMAND.id) { cancel(); skel.begin(null); setSelection(emptySel); setEditNode(null); return; }
     if (cmd.id === STEPS_COMMAND.id) { cancel(); setBomOpen(false); setRebuildOpen(false); setVariantsOpen(false); setLibraryOpen(false); setParamsOpen(false); openSteps(); return; }
     if (cmd.action === 'sketch') {
