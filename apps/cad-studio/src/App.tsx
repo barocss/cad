@@ -1,5 +1,5 @@
 import { useStudioSheetPatterns } from './app/useStudioSheetPatterns';
-import { useStudioModelEvaluation, type RouteEvaluationHandoff, type StudioParameterEdit } from './state/useStudioModelEvaluation';
+import { useStudioEvaluatedSource, useStudioModelEvaluation, type RouteEvaluationHandoff, type StudioParameterEdit } from './state/useStudioModelEvaluation';
 import { useStudioWorkerRecovery } from './state/useStudioWorkerRecovery';
 import { useStudioInspectionViews } from './app/useStudioInspectionViews';
 import { useStudioMeasurementReadouts, useStudioMeasurementSession } from './app/useStudioMeasurementReadouts';
@@ -738,25 +738,11 @@ export function App() {
 
   const bodiesRef = useRef(bodies); bodiesRef.current = bodies;
   const ctx: Ctx = { doc: commandDoc, placedPartCount: doc.instances?.length ?? 0, bodies, selection, pick: pick ?? undefined, direct: directSel, bearingAssembly: { root: doc, owner: 'base' } };
-  const evaluatedRef = useRef(evaluated); evaluatedRef.current = evaluated;
-  const interferenceGeneration = workOwnership.current.generation;
-  const interferenceSource = useMemo(() => ({
-    document: doc, input: evaluated, generation: interferenceGeneration, worker: workerSession, marker,
-  }), [doc, evaluated, interferenceGeneration, workerSession, marker]);
-  const ownsEvaluatedSource = useCallback(() => docNow.current === interferenceSource.document &&
-    evaluatedRef.current === interferenceSource.input && workOwnership.current.generation === interferenceSource.generation &&
-    workerSessionNow.current === interferenceSource.worker && markerNow.current === interferenceSource.marker, [interferenceSource]);
-  const interference = useInterferenceCheck(interferenceSource, ownsEvaluatedSource, engine);
-  const checkInterference = useCallback(() => {
-    if (!fresh || busy) {
-      setToast({ title: 'Interference check not started', hint: 'Wait for the current part to finish evaluating.', detail: '' });
-      return;
-    }
-    const picked = selectedBodies(selection);
-    const list = picked.length > 1 ? picked.map(index => bodies[index]).filter(Boolean) : bodies.slice();
-    setEditNode(null);
-    void interference.start(list, picked.length > 1 ? 'selected' : 'all');
-  }, [fresh, busy, selection, bodies, interference.start, setToast]);
+  const { evaluatedRef, source: evaluatedSource, ownsEvaluatedSource } = useStudioEvaluatedSource(
+    { doc, evaluated, workerSession, marker }, { docNow, workOwnership, workerSessionNow, markerNow });
+  const interference = useInterferenceCheck(evaluatedSource, ownsEvaluatedSource, engine,
+    { ready: fresh && !busy, selection, bodies, setEditNode, setToast });
+  const checkInterference = interference.checkSelection;
   discardDirectCandidateRef.current = () => {
     const pending = parameterEditNow.current;
     if (pending?.kind !== 'direct') return;

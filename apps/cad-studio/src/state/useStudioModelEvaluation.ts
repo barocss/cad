@@ -1,4 +1,4 @@
-import { useEffect, type Dispatch, type RefObject, type SetStateAction } from 'react';
+import { useCallback, useEffect, useMemo, useRef, type Dispatch, type RefObject, type SetStateAction } from 'react';
 import { carrySelection, type Selection } from '@barocss/cad-model/app/commands';
 import { resolveNames, type NameSelection } from '@barocss/cad-model/chat/names';
 import { prefixDoc, type StudioDoc } from '@barocss/cad-model/engine/doc';
@@ -31,6 +31,35 @@ export interface RouteEvaluationHandoff {
   evaluatedIdentity: string;
   revision: number;
   result: Extract<EvalResult, { ok: true }>;
+}
+
+interface EvaluationSource {
+  doc: StudioDoc;
+  evaluated: StudioDoc;
+  workerSession: number;
+  marker: number | null;
+}
+
+interface EvaluationOwner {
+  docNow: RefObject<StudioDoc>;
+  workOwnership: RefObject<Pick<WorkOwnership<StudioDoc, StudioDoc>, 'generation'>>;
+  workerSessionNow: RefObject<number>;
+  markerNow: RefObject<number | null>;
+}
+
+/** Keep commands bound to the exact evaluated document, history position and Worker. */
+export function useStudioEvaluatedSource({ doc, evaluated, workerSession, marker }: EvaluationSource,
+  { docNow, workOwnership, workerSessionNow, markerNow }: EvaluationOwner) {
+  const evaluatedRef = useRef(evaluated);
+  evaluatedRef.current = evaluated;
+  const generation = workOwnership.current.generation;
+  const source = useMemo(() => ({ document: doc, input: evaluated, generation, worker: workerSession, marker }),
+    [doc, evaluated, generation, workerSession, marker]);
+  const ownsEvaluatedSource = useCallback(() => docNow.current === source.document &&
+    evaluatedRef.current === source.input && workOwnership.current.generation === source.generation &&
+    workerSessionNow.current === source.worker && markerNow.current === source.marker,
+  [docNow, workOwnership, workerSessionNow, markerNow, source]);
+  return { evaluatedRef, source, ownsEvaluatedSource };
 }
 
 interface ModelEvaluationOptions {
