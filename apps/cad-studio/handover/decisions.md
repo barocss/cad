@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D2260: [D2260](notes/drawing-tolerance-pdf-closeout-2026-11-29/README.md), #35. Verify the original diameter tolerance and H7 fit values in actual Studio PDF and reconcile the original acceptance.
+
 - D2259: [D2259](notes/sharp-native-arch-rails-2026-11-29/README.md), #779. Retain both sharp native arch rails in default projection and both STEP representations in actual Studio.
 
 - D2258: [D2258](notes/studio-box-width-from-corners-2026-11-29/README.md), #629. Match Box width through two actual native viewport corner picks and the existing Studio preview session.
