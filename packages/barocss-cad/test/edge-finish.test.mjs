@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { finishBrepEdges, revolveProfile, brepFromPrismatic, prismaticFromProfile, transformBrep, checkBrep, tessellateBrep, brepMassProperties, BrepError, evaluateCadPart, massPropertiesOf, checkOutput, surfaceAreaOf } from '../dist/index.js';
+import { finishBrepEdges, revolveProfile, brepFromPrismatic, prismaticFromProfile, transformBrep, checkBrep, tessellateBrep, brepMassProperties, brepSurfaceArea, BrepError, evaluateCadPart, massPropertiesOf, checkOutput, surfaceAreaOf } from '../dist/index.js';
 import { openEdgesByBody } from '../scripts/rb/stages.mjs';
 
 const pi = Math.PI, corner = r => r * r * (1 - pi / 4), k = (10 - 3 * pi) / (12 - 3 * pi);
@@ -174,6 +174,26 @@ test('every edge of a box filleted: strictly valid, watertight, volume and area 
     assert.ok(Math.abs(surfaceAreaOf(o) - area) <= 5e-5 * area, `r ${r} area ${surfaceAreaOf(o)} vs ${area}`);
     m.centroid.forEach((x, k) => assert.ok(Math.abs(x - [a / 2, b / 2, c / 2][k]) < 5e-4, `r ${r} centroid ${m.centroid}`));
   }
+});
+
+test('the exact spherical area belongs to the current complete circular cube Fillet', () => {
+  const side = 20, stock = prism(rect(0, 0, side, side), side, 'e');
+  const all = stock.edges.map(edge => edge.name);
+  for (const radius of [2, 2.5]) {
+    const result = finishBrepEdges(stock, all, radius, 'fillet', 'f');
+    const area = 6 * side ** 2 + (6 * pi - 24) * side * radius + (24 - 8 * pi) * radius ** 2;
+    const strict = checkBrep(result, { strict: true });
+    assert.ok(strict.valid, strict.issues.join('\n'));
+    assert.equal(strict.counts.faces, 34);
+    assert.ok(near(brepSurfaceArea(result), area, 1e-9));
+    const quadrature = brepSurfaceArea(result, { quadratureSegments: 8 });
+    assert.ok(!near(quadrature, area, 1e-9));
+    assert.equal(brepSurfaceArea({ ...result }), quadrature);
+    const moved = transformBrep(result, { matrix: [1, 0, 0, 0, 1, 0, 0, 0, 1], offset: [11, 13, 17] });
+    assert.equal(brepSurfaceArea(moved), brepSurfaceArea(moved, { quadratureSegments: 8 }));
+  }
+  const partial = finishBrepEdges(stock, ['e.side0|e.top', 'e.side1|e.top'], 2, 'fillet', 'm');
+  assert.equal(brepSurfaceArea(partial), brepSurfaceArea(partial, { quadratureSegments: 8 }));
 });
 
 
