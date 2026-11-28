@@ -1330,24 +1330,14 @@ export function App() {
     setFileName(identity.fileName);
     setDirty(identity.dirty);
   }, [setFileName, setDirty]);
-  const { reverseHistoryEntry, restoreHistoryEntry, doUndo, doRedo } = useDocumentHistoryActions({
+  const { doUndo, doRedo, cancelWork } = useDocumentHistoryActions({
     history: { undo, redo, setUndo, setRedo },
-    document: { doc, current: docNow, marker, setDoc: setDocState, setMarker, setSelection },
+    document: { doc, current: docNow, marker, currentMarker: markerNow, setDoc: setDocState, setMarker, setSelection },
     boundary: { clearDraft: clearHistoryBoundaryDraft, resetView: resetHistoryBoundaryView, identity: currentDocumentIdentity,
       captureBinding: project.documentBinding, restoreBinding: project.restoreDocument, restoreIdentity: restoreHistoryIdentity },
+    stop: { evaluated: evaluatedRef, take: stopDocumentWork, markDirty: () => setDirty(true), notice: setToast },
     invalidateWork: invalidateDocumentWork, cancelReview: cancelNativeReview, cancel,
   });
-  const cancelWork = () => {
-    const target = stopDocumentWork(docNow.current, evaluatedRef.current, undo[undo.length - 1]);
-    if (target === undefined) return;
-    if (target) {
-      const redoEntry = reverseHistoryEntry(target, docNow.current, markerNow.current);
-      setRedo(r => [...r, redoEntry]); setUndo(u => u.slice(0, -1));
-      restoreHistoryEntry(target);
-      if (!target.documentIdentity) setDirty(true);
-      setToast({ title: 'Stopped', hint: 'The computation was stopped and its change taken back.', detail: '' });
-    } else setToast({ title: 'Stopped', hint: 'The computation was stopped; no unrelated change was taken back.', detail: 'The document is unchanged. The view is not up to date.' });
-  };
   // (The latest undo, for a toast made before the change it takes back was committed.)
   const undoNow = useRef(doUndo); undoNow.current = doUndo;
 
