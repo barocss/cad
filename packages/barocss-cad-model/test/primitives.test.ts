@@ -43,6 +43,20 @@ test('primitive sizes that cannot be made say why', () => {
   }
 });
 
+test('SubD radius relationships and cage counts have distinct diagnostics', () => {
+  const cases: { id: string; equal: Values; message: RegExp; otherCount: Values }[] = [
+    { id: 'subd-torus', equal: { R: 12, r: 12 }, message: /Tube radius must be smaller than Ring radius/, otherCount: { nv: 33 } },
+    { id: 'subd-tube', equal: { r: 12, ri: 12 }, message: /Inner radius must be smaller than Outer radius/, otherCount: { nh: 25 } },
+  ];
+  for (const { id, equal, message, otherCount } of cases) {
+    const command = commands.find(candidate => candidate.id === id)!;
+    const defaults = command.defaults!(ctx);
+    assert.throws(() => command.build!(ctx, { ...defaults, ...equal }), { code: 'PRIMITIVE_SIZE', message });
+    for (const counts of [{ nu: 8.5 }, { nu: 65 }, otherCount])
+      assert.throws(() => command.build!(ctx, { ...defaults, ...counts }), { code: 'PRIMITIVE_SIZE', message: /whole-number cage counts/ });
+  }
+});
+
 test('a placed shape edits as itself later: its command, values, arrows and puck, rebuilt in place', () => {
   const sphere = commands.find(c => c.id === 'sphere')!, doc = sphere.build!(ctx, { ...sphere.defaults!(ctx), r: 10, x: 0, y: 0, z: 0 });
   const edit = editCommand(1, doc.nodes)!, bodies = (evaluateDoc(doc, 1) as { bodies: BodyResult[] }).bodies;
