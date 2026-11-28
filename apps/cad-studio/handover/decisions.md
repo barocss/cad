@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D2266: [D2266](notes/exact-trapezoidal-sweep-cavity-2026-11-29/README.md), #10. Carry one enclosed rectangular cavity with an exact closed trapezoidal Sweep and preserve its authored placement.
+
 - D2265: [D2265](notes/closed-trapezoid-inner-rim-fillet-2026-11-29/README.md), #12. Verify the original complete inner-rim Fillet after a closed trapezoidal Sweep and an upstream width edit.
 
 - D2264: [D2264](notes/exact-closed-trapezoidal-sweep-2026-11-29/README.md), #10. Sweep one filled radial trapezoid on the native closed circle and verify its editable Studio history.

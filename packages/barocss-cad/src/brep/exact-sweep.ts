@@ -585,25 +585,32 @@ function rectangleSection(outer: ExactSweepInput['outer']) {
 const ductWallError = (refuse: Refuse) =>
   refuse('GEOMETRY', 'Exact rectangular duct sweep needs strictly positive wall clearance around the opening.');
 
-/** Keep the authored order and winding so the two producers agree on the opening's side tags. */
-function rectangularOpening(rectangle: NonNullable<ReturnType<typeof rectangleSection>>,
-  holes: NonNullable<ExactSweepInput['holes']>, tolerance: number, refuse: Refuse): RectangularOpening {
-  const unsupported = () => refuse('CAPABILITY', 'Exact rectangular duct sweep needs one centered rectangular opening aligned with the outer rectangle.');
-  const hole = holes[0];
-  if (holes.length !== 1 || hole.length !== 4 || hole.some(segment => segment.kind !== 'line')) return unsupported();
-  const points = hole.map(segment => segment.start);
+/** Read four distinct, consecutive axis-aligned corners without changing their authored order. */
+function rectangularLoop(loop: ExactSweepInput['outer']) {
+  if (loop.length !== 4 || loop.some(segment => segment.kind !== 'line')) return;
+  const points = loop.map(segment => segment.start);
   const [[x0, y0], [x1, y1], [x2, y2], [x3, y3]] = points;
-  const minX = Math.min(x0, x1, x2, x3), maxX = Math.max(x0, x1, x2, x3);
-  const minY = Math.min(y0, y1, y2, y3), maxY = Math.max(y0, y1, y2, y3);
-  if (maxX - minX < ExtrudedProfileLimits.minimumLengthMM || maxY - minY < ExtrudedProfileLimits.minimumLengthMM) return unsupported();
+  const low: XY = [Math.min(x0, x1, x2, x3), Math.min(y0, y1, y2, y3)];
+  const high: XY = [Math.max(x0, x1, x2, x3), Math.max(y0, y1, y2, y3)];
+  if (high[0] - low[0] < ExtrudedProfileLimits.minimumLengthMM || high[1] - low[1] < ExtrudedProfileLimits.minimumLengthMM) return;
   const corners = points.map(([x, y]): XY => [
-    x === minX ? -1 : x === maxX ? 1 : 0,
-    y === minY ? -1 : y === maxY ? 1 : 0,
+    x === low[0] ? -1 : x === high[0] ? 1 : 0,
+    y === low[1] ? -1 : y === high[1] ? 1 : 0,
   ]);
   if (new Set(corners.map(([x, y]) => 2 * x + y)).size !== 4 || corners.some(([x, y], i) => {
     const [nextX, nextY] = corners[(i + 1) % 4];
     return !x || !y || (x === nextX) === (y === nextY);
-  })) return unsupported();
+  })) return;
+  return { points, low, high, corners };
+}
+
+/** Keep the authored order and winding so the two producers agree on the opening's side tags. */
+function rectangularOpening(rectangle: NonNullable<ReturnType<typeof rectangleSection>>,
+  holes: NonNullable<ExactSweepInput['holes']>, tolerance: number, refuse: Refuse): RectangularOpening {
+  const unsupported = () => refuse('CAPABILITY', 'Exact rectangular duct sweep needs one centered rectangular opening aligned with the outer rectangle.');
+  const opening = holes.length === 1 ? rectangularLoop(holes[0]) : undefined;
+  if (!opening) return unsupported();
+  const { points, low: [minX, minY], high: [maxX, maxY], corners } = opening;
   const { min, max } = rectangle;
   const clearance = Math.min(minX - min[0], max[0] - maxX, minY - min[1], max[1] - maxY);
   if (!(clearance > 10 * tolerance)) return ductWallError(refuse);
@@ -630,15 +637,9 @@ function pairedRectangularApertures(rectangle: NonNullable<ReturnType<typeof rec
   const profiles: ProfileSegmentInput[][] = [], intervals: [number, number][] = [];
   let roundoff = 0, clearance = Infinity;
   for (const hole of holes) {
-    if (hole.length !== 4 || hole.some(segment => segment.kind !== 'line')) return unsupported();
-    const points = hole.map(segment => segment.start), [[x0, y0], [x1, y1], [x2, y2], [x3, y3]] = points;
-    const low: XY = [Math.min(x0, x1, x2, x3), Math.min(y0, y1, y2, y3)];
-    const high: XY = [Math.max(x0, x1, x2, x3), Math.max(y0, y1, y2, y3)];
-    if (high[0] - low[0] < ExtrudedProfileLimits.minimumLengthMM || high[1] - low[1] < ExtrudedProfileLimits.minimumLengthMM) return unsupported();
-    const corners = points.map(([x, y]): XY => [x === low[0] ? -1 : x === high[0] ? 1 : 0, y === low[1] ? -1 : y === high[1] ? 1 : 0]);
-    if (new Set(corners.map(([x, y]) => 2 * x + y)).size !== 4 || corners.some(([x, y], i) => {
-      const next = corners[(i + 1) % 4]; return !x || !y || (x === next[0]) === (y === next[1]);
-    })) return unsupported();
+    const opening = rectangularLoop(hole);
+    if (!opening) return unsupported();
+    const { points, low, high } = opening;
     const margin = 8 * Number.EPSILON * Math.max(1, geometryScaleMM([min, max], points));
     roundoff = Math.max(roundoff, margin);
     if (Math.abs((low[radial] + high[radial]) - (min[radial] + max[radial])) > margin)
@@ -696,11 +697,24 @@ function hasUnequalRadialSides([a, b, c, d]: readonly XY[], radial: 0 | 1, toler
   return pair(a, b, c, d) || pair(b, c, d, a);
 }
 
+function trapezoidalCavity(profile: ExactSweepInput['outer'], holes: NonNullable<ExactSweepInput['holes']>,
+  cx: number, cy: number, tolerance: number, refuse: Refuse): readonly ProfileSegmentInput[] {
+  const opening = holes.length === 1 ? rectangularLoop(holes[0]) : undefined;
+  if (!opening) return refuse('CAPABILITY', 'Exact closed-circle trapezoidal sweep accepts one axis-aligned rectangular cavity.');
+  const points = opening.points.map(([x, y]): XY => [x - cx, y - cy]);
+  // The admitted trapezoid is convex. The whole rectangle must lie inside each inset side.
+  for (const { start: [x, y], end, length } of buildProfileLoop(profile).segments) {
+    if (points.some(([px, py]) => (end[0] - x) * (py - y) - (end[1] - y) * (px - x) <= 10 * tolerance * length))
+      return refuse('GEOMETRY', 'Exact closed-circle trapezoidal sweep needs strictly positive wall clearance around the opening.');
+  }
+  return points.map(start => ({ kind: 'line', start }));
+}
+
 function closedStraightProfileRing(id: string, outer: ExactSweepInput['outer'], holes: NonNullable<ExactSweepInput['holes']>,
   initialAxes: SweepAxes, rail: Pick<JoinedRail, 'toCentre' | 'radius' | 'tolerance'>, sideTags: SideTags | undefined, refuse: Refuse) {
   const corners = outer.map(segment => segment.start), [a, b, c, d = a] = corners;
   const sectionSides = outer.length === 3 ? 3 : 4, triangular = sectionSides === 3;
-  const style = triangular ? 'triangular' : 'trapezoidal', section = triangular ? 'triangle' : 'trapezoid';
+  const style = triangular ? 'triangular' : 'trapezoidal';
   if (triangular && holes.length) return refuse('CAPABILITY', 'Exact closed-circle triangular sweep needs a filled triangle without holes.');
   if (triangular && rail.radius > CadNumericPolicy.coordinateAbs)
     return refuse('PARAMETER', 'Exact closed-circle sweep path radius must be at most 10000 mm.');
@@ -715,7 +729,6 @@ function closedStraightProfileRing(id: string, outer: ExactSweepInput['outer'], 
     return;
   }
   if (!triangular && !hasUnequalRadialSides(corners, aligned.radial, tolerance)) return;
-  if (holes.length) return refuse('CAPABILITY', `Exact closed-circle ${style} sweep needs a filled ${section} without holes.`);
   if (!triangular && radius > CadNumericPolicy.coordinateAbs)
     return refuse('PARAMETER', 'Exact closed-circle sweep path radius must be at most 10000 mm.');
 
@@ -723,11 +736,14 @@ function closedStraightProfileRing(id: string, outer: ExactSweepInput['outer'], 
   const cx = minX + halfX, cy = minY + halfY, [dx, dy] = aligned.bendCentre;
   const profile: ProfileSegmentInput[] = corners.map(([x, y]) => ({ kind: 'line', start: [x - cx, y - cy] }));
   const clearance = () => refuse('PARAMETER', `Exact closed-circle ${style} sweep needs strictly positive radial clearance.`);
-  const revolve: RevolveInput = { id, profile, axis: { origin: [dx, dy], direction: [-dy, dx] }, angle: 360, sideTags: sideTags?.outer };
+  const cavity = holes.length ? trapezoidalCavity(profile, holes, cx, cy, tolerance, refuse) : undefined;
+  const revolve: RevolveInput = { id, profile, axis: { origin: [dx, dy], direction: [-dy, dx] }, angle: 360, sideTags: sideTags?.outer,
+    ...(cavity ? { holes: [cavity], holeTags: sideTags?.holes } : {}) };
   const ring = revolveSweepProfile(revolve, { minimum: tolerance, refuse: clearance });
-  const brep = bindClosedStraightRing(ring, 128 * Number.EPSILON * Math.max(1, radius + extent), sectionSides, 1);
+  const shellCount = cavity ? 2 : 1;
+  const brep = bindClosedStraightRing(ring, 128 * Number.EPSILON * Math.max(1, radius + extent), sectionSides, shellCount);
   if (!brep) return refuse('GEOMETRY', `The exact closed-circle ${style} sweep could not bind the native ring seams.`);
-  return { axes: aligned.axes, style, local: { brep, mass: (density: number) => revolveMassProperties(revolve, density) } };
+  return { axes: aligned.axes, style, shellCount, local: { brep, mass: (density: number) => revolveMassProperties(revolve, density) } };
 }
 
 function closedRectangularRing(id: string, section: JoinedSection, tolerance: number, sideTags: SideTags | undefined, refuse: Refuse,
@@ -1602,7 +1618,8 @@ export function exactSweep(input: ExactSweepInput, refuse: Refuse): SweepSolid {
       const straight = closedStraightProfileRing(id, outer, holes, frame(closed.tangent), closed, sideTags, refuse);
       if (straight) {
         const result = place(straight.local, straight.axes, closed.start), report = checkBrep(result.brep, { strict: true });
-        if (!report.valid || report.topology.length !== 1 || report.topology[0].shells !== 1 || report.topology[0].genus !== 1)
+        const { shellCount } = straight;
+        if (!report.valid || report.topology.length !== 1 || report.topology[0].shells !== shellCount || report.topology[0].genus !== shellCount)
           return refuse('GEOMETRY', `The exact closed-circle ${straight.style} sweep did not produce one valid closed ring.`);
         return result;
       }
