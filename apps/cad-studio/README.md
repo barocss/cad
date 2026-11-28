@@ -22,6 +22,14 @@ node apps/cad-studio/scripts/cad-cli.mjs --help
 
 The [agent guide](../library-docs/docs/agent/index.md) explains tool access and approval. The [MCP and CLI guide](../library-docs/docs/agent/cli.md) covers document paths and command arguments.
 
+## Browser tools (WebMCP)
+
+Use a secure Studio page in a browser with WebMCP support. Open **Chat** and click **WebMCP** to share the current part summary and measurements between supported planar faces. Click it again to stop sharing. The volume can be empty while Studio calculates it. Read the summary again after the part mass appears.
+
+Studio shows the proposal controls that match the shared part. **Box** and **Cylinder** can propose the first solid. **Propose** can change the distance of a supported Extrude. **Hole** can propose a centered through hole on a standalone Cylinder.
+
+Click one proposal control to allow one proposal. Click the highlighted control again to revoke it, including while it shows **Evaluating…**. When a proposal appears, use **Preview**, then **Accept** or **Reject**. Use **Save** to keep the result. After reopening the document, click **WebMCP** again if you want to share it.
+
 ## Development
 
 ```sh
