@@ -2,10 +2,37 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { evaluateCadPart, tessellateBrep, checkBrep, massPropertiesOf, outputOf } from '../dist/index.js';
 import { oracle } from '../scripts/rb/fuzz-oracle.mjs';
-import { documentOf } from '../scripts/rb/fuzz-gen.mjs';
+import { caseOf, documentOf } from '../scripts/rb/fuzz-gen.mjs';
+import { random } from '../scripts/rb/property.mjs';
 
 const D = features => ({ format: 'barocss-cad-part', version: 1, units: 'mm', parameters: {}, features });
 const leaf = (kind, dims, rot, move) => ({ leaf: { kind, ...dims, rot: rot.map(([axis, deg]) => ({ axis, deg })), move } });
+
+test('three circular copies keep a separate closed solid at each use pair of a common edge', () => {
+  const box = leaf('box', { w: 5, d: 4, h: 2 }, [['x', 90]], [0, 0, -3]);
+  const sphere = leaf('sphere', { r: 2 }, [], [20, 20, -1]);
+  const { document, root } = documentOf({
+    pattern: { kind: 'circular', axis: 'z', deg: 120, count: 3, pivot: [0, 0, 0] },
+    child: { op: 'union', a: box, b: sphere },
+  });
+  const separated = outputOf(evaluateCadPart(document), root);
+  assert.equal(lumps(separated).length, 6);
+  const mass = massPropertiesOf(separated);
+  assert.ok(Math.abs(mass.volume - (120 + 32 * Math.PI)) < 1e-7);
+  assert.ok(Math.hypot(mass.centroid[0], mass.centroid[1], mass.centroid[2] + 1) < 1e-8);
+
+  const generator = random(20261023);
+  let sample;
+  for (let index = 0; index <= 4; index++) sample = caseOf(generator);
+  const original = documentOf(sample.tree);
+  const output = outputOf(evaluateCadPart(original.document), original.root);
+  const report = checkBrep(output.brep, { strict: true });
+  assert.ok(report.valid, report.issues.join('\n'));
+  assert.equal(report.counts.bodies, 18);
+  assert.ok(report.topology.every(body => body.shells === 1 && body.genus === 0));
+  assert.ok(Math.abs(massPropertiesOf(output).volume - 789.4076475986217) < 3.9169805715255714);
+});
+
 /** Each body of an output: its face-name prefixes (the features its faces come from) and its mesh volume; strict validity; watertight body by body. */
 function lumps(o) {
   const b = o.brep, mesh = tessellateBrep(b, { segmentsPerQuarter: 16 }), P = mesh.positions, shellBody = new Map(b.shells.map(s => [s.id, s.body]));
