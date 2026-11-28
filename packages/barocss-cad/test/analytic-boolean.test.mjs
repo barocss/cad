@@ -20,14 +20,18 @@ function cylinder(axis, c, r, h0, h1, id = 'c') {
 }
 const pi = Math.PI;
 
+function seededTree(seed, index) {
+  const next = random(seed);
+  let sample = caseOf(next);
+  for (let i = 0; i < index; i++) sample = caseOf(next);
+  return sample.tree;
+}
+
 test('an internally tangent sphere bore refuses an invalid boundary and nearby offsets stay strict', () => {
   const a = { leaf: { kind: 'sphere', r: 3, rot: [{ axis: 'y', deg: 270 }, { axis: 'z', deg: 270 }], move: [2, -2, -2] } };
   const b = { leaf: { kind: 'cyl', r: 2, h: 6, rot: [{ axis: 'x', deg: 90 }], move: [2, 1, -3] } };
   const reduced = documentOf({ op: 'difference', a, b });
-  const source = random(20261025);
-  let seeded;
-  for (let index = 0; index <= 137; index++) seeded = caseOf(source);
-  const original = documentOf(seeded.tree);
+  const original = documentOf(seededTree(20261025, 137));
   for (const [document, id] of [[reduced.document, 'n0'], [original.document, 'n6']]) {
     assert.throws(() => evaluateCadPart(document), failure =>
       failure.code === 'GEOMETRY' && failure.message.includes(id + ':') &&
@@ -41,6 +45,27 @@ test('an internally tangent sphere bore refuses an invalid boundary and nearby o
     const report = checkBrep(brep, { strict: true });
     assert.ok(report.valid, report.issues.join('\n'));
     assert.ok(Math.abs(brepMassProperties(brep, 1).volume - expected) < 2e-6);
+  }
+});
+
+test('a short supported cylindrical chord retains its original boundary in the seeded Difference', () => {
+  const original = seededTree(20261023, 131);
+  const reduced = { ...original, a: { op: 'union', a: original.a.a.b, b: original.a.b.a } };
+  const cases = [
+    [reduced, 105.31824275002164, 2e-6],
+    [original, 432.9040498675479, 0.069842],
+  ];
+  for (const [tree, expected, tolerance] of cases) {
+    const { document, root } = documentOf(tree);
+    const { brep } = outputOf(evaluateCadPart(document), root);
+    const report = checkBrep(brep, { strict: true });
+    assert.ok(report.valid, report.issues.join('\n'));
+    const mass = brepMassProperties(brep, 1);
+    assert.ok(Math.abs(mass.volume - expected) < tolerance, `${mass.volume} vs ${expected}`);
+    if (tree === original) {
+      const expectedCentroid = [0.6164609066013816, -0.354285486334317, -3.186000815546764];
+      mass.centroid.forEach((coord, axis) => assert.ok(Math.abs(coord - expectedCentroid[axis]) < 0.000591));
+    }
   }
 });
 

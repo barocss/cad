@@ -49,7 +49,7 @@ const INNER_QUARTERS: readonly number[] = [0.25, 0.5, 0.75], INNER_3: readonly n
 // ---- surfaces and face domains ------------------------------------------------------------------
 type Plane = { kind: 'plane'; o: P3; n: P3; e1: P3; e2: P3 };
 /** Axis a (canonical sign), frame e1, e2 ⊥ a, U = s·r·θ with θ unwrapped about `ref`, V = height along a from c. */
-type Cylinder = { kind: 'cylinder'; c: P3; a: P3; e1: P3; e2: P3; r: number; s: 1 | -1; ref: number };
+type Cylinder = { kind: 'cylinder'; mappedChord?: boolean; c: P3; a: P3; e1: P3; e2: P3; r: number; s: 1 | -1; ref: number };
 // (ref is reassigned for a full-turn wall: its domain is centred opposite the seam.)
 /**
  * Any other smooth surface patch: domain coordinates (ku·u, kv·v), scaled to arc length, with ku < 0 for
@@ -247,7 +247,22 @@ function curve2(f: { surf: Surf }, k: Curve3, tol: number, tag?: string): CurveS
   if (k.kind === 'param') return { kind: 'curve', f: cached(x => to2(f, k.at(x))), t0: k.t0, t1: k.t1, src: k.at, ...t, ...(k.src ? { srcCurve: k.src } : {}) } as CurveSegment2;
   if (k.kind === 'line') {
     const a = to2(f, k.p), b = to2(f, k.q);
-    if (s.kind === 'cylinder' && Math.abs(a[0] - b[0]) > Math.max(tol, 1e-9 * s.r)) throw new BrepError('GEOMETRY', 'analytic Boolean: a straight edge on a cylinder runs across its axis direction');
+    if (s.kind === 'cylinder' && Math.abs(a[0] - b[0]) > Math.max(tol, 1e-9 * s.r)) {
+      // A retained short chord can be within the native tolerance of the wall without being a generator.
+      // Its radial squared distance is a convex quadratic: endpoints give the maximum, its vertex the minimum.
+      const radial = (x: P3): P3 => { const d = sub(x, s.c); return sub(d, scale(s.a, dot(d, s.a))); };
+      const p = radial(k.p), q = radial(k.q), radialStep = sub(q, p);
+      const radialStepSquared = dot(radialStep, radialStep);
+      const nearest = radialStepSquared ? Math.min(1, Math.max(0, -dot(p, radialStep) / radialStepSquared)) : 0;
+      const minRadius = len(add(p, scale(radialStep, nearest))), maxRadius = Math.max(len(p), len(q));
+      if (!(s.r > tol && Math.abs(a[0] - b[0]) < Math.PI * s.r
+        && Math.max(Math.abs(minRadius - s.r), Math.abs(maxRadius - s.r)) <= tol))
+        throw new BrepError('GEOMETRY', 'analytic Boolean: a straight edge on a cylinder runs across its axis direction');
+      const chord = sub(k.q, k.p);
+      const at = (u: number): P3 => add(k.p, scale(chord, u));
+      s.mappedChord = true;
+      return { kind: 'curve', f: cached(u => to2(f, at(u))), t0: 0, t1: 1, src: at, exact: true, ...t } as CurveSegment2 & { exact: true };
+    }
     return { kind: 'line', a, b: s.kind === 'cylinder' ? [a[0], b[1]] : b, ...t };
   }
   const start = arcAt(k, 0);
@@ -1682,9 +1697,12 @@ function analyticBoolean(a: Brep, b: Brep, operation: AnalyticBooleanOperation, 
     if (sources) trace.results.set(result, sources);
   }
   if (!touches.length) {
-    if (operation === 'difference' && A.some(f => f.sphereCylinderCut)) {
+    const usedChord = (face: GFace) => face.surf.kind === 'cylinder' && face.surf.mappedChord;
+    const curvedDifference = operation === 'difference' && A.some(f => f.sphereCylinderCut);
+    if (curvedDifference || A.some(usedChord) || B.some(usedChord)) {
       const report = checkBrep(result, { strict: true });
-      if (!report.valid) throw new BrepError('GEOMETRY', `analytic Boolean: sphere/cylinder difference is not a valid manifold solid: ${report.issues[0]}`, report);
+      const context = curvedDifference ? 'sphere/cylinder difference' : 'result with a retained cylinder chord';
+      if (!report.valid) throw new BrepError('GEOMETRY', `analytic Boolean: ${context} is not a valid manifold solid: ${report.issues[0]}`, report);
     }
     return touchChecked(result, touchedAt);
   }
