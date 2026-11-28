@@ -2,18 +2,21 @@ import type { Curve } from '../types.js';
 
 type QuadraticSource = Pick<Curve, 'degree' | 'knots' | 'weights'>;
 
-/** Sample a clamped quadratic with geometric-progression weights in its balanced parameter.
- * A Möbius map gives the parameters of the original curve without changing its coefficients. */
+/** Balance the endpoint weights of a clamped quadratic. The Möbius map returns native parameters. */
 function quadraticBalance(curve: QuadraticSource) {
   if (curve.degree !== 2 || curve.weights.length !== 3 || curve.knots.length !== 6) return;
   const [a, a1, a2, b, b1, b2] = curve.knots;
   if (a !== a1 || a !== a2 || b !== b1 || b !== b2 || !(a < b)) return;
   const [start, middle, end] = curve.weights;
   if (!(start > 0 && middle > 0 && end > 0) || start === end) return;
+  const ratio = Math.sqrt(start / end);
   const balancedMiddle = middle / Math.sqrt(start * end);
-  // Do not use this spacing when the transformed middle weight can still compress the geometric samples.
-  if (!(Math.abs(balancedMiddle - 1) <= 8 * Number.EPSILON)) return;
-  return { a, b, ratio: Math.sqrt(start / end) };
+  const geometricProgression = Math.abs(balancedMiddle - 1) <= 8 * Number.EPSILON;
+  // With normalized weights [1, m, 1], m in [1/2, 2] bounds the denominator to [3/4, 3/2].
+  // Apply the wider rule to endpoint compression beyond a 4:1 weight ratio.
+  const boundedCompression = (ratio < 0.5 || ratio > 2) && balancedMiddle >= 0.5 && balancedMiddle <= 2;
+  if (!geometricProgression && !boundedCompression) return;
+  return { a, b, ratio };
 }
 
 export function balancedQuadraticStations(curve: QuadraticSource, count: number): number[] | undefined {

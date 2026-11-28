@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { brepMassProperties, buildBrep, checkBrep, exportStep, importStep, lineCurve, transformBrep } from '../dist/index.js';
+import { brepMassProperties, brepSurfaceArea, buildBrep, checkBrep, exportStep, importStep, lineCurve, transformBrep } from '../dist/index.js';
 import { balancedQuadraticRule } from '../dist/brep/balanced-quadratic-stations.js';
 import { brepQuadratureIntegrals } from '../dist/brep/brep-mass-quadrature.js';
 
@@ -31,12 +31,12 @@ function archPrism(weights, transpose = false) {
     edges: [edge('arch-base', ['a', 'b'], true), edge('arch-top', ['c', 'd'], true),
       edge('chord-base', ['a', 'b']), edge('chord-top', ['c', 'd']), edge('rail-a', ['a', 'c']), edge('rail-b', ['b', 'd'])],
     bodies: [{ id: 'solid', kind: 'solid', shells: [{ id: 'closed', closed: true, faces: [
-      face('base', plane('base-plane', [[a, [0, 5, 0]], [b, [100, 5, 0]]]), 'reverse', [['arch-base', 'forward'], ['chord-base', 'reverse']]),
-      face('top', plane('top-plane', [[c, [0, 5, 15]], [d, [100, 5, 15]]]), 'forward', [['chord-top', 'forward'], ['arch-top', 'reverse']]),
+      face('base', plane('base-plane', [[a, [0, 5, 0]], [b, [100, 5, 0]]]), 'reversed', [['arch-base', 'forward'], ['chord-base', 'reversed']]),
+      face('top', plane('top-plane', [[c, [0, 5, 15]], [d, [100, 5, 15]]]), 'forward', [['chord-top', 'forward'], ['arch-top', 'reversed']]),
       face('chord-side', plane('chord-plane', [[a, c], [b, d]]), 'forward',
-        [['chord-base', 'forward'], ['rail-b', 'forward'], ['chord-top', 'reverse'], ['rail-a', 'reverse']]),
-      face('arch-side', side, transpose ? 'forward' : 'reverse',
-        [['arch-base', 'reverse'], ['rail-a', 'forward'], ['arch-top', 'forward'], ['rail-b', 'reverse']]),
+        [['chord-base', 'forward'], ['rail-b', 'forward'], ['chord-top', 'reversed'], ['rail-a', 'reversed']]),
+      face('arch-side', side, transpose ? 'forward' : 'reversed',
+        [['arch-base', 'reversed'], ['rail-a', 'forward'], ['arch-top', 'forward'], ['rail-b', 'reversed']]),
     ] }] }],
   });
 }
@@ -74,6 +74,26 @@ test('the weighted arch retains exact boundary weights and analytic mass after S
   assert.equal(edges.length, 2);
   for (const edge of edges) assert.deepEqual(edge.curve.weights, [1e-6, 1, 1e6]);
   check(reopened);
+});
+
+test('the non-GP arch has the same correct mass with reversed weights, a transposed patch and STEP readback', () => {
+  const weights = [2e-6, 1, 1e6];
+  const source = archPrism(weights), original = JSON.stringify(source);
+  const reopened = importStep(exportStep(source, { validationProperties: false }));
+  const edges = reopened.edges.filter(edge => edge.curve.degree === 2);
+  assert.equal(edges.length, 2);
+  for (const edge of edges) assert.deepEqual(edge.curve.weights, weights);
+  for (const brep of [source, archPrism([...weights].reverse(), true), reopened]) {
+    const strict = checkBrep(brep, { strict: true });
+    assert.ok(strict.valid, strict.issues.join('\n'));
+    const mass = brepMassProperties(brep, 1);
+    assert.equal(mass.method, 'quadrature');
+    // Independent Simpson integration of y dx, y² dx / 2 and the profile's arc length.
+    close(mass.volume, 2140.486225480854);
+    mass.centroid.forEach((value, i) => close(value, [50, 0.8397946462803674, 7.5][i]));
+    close(brepSurfaceArea(brep), 3287.244106546534);
+  }
+  assert.equal(JSON.stringify(source), original);
 });
 
 test('the balanced solid mass retains its translated centroid and density scale', () => {
