@@ -21,7 +21,7 @@ interface SelectionInspectorProps {
   selection: Selection;
   materialSettings: { material: string; setMaterial: Dispatch<SetStateAction<string>> };
   display: { showBox: boolean; setShowBox: Dispatch<SetStateAction<boolean>>; inertiaAt: 'centre' | 'origin'; setInertiaAt: Dispatch<SetStateAction<'centre' | 'origin'>> };
-  changes: { commit(next: StudioDoc): boolean; setSelection: Dispatch<SetStateAction<Selection>>; edgesToCurves(): void; loadBendTable(body: BodyResult, file?: File): Promise<void>; setFlatView(key: string): void; setCutListView(open: boolean): void; separate(body: BodyResult): void; vertexExtrude?: { disabled: boolean; open: MouseEventHandler<HTMLButtonElement> }; matchBoxWidth?: () => void };
+  changes: { commit(next: StudioDoc): boolean; setSelection: Dispatch<SetStateAction<Selection>>; edgesToCurves(): void; loadBendTable(body: BodyResult, file?: File): Promise<void>; setFlatView(key: string): void; setCutListView(open: boolean): void; separate(body: BodyResult): void; vertexExtrude?: { disabled: boolean; open: MouseEventHandler<HTMLButtonElement> }; matchBoxFootprint?: { width?: () => void; depth?: () => void } };
   children: ReactNode;
 }
 /** Properties of the accepted selection; document adoption and feature editing stay in App. */
@@ -30,7 +30,7 @@ export function SelectionInspector({ model, selection, materialSettings, display
   const { doc, evaluated, bodies, fresh, busy, massReady } = model;
   const { material, setMaterial } = materialSettings;
   const { showBox, setShowBox, inertiaAt, setInertiaAt } = display;
-  const { commit, setSelection, edgesToCurves, loadBendTable, setFlatView, setCutListView, separate, vertexExtrude, matchBoxWidth } = changes;
+  const { commit, setSelection, edgesToCurves, loadBendTable, setFlatView, setCutListView, separate, vertexExtrude, matchBoxFootprint } = changes;
   const density = MATERIALS.find(m => m.id === material) ?? MATERIALS[0];
   const groupMass = (list: BodyResult[]) => {
     const parts = [];
@@ -53,7 +53,8 @@ export function SelectionInspector({ model, selection, materialSettings, display
           <div className="card-title">SELECTION · {selection.vertices.length === 1 ? 'POINT' : `${selection.vertices.length} POINTS`}</div>
           {selection.vertices.map((v, k) => <div key={k} className="kv">{selection.vertices!.length > 1 ? `Point ${k + 1}` : 'X Y Z'} <b>{v.at.map(x => fmt(Math.round(x * 1000) / 1000)).join(', ')}</b></div>)}
           {vertexExtrude && <button className="ghost small" disabled={vertexExtrude.disabled} onClick={vertexExtrude.open}>Edit Extrude</button>}
-          {matchBoxWidth && <button className="ghost small" onClick={matchBoxWidth}>Match Box Width</button>}
+          {matchBoxFootprint?.width && <button className="ghost small" onClick={matchBoxFootprint.width}>Match Box Width</button>}
+          {matchBoxFootprint?.depth && <button className="ghost small" onClick={matchBoxFootprint.depth}>Match Box Depth</button>}
           {selection.vertices.length === 2 && (() => { const [a, b] = selection.vertices!.map(v => v.at), d = [0, 1, 2].map(k => b[k] - a[k]); return <><div className="kv">Distance <b>{fmt(Math.round(Math.hypot(d[0], d[1], d[2]) * 1000) / 1000)} mm</b></div><div className="kv">ΔX ΔY ΔZ <b>{d.map(x => fmt(Math.round(x * 1000) / 1000)).join(', ')}</b></div></>; })()}
         </>) : sel1?.kind === 'face' && sel1.face ? (<>
           <div className="card-title">SELECTION · {edges ? `${faces} FACE${faces === 1 ? '' : 'S'}, ${edges} EDGE${edges === 1 ? '' : 'S'}` : `${faces} FACE${faces === 1 ? '' : 'S'}`}</div>

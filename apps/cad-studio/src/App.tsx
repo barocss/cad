@@ -2,7 +2,7 @@ import { useStudioDirectCommit } from './state/useStudioDirectCommit';
 import { adoptStudioDocument, canChangeStudioDocument, type StudioDocumentUndo } from './state/studioDocumentAdoption';
 import { useFitTableCommit } from './state/useFitTableCommit';
 import { useVertexExtrudeEntry } from './state/useVertexExtrudeEntry';
-import { useBoxWidthEntry } from './state/useBoxWidthEntry';
+import { useBoxFootprintEntry } from './state/useBoxFootprintEntry';
 import { useStudioSheetPatterns } from './app/useStudioSheetPatterns';
 import { useStudioEvaluatedSource, useStudioModelEvaluation, type RouteEvaluationHandoff, type StudioParameterEdit } from './state/useStudioModelEvaluation';
 import { useStudioWorkerRecovery } from './state/useStudioWorkerRecovery';
@@ -994,7 +994,7 @@ export function App() {
   });
   const vertexExtrude = useVertexExtrudeEntry({ doc, bodies, vertex: solidVertex, editNode, open: openHistoryFeatureAt,
     canOpen: () => ownsEvaluatedSource() && !project.opening() && editNodeNow.current === null });
-  const matchBoxWidth = useBoxWidthEntry({ doc, bodies, start,
+  const matchBoxFootprint = useBoxFootprintEntry({ doc, bodies, start,
     picks: editNode === null && !sketch && !measure && !variants.showing && !assembly.draft ? solidVertexPair : undefined,
     canOpen: () => ownsEvaluatedSource() && !project.opening() && editNodeNow.current === null && !activeStore.get() });
 
@@ -1921,7 +1921,7 @@ export function App() {
       {cageInputActive && cageEd.session && doc.nodes[cageEd.session.node] && <CagePanel editor={cageEd} name={featureLabel(doc.nodes[cageEd.session.node], cageEd.session.node, doc.nodes)} />}
       {sketch3dInputActive && skel.session && <SkeletonPanel editor={skel} name={skel.session.node === null ? 'new skeleton' : featureLabel(doc.nodes[skel.session.node], skel.session.node, doc.nodes)} />}
       {!cageEd.session && !skel.session && !rendering && !sketch && !measure && !active && !directSel.length && !instanceSel.length && !assembly.draft && <SelectionInspector model={{ doc, evaluated, bodies, fresh, busy, massReady }} selection={selection} materialSettings={{ material, setMaterial }}
-        display={{ showBox, setShowBox, inertiaAt, setInertiaAt }} changes={{ commit, setSelection, edgesToCurves, loadBendTable, setFlatView, setCutListView, separate, vertexExtrude, matchBoxWidth }}>
+        display={{ showBox, setShowBox, inertiaAt, setInertiaAt }} changes={{ commit, setSelection, edgesToCurves, loadBendTable, setFlatView, setCutListView, separate, vertexExtrude, matchBoxFootprint }}>
         {edgeInspection.panel}
         {edgeInspection.combControls}
         {editNode !== null && <HistoryFeatureEditor

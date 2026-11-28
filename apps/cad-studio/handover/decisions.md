@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D2270: [D2270](notes/studio-box-depth-from-corners-2026-11-29/README.md), #629. Match authored Box depth to a second original native corner from the Studio viewport.
+
 - D2269: [D2269](notes/closed-trapezoid-outer-rim-fillet-2026-11-29/README.md), #12. Verify the complete native cone-to-plane exterior rim Fillet on an exact trapezoidal Sweep.
 
 - D2268: [D2268](notes/studio-command-launch-routing-2026-11-29/README.md), #44. Extract Studio command launch routing and verify matching actual Sketch, Sweep and Fillet behavior.
