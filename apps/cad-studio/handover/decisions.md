@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D2268: [D2268](notes/studio-command-launch-routing-2026-11-29/README.md), #44. Extract Studio command launch routing and verify matching actual Sketch, Sweep and Fillet behavior.
+
 - D2267: [D2267](notes/agent-trapezoidal-cavity-review-2026-11-29/README.md), #324. Pin one sealed trapezoidal Sweep cavity edit to exact native wall evidence and Studio approval.
 
 - D2266: [D2266](notes/exact-trapezoidal-sweep-cavity-2026-11-29/README.md), #10. Carry one enclosed rectangular cavity with an exact closed trapezoidal Sweep and preserve its authored placement.

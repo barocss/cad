@@ -98,20 +98,17 @@ import { useDirectCurveCurvature } from './app/useDirectCurveCurvature';
 import { useNativeEdgeInspection } from './app/useNativeEdgeInspection';
 import { MeshFileDialogs } from './files/MeshFileDialogs';
 import { useRouteBundleEditor } from './state/useRouteBundleEditor';
-import { prepareCutPatternLaunch } from './app/commandLaunchContext';
-import { prepareStudioFeatureCommand, useStudioCommandEntry } from './app/useStudioCommandEntry';
+import { launchStudioCommand } from './app/studioCommandLaunch';
+import { useStudioCommandEntry } from './app/useStudioCommandEntry';
 import { moveRenderAppearance } from './app/moveRenderAppearance';
 import { curvePatternInputKey, directCommandDocument } from './app/directCurveCandidate';
-import { createRoundedInsetHistoryEdit, LINKED_INSET_EXTRUDE } from './app/roundedInsetCommand';
+import { createRoundedInsetHistoryEdit } from './app/roundedInsetCommand';
 import { ReferenceDecisions } from './ui/ReferenceDecisions';
 import { useRobotExports } from './robot/useRobotExports';
 import { RobotInspector } from './robot/RobotInspector';
 import { useHistoryReferenceActions } from './app/useHistoryReferenceActions';
-import { filletLaunchAvailability, filletType } from './app/filletFamily';
-import { currentNativePlanePick, SKETCH_AT_MIDPOINT } from './app/midpointSketch';
+import { filletType } from './app/filletFamily';
 import { createInsetSourceReview } from './sketch/insetSourceReview';
-import { PROJECT_TO_SKETCH } from './app/materialFootprint';
-import { launchDerivedSketch } from './app/launchDerivedSketch';
 import { useModelExports } from './files/useModelExports';
 import { ModelExportDialogs } from './files/ModelExportDialogs';
 import { StepExportPanel } from './files/StepExportPanel';
@@ -149,15 +146,14 @@ import type { BodyResult } from '@barocss/cad-model/engine/evaluate';
 import type { FriendlyError } from '@barocss/cad-model/engine/errors';
 import type { Vec3 } from '@barocss/cad-model/engine/mesh';
 import { commands, refOf, selectedBodies, subdNodeOf, type Command, type Ctx, type Selection, type Values } from '@barocss/cad-model/app/commands';
-import type { MeasurePick } from '@barocss/cad-model/app/measure';
-import { captureMeasureTarget, type PlacedMeasureSource } from './app/measureTargets';
+import type { PlacedMeasureSource } from './app/measureTargets';
 import { hostsOf, nestedCard, renderKeysOf, singleNested, singleTop, viewportInstanceSelection } from './assembly/nestedSelection';
 import { NestedPartPanel } from './ui/NestedPartPanel';
 import { snapshotInstanceIsolation, type SketchState, type ViewportHandle } from './viewport/Viewport';
 import { countRender, onBlockRender } from './devRenders';
 import { AssemblyCutHud } from './ui/AssemblyCutHud';
 import { AssemblyStepsPanel } from './ui/AssemblyStepsPanel';
-import { STEPS_COMMAND, shownSelection as litSelection } from './app/assemblySteps';
+import { shownSelection as litSelection } from './app/assemblySteps';
 import { useAssemblyStepReview } from './app/useAssemblyStepReview';
 import type { CutDraft } from './app/assemblyCutDraft';
 import { useAssemblyCutEditor } from './app/useAssemblyCutEditor';
@@ -213,7 +209,7 @@ import { ParametersPanel } from './ui/ParametersPanel';
 import { LibraryPanel } from './ui/LibraryPanel';
 import { CagePanel } from './ui/CagePanel';
 import { useCageEditor } from './subd/useCageEditor';
-import { SKETCH3D_COMMAND, useSkeletonEditor } from './skeleton/useSkeletonEditor';
+import { useSkeletonEditor } from './skeleton/useSkeletonEditor';
 import { SkeletonPanel } from './ui/SkeletonPanel';
 import { RouteBundlePanel } from './ui/RouteBundlePanel';
 import { loadUserLibraries, setLibraryStore } from '@barocss/cad-model/library/libraries';
@@ -260,7 +256,6 @@ import { Dock } from './layout/Dock';
 import { PreviewSection, type PreviewMode } from './layout/PreviewSection';
 import { CHAT_DEFAULT, CHAT_STRIP } from './layout/useLayout';
 import { sketchDxf } from '@barocss/cad-model/sketch/dxf';
-import { prepareSketchLaunch, resolveSketchLaunchVertices } from './sketch/sketchLaunch';
 import { planeLabel } from '@barocss/cad-model/sketch/plane';
 
 // Workspaces off the first screen load when first opened (the chat's tools, the drawing and the render panel).
@@ -904,109 +899,76 @@ export function App() {
     draft: { fontUpload, hudValues, setRestart },
   });
 
-  const start = useCallback((cmd: Command, initial?: Values) => {
-    const request = ++projectionRequest.current;
-    cancelNativeReview();
-    if (modelUnavailable && (cmd.build || cmd.action === 'sketch' || cmd.action === 'measure' || cmd.action === 'cage')) {
-      setPalette(false);
-      setToast({ title: `${cmd.label} not started`, hint: 'Fix the model evaluation or undo the last change first.', detail: '', documentSource: { doc, evaluated } });
-      return;
-    }
-    if (cmd.id === SKETCH_AT_MIDPOINT.id || cmd.id === PROJECT_TO_SKETCH.id) {
-      setPalette(false);
-      launchDerivedSketch(cmd.id === SKETCH_AT_MIDPOINT.id ? 'midpoint' : 'projection', { ctx, doc, evaluated }, {
-        readOwner: () => ({
-          doc: docNow.current, evaluated: evaluatedRef.current, selection: footprintState.current.selection,
+  const start = useCallback((cmd: Command, initial?: Values) => launchStudioCommand(cmd, initial, {
+    model: { doc, evaluated, ctx, selection, bodies, unavailable: modelUnavailable, fresh, busy, nativeVertexReady,
+      hasPlacedSelection: instanceSel.length > 0, variant: variants.showing },
+    owner: { begin: () => { const request = ++projectionRequest.current; cancelNativeReview(); return request; },
+      canChangeDocument, cutIntent: () => cutSourceIntent.current,
+      canUseEarlierCut: () => marker === null && !inPlaceNow.current && fresh && !busy,
+      canStartLinkedInset: () => markerNow.current === null && !inPlaceNow.current && fresh && !busy },
+    view: { closePalette: () => setPalette(false), notice: setToast,
+      closeWorkspaceDrafts: cmd => {
+        discardRouteRef.current(); setRoutePanelOpen(false);
+        if (cmd.action !== 'assembly-cut') setCutDraft(null);
+        setPalette(false); setRendering(false); setPlaying(false); setDrawing(false);
+      },
+      clearInputNotice: cmd => setToast(current => current?.inputPick === cmd ? null : current) },
+    entry: {
+      derived: request => ({
+        readOwner: () => ({ doc: docNow.current, evaluated: evaluatedRef.current, selection: footprintState.current.selection,
           open: openIntent.current, worker: workerSessionNow.current, scope: workOwnership.current.scope,
-          generation: workOwnership.current.generation, sketchRevision: sketchGeneration.current, commandActive: !!activeStore.get(),
-        }),
+          generation: workOwnership.current.generation, sketchRevision: sketchGeneration.current, commandActive: !!activeStore.get() }),
         projection: { request, currentRequest: () => projectionRequest.current, ready: () => footprintState.current.ready },
         midpoint: { ready: () => footprintState.current.midpointReady, review: midpointSketch.start },
         engine, canChangeDocument, notice: setToast,
-        editor: {
-          discardFeatureDraft, setSketch, clearPreview: () => setPreviewBodies(null),
-          clearHistoryEditor: () => setEditNode(null), frame: (min, max, plane) => viewport.current?.frameSketch(min, max, plane),
-        },
-      });
-      return;
-    }
-    if ((cmd.build || cmd.action === 'sketch' || cmd.action === 'cage' || cmd.action === 'assembly-cut' || cmd.id === SKETCH3D_COMMAND.id) && !canChangeDocument()) return;
-    if (cmd.action === 'cage' && cageEdRef.current.session) {
-      const editor = cageEdRef.current, owner = docNow.current, n = subdNodeOf(ctx);
-      if (n === null) return;
-      const target = owner.nodes[n];
-      setPalette(false);
-      if (editor.session?.node === n) { editor.begin(n); return; }
-      workspaceModeExit.switchWhenReady(() => {
-        if (docNow.current !== owner || docNow.current.nodes[n] !== target) return;
-        if (!cageEdRef.current.begin(n, true)) return;
-        discardRouteRef.current(); setRoutePanelOpen(false); setCutDraft(null);
-        setRendering(false); setPlaying(false); setDrawing(false);
-        setSelection(emptySel); setEditNode(null);
-      }, { readFeature: () => cageEdRef.current.session, title: 'Discard cage draft and edit another cage?' });
-      return;
-    }
-    const vertices = cmd.id === 'sketch' ? resolveSketchLaunchVertices(doc, ctx, nativeVertexReady) : null;
-    if (vertices?.ok === false) { setToast(vertices.notice); return; }
-    discardRouteRef.current(); setRoutePanelOpen(false);
-    if (cmd.action !== 'assembly-cut') setCutDraft(null);
-    setPalette(false); setRendering(false); setPlaying(false); setDrawing(false);
-    const family = filletType(cmd.id);
-    if (family && (!fresh || busy)) { setToast({ title: 'Fillet not started', hint: 'Wait for the current part to finish evaluating.', detail: '' }); return; }
-    const cut = prepareCutPatternLaunch({ command: cmd, ctx, doc, selection, intent: cutSourceIntent.current,
-      canUseEarlier: marker === null && !inPlaceNow.current && fresh && !busy });
-    if ('notice' in cut) { setToast(cut.notice); return; }
-    const avail = family ? filletLaunchAvailability(ctx, family) : cmd.available(ctx);
-    if (!avail.ok) { setToast({ title: `${cmd.label} can’t run here`, hint: avail.reason, detail: '', inputPick: cmd }); return; }
-    if (variants.showing) { setToast({ title: `${cmd.label} can’t run here`, hint: `Showing ${variants.showing}: show the master to edit.`, detail: '' }); return; }
-    if (cmd === LINKED_INSET_EXTRUDE && (markerNow.current !== null || inPlaceNow.current || !fresh || busy)) {
-      setToast({ title: 'Linked inset not started', hint: 'Show the latest History of a standalone part.', detail: '' });
-      return;
-    }
-    setToast(current => current?.inputPick === cmd ? null : current);
-    if (cmd.id === SKETCH3D_COMMAND.id) { cancel(); skel.begin(null); setSelection(emptySel); setEditNode(null); return; }
-    if (cmd.id === STEPS_COMMAND.id) { cancel(); setBomOpen(false); setRebuildOpen(false); setVariantsOpen(false); setLibraryOpen(false); setParamsOpen(false); openSteps(); return; }
-    if (cmd.action === 'sketch') {
-      const launch = prepareSketchLaunch({ command: cmd.id, doc, ctx, hasPlacedSelection: instanceSel.length > 0, vertexPlane: vertices?.plane });
-      if (!launch.ok) { setToast(launch.notice); return; }
-      discardFeatureDraft();
-      setSketch(launch.sketch); setPreviewBodies(null);
-      viewport.current?.frameSketch(...launch.bounds, launch.sketch.plane); return;
-    }
-    if (cmd.action === 'assembly-cut') { cancel(); openCut(null); return; }
-    if (cmd.action === 'interference') { checkInterference(); return; }
-    if (cmd.action === 'cage') { const n = subdNodeOf(ctx); if (n !== null && cageEdRef.current.begin(n)) { setSelection(emptySel); setEditNode(null); } return; }
-    if (cmd.action === 'measure') {
-      // Start from the selected face, edge, or vertex.
-      const face = selection.faces[0], edge = selection.edges[0], vertex = selection.vertices?.[0];
-      const first: MeasurePick | undefined = face ?? edge ?? (vertex ? { body: vertex.body, vertex: vertex.at } : undefined);
-      const target = first && captureMeasureTarget(first, doc, bodies[first.body],
-        !!face && measureNativeReady.current && !!currentNativePlanePick(ctx, face, doc));
-      setMeasure(target ? [target] : []); setSelection(emptySel); setEditNode(null); return;
-    }
-    if (!cmd.fields) {
-      const candidate = cmd.build!(ctx, {});
-      engine.evaluate(candidate, revision.current++).then(result => {
-        if (!result) return;
-        if (result.ok) commit(candidate); else setToast(result.error);
-      });
-      return;
-    }
-    const next = prepareStudioFeatureCommand({
-      launch: { command: cmd, ctx, doc, shownDoc, selection, cutSource: cut.source, hasDirectSelection: directSel.length > 0,
-        nativePlaneReady: footprintState.current.midpointReady || footprintState.current.insetReady, snapStep },
-      evaluated, viewport, initial, rememberOpener, family,
-      prepareFillet: () => { commandPreview.retire(); commandApply.clearApply(); },
-      join: { available: marker === null && shownDoc === doc, readScope: () => joinViewNow.current,
-        captureOwner: () => {
-          const open = openIntent.current;
-          return () => openIntent.current === open && !project.opening() && ownsEvaluatedSource()
-            && shownDocNow.current === doc && bodiesRef.current === bodies;
-        } },
-    });
-    if (family) setSelection(next.ctx.selection);
-    setActive(next);
-  }, [ctx, doc, selection, instanceSel, bodies, engine, commit, evaluated, shownDoc, variants.showing, setSketch, acceptanceScope, openCut, commandApply, commandPreview.retire, discardFeatureDraft, fresh, busy, modelUnavailable, nativeVertexReady, checkInterference, midpointSketch.start, cancelNativeReview, snapStep, directSel, marker, ownsEvaluatedSource, project.opening, openSteps, rememberOpener]);
+        editor: { discardFeatureDraft, setSketch, clearPreview: () => setPreviewBodies(null),
+          clearHistoryEditor: () => setEditNode(null), frame: (min, max, plane) => viewport.current?.frameSketch(min, max, plane) },
+      }),
+      switchHeldCage: () => {
+        const editor = cageEdRef.current;
+        if (!editor.session) return false;
+        const owner = docNow.current, n = subdNodeOf(ctx);
+        if (n === null) return true;
+        const target = owner.nodes[n];
+        setPalette(false);
+        if (editor.session.node === n) editor.begin(n);
+        else workspaceModeExit.switchWhenReady(() => {
+          if (docNow.current !== owner || docNow.current.nodes[n] !== target) return;
+          if (!cageEdRef.current.begin(n, true)) return;
+          discardRouteRef.current(); setRoutePanelOpen(false); setCutDraft(null);
+          setRendering(false); setPlaying(false); setDrawing(false);
+          setSelection(emptySel); setEditNode(null);
+        }, { readFeature: () => cageEdRef.current.session, title: 'Discard cage draft and edit another cage?' });
+        return true;
+      },
+      sketch: next => { discardFeatureDraft(); setSketch(next.sketch); setPreviewBodies(null); viewport.current?.frameSketch(...next.bounds, next.sketch.plane); },
+      sketch3D: () => { cancel(); skel.begin(null); setSelection(emptySel); setEditNode(null); },
+      steps: () => { cancel(); setBomOpen(false); setRebuildOpen(false); setVariantsOpen(false); setLibraryOpen(false); setParamsOpen(false); openSteps(); },
+      cut: () => { cancel(); openCut(null); }, interference: checkInterference,
+      cage: n => { if (cageEdRef.current.begin(n)) { setSelection(emptySel); setEditNode(null); } },
+      measureReady: () => measureNativeReady.current,
+      measure: targets => { setMeasure(targets); setSelection(emptySel); setEditNode(null); },
+      immediate: candidate => {
+        engine.evaluate(candidate, revision.current++).then(result => {
+          if (!result) return;
+          if (result.ok) commit(candidate); else setToast(result.error);
+        });
+      },
+      feature: ({ command, cutSource }) => ({
+        launch: { command, ctx, doc, shownDoc, selection, cutSource, hasDirectSelection: directSel.length > 0,
+          nativePlaneReady: footprintState.current.midpointReady || footprintState.current.insetReady, snapStep },
+        evaluated, viewport, rememberOpener,
+        prepareFillet: () => { commandPreview.retire(); commandApply.clearApply(); },
+        join: { available: marker === null && shownDoc === doc, readScope: () => joinViewNow.current,
+          captureOwner: () => {
+            const open = openIntent.current;
+            return () => openIntent.current === open && !project.opening() && ownsEvaluatedSource()
+              && shownDocNow.current === doc && bodiesRef.current === bodies;
+          } },
+      }),
+      select: setSelection, activate: setActive,
+    },
+  }), [ctx, doc, selection, instanceSel, bodies, engine, commit, evaluated, shownDoc, variants.showing, setSketch, acceptanceScope, openCut, commandApply, commandPreview.retire, discardFeatureDraft, fresh, busy, modelUnavailable, nativeVertexReady, checkInterference, midpointSketch.start, cancelNativeReview, snapStep, directSel, marker, ownsEvaluatedSource, project.opening, openSteps, rememberOpener]);
 
   const sheetRuleSource = { doc, evaluated, bodies, open: openIntent.current, worker: workerSession,
     generation: workOwnership.current.generation,
