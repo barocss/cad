@@ -86,6 +86,11 @@ await f.run(async () => {
   await countTools(1);
   assert.deepEqual((await toolList()).sort(), [measureName, name].sort());
   const tool = await getTool(), measure = await getTool(measureName), expected = await localQueries(originalFile);
+  const measurementSchema = await measure.evaluate(({ inputSchema }) =>
+    typeof inputSchema === 'string' ? JSON.parse(inputSchema) : inputSchema);
+  assert.deepEqual(measurementSchema.properties.expectedRevision,
+    { type: 'string', minLength: 16, maxLength: 16, pattern: '^[a-f0-9]{16}$' });
+  assert.equal(measurementSchema.properties.body.minLength, 1);
   const result = await invoke(tool);
   assert.deepEqual(result, expected.summary);
   assert.equal(result.bodies[0].volume, 12000);
@@ -101,6 +106,7 @@ await f.run(async () => {
   assert.equal((await invoke(measure, { ...args, second: 'top' })).error.code, 'invalid_arguments');
   assert.equal((await invoke(measure, { ...args, body: 'missing' })).error.code, 'planes_unavailable');
   assert.equal((await invoke(measure, { ...args, expectedRevision: '0000000000000000' })).error.code, 'stale_part');
+  assert.equal((await invoke(measure, { ...args, expectedRevision: args.expectedRevision + '\n' })).error.code, 'invalid_arguments');
   await f.same(first);
   const shared = await f.snapshot('original-part-shared');
   assert.deepEqual([shared.history, shared.selection], [initial.history, initial.selection]);

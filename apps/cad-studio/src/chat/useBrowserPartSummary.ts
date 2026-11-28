@@ -4,7 +4,8 @@ import { matchesFaceName } from '@barocss/cad-model/chat/names';
 import type { StudioDoc } from '@barocss/cad-model/engine/doc';
 import type { BodyResult } from '@barocss/cad-model/engine/evaluate';
 import { revisionOf } from '@barocss/cad-model/util/revision';
-import { browserToolFailure as readFailure, modelContext, plainInput } from './browserModelContext';
+import { browserBodyField, browserRevisionField, browserToolFailure as readFailure, modelContext, plainInput,
+  validBrowserBody, validBrowserRevision } from './browserModelContext';
 
 export interface BrowserPartSummarySource {
   doc: StudioDoc;
@@ -34,9 +35,8 @@ function planeMeasurement(input: unknown): PlaneMeasurement | undefined {
   if (!plainInput(input) || Reflect.ownKeys(input).length !== 4 ||
     !['body', 'first', 'second', 'expectedRevision'].every(key => Object.hasOwn(input, key))) return;
   const { body, first, second, expectedRevision } = input;
-  if (typeof body === 'string' && body.length > 0 && body.length <= 128 &&
-    isDirection(first) && isDirection(second) && first !== second &&
-    typeof expectedRevision === 'string' && /^[a-f0-9]{16}$/.test(expectedRevision))
+  if (validBrowserBody(body) && isDirection(first) && isDirection(second) && first !== second &&
+    validBrowserRevision(expectedRevision))
     return { body, first, second, expectedRevision };
 }
 
@@ -111,10 +111,10 @@ export function useBrowserPartSummary(source: BrowserPartSummarySource | undefin
           name: 'cad_part_measure_planes',
           description: 'Measure two unique original cardinal faces on one body of the shared part. Get the body key and revision from cad_part_summary.',
           inputSchema: { type: 'object', properties: {
-            body: { type: 'string', maxLength: 128 },
+            body: browserBodyField,
             first: { type: 'string', enum: Object.keys(directions) },
             second: { type: 'string', enum: Object.keys(directions) },
-            expectedRevision: { type: 'string', maxLength: 16 },
+            expectedRevision: browserRevisionField,
           }, required: ['body', 'first', 'second', 'expectedRevision'], additionalProperties: false },
           annotations: { readOnlyHint: true },
           async execute(input, options) {

@@ -6,21 +6,22 @@ import { featureId } from '../engine/ids';
 import { matchesFaceName } from './names';
 
 export const BROWSER_PROPOSAL_AUTHOR = 'browser';
+export const browserProposalMinimum = { primitiveDimension: 1, cylinderRadius: 0.5, holeDiameter: 0.5 } as const;
 
 export function validExtrudeDistance(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value) && value > 0 && value <= CadPartLimits.length;
 }
 
 export function validBoxDimension(value: unknown): value is number {
-  return validExtrudeDistance(value) && value >= 1;
+  return validExtrudeDistance(value) && value >= browserProposalMinimum.primitiveDimension;
 }
 
 export function validCylinderRadius(value: unknown): value is number {
-  return validExtrudeDistance(value) && value >= 0.5;
+  return validExtrudeDistance(value) && value >= browserProposalMinimum.cylinderRadius;
 }
 
 export function validHoleDiameter(value: unknown): value is number {
-  return validExtrudeDistance(value) && value >= 0.5;
+  return validExtrudeDistance(value) && value >= browserProposalMinimum.holeDiameter;
 }
 
 export function canProposeBrowserPrimitive(doc: StudioDoc, bodies: readonly BodyResult[]): boolean {

@@ -1,10 +1,12 @@
 import { useLayoutEffect, useRef, useState } from 'react';
-import { browserExtrudeTarget, browserHoleTarget, canProposeBrowserPrimitive,
+import { CadPartLimits } from '@barocss/cad';
+import { browserExtrudeTarget, browserHoleTarget, browserProposalMinimum, canProposeBrowserPrimitive,
   validBoxDimension, validCylinderRadius, validExtrudeDistance, validHoleDiameter } from '@barocss/cad-model/chat/browserProposalTargets';
 import { proposeBrowserBox, proposeBrowserCylinder, proposeBrowserExtrude, proposeBrowserHole, type ChatState, type Evaluate } from '@barocss/cad-model/chat/tools';
 import { revisionOf } from '@barocss/cad-model/util/revision';
 import type { StudioDoc } from '@barocss/cad-model/engine/doc';
-import { browserToolFailure, modelContext, plainInput } from './browserModelContext';
+import { browserBodyField, browserRevisionField, browserToolFailure, modelContext, plainInput,
+  validBrowserBody, validBrowserRevision, type InputProperty } from './browserModelContext';
 import type { BrowserPartSummarySource } from './useBrowserPartSummary';
 
 export interface BrowserPartProposalSource {
@@ -13,36 +15,37 @@ export interface BrowserPartProposalSource {
   stage(next: StudioDoc): boolean;
 }
 
-const revisionField = { type: 'string', maxLength: 16 } as const;
-const distanceField = { type: 'number' } as const;
-const bodyField = { type: 'string', maxLength: 128 } as const;
+const distanceField = { type: 'number', maximum: CadPartLimits.length } as const;
+const primitiveDimensionField = { ...distanceField, minimum: browserProposalMinimum.primitiveDimension };
+const holeDiameterField = { ...distanceField, minimum: browserProposalMinimum.holeDiameter };
 const proposalTimeoutMs = 30_000;
 const proposalTools = {
   Box: {
     name: 'cad_part_propose_box',
     description: 'Propose the first Box at the origin of the shared empty part. Give its width, depth and height in millimetres and the revision from cad_part_summary. A person decides in Studio.',
-    fields: { width: distanceField, depth: distanceField, height: distanceField, expectedRevision: revisionField },
+    fields: { width: primitiveDimensionField, depth: primitiveDimensionField, height: primitiveDimensionField, expectedRevision: browserRevisionField },
     invalid: 'Give numeric width, depth and height of at least 1 mm and the expected revision.',
     title: 'Allow one browser proposal for the first Box',
   },
   Cylinder: {
     name: 'cad_part_propose_cylinder',
     description: 'Propose the first Cylinder at the origin of the shared empty part. Give its radius and height in millimetres and the revision from cad_part_summary. A person decides in Studio.',
-    fields: { radius: distanceField, height: distanceField, expectedRevision: revisionField },
+    fields: { radius: { ...distanceField, minimum: browserProposalMinimum.cylinderRadius }, height: primitiveDimensionField,
+      expectedRevision: browserRevisionField },
     invalid: 'Give a numeric radius of at least 0.5 mm, a numeric height of at least 1 mm and the expected revision.',
     title: 'Allow one browser proposal for the first Cylinder',
   },
   Extrude: {
     name: 'cad_part_propose_extrude',
     description: 'Propose a positive distance in millimetres for the shared rectangular or circular Extrude. A Box or Cylinder requires at least 1 mm. Use the body key and revision from cad_part_summary. A person decides in Studio.',
-    fields: { body: bodyField, height: distanceField, expectedRevision: revisionField },
+    fields: { body: browserBodyField, height: { ...distanceField, exclusiveMinimum: 0 }, expectedRevision: browserRevisionField },
     invalid: 'Give a body key, a positive numeric distance in millimetres and the expected revision.',
     title: 'Allow one browser proposal for this part’s Extrude distance',
   },
   Hole: {
     name: 'cad_part_propose_hole',
     description: 'Propose one centred axial through Hole on the shared standalone Cylinder. Give the body key and revision from cad_part_summary and a diameter in millimetres smaller than the outside diameter. A person decides in Studio.',
-    fields: { body: bodyField, diameter: distanceField, expectedRevision: revisionField },
+    fields: { body: browserBodyField, diameter: holeDiameterField, expectedRevision: browserRevisionField },
     invalid: 'Give a body key, a numeric diameter of at least 0.5 mm and the expected revision.',
     title: 'Allow one browser proposal for a centred through Hole',
   },
@@ -71,14 +74,14 @@ function proposalInput(kind: ProposalKind, input: unknown, required: readonly st
   if (!plainInput(input) || Reflect.ownKeys(input).length !== required.length ||
     !required.every(key => Object.hasOwn(input, key))) return;
   const { body, width, depth, radius, height, diameter, expectedRevision } = input;
-  if (typeof expectedRevision !== 'string' || !/^[a-f0-9]{16}$/.test(expectedRevision)) return;
+  if (!validBrowserRevision(expectedRevision)) return;
   if (kind === 'Box') {
     if (validBoxDimension(width) && validBoxDimension(depth) && validBoxDimension(height))
       return { kind, args: { width, depth, height, expectedRevision } };
   } else if (kind === 'Cylinder') {
     if (validCylinderRadius(radius) && validBoxDimension(height))
       return { kind, args: { radius, height, expectedRevision } };
-  } else if (typeof body === 'string' && body.length > 0 && body.length <= bodyField.maxLength) {
+  } else if (validBrowserBody(body)) {
     if (kind === 'Extrude' && validExtrudeDistance(height)) return { kind, args: { body, height, expectedRevision } };
     if (kind === 'Hole' && validHoleDiameter(diameter)) return { kind, args: { body, diameter, expectedRevision } };
   }
@@ -107,7 +110,16 @@ export function useBrowserPartProposal(source: BrowserPartSummarySource | undefi
   useLayoutEffect(() => {
     if (!active || !api || !grant || !kind) return;
     const tool = proposalTools[kind];
-    const required = Object.keys(tool.fields);
+    const fields: Record<string, InputProperty> = { ...tool.fields };
+    const registrationSource = live.current.source;
+    if (kind === 'Extrude' && registrationSource &&
+      browserExtrudeTarget(registrationSource.doc, registrationSource.bodies)?.node.made)
+      fields.height = primitiveDimensionField;
+    if (kind === 'Hole' && registrationSource) {
+      const target = browserHoleTarget(registrationSource.doc, registrationSource.bodies);
+      if (target) fields.diameter = { ...holeDiameterField, exclusiveMaximum: target.radius * 2 };
+    }
+    const required = Object.keys(fields);
     const controller = new AbortController();
     let submitting = false, used = false;
     const stale = browserToolFailure('stale_part', 'The proposal grant or the current part has changed.');
@@ -120,7 +132,7 @@ export function useBrowserPartProposal(source: BrowserPartSummarySource | undefi
         await api.registerTool({
           name: tool.name,
           description: tool.description,
-          inputSchema: { type: 'object', properties: { ...tool.fields }, required, additionalProperties: false },
+          inputSchema: { type: 'object', properties: fields, required, additionalProperties: false },
           annotations: { readOnlyHint: false },
           async execute(input, options) {
             const request = proposalInput(kind, input, required);
@@ -135,7 +147,7 @@ export function useBrowserPartProposal(source: BrowserPartSummarySource | undefi
               const target = browserExtrudeTarget(snapshot.doc, snapshot.bodies);
               if (!target || target.body !== request.args.body || target.height === request.args.height)
                 return browserToolFailure('extrude_unavailable', 'Choose the current Extrude body and a different distance.');
-              if (target.node.made && request.args.height < 1)
+              if (target.node.made && !validBoxDimension(request.args.height))
                 return browserToolFailure('invalid_arguments', 'Give a height of at least 1 mm for a Box or Cylinder.');
             } else if (request.kind === 'Hole') {
               const target = browserHoleTarget(snapshot.doc, snapshot.bodies);

@@ -409,6 +409,9 @@ async function verifyAxialHole() {
   const args = { body: 'b1', diameter: 4, expectedRevision: summary.revision };
   await assert.rejects(invoke(oldExtrude, { body: args.body, height: 15, expectedRevision: summary.revision }));
   const tool = await getTool(holeName);
+  const schema = await tool.evaluate(({ inputSchema }) => typeof inputSchema === 'string' ? JSON.parse(inputSchema) : inputSchema);
+  assert.equal(schema.properties.diameter.minimum, 0.5);
+  assert.equal(schema.properties.diameter.exclusiveMaximum, 10);
   for (const [input, code] of [
     [{ ...args, diameter: '4' }, 'invalid_arguments'], [{ ...args, diameter: 0.49 }, 'invalid_arguments'],
     [{ ...args, diameter: 10 }, 'invalid_arguments'], [{ ...args, x: 0 }, 'invalid_arguments'],

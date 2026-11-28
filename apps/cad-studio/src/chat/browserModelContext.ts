@@ -1,4 +1,17 @@
-type InputProperty = { type: 'string'; enum?: string[]; maxLength?: number } | { type: 'number' };
+export type InputProperty = { type: 'string'; enum?: string[]; minLength?: number; maxLength?: number; pattern?: string }
+  | { type: 'number'; minimum?: number; maximum?: number; exclusiveMinimum?: number; exclusiveMaximum?: number };
+
+const revisionPattern = /^[a-f0-9]{16}$/;
+export const browserRevisionField = { type: 'string', minLength: 16, maxLength: 16, pattern: revisionPattern.source } as const;
+export const browserBodyField = { type: 'string', minLength: 1, maxLength: 128 } as const;
+
+export function validBrowserRevision(value: unknown): value is string {
+  return typeof value === 'string' && value.length === browserRevisionField.maxLength && revisionPattern.test(value);
+}
+
+export function validBrowserBody(value: unknown): value is string {
+  return typeof value === 'string' && value.length >= browserBodyField.minLength && value.length <= browserBodyField.maxLength;
+}
 
 interface ModelContext {
   registerTool(tool: {
