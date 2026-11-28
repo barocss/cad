@@ -1,19 +1,21 @@
 import type { Dispatch, SetStateAction, RefObject } from 'react';
 import type { StudioDoc } from '@barocss/cad-model/engine/doc';
 import type { BodyResult } from '@barocss/cad-model/engine/evaluate';
-import { selectedBodies, type Command, type Ctx, type Selection } from '@barocss/cad-model/app/commands';
+import { selectedBodies, type Command, type Ctx, type Selection, type Values } from '@barocss/cad-model/app/commands';
+import { rotateCommand } from '@barocss/cad-model/app/rotateCommand';
 import { readMeasureTarget, sameMeasureOccurrence, type MeasureTarget, type PlacedMeasureSource } from '../app/measureTargets';
 import { lookOf, withLook } from '@barocss/cad-model/app/bodies';
 import { emptySel } from '../app/studioConstants';
+import { edgeRotationValues } from '../app/edgeRotation';
 import type { ViewportMenu } from '../viewport/useViewportPicking';
 import type { ViewportHandle } from '../viewport/Viewport';
 import { ContextMenu } from './ContextMenu';
 interface ViewContextMenuProps {
-  model: { doc: StudioDoc; bodies: BodyResult[]; ctx: Ctx; placed?: ReadonlyMap<string, PlacedMeasureSource>; placedMeasureContextReady(): boolean };
+  model: { doc: StudioDoc; bodies: BodyResult[]; ctx: Ctx; placed?: ReadonlyMap<string, PlacedMeasureSource>; placedMeasureContextReady(): boolean; canRotateAtEdge(): boolean };
   menu: ViewportMenu | null;
   setMenu(value: null): void;
   viewport: RefObject<ViewportHandle | null>;
-  changes: { commit(next: StudioDoc): boolean; start(command: Command): void; deleteSelection(): void; setSelection: Dispatch<SetStateAction<Selection>>; setMeasure: Dispatch<SetStateAction<MeasureTarget[] | null>>; setEditNode(value: null): void };
+  changes: { commit(next: StudioDoc): boolean; start(command: Command, initial?: Values): void; deleteSelection(): void; setSelection: Dispatch<SetStateAction<Selection>>; setMeasure: Dispatch<SetStateAction<MeasureTarget[] | null>>; setEditNode(value: null): void };
 }
 export function ViewContextMenu({ model, menu, setMenu, viewport, changes }: ViewContextMenuProps) {
   const { doc, bodies, ctx, placed } = model;
@@ -25,6 +27,7 @@ export function ViewContextMenu({ model, menu, setMenu, viewport, changes }: Vie
   const measureBodies = occurrence ? part?.bodies : bodies;
   const target = picked && measureBodies && (!occurrence || (part && sameMeasureOccurrence(occurrence, part.inst) && !part.hidden.has(picked.body)))
     && measureBodies[picked.pick.body]?.mesh === picked.mesh && readMeasureTarget(picked, doc, measureBodies) ? picked : null;
+  const edgeRotation = menu?.title === 'EDGE' && target && model.canRotateAtEdge() ? edgeRotationValues(ctx, target) : undefined;
   const startMeasure = (target: MeasureTarget) => {
     if (target.occurrence && !model.placedMeasureContextReady()) return;
     setMeasure([target]);
@@ -34,6 +37,10 @@ export function ViewContextMenu({ model, menu, setMenu, viewport, changes }: Vie
   return <>      {menu && <ContextMenu at={menu.at} title={menu.title} commands={!menu.viewOnly} ctx={{ ...ctx, selection: menu.selection }} onClose={() => setMenu(null)}
         onRun={c => { setMenu(null); start(c); }}
         actions={[
+          ...(edgeRotation ? [{ label: 'Rotate about edge', icon: 'cad-rotate', run: () => {
+            setMenu(null);
+            if (model.canRotateAtEdge()) start(rotateCommand, edgeRotation);
+          } }] : []),
           { label: 'Frame all', icon: 'fit_screen', shortcut: 'F', run: () => viewport.current?.fit() },
           { label: 'Isometric view', icon: 'view_in_ar', run: () => viewport.current?.setView('iso') },
           { label: 'Top view', icon: 'crop_square', run: () => viewport.current?.setView('top') },

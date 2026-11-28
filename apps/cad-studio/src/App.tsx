@@ -2154,7 +2154,10 @@ export function App() {
       <FeatureHistoryMenu doc={doc} ctx={ctx} marker={marker} historyMenu={historyMenu} close={() => setHistoryMenu(null)}
         beforeEdit={action => workspaceModeExit.switchWhenReady(action, { originFocus: historyMenu?.focus, readFeature: readFeatureTransitionDraft })}
         editors={{ setEditNode, setInstanceSel, setDirectSel, editSketch, exportSketchDxf, cancel, beginSkeleton: skel.begin, setSelection }} history={{ toggleSuppress, reorder, setMarker, deleteNode }} />
-      <ViewContextMenu model={{ doc, bodies, ctx, placed: placedMeasureContext ? liveMeasurement.placedSources : undefined, placedMeasureContextReady }} menu={modelUnavailable ? null : menu} setMenu={setMenu} viewport={viewport} changes={{ commit, start, deleteSelection, setSelection, setMeasure, setEditNode }} />
+      <ViewContextMenu model={{ doc, bodies, ctx, placed: placedMeasureContext ? liveMeasurement.placedSources : undefined, placedMeasureContextReady,
+        canRotateAtEdge: () => nativeVertexReady && shownDoc === doc && previewMode === 'none' && !section && !measure &&
+          !rendering && !drawing && !sketch && !activeStore.get() && ownsEvaluatedSource() }}
+        menu={modelUnavailable ? null : menu} setMenu={setMenu} viewport={viewport} changes={{ commit, start, deleteSelection, setSelection, setMeasure, setEditNode }} />
 
       {cutListView && (() => { const list = partCutList(doc, bodies, material); return list ? <CutListDialog list={list} nesting={nestCutList(doc, list)} name={fileName.replace(/[^\w.-]+/g, '_')} onClose={() => setCutListView(false)} /> : null; })()}
       {flatPattern && <FlatPatternDialog {...flatPattern} />}
