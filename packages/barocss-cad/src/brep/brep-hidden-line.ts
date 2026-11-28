@@ -14,7 +14,8 @@ import { faceGeometry } from './analytic-boolean.js';
 import { authoredBrepEdgeRadii } from './authored-circle-nominal.js';
 import type { Brep } from './brep-core.js';
 import { sharedConeMeridianNormal } from './brep-hidden-cone-meridian.js';
-import { circleOf, tessellateBrep } from './brep-tessellate.js';
+import { createNativeLoftProbe, tracksNativeLoftOutline, type NativeLoftMesh, type NativeLoftProbe } from './brep-hidden-native-loft.js';
+import { circleOf, tessellateBrep, tessellateBrepWithEdgeParameters } from './brep-tessellate.js';
 import { hiddenGeneratorAlias, type HiddenGenerator, type HiddenGeneratorRun } from './brep-hidden-alias.js';
 import type { Point } from '../types.js';
 import { cross, dot, len, lerp as lerp3, sub, unit } from '../core/vec3.js';
@@ -98,6 +99,8 @@ interface Candidate {
   generator?: HiddenGenerator;
   /** Analytic cylinder provenance when this candidate is a straight cylinder silhouette. */
   cylinder?: ProjectedCylinderSource;
+  /** Visibility probes on a complete source seam behind the sampled outline. */
+  nativeProbe?: { at: NativeLoftProbe['at']; adjacent: Own };
 }
 
 const dist2 = (a: XY, b: XY) => Math.hypot(b[0] - a[0], b[1] - a[1]);
@@ -111,11 +114,17 @@ function geometryOfFace(face: Brep['faces'][number]): ReturnType<typeof faceGeom
   return g;
 }
 // A B-rep's tessellation per quality, made once: a drawing projects the same part in several views.
-const meshes = new WeakMap<Brep, Map<number, ReturnType<typeof tessellateBrep>>>();
-function meshOf(b: Brep, perQuarter: number): ReturnType<typeof tessellateBrep> {
-  let byQuality = meshes.get(b); if (!byQuality) meshes.set(b, byQuality = new Map());
-  let m = byQuality.get(perQuarter); if (!m) byQuality.set(perQuarter, m = tessellateBrep(b, { segmentsPerQuarter: perQuarter }));
-  return m;
+const meshCache = new WeakMap<Brep, Map<number, NativeLoftMesh>>();
+function meshOf(b: Brep, perQuarter: number): NativeLoftMesh {
+  let byQuality = meshCache.get(b); if (!byQuality) meshCache.set(b, byQuality = new Map());
+  let source = byQuality.get(perQuarter);
+  if (!source) {
+    const options = { segmentsPerQuarter: perQuarter };
+    source = tracksNativeLoftOutline(b, perQuarter)
+      ? tessellateBrepWithEdgeParameters(b, options) : { mesh: tessellateBrep(b, options) };
+    byQuality.set(perQuarter, source);
+  }
+  return source;
 }
 export function projectBrepHiddenLines(breps: readonly Brep[], view: HiddenLineView, options: HiddenLineOptions = {}): BrepProjection {
   const toward = unit(view.toward), right = unit(cross(view.up, toward));
@@ -127,7 +136,8 @@ export function projectBrepHiddenLines(breps: readonly Brep[], view: HiddenLineV
   // Occluders: every face's triangles in view coordinates.
   const tris: number[] = [], triFace: number[] = [], triAt: number[] = [], faceSag: number[] = [], faceSpan: number[] = [];
   const perQuarter = options.segmentsPerQuarter ?? 12;
-  const meshes = breps.map(b => meshOf(b, perQuarter));
+  const meshSources = breps.map(b => meshOf(b, perQuarter)), meshes = meshSources.map(source => source.mesh);
+  const nativeLoftProbe = createNativeLoftProbe(breps, P, toward);
   const lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
   for (const m of meshes) {
     const X = m.positions;
@@ -156,7 +166,7 @@ export function projectBrepHiddenLines(breps: readonly Brep[], view: HiddenLineV
     }
   }
   const occluder = triangleGrid(tris, triFace, triAt);
-  const hidden = (p: Point, c: Candidate) => occluder.covers(P(p), p, D(p) + c.eps, c.own ?? null);
+  const hidden = (p: Point, c: Candidate, adjacent?: Own) => occluder.covers(P(p), p, D(p) + c.eps, c.own ?? null, adjacent);
 
   const candidates: Candidate[] = [], silhouettes: Candidate[] = [];
   const h = size / 300; // sampling step along a curve (view units)
@@ -352,7 +362,18 @@ export function projectBrepHiddenLines(breps: readonly Brep[], view: HiddenLineV
             ...(cylinder ? { cylinder } : {}),
             at: s => lerp3(A, B, s), out: (s0, s1) => ({ kind: 'line', a: P(lerp3(A, B, s0)), b: P(lerp3(A, B, s1)) }),
             samples: () => steps(0, 1, Math.ceil(L / h)) });
-        } else { const cand = polylineCandidate(name, 'silhouette', ch, P, h, eps); if (cand) silhouettes.push({ ...cand, own }); }
+        } else {
+          const cand = polylineCandidate(name, 'silhouette', ch, P, h, eps);
+          if (!cand) return;
+          const probe = nativeLoftProbe(brep, face, ch, meshSources[bi]);
+          const neighbor = probe ? mesh.faces.findIndex(f => f.faceId === probe.neighbor.id) : -1;
+          const adjacent = faceBase[bi] + neighbor;
+          const nativeProbe = probe && neighbor >= 0 ? { at: probe.at, adjacent: {
+            face: adjacent, eps: 4 * (faceSag[faceIndex] + faceSag[adjacent]) + eps,
+            rho: 2.5 * Math.max(faceSpan[faceIndex], faceSpan[adjacent]),
+          } } : undefined;
+          silhouettes.push({ ...cand, own, nativeProbe });
+        }
       });
     });
   });
@@ -361,7 +382,23 @@ export function projectBrepHiddenLines(breps: readonly Brep[], view: HiddenLineV
   const edges = new Map<Candidate, ProjectedPiece[]>();
   const visibleInk: XY[][] = [];
   const minRun = 2e-3 * size;
-  const runsOf = (c: Candidate) => intervals(c, s => !hidden((c.probe ?? c.at)(s), c), P, minRun);
+  let nativeQueries = 65_536;
+  const runsOf = (c: Candidate) => {
+    if (c.nativeProbe) {
+      const samples = c.samples();
+      // One query per station and at most 30 bisection queries between neighbors.
+      const cost = 3 * (samples.length + 2) * 31;
+      if (cost <= nativeQueries) {
+        nativeQueries -= cost;
+        const probe = c.nativeProbe;
+        return intervals({ ...c, samples: () => samples }, s => {
+          const native = probe.at(s);
+          return native ? !hidden(native, c, probe.adjacent) : !hidden(c.at(s), c);
+        }, P, minRun);
+      }
+    }
+    return intervals(c, s => !hidden((c.probe ?? c.at)(s), c), P, minRun);
+  };
   const visibleRuns = new Map<Candidate, [number, number, boolean][]>();
   for (const c of candidates) {
     const runs = runsOf(c); visibleRuns.set(c, runs);
@@ -541,7 +578,7 @@ function triangleGrid(t: number[], face: number[], at: number[]) {
     for (let i = cx(ax); i <= cx(bx); i++) for (let j = cy(ay); j <= cy(by); j++) cells[j * G + i].push(k);
   }
   return {
-    covers(p: XY, p3: Point, depth: number, own: Own | null) {
+    covers(p: XY, p3: Point, depth: number, own: Own | null, adjacent?: Own) {
       if (!n || p[0] < x0 - w || p[0] > x1 + w || p[1] < y0 - hgt || p[1] > y1 + hgt) return false;
       for (const k of cells[cy(p[1]) * G + cx(p[0])]) {
         const o = k * 9, ax = t[o], ay = t[o + 1], bx = t[o + 3], by = t[o + 4], qx = t[o + 6], qy = t[o + 7];
@@ -552,6 +589,9 @@ function triangleGrid(t: number[], face: number[], at: number[]) {
         const z = l0 * t[o + 2] + l1 * t[o + 5] + l2 * t[o + 8];
         if (z <= depth) continue;
         if (own && face[k] === own.face && (z <= depth + own.eps || Math.hypot(at[k * 3] - p3[0], at[k * 3 + 1] - p3[1], at[k * 3 + 2] - p3[2]) < own.rho)) continue;
+        // Only a probe on the native tangent seam can borrow this local facet envelope.
+        if (adjacent && face[k] === adjacent.face && z <= depth + adjacent.eps
+          && Math.hypot(at[k * 3] - p3[0], at[k * 3 + 1] - p3[1], at[k * 3 + 2] - p3[2]) <= adjacent.rho) continue;
         return true;
       }
       return false;

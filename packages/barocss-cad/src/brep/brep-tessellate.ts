@@ -337,6 +337,12 @@ export function planar(surface: Surface): { origin: Point; normal: Point; e1: Po
 
 export function tessellateBrep(brep: Brep, options: BrepTessellationOptions = {}): BrepMesh { return tessellate(brep, options, null); }
 
+/** Retain the final native stations of the same mesh, including any shared-edge refinement. */
+export function tessellateBrepWithEdgeParameters(brep: Brep, options: BrepTessellationOptions = {}) {
+  const edgeParameters = new Map<BrepEdge, readonly number[]>();
+  return { mesh: tessellate(brep, options, null, null, null, edgeParameters), edgeParameters };
+}
+
 /** A face's vertices in a parameter domain of its surface, and the exact surface there (mass quadrature). */
 export interface FaceParameters {
   readonly uv: readonly XY[]; readonly at: (u: number, v: number) => Point;
@@ -364,7 +370,7 @@ export function segmentKey(a: ArrayLike<number>, b: ArrayLike<number>): string {
   return p < q ? `${p}|${q}` : `${q}|${p}`;
 }
 
-function tessellate(brep: Brep, options: BrepTessellationOptions, parameters: Map<string, FaceParameters> | null, only: ReadonlySet<string> | null = null, segments: Map<string, EdgeSegment> | null = null): BrepMesh {
+function tessellate(brep: Brep, options: BrepTessellationOptions, parameters: Map<string, FaceParameters> | null, only: ReadonlySet<string> | null = null, segments: Map<string, EdgeSegment> | null = null, retainedEdgeParameters?: Map<BrepEdge, readonly number[]>): BrepMesh {
   assertBoundaryBindings(brep);
   const perQuarter = Math.max(1, Math.min(64, Math.floor(options.segmentsPerQuarter ?? 8)));
   const edges = new Map(brep.edges.map(e => [e.id, e])), loops = new Map(brep.loops.map(l => [l.id, l])), coedges = new Map(brep.coedges.map(c => [c.id, c]));
@@ -573,6 +579,7 @@ function tessellate(brep: Brep, options: BrepTessellationOptions, parameters: Ma
         const ts = params.get(e.id)!, s = samples.get(e.id)!;
         for (let j = 0; j + 1 < s.length; j++) segments.set(segmentKey(s[j], s[j + 1]), { curve: e.curve, from: s[j], tFrom: ts[j], tTo: ts[j + 1] });
       }
+      if (retainedEdgeParameters) for (const edge of brep.edges) retainedEdgeParameters.set(edge, params.get(edge.id)!);
       return { ...joined(brep.faces.flatMap(f => meshes.get(f.id) ?? [])), edges: brep.edges.map(e => ({ edgeId: e.id, points: new Float64Array(samples.get(e.id)!.flat()) })) };
     }
     dirty = new Set();

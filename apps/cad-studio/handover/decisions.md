@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D2249: [D2249](notes/smooth-loft-outline-visibility-2026-11-29/README.md), #769. Bind the original smooth Loft seam and retain the complete sampled Front and Right outlines with real cover.
+
 - D2248: [D2248](notes/agent-native-vertex-move-2026-11-29/README.md), #629. Move one original native vertex to another through local Agent proposal and verify explicit desktop approval and native reopen.
 
 - D2247: [D2247](notes/agent-native-vertex-rotate-2026-11-29/README.md), #629. Propose Rotate about a named original native vertex and verify exact Studio approval and project reopen.
