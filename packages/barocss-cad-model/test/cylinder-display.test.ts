@@ -3,7 +3,7 @@ import test from 'node:test';
 import { emptyDoc, withNode, type StudioDoc } from '../src/engine/doc';
 import { evaluateDoc, partBreps, shareMeshes } from '../src/engine/evaluate';
 import { MeshReceiver, MeshSender } from '../src/engine/meshWire';
-import { cylinderDisplayMesh } from '../src/engine/cylinderDisplay';
+import { cylinderDisplayMesh, draftedSectorDisplayMesh } from '../src/engine/cylinderDisplay';
 import { offsetFaceCommand } from '../src/app/profileCommands';
 import type { CylinderDisplayTier, DisplayMesh } from '../src/engine/mesh';
 
@@ -196,42 +196,61 @@ test('tube packets reject forged circular support or rim ownership without chang
   }
 });
 
-test('a native drafted sector refines both circular rims within one packet and keeps canonical ownership', () => {
-  const source: StudioDoc = { ...doc, nodes: [
-    { id: 'n0', kind: 'sketch', profile: 'loop', segments: [
-      { kind: 'line', start: [0, 0] },
-      { kind: 'arc', start: [10, 0], center: [0, 0], direction: 'ccw' },
-      { kind: 'line', start: [6, -8] },
-    ] },
-    { id: 'n1', kind: 'extrude', sketch: 0, height: 10, draft: -30 },
-  ] };
-  const ordinary = evaluateDoc(source, 1), refined = evaluateDoc(source, 2, 8, true);
-  assert.ok(ordinary.ok && refined.ok);
-  const [model] = ordinary.bodies, [display] = refined.bodies;
-  const { cylinderDetail, ...baseMesh } = display.mesh;
-  assert.ok(cylinderDetail?.sweep);
-  assert.deepEqual(baseMesh, model.mesh);
-  assert.equal(display.volume, model.volume);
-  assert.equal(cylinderDetail.tiers.length, 1);
-  const [detail] = cylinderDetail.tiers;
-  const bytes = detail.positions.byteLength + detail.normals.byteLength + detail.faceOfVertex.byteLength
-    + detail.indices.byteLength + detail.edgeLines.byteLength + detail.edgeOfSegment.byteLength;
-  assert.ok(bytes <= 192 * 1024);
-  assert.ok(detail.chordErrorMM < cylinderDetail.baseChordErrorMM / 9);
+for (const plane of [undefined, { origin: [14, -6, 4], xAxis: [1, 0, 0], normal: [0, 0.6, 0.8] }] as const) {
+  test(`a native drafted sector refines its rims and keeps ownership in ${plane ? 'an inclined' : 'the default'} plane`, () => {
+    const source: StudioDoc = { ...doc, nodes: [
+      { id: 'n0', kind: 'sketch', profile: 'loop', segments: [
+        { kind: 'line', start: [0, 0] },
+        { kind: 'arc', start: [10, 0], center: [0, 0], direction: 'ccw' },
+        { kind: 'line', start: [6, -8] },
+      ], ...(plane ? { plane: { origin: [...plane.origin], xAxis: [...plane.xAxis], normal: [...plane.normal] } } : {}) },
+      { id: 'n1', kind: 'extrude', sketch: 0, height: 10, draft: -30 },
+    ] };
+    const before = structuredClone(partBreps(source)[0].brep);
+    const ordinary = evaluateDoc(source, 1), refined = evaluateDoc(source, 2, 8, true);
+    assert.deepEqual(partBreps(source)[0].brep, before);
+    assert.ok(ordinary.ok && refined.ok);
+    const [model] = ordinary.bodies, [display] = refined.bodies;
+    const { cylinderDetail, ...baseMesh } = display.mesh;
+    assert.ok(cylinderDetail?.sweep);
+    const centres = plane ? [[14, -6, 4], [14, 0, 12]] : [[0, 0, 0], [0, 0, 10]];
+    cylinderDetail.sweep.centres.forEach((centre, i) => centre.forEach((value, axis) => {
+      assert.ok(Math.abs(value - centres[i][axis]) < 1e-9);
+    }));
+    const changed: DisplayMesh = structuredClone(baseMesh);
+    const rim = changed.edges.find(edge => edge.nativeCircle
+      && edge.faces.some(face => changed.faces[face]?.nativePlaneName === 'n1.top'));
+    assert.ok(rim?.nativeCircle);
+    rim.nativeCircle.centre[0] += 0.01;
+    assert.equal(draftedSectorDisplayMesh(changed, partBreps(source)[0].brep, 2), changed);
+    const capChanged: DisplayMesh = structuredClone(baseMesh);
+    const cap = capChanged.faces.find(face => face.nativePlaneName === 'n1.top');
+    assert.ok(cap?.exact?.kind === 'plane');
+    cap.exact.o[2] += 0.01;
+    assert.equal(draftedSectorDisplayMesh(capChanged, partBreps(source)[0].brep, 2), capChanged);
+    assert.deepEqual(baseMesh, model.mesh);
+    assert.equal(display.volume, model.volume);
+    assert.equal(cylinderDetail.tiers.length, 1);
+    const [detail] = cylinderDetail.tiers;
+    const bytes = detail.positions.byteLength + detail.normals.byteLength + detail.faceOfVertex.byteLength
+      + detail.indices.byteLength + detail.edgeLines.byteLength + detail.edgeOfSegment.byteLength;
+    assert.ok(bytes <= 192 * 1024);
+    assert.ok(detail.chordErrorMM < cylinderDetail.baseChordErrorMM / 9);
 
-  const facePoints = new Map<number, Set<string>>();
-  for (let at = 0; at < detail.faceOfVertex.length; at++) {
-    const face = detail.faceOfVertex[at];
-    if (!facePoints.has(face)) facePoints.set(face, new Set());
-    facePoints.get(face)!.add(detail.positions.subarray(3 * at, 3 * at + 3).join(','));
-  }
-  const rims = new Set<number>();
-  for (let at = 0; at < detail.edgeLines.length; at += 3) {
-    const edge: DisplayMesh['edges'][number] = baseMesh.edges[detail.edgeOfSegment[at / 3]];
-    if (!edge.nativeCircle) continue;
-    rims.add(edge.index);
-    const atRim = detail.edgeLines.subarray(at, at + 3).join(',');
-    assert.ok(edge.faces.every(owner => facePoints.get(owner)?.has(atRim)));
-  }
-  assert.equal(rims.size, 2);
-});
+    const facePoints = new Map<number, Set<string>>();
+    for (let at = 0; at < detail.faceOfVertex.length; at++) {
+      const face = detail.faceOfVertex[at];
+      if (!facePoints.has(face)) facePoints.set(face, new Set());
+      facePoints.get(face)!.add(detail.positions.subarray(3 * at, 3 * at + 3).join(','));
+    }
+    const rims = new Set<number>();
+    for (let at = 0; at < detail.edgeLines.length; at += 3) {
+      const edge: DisplayMesh['edges'][number] = baseMesh.edges[detail.edgeOfSegment[at / 3]];
+      if (!edge.nativeCircle) continue;
+      rims.add(edge.index);
+      const atRim = detail.edgeLines.subarray(at, at + 3).join(',');
+      assert.ok(edge.faces.every(owner => facePoints.get(owner)?.has(atRim)));
+    }
+    assert.equal(rims.size, 2);
+  });
+}

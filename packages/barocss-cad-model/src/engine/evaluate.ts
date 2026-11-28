@@ -418,7 +418,7 @@ export function evaluateDoc(doc: StudioDoc, revision: number, quality = 8, refin
         || (body.ref && uprightTubeDisplaySource(doc.nodes, body.ref.node, snapshot.outputs[0].brep))) {
         const mesh = cylinderDisplayMesh(body.mesh, snapshot.outputs[0].brep, revision);
         if (mesh !== body.mesh) result.bodies[0] = { ...body, mesh };
-      } else if (node?.kind === 'extrude' && node.draft && source?.kind === 'sketch' && source.profile === 'loop' && !source.plane) {
+      } else if (node?.kind === 'extrude' && node.draft && source?.kind === 'sketch' && source.profile === 'loop') {
         const mesh = draftedSectorDisplayMesh(body.mesh, snapshot.outputs[0].brep, revision);
         if (mesh !== body.mesh) result.bodies[0] = { ...body, mesh };
       } else if (node?.kind === 'sweep-curve' && node.mode === 'exact') {

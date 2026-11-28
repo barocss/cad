@@ -1,7 +1,7 @@
 import { exportStep, faceGeometry, shaftSolid, stepGeometryRecipeKey, type Brep } from '@barocss/cad';
 import { boreWallOffsetFrame } from '@barocss/cad/internal/bored-cap-offset';
 import { bodyMesh, type CylinderDisplayTier, type DisplayMesh } from './mesh';
-import { cross, len, sub, unit } from './vec3';
+import { cross, dot, len, sub, unit } from './vec3';
 import { twoStepShaftDimensions } from './twoStepShaftGeometry';
 
 const byMesh = new WeakMap<DisplayMesh, DisplayMesh>();
@@ -102,7 +102,7 @@ export function cylinderDisplayMesh(base: DisplayMesh, brep: Brep, revision: num
   return detail;
 }
 
-/** Refine the circular rims and shared body packet of one exact upright radial Draft. */
+/** Refine the circular rims and shared body packet of one exact radial Draft. */
 export function draftedSectorDisplayMesh(base: DisplayMesh, brep: Brep, revision: number): DisplayMesh {
   const cached = byMesh.get(base);
   if (cached) return cached;
@@ -110,14 +110,23 @@ export function draftedSectorDisplayMesh(base: DisplayMesh, brep: Brep, revision
   if (brep.source.family !== 'drafted-extrusion' || brep.bodies.length !== 1 || brep.bodies[0].kind !== 'solid'
     || brep.shells.length !== 1 || !brep.shells[0].closed || brep.faces.length !== 6 || brep.edges.length !== 12
     || !brep.faces.some(face => face.id.endsWith('/first-cone')) || !brep.faces.some(face => face.id.endsWith('/second-cone'))) return base;
-  const circleAt = (cap: 'bottom' | 'top') => base.edges.find(edge => edge.nativeCircle
-    && edge.faces.some(index => base.faces[index]?.nativePlaneName?.endsWith('.' + cap)))?.nativeCircle;
-  const lower = circleAt('bottom'), upper = circleAt('top');
-  if (!lower || !upper || Math.abs(lower.normal[2]) < 1 - 1e-10 || Math.abs(upper.normal[2]) < 1 - 1e-10) return base;
-  const radius = Math.max(lower.radius, upper.radius);
+  const rimAt = (cap: 'bottom' | 'top') => {
+    const faces = base.faces.filter(face => face.nativePlaneName?.endsWith('.' + cap));
+    if (faces.length !== 1) return;
+    const [face] = faces;
+    if (face.exact?.kind !== 'plane') return;
+    const rims = base.edges.filter(edge => edge.nativeCircle && edge.faces.includes(face.index));
+    const circle = rims.length === 1 ? rims[0].nativeCircle : undefined;
+    if (circle) return { circle, plane: face.exact };
+  };
+  const bottom = rimAt('bottom'), top = rimAt('top');
+  if (!bottom || !top) return base;
+  const lower = bottom.circle, upper = top.circle;
+  const radius = Math.max(lower.radius, upper.radius), displacement = sub(upper.centre, lower.centre);
   const tolerance = 64 * Number.EPSILON * Math.max(1, radius, ...lower.centre.map(Math.abs), ...upper.centre.map(Math.abs));
-  if (Math.hypot(lower.centre[0] - upper.centre[0], lower.centre[1] - upper.centre[1]) > tolerance
-    || Math.abs(upper.centre[2] - lower.centre[2]) <= tolerance) return base;
+  if (!(len(displacement) > tolerance) || ![bottom, top].every(({ circle, plane }) =>
+    len(cross(displacement, circle.normal)) <= tolerance && len(cross(displacement, plane.n)) <= tolerance
+    && Math.abs(dot(sub(circle.centre, plane.o), plane.n)) <= tolerance)) return base;
   try {
     const detail = withCylinderTiers(base, brep, revision, { centres: [lower.centre, upper.centre], radius: radius + tolerance }, true);
     byMesh.set(base, detail);

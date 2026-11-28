@@ -5,7 +5,8 @@ import { createFlow } from './flow-helper.mjs';
 
 const { PNG } = createRequire(join(process.env.PW_DIR, 'package.json'))('playwright-core/lib/utilsBundle');
 const baseline = process.argv.includes('--baseline');
-const draftSector = process.argv.includes('--draft-sector');
+const tilted = process.argv.includes('--tilted-sector');
+const draftSector = tilted || process.argv.includes('--draft-sector');
 const backend = process.argv.includes('--webgl2') ? 'webgl2' : 'webgpu';
 const pins = ['apps/cad-studio/test/native-cylinder-zoom-browser.mjs', 'apps/cad-studio/src/viewport/Viewport.tsx',
   'apps/cad-studio/src/viewport/gpuRenderer.ts', 'apps/cad-studio/src/viewport/renderer.ts',
@@ -18,7 +19,7 @@ const f = await createFlow({
   initialFiles: pins, requiredFrozen: pins,
   qualification: draftSector ? 'Measure displayed rim error and edge identity on one exact drafted radial sector.'
     : 'Measure one ordinary cylinder cap, native rim and edge selection in desktop Top Ortho.',
-  limits: [draftSector ? 'One original 306.87 degree sector with a signed Draft. Desktop, with one unplaced output.'
+  limits: [draftSector ? 'One original 306.87 degree sector with a signed Draft and one upright or inclined original sketch.'
     : 'One original uncut circular extrusion, no transforms, instances or sections.'],
 });
 const source = {
@@ -28,7 +29,7 @@ const source = {
       { kind: 'line', start: [0, 0] },
       { kind: 'arc', start: [10, 0], center: [0, 0], direction: 'ccw' },
       { kind: 'line', start: [6, -8] },
-    ] },
+    ], ...(tilted ? { plane: { origin: [14, -6, 4], xAxis: [1, 0, 0], normal: [0, 0.6, 0.8] } } : {}) },
     { id: 'n1', kind: 'extrude', sketch: 0, height: 10, draft: -30 },
   ] : [{ id: 'n0', kind: 'sketch', profile: 'circle', center: [0, 0], radius: 10 },
     { id: 'n1', kind: 'extrude', sketch: 0, height: 5 }],
@@ -40,7 +41,9 @@ const settle = () => f.page.evaluate(() => new Promise(done => requestAnimationF
 const top = draftSector ? 10 : 5;
 const rimRadius = draftSector ? 10 + 10 / Math.sqrt(3) : 10;
 const pickAngle = draftSector ? Math.PI / 3 : Math.PI / 32;
-const rim = (theta, radius = rimRadius) => [radius * Math.cos(theta), radius * Math.sin(theta), top];
+const onPlane = (x, y, z) => tilted ? [14 + x, -6 + 0.8 * y + 0.6 * z, 4 - 0.6 * y + 0.8 * z] : [x, y, z];
+const capCentre = onPlane(0, 0, top);
+const rim = (theta, radius = rimRadius) => onPlane(radius * Math.cos(theta), radius * Math.sin(theta), top);
 function distance(p, a, b) {
   const [dx, dy] = [b[0] - a[0], b[1] - a[1]], denominator = dx * dx + dy * dy;
   const t = denominator ? Math.max(0, Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / denominator)) : 0;
@@ -64,19 +67,18 @@ await f.run(async () => {
   for (let i = 0; i < 4 && !(await filter.innerText()).includes('Edges'); i++) await filter.click();
   assert.match(await filter.innerText(), /Edges/);
   await settle();
-  const center = await world([0, 0, top]);
+  const center = await world(capCentre);
   await f.page.mouse.move(...center);
   await f.page.mouse.wheel(0, 520);
   await settle();
 
   async function capture(label, pick) {
-    const sample = await f.page.evaluate(({ top, radius, theta }) => {
+    const sample = await f.page.evaluate(({ hand, centre, u, v }) => {
       const project = p => window.__studioScreenOf(p).slice(0, 2);
-      const hand = [radius * Math.cos(theta), radius * Math.sin(theta), top];
-      const edge = window.__studioEdgeAt(hand, 30), center = project([0, 0, top]), right = project([radius, 0, top]), north = project([0, radius, top]);
+      const edge = window.__studioEdgeAt(hand, 30);
       const segments = edge.segments.map(line => [project(line.slice(0, 3)), project(line.slice(3, 6))]);
-      return { edge: { body: edge.body, edge: edge.edge }, center, right, north, segments, at: project(hand) };
-    }, { top, radius: rimRadius, theta: pickAngle });
+      return { edge: { body: edge.body, edge: edge.edge }, center: project(centre), right: project(u), north: project(v), segments, at: project(hand) };
+    }, { hand: rim(pickAngle), centre: capCentre, u: rim(0), v: rim(Math.PI / 2) });
     const { center, right, north, segments, at } = sample;
     assert.ok(segments.length > 1);
     const rho = Math.hypot(right[0] - center[0], right[1] - center[1]);
@@ -116,7 +118,7 @@ await f.run(async () => {
   const low = await capture('01-low', true);
   await f.page.evaluate(() => document.activeElement?.blur());
   await f.page.keyboard.press('Escape');
-  await f.page.mouse.move(...await world([0, 0, top]));
+  await f.page.mouse.move(...await world(capCentre));
   await f.page.mouse.wheel(0, -850);
   await settle();
   const high = await capture('02-high', true);
