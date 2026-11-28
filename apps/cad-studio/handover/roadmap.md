@@ -1,13 +1,13 @@
 # CAD roadmap — current status and execution order
 
-Updated 2026-11-28 · Priority authority: D520 · Latest delivery: D2196 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
+Updated 2026-11-28 · Priority authority: D520 · Latest delivery: D2197 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
 
 This is the only current status index. Detailed tracks define acceptance; the 34 stable row pages retain scope and issue navigation. Immutable decision notes retain results. Do not append chronological status paragraphs here. [D520 decision](notes/cad-roadmap-replan-2026-11-04/README.md) supersedes D445 execution order and historical next-item text, while retaining its safeguards and bounded proofs.
 
 ## Now and next
 
-- **Current position:** [D2196](notes/webmcp-centred-through-hole-proposal-2026-11-28/README.md), P1 rows 04 and 16. A browser can propose a centred axial through Hole on a standalone Cylinder. Desktop Studio verifies preview, rejection, approval and project reopen.
-- **Next MAIN:** D2197, P1 rows 04 and 16. Check whether a Studio autonomy change retires a browser proposal grant and a pending Worker result. Reproduce the case in desktop Studio and correct the first gap ([#204](https://github.com/barocss/cad/issues/204)).
+- **Current position:** [D2197](notes/webmcp-proposal-autonomy-change-2026-11-28/README.md), P1 rows 04 and 16. Changing Studio autonomy retires the browser proposal grant and discards its pending result. A new grant still requires review and approval.
+- **Next MAIN:** D2198, P1 rows 04 and 16. Compare the current browser proposal allowlist with the local MCP proposal path across Studio autonomy levels. Verify equivalent native results, typed refusals and the recorded approval owner, then correct the first confirmed contract gap ([#204](https://github.com/barocss/cad/issues/204)).
 - **Separate follow-ups:** Continue Studio App extraction in cohesive parts with affected desktop checks. [#608 Rendering](https://github.com/barocss/cad/issues/608) stays on HOLD. API inventory drift remains open. The issue tracker records [#126](https://github.com/barocss/cad/issues/126), [#613](https://github.com/barocss/cad/issues/613), [#152](https://github.com/barocss/cad/issues/152) and [#22](https://github.com/barocss/cad/issues/22) as closed.
 - **Active repository:** [barocss/cad](https://github.com/barocss/cad), based on `origin/main`. Fetch before work and preserve unexpected changes. The [migration record](../../../docs/migration/README.md) maps the former `local/cad-dev` history and issue numbers.
 - **Evidence correction:** D482 records2167 PASS/0 FAIL/2 existing SKIP in a later full-kernel run than D433. Neither result is a new full-suite PASS at this audit HEAD. [D482 record](notes/vertical-contact-refusal-2026-11-04/README.md).

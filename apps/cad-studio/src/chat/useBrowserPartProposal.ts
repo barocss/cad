@@ -169,6 +169,11 @@ export function useBrowserPartProposal(source: BrowserPartSummarySource | undefi
   return {
     options: kinds.map(choice => ({ kind: choice, title: proposalTools[choice].title, enabled: same && grant?.kind === choice })),
     ready, failed,
+    revoke() {
+      live.current.active = false;
+      setGrant(undefined);
+      setFailed(false);
+    },
     toggle(choice: ProposalKind) {
       if (enabled) live.current.active = false;
       setFailed(false);

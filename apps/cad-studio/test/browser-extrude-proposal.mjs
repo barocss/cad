@@ -63,6 +63,22 @@ const getTool = name => f.page.evaluateHandle(async name =>
 const invoke = (tool, input = {}) => f.page.evaluate(async ({ tool, input }) =>
   JSON.parse(await document.modelContext.executeTool(tool, input)), { tool, input });
 
+async function holdProposal(tool, args) {
+  await f.page.evaluate(({ tool, args }) => {
+    window.__browserExtrudeCheck.arm();
+    window.__browserExtrudeCheck.pending = document.modelContext.executeTool(tool, args)
+      .then(reply => JSON.parse(reply), () => ({ error: { code: 'revoked' } }));
+  }, { tool, args });
+  await f.page.waitForFunction(() => window.__browserExtrudeCheck.held() === true);
+}
+
+async function releaseProposal() {
+  await f.page.evaluate(() => window.__browserExtrudeCheck.release());
+  const discarded = await f.page.evaluate(() => window.__browserExtrudeCheck.pending);
+  assert.ok(['revoked', 'stale_part'].includes(discarded.error?.code));
+  return discarded;
+}
+
 // Preserve the actual Worker result and delay only its delivery in the Open race.
 function holdNextAgentReply() {
   const worker = Worker.prototype, send = worker.postMessage;
@@ -540,19 +556,28 @@ await f.run(axialHole ? verifyAxialHole : firstBox ? verifyFirstBox : firstCylin
   const after = await share();
   await proposalGrant().click();
   await toolsReady(proposalName, true);
-  const oldPart = await getTool(proposalName);
   const pendingInput = { ...input, height: 18, expectedRevision: after.revision };
-  await f.page.evaluate(({ tool, args }) => {
-    window.__browserExtrudeCheck.arm();
-    window.__browserExtrudeCheck.pending = document.modelContext.executeTool(tool, args)
-      .then(reply => JSON.parse(reply), () => ({ error: { code: 'revoked' } }));
-  }, { tool: oldPart, args: pendingInput });
-  await f.page.waitForFunction(() => window.__browserExtrudeCheck.held() === true);
+  const policyInput = { ...pendingInput, height: 17 };
+  const oldPolicy = await getTool(proposalName);
+  await holdProposal(oldPolicy, policyInput);
+  const autonomy = chat().getByRole('combobox', { name: 'Autonomy', exact: true });
+  assert.equal(await autonomy.inputValue(), '2');
+  await autonomy.selectOption('1');
+  await toolsReady(proposalName, false);
+  await autonomy.selectOption('2');
+  await toolsReady(proposalName, false);
+  await releaseProposal();
+  await assert.rejects(invoke(oldPolicy, policyInput));
+  assert.equal((await invoke(await getTool(summaryName))).revision, after.revision);
+  await f.same(applied);
+
+  await proposalGrant().click();
+  await toolsReady(proposalName, true);
+  const oldPart = await getTool(proposalName);
+  await holdProposal(oldPart, pendingInput);
   await open(applied, 'same-revision.bcad');
   await toolsReady(proposalName, false);
-  await f.page.evaluate(() => window.__browserExtrudeCheck.release());
-  const discarded = await f.page.evaluate(() => window.__browserExtrudeCheck.pending);
-  assert.ok(['revoked', 'stale_part'].includes(discarded.error?.code));
+  const discarded = await releaseProposal();
   await assert.rejects(invoke(oldPart, pendingInput));
   await f.same(applied);
   await assertBox(15);

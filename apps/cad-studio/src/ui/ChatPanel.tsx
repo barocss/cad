@@ -211,7 +211,10 @@ export function ChatPanel(props: ChatPanelProps) {
           aria-pressed={option.enabled} disabled={!browserProposal.ready && !option.enabled}
           onClick={() => browserProposal.toggle(option.kind)}>{option.kind === 'Extrude' ? 'Propose' : option.kind}</Button>)}
         <select className="chat-autonomy" aria-label="Autonomy" title={AUTONOMY_TIPS[autonomy - 1]} value={autonomy} disabled={running}
-          onChange={e => chat.setAutonomy(Number(e.currentTarget.value))}>
+          onChange={e => {
+            browserProposal?.revoke();
+            chat.setAutonomy(Number(e.currentTarget.value));
+          }}>
           {AUTONOMY_TIPS.map((t, i) => <option key={i} value={i + 1} title={t}>L{i + 1}</option>)}</select>
         <button className="tool small" aria-label="New conversation" title="New conversation" disabled={running || !messages.length} onClick={newConversation}><Icon name="restart_alt" small /></button>
         <button className="tool small" aria-label="Close chat" title="Close" onClick={props.onClose}><Icon name="close" small /></button>
