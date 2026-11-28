@@ -436,6 +436,37 @@ test('Studio and Agent Draft both original tube walls in either pick order with 
   assert.deepEqual(agent.state.doc.nodes[2], node);
 });
 
+test('Studio and Agent Draft both walls of a placed XY tube from their world cap stations', async () => {
+  const source = cylinderPart(12, 16), [sketch, extrusion] = source.nodes;
+  assert.ok(sketch.kind === 'sketch' && sketch.profile === 'circle' && extrusion.kind === 'extrude');
+  const doc: StudioDoc = { ...source, nodes: [{ ...sketch, center: [14, 9],
+    plane: { origin: [-28, 16, 17], normal: [0, 0, 1], xAxis: [1, 0, 0] },
+    holes: [[{ kind: 'arc', start: [18, 9], center: [14, 9], direction: 'ccw' }]] }, { ...extrusion, from: 3 }] };
+  const bodies = bodiesOf(doc), walls = ['n1.side0', 'n1.hole0.side0'];
+  const faces = walls.map(name => ({ body: 0, face: bodies[0].mesh.faces.findIndex(face => face.name === name) }));
+  assert.ok(faces.every(face => face.face >= 0));
+  const ctx: Ctx = { doc, bodies, selection: { faces, edges: [], bodies: [] } };
+  assert.ok(draft.available(ctx).ok);
+  for (const face of faces) assert.equal(draft.available({ ...ctx, selection: { ...ctx.selection, faces: [face] } }).ok, false);
+  const defaults = draft.defaults!(ctx), deg = Math.atan(1 / 16) * 180 / Math.PI;
+  const pull = '-z', candidate = draft.build!(ctx, { ...defaults, deg, pull });
+  const node = candidate.nodes[2];
+  assert.ok(node.kind === 'draft');
+  assert.equal(node.pull, pull);
+  assert.deepEqual(node.faces, ['n1.hole0.side0#1', 'n1.hole0.side0#2', 'n1.side0#1', 'n1.side0#2']);
+  assert.ok(Math.abs(volume(candidate) - 1792 * Math.PI) < 1e-7);
+  assert.equal(patchValues(draft, ctx, { ...defaults, pull }, { neutralMode: 'fixed' }).neutral, 36);
+  const edit = editSavedDraftCommand(candidate, 2), history = { ...ctx, doc: candidate, bodies: bodiesOf(candidate) };
+  assert.ok(edit?.defaults);
+  const automatic = edit.defaults(history);
+  assert.equal(patchValues(edit, history, automatic, { neutralMode: 'fixed' }).neutral, 36);
+  assert.equal(patchValues(edit, history, { ...automatic, pull: 'z' }, { neutralMode: 'fixed' }).neutral, 20);
+  const agent = await dispatchTool({ doc, bodies }, 'features', { action: 'command', command: 'draft',
+    faces: walls, values: { deg, pull }, expectedRevision: revisionOf(doc) }, async next => evaluateDoc(next, 2));
+  assert.ok(agent.changed && !agent.isError, agent.content);
+  assert.deepEqual(agent.state.doc.nodes[2], node);
+});
+
 test('Studio Draft retains three selected box sides through its editable History command', () => {
   const source = rectanglePart(40, 30, 40), ctx = ctxOn(source, [[1, 0, 0], [0, -1, 0], [0, 1, 0]]);
   const created = draft.build!(ctx, { ...draft.defaults!(ctx), deg: 10, pull: 'z' });

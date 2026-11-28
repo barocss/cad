@@ -48,28 +48,68 @@ function originalCircularDraftStock(reference: unknown, part: Part, t: Tools): b
   return slabs.length === 1 && slabs[0].regions.length === 1 && slabs[0].regions[0].holes.length === 0;
 }
 
-/** One literal unplaced circle with one intrinsic coaxial full-circle hole; native charts are proved separately. */
-function originalAnnularDraftStock(reference: unknown, part: Part, t: Tools): boolean {
+/** The literal original recipe shared by unplaced and explicitly proved XY annular Draft. */
+function originalAnnularDraftSource(reference: unknown, part: Part, t: Tools) {
   const owner = t.ref(reference, 'Inner circular Draft stock'), author = owner.author;
   if (author?.kind !== 'extrude' || owner.result.kind !== 'solid' || owner.result.parts.length !== 1 || owner.result.parts[0] !== part
-    || (author.draft !== undefined && author.draft !== 0) || part.solid.kind !== 'upright'
+    || (author.draft !== undefined && author.draft !== 0)
     || typeof author.height !== 'number' || !Number.isFinite(author.height) || author.height <= 0
-    || (author.from !== undefined && (typeof author.from !== 'number' || !Number.isFinite(author.from)))) return false;
+    || (author.from !== undefined && (typeof author.from !== 'number' || !Number.isFinite(author.from)))) return undefined;
   const sketch = t.ref(author.sketch, 'Inner circular Draft sketch'), source = sketch.author;
-  if (source?.kind !== 'sketch' || source.profile !== 'circle' || source.plane !== undefined || source.regions?.length
+  if (source?.kind !== 'sketch' || source.profile !== 'circle' || source.regions?.length
     || typeof source.radius !== 'number' || !Number.isFinite(source.radius) || !(source.radius > 0)
     || !Array.isArray(source.center) || source.center.length !== 2 || source.center.some(value => typeof value !== 'number' || !Number.isFinite(value))
-    || source.holes?.length !== 1 || source.holes[0].length !== 1 || sketch.result.kind !== 'sketch' || sketch.result.frame
-    || sketch.result.regions?.length || sketch.result.holes?.length !== 1) return false;
+    || source.holes?.length !== 1 || source.holes[0].length !== 1 || sketch.result.kind !== 'sketch'
+    || sketch.result.regions?.length || sketch.result.holes?.length !== 1) return undefined;
   const hole = source.holes[0][0];
   if (hole.kind !== 'arc' || !hole.center.every((value, axis) => typeof value === 'number' && Number.isFinite(value) && value === source.center[axis])
-    || !hole.start.every(value => typeof value === 'number' && Number.isFinite(value))) return false;
-  const slabs = part.solid.solid.slabs, slab = slabs[0], from = author.from ?? 0;
-  return slabs.length === 1 && slab.z0 === from && slab.z1 === from + author.height
+    || !hole.start.every(value => typeof value === 'number' && Number.isFinite(value))) return undefined;
+  return { height: author.height, from: author.from ?? 0, source, sketch: sketch.result };
+}
+
+/** One literal unplaced circle with one intrinsic coaxial full-circle hole; native charts are proved separately. */
+function originalAnnularDraftStock(reference: unknown, part: Part, t: Tools): boolean {
+  if (part.solid.kind !== 'upright') return false;
+  const original = originalAnnularDraftSource(reference, part, t);
+  if (!original || original.source.plane !== undefined || original.sketch.frame) return false;
+  const { height, from } = original, slabs = part.solid.solid.slabs, slab = slabs[0];
+  return slabs.length === 1 && slab.z0 === from && slab.z1 === from + height
     && slab.regions.length === 1 && slab.regions[0].holes.length === 1;
 }
 
+/** Both walls only: fresh world-upright charts under one exact authored unit XY frame, never a moved derivative. */
+function originalPlacedXYAnnularDraftStock(reference: unknown, part: Part, t: Tools): boolean {
+  const original = originalAnnularDraftSource(reference, part, t);
+  const plane = original?.source.plane;
+  if (!original || !plane) return false;
+  const { height, from, sketch } = original, frame = sketch.frame, placement = part.moved;
+  const reject = (): never => t.fail('CAPABILITY', 'Both circular wall Draft needs an original exact unit cardinal XY sketch frame.');
+  const n = cardinalDirection(plane.normal), x = cardinalDirection(plane.xAxis);
+  if (!n || !x || Math.abs(n[2]) !== 1 || x[2] !== 0 || !plane.normal.every((value, axis) => value === n[axis])
+    || !plane.xAxis.every((value, axis) => value === x[axis])
+    || !plane.origin.every(value => typeof value === 'number' && Number.isFinite(value))) return reject();
+  const y = cross(n, x), expected = [x[0], y[0], n[0], x[1], y[1], n[1], x[2], y[2], n[2]];
+  if (part.solid.kind !== 'upright' || !frame || !placement || placement.from.solid.kind !== 'upright' || placement.from.history || placement.from.moved
+    || !frame.m.every((value, axis) => value === expected[axis] && value === placement.m[axis])
+    || !frame.o.every((value, axis) => value === plane.origin[axis] && value === placement.o[axis])) return reject();
+  const local = placement.from.solid.solid.slabs, world = part.solid.solid.slabs;
+  const a = frame.o[2] + n[2] * from, b = frame.o[2] + n[2] * (from + height);
+  if (local.length !== 1 || local[0].z0 !== from || local[0].z1 !== from + height
+    || local[0].regions.length !== 1 || local[0].regions[0].holes.length !== 1
+    || world.length !== 1 || world[0].z0 !== Math.min(a, b) || world[0].z1 !== Math.max(a, b)
+    || world[0].regions.length !== 1 || world[0].regions[0].holes.length !== 1) return reject();
+  return true;
+}
+
 interface CardinalCircularStock { readonly matrix: BrepAffine['matrix']; readonly axis: 0 | 1 | 2; readonly sign: 1 | -1; readonly retainedCardinalTrims: boolean }
+
+/** Read raw authored directions before frameOf's normalization and near-axis snapping. */
+function cardinalDirection(vector: readonly number[]): Point | undefined {
+  if (vector.length !== 3 || vector.some(value => !Number.isFinite(value)) || vector.filter(value => value !== 0).length !== 1) return undefined;
+  const axis = vector.findIndex(value => value !== 0);
+  if (!(Math.abs(vector[axis]) > 1e-12)) return undefined;
+  return vector.map(value => value === 0 ? 0 : Math.sign(value)) as Point;
+}
 
 /** Prove the authored cardinal placement, including its raw axes before frameOf's near-axis snapping. */
 function cardinalCircularDraftStock(reference: unknown, part: Part, t: Tools): CardinalCircularStock | undefined {
@@ -82,13 +122,7 @@ function cardinalCircularDraftStock(reference: unknown, part: Part, t: Tools): C
   const frame = sketch.result.frame;
   const xy = frame.m[8] === 1 || frame.m[8] === -1;
   const reject = (): never => t.fail('CAPABILITY', `Circular wall Draft needs an original exact cardinal ${xy ? 'XY' : 'non-XY'} sketch frame.`);
-  const cardinal = (vector: readonly number[]): Point | undefined => {
-    if (vector.length !== 3 || vector.some(v => !Number.isFinite(v)) || vector.filter(v => v !== 0).length !== 1) return undefined;
-    const axis = vector.findIndex(v => v !== 0);
-    if (!(Math.abs(vector[axis]) > 1e-12)) return undefined;
-    return vector.map(v => v === 0 ? 0 : Math.sign(v)) as Point;
-  };
-  const n = cardinal(source.plane.normal), x = cardinal(source.plane.xAxis);
+  const n = cardinalDirection(source.plane.normal), x = cardinalDirection(source.plane.xAxis);
   if (!n || !x || dot(n, x) !== 0) return reject();
   const y = cross(n, x), expected = [x[0], y[0], n[0], x[1], y[1], n[1], x[2], y[2], n[2]];
   const placement = part.moved;
@@ -297,10 +331,11 @@ export function faceFinishOperation(f: CadPartFeature & Record<string, unknown>,
       if (pull !== 'x' && pull !== 'y' && pull !== 'z' && pull !== '-x' && pull !== '-y' && pull !== '-z') fail('INPUT', 'pull must be x, y or z (a positive coordinate axis), or -x, -y or -z');
       const circularStock = hinge === undefined && originalCircularDraftStock(f.target, target[0], t);
       const annularStock = hinge === undefined && !circularStock && originalAnnularDraftStock(f.target, target[0], t);
-      const cardinalCircle = hinge === undefined && !circularStock && !annularStock ? cardinalCircularDraftStock(f.target, target[0], t) : undefined;
+      const placedAnnularStock = hinge === undefined && !circularStock && !annularStock && names.length === 4 && originalPlacedXYAnnularDraftStock(f.target, target[0], t);
+      const cardinalCircle = hinge === undefined && !circularStock && !annularStock && !placedAnnularStock ? cardinalCircularDraftStock(f.target, target[0], t) : undefined;
       return () => {
         if (target[0].solid.kind === 'brep' && target[0].solid.brep.faces.some(isFacetFace)) fail('CAPABILITY', 'draft on mesh faces is not supported yet (general draft and offset arrive with R11)');
-        if (annularStock) {
+        if (annularStock || placedAnnularStock) {
           const original = k.namedFaceTargetBrep(t, f.target, target[0]);
           const both = names.length === 4, outer = !both && names.every(name => original.faces.some(face => {
             if (face.name !== name) return false;

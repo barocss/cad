@@ -26,22 +26,22 @@ function originalCylinderDraftSource(doc: StudioDoc, ref: BodyRef, axis: number)
   if (sketch?.kind !== 'sketch' || sketch.profile !== 'circle' || sketch.on || sketch.association
     || sketch.pocketFloor || sketch.regions?.length) return;
   const plane = sketch.plane;
+  if (plane) {
+    const x = exactAxis(plane.xAxis);
+    if (exactAxis(plane.normal) !== axis || x < 0 || x === axis || !plane.origin.every(Number.isFinite)) return;
+  } else if (axis !== 2) return;
   const owner = featureId(doc.nodes, ref.node);
   if (sketch.holes?.length) {
     const [bore] = sketch.holes, [arc] = bore;
-    if (axis !== 2 || plane || sketch.holes.length !== 1 || bore.length !== 1 || arc.kind !== 'arc'
+    if (axis !== 2 || sketch.holes.length !== 1 || bore.length !== 1 || arc.kind !== 'arc'
       || typeof extrusion.height !== 'number' || !Number.isFinite(extrusion.height) || extrusion.height <= 0
       || extrusion.from !== undefined && (typeof extrusion.from !== 'number' || !Number.isFinite(extrusion.from))
       || typeof sketch.radius !== 'number' || !Number.isFinite(sketch.radius) || sketch.radius <= 0
       || !arc.center.every((value, i) => typeof value === 'number' && Number.isFinite(value) && value === sketch.center[i])
       || !arc.start.every(value => typeof value === 'number' && Number.isFinite(value))) return;
-    return { owner, wall: `${owner}.side`, bore: `${owner}.hole0.side`, faceCount: 6 };
+    return { owner, wall: `${owner}.side`, bore: `${owner}.hole0.side`, faceCount: 6, needsBothWalls: !!plane };
   }
-  if (plane) {
-    const x = exactAxis(plane.xAxis);
-    if (exactAxis(plane.normal) !== axis || x < 0 || x === axis || !plane.origin.every(Number.isFinite)) return;
-  } else if (axis !== 2) return;
-  return { owner, wall: `${owner}.side`, faceCount: 4 };
+  return { owner, wall: `${owner}.side`, faceCount: 4, needsBothWalls: false };
 }
 
 const draftEnd = (pull: DraftPull, bottom: number, top: number) => pull.startsWith('-') ? Math.max(bottom, top) : Math.min(bottom, top);
@@ -59,7 +59,7 @@ export function originalCylinderDraftSelection(ctx: Ctx, pull: DraftPull): { fac
   const body = ctx.bodies[picks[0].body], ref = body?.ref;
   if (!ref || body.topology?.bodyCount !== 1) return;
   const source = originalCylinderDraftSource(ctx.doc, ref, axis);
-  if (!source || body.mesh.faces.length !== (source.bore ? 4 : 3)) return;
+  if (!source || source.needsBothWalls && picks.length !== 2 || body.mesh.faces.length !== (source.bore ? 4 : 3)) return;
   const roles = new Set<string>(), faces: string[] = [];
   for (const pick of picks) {
     const face = body.mesh.faces[pick.face], role = face && draftWallRole(source, face.name);
@@ -114,6 +114,7 @@ interface SavedDraftWall { parent: BodyRef; faces: readonly string[] }
 function cylinderDraftBodyEnd(doc: StudioDoc, target: Brep, wall: SavedDraftWall, pull: DraftPull, axis: number): number | undefined {
   const source = originalCylinderDraftSource(doc, wall.parent, axis);
   if (!source || target.bodies.length !== 1 || target.bodies[0].kind !== 'solid' || target.faces.length !== source.faceCount
+    || source.needsBothWalls && wall.faces.length !== 4
     || (wall.faces.length !== 2 && !(source.bore && wall.faces.length === 4))) return;
   const first = wall.faces.filter(name => name.endsWith('#1'));
   const roles = first.map(name => draftWallRole(source, name));

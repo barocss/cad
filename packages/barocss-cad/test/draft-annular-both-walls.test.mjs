@@ -182,3 +182,141 @@ test('incomplete/mixed owners and invalid shared options refuse; single walls an
   const eccentric = doc(); eccentric.features.pop(); eccentric.features[0].holes[0][0].center[0] += .01; eccentric.features[0].holes[0][0].start[0] += .01;
   const native = evaluateCadPart(eccentric).outputs[0].brep; assert.ok(annularCapReplacementFrame(native, 'n1.top')); assert.equal(draftAnnularWallsIfAdmitted(native, names, .1, 'z', 3), undefined);
 });
+
+const xyPlane = { origin: [-28, 16, 17], normal: [0, 0, 1], xAxis: [1, 0, 0] };
+const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+function placedDoc(plane = xyPlane, angle = 5, pull = 'z', neutral = 26) {
+  const source = doc(angle, pull, neutral); source.features[0].plane = structuredClone(plane); return source;
+}
+function placedReference(plane, angle, pull, neutral) {
+  const y = cross(plane.normal, plane.xAxis), center = plane.origin.map((value, axis) => value + 14 * plane.xAxis[axis] + 9 * y[axis]);
+  const stations = [3, 19].map(z => plane.origin[2] + plane.normal[2] * z).sort((a, b) => a - b), [lo, hi] = stations;
+  const k = (pull === 'z' ? 1 : -1) * Math.tan(angle * Math.PI / 180), A0 = Math.PI * (128 - 32 * k * (lo - neutral)), A1 = Math.PI * (128 - 32 * k * (hi - neutral));
+  return { center, lo, hi, k, volume: 16 * (A0 + A1) / 2, centroid: [center[0], center[1], lo + 16 * (A0 + 2 * A1) / (3 * (A0 + A1))],
+    area: 32 * Math.PI * Math.hypot(16, 16 * k) + A0 + A1 };
+}
+function exactWorldCapTrims(brep) {
+  const edges = new Map(brep.edges.map(edge => [edge.id, edge]));
+  const caps = brep.faces.filter(face => { const support = faceGeometry(face); return support.kind === 'plane' && Math.abs(support.n[2]) === 1; });
+  assert.equal(caps.length, 2);
+  for (const cap of caps) {
+    assert.equal(cap.loops.length, 2);
+    const support = faceGeometry(cap), up = support.n[2] === 1, poles = cap.surface.controlPoints.flat();
+    const min = [Math.min(...poles.map(point => point[0])), Math.min(...poles.map(point => point[1]))], max = [Math.max(...poles.map(point => point[0])), Math.max(...poles.map(point => point[1]))];
+    for (const use of brep.coedges.filter(use => cap.loops.includes(use.loop))) {
+      const edge = edges.get(use.edge);
+      assert.deepEqual(use.pcurve.knots, edge.curve.knots); assert.deepEqual(use.pcurve.weights, edge.curve.weights);
+      edge.curve.controlPoints.forEach(([x, y], i) => {
+        const u = (x - min[0]) / (max[0] - min[0]), v = (y - min[1]) / (max[1] - min[1]);
+        const expected = up ? [u, v, 0] : [v, u, 0];
+        assert.ok(use.pcurve.controlPoints[i].every((value, axis) => value === expected[axis]), 'fresh world-Z cap coefficients match exactly, without placement tolerance');
+      });
+    }
+  }
+}
+
+for (const pull of ['z', '-z']) for (const angle of [5, -5]) test(`translated explicit XY joint Draft ${angle}/${pull} retains world-native charts, cap ownership and neutral`, () => {
+  for (const neutral of [20, 26, 36]) {
+    const source = placedDoc(xyPlane, angle, pull, neutral), before = structuredClone(source), original = stock(source), ref = placedReference(xyPlane, angle, pull, neutral);
+    const originalReport = checkBrep(original, { strict: true }); assert.ok(originalReport.valid, originalReport.issues.join('\n'));
+    exactWorldCapTrims(original);
+    const direct = draftAnnularWallsIfAdmitted(original, names, angle * Math.PI / 180, pull, neutral); assert.ok(direct, 'unchanged producer admits the actual world-upright stock');
+    const snapshot = evaluateCadPart(source), result = snapshot.outputs[0], brep = result.brep;
+    assert.deepEqual(source, before); assert.deepEqual(brep, direct); assert.deepEqual(metadata(brep), metadata(original)); exactWorldCapTrims(brep);
+    const report = checkBrep(brep, { strict: true, pcurveSamples: 9 }); assert.ok(report.valid, report.issues.join('\n')); assert.equal(report.topology[0].genus, 1);
+    assert.deepEqual(report.counts, { bodies: 1, shells: 1, faces: 6, loops: 8, coedges: 24, edges: 12, vertices: 8 });
+    for (const face of brep.faces.filter(face => names.includes(face.name))) for (const u of [0, .2, .5, .8, 1]) for (const v of [0, .25, (neutral - ref.lo) / 16, .7, 1]) {
+      const p = evaluateSurface(face.surface, u, v), outer = outerNames.includes(face.name);
+      close(Math.hypot(p[0] - ref.center[0], p[1] - ref.center[1]), outer ? 12 - ref.k * (p[2] - neutral) : 4 + ref.k * (p[2] - neutral), 'world-native placed conical radius');
+    }
+    for (const mass of [massPropertiesOf(result), brepMassProperties(brep, 1)]) {
+      close(mass.volume, ref.volume, 'independent translated joint volume', 1e-7); mass.centroid.forEach((value, axis) => close(value, ref.centroid[axis], 'independent world centroid', 1e-7));
+    }
+    close(surfaceAreaOf(result), ref.area, 'translated native area', 1e-6);
+    for (const name of ['n1.bottom', 'n1.top']) {
+      const beforeCap = original.faces.find(face => face.name === name), afterCap = brep.faces.find(face => face.name === name);
+      close(faceGeometry(afterCap).o[2], faceGeometry(beforeCap).o[2], 'original named cap support'); assert.deepEqual(afterCap.loops, beforeCap.loops);
+    }
+    if (neutral === ref.lo || neutral === ref.hi) {
+      const cap = original.faces.find(face => { const support = faceGeometry(face); return support.kind === 'plane' && support.o[2] === neutral; });
+      assert.ok(cap); assert.deepEqual(brep.faces.find(face => face.id === cap.id), cap, 'named world neutral cap is byte exact');
+      for (const use of original.coedges.filter(use => cap.loops.includes(use.loop))) assert.deepEqual(brep.coedges.find(item => item.id === use.id), use, 'both world-neutral cap trim loops');
+    }
+    assert.deepEqual(loadCadPart(saveCadPart(snapshot)).outputs[0].brep, brep);
+    const mesh = meshOf(brep), z = 28, inner = 4 + ref.k * (z - neutral), outer = 12 - ref.k * (z - neutral);
+    assert.equal(materialAt(mesh, [ref.center[0] + inner - .2, ref.center[1], z]), false); assert.equal(materialAt(mesh, [ref.center[0] + inner + .2, ref.center[1], z]), true);
+    assert.equal(materialAt(mesh, [ref.center[0] + outer - .2, ref.center[1], z]), true); assert.equal(materialAt(mesh, [ref.center[0] + outer + .2, ref.center[1], z]), false);
+  }
+});
+
+test('all eight unit cardinal XY bases retain joint world-Z semantics without a basis-dependent angle reversal', () => {
+  for (const normalSign of [1, -1]) for (const axis of [0, 1]) for (const axisSign of [1, -1]) {
+    const xAxis = [0, 0, 0]; xAxis[axis] = axisSign;
+    const plane = { origin: [-28, 16, 17], normal: [0, 0, normalSign], xAxis }, neutral = 17 + normalSign * 9;
+    for (const pull of ['z', '-z']) for (const angle of [5, -5]) {
+      const source = placedDoc(plane, angle, pull, neutral), original = stock(source), ref = placedReference(plane, angle, pull, neutral);
+      exactWorldCapTrims(original);
+      const result = evaluateCadPart(source).outputs[0], mass = massPropertiesOf(result); assert.deepEqual(metadata(result.brep), metadata(original));
+      close(mass.volume, ref.volume, 'signed basis volume', 1e-7); mass.centroid.forEach((value, i) => close(value, ref.centroid[i], 'signed basis centroid', 1e-7));
+      exactWorldCapTrims(result.brep);
+      const sourceVertices = original.vertices.map(vertex => vertex.point[2]); assert.equal(Math.min(...sourceVertices), ref.lo); assert.equal(Math.max(...sourceVertices), ref.hi);
+      for (const face of result.brep.faces.filter(face => names.includes(face.name))) {
+        const p = evaluateSurface(face.surface, .3, (neutral - ref.lo) / 16); close(p[2], neutral, 'world neutral belongs to both ruled native walls');
+        close(Math.hypot(p[0] - ref.center[0], p[1] - ref.center[1]), outerNames.includes(face.name) ? 12 : 4, 'original radius at shared world neutral');
+      }
+    }
+    for (const pull of ['z', '-z']) {
+      const source = placedDoc(plane, 5, pull, neutral); delete source.features.at(-1).neutral;
+      const fixed = placedDoc(plane, 5, pull, pull === 'z' ? placedReference(plane, 5, pull, neutral).lo : placedReference(plane, 5, pull, neutral).hi);
+      assert.deepEqual(evaluateCadPart(source).outputs[0].brep, evaluateCadPart(fixed).outputs[0].brep, 'automatic neutral uses actual world end, independent of authored normal sign');
+    }
+  }
+});
+
+test('translated fixture exact world neutral, parameter/cold rebuild and joint collapse keep their original contracts', () => {
+  const angle = Math.atan(1 / 16) * 180 / Math.PI, source = placedDoc(xyPlane, angle, 'z', 26), snapshot = evaluateCadPart(source);
+  const mass = massPropertiesOf(snapshot.outputs[0]); close(mass.volume, 1984 * Math.PI, 'world N26 exact translated fixture volume', 1e-7); close(mass.centroid[2], 2572 / 93, 'world N26 exact centroid');
+  close(mass.centroid[0], -14, 'actual world center X'); close(mass.centroid[1], 25, 'actual world center Y');
+  const changed = placedDoc(xyPlane, -angle, '-z', 30); assert.deepEqual(reevaluate(snapshot, { document: changed }).outputs[0].brep, evaluateCadPart(changed).outputs[0].brep);
+  const parameterized = placedDoc(xyPlane, angle, 'z', 26); parameterized.parameters.N = 26; parameterized.features.at(-1).neutral = { parameter: 'N' };
+  const first = evaluateCadPart(parameterized), moved = reevaluate(first, { parameters: { N: 20 } }).outputs[0]; close(massPropertiesOf(moved).volume, 1792 * Math.PI, 'world-neutral parameter uses actual lower cap', 1e-7);
+  assert.throws(() => evaluateCadPart(placedDoc(xyPlane, 5, 'z', 9)), error => error.code === 'SELECTION' && /neutral must lie within the original caps/.test(error.message), 'local neutral is not reinterpreted as a world coordinate');
+  for (const pull of ['z', '-z']) {
+    const collapsing = placedDoc(xyPlane, Math.atan(4 / 16) * 180 / Math.PI, pull, pull === 'z' ? 20 : 36);
+    assert.throws(() => evaluateCadPart(collapsing), error => error.code === 'GEOMETRY' && /inner and outer walls reach or cross each other/.test(error.message));
+  }
+  const cone = snapshot.outputs[0].brep; assert.equal(draftAnnularWallsIfAdmitted(cone, names, .1, 'z', 26), undefined);
+  assert.equal(boreWallOffsetFrame(cone, innerNames[0]), undefined); assert.equal(circularWallOffsetFrame(cone, outerNames[0]), undefined);
+});
+
+test('placed joint Draft refuses snapped, off-axis, non-XY and scaled frames and preserves legacy fixed-neutral refusals', () => {
+  for (const [normal, xAxis] of [
+    [[1e-13, 0, 1], [0, 1, 0]], [[0, 0, 1], [1, 1e-13, 0]], [[0, 0, -1], [.6, -.8, 0]],
+    [[1, 0, 0], [0, 1, 0]], [[0, 1, 0], [1, 0, 0]], [[0, 0, 2], [1, 0, 0]], [[0, 0, 1], [2, 0, 0]],
+  ]) {
+    const source = placedDoc({ origin: [-28, 16, 17], normal, xAxis }), before = structuredClone(source);
+    assert.throws(() => evaluateCadPart(source), error => error.code === 'CAPABILITY' && /original exact unit cardinal XY sketch frame/.test(error.message)); assert.deepEqual(source, before);
+  }
+  for (const selection of [outerNames, innerNames, [outerNames[0]], [innerNames[0]]]) {
+    const source = placedDoc(); source.features.at(-1).faces = selection;
+    assert.throws(() => evaluateCadPart(source), error => error.code === 'SELECTION' && /neutral plane z = 26 must be at or below the face/.test(error.message), 'placed singleton scope retains its incumbent fixed-neutral refusal');
+  }
+  for (const selection of [[...outerNames, innerNames[0], innerNames[0]], [...outerNames, innerNames[0], 'n1.top']]) {
+    const source = placedDoc(); source.features.at(-1).faces = selection;
+    assert.throws(() => evaluateCadPart(source), error => error.code === 'CAPABILITY' && /all four distinct/.test(error.message));
+  }
+  const parameterizedOrigin = placedDoc();
+  parameterizedOrigin.parameters.O = -28;
+  parameterizedOrigin.features[0].plane.origin[0] = { parameter: 'O' };
+  assert.throws(() => evaluateCadPart(parameterizedOrigin), error => error.code === 'CAPABILITY' && /original exact unit cardinal XY sketch frame/.test(error.message));
+  for (const change of [
+    source => { source.parameters.H = 16; source.features[1].height = { parameter: 'H' }; },
+    source => { source.parameters.R = 12; source.features[0].radius = { parameter: 'R' }; },
+    source => { source.features.splice(2, 0, { id: 'm', kind: 'translate', target: 'n1', offset: [1, 0, 0] }); source.features.at(-1).target = 'm'; },
+    source => { source.features.splice(2, 0, { id: 'm', kind: 'rotate', target: 'n1', axis: 'z', angle: 90 }); source.features.at(-1).target = 'm'; },
+  ]) {
+    const source = placedDoc(); change(source); const before = structuredClone(source);
+    assert.throws(() => evaluateCadPart(source), error => error.code === 'SELECTION' && /neutral plane z = 26 must be at or below the face/.test(error.message));
+    assert.deepEqual(source, before);
+  }
+});
