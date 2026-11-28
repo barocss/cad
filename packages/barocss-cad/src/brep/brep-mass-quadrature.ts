@@ -18,6 +18,7 @@ import { facetIntegrals } from '../mesh/facet-patch.js';
 import type { FacetPatch } from '../types.js';
 import { cross, dot, sub } from '../core/vec3.js';
 import { gauss } from '../core/quadrature.js';
+import { balancedQuadraticRule } from './balanced-quadratic-stations.js';
 
 type XY = readonly [number, number];
 /** Dunavant's degree-8 rule on the unit triangle (16 points): barycentric (a, b, c) and weight (sum 1). */
@@ -112,7 +113,7 @@ const gaussOf = (n: number) => { let r = rules.get(n); if (!r) rules.set(n, r = 
  * A planar face's ten integrals by Green's theorem in its plane (o; e1, e2 with e1 × e2 the outward
  * normal n): ∫∫ h ds dt = ∮ H dt, H(s, t) = ∫₀ˢ h(σ, t) dσ, along each coedge's exact curve.
  */
-function planarIntegrals(brep: Brep, face: BrepFace, n: Point, o: Point, maps: Maps): number[] {
+function planarIntegrals(brep: Brep, face: BrepFace, n: Point, o: Point, maps: Maps): number[] | null {
   const { loops, coedges, edges } = maps;
   const e1 = (() => { const a: Point = Math.abs(n[0]) < 0.9 ? [1, 0, 0] : [0, 1, 0], d = dot(a, n), v: Point = [a[0] - n[0] * d, a[1] - n[1] * d, a[2] - n[2] * d], l = Math.hypot(...v); return v.map(x => x / l) as Point; })();
   const e2 = cross(n, e1), I = Array(11).fill(0) as number[];
@@ -120,11 +121,12 @@ function planarIntegrals(brep: Brep, face: BrepFace, n: Point, o: Point, maps: M
   for (const loopId of face.loops) for (const cid of loops.get(loopId)!.coedges) {
     const co = coedges.get(cid)!, curve = edges.get(co.edge)!.curve, [t0, t1] = curveDomain(curve), d1 = curveD1Evaluator(curve);
     const knots = [t0, ...curve.knots.filter(k => k > t0 && k < t1), t1].filter((k, i, all) => i === 0 || k > all[i - 1]);
-    const sense = co.sense === 'forward' ? 1 : -1;
+    const sense = co.sense === 'forward' ? 1 : -1, rule = balancedQuadraticRule(curve, G12);
+    if (!rule) return null;
     for (let k = 0; k + 1 < knots.length; k++) {
       const a = knots[k], b = knots[k + 1];
-      G12.x.forEach((x, g) => {
-        const { point, derivative } = d1(a + (b - a) * x), d = sub(point, o), s = dot(d, e1), t = dot(d, e2), dt = dot(derivative, e2) * (b - a) * G12.w[g] * sense;
+      rule.x.forEach((x, g) => {
+        const { point, derivative } = d1(a + (b - a) * x), d = sub(point, o), s = dot(d, e1), t = dot(d, e2), dt = dot(derivative, e2) * (b - a) * rule.w[g] * sense;
         // H(s, t)·dt: the field integrated across from s = 0.
         G4.x.forEach((y, j) => accumulate(I, P(s * y, t), n, G4.w[j] * s * dt));
         // The face's area: ∫∫ 1 ds dt = ∮ s dt.
@@ -157,8 +159,16 @@ export function brepQuadratureIntegrals(brep: Brep, segmentsPerQuarter: number):
     // (A facet face: exact, no tessellation.)
     if (face.surface.kind === 'facets') { if (mixed) facetFieldIntegrals(face.surface, sign, I); else facetIntegrals(face.surface, sign, centre, I); continue; }
     const plane = planar(face.surface);
-    if (plane) { planarIntegrals(brep, face, [plane.normal[0] * sign, plane.normal[1] * sign, plane.normal[2] * sign], plane.origin, maps).forEach((x, k) => { I[k] += x; }); continue; }
-    if (wholePatch(face, maps)) { patchIntegrals(face, I); continue; }
+    if (plane) {
+      const exact = planarIntegrals(brep, face, [plane.normal[0] * sign, plane.normal[1] * sign, plane.normal[2] * sign], plane.origin, maps);
+      if (!exact) return null;
+      exact.forEach((x, k) => { I[k] += x; });
+      continue;
+    }
+    if (wholePatch(face, maps)) {
+      if (!patchIntegrals(face, I)) return null;
+      continue;
+    }
     rest.add(face.id);
   }
   if (!rest.size) return { integrals: fromCentre(I), meshed: false };
@@ -727,10 +737,17 @@ function sideDistance(at: (u: number, v: number) => Point, U: readonly number[],
  * eight more for rational patches, whose cubic moments need more points than volume),
  * the outward normal ±∂S/∂u × ∂S/∂v by the face's sense.
  */
-function patchIntegrals(face: BrepFace, I: number[]): void {
+function patchIntegrals(face: BrepFace, I: number[]): boolean {
   const S = face.surface as Surface, sign = face.sense === 'forward' ? 1 : -1, { u: U, v: V } = surfaceDomain(S);
   const rational = S.weights.some(row => row.some(w => w !== 1));
-  const gu = gaussOf(Math.min(20, Math.ceil(5 * S.degreeU / 2) + (rational ? 8 : 0))), gv = gaussOf(Math.min(20, Math.ceil(5 * S.degreeV / 2) + (rational ? 8 : 0)));
+  const uRule = gaussOf(Math.min(20, Math.ceil(5 * S.degreeU / 2) + (rational ? 8 : 0)));
+  const vRule = gaussOf(Math.min(20, Math.ceil(5 * S.degreeV / 2) + (rational ? 8 : 0)));
+  // Balance the whole quadratic-by-linear patch when the weights only vary along its quadratic direction.
+  const gu = rational && S.degreeU === 2 && S.degreeV === 1 && S.weights.length === 3 && S.weights[0].length === 2 && S.weights.every(row => row[0] === row[1])
+    ? balancedQuadraticRule({ degree: S.degreeU, knots: S.knotsU, weights: S.weights.map(row => row[0]) }, uRule) : uRule;
+  const gv = rational && S.degreeV === 2 && S.degreeU === 1 && S.weights.length === 2 && S.weights[0].length === 3 && S.weights[0].every((w, j) => w === S.weights[1][j])
+    ? balancedQuadraticRule({ degree: S.degreeV, knots: S.knotsV, weights: S.weights[0] }, vRule) : vRule;
+  if (!gu || !gv) return false;
   // (Batched: each direction's basis values and first derivatives at its Gauss points worked out once per span; the
   // poles kept homogeneous in one array; the u sums made once per Gauss point in u and reused along v. No evaluator
   // call, validation or allocation per point: a 20k-span SubD body in a fraction of a second.)
@@ -748,6 +765,7 @@ function patchIntegrals(face: BrepFace, I: number[]): void {
       for (let j = 0; j < gv.x.length; j++) patchPoint(I, R, Ru, B.N, B.D, j, q, sign * gu.w[i] * gv.w[j] * A.length * B.length);
     }
   }
+  return true;
 }
 /** One span's basis values N and first derivatives D (p + 1 each) at every Gauss point, and its first pole index. */
 interface SpanBasis { first: number; length: number; N: Float64Array; D: Float64Array }

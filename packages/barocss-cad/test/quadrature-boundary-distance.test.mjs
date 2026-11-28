@@ -4,7 +4,8 @@ import { readFileSync } from 'node:fs';
 
 // Test the private production predicate without adding a public API or pinning source checksums.
 const modulePath = new URL('../dist/brep/brep-mass-quadrature.js', import.meta.url);
-const source = readFileSync(modulePath, 'utf8').replace(/from '([^']+)'/g, (_, path) => `from '${new URL(path, modulePath).href}'`);
+const source = readFileSync(modulePath, 'utf8').replace(/from (['"])(\.[^'"]+)\1/g,
+  (_, quote, path) => `from ${quote}${new URL(path, modulePath).href}${quote}`);
 const { nearBoundary } = await import(`data:text/javascript;base64,${Buffer.from(`${source}\nexport { nearBoundary };`).toString('base64')}`);
 
 // The pre-optimization full-distance scan. Keep the original strict tie rule and refinement order.
