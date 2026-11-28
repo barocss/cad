@@ -6,6 +6,7 @@ import type { FriendlyError } from '@barocss/cad-model/engine/errors';
 import { getBlob, meshNodeBlobs, positionsArray, putBlob } from '@barocss/cad-model/engine/blobs';
 import { FACET_EXPLODE_TRIANGLES, FACET_PREVIEW_TRIANGLES, MESH_UNITS, meshInMM, type readMeshFile, type MeshUnit } from '@barocss/cad-model/engine/meshImport';
 import type { EngineClient } from '../engine/client';
+import { rememberStlCornerSource } from './stlCornerProvenance';
 
 export interface MeshQuestion {
   owner?: ImportOwner;
@@ -118,10 +119,10 @@ export function createMeshImportController(options: () => MeshImportOptions, onC
     setMeshAsk(null);
     // (Anything a step would change, or crossings to say: the gate; else straight in.)
     if (!d.closed || d.degenerate || d.duplicates || d.floaters || d.selfIntersections) { setRepairAsk({ owner: meshAsk.owner, mode: 'import', name, format, unit, positions: meshInUnit.positions, indices: meshInUnit.indices, diagnosis: d, steps: DEFAULT_REPAIR, result: null }); return; }
-    await openMeshNode({ owner: meshAsk.owner, name, format, unit, positions: meshInUnit.positions, indices: meshInUnit.indices, diagnosis: d });
+    await openMeshNode({ owner: meshAsk.owner, name, format, unit, positions: meshInUnit.positions, indices: meshInUnit.indices, diagnosis: d }, format === 'STL' && meshAsk.mesh.indices === null);
   };
   /** The mesh node made (its import's blobs, a repair's beside them) and opened as the part. */
-  const openMeshNode = async (o: MeshOpenInput) => {
+  const openMeshNode = async (o: MeshOpenInput, fromRawStl = false) => {
     if (!current(o.owner)) return;
     const { engine, nextRevision, onNotice, onOpened } = options();
     const valid = begin(o.owner);
@@ -141,6 +142,10 @@ export function createMeshImportController(options: () => MeshImportOptions, onC
     if (!read.ok) { onNotice({ title: 'Could not open this mesh', hint: `${read.error.detail || read.error.hint}. Your part is unchanged.`, detail: read.error.detail }); return; }
     const pieces = read.bodies.length, next = withNode(emptyDoc(), { ...node, ...(pieces > 1 ? { pieces } : {}) });
     if (!onOpened(next, o.name)) return;
+    // The facet builder welds again. Its endpoints can only report file corners when that weld kept every vertex.
+    if (fromRawStl && pieces === 1 && o.diagnosis.pieces === 1 && o.diagnosis.welded === 0
+      && o.diagnosis.vertices * 3 === o.positions.length && o.diagnosis.triangles * 3 === o.indices.length
+      && o.diagnosis.triangles <= FACET_PREVIEW_TRIANGLES) rememberStlCornerSource(next);
     setRepairAsk(null);
     const faces = read.bodies.reduce((n, b) => n + b.mesh.faces.length, 0), volume = read.bodies.reduce((v, b) => v + (b.volume ?? 0), 0);
     const r = repair?.report, sheet = r && !r.closed;
@@ -207,7 +212,7 @@ export function createMeshImportController(options: () => MeshImportOptions, onC
     get meshAsk() { return question(); }, setMeshAsk, get meshInUnit() { return converted(); },
     get stage() { return current(stageOwner ?? undefined) ? stageValue : null; }, setStage,
     get repairAsk() { return repairQuestionNow(); }, setRepairAsk,
-    stopStage, openMesh, openMeshNode, checkRepair, applyRepair, editRepair, removeRepair };
+    stopStage, openMesh, openMeshNode: (input: MeshOpenInput) => openMeshNode(input), checkRepair, applyRepair, editRepair, removeRepair };
 }
 
 export type MeshImportController = ReturnType<typeof createMeshImportController>;
