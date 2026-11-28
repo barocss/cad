@@ -26,6 +26,16 @@ export function canSetShellCorner(nodes: readonly ModelNode[], parent: BodyRef, 
     && canSetClosedShellCorner(nodes, parent);
 }
 
+export function canSetShellFloor(nodes: readonly ModelNode[], parent: BodyRef, open: readonly string[]): boolean {
+  return open.length === 1 && open[0] === featureId(nodes, parent.node) + '.top' && canSetClosedShellCorner(nodes, parent);
+}
+
+export function canSetAgentShellFloor(ctx: Ctx, faceInput: unknown): boolean {
+  if (!canSetAgentShellCorner(ctx, undefined, faceInput)) return false;
+  const pick = ctx.selection.faces[0], body = ctx.bodies[pick.body], parent = body.ref;
+  return !!parent && canSetShellFloor(ctx.doc.nodes, parent, [body.mesh.faces[pick.face].name]);
+}
+
 /** An explicit Agent corner needs one literal original body or one unique literal original end cap. */
 export function canSetAgentShellCorner(ctx: Ctx, bodyInput: unknown, faceInput: unknown): boolean {
   const { doc, bodies, selection } = ctx;

@@ -1,7 +1,7 @@
 // The v2 `features` group's handlers (R3, moved verbatim from chat/tools.ts's runPartTool): the feature tree's
 // commands, raw nodes, edits and deletes, materials, and the person's rows (stock, frame stock, sections, welds).
 import { commandById, commands, givenValues, shownFields, type Ctx, type Values } from '../../app/commands';
-import { canSetAgentShellCorner } from '../../app/shellCorner';
+import { canSetAgentShellCorner, canSetAgentShellFloor } from '../../app/shellCorner';
 import { PIVOT_FACE } from '../../app/pivotFaceCommand';
 import { updateBoxFootprint } from '../../app/editCommand';
 import { editFields, type BindableField } from '../../app/editFields';
@@ -154,7 +154,8 @@ export const COMMAND_DOCS: Record<string, { selection: string; values: Record<st
   shell: { selection: 'Choose distinct faces to open on one body, or choose one body for a closed hollow. For an original full capsule Revolve, use one or both complete hemisphere names from query.summary. Pass expectedRevision from query.rebuild for the reviewed part.', values: {
     t: 'uniform wall thickness in mm',
     join: 'default | sharp | arc. Sharp and Round need expectedRevision from query.rebuild and one exact original upright L body ID or its single original end cap name.',
-    wallMode: 'uniform | per-face. Give expectedRevision from query.rebuild. For a closed rectangular Shell, name its original body and supply all six thicknesses. For an open rectangular Shell, name one or two original faces, three original faces sharing a corner or including an opposite pair, or four original faces leaving two adjacent walls. Give every kept wall thickness.',
+    wallMode: 'uniform | per-face | separate-floor. Give expectedRevision from query.rebuild. For a closed rectangular Shell, name its original body and supply all six thicknesses. For an open rectangular Shell, name one or two original faces, three original faces sharing a corner or including an opposite pair, or four original faces leaving two adjacent walls. Give every kept wall thickness. For separate-floor, name the single exact original top cap of an upright L extrusion and supply t and floorThickness with the default inner corner.',
+    floorThickness: 'positive literal floor thickness in mm for separate-floor mode',
     bottomWall: 'bottom thickness in mm', frontWall: 'front thickness in mm', rightWall: 'right thickness in mm',
     backWall: 'back thickness in mm', leftWall: 'left thickness in mm', topWall: 'top thickness in mm',
   } },
@@ -273,6 +274,13 @@ async function runCommandTool(state: ChatState, args: Record<string, unknown>, e
   const point = Array.isArray(args.point) && args.point.length === 3 ? args.point.map(Number) as [number, number, number] : undefined;
   let given = isObj(args.values) ? args.values : {};
   const perFaceShell = cmd.id === 'shell' && given.wallMode === 'per-face';
+  const separateShellFloor = cmd.id === 'shell' && given.wallMode === 'separate-floor';
+  if (separateShellFloor && (state.partOf || args.expectedRevision === undefined || args.bodies !== undefined ||
+    args.edges !== undefined || args.point !== undefined || typeof given.floorThickness !== 'number' ||
+    !Number.isFinite(given.floorThickness) || given.floorThickness <= 0 ||
+    !canSetAgentShellFloor({ doc: state.doc, bodies: state.bodies, selection }, args.faces))) {
+    return fail(state, 'A separate Shell floor needs a revision, one exact original upright L top face and a positive numeric floor thickness.', { code: 'COMMAND_INPUT' });
+  }
   if (cmd.id === 'shell' && (given.join === 'sharp' || given.join === 'arc')) {
     if (args.expectedRevision === undefined)
       return fail(state, 'An explicit Shell inner corner needs expectedRevision from query.rebuild for the same part.', { code: 'COMMAND_INPUT' });
@@ -339,7 +347,7 @@ async function runCommandTool(state: ChatState, args: Record<string, unknown>, e
   const avail = cmd.available(ctx);
   if (!avail.ok) return fail(state, `${cmd.label} can’t run: ${avail.reason}`);
   const fieldMode: Values | undefined = cmd.id === 'sweep-curve' ? { representation: String(given.representation) }
-    : perFaceShell ? { wallMode: 'per-face' } : undefined;
+    : perFaceShell || separateShellFloor ? { wallMode: String(given.wallMode) } : undefined;
   const fields = cmd.fields?.(ctx, fieldMode) ?? [];
   const bad = Object.keys(given).filter(k => !fields.some(f => f.key === k));
   if (bad.length) return fail(state, `${cmd.label} has no value ${bad.map(k => `"${k}"`).join(', ')}; its values are ${fields.map(f => `${f.key} (${f.label})`).join(', ') || 'none'}.`);

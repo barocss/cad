@@ -8,7 +8,7 @@ import { erodeSection } from '../features/section-offset.js';
 import { booleanCurveRegions, curveTolerance, regionMoments, segReverse, type CurveRegion2, type CurveSegment2, type XY } from '../brep/curved-arrangement.js';
 import { faceGeometry } from '../brep/analytic-boolean.js';
 import { facetBrepFromTriangles } from '../mesh/facet-brep.js';
-import { buildProfileLoop, type ProfileSegmentInput } from '../features/extruded-profile-solid.js';
+import { buildProfileLoop, ExtrudedProfileLimits, type ProfileSegmentInput } from '../features/extruded-profile-solid.js';
 import { revolveProfile, revolveMassProperties, type RevolveInput } from '../features/revolve.js';
 import { transformBrep } from '../brep/brep-transform.js';
 import { unsupportedNativeMass } from '../internal/native-si-mass-state.js';
@@ -69,12 +69,20 @@ export function shellOperation(f: CadPartFeature & Record<string, unknown>, t: T
       const names = open as string[], part = target[0], expect = expectOf(f, fail);
       const join = f.join;
       if (join !== undefined && join !== 'sharp' && join !== 'arc') fail('INPUT', 'Shell join must be sharp or arc.');
-      const limit = join === undefined ? undefined : originalClosedLShellLimit(f.target, part, t);
+      const floorThickness = f.floorThickness;
+      if (floorThickness !== undefined && (typeof floorThickness !== 'number' || !Number.isFinite(floorThickness) || floorThickness < ExtrudedProfileLimits.minimumLengthMM))
+        fail('PARAMETER', `Shell floor thickness must be at least ${ExtrudedProfileLimits.minimumLengthMM} mm.`);
+      const limit = join === undefined && floorThickness === undefined ? undefined : originalClosedLShellLimit(f.target, part, t);
       const [targetId, output] = f.target.split('/'), capPrefix = `${targetId}.cut.`;
       const capOpening = names.length === 1 && (names[0] === `${targetId}.top` || names[0] === `${targetId}.bottom`);
       const openingSign = names[0] === `${targetId}.bottom` ? -1 : 1;
+      if (floorThickness !== undefined && (join !== undefined || limit === undefined || names.length !== 1 || names[0] !== `${targetId}.top`))
+        fail('CAPABILITY', 'Independent Shell floor needs one original zero-draft upright orthogonal L extrusion with only its exact top cap opened and the default Round join.');
       if (join !== undefined && (names.length > 0 && !capOpening || limit === undefined))
         fail('CAPABILITY', 'Explicit Shell join needs one original closed zero-draft upright orthogonal L extrusion, or its single exact original top cap or bottom cap.');
+      if (floorThickness !== undefined && limit !== undefined
+        && (thickness < ExtrudedProfileLimits.minimumLengthMM || 2 * (limit - thickness) < ExtrudedProfileLimits.minimumLengthMM))
+        fail('PARAMETER', 'The Shell side thickness leaves no supported L cavity.');
       if (limit !== undefined && thickness >= limit)
         fail('PARAMETER', `Shell join wall thickness must be less than ${limit} mm to keep both L arms and the closed height.`);
       const caps = names.length && output !== undefined && t.featureKind(targetId) === 'split'
@@ -88,6 +96,34 @@ export function shellOperation(f: CadPartFeature & Record<string, unknown>, t: T
             if (count > 1) fail('REFERENCE', `Split cap "${cap}" is ambiguous on this output (${count} native faces).`);
           }
           if (expect) checkExpected(brep, expect, false, 'shell', fail);
+        }
+        if (floorThickness !== undefined) {
+          const original = brepOf(part, f.target), input = checkBrep(original, { strict: true });
+          const top = original.faces.filter(face => face.name === names[0]), support = top[0] && faceGeometry(top[0]);
+          if (!input.valid || original.bodies.length !== 1 || original.shells.length !== 1 || original.faces.length !== 8
+            || new Set(original.faces.map(face => face.name)).size !== 8 || top.length !== 1 || top[0].loops.length !== 1
+            || support?.kind !== 'plane' || support.n[2] !== 1 || support.o[2] !== Math.max(...original.vertices.map(vertex => vertex.point[2])))
+            fail('REFERENCE', 'Independent Shell floor needs one strict original L prism and its unambiguous exact top cap.');
+          const stock = part.solid.kind === 'upright' ? part.solid.solid : fail('CAPABILITY', 'Independent Shell floor needs original upright stock.');
+          const height = stock.slabs[0].z1 - stock.slabs[0].z0;
+          if (!(height - floorThickness >= ExtrudedProfileLimits.minimumLengthMM))
+            fail('PARAMETER', 'The Shell floor thickness leaves no cavity height.');
+          const hollow = hollowOf(stock, thickness, names, at, fail, floorThickness);
+          const result: Part = { solid: { kind: 'upright', solid: booleanPrismatic(stock, hollow.hollow, 'difference') } };
+          const brep = brepOf(result, at), report = checkBrep(brep, { strict: true });
+          if (!report.valid || brep.bodies.length !== 1 || brep.bodies[0].kind !== 'solid' || brep.shells.length !== 1
+            || !brep.shells[0].closed || report.topology[0]?.genus !== 0 || report.counts.faces !== 16
+            || report.counts.loops !== 17 || report.counts.edges !== 39 || report.counts.vertices !== 26
+            || !brep.coedges.every(use => !!use.pcurve) || !singleLCapOpening(brep, original, names[0], floorThickness, 1)
+            || !roundLWallSupports(brep, original, stock, thickness, at)
+            || !original.faces.every(face => {
+              const matches = brep.faces.filter(candidate => candidate.name === face.name), old = faceGeometry(face);
+              const current = matches[0] && faceGeometry(matches[0]);
+              return matches.length === 1 && old.kind === 'plane' && current?.kind === 'plane'
+                && old.n.every((value, axis) => value === current.n[axis]) && dot(old.n, sub(current.o, old.o)) === 0;
+            }))
+            fail('GEOMETRY', '[SHELL_NOT_CLOSED] independent L floor could not retain one strict Round top opening and its original outer supports.');
+          return { kind: 'solid', parts: [{ ...result, brep }] };
         }
         if (join !== undefined) {
           const original = brepOf(part, f.target), input = checkBrep(original, { strict: true });
@@ -177,6 +213,32 @@ function singleLCapOpening(brep: Brep, original: Brep, capName: string, thicknes
     const use = coedges.get(id), edge = use && edges.get(use.edge);
     return edge && edge.curve.controlPoints.every(point => Math.abs(point[2] - rimStation) <= roundoff);
   }));
+}
+
+/** The six named inner planes and the one Round chart belong to the certified original side supports. */
+function roundLWallSupports(brep: Brep, original: Brep, stock: PrismaticSolid, thickness: number, id: string): boolean {
+  const roundoff = 128 * Number.EPSILON * Math.max(1, thickness, ...original.vertices.flatMap(vertex => vertex.point.map(Math.abs)));
+  for (const face of original.faces) {
+    const source = faceGeometry(face);
+    if (source.kind !== 'plane' || source.n[2] !== 0) continue;
+    const inner = brep.faces.filter(candidate => candidate.name?.replace(/#\d+$/, '') === `${id}.in.${face.name}`)
+      .map(candidate => faceGeometry(candidate)).filter(geometry => geometry.kind === 'plane');
+    const plane = inner[0];
+    if (inner.length !== 1 || plane?.kind !== 'plane' || !source.n.every((value, axis) => Math.abs(value + plane.n[axis]) <= roundoff)
+      || Math.abs(dot(source.n, sub(plane.o, source.o)) + thickness) > roundoff) return false;
+  }
+  const ring = stock.slabs[0].regions[0].outer;
+  const reflex = ring.filter((segment, i) => {
+    const previous = ring[(i + ring.length - 1) % ring.length];
+    return segment.kind === 'line' && previous.kind === 'line'
+      && (previous.b[0] - previous.a[0]) * (segment.b[1] - segment.a[1]) - (previous.b[1] - previous.a[1]) * (segment.b[0] - segment.a[0]) < 0;
+  });
+  const cylinders = brep.faces.map(face => faceGeometry(face)).filter(geometry => geometry.kind === 'cylinder'), corner = reflex[0];
+  const cylinder = cylinders[0];
+  return reflex.length === 1 && corner?.kind === 'line' && cylinders.length === 1 && cylinder?.kind === 'cylinder'
+    && Math.abs(cylinder.r - thickness) <= roundoff && Math.abs(cylinder.c[0] - corner.a[0]) <= roundoff
+    && Math.abs(cylinder.c[1] - corner.a[1]) <= roundoff && cylinder.out === 1
+    && Math.abs(cylinder.a[2]) === 1;
 }
 
 /** Authored ownership and the evaluated straight section must describe the same unplaced original L. */
@@ -456,7 +518,7 @@ function shellSwept(part: Part, swept: NonNullable<Part['swept']>, t: number, op
  * — the section at z is the intersection of the sections over [z − t, z + t], eroded (exact for lines
  * and arcs); offset walls and ledges meet sharply, as offset faces do. It runs on through open faces.
  */
-function hollowOf(solid: PrismaticSolid, t: number, open: string[], at: string, fail: Tools['fail']): { hollow: PrismaticSolid; sides: Set<string>; tops: Set<string>; bottoms: Set<string> } {
+function hollowOf(solid: PrismaticSolid, t: number, open: string[], at: string, fail: Tools['fail'], floorThickness?: number): { hollow: PrismaticSolid; sides: Set<string>; tops: Set<string>; bottoms: Set<string> } {
   const slabs = [...solid.slabs].sort((a, b) => a.z0 - b.z0), rings = slabs.flatMap(s => s.regions.flatMap(r => [r.outer, ...r.holes])), tol = curveTolerance(rings);
   for (let k = 1; k < slabs.length; k++) if (slabs[k].z0 > slabs[k - 1].z1 + tol) fail('CAPABILITY', 'shell works on one body at a time (this one has pieces apart along its height)');
   const zmin = slabs[0].z0, zmax = slabs[slabs.length - 1].z1;
@@ -468,7 +530,7 @@ function hollowOf(solid: PrismaticSolid, t: number, open: string[], at: string, 
     if (!sides.has(name) && !tops.has(name) && !bottoms.has(name)) fail('SELECTION', `no face named ${name} to open; faces: ${[...tops, ...bottoms, ...sides].slice(0, 12).join(', ')}`);
   }
   const openTop = open.some(n => tops.has(n)), openBottom = open.some(n => bottoms.has(n)), openSides = new Set(open.filter(n => sides.has(n)));
-  const lo = openBottom ? zmin - 1 : zmin + t, hi = openTop ? zmax + 1 : zmax - t;
+  const lo = openBottom ? zmin - 1 : zmin + (floorThickness ?? t), hi = openTop ? zmax + 1 : zmax - t;
   if (!(hi > lo + tol)) fail('PARAMETER', `a wall of ${t} mm leaves no hollow between the top and the bottom`);
   // Heights where the window [z − t, z + t] takes in another section.
   const cuts = [...new Set([lo, hi, ...slabs.slice(1).flatMap(s => [s.z0 - t, s.z0 + t])].filter(z => z >= lo - tol && z <= hi + tol))].sort((a, b) => a - b);

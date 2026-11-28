@@ -80,6 +80,10 @@ export function readStudioDoc(text: string): { doc: StudioDoc; notes: string[] }
     if (record(node) && node.kind === 'shell' && Object.hasOwn(node, 'join') && node.join !== 'sharp' && node.join !== 'arc') {
       return { error: 'A Shell inner corner must be Sharp or Round.' };
     }
+    if (record(node) && node.kind === 'shell' && Object.hasOwn(node, 'floorThickness') &&
+      (node.join !== undefined || typeof node.floorThickness !== 'number' || !Number.isFinite(node.floorThickness) || node.floorThickness <= 0)) {
+      return { error: 'A separate Shell floor needs a positive finite thickness and the default inner corner.' };
+    }
     if (record(node) && node.kind === 'shell-walls') {
       const problem = shellWallFieldsProblem(node);
       if (problem) return { error: problem };

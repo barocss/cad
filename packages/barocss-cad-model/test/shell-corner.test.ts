@@ -5,6 +5,8 @@ import { editFields } from '../src/app/editFields';
 import type { StudioDoc } from '../src/engine/doc';
 import { evaluateDoc } from '../src/engine/evaluate';
 import { readStudioDoc } from '../src/engine/migrate';
+import { dispatchTool } from '../src/chat/tools';
+import { revisionOf } from '../src/util/revision';
 
 const points: [number, number][] = [[0, 0], [40, 0], [40, 10], [10, 10], [10, 30], [0, 30]];
 const doc: StudioDoc = {
@@ -78,4 +80,50 @@ test('either original L end cap admits explicit corners and retains the default 
     assert.equal(shell.fields!(unsupported).some(field => field.key === 'join'), false);
     assert.throws(() => shell.build!(unsupported, { t: 2, join: 'arc' }), /one end cap open/);
   }
+});
+
+test('a literal top-open L floor edits independently and needs a revision-pinned exact face in the Agent', async () => {
+  const evaluated = evaluateDoc(doc, 1);
+  assert.ok(evaluated.ok);
+  const top = evaluated.bodies[0].mesh.faces.findIndex(face => face.nativePlaneName === 'n1.top');
+  assert.ok(top >= 0);
+  const ctx = { doc, bodies: evaluated.bodies, selection: { bodies: [], edges: [], faces: [{ body: 0, face: top }] } };
+  const defaults = shell.defaults!(ctx);
+  const fields = shell.fields!(ctx, { wallMode: 'separate-floor' });
+  assert.ok(fields.some(field => field.key === 'floorThickness'));
+  assert.ok(!fields.some(field => field.key === 'join'));
+  const values = { wallMode: 'separate-floor', t: 2, floorThickness: 3 };
+  const candidate = shell.build!(ctx, { ...defaults, ...values });
+  const exact = candidate.nodes[2];
+  assert.ok(exact.kind === 'shell' && exact.floorThickness === 3 && exact.join === undefined);
+  const field = editFields(candidate.nodes, 2).find(field => field.key === 'floorThickness');
+  assert.ok(field?.kind === 'number');
+  const heightChange = { ...candidate, nodes: field.set(candidate.nodes, 4) };
+  const read = readStudioDoc(JSON.stringify(heightChange));
+  assert.ok('doc' in read);
+  assert.equal((read.doc.nodes[2] as typeof exact).floorThickness, 4);
+  assert.ok('error' in readStudioDoc(JSON.stringify({ ...candidate, nodes: [...doc.nodes, { ...exact, floorThickness: '3' }] })));
+  assert.ok('error' in readStudioDoc(JSON.stringify({ ...candidate, nodes: [...doc.nodes, { ...exact, join: 'arc' }] })));
+
+  const state = { doc, bodies: evaluated.bodies };
+  const evaluate = async (next: StudioDoc) => evaluateDoc(next, 2);
+  const arg = { action: 'command', command: 'shell', faces: ['n1.top'], values };
+  for (const invalid of [arg, { ...arg, faces: ['n1.bottom'], expectedRevision: revisionOf(doc) },
+    { ...arg, values: { ...values, floorThickness: '3' }, expectedRevision: revisionOf(doc) }]) {
+    const refused = await dispatchTool(state, 'features', invalid, async () => assert.fail('a refused floor must not evaluate'));
+    assert.ok(refused.isError && !refused.changed, refused.content);
+    assert.equal(refused.state.doc, doc);
+  }
+  const outcome = await dispatchTool(state, 'features', { ...arg, expectedRevision: revisionOf(doc) }, evaluate);
+  assert.ok(!outcome.isError && outcome.changed, outcome.content);
+  const agent = outcome.state.doc.nodes[2];
+  assert.ok(agent.kind === 'shell');
+  assert.deepEqual([agent.parent, agent.open, agent.thickness, agent.floorThickness, agent.join],
+    [exact.parent, exact.open, exact.thickness, exact.floorThickness, exact.join]);
+  const preview = evaluateDoc(candidate, 2), next = evaluateDoc(read.doc, 3);
+  assert.ok(preview.ok && next.ok);
+  const cavityArea = (40 - 4) * (10 - 4) + (10 - 4) * (30 - 10) + 4 - Math.PI;
+  assert.ok(Math.abs(preview.bodies[0].volume! - (12000 - cavityArea * 17)) < 1e-7);
+  assert.ok(Math.abs(next.bodies[0].volume! - preview.bodies[0].volume! - cavityArea) < 1e-7);
+  assert.ok(Math.abs(outcome.state.bodies[0].volume! - preview.bodies[0].volume!) < 1e-7);
 });

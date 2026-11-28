@@ -531,6 +531,10 @@ export function friendly(message: string, kind?: string): FriendlyError {
       hint: 'Reduce Angle or move the neutral plane so both caps keep a positive radius.', detail, ...extra };
   if (code === 'PARAMETER' && detail === 'The wall thicknesses leave no cavity in this box.')
     return { title: 'Wall thicknesses leave no cavity', hint: 'Reduce the thickness of one or more walls.', detail, ...extra };
+  if (code === 'PARAMETER' && detail === 'The Shell floor thickness leaves no cavity height.')
+    return { title: 'The Shell floor is too thick', hint: 'Reduce Floor thickness to leave room below the opening.', detail, ...extra };
+  if (code === 'PARAMETER' && detail === 'The Shell side thickness leaves no supported L cavity.')
+    return { title: 'The Shell walls leave no supported L cavity', hint: 'Choose a Wall thickness that leaves both arms open.', detail, ...extra };
   const shellCornerLimit = code === 'PARAMETER' ? /^Shell join wall thickness must be less than (\d+(?:\.\d+)?(?:e[+-]?\d+)?) mm to keep both L arms and the closed height\.$/i.exec(detail) : null;
   if (shellCornerLimit && Number.isFinite(Number(shellCornerLimit[1])) && Number(shellCornerLimit[1]) > 0)
     return { title: 'The wall is too thick', hint: `Enter Wall less than ${shellCornerLimit[1]} mm to keep the cavity open inside the L shape.`, detail, ...extra };

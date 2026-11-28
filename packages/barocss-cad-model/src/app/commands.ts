@@ -39,7 +39,7 @@ import type { BodyResult } from '../engine/evaluate';
 import { circularFilletPair, closedCircularFilletPair } from './circularFilletPair';
 import { closedFilletDragLimit } from '../engine/nativeFilletTorus';
 import { boxShellSelection, buildBoxWallShell } from './boxShellSelection';
-import { canSetShellCorner, shellCornerOptions, shellOpenFaces } from './shellCorner';
+import { canSetShellCorner, canSetShellFloor, shellCornerOptions, shellOpenFaces } from './shellCorner';
 import { ATTACHED_RIB } from './attachedRibCommand';
 import type { BearingAssemblyInput } from '../engine/bearingContext';
 import type { DisplayEdge } from '../engine/mesh';
@@ -813,8 +813,15 @@ const allCommands: Command[] = [
       const target = boxShellSelection(ctx, 'shell');
       if (!target) {
         const body = oneBody(ctx);
-        return body && canSetShellCorner(ctx.doc.nodes, refOf(body), shellOpenFaces(ctx, body))
-          ? [wall, { key: 'join', label: 'Inner corner', kind: 'choice', options: shellCornerOptions }] : [wall];
+        if (!body) return [wall];
+        const parent = refOf(body), open = shellOpenFaces(ctx, body);
+        if (!canSetShellCorner(ctx.doc.nodes, parent, open)) return [wall];
+        const corner: Field = { key: 'join', label: 'Inner corner', kind: 'choice', options: shellCornerOptions };
+        if (!canSetShellFloor(ctx.doc.nodes, parent, open)) return [wall, corner];
+        const mode: Field = { key: 'wallMode', label: 'Wall thickness', kind: 'choice',
+          options: [{ value: 'uniform', label: 'Uniform' }, { value: 'separate-floor', label: 'Separate floor' }] };
+        const floor: Field = { key: 'floorThickness', label: 'Floor thickness', kind: 'mm', min: 0.1 };
+        return [mode, wall, values?.wallMode === 'separate-floor' ? floor : corner];
       }
       const mode: Field = { key: 'wallMode', label: 'Wall thickness', kind: 'choice',
         options: [{ value: 'uniform', label: 'Uniform' }, { value: 'per-face', label: 'Per face' }] };
@@ -825,7 +832,10 @@ const allCommands: Command[] = [
       const target = boxShellSelection(ctx, 'shell');
       if (target) return { t: 2, wallMode: 'uniform', ...Object.fromEntries(target.walls.map(side => [side.key, 2])) };
       const body = oneBody(ctx);
-      return body && canSetShellCorner(ctx.doc.nodes, refOf(body), shellOpenFaces(ctx, body)) ? { t: 2, join: 'default' } : { t: 2 };
+      if (!body) return { t: 2 };
+      const parent = refOf(body), open = shellOpenFaces(ctx, body);
+      if (canSetShellFloor(ctx.doc.nodes, parent, open)) return { t: 2, join: 'default', wallMode: 'uniform', floorThickness: 2 };
+      return canSetShellCorner(ctx.doc.nodes, parent, open) ? { t: 2, join: 'default' } : { t: 2 };
     },
     // The wall: an arrow into the body from the (first) open face; deeper is thicker.
     handles: (ctx, v) => {
@@ -844,6 +854,11 @@ const allCommands: Command[] = [
       const body = ctx.bodies[selectedBodies(ctx.selection)[0]];
       const open = shellOpenFaces(ctx, body);
       const parent = refOf(body);
+      if (v.wallMode === 'separate-floor') {
+        if (!canSetShellFloor(ctx.doc.nodes, parent, open))
+          throw refusal('BAD_REFERENCE', 'Select the original top cap of one upright L extrusion for a separate Shell floor.');
+        return withNode(ctx.doc, { kind: 'shell', parent, thickness: Number(v.t), open, floorThickness: Number(v.floorThickness) });
+      }
       if (join !== undefined && !canSetShellCorner(ctx.doc.nodes, parent, open))
         throw refusal('BAD_REFERENCE', 'Choose an inner corner on an original upright L-shaped extrusion, closed or with one end cap open.');
       return withNode(ctx.doc, { kind: 'shell', parent, thickness: Number(v.t), open, ...(join === undefined ? {} : { join }) });
