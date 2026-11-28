@@ -20,7 +20,7 @@ import { evaluateCurve, curveDomain, evaluateSurface, surfaceDomain, surfaceEval
 import type { Curve, FacetPatch, Point, Surface } from '../types.js';
 import { add as add3, cross, dot, scale as scale3, sub, unit } from '../core/vec3.js';
 import { surfaceD1Evaluator } from '../core/derivatives.js';
-import { balancedQuadraticStations } from './balanced-quadratic-stations.js';
+import { rationalEdgeStations } from './compressed-edge-stations.js';
 
 export interface BrepMeshFace { readonly faceId: string; readonly kind: 'planar' | 'ruled' | 'trimmed' | 'facet'; readonly vertexOffset: number; readonly vertexCount: number; readonly indexOffset: number; readonly indexCount: number }
 export interface BrepMeshEdge { readonly edgeId: string; readonly points: Float64Array }
@@ -91,7 +91,7 @@ function edgeParameters(curve: Curve, perQuarter: number): number[] {
     turning += Math.acos(Math.max(-1, Math.min(1, dot(a, b))));
   }
   const n = Math.max(2, Math.ceil(turning / (Math.PI / 2) * perQuarter));
-  return balancedQuadraticStations(curve, n + 1) ?? Array.from({ length: n + 1 }, (_, k) => k === n ? t1 : t0 + (t1 - t0) * k / n);
+  return rationalEdgeStations(curve, n + 1) ?? Array.from({ length: n + 1 }, (_, k) => k === n ? t1 : t0 + (t1 - t0) * k / n);
 }
 
 /**

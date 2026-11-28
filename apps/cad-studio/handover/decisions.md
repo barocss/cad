@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D2250: [D2250](notes/represented-native-cap-stations-2026-11-29/README.md), #777. Keep the full elevated and inserted cap representations through strict validation, mesh, projection and Studio reopen.
+
 - D2249: [D2249](notes/smooth-loft-outline-visibility-2026-11-29/README.md), #769. Bind the original smooth Loft seam and retain the complete sampled Front and Right outlines with real cover.
 
 - D2248: [D2248](notes/agent-native-vertex-move-2026-11-29/README.md), #629. Move one original native vertex to another through local Agent proposal and verify explicit desktop approval and native reopen.
