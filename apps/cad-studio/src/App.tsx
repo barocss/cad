@@ -21,11 +21,10 @@ import { useFilletEndpointDisplay } from './state/useFilletEndpointDisplay';
 import { createCommandReferencePicking, type CommandPickScope } from './app/commandReferencePicking';
 import { retireStudioNotice, type StudioNotice } from './app/studioNotice';
 import { useStudioPartInsertion } from './app/studioPartInsertion';
-import { filletStationInputKey } from './app/filletEndpoints';
-import { readFilletPickedEdgeHighlight, type FilletPickedEdgeRequest } from './app/filletPickedEdgeHighlight';
+import { readFilletPickedEdgeHighlight } from './app/filletPickedEdgeHighlight';
 import { useSketchReopenCamera } from './sketch/useSketchReopenCamera';
 import { useBrowserActions } from './app/useBrowserActions';
-import { createCommandApplyQueue } from './state/commandApply';
+import { useStudioCommandSession } from './state/useStudioCommandSession';
 import { useStudioCommandApply } from './state/useStudioCommandApply';
 import { sketchOffsetTarget } from './app/sketchOffsetTarget';
 import { useStudioReferenceReview } from './app/useStudioReferenceReview';
@@ -118,7 +117,7 @@ import { createStudioDocumentEntryActions } from './app/studioDocumentEntryActio
 import { createStudioChatTurnActions } from './app/studioChatTurnActions';
 import { createStudioParameterActions } from './app/studioParameterActions';
 import { createStudioAssemblyCommits, createStudioAssemblyFeatureActions } from './app/studioAssemblyChanges';
-import { activeKey, type Active } from './app/commandState';
+import type { Active } from './app/commandState';
 import { useStudioShapePlacement } from './app/useStudioShapePlacement';
 import { emptySel, NO_INSTANCES, BROWSER_PLACEMENT, PALETTE_EXTRA } from './app/studioConstants';
 import { routeMessage } from './app/routeSession';
@@ -247,7 +246,6 @@ import { editInPlaceActions } from './app/editInPlaceActions';
 import { BASE } from '@barocss/cad-model/assembly/mates';
 import type { DirectGeometry } from '@barocss/cad-model/engine/direct';
 import { directNow, loadDirect } from '@barocss/cad-model/engine/directModule';
-import { FontUpload } from './app/fontUpload';
 import { boundsOf } from '@barocss/cad-model/engine/bounds';
 import { defaultRender, type RenderCamera, type RenderSettings } from '@barocss/cad-model/engine/render';
 import { downloadBytes } from './ui/files';
@@ -389,25 +387,8 @@ export function App() {
   const [selection, setSelection] = useState<Selection>(emptySel);
   const cutSourceIntent = useRef<{ doc: StudioDoc; selection: Selection; index: number } | null>(null);
   const [pick, setPick] = useState<Vec3 | null>(null);
-  // (R1d: the running command outside React state — see activeKey. The HUD subscribes to all of it.)
-  const activeStore = useMemo(() => createValueStore<Active | null>(null), []), setActive = activeStore.set;
-  const commandApply = useMemo(createCommandApplyQueue, []);
-  const fontUpload = useMemo(() => new FontUpload(), []);
-  useEffect(() => {
-    const sync = () => fontUpload.sync(activeStore.get()?.ctx ?? null);
-    sync();
-    const unsubscribe = activeStore.subscribe(sync);
-    return () => { unsubscribe(); fontUpload.sync(null); };
-  }, [activeStore, fontUpload]);
-  const hudValues = useRef<Values | null>(null);
-  useSyncExternalStore(activeStore.subscribe, () => activeKey(activeStore.get(), hudValues.current));
-  useSyncExternalStore(activeStore.subscribe, () => filletStationInputKey(activeStore.get()));
-  const active = activeStore.get();
-  const [filletPickedEdgeRequest, setFilletPickedEdgeRequest] = useState<FilletPickedEdgeRequest | null>(null);
-  useEffect(() => activeStore.subscribe(() => {
-    const current = activeStore.get();
-    setFilletPickedEdgeRequest(request => request && (!current || request.owner.cmd !== current.cmd || request.owner.ctx !== current.ctx) ? null : request);
-  }), [activeStore]);
+  const { active, activeStore, setActive, commandApply, fontUpload, hudValues,
+    filletPickedEdgeRequest, setFilletPickedEdgeRequest } = useStudioCommandSession();
   const [previewBodies, setPreviewBodies] = useState<BodyResult[] | null>(null);
   /**
    * A Move or Rotate gizmo drag: the body follows at once by this matrix on the evaluated part; once let

@@ -1,13 +1,13 @@
 # CAD roadmap — current status and execution order
 
-Updated 2026-11-28 · Priority authority: D520 · Latest delivery: D2168 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
+Updated 2026-11-28 · Priority authority: D520 · Latest delivery: D2169 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
 
 This is the only current status index. Detailed tracks define acceptance; the 34 stable row pages retain scope and issue navigation. Immutable decision notes retain results. Do not append chronological status paragraphs here. [D520 decision](notes/cad-roadmap-replan-2026-11-04/README.md) supersedes D445 execution order and historical next-item text, while retaining its safeguards and bounded proofs.
 
 ## Now and next
 
-- **Current position:** [D2168](notes/four-opening-box-wall-shell-2026-11-28/README.md), P5 rows 07, 16 and 30. Per-face Shell opens four original rectangular-box faces and retains two independently editable adjacent walls. Opposite kept walls refuse, and desktop History and Open pass ([#13](https://github.com/barocss/cad/issues/13)).
-- **Next MAIN:** D2169, P4 rows 16 and 20. Extract the active command session from Studio App and verify current Fillet station inputs and the existing full-preview approval flow in desktop Studio.
+- **Current position:** [D2169](notes/studio-command-session-extraction-2026-11-28/README.md), P4 rows 16 and 20. Studio's active command session has its own module. Actual full-preview approval, Fillet station markers and original picked-edge feedback pass.
+- **Next MAIN:** D2170, P1 rows 04 and 16. In [#204](https://github.com/barocss/cad/issues/204), add one read-only, revision-pinned planar-face measurement to the explicitly shared current part and verify native Chrome tool execution and local MCP parity.
 - **Separate follow-ups:** Continue Studio App extraction in cohesive parts with affected desktop checks. [#608 Rendering](https://github.com/barocss/cad/issues/608) stays on HOLD. API inventory drift remains open. The issue tracker records [#126](https://github.com/barocss/cad/issues/126), [#613](https://github.com/barocss/cad/issues/613), [#152](https://github.com/barocss/cad/issues/152) and [#22](https://github.com/barocss/cad/issues/22) as closed.
 - **Active repository:** [barocss/cad](https://github.com/barocss/cad), based on `origin/main`. Fetch before work and preserve unexpected changes. The [migration record](../../../docs/migration/README.md) maps the former `local/cad-dev` history and issue numbers.
 - **Evidence correction:** D482 records2167 PASS/0 FAIL/2 existing SKIP in a later full-kernel run than D433. Neither result is a new full-suite PASS at this audit HEAD. [D482 record](notes/vertical-contact-refusal-2026-11-04/README.md).
