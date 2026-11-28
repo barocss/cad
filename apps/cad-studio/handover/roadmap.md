@@ -1,13 +1,13 @@
 # CAD roadmap — current status and execution order
 
-Updated 2026-11-29 · Priority authority: D520 · Latest delivery: D2240 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
+Updated 2026-11-29 · Priority authority: D520 · Latest delivery: D2241 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
 
 This is the only current status index. Detailed tracks define acceptance; the 34 stable row pages retain scope and issue navigation. Immutable decision notes retain results. Do not append chronological status paragraphs here. [D520 decision](notes/cad-roadmap-replan-2026-11-04/README.md) supersedes D445 execution order and historical next-item text, while retaining its safeguards and bounded proofs.
 
 ## Now and next
 
-- **Current position:** [D2240](notes/agent-cardinal-edge-rotate-2026-11-29/README.md), P1 rows 04 and 31. A revision-pinned local Agent proposal now rotates one standalone solid about its exact native cardinal edge. Desktop approval, Undo/Redo and project reopen passed.
-- **Next MAIN:** D2241, P2 rows 11 and 30. Reproduce the original blind-drill seam in the top drawing with hidden lines off ([#775](https://github.com/barocss/cad/issues/775)). If current main reproduces it, correct the native projection and verify real rims and true edges in Studio.
+- **Current position:** [D2241](notes/blind-drill-cone-projection-2026-11-29/README.md), P2 rows 11 and 30. Studio Top drawings and exported SVG omit the false blind-drill cone seam. The original rim, true silhouettes and native project reopen passed.
+- **Next MAIN:** D2242, P0 rows 13 and 30. Isolate the two current rounded-box STEP round-trip area failures against the independent rounded-box area. Correct the responsible calculation or transfer before changing unrelated behavior.
 - **Separate follow-ups:** Continue Studio App extraction in cohesive parts with affected desktop checks. [#608 Rendering](https://github.com/barocss/cad/issues/608) stays on HOLD. API inventory drift remains open. The issue tracker records [#126](https://github.com/barocss/cad/issues/126), [#613](https://github.com/barocss/cad/issues/613), [#152](https://github.com/barocss/cad/issues/152) and [#22](https://github.com/barocss/cad/issues/22) as closed.
 - **Active repository:** [barocss/cad](https://github.com/barocss/cad), based on `origin/main`. Fetch before work and preserve unexpected changes. The [migration record](../../../docs/migration/README.md) maps the former `local/cad-dev` history and issue numbers.
 - **Evidence correction:** D482 records2167 PASS/0 FAIL/2 existing SKIP in a later full-kernel run than D433. Neither result is a new full-suite PASS at this audit HEAD. [D482 record](notes/vertical-contact-refusal-2026-11-04/README.md).

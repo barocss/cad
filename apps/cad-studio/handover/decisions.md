@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D2241: [D2241](notes/blind-drill-cone-projection-2026-11-29/README.md), #775. Bind the native cone at an interior generator point and verify true silhouettes and Top drawing ink.
+
 - D2240: [D2240](notes/agent-cardinal-edge-rotate-2026-11-29/README.md). Reuse exact cardinal-edge admission for a local Agent Rotate proposal and verify approval, fixed endpoints and native project reopen.
 
 - D2120: [Verify Union at one exact sphere-box vertex contact](notes/sphere-box-point-union-2026-11-28/README.md), #7. Match both actual Studio pick orders, two native solids, independent mass properties and exact fresh Open.

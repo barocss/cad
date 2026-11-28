@@ -13,6 +13,7 @@
 import { faceGeometry } from './analytic-boolean.js';
 import { authoredBrepEdgeRadii } from './authored-circle-nominal.js';
 import type { Brep } from './brep-core.js';
+import { sharedConeMeridianNormal } from './brep-hidden-cone-meridian.js';
 import { circleOf, tessellateBrep } from './brep-tessellate.js';
 import { hiddenGeneratorAlias, type HiddenGenerator, type HiddenGeneratorRun } from './brep-hidden-alias.js';
 import type { Point } from '../types.js';
@@ -196,26 +197,33 @@ export function projectBrepHiddenLines(breps: readonly Brep[], view: HiddenLineV
       if (fs.length === 2) {
         const ga = geomOf(fs[0]), gb = geomOf(fs[1]);
         if (ga.kind === 'plane' && gb.kind === 'plane' && Math.abs(dot(ga.n, gb.n)) > 1 - 1e-9 && Math.abs(dot(sub(ga.o, gb.o), ga.n)) < 1e-6 * size) continue;
-        const k = Math.floor(pts.length / 6) * 3, mid: Point = [pts[k], pts[k + 1], pts[k + 2]];
-        // A smooth joint: the faces' normals agree there (exactly for planes and cylinders; within a
-        // facet's turn for tessellation normals). It is drawn only where the surface turns away from
-        // the viewer along it (a silhouette on the joint).
-        const exact = (g: ReturnType<typeof faceGeometry>) => g.kind === 'plane' || g.kind === 'cylinder';
-        const na = normalOn(ga, fs[0], mid), nb = normalOn(gb, fs[1], mid);
-        // Facets of a mesh solid (a modelled thread, an STL) join smoothly within 20°: drawn only where
-        // the solid's outline runs along them (one facet towards the viewer, the other away).
-        const facets = meshy(faceById.get(fs[0])!) && meshy(faceById.get(fs[1])!);
-        if (facets && na && nb && dot(unit(na), unit(nb)) > Math.cos(Math.PI / 9)) {
-          if (Math.sign(dot(na, toward)) !== Math.sign(dot(nb, toward))) kind = 'silhouette';
-          else if (options.tangentEdges) kind = 'tangent';
-          else continue;
-        }
-        const within = exact(ga) && exact(gb) ? Math.PI / 180 : 1.5 * Math.PI / 2 / perQuarter;
-        if (kind === 'edge' && na && nb && Math.abs(dot(unit(na), unit(nb))) > Math.cos(within)) {
-          // (Between other surfaces, the silhouettes found on the faces run on across the joint.)
-          if (exact(ga) && exact(gb) && Math.abs(dot(unit(na), toward)) < 1e-6) kind = 'silhouette';
-          else if (options.tangentEdges && !sameSurface(ga, gb, faceById.get(fs[0])!.name ?? fs[0], faceById.get(fs[1])!.name ?? fs[1])) kind = 'tangent';
-          else continue;
+        const coneNormal = pts.length === 6 && ga.kind === 'other' && gb.kind === 'other'
+          ? sharedConeMeridianNormal(edge.curve, faceById.get(fs[0])!, faceById.get(fs[1])!, size) : undefined;
+        if (coneNormal) {
+          if (Math.abs(dot(coneNormal, toward)) >= 1e-6) continue;
+          kind = 'silhouette';
+        } else {
+          const k = Math.floor(pts.length / 6) * 3, mid: Point = [pts[k], pts[k + 1], pts[k + 2]];
+          // A smooth joint: the faces' normals agree there (exactly for planes and cylinders; within a
+          // facet's turn for tessellation normals). It is drawn only where the surface turns away from
+          // the viewer along it (a silhouette on the joint).
+          const exact = (g: ReturnType<typeof faceGeometry>) => g.kind === 'plane' || g.kind === 'cylinder';
+          const na = normalOn(ga, fs[0], mid), nb = normalOn(gb, fs[1], mid);
+          // Facets of a mesh solid (a modelled thread, an STL) join smoothly within 20°: drawn only where
+          // the solid's outline runs along them (one facet towards the viewer, the other away).
+          const facets = meshy(faceById.get(fs[0])!) && meshy(faceById.get(fs[1])!);
+          if (facets && na && nb && dot(unit(na), unit(nb)) > Math.cos(Math.PI / 9)) {
+            if (Math.sign(dot(na, toward)) !== Math.sign(dot(nb, toward))) kind = 'silhouette';
+            else if (options.tangentEdges) kind = 'tangent';
+            else continue;
+          }
+          const within = exact(ga) && exact(gb) ? Math.PI / 180 : 1.5 * Math.PI / 2 / perQuarter;
+          if (kind === 'edge' && na && nb && Math.abs(dot(unit(na), unit(nb))) > Math.cos(within)) {
+            // (Between other surfaces, the silhouettes found on the faces run on across the joint.)
+            if (exact(ga) && exact(gb) && Math.abs(dot(unit(na), toward)) < 1e-6) kind = 'silhouette';
+            else if (options.tangentEdges && !sameSurface(ga, gb, faceById.get(fs[0])!.name ?? fs[0], faceById.get(fs[1])!.name ?? fs[1])) kind = 'tangent';
+            else continue;
+          }
         }
       }
       const name = (options.prefixes?.[bi] ?? '') + (edge.name ?? edge.id) + (kind === 'silhouette' ? '~sil' : ''), c = edge.curve, into = kind === 'silhouette' ? silhouettes : candidates;

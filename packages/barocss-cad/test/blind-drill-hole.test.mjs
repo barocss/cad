@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   blindDrillPointHeight, brepMassProperties, CadPartError, checkBrep, curveDomain, evaluateCadPart, evaluateCurve,
-  faceGeometry, loadCadPart, massPropertiesOf, reevaluate, revolveMassProperties, revolveProfile, saveCadPart,
+  faceGeometry, loadCadPart, massPropertiesOf, projectBrepHiddenLines, reevaluate, revolveMassProperties, revolveProfile, saveCadPart,
   surfaceDomain, transformBrep,
 } from '../dist/index.js';
 import { evaluateSurfaceD1 } from '../dist/core/derivatives.js';
@@ -146,4 +146,68 @@ test('unsupported faces, rims, source history and extra shape modes fail without
   refused(input => { input.features[1].draft = 5; }, 'CAPABILITY');
   refused(input => { input.features[0].holes = [[{ kind: 'arc', center: [24, 16], start: [25, 16], direction: 'ccw' }]]; }, 'CAPABILITY');
   refused(input => { input.features.splice(2, 0, { id: 'moved', kind: 'translate', target: 'stock', offset: [0, 0, 0] }); input.features.at(-1).target = 'moved'; }, 'CAPABILITY');
+});
+
+test('the blind-drill Top projection preserves the complete entrance and omits the smooth cone meridians', () => {
+  const { brep } = verify(evaluateCadPart(doc()));
+  const sides = brep.faces.filter(face => face.name.startsWith('drill.point'));
+  const owners = new Set(sides.map(face => face.id));
+  const faceByLoop = new Map(brep.loops.map(loop => [loop.id, loop.face]));
+  const meridians = brep.edges.filter(edge => {
+    const uses = brep.coedges.filter(use => use.edge === edge.id);
+    return uses.length === 2 && uses.every(use => owners.has(faceByLoop.get(use.loop)));
+  });
+  assert.equal(meridians.length, 2);
+  const meridianIds = new Set(meridians.map(edge => edge.id));
+  const meridianNames = new Set(meridians.map(edge => edge.name));
+  const renamed = {
+    ...brep,
+    faces: brep.faces.map(face => owners.has(face.id) ? { ...face, name: 'unrelated-' + face.id } : face),
+    edges: brep.edges.map(edge => meridianIds.has(edge.id) ? {
+      ...edge, vertices: [...edge.vertices].reverse(),
+      curve: { ...edge.curve, controlPoints: [...edge.curve.controlPoints].reverse() },
+    } : edge),
+    coedges: brep.coedges.map(use => meridianIds.has(use.edge) ? {
+      ...use, sense: use.sense === 'forward' ? 'reversed' : 'forward',
+    } : use),
+  };
+  assert.ok(checkBrep(renamed, { strict: true }).valid);
+  const view = { toward: [0, 0, 1], up: [0, 1, 0] };
+  for (const source of [brep, renamed]) for (const segmentsPerQuarter of [6, 12, 24]) for (const tangentEdges of [false, true]) {
+    const { edges } = projectBrepHiddenLines([source], view, { segmentsPerQuarter, tangentEdges });
+    assert.ok(edges.every(edge => !meridianNames.has(edge.name.replace(/~sil$/, ''))));
+    const rims = edges.filter(edge => /^drill\.wall#\d+\|stock\.top$/.test(edge.name));
+    assert.equal(rims.length, 2);
+    let sweep = 0;
+    for (const rim of rims) for (const { curve, visible } of rim.pieces) {
+      assert.ok(visible);
+      assert.equal(curve.kind, 'arc');
+      near(curve.center[0], 10);
+      near(curve.center[1], 9);
+      near(Math.hypot(...curve.u), 4);
+      near(Math.hypot(...curve.v), 4);
+      sweep += curve.t1 - curve.t0;
+    }
+    near(sweep, 2 * Math.PI);
+    assert.equal(edges.filter(edge => edge.kind === 'line' && edge.pieces.some(piece => piece.visible)).length, 4);
+  }
+});
+
+test('an exposed cone keeps its true Front silhouettes and sharp base projection', () => {
+  const h = blindDrillPointHeight(4);
+  const native = revolveProfile({ id: 'cone', profile: [[0, 0], [4, 0], [0, h]].map(start => ({ kind: 'line', start })),
+    axis: { origin: [0, 0], direction: [0, 1] }, angle: 360 });
+  const cone = transformBrep(native, { matrix: [1, 0, 0, 0, 0, -1, 0, 1, 0], offset: [0, 0, 0] });
+  assert.ok(checkBrep(cone, { strict: true }).valid);
+  for (const tangentEdges of [false, true]) {
+    const { edges } = projectBrepHiddenLines([cone], { toward: [0, -1, 0], up: [0, 0, 1] }, { tangentEdges });
+    const visible = edges.flatMap(edge => edge.pieces.filter(piece => piece.visible && piece.ink !== false).map(piece => ({ edge, curve: piece.curve })));
+    const silhouettes = visible.filter(({ edge }) => edge.kind === 'silhouette');
+    assert.equal(silhouettes.length, 2);
+    for (const x of [-4, 4]) assert.ok(silhouettes.some(({ curve }) => curve.kind === 'line' &&
+      [curve.a, curve.b].some(p => Math.hypot(p[0] - x, p[1]) < 1e-9) &&
+      [curve.a, curve.b].some(p => Math.hypot(p[0], p[1] - h) < 1e-9)));
+    assert.ok(visible.some(({ edge, curve }) => edge.kind === 'circle' && curve.kind === 'line' &&
+      Math.abs(Math.hypot(curve.a[0] - curve.b[0], curve.a[1] - curve.b[1]) - 8) < 1e-9));
+  }
 });
