@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { brepMassProperties, brepSurfaceArea, buildBrep, checkBrep, elevateBezierCurveDegree, exportStep, importStep, lineCurve, transformBrep } from '../dist/index.js';
+import { brepMassProperties, brepSurfaceArea, buildBrep, checkBrep, elevateBezierCurveDegree, exportStep, importStep, lineCurve, projectBrepHiddenLines, transformBrep } from '../dist/index.js';
 import { balancedQuadraticRule } from '../dist/brep/balanced-quadratic-stations.js';
 import { compressedChordRules } from '../dist/brep/compressed-edge-stations.js';
 import { insertCurveKnotCoefficientsTrusted } from '../dist/nurbs/curves/curve-knot-insertion.js';
@@ -137,4 +137,32 @@ test('an unrepresentable cubic quadrature station declines the whole change of c
   const rule = {x:[0.25,0.5,0.75], w:[1/3,1/3,1/3]};
   assert.ok(compressedChordRules(curve, rule));
   assert.equal(compressedChordRules({...curve, knots:curve.knots.map(k => k + 2**40)}, rule), null);
+});
+
+test('the elevated arch retains its sharp exposed rails in default and tangent views', () => {
+  const source = archPrism([1e-6, 1, 1e6], false, curve => elevateBezierCurveDegree(curve, { targetDegree: 3 }).elevated);
+  const original = JSON.stringify(source);
+  check(source);
+  // Every positive-weight source pole has Y >= 0. The front and iso rays leave this half-space.
+  assert.ok(source.faces.every(face => face.surface.controlPoints.every(row => row.every(p => p[1] >= 0))));
+  const views = [
+    [{ toward: [0, -1, 0], up: [0, 0, 1] }, ['rail-a', 'rail-b']],
+    [{ toward: [1, -1, 1], up: [0, 0, 1] }, ['rail-a', 'rail-b']],
+    [{ toward: [1, 0, 0], up: [0, 0, 1] }, ['rail-b']],
+    [{ toward: [0, 0, 1], up: [0, 1, 0] }, []],
+  ];
+  for (const tangentEdges of [false, true]) for (const [view, expected] of views) {
+    const { edges } = projectBrepHiddenLines([source], view, { tangentEdges, segmentsPerQuarter: 12 });
+    const rails = edges.filter(edge => /^rail-[ab]$/.test(edge.name));
+    const visible = rails.filter(edge => edge.pieces.some(piece => piece.visible && piece.ink !== false));
+    assert.deepEqual(visible.map(edge => edge.name).sort(), expected);
+    assert.ok(rails.every(edge => edge.kind === 'line' && !edge.tangent));
+    for (const edge of visible) {
+      const x = edge.name === 'rail-a' ? 0 : 100;
+      assert.deepEqual(edge.ends, [[x, 0, 0], [x, 0, 15]]);
+      assert.equal(edge.pieces.length, 1);
+      assert.equal(edge.pieces[0].curve.kind, 'line');
+    }
+  }
+  assert.equal(JSON.stringify(source), original);
 });

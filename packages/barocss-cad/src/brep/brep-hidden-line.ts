@@ -251,7 +251,11 @@ export function projectBrepHiddenLines(breps: readonly Brep[], view: HiddenLineV
             else continue;
           }
           const within = exact(ga) && exact(gb) ? Math.PI / 180 : 1.5 * Math.PI / 2 / perQuarter;
-          if (kind === 'edge' && na && nb && Math.abs(dot(unit(na), unit(nb))) > Math.cos(within)) {
+          // The plane and sampled surface normals both carry the face sense. Near-opposite normals
+          // on this mixed joint make a sharp fold. The analytic cylinder normal above is unsigned.
+          const planeToSampled = (ga.kind === 'plane' && gb.kind === 'other') || (ga.kind === 'other' && gb.kind === 'plane');
+          const alignment = na && nb ? dot(unit(na), unit(nb)) : 0;
+          if (kind === 'edge' && na && nb && (planeToSampled ? alignment : Math.abs(alignment)) > Math.cos(within)) {
             // (Between other surfaces, the silhouettes found on the faces run on across the joint.)
             if (exact(ga) && exact(gb) && Math.abs(dot(unit(na), toward)) < 1e-6) kind = 'silhouette';
             else if (options.tangentEdges && !sameSurface(ga, gb, faceById.get(fs[0])!.name ?? fs[0], faceById.get(fs[1])!.name ?? fs[1])) kind = 'tangent';

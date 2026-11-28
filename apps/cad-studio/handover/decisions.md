@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D2259: [D2259](notes/sharp-native-arch-rails-2026-11-29/README.md), #779. Retain both sharp native arch rails in default projection and both STEP representations in actual Studio.
+
 - D2258: [D2258](notes/studio-box-width-from-corners-2026-11-29/README.md), #629. Match Box width through two actual native viewport corner picks and the existing Studio preview session.
 
 - D2257: [D2257](notes/agent-box-reference-width-2026-11-29/README.md), #629. Match the original Box width to an exact second Box corner through local Agent proposal and Studio approval.
