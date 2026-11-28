@@ -19,6 +19,7 @@ import type { FacetPatch } from '../types.js';
 import { cross, dot, sub } from '../core/vec3.js';
 import { gauss } from '../core/quadrature.js';
 import { balancedQuadraticRule } from './balanced-quadratic-stations.js';
+import { compressedChordRules, type SpanRule } from './compressed-edge-stations.js';
 
 type XY = readonly [number, number];
 /** Dunavant's degree-8 rule on the unit triangle (16 points): barycentric (a, b, c) and weight (sum 1). */
@@ -121,10 +122,11 @@ function planarIntegrals(brep: Brep, face: BrepFace, n: Point, o: Point, maps: M
   for (const loopId of face.loops) for (const cid of loops.get(loopId)!.coedges) {
     const co = coedges.get(cid)!, curve = edges.get(co.edge)!.curve, [t0, t1] = curveDomain(curve), d1 = curveD1Evaluator(curve);
     const knots = [t0, ...curve.knots.filter(k => k > t0 && k < t1), t1].filter((k, i, all) => i === 0 || k > all[i - 1]);
-    const sense = co.sense === 'forward' ? 1 : -1, rule = balancedQuadraticRule(curve, G12);
-    if (!rule) return null;
+    const sense = co.sense === 'forward' ? 1 : -1, ordinary = balancedQuadraticRule(curve, G12);
+    const compressed = compressedChordRules(curve, G12);
+    if (!ordinary || compressed === null) return null;
     for (let k = 0; k + 1 < knots.length; k++) {
-      const a = knots[k], b = knots[k + 1];
+      const a = knots[k], b = knots[k + 1], rule = compressed?.[k] ?? ordinary;
       rule.x.forEach((x, g) => {
         const { point, derivative } = d1(a + (b - a) * x), d = sub(point, o), s = dot(d, e1), t = dot(d, e2), dt = dot(derivative, e2) * (b - a) * rule.w[g] * sense;
         // H(s, t)·dt: the field integrated across from s = 0.
@@ -749,11 +751,12 @@ function patchIntegrals(face: BrepFace, I: number[]): boolean {
     ? balancedQuadraticRule({ degree: S.degreeU, knots: S.knotsU, weights: S.weights.map(row => row[0]) }, uRule) : uRule;
   const gv = rational && S.degreeV === 2 && S.degreeU === 1 && S.weights.length === 2 && S.weights[0].length === 3 && S.weights[0].every((w, j) => w === S.weights[1][j])
     ? balancedQuadraticRule({ degree: S.degreeV, knots: S.knotsV, weights: S.weights[0] }, vRule) : vRule;
-  if (!gu || !gv) return false;
+  const cu = ruledChordRules(S, false, uRule), cv = ruledChordRules(S, true, vRule);
+  if (!gu || !gv || cu === null || cv === null) return false;
   // (Batched: each direction's basis values and first derivatives at its Gauss points worked out once per span; the
   // poles kept homogeneous in one array; the u sums made once per Gauss point in u and reused along v. No evaluator
   // call, validation or allocation per point: a 20k-span SubD body in a fraction of a second.)
-  const bu = spanBases(S.knotsU, S.degreeU, spans(S.knotsU, U), gu.x), bv = spanBases(S.knotsV, S.degreeV, spans(S.knotsV, V), gv.x);
+  const bu = spanBases(S.knotsU, S.degreeU, spans(S.knotsU, U), gu, cu), bv = spanBases(S.knotsV, S.degreeV, spans(S.knotsV, V), gv, cv);
   // Center before weighting and column sums: late subtraction cannot recover a tiny derivative
   // lost between large absolute homogeneous coordinates. Native poles remain untouched.
   const nu = S.controlPoints.length, nv = S.controlPoints[0].length, Pw = new Float64Array(4 * nu * nv);
@@ -761,24 +764,45 @@ function patchIntegrals(face: BrepFace, I: number[]): boolean {
   const p = S.degreeU, q = S.degreeV, R = new Float64Array(4 * (q + 1)), Ru = new Float64Array(4 * (q + 1));
   for (let a = 0; a < bu.length; a++) {
     const A = bu[a];
-    for (let i = 0; i < gu.x.length; i++) for (let b = 0; b < bv.length; b++) {
+    for (let i = 0; i < A.weights.length; i++) for (let b = 0; b < bv.length; b++) {
       const B = bv[b];
       uSums(Pw, nv, A.first, B.first, p, q, A.N, A.D, i, R, Ru);
-      for (let j = 0; j < gv.x.length; j++) patchPoint(I, R, Ru, B.N, B.D, j, q, sign * gu.w[i] * gv.w[j] * A.length * B.length);
+      for (let j = 0; j < B.weights.length; j++) patchPoint(I, R, Ru, B.N, B.D, j, q, sign * A.weights[i] * B.weights[j] * A.length * B.length);
     }
   }
   return true;
 }
+/** The same native change of coordinate can be used on both translated sides of a ruled patch. */
+function ruledChordRules(surface: Surface, alongV: boolean, rule: SpanRule) {
+  const degree = alongV ? surface.degreeV : surface.degreeU, transverse = alongV ? surface.degreeU : surface.degreeV;
+  if (transverse !== 1 || (degree !== 2 && degree !== 3)) return;
+  const transverseCount = alongV ? surface.weights.length : surface.weights[0].length;
+  if (transverseCount !== 2) return;
+  const count = alongV ? surface.weights[0].length : surface.weights.length;
+  if (count <= 3 || count > 13) return;
+  const point = (i: number, j: number) => alongV ? surface.controlPoints[j][i] : surface.controlPoints[i][j];
+  const weight = (i: number, j: number) => alongV ? surface.weights[j][i] : surface.weights[i][j];
+  const offset = sub(point(0, 1), point(0, 0)), controlPoints: Point[] = [], weights: number[] = [];
+  for (let i = 0; i < count; i++) {
+    const p = point(i, 0);
+    if (weight(i, 0) !== weight(i, 1) || sub(point(i, 1), p).some((value, j) => value !== offset[j])) return;
+    controlPoints.push(p);
+    weights.push(weight(i, 0));
+  }
+  return compressedChordRules({ degree, knots: alongV ? surface.knotsV : surface.knotsU, controlPoints, weights }, rule);
+}
+
 /** One span's basis values N and first derivatives D (p + 1 each) at every Gauss point, and its first pole index. */
-interface SpanBasis { first: number; length: number; N: Float64Array; D: Float64Array }
-function spanBases(knots: readonly number[], p: number, edges: readonly number[], x: readonly number[]): SpanBasis[] {
+interface SpanBasis { first: number; length: number; N: Float64Array; D: Float64Array; weights: readonly number[] }
+function spanBases(knots: readonly number[], p: number, edges: readonly number[], rule: SpanRule, mapped?: SpanRule[]): SpanBasis[] {
   const out: SpanBasis[] = [], left = new Float64Array(p + 1), right = new Float64Array(p + 1), ndu = new Float64Array((p + 1) * (p + 1));
   for (let a = 0; a + 1 < edges.length; a++) {
     const t0 = edges[a], length = edges[a + 1] - t0;
+    const { x, w } = mapped?.[a] ?? rule;
     let k = p; while (k + 1 < knots.length - p - 1 && knots[k + 1] <= t0) k++;
     const N = new Float64Array(x.length * (p + 1)), D = new Float64Array(x.length * (p + 1));
     for (let g = 0; g < x.length; g++) basisDerivatives(knots, p, k, t0 + length * x[g], left, right, ndu, N, D, g * (p + 1));
-    out.push({ first: k - p, length, N, D });
+    out.push({ first: k - p, length, N, D, weights: w });
   }
   return out;
 }

@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { brepMassProperties, brepSurfaceArea, buildBrep, checkBrep, exportStep, importStep, lineCurve, transformBrep } from '../dist/index.js';
+import { brepMassProperties, brepSurfaceArea, buildBrep, checkBrep, elevateBezierCurveDegree, exportStep, importStep, lineCurve, transformBrep } from '../dist/index.js';
 import { balancedQuadraticRule } from '../dist/brep/balanced-quadratic-stations.js';
+import { compressedChordRules } from '../dist/brep/compressed-edge-stations.js';
+import { insertCurveKnotCoefficientsTrusted } from '../dist/nurbs/curves/curve-knot-insertion.js';
 import { brepQuadratureIntegrals } from '../dist/brep/brep-mass-quadrature.js';
 
 const unit = [0, 0, 1, 1], quadratic = [0, 0, 0, 1, 1, 1];
@@ -10,21 +12,24 @@ const arcPoles = [[50, 5, 0], [50, 5, 15]];
 const plane = (id, controlPoints) => ({ kind: 'surface', id, degreeU: 1, degreeV: 1,
   knotsU: unit, knotsV: unit, controlPoints, weights: [[1, 1], [1, 1]] });
 
-function archPrism(weights, transpose = false) {
+function archPrism(weights, transpose = false, represent = curve => curve) {
   const { a, b, c, d } = points;
+  const source = represent({kind: 'curve', id: 'arch-base-curve', degree: 2, knots: quadratic, weights,
+    controlPoints: [a, arcPoles[0], b]});
+  const polesAt = z => source.controlPoints.map(([x, y]) => [x, y, z]);
   const edge = (id, vertices, arch) => {
     const [p, q] = vertices.map(vertex => points[vertex]);
-    const curve = arch ? { kind: 'curve', id: id + '-curve', degree: 2, knots: quadratic, weights,
-      controlPoints: [p, p[2] === 0 ? arcPoles[0] : arcPoles[1], q] } : lineCurve(id + '-curve', p, q);
+    const curve = arch ? { ...source, id: id + '-curve', controlPoints: polesAt(p[2]) } : lineCurve(id + '-curve', p, q);
     return { id, name: id, curve, vertices };
   };
   const face = (id, surface, sense, loop) => ({
     id, name: id, surface, sense, loops: [{ kind: 'outer', uses: loop.map(([edge, sense]) => ({ edge, sense })) }],
   });
-  const ruled = { kind: 'surface', id: 'arch-surface', degreeU: 2, degreeV: 1,
-    knotsU: quadratic, knotsV: unit, controlPoints: [[a, c], arcPoles, [b, d]], weights: weights.map(w => [w, w]) };
-  const side = transpose ? { ...ruled, degreeU: 1, degreeV: 2, knotsU: unit, knotsV: quadratic,
-    controlPoints: [[a, arcPoles[0], b], [c, arcPoles[1], d]], weights: [weights, weights] } : ruled;
+  const ruled = { kind: 'surface', id: 'arch-surface', degreeU: source.degree, degreeV: 1,
+    knotsU: source.knots, knotsV: unit, controlPoints: source.controlPoints.map(([x,y]) => [[x,y,0],[x,y,15]]),
+    weights: source.weights.map(w => [w,w]) };
+  const side = transpose ? { ...ruled, degreeU: 1, degreeV: source.degree, knotsU: unit, knotsV: source.knots,
+    controlPoints: [polesAt(0), polesAt(15)], weights: [source.weights, source.weights] } : ruled;
   return buildBrep({
     source: { family: 'weighted-arch-prism', id: 'arch' },
     vertices: Object.entries(points).map(([id, point]) => ({ id, point })),
@@ -110,4 +115,26 @@ test('quadrature declines a compressed chart whose interior stations cannot be r
   const curve = { degree: 2, weights: [1e-6, 1, 1e6],
     knots: [...Array(3).fill(2 ** 40), ...Array(3).fill(2 ** 40 + 1)] };
   assert.equal(balancedQuadraticRule(curve, { x: [0.25, 0.5, 0.75], w: [1 / 3, 1 / 3, 1 / 3] }), null);
+});
+
+test('the complete elevated and inserted arch keeps all analytic moments on both surface axes', () => {
+  for (const represent of [
+    curve => elevateBezierCurveDegree(curve, {targetDegree:3}).elevated,
+    curve => insertCurveKnotCoefficientsTrusted(curve, 1/8, 2).candidate,
+  ]) {
+    const source = archPrism([1e-6, 1, 1e6], false, represent);
+    const transposed = archPrism([1e6, 1, 1e-6], true, represent);
+    const reopened = importStep(exportStep(source, {validationProperties:false}));
+    const coefficients = brep => brep.edges.filter(edge => edge.curve.degree > 1)
+      .map(({curve}) => ({degree:curve.degree, knots:curve.knots, weights:curve.weights, points:curve.controlPoints}));
+    assert.deepEqual(coefficients(reopened), coefficients(source));
+    for (const brep of [source, transposed, reopened]) check(brep);
+  }
+});
+
+test('an unrepresentable cubic quadrature station declines the whole change of coordinates', () => {
+  const curve = archPrism([1e-6,1,1e6], false, source => elevateBezierCurveDegree(source, {targetDegree:3}).elevated).edges[0].curve;
+  const rule = {x:[0.25,0.5,0.75], w:[1/3,1/3,1/3]};
+  assert.ok(compressedChordRules(curve, rule));
+  assert.equal(compressedChordRules({...curve, knots:curve.knots.map(k => k + 2**40)}, rule), null);
 });
