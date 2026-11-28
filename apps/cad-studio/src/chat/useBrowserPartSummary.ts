@@ -106,6 +106,7 @@ export function useBrowserPartSummary(source: BrowserPartSummarySource | undefin
               })) };
           },
         }, { signal: controller.signal });
+        if (controller.signal.aborted) return;
         await api.registerTool({
           name: 'cad_part_measure_planes',
           description: 'Measure two unique original cardinal faces on one body of the shared part. Get the body key and revision from cad_part_summary.',

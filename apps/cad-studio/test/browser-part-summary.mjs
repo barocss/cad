@@ -105,6 +105,27 @@ await f.run(async () => {
   const shared = await f.snapshot('original-part-shared');
   assert.deepEqual([shared.history, shared.selection], [initial.history, initial.selection]);
 
+  await toggle().click();
+  await countTools(0);
+  const lateRead = await f.page.evaluateHandle(summaryName => {
+    const prototype = Object.getPrototypeOf(document.modelContext);
+    const register = prototype.registerTool;
+    const state = { abortedCalls: [] };
+    let hold = true;
+    prototype.registerTool = async function (tool, options) {
+      if (options.signal.aborted) state.abortedCalls.push(tool.name);
+      const shouldHold = hold && tool.name === summaryName;
+      if (shouldHold) hold = false;
+      await Reflect.apply(register, this, [tool, options]);
+      if (shouldHold) await new Promise(resolve => { state.release = resolve; });
+    };
+    state.restore = () => { prototype.registerTool = register; };
+    return state;
+  }, name);
+  await toggle().click();
+  await f.page.waitForFunction(state => !!state.release, lateRead);
+  const heldTool = await getTool();
+  assert.deepEqual(await invoke(heldTool), result);
   await f.openFile(nextFile, second.nodes.length);
   await f.changed(first);
   await f.same(second);
@@ -117,6 +138,15 @@ await f.run(async () => {
   await toggle().click();
   await countTools(1);
   const nextTool = await getTool(), updated = await invoke(nextTool);
+  const abortedCalls = await lateRead.evaluate(async state => {
+    state.release();
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    state.restore();
+    return state.abortedCalls;
+  });
+  assert.deepEqual(abortedCalls, []);
+  await assert.rejects(invoke(heldTool));
+  await lateRead.dispose();
   assert.notEqual(updated.revision, expected.summary.revision);
   const nextMeasure = await getTool(measureName);
   assert.equal((await invoke(nextMeasure, args)).error.code, 'stale_part');
