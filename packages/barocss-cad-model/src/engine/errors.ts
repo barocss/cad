@@ -526,6 +526,9 @@ export function friendly(message: string, kind?: string): FriendlyError {
       detail, ...extra };
   if (code === 'INPUT' && detail === 'angle must be a number of degrees, not 0, below 45 in size')
     return { ...DRAFT_ANGLE_HELP, detail, ...extra };
+  if (code === 'INPUT' && detail === 'Annular Extrude Draft must be below 45 degrees in size.')
+    return { title: 'Tube Draft angle is out of range',
+      hint: 'Use an angle greater than −45° and less than 45°. Use 0° to keep straight walls.', detail, ...extra };
   if (code === 'GEOMETRY' && detail.replace(/^B-rep: /, '') === 'circular wall draft: the draft reaches or crosses the cylinder axis')
     return { title: 'Draft reaches the cylinder axis',
       hint: 'Reduce Angle or move the neutral plane so both caps keep a positive radius.', detail, ...extra };

@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { checkBrep } from '@barocss/cad';
 import { editFields, type BindableField } from '../src/app/editFields';
+import { extrudeCommand } from '../src/app/profileCommands';
 import { emptyDoc, rectanglePart, withNode, type StudioDoc } from '../src/engine/doc';
 import { evaluateDoc, partBreps } from '../src/engine/evaluate';
 import { encodeStudioFile, readStudioFile } from '../src/engine/container';
@@ -47,4 +48,27 @@ test('Distance Height binding preserves numeric Draft 14 and matches direct heig
   const opened = await readStudioFile(encodeStudioFile(bound)); assert.ok('doc' in opened);
   assert.deepEqual(opened.doc, JSON.parse(JSON.stringify(bound))); assert.equal(native(opened.doc), native(bound));
   assert.deepEqual(doc, before);
+});
+
+test('a finished coaxial sketch makes one signed Draft Extrude and reopens with the same native result', async () => {
+  const doc = withNode(emptyDoc(), { kind: 'sketch', profile: 'circle', center: [14, 9], radius: 12,
+    holes: [[{ kind: 'arc', start: [18, 9], center: [14, 9], direction: 'ccw' }]] });
+  const ctx = { doc, bodies: [], selection: { sketches: [0], faces: [], edges: [], bodies: [] } };
+  const angle = Math.atan(1 / 16) * 180 / Math.PI;
+  assert.ok(extrudeCommand.available(ctx).ok);
+  const made = extrudeCommand.build!(ctx, { ...extrudeCommand.defaults!(ctx), h: 16, draft: angle });
+  const feature = made.nodes[1];
+  assert.ok(feature.kind === 'extrude');
+  assert.deepEqual([feature.sketch, feature.height, feature.draft], [0, 16, angle]);
+  assert.equal(made.nodes.length, 2);
+  const edited = { ...made, nodes: field(made, 'draft').set(made.nodes, -angle) };
+  for (const [candidate, volume] of [[made, 1792 * Math.PI], [edited, 2304 * Math.PI]] as const) {
+    const result = evaluateDoc(candidate, 1);
+    assert.ok(result.ok);
+    const actual = result.bodies[0].volume;
+    assert.ok(actual !== null && Math.abs(actual - volume) < 1e-7);
+    const opened = await readStudioFile(encodeStudioFile(candidate));
+    assert.ok('doc' in opened);
+    assert.equal(native(opened.doc), native(candidate));
+  }
 });

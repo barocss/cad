@@ -1,7 +1,9 @@
 // Sketch-driven solid operation cases, moved unchanged from part-model.ts. Shared geometry/state stays with its owner.
 import { BrepError, type Brep } from '../brep/brep-core.js';
+import { faceGeometry } from '../brep/analytic-boolean.js';
 import { bindAuthoredPrismaticCircle } from '../brep/authored-circle-nominal.js';
-import { prismaticFromProfile } from '../features/prismatic-solid.js';
+import { brepFromPrismatic, prismaticFromProfile } from '../features/prismatic-solid.js';
+import { draftAnnularWallsIfAdmitted } from '../features/bored-cap-offset.js';
 import { draftedExtrusion } from '../features/drafted-extrusion.js';
 import { revolveProfile, revolveMassProperties } from '../features/revolve.js';
 import { transformBrep } from '../brep/brep-transform.js';
@@ -22,13 +24,26 @@ interface ProfileSolidHelpers {
 }
 const one = (s: Solid): Result => ({ kind: 'solid', parts: [{ solid: s }] });
 
+/** The existing sketch compiler owns loop validity; this gate binds the new path to one literal original recipe. */
+function literalAnnularExtrudeSketch(reference: unknown, owner: ReturnType<Tools['ref']>): boolean {
+  const source = owner.author;
+  if (reference !== owner.id || owner.part !== null || source?.kind !== 'sketch' || source.profile !== 'circle' || source.plane !== undefined
+    || source.regions?.length || source.holes?.length !== 1 || source.holes[0].length !== 1
+    || typeof source.radius !== 'number' || !Number.isFinite(source.radius) || !(source.radius > 0)
+    || !source.center.every(value => typeof value === 'number' && Number.isFinite(value))
+    || owner.result.kind !== 'sketch' || !owner.result.authoredCircle || owner.result.frame || owner.result.regions?.length || owner.result.holes?.length !== 1) return false;
+  const hole = source.holes[0][0];
+  return hole.kind === 'arc' && hole.center.every((value, axis) => typeof value === 'number' && Number.isFinite(value) && value === source.center[axis])
+    && hole.start.every(value => typeof value === 'number' && Number.isFinite(value));
+}
+
 /** Resolve the same inputs now and return the same deferred operation closure. */
 export function profileSolidOperation(f: CadPartFeature & Record<string, unknown>, t: Tools, k: ProfileSolidHelpers): () => Result {
   const { dim, xy, ref, fail, at } = t;
   const { isRecord, CadPartLimits, placed, sweepBrep, guideInFrame } = k;
   switch (f.kind) {
     case 'extrude': {
-      const sketch = ref(f.sketch, 'sketch').result;
+      const sketchOwner = ref(f.sketch, 'sketch'), sketch = sketchOwner.result;
       if (sketch.kind !== 'sketch') fail('REFERENCE', `${f.sketch} is not a sketch`);
       const h = dim(f.height as CadPartDim, 'height'), from = f.from === undefined ? 0 : dim(f.from as CadPartDim, 'from');
       if (h === 0) fail('PARAMETER', 'height must not be zero');
@@ -41,6 +56,20 @@ export function profileSolidOperation(f: CadPartFeature & Record<string, unknown
         if (authoredCircle && !frame && !holes?.length && !regions?.length) bindAuthoredPrismaticCircle(solid, authoredCircle);
         return one({ kind: 'upright', solid });
       });
+      if (h > 0 && typeof f.height === 'number' && (f.from === undefined || typeof f.from === 'number')
+        && !frame && !regions?.length && holes?.length === 1 && literalAnnularExtrudeSketch(f.sketch, sketchOwner)) {
+        if (!(Math.abs(draft as number) < 45)) fail('INPUT', 'Annular Extrude Draft must be below 45 degrees in size.');
+        return () => {
+          const solid = prismaticFromProfile({ outer, holes, ...(tags ? { sideTags: tags } : {}), height: h, from, tag: at });
+          const original = brepFromPrismatic(solid, { id: at });
+          const names = original.faces.flatMap(face => {
+            const support = faceGeometry(face); return support.kind === 'cylinder' && face.name !== undefined ? [face.name] : [];
+          });
+          const brep = draftAnnularWallsIfAdmitted(original, names, (draft as number) * Math.PI / 180, 'z', from);
+          if (!brep) return fail('CAPABILITY', 'Annular Extrude Draft needs one original upright coaxial circle and one complete circular hole.');
+          return one({ kind: 'brep', brep });
+        };
+      }
       if (regions?.length || holes?.length) fail('CAPABILITY', 'a drafted extrude takes one loop (no regions or holes) yet');
       // Built upwards from the sketch plane, then turned over for a downward extrude (the walls lean
       // away from the sketch plane either way).

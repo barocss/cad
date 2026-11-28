@@ -23,6 +23,22 @@ test('collapse points to Draft, Distance and Reset without changing kernel evide
   assert.match(extrudeDraftFailure(collapse, nodes, 1)!.hint, /Draft or Distance/);
   assert.match(extrudeDraftFailure(collapse, nodes, 1)!.hint, /Reset/);
 });
+test('annular Extrude attributes its own angle and collapse errors to Draft', () => {
+  const bounds = { ...error, detail: 'Annular Extrude Draft must be below 45 degrees in size.' };
+  assert.deepEqual(extrudeDraftFailure(bounds, nodes, 1), { ...bounds, historyField: 'draft' });
+  for (const detail of [
+    'B-rep: annular walls draft: the drafted inner and outer walls reach or cross each other',
+    'B-rep: annular walls draft: the draft reaches or crosses the bore axis',
+  ]) {
+    const failure = { ...error, detail };
+    const displayed = extrudeDraftFailure(failure, nodes, 1);
+    assert.ok(displayed);
+    assert.equal(displayed.historyField, 'draft');
+    assert.equal(displayed.detail, detail);
+    assert.match(displayed.hint, /Draft or Distance/);
+    assert.equal(extrudeDraftFailure({ ...failure, feature: 'n2' }, nodes, 1), undefined);
+  }
+});
 test('unsupported joints and unrelated errors keep their original feedback', () => {
   assert.equal(extrudeDraftFailure(error, nodes, 1), undefined);
   assert.equal(extrudeDraftFailure({ ...error, feature: 'n2' }, nodes, 1), undefined);

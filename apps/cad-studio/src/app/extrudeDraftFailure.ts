@@ -6,7 +6,9 @@ import type { Active } from './commandState';
 export function extrudeDraftFailure(error: FeatureFailure, nodes: readonly ModelNode[], index: number): FeatureFailure | undefined {
   const node = nodes[index];
   if (node?.kind !== 'extrude' || error.feature !== featureId(nodes, index)) return;
-  if (/draft closes/i.test(error.detail)) return { ...error, historyField: 'draft',
+  if (error.detail === 'Annular Extrude Draft must be below 45 degrees in size.') return { ...error, historyField: 'draft' };
+  const annularCollapse = /^(?:B-rep: )?annular walls draft: (?:the drafted inner and outer walls reach or cross each other|the draft reaches or crosses the bore axis)$/.test(error.detail);
+  if (annularCollapse || /draft closes/i.test(error.detail)) return { ...error, historyField: 'draft',
     hint: 'Reduce Draft or Distance so the walls stay apart, or Reset this edit to restore the accepted values.' };
   const rangeShape = /drafted (half-disk|circular segment) exceeds.*modeling coordinate range/i.exec(error.detail)?.[1];
   if (rangeShape) return { ...error, title: `The drafted ${rangeShape} exceeds the modeling range`, historyField: 'draft',
