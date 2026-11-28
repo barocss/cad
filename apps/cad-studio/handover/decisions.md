@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D2274: [D2274](notes/step-tapered-cavity-drawing-2026-11-29/README.md), #16. Qualify both original STEP cavity contours, material hatch and current SVG in actual Studio Drawing.
+
 - D2273: [D2273](notes/browser-box-depth-match-2026-11-29/README.md), #204. Share a one-use native Box depth proposal through actual browser WebMCP and verify explicit Studio approval.
 
 - D2272: [D2272](notes/closed-trapezoidal-cavity-step-2026-11-29/README.md), #16. Qualify exact STEP exchange of the tapered ring cavity and report the original omitted Direct geometry.
