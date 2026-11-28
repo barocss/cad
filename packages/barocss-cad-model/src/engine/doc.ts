@@ -1274,7 +1274,7 @@ type ModelNodeBase = DrivenSketchNode | RoundedRectangleInsetNode | SketchNode |
    */
   | { kind: 'thread'; diameter: number; pitch: number; center: [number, number]; seat: number; length?: number; hex?: { across: number; height: number; internal?: true }; form?: 'helical' | 'faceted'; made?: Made }
   /** Hollowed to walls `thickness` thick, the named faces removed (none: a closed hollow). */
-  | { kind: 'shell'; parent: BodyRef; thickness: Dim; open: string[]; join?: 'sharp' | 'arc'; floorThickness?: number }
+  | { kind: 'shell'; parent: BodyRef; thickness: Dim; open: string[]; join?: 'sharp' | 'arc'; floorThickness?: number; ceilingThickness?: number }
   | { kind: 'shell-walls'; parent: BodyRef; opening: string | null; secondOpening?: string; thirdOpening?: string; fourthOpening?: string; walls: Record<string, number>; sigs: Record<string, Sig> }
   /** Edges by their persistent B-rep names (they follow the features, so edits keep the selection). */
   | { kind: 'chamfer'; parent: BodyRef; edges: string[]; distance: Dim }

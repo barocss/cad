@@ -26,14 +26,25 @@ export function canSetShellCorner(nodes: readonly ModelNode[], parent: BodyRef, 
     && canSetClosedShellCorner(nodes, parent);
 }
 
+export function separateShellCap(nodes: readonly ModelNode[], parent: BodyRef, open: readonly string[]): 'floor' | 'ceiling' | undefined {
+  if (open.length !== 1) return;
+  const owner = featureId(nodes, parent.node);
+  const cap = open[0] === owner + '.top' ? 'floor' : open[0] === owner + '.bottom' ? 'ceiling' : undefined;
+  return cap && canSetClosedShellCorner(nodes, parent) ? cap : undefined;
+}
+
 export function canSetShellFloor(nodes: readonly ModelNode[], parent: BodyRef, open: readonly string[]): boolean {
-  return open.length === 1 && open[0] === featureId(nodes, parent.node) + '.top' && canSetClosedShellCorner(nodes, parent);
+  return separateShellCap(nodes, parent, open) === 'floor';
+}
+
+export function canSetAgentShellCap(ctx: Ctx, faceInput: unknown, cap: 'floor' | 'ceiling'): boolean {
+  if (!canSetAgentShellCorner(ctx, undefined, faceInput)) return false;
+  const pick = ctx.selection.faces[0], body = ctx.bodies[pick.body], parent = body.ref;
+  return !!parent && separateShellCap(ctx.doc.nodes, parent, [body.mesh.faces[pick.face].name]) === cap;
 }
 
 export function canSetAgentShellFloor(ctx: Ctx, faceInput: unknown): boolean {
-  if (!canSetAgentShellCorner(ctx, undefined, faceInput)) return false;
-  const pick = ctx.selection.faces[0], body = ctx.bodies[pick.body], parent = body.ref;
-  return !!parent && canSetShellFloor(ctx.doc.nodes, parent, [body.mesh.faces[pick.face].name]);
+  return canSetAgentShellCap(ctx, faceInput, 'floor');
 }
 
 /** An explicit Agent corner needs one literal original body or one unique literal original end cap. */

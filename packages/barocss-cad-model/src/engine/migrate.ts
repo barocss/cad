@@ -84,6 +84,11 @@ export function readStudioDoc(text: string): { doc: StudioDoc; notes: string[] }
       (typeof node.floorThickness !== 'number' || !Number.isFinite(node.floorThickness) || node.floorThickness <= 0)) {
       return { error: 'A separate Shell floor needs a positive finite thickness.' };
     }
+    if (record(node) && node.kind === 'shell' && Object.hasOwn(node, 'ceilingThickness')) {
+      if (Object.hasOwn(node, 'floorThickness')) return { error: 'A Shell can set one separate cap thickness.' };
+      if (typeof node.ceilingThickness !== 'number' || !Number.isFinite(node.ceilingThickness) || node.ceilingThickness <= 0)
+        return { error: 'A separate Shell ceiling needs a positive finite thickness.' };
+    }
     if (record(node) && node.kind === 'shell-walls') {
       const problem = shellWallFieldsProblem(node);
       if (problem) return { error: problem };

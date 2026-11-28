@@ -151,3 +151,50 @@ test('a literal top-open L floor edits independently and needs a revision-pinned
     assert.equal(requested.state.bodies[0].volume, direct.bodies[0].volume);
   }
 });
+
+test('a separate ceiling binds the original bottom, carries History and rejects invalid Agent ownership', async () => {
+  const evaluated = evaluateDoc(doc, 1);
+  assert.ok(evaluated.ok);
+  const bottom = evaluated.bodies[0].mesh.faces.findIndex(face => face.nativePlaneName === 'n1.bottom');
+  assert.ok(bottom >= 0);
+  const ctx = { doc, bodies: evaluated.bodies, selection: { bodies: [], edges: [], faces: [{ body: 0, face: bottom }] } };
+  const values = { wallMode: 'separate-ceiling', t: 2, ceilingThickness: 3, join: 'sharp' } as const;
+  const fields = shell.fields!(ctx, values);
+  assert.ok(fields.some(field => field.key === 'ceilingThickness' && field.label === 'Ceiling thickness'));
+  assert.ok(fields.some(field => field.key === 'join'));
+  assert.ok(!fields.some(field => field.key === 'floorThickness'));
+  const candidate = shell.build!(ctx, { ...shell.defaults!(ctx), ...values });
+  const node = candidate.nodes[2];
+  assert.ok(node.kind === 'shell' && node.join === 'sharp' && node.ceilingThickness === 3);
+  assert.deepEqual(node.open, ['n1.bottom']);
+  assert.ok(!Object.hasOwn(node, 'floorThickness'));
+  assert.throws(() => shell.build!(ctx, { ...values, wallMode: 'separate-floor', floorThickness: 3 }), /original top cap/);
+  const field = editFields(candidate.nodes, 2).find(option => option.key === 'ceilingThickness');
+  assert.ok(field?.kind === 'number');
+  const read = readStudioDoc(JSON.stringify({ ...candidate, nodes: field.set(candidate.nodes, 4) }));
+  assert.ok('doc' in read && read.doc.schema === doc.schema);
+  const edited = read.doc.nodes[2];
+  assert.ok(edited.kind === 'shell' && edited.ceilingThickness === 4 && edited.join === 'sharp');
+  for (const invalid of [{ ...node, ceilingThickness: '3' }, { ...node, floorThickness: 3 }])
+    assert.ok('error' in readStudioDoc(JSON.stringify({ ...candidate, nodes: [...doc.nodes, invalid] })));
+
+  const state = { doc, bodies: evaluated.bodies };
+  const expectedRevision = revisionOf(doc);
+  const request = { action: 'command', command: 'shell', faces: ['n1.bottom'], values, expectedRevision };
+  for (const invalid of [{ ...request, expectedRevision: undefined },
+    { ...request, faces: ['n1.top'] }, { ...request, values: { ...values, ceilingThickness: '3' } }]) {
+    const refused = await dispatchTool(state, 'features', invalid, async () => assert.fail('a refused ceiling must not evaluate'));
+    assert.ok(refused.isError && !refused.changed, refused.content);
+    assert.equal(refused.state.doc, doc);
+  }
+  const outcome = await dispatchTool(state, 'features', request, async next => evaluateDoc(next, 2));
+  assert.ok(!outcome.isError && outcome.changed, outcome.content);
+  const accepted = outcome.state.doc.nodes[2];
+  assert.ok(accepted.kind === 'shell');
+  assert.deepEqual([accepted.parent, accepted.open, accepted.thickness, accepted.ceilingThickness, accepted.join],
+    [node.parent, node.open, node.thickness, node.ceilingThickness, node.join]);
+  const rebuilt = evaluateDoc(read.doc, 3);
+  assert.ok(rebuilt.ok);
+  assert.ok(Math.abs(outcome.state.bodies[0].volume! - (12000 - 336 * 17)) < 1e-7);
+  assert.ok(Math.abs(rebuilt.bodies[0].volume! - (12000 - 336 * 16)) < 1e-7);
+});

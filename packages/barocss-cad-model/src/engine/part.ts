@@ -220,7 +220,8 @@ export function featureOf(node: ModelNode, index: number, nodes?: readonly Model
     case 'thread': return { ...at, kind: 'thread', diameter: node.diameter, pitch: node.pitch, center: node.center, seat: node.seat, ...(node.length !== undefined ? { length: node.length } : {}), ...(node.hex ? { hex: node.hex } : {}), ...(node.form ? { form: node.form } : {}) };
     case 'shell': return { ...at, kind: 'shell', target: ref(node.parent), thickness: node.thickness, open: node.open,
       ...(node.join === undefined ? {} : { join: node.join }),
-      ...(node.floorThickness === undefined ? {} : { floorThickness: node.floorThickness }), ...expectOf(node, node.open) };
+      ...(node.floorThickness === undefined ? {} : { floorThickness: node.floorThickness }),
+      ...(node.ceilingThickness === undefined ? {} : { ceilingThickness: node.ceilingThickness }), ...expectOf(node, node.open) };
     case 'shell-walls': {
       const problem = shellWallFieldsProblem(node);
       if (problem) throw refusal('VALUE', problem);

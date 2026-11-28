@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { evaluateCadPart, massPropertiesOf, surfaceAreaOf, checkBrep, evaluateSurface, tessellateBrep, saveCadPart, loadCadPart } from '../dist/index.js';
+import { evaluateCadPart, massPropertiesOf, surfaceAreaOf, checkBrep, evaluateCurve, evaluateSurface, tessellateBrep, saveCadPart, loadCadPart } from '../dist/index.js';
 import { faceGeometry } from '../dist/brep/analytic-boolean.js';
 
 const points = [[0, 0], [40, 0], [40, 16], [16, 16], [16, 30], [0, 30]];
@@ -189,5 +189,147 @@ for (const join of ['sharp', 'arc']) test(`independent ${join} floor keeps colla
     const source = documentOf(3, { join }); change(source);
     const edited = structuredClone(source); assert.throws(() => output(source), error => category(error) === 'CAPABILITY');
     assert.deepEqual(source, edited);
+  }
+});
+
+function ceilingDocumentOf(ceilingThickness = 3, extra = {}) {
+  const source = documentOf(), shell = source.features[2];
+  delete shell.floorThickness;
+  Object.assign(shell, { open: ['e.bottom'], ceilingThickness }, extra);
+  return source;
+}
+
+for (const join of [undefined, 'sharp', 'arc']) test(`original bottom-open L has independent ${join ?? 'default Round'} ceiling with exact datum, names and physical walls`, () => {
+  const source = ceilingDocumentOf(3, join === undefined ? {} : { join }), before = structuredClone(source);
+  const snapshot = evaluateCadPart(source), result = snapshot.outputs[0], brep = result.brep, sharp = join === 'sharp';
+  assert.deepEqual(source, before);
+  const cavityArea = sharp ? 600 : area, expectedVolume = 17280 - cavityArea * 17;
+  const report = checkBrep(brep, { strict: true }); assert.ok(report.valid, report.issues.join('\n'));
+  assert.deepEqual(report.counts, sharp
+    ? { bodies: 1, shells: 1, faces: 15, loops: 16, coedges: 72, edges: 36, vertices: 24 }
+    : { bodies: 1, shells: 1, faces: 16, loops: 17, coedges: 78, edges: 39, vertices: 26 });
+  assert.equal(report.topology[0].genus, 0); assert.equal(brep.bodies[0].kind, 'solid');
+  assert.ok(brep.shells[0].closed && brep.coedges.every(use => use.pcurve));
+  const mass = massPropertiesOf(result), extraMoment = sharp ? 0 : 16 * delta - 4 / 3;
+  close(mass.volume, expectedVolume, 'independent ceiling volume');
+  close(mass.centroid[0], (14592 * 20 - (9984 + extraMoment) * 17) / expectedVolume, 'X centroid');
+  close(mass.centroid[1], (10272 * 20 - (6984 + extraMoment) * 17) / expectedVolume, 'Y centroid');
+  close(mass.centroid[2], (172800 - cavityArea * 17 * 8.5) / expectedVolume, 'bottom-open Z centroid');
+  close(surfaceAreaOf(result), sharp ? 6636 : 6568 + 17 * Math.PI, 'bottom-open surface area', 1e-6);
+  const mirror = output(documentOf(3, join === undefined ? {} : { join }));
+  close(mass.centroid[2] + massPropertiesOf(mirror).centroid[2], 20, 'independent top/bottom reflection oracle');
+  const original = output({ ...source, features: source.features.slice(0, 2) }).brep;
+  for (const face of original.faces) {
+    const matches = brep.faces.filter(candidate => candidate.name === face.name), old = faceGeometry(face);
+    assert.equal(matches.length, 1, `retained original ${face.name}`);
+    const current = faceGeometry(matches[0]); assert.equal(old.kind, 'plane'); assert.equal(current.kind, 'plane');
+    assert.deepEqual(current.n, old.n);
+    close(old.n.reduce((sum, value, axis) => sum + value * (current.o[axis] - old.o[axis]), 0), 0, 'unchanged original support');
+    if (old.n[2] !== 0) continue;
+    const inner = brep.faces.filter(candidate => candidate.name?.replace(/#\d+$/, '') === `sh.in.${face.name}`)
+      .map(faceGeometry).filter(support => support.kind === 'plane');
+    assert.equal(inner.length, 1);
+    const [g] = inner;
+    for (let axis = 0; axis < 3; axis++) close(g.n[axis], -old.n[axis], 'opposing inner side normal');
+    close(old.n.reduce((sum, value, axis) => sum + value * (g.o[axis] - old.o[axis]), 0), -2, 'independent two millimetre side');
+  }
+  for (const [name, z, sign, loops] of [['e.bottom', 0, -1, 2], ['e.top', 20, 1, 1], ['sh.ceiling', 17, -1, 1]]) {
+    const face = brep.faces.find(candidate => candidate.name === name), g = face && faceGeometry(face);
+    assert.ok(face && g.kind === 'plane', name); close(g.o[2], z, name); assert.equal(g.n[2], sign); assert.equal(face.loops.length, loops);
+  }
+  assert.equal(brep.faces.some(face => face.name === 'sh.floor'), false, 'no artificial floor blocks the original bottom opening');
+  const rim = brep.faces.find(face => face.name === 'e.bottom');
+  const rimLoops = rim.loops.map(id => brep.loops.find(loop => loop.id === id));
+  const outerLoop = rimLoops.find(loop => loop.kind === 'outer'), innerLoop = rimLoops.find(loop => loop.kind === 'inner');
+  assert.equal(outerLoop.coedges.length, 6); assert.equal(innerLoop.coedges.length, sharp ? 6 : 7);
+  const edges = new Map(brep.edges.map(edge => [edge.id, edge])), uses = new Map(brep.coedges.map(use => [use.id, use]));
+  for (const loop of rimLoops) for (const useId of loop.coedges) for (const p of edges.get(uses.get(useId).edge).curve.controlPoints) close(p[2], 0, 'rim stays on original datum');
+  const cylinders = brep.faces.filter(face => faceGeometry(face).kind === 'cylinder'); assert.equal(cylinders.length, sharp ? 0 : 1);
+  if (!sharp) {
+    for (const u of [0, .2, .5, .8, 1]) for (const v of [0, .3, 1]) {
+      const p = evaluateSurface(cylinders[0].surface, u, v); close((p[0] - 16) ** 2 + (p[1] - 16) ** 2, 4, 'exact Round side radius');
+      assert.ok(p[2] >= -1e-9 && p[2] <= 17 + 1e-9);
+    }
+    const arc = innerLoop.coedges.map(id => edges.get(uses.get(id).edge)).find(edge => edge.curve.degree === 2); assert.ok(arc);
+    for (const t of [0, .2, .5, .8, 1]) {
+      const p = evaluateCurve(arc.curve, t); close((p[0] - 16) ** 2 + (p[1] - 16) ** 2, 4, 'native bottom-rim arc'); close(p[2], 0, 'native bottom-rim datum');
+    }
+  }
+  const mesh = tessellateBrep(brep, { segmentsPerQuarter: 32 }); watertight(mesh);
+  for (const z of [-1, .5, 10, 16.5, 21]) assert.equal(materialAt(mesh, [5, 5, z]), false, 'bottom cavity and exterior stay empty');
+  for (const z of [17.5, 19.5]) assert.equal(materialAt(mesh, [5, 5, z]), true, 'retained three millimetre top cap');
+  assert.equal(materialAt(mesh, [1, 5, 10]), true); assert.equal(materialAt(mesh, [3, 5, 10]), false);
+  assert.equal(materialAt(mesh, [14.4, 14.4, 10]), sharp, 'Sharp square differs from Round quarter disc');
+  assert.equal(materialAt(mesh, [14.8, 14.8, 10]), true); assert.equal(materialAt(mesh, [13.5, 13.5, 10]), false);
+  const saved = saveCadPart(snapshot), feature = JSON.parse(saved).features.at(-1);
+  assert.equal(feature.ceilingThickness, 3); assert.equal(Object.hasOwn(feature, 'floorThickness'), false);
+  assert.deepEqual(loadCadPart(saved).outputs[0].brep, brep); assert.deepEqual(output(structuredClone(source)).brep, brep);
+  for (const ceilingThickness of [1, 4]) {
+    const edited = output(ceilingDocumentOf(ceilingThickness, join === undefined ? {} : { join }));
+    close(massPropertiesOf(edited).volume - mass.volume, cavityArea * (ceilingThickness - 3), 'one-parameter ceiling edit');
+    assert.deepEqual(edited.brep.faces.map(face => face.name), brep.faces.map(face => face.name));
+    close(faceGeometry(edited.brep.faces.find(face => face.name === 'e.bottom')).o[2], 0, 'edit retains opening datum');
+    close(faceGeometry(edited.brep.faces.find(face => face.name === 'sh.ceiling')).o[2], 20 - ceilingThickness, 'edit changes only ceiling depth');
+  }
+});
+
+test('independent ceiling default and explicit Round agree; absent ceiling retains existing uniform semantics', () => {
+  for (const thickness of [1, 2, 3, 4]) assert.deepEqual(output(ceilingDocumentOf(thickness)).brep, output(ceilingDocumentOf(thickness, { join: 'arc' })).brep);
+  const uniform = ceilingDocumentOf(); delete uniform.features[2].ceilingThickness;
+  const result = output(uniform); close(massPropertiesOf(result).volume, 17280 - area * 18, 'incumbent uniform bottom-open volume');
+  close(faceGeometry(result.brep.faces.find(face => face.name === 'sh.ceiling')).o[2], 18, 'incumbent uniform ceiling');
+  assert.equal(Object.hasOwn(JSON.parse(saveCadPart(evaluateCadPart(uniform))).features.at(-1), 'ceilingThickness'), false);
+});
+
+for (const join of ['sharp', 'arc']) test(`independent ${join} ceiling retains reflected/reversed original loops, tags and nonzero from`, () => {
+  for (const sx of [1, -1]) for (const sy of [1, -1]) for (const reversed of [false, true]) {
+    let p = points.map(([x, y]) => [17 + sx * x, -11 + sy * y]); p = p.slice(2).concat(p.slice(0, 2)); if (reversed) p = p.toReversed();
+    const source = ceilingDocumentOf(3, { join });
+    source.features[0] = { id: 's', kind: 'sketch', profile: 'loop', segments: p.map(start => ({ kind: 'line', start })), sideTags: { outer: p.map((_, i) => `wall${i}`) } };
+    source.features[1].from = 3;
+    const result = output(source), mass = massPropertiesOf(result), cavityArea = join === 'sharp' ? 600 : area;
+    const expectedVolume = 17280 - cavityArea * 17, extraMoment = join === 'sharp' ? 0 : 16 * delta - 4 / 3;
+    close(mass.volume, expectedVolume, 'translated volume');
+    close(mass.centroid[0], 17 + sx * (14592 * 20 - (9984 + extraMoment) * 17) / expectedVolume, 'translated X centroid');
+    close(mass.centroid[1], -11 + sy * (10272 * 20 - (6984 + extraMoment) * 17) / expectedVolume, 'translated Y centroid');
+    close(mass.centroid[2], 3 + (172800 - cavityArea * 17 * 8.5) / expectedVolume, 'translated Z centroid');
+    assert.ok(p.every((_, i) => result.brep.faces.some(face => face.name === `e.side[wall${i}]`)));
+    close(faceGeometry(result.brep.faces.find(face => face.name === 'e.bottom')).o[2], 3, 'original opening datum');
+    close(faceGeometry(result.brep.faces.find(face => face.name === 'e.top')).o[2], 23, 'original retained cap support');
+    close(faceGeometry(result.brep.faces.find(face => face.name === 'sh.ceiling')).o[2], 20, 'from plus height minus ceiling');
+  }
+});
+
+for (const join of ['sharp', 'arc']) test(`independent ${join} ceiling checks the actual thin cavity without a padded-height midpoint`, () => {
+  const t = .1, ceilingThickness = 19.8, source = ceilingDocumentOf(ceilingThickness, { join, thickness: t });
+  const cavityArea = (40 - 2 * t) * (16 - 2 * t) + (16 - 2 * t) * (30 - 2 * t) - (16 - 2 * t) ** 2
+    + (join === 'arc' ? t * t * (1 - Math.PI / 4) : 0);
+  const result = output(source), report = checkBrep(result.brep, { strict: true }); assert.ok(report.valid, report.issues.join('\n'));
+  close(massPropertiesOf(result).volume, 17280 - cavityArea * (20 - ceilingThickness), 'thin bottom cavity volume');
+  close(faceGeometry(result.brep.faces.find(face => face.name === 'sh.ceiling')).o[2], .2, 'actual thin cavity ceiling');
+});
+
+for (const join of [undefined, 'sharp', 'arc']) test(`independent ${join ?? 'default'} ceiling rejects invalid thickness, wrong opening, mixed cap fields and unsupported ancestry`, () => {
+  const extra = join === undefined ? {} : { join };
+  for (const ceilingThickness of [0, -1, NaN, Infinity, '3', { param: 'c' }, 20, 19.999999999]) {
+    const source = ceilingDocumentOf(ceilingThickness, extra), before = structuredClone(source);
+    assert.throws(() => output(source), error => category(error) === 'PARAMETER'); assert.deepEqual(source, before);
+  }
+  for (const thickness of [8, 7.999999999, .000001])
+    assert.throws(() => output(ceilingDocumentOf(3, { ...extra, thickness })), error => category(error) === 'PARAMETER');
+  for (const open of [[], ['e.top'], ['e.side0'], ['e.top', 'e.bottom'], ['e.bottom', 'e.bottom'], ['e.bottom#1']])
+    assert.throws(() => output(ceilingDocumentOf(3, { ...extra, open })), error => category(error) === 'CAPABILITY');
+  for (const open of [['e.top'], ['e.bottom']])
+    assert.throws(() => output(ceilingDocumentOf(3, { ...extra, floorThickness: 2, open })), error => category(error) === 'INPUT');
+  assert.throws(() => output(documentOf(3, { ...extra, open: ['e.bottom'] })), error => category(error) === 'CAPABILITY', 'floor is never reinterpreted as ceiling');
+  for (const change of [
+    source => { source.features[0] = { id: 's', kind: 'sketch', profile: 'rectangle', min: [0, 0], max: [40, 30] }; },
+    source => { source.features[1].draft = 2; },
+    source => { source.features[0].plane = { origin: [0, 0, 0], normal: [0, 0, 1], xAxis: [1, 0, 0] }; },
+    source => { source.features[0].points = structuredClone(points); source.parameters.x = 40; source.features[0].points[1][0] = { parameter: 'x' }; },
+    source => { source.features.splice(2, 0, { id: 'm', kind: 'translate', target: 'e', offset: [1, 0, 0] }); source.features.at(-1).target = 'm'; },
+  ]) {
+    const source = ceilingDocumentOf(3, extra); change(source); const before = structuredClone(source);
+    assert.throws(() => output(source), error => category(error) === 'CAPABILITY'); assert.deepEqual(source, before);
   }
 });
