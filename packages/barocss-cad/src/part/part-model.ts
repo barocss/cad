@@ -47,6 +47,7 @@ import { revolveProfile, revolveMassProperties } from '../features/revolve.js';
 import { transformBrep, quarterTurn, type BrepAffine } from '../brep/brep-transform.js';
 import { tessellateBrep } from '../brep/brep-tessellate.js';
 import { rayHit, triangleBvh } from '../mesh/triangle-bvh.js';
+import { bindAuthoredPrismaticHole } from '../brep/authored-circle-nominal.js';
 import { combineMassProperties, prismaticMassProperties, brepMassProperties, brepSurfaceArea, isSolidMassError, type MassProperties } from '../brep/solid-mass.js';
 import { readNativeSIInertia, transferNativeMassBasis, unsupportedNativeMass } from '../internal/native-si-mass-state.js';
 import { glueAtSharedFace } from '../brep/brep-glue.js';
@@ -1009,7 +1010,11 @@ function operation(f: CadPartFeature & Record<string, unknown>, t: Tools): () =>
         // already there) the volumes decide, as before.
         const missed = out.kind === 'brep' && out.brep.faces.some(x => x.name?.startsWith(`${at}.`)) ? false : volumeOfSolid(p.solid) - volumeOfSolid(out) <= 1e-6 * volumeOfSolid(p.solid);
         if (missed) fail('SELECTION', `the hole at (${c[0]}, ${c[1]}) along ${axis} misses the target`);
-        if (csk === null) return out;
+        if (csk === null) {
+          if (depth === null && axis === 'z' && target.length === 1 && p.solid.kind === 'upright' && out.kind === 'upright')
+            bindAuthoredPrismaticHole(p.solid.solid, out.solid, { center: c, radius: r });
+          return out;
+        }
         // The countersink: a 90° cone from Ø csk at the face down to the hole, its rim a little above the
         // face (so no face of it lies on the face). Revolved about its profile's Y (depth into the
         // material), then carried to the hole: s along local x, depth down local z from the face, the

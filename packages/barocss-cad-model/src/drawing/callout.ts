@@ -161,7 +161,7 @@ function formatHoleCallout(nodes: readonly ModelNode[], edge: string, parameters
   const h = nodes[i]; if (h.kind !== 'hole') return null;
   const radius = lengthOf(h.radius, parameters); if (radius === null) return null;
   const length = (mm: number) => exact ? String(mm) : f(n(mm), 3);
-  const d = exact ? radius * 2 : n(radius) * 2; if (!Number.isFinite(d)) return null;
+  const d = radius * 2; if (!Number.isFinite(d)) return null;
   const count = !source.patterned && h.pattern && h.pattern.count > 1 ? `${h.pattern.count}× ` : '';
   const depth = h.depth === undefined ? undefined : lengthOf(h.depth, parameters);
   if (depth === null) return null;

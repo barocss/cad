@@ -1136,7 +1136,7 @@ function tableInUnits(c: TableContent, p: StandardPreset): TableContent {
  */
 export function dimensionText(r: Extract<Resolved, { ok: true }>, callout?: (edge: string, diameter?: number, f?: LengthFormat) => string | null, f: LengthFormat = fmtMM): string {
   // (D155: the diameter measured goes with it — a face's fit class reads its limits at that size, drawing/fits.ts.)
-  const base = (r.kind === 'diameter' && callout ? callout(r.dim.edge, 2 * r.radius, f) : null) ?? valueText(r, f);
+  const base = (r.kind === 'diameter' && callout ? callout(r.dim.edge, r.value, f) : null) ?? valueText(r, f);
   return r.dim.count ? `${r.dim.count}× ${base.replace(/^\d+× /, '')}` : base;
 }
 /** A resolved dimension with the text the sheet prints: its value in the drawing's unit, and on a dual drawing `alt`, the same in the other (11 ③b; an angle never converts). */
@@ -1160,7 +1160,7 @@ export function withShownText(r: Extract<Resolved, { ok: true }>, callout: ((edg
       const format = u === p.units ? f.primary : f.secondary!;
       // Fractional inch applies only to plain untoleranced, non-basic, non-callout length dimensions; model mm is never altered.
       const canFraction = u === 'inch' && p.inchFraction !== undefined && r.kind !== 'angle' && r.kind !== 'chamfer' && !r.dim.tol && !r.dim.basic;
-      const calloutText = canFraction && r.kind === 'diameter' && callout ? callout(r.dim.edge, 2 * r.radius, format) : null;
+      const calloutText = canFraction && r.kind === 'diameter' && callout ? callout(r.dim.edge, r.value, format) : null;
       const activeFormat: LengthFormat = canFraction && calloutText === null
         ? Object.assign((mm: number, places?: 2 | 3 | 4) => {
             const res = formatFractionalInch(mm, p.inchFraction!);

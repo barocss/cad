@@ -48,3 +48,22 @@ test('new B-reps and changed Booleans use the geometric projection radius', () =
     assert.ok(radii(derived).every(radius => radius === undefined));
   }
 });
+
+test('the original rectangular through-bore retains its exact authored circle support', () => {
+  const stock = { id: 'n0', kind: 'sketch', profile: 'rectangle', min: [0, 0], max: [40, 30] };
+  const hole = { id: 'n2', kind: 'hole', target: 'n1', face: 'n1.top', center: [18, 14], radius: { parameter: 'R' } };
+  const drilled = document(9, [stock, prism, hole]);
+  const original = body(evaluateCadPart(drilled));
+  assert.deepEqual(radii(original), [9, 9, 9, 9]);
+  assert.ok(circles(original).some(edge => edge.radius !== 9));
+  assert.ok(radii(JSON.parse(JSON.stringify(original))).every(radius => radius === undefined));
+
+  const blind = body(evaluateCadPart(document(9, [stock, prism, { ...hole, depth: 4 }])));
+  assert.ok(circles(blind).length > 0);
+  assert.ok(radii(blind).every(radius => radius === undefined));
+
+  const moved = body(evaluateCadPart({ ...drilled, features: [...drilled.features,
+    { id: 'n3', kind: 'translate', target: 'n2', offset: [0, 5, 0] }] }));
+  assert.ok(circles(moved).length > 0);
+  assert.ok(radii(moved).every(radius => radius === undefined));
+});

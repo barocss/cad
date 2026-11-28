@@ -19,7 +19,7 @@
 // them, and a solid carries its cap sources (the authored tops and bottoms) that name the caps. Face
 // names are the tag, or `tag#k` when one tag names several faces (k by position); edge names join
 // the names of their two faces.
-import { authoredPrismaticRadii, authoredBrepEdgeRadii } from '../brep/authored-circle-nominal.js';
+import { authoredPrismaticCircles, authoredBrepEdgeRadii } from '../brep/authored-circle-nominal.js';
 import {
   booleanCurveRegions, curveArrangementVertices, pointInPolygon, curveTolerance, paramOf, regionArea, regionInteriorPoint, sampleRing, segAt, segDistance, segEnd, segReverse, segStart,
   type CurveRegion2, type CurveSegment2, type XY,
@@ -323,8 +323,8 @@ export function brepFromPrismatic(solid: PrismaticSolid, options: { readonly id?
   };
   nameFaces(faces);
   const edgeIds = new Map<string, string>(), edges: { id: string; curve: Curve; vertices: [string, string]; name?: string }[] = [];
-  const authoredRadius = authoredPrismaticRadii.get(solid);
-  const authoredEdges = authoredRadius === undefined ? undefined : new Map<string, number>();
+  const authoredCircle = authoredPrismaticCircles.get(solid);
+  const authoredEdges = authoredCircle ? new Map<string, number>() : undefined;
   const edgeBase = (list: Use[]) => [...new Set(list.map(u => faces[u.face].name!))].sort().join('|');
   for (const [key, list] of finalUses) {
     const fwd = list.find(u => u.sense === 'forward')!, eid = `${id}_e${edges.length}`;
@@ -335,7 +335,8 @@ export function brepFromPrismatic(solid: PrismaticSolid, options: { readonly id?
       const [k, level] = key.slice(1).replace(/[ab]$/, '').split('_').map(Number);
       curve = curveOf(k, levels[level], eid);
       const segment = pieces[k].seg;
-      if (segment.kind === 'arc' && segment.r === authoredRadius) authoredEdges?.set(eid, segment.r);
+      if (authoredCircle && segment.kind === 'arc' && segment.r === authoredCircle.radius
+        && segment.c[0] === authoredCircle.center[0] && segment.c[1] === authoredCircle.center[1]) authoredEdges?.set(eid, segment.r);
     }
     edges.push({ id: eid, curve, vertices: [vertexOf(fwd.start, fwd.startRoot!), vertexOf(fwd.end, fwd.endRoot!)], name: edgeBase(list) });
   }

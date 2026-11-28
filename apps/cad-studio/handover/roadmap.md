@@ -1,13 +1,13 @@
 # CAD roadmap — current status and execution order
 
-Updated 2026-11-29 · Priority authority: D520 · Latest delivery: D2244 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
+Updated 2026-11-29 · Priority authority: D520 · Latest delivery: D2245 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
 
 This is the only current status index. Detailed tracks define acceptance; the 34 stable row pages retain scope and issue navigation. Immutable decision notes retain results. Do not append chronological status paragraphs here. [D520 decision](notes/cad-roadmap-replan-2026-11-04/README.md) supersedes D445 execution order and historical next-item text, while retaining its safeguards and bounded proofs.
 
 ## Now and next
 
-- **Current position:** [D2244](notes/recovery-later-open-ownership-2026-11-29/README.md), P0 rows 12 and 22. A late Recovery read can no longer replace a newer Studio Open. An explicit subsequent Restore and Undo/Redo both passed.
-- **Next MAIN:** D2245, P2 rows 11 and 25. Check the original H7 boundary in Studio using the current authored circular nominal and the recorded overlapping table rows ([#35](https://github.com/barocss/cad/issues/35)). Correct a reproduced table-row or class mismatch. The external PDF comparison remains on HOLD.
+- **Current position:** [D2245](notes/original-through-bore-h7-boundary-2026-11-29/README.md), P2 rows 11 and 25. The original through-bore shows the correct H7 row and limits at Ø18 and Ø18.001 through an actual edit, Undo/Redo and project reopen. The PDF comparison stays on HOLD.
+- **Next MAIN:** D2246, P0 rows 16 and 30. Reproduce the non-geometric-progression quadratic cap in [#776](https://github.com/barocss/cad/issues/776) on current main. Qualify the original native boundary through strict admission, mesh and projected output. Keep the true-sliver control and native coefficients.
 - **Separate follow-ups:** Continue Studio App extraction in cohesive parts with affected desktop checks. [#608 Rendering](https://github.com/barocss/cad/issues/608) stays on HOLD. API inventory drift remains open. The issue tracker records [#126](https://github.com/barocss/cad/issues/126), [#613](https://github.com/barocss/cad/issues/613), [#152](https://github.com/barocss/cad/issues/152) and [#22](https://github.com/barocss/cad/issues/22) as closed.
 - **Active repository:** [barocss/cad](https://github.com/barocss/cad), based on `origin/main`. Fetch before work and preserve unexpected changes. The [migration record](../../../docs/migration/README.md) maps the former `local/cad-dev` history and issue numbers.
 - **Evidence correction:** D482 records2167 PASS/0 FAIL/2 existing SKIP in a later full-kernel run than D433. Neither result is a new full-suite PASS at this audit HEAD. [D482 record](notes/vertical-contact-refusal-2026-11-04/README.md).

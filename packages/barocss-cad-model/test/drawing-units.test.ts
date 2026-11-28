@@ -101,7 +101,7 @@ test('a dual sheet: primary [secondary], the tolerance in both, stacked deviatio
   assert.deepEqual(texts(groupOf(sheet, 'high')), ['.315 +.003/-.002 [8 +0.1/-0.05]']);
   assert.deepEqual(texts(groupOf(sheet, 'slant')), ['2.539 h7 [64.5 h7]']);
   assert.deepEqual(texts(groupOf(sheet, 'bore')), ['Ø.945 THRU [Ø24 THRU]']);
-  assert.deepEqual(texts(groupOf(sheet, 'round')), ['R.472 +.005/-.004 [R12 +0.125/-0.124]']);
+  assert.deepEqual(texts(groupOf(sheet, 'round')), ['R.472 +.005/-.004 [R12 ±0.125]']);
   assert.ok(texts(groupOf(sheet, 'flat')).includes('.0039'), 'a frame prints the primary unit only');
   const mmFirst = sheetOf({ dual: true }).sheet;
   assert.deepEqual(texts(groupOf(mmFirst, 'wide')), ['64 ±0.05 [2.5197 ±.0019]']); assert.deepEqual(texts(groupOf(mmFirst, 'high')), ['8 +0.1/-0.05 [.315 +.003/-.002]']);
@@ -213,7 +213,8 @@ test('a tolerance is converted by its limits and rounded inward: never zero, nev
   assert.deepEqual(deviationPair(0.009, -0.004, inch, 'inch'), { upper: '+.00035', lower: '-.00015', printable: true, equal: false, digits: 5, nominal: '.00000', tight: false });
   assert.equal(deviationPair(0.05, -0.05, presetFor({ precision: { mm: 0 } }), 'mm').upper, '+0.05');
   const plain = sheetOf({ dimensions: [{ ...drawing().settings.dimensions[0], tol: { kind: 'symmetric', value: 0.005 } }, { ...drawing().settings.dimensions[5], tol: { kind: 'symmetric', value: 0.125 } }] }).sheet;
-  assert.equal(texts(groupOf(plain, 'wide'))[0], '64 ±0.005', 'plain mm: a tolerance prints as entered'); assert.equal(texts(groupOf(plain, 'round'))[0], 'R12 +0.125/-0.124', 'resolved radius is 12.000000000000002: keep its exact lower limit');
+  assert.equal(texts(groupOf(plain, 'wide'))[0], '64 ±0.005', 'plain mm: a tolerance prints as entered');
+  assert.equal(texts(groupOf(plain, 'round'))[0], 'R12 ±0.125', 'the original bore uses the exact authored radius');
 });
 /** The probe of the audit: random nominals and tolerances through the real sheet text; every printed limit must lie inside the true zone. */
 test('printed limits never lie outside the true zone (20,000 random dimensions per setting; nominal, deviations, unequal results)', () => {
@@ -289,13 +290,20 @@ test('point zones: no invalid numeric pair in stacked, inline, dual, SVG or DXF 
 test('UNIT_PRECISION reports omitted fit limits in each displayed unit and the configured sixth decimal', () => {
   const base = drawing(), bore = base.settings.dimensions.find(d => d.id === 'bore')!;
   assert.ok(bore.kind === 'diameter');
-  const doc: StudioDoc = { ...base.doc, fits: { version: 1, tables: [{ id: 'p', rows: [{ class: 'H7', over: 20, upTo: 30, upper: 0.01, lower: 0.01 }] }], faces: [{ face: bore.edge.split('|')[0], class: 'H7' }] } };
   const settings = { ...base.settings, units: 'inch' as const, dual: true, precision: { inch: 6 }, dimensions: [bore], frames: [], datumTargets: [] };
-  const layout = layoutSheet(base.views, settings), sheet = buildSheet(base.views, layout, settings, { title: 'Plate', date: 'x', callout: withFit(doc, () => null) }), input = drawingInputs(doc, settings); assert.ok(typeof input !== 'string');
-  const issues = drawingIssues(issueContext({ ...input, views: base.views, settings, sheet, layout } as never)).filter(i => i.code === 'UNIT_PRECISION');
-  assert.equal(issues.length, 2, 'canonical resolved diameter has no exact decimal endpoint in either unit');
-  assert.ok(issues.some(i => /inches even at 6 decimals.*limits are omitted/.test(i.message)));
-  assert.ok(issues.some(i => /mm even at 4 decimals.*limits are omitted/.test(i.message)));
+  for (const [point, printableMm] of [[0.01, true], [0.010001, false]] as const) {
+    const doc: StudioDoc = { ...base.doc, fits: { version: 1, tables: [{ id: 'p', rows: [{ class: 'H7', over: 20, upTo: 30, upper: point, lower: point }] }], faces: [{ face: bore.edge.split('|')[0], class: 'H7' }] } };
+    const layout = layoutSheet(base.views, settings);
+    const sheet = buildSheet(base.views, layout, settings, { title: 'Plate', date: 'x', callout: withFit(doc, () => null) });
+    assert.ok(sheet.dimensions[0].ok);
+    assert.equal(sheet.dimensions[0].value, 24);
+    const input = drawingInputs(doc, settings);
+    assert.ok(typeof input !== 'string');
+    const issues = drawingIssues(issueContext({ ...input, views: base.views, settings, sheet, layout } as never)).filter(i => i.code === 'UNIT_PRECISION');
+    assert.equal(issues.length, printableMm ? 1 : 2);
+    assert.ok(issues.some(i => /inches even at 6 decimals.*limits are omitted/.test(i.message)));
+    assert.equal(issues.some(i => /mm even at 4 decimals.*limits are omitted/.test(i.message)), !printableMm);
+  }
 });
 test('frame values are not dimensions: mm as entered whatever the precision; inch rounded down with 3 to 5 places', () => {
   const frames = (extra: Partial<DrawingSettings>, value: number) => texts(groupOf(sheetOf({ ...extra, frames: [{ id: 'flat', dim: 'wide', characteristic: 'flatness', value, datums: [] }] }).sheet, 'flat'));

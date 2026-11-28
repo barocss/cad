@@ -676,7 +676,7 @@ export function drawingIssues(ctx: IssueContext): DrawingIssue[] {
   for (const t of ctx.followedChanged ?? []) out.push({ code: 'FOLLOWED_CHANGED', severity: 'warning', message: `A frame ${t}.` });
   // (D155: a diameter's fit class with no row for its size in the user's tables: said, with what to load — never a guessed limit.)
   if (ctx.fitMiss) for (const r of sheet.dimensions) if (r.ok && r.kind === 'diameter') {
-    const why = ctx.fitMiss(r.dim.edge, 2 * r.radius);
+    const why = ctx.fitMiss(r.dim.edge, r.value);
     if (why) out.push({ code: 'FIT_ROW_MISSING', severity: 'error', message: `Dimension ${r.text}: its tolerance class has no limits here — ${why.replace(/^\[FIT_TABLE_MISS\] /, '')}.`, dims: [r.dim.id], view: r.dim.view });
   }
   // (FRd2, O119: a weld seen in no view has no symbol: said, the weld list holds it.)

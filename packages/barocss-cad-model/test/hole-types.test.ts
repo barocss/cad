@@ -71,6 +71,7 @@ test('hole callouts: count, size or thread, through or deep, counterbore and cou
   const ctx = faceCtx('n1.top'), base = { ...hole.defaults!(ctx), x: 8, y: 8 }, last = (v: Record<string, unknown>) => hole.build!(ctx, { ...base, ...v } as never).nodes;
   const k = plate.nodes.length; // the hole's node
   assert.equal(holeCallout(last({ d: 6.6 }), `n${k}.side0|n1.top`), 'Ø6.6 THRU');
+  assert.equal(holeCallout(last({ d: 6.601 }), `n${k}.side0|n1.top`), 'Ø6.601 THRU');
   assert.equal(holeCallout(last({ d: 6.6, pat: 'row', pn: 4, pa: 8, pb: 0 }), `n${k}.side0`), '4× Ø6.6 THRU');
   assert.equal(holeCallout(last({ type: 'tapped', thread: 'M6', d: 5, tend: 'blind', depth: 10 }), `n${k}.side0`), 'M6×1 × 10 DEEP');
   const cb = last({ type: 'counterbore', d: 6.6, cd: 11, ch: 6.5 });

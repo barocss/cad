@@ -4,7 +4,7 @@ import { deviationPair, deviationSet, lengthFormats, presetFor, type DeviationPa
 import { dimensionLine, dimensionMarks, toleranceText, valueMarks, withShownText } from '../src/drawing/sheet';
 import { emptyDoc, type StudioDoc } from '../src/engine/doc';
 import { withFit } from '../src/drawing/fits';
-import { resolveDimension } from '../src/drawing/dimensions';
+import { resolveDimension, type Resolved } from '../src/drawing/dimensions';
 import type { DrawingDimension } from '../src/drawing/types';
 import { projectViews } from '../src/drawing/project';
 import { brepsFor } from '../src/engine/evaluate';
@@ -149,4 +149,28 @@ test('a projected original circle supplies the authored nominal to the unchanged
     assert.equal(pair.equal, true);
     contained(pair, 12.7, 0.254, -0.254, unit);
   }
+});
+
+test('a fit callout uses the resolved diameter in decimal and fractional drawings', () => {
+  const doc: StudioDoc = {
+    ...emptyDoc(), fits: {
+      version: 1,
+      tables: [{ id: 'primary-fit', rows: [
+        { class: 'H7', over: 10, upTo: 18, upper: 0.018, lower: 0 },
+        { class: 'H7', over: 18, upTo: 30, upper: 0.028, lower: 0 },
+      ] }],
+      faces: [{ face: 'bore', class: 'H7' }],
+    },
+  };
+  const dim: DrawingDimension = { id: 'd1', kind: 'diameter', view: 'top', edge: 'bore', near: [0, 0, 0], place: [20, 20] };
+  const callout = withFit(doc, () => null);
+  const measure: Resolved = { ok: true, kind: 'diameter', dim, center: [0, 0], radius: 8.999999999999998, value: 18, text: '' };
+  const mm = withShownText(measure, callout, presetFor({}));
+  assert.ok(mm.ok);
+  assert.equal(mm.text, 'Ø18 H7 (+0.018/0)');
+  const inch = withShownText(measure, callout, presetFor({ units: 'inch', inchFraction: 64 }));
+  const decimalInch = withShownText(measure, callout, presetFor({ units: 'inch' }));
+  assert.ok(inch.ok && decimalInch.ok);
+  assert.equal(inch.text, decimalInch.text);
+  assert.match(inch.text, / H7 \(/);
 });
