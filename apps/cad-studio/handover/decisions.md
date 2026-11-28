@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D2247: [D2247](notes/agent-native-vertex-rotate-2026-11-29/README.md), #629. Propose Rotate about a named original native vertex and verify exact Studio approval and project reopen.
+
 - D2246: [D2246](notes/non-gp-quadratic-cap-2026-11-29/README.md), #776. Restore the original non-GP quadratic cap in strict validation, native mesh and drawing, and verify the closed STEP mass.
 
 - D2245: [D2245](notes/original-through-bore-h7-boundary-2026-11-29/README.md), #35. Use the original through-bore diameter for the H7 callout and verify both fit rows through project reopen.

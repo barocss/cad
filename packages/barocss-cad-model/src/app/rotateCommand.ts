@@ -6,8 +6,10 @@ import type { Command, Ctx } from './commands';
 const selectSource = 'Select one body or one native vertex to rotate.';
 const axes: readonly Axis[] = ['x', 'y', 'z'];
 
-/** The initial Rotate values from one complete, axis-aligned native edge. */
-export function cardinalEdgeRotation({ bodies, selection, direct }: Pick<Ctx, 'bodies' | 'selection' | 'direct'>) {
+type RotationSelection = Pick<Ctx, 'bodies' | 'selection' | 'direct'>;
+
+/** Resolve one unambiguous complete native line on the current standalone solid. */
+function rotationLine({ bodies, selection, direct }: RotationSelection) {
   const { edges, faces, bodies: selected, vertices, sketches, profileRegions } = selection;
   if (bodies.length !== 1 || edges.length !== 1 || faces.length || selected.length
     || vertices?.length || sketches?.length || profileRegions || direct?.length) return;
@@ -20,10 +22,25 @@ export function cardinalEdgeRotation({ bodies, selection, direct }: Pick<Ctx, 'b
   const { edgeId } = edge.nativeJoint;
   if (body.mesh.edges.some(other => other !== edge && (other.nativeJoint?.edgeId === edgeId || other.names.includes(edge.names[0])))) return;
   if (![...edge.a, ...edge.b].every(Number.isFinite)) return;
+  return edge;
+}
+
+/** The initial Rotate values from one complete, axis-aligned native edge. */
+export function cardinalEdgeRotation(ctx: RotationSelection) {
+  const edge = rotationLine(ctx);
+  if (!edge) return;
   const varying = axes.filter((_, index) => edge.a[index] !== edge.b[index]);
   if (varying.length !== 1) return;
   const [px, py, pz] = edge.a;
   return { axis: varying[0], angle: 0, px, py, pz };
+}
+
+/** Use the exact vertex behind the named edge endpoint reported by the part summary. */
+export function edgeEndpointRotation(ctx: RotationSelection, endpoint: 'from' | 'to', axis: Axis) {
+  const edge = rotationLine(ctx);
+  if (!edge || edge.a.every((coordinate, index) => coordinate === edge.b[index])) return;
+  const [px, py, pz] = endpoint === 'from' ? edge.a : edge.b;
+  return { axis, angle: 0, px, py, pz };
 }
 
 function rotationVertex({ rotateVertex, selection, direct }: Ctx) {

@@ -56,3 +56,45 @@ test('Agent edge Rotate refuses invalid input without evaluating or altering the
   assert.match(result.content, /straight X, Y or Z edge/);
   assert.equal(result.state.doc, cylinder.doc);
 });
+
+test('Agent Rotate uses either native endpoint as the pivot for an explicit world axis', async () => {
+  const state = await stateOf(doc);
+  const summary = await dispatchTool(state, 'query', { action: 'summary', body: state.bodies[0].key }, evaluate);
+  assert.ok(!summary.isError);
+  const line = JSON.parse(summary.content).bodies[0].edges.find((item: { name: string }) => item.name === edge);
+  assert.deepEqual([line.from, line.to], [[30, 0, 0], [30, 0, 10]]);
+  for (const [endpoint, axis] of [['from', 'x'], ['to', 'y']] as const) {
+    const outcome = await dispatchTool(state, 'features', { ...command, values: { about: 'vertex', endpoint, axis, angle: -30 } }, evaluate);
+    assert.ok(outcome.changed && !outcome.isError, outcome.content);
+    const node = outcome.state.doc.nodes.at(-1);
+    assert.equal(node?.kind, 'rotate');
+    assert.deepEqual([node.axis, node.angle, node.pivot], [axis, -30, line[endpoint]]);
+    const { did } = JSON.parse(outcome.content);
+    const reported = JSON.parse(did.slice('Rotate '.length));
+    assert.equal(reported.endpoint, endpoint);
+  }
+});
+
+test('Agent vertex Rotate requires a current named edge, endpoint and explicit axis', async () => {
+  const state = await stateOf(doc);
+  const values = { about: 'vertex', endpoint: 'to', axis: 'x', angle: 30 };
+  const neverEvaluate = () => assert.fail('Invalid inputs must be refused before evaluation.');
+  for (const patch of [
+    { expectedRevision: undefined }, { expectedRevision: '0000000000000000' },
+    { edges: [edge, edge] }, { edges: [] }, { point: [30, 0, 10] },
+    { values: { ...values, endpoint: 'middle' } }, { values: { ...values, endpoint: undefined } },
+    { values: { ...values, axis: undefined } }, { values: { ...values, axis: 'xy' } },
+    { values: { ...values, pz: 10 } }, { values: { ...values, angle: 0 } },
+  ]) {
+    const result = await dispatchTool(state, 'features', { ...command, values, ...patch }, neverEvaluate);
+    assert.ok(result.isError && !result.changed, JSON.stringify(patch));
+    assert.equal(result.state.doc, doc);
+  }
+  const cylinder = await stateOf(cylinderPart(10, 20));
+  const rim = cylinder.bodies[0].mesh.edges.find(candidate => !candidate.nativeLine && candidate.names.length);
+  assert.ok(rim);
+  const curve = await dispatchTool(cylinder, 'features', { ...command, values, edges: [rim.names[0]],
+    expectedRevision: revisionOf(cylinder.doc) }, neverEvaluate);
+  assert.match(curve.content, /straight edge and its native endpoint/);
+  assert.equal(curve.state.doc, cylinder.doc);
+});
