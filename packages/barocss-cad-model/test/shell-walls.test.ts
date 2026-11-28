@@ -277,12 +277,12 @@ test('a corner Shell preserves three original opening names and refuses ambiguou
   const result = evaluateDoc(loaded.doc, 2);
   assert.ok(result.ok && Math.abs(result.bodies[0].volume! - 6684) < 1e-7);
   for (const patch of [{ thirdOpening: undefined }, { thirdOpening: feature.opening }, { secondOpening: undefined },
-    { thirdOpening: 'n1.side3', walls: { 'n1.side0': 3, 'n1.side2': 4, 'n1.bottom': 2 } }]) {
+    { thirdOpening: 'n1.unknown', walls: { 'n1.side0': 3, 'n1.side2': 4, 'n1.bottom': 2 } }]) {
     assert.ok('error' in readStudioDoc(JSON.stringify({ ...built, nodes: [...built.nodes.slice(0, 2), { ...feature, ...patch }] })));
   }
-  const opposite = { ...ctx, selection: { ...ctx.selection, faces: picks(['n1.top', 'n1.side1', 'n1.side3']) } };
-  assert.equal(shell.fields?.(opposite, values).some(field => field.key === 'wallMode'), false);
-  assert.throws(() => shell.build!(opposite, values), /three faces sharing a corner/);
+  const duplicate = { ...ctx, selection: { ...ctx.selection, faces: picks(['n1.top', 'n1.side1', 'n1.top']) } };
+  assert.equal(shell.fields?.(duplicate, values).some(field => field.key === 'wallMode'), false);
+  assert.throws(() => shell.build!(duplicate, values), /three distinct faces/);
   const staleSignature = { ...feature, sigs: { ...feature.sigs, 'n1.side0': feature.sigs['n1.side2'], 'n1.side2': feature.sigs['n1.side0'] } };
   const stale = evaluateDoc({ ...built, nodes: [...built.nodes.slice(0, 2), staleSignature] }, 3);
   assert.ok(!stale.ok && /REFERENCE_MOVED/.test(stale.error.detail));
@@ -294,9 +294,44 @@ test('a corner Shell preserves three original opening names and refuses ambiguou
   const tool = await dispatchTool(state, 'features', args, evaluate);
   assert.ok(tool.changed && !tool.isError, tool.content);
   assert.deepEqual(tool.state.doc.nodes[2], feature);
-  for (const change of [{ faces: ['n1.top', 'n1.side1', 'n1.side3'] }, { values: { ...values, leftWall: undefined } },
+  for (const change of [{ faces: ['n1.top', 'n1.side1', 'n1.top'] }, { values: { ...values, leftWall: undefined } },
     { values: { ...values, bottomWall: 20 } }]) {
     const refused = await dispatchTool(state, 'features', { ...args, ...change }, evaluate);
     assert.ok(refused.isError && !refused.changed && refused.state.doc === doc, refused.content);
   }
+});
+
+
+test('three openings with an opposite pair have one canonical manual and revision-pinned Agent recipe', async () => {
+  const doc = rectanglePart(40, 30, 20), original = evaluateDoc(doc, 1);
+  assert.ok(original.ok);
+  const shell = commandById('shell')!;
+  const names = ['n1.bottom', 'n1.side0', 'n1.top'];
+  const picks = names.map(name => {
+    const face = original.bodies[0].mesh.faces.findIndex(candidate => candidate.nativePlaneName === name);
+    assert.ok(face >= 0, name);
+    return { body: 0, face };
+  });
+  const selection = { faces: picks, bodies: [], edges: [] };
+  const values = { wallMode: 'per-face', leftWall: 3, rightWall: 5, backWall: 4 };
+  const ctx = { doc, bodies: original.bodies, selection };
+  const built = shell.build!(ctx, values), feature = built.nodes[2];
+  assert.ok(feature.kind === 'shell-walls');
+  assert.deepEqual([feature.opening, feature.secondOpening, feature.thirdOpening], ['n1.top', 'n1.bottom', 'n1.side0']);
+  assert.deepEqual(feature, shell.build!({ ...ctx, selection: { ...selection, faces: [...picks].reverse() } }, values).nodes[2]);
+  assert.deepEqual(editFields(built.nodes, 2).map(field => field.key), ['rightWall', 'backWall', 'leftWall']);
+  const loaded = readStudioDoc(JSON.stringify(built));
+  assert.ok('doc' in loaded);
+  assert.deepEqual(loaded.doc.nodes[2], feature);
+  const result = evaluateDoc(loaded.doc, 2);
+  assert.ok(result.ok && Math.abs(result.bodies[0].volume! - 7360) < 1e-7);
+
+  const state = { doc, bodies: original.bodies }, evaluate = async (candidate: StudioDoc) => evaluateDoc(candidate, 1);
+  const expectedRevision = JSON.parse((await dispatchTool(state, 'query', { action: 'rebuild' }, evaluate)).content).revision;
+  const args = { action: 'command', command: 'shell', expectedRevision, faces: names, values };
+  const tool = await dispatchTool(state, 'features', args, evaluate);
+  assert.ok(tool.changed && !tool.isError, tool.content);
+  assert.deepEqual(tool.state.doc.nodes[2], feature);
+  const collapse = await dispatchTool(state, 'features', { ...args, values: { ...values, rightWall: 37 } }, evaluate);
+  assert.ok(collapse.isError && !collapse.changed && collapse.state.doc === doc, collapse.content);
 });

@@ -125,7 +125,7 @@ export function shellOperation(f: CadPartFeature & Record<string, unknown>, t: T
         return fail('INPUT', 'Per-face Shell needs two distinct original opening names for two openings.');
       if (thirdOpening !== undefined && (opening === null || secondOpening === undefined || typeof thirdOpening !== 'string'
         || !thirdOpening || thirdOpening === opening || thirdOpening === secondOpening))
-        return fail('INPUT', 'Per-face Shell needs three distinct original opening names for a corner opening.');
+        return fail('INPUT', 'Per-face Shell needs three distinct original opening names.');
       if (opening === null || secondOpening !== undefined) {
         const parent = t.ref(f.target, 'Per-face Shell stock').author;
         const sketch = parent?.kind === 'extrude' ? t.ref(parent.sketch, 'Per-face Shell sketch') : undefined;

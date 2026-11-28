@@ -14,13 +14,12 @@ export function sameWallNormal(value: unknown, direction: readonly number[]): bo
   return isVec3(value) && direction.every((coordinate, i) => coordinate === value[i]);
 }
 
-/** Return the kept walls of distinct original openings, with one opening per axis for a corner. */
+/** Return the kept walls of distinct original openings, on one cardinal box. */
 export function boxShellOpeningWalls(normal: unknown, secondNormal?: unknown, thirdNormal?: unknown) {
   const normals = thirdNormal !== undefined ? [normal, secondNormal, thirdNormal]
     : secondNormal !== undefined ? [normal, secondNormal] : [normal];
   const openings = normals.map(direction => boxShellWalls.find(side => sameWallNormal(direction, side.normal)));
   if (openings.includes(undefined) || new Set(openings).size !== openings.length) return;
-  if (thirdNormal !== undefined && new Set(openings.map(side => side?.normal.findIndex(value => value !== 0))).size !== 3) return;
   return boxShellWalls.filter(side => !openings.includes(side));
 }
 
@@ -61,6 +60,6 @@ export function shellWallFieldsProblem(node: Record<string, unknown>): string | 
     return opening === null ? 'Closed per-face Shell needs six distinct cardinal walls.'
       : secondOpening === undefined ? 'Per-face Shell needs an original cardinal opening and its five cardinal walls.'
       : thirdOpening === undefined ? 'Per-face Shell needs two original cardinal openings and their four kept cardinal walls.'
-        : 'The three original Shell openings must share a corner and have three kept cardinal walls.';
+        : 'Per-face Shell needs three distinct original cardinal openings and their three kept walls.';
   return null;
 }

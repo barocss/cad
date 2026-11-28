@@ -7,12 +7,13 @@ import { clickModelCommand } from './model-rail-helper.mjs';
 
 const baseline = process.argv.includes('--baseline');
 const agent = process.argv.includes('--agent');
+const channel = process.argv.includes('--channel');
 const pins = ['packages/barocss-cad-model/src/app/boxShellSelection.ts', 'packages/barocss-cad-model/src/engine/shellWalls.ts',
   'packages/barocss-cad/src/part/part-box-shell.ts', 'packages/barocss-cad/src/part/part-shell.ts'];
 const f = await createFlow({
   name: 'corner-open-box-wall-shell', output: process.argv[2], envFrozen: 'CORNER_OPEN_BOX_WALL_SHELL_FROZEN',
-  qualification: 'Pick three original faces sharing a corner and edit the other three walls of a rectangular Shell.',
-  limits: ['An original 40×30×20 mm box with the top, front and right faces opened.'],
+  qualification: 'Open three original rectangular box faces and edit the other three walls.',
+  limits: [channel ? 'An original 40×30×20 mm box opens Top, Bottom and Front.' : 'An original 40×30×20 mm box opens Top, Front and Right.'],
   initialFiles: pins, requiredFrozen: pins,
   inspectorSource: `
 import { createHash } from 'node:crypto';
@@ -34,7 +35,13 @@ const stock = {
 };
 const button = (name, scope = f.page) => scope.getByRole('button', { name, exact: true });
 const hud = () => f.page.getByRole('dialog', { name: 'Shell', exact: true });
-const view = name => button(name, f.page.locator('.views')).click();
+const view = async name => {
+  if (name === 'Bottom') {
+    await button('View cube directions', f.page.getByRole('group', { name: 'View cube', exact: true })).click();
+    await f.page.getByRole('menuitem', { name, exact: true }).click();
+    await f.page.locator('.view-cube .vc-label').getByText('BOTTOM', { exact: true }).waitFor();
+  } else await button(name, f.page.locator('.views')).click();
+};
 const frame = () => f.page.getByTitle('Frame all (F)', { exact: true }).click();
 const near = (a, b) => assert.ok(Number.isFinite(a) && Math.abs(a - b) < 1e-7, `${a} versus ${b}`);
 
@@ -48,26 +55,46 @@ async function pick(viewName, point, count) {
   await f.page.waitForFunction(n => window.__studioSelection.selection.faces.length === n, count);
 }
 
-async function prove(label, doc, bottom) {
+const originalDimensions = [40, 30, 20];
+const opened = channel ? ['n1.top', 'n1.bottom', 'n1.side0'] : ['n1.top', 'n1.side1', 'n1.side0'];
+const kept = [
+  { label: 'Left wall', name: 'n1.side3', axis: 0, high: false, thickness: 3, key: 'leftWall' },
+  { label: 'Back wall', name: 'n1.side2', axis: 1, high: true, thickness: 4, key: 'backWall' },
+  channel ? { label: 'Right wall', name: 'n1.side1', axis: 0, high: true, thickness: 5, key: 'rightWall' }
+    : { label: 'Bottom wall', name: 'n1.bottom', axis: 2, high: false, thickness: 2, key: 'bottomWall' },
+];
+const editedWall = kept.at(-1), editedWidth = channel ? 8 : 6;
+const thickness = (wall, width) => wall === editedWall ? width : wall.thickness;
+const wallValues = Object.fromEntries(kept.map(wall => [wall.key, wall.thickness]));
+const originalVolume = 40 * 30 * 20;
+function cavityFor(width) {
+  const box = originalDimensions.map(dimension => [0, dimension]);
+  for (const wall of kept) box[wall.axis][Number(wall.high)] += (wall.high ? -1 : 1) * thickness(wall, width);
+  return box;
+}
+const volumeOf = box => box.reduce((volume, [low, high]) => volume * (high - low), 1);
+
+async function prove(label, doc, width) {
   const native = await f.inspect(label, doc), node = doc.nodes[2];
   assert.equal(node.kind, 'shell-walls');
-  assert.deepEqual([node.opening, node.secondOpening, node.thirdOpening], ['n1.top', 'n1.side1', 'n1.side0']);
-  assert.deepEqual(node.walls, { 'n1.side3': 3, 'n1.side2': 4, 'n1.bottom': bottom });
+  assert.deepEqual([node.opening, node.secondOpening, node.thirdOpening], opened);
+  assert.deepEqual(node.walls, Object.fromEntries(kept.map(wall => [wall.name, thickness(wall, width)])));
   assert.equal(Object.keys(node.sigs).length, 6);
-  assert.deepEqual([native.valid, native.closed, native.pcurves], [true, [true], 50]);
-  assert.deepEqual(native.counts, { bodies: 1, shells: 1, faces: 11, loops: 11, coedges: 50, edges: 25, vertices: 16 });
-  const cavity = 37 * 26 * (20 - bottom), volume = 24000 - cavity;
-  const centroid = [20, 15, 10].map((value, i) => (24000 * value - cavity * [21.5, 13, (20 + bottom) / 2][i]) / volume);
+  const faces = channel ? 10 : 11, edges = channel ? 24 : 25;
+  assert.deepEqual([native.valid, native.closed, native.pcurves], [true, [true], 2 * edges]);
+  assert.deepEqual(native.counts, { bodies: 1, shells: 1, faces, loops: faces, coedges: 2 * edges, edges, vertices: 16 });
+  const cavity = cavityFor(width), removed = volumeOf(cavity), volume = originalVolume - removed;
+  const centroid = originalDimensions.map((dimension, axis) => (originalVolume * dimension - removed * (cavity[axis][0] + cavity[axis][1])) / (2 * volume));
   const visible = (await f.bodies()).bodies[0];
   for (const result of [native.mass, visible]) {
     near(result.volume, volume);
     result.centroid.forEach((value, i) => near(value, centroid[i]));
   }
-  for (const [name, axis, station, normal] of [['n1.side3', 0, 3, 1], ['n1.side2', 1, 26, -1], ['n1.bottom', 2, bottom, 1]]) {
+  for (const { name, axis, high } of kept) {
     const support = native.supports[`n2.in.${name}`];
     assert.equal(support.kind, 'plane');
-    near(support.o[axis], station);
-    assert.deepEqual(support.n.map(value => value || 0), [0, 1, 2].map(i => i === axis ? normal : 0));
+    near(support.o[axis], cavity[axis][Number(high)]);
+    assert.deepEqual(support.n.map(value => value || 0), [0, 1, 2].map(i => i === axis ? (high ? -1 : 1) : 0));
   }
   f.report.observations.push({ label, volume, centroid, digest: native.digest });
   return native.digest;
@@ -79,11 +106,11 @@ async function approve(file) {
     const description = await call('describe', { command: 'shell' });
     assert.match(description.values.wallMode, /three original faces sharing a corner/);
     const revision = await currentPartRevision(call);
-    const proposed = await call('proposals', { action: 'propose', title: 'Open the three faces at the top front right corner', ops: [{
-      tool: 'features', args: { action: 'command', command: 'shell', faces: ['n1.side0', 'n1.top', 'n1.side1'], expectedRevision: revision,
-        values: { wallMode: 'per-face', leftWall: 3, backWall: 4, bottomWall: 2 } },
+    const proposed = await call('proposals', { action: 'propose', title: channel ? 'Open both caps and the front face' : 'Open the three faces at the top front right corner', ops: [{
+      tool: 'features', args: { action: 'command', command: 'shell', faces: [...opened].reverse(), expectedRevision: revision,
+        values: { wallMode: 'per-face', ...wallValues } },
     }] });
-    assert.deepEqual([proposed.proposal, proposed.applied, proposed.change.volume], ['P1', false, -17316]);
+    assert.deepEqual([proposed.proposal, proposed.applied, proposed.change.volume], ['P1', false, -volumeOf(cavityFor(editedWall.thickness))]);
     assert.match((await call('proposals', { action: 'accept', id: proposed.proposal }, true)).error, /user accepts.*studio/i);
     return proposed.proposal;
   });
@@ -102,7 +129,7 @@ async function approve(file) {
   await f.changed(pending);
   const accepted = await f.doc();
   assert.deepEqual([accepted.history.at(-1).kind, accepted.history.at(-1).proposal, accepted.history.at(-1).by.agent], ['accept', proposal, 'user']);
-  await prove('agent-approved', accepted, 2);
+  await prove('agent-approved', accepted, editedWall.thickness);
   await f.snapshot('corner-shell-proposal-approved');
 }
 
@@ -115,10 +142,10 @@ await f.run(async () => {
   for (let i = 0; i < 6 && !(await filter.innerText()).includes('Faces'); i++) await filter.click();
   assert.match(await filter.innerText(), /Faces/);
   if (await button('Ortho').getAttribute('aria-pressed') !== 'true') await button('Ortho').click();
-  f.phase = 'pick the top, front and right faces';
+  f.phase = 'pick the three original Shell openings';
   await pick('Top', [20, 12, 20], 1);
   await pick('Front', [20, 0, 8], 2);
-  await pick('Right', [40, 12, 8], 3);
+  await (channel ? pick('Bottom', [20, 12, 0], 3) : pick('Right', [40, 12, 8], 3));
   await view('Iso');
   await frame();
   const launch = () => clickModelCommand(f.page, 'Modify', 'Shell');
@@ -132,10 +159,8 @@ await f.run(async () => {
   }
   async function preview() {
     await mode().selectOption('per-face');
-    for (const [name, value] of [['Left wall', 3], ['Back wall', 4], ['Bottom wall', 2]]) {
-      await hud().getByLabel(name, { exact: true }).fill(String(value));
-    }
-    for (const name of ['Top wall', 'Front wall', 'Right wall']) assert.equal(await hud().getByLabel(name, { exact: true }).count(), 0);
+    for (const { label, thickness } of kept) await hud().getByLabel(label, { exact: true }).fill(String(thickness));
+    for (const name of ['Top wall', 'Front wall', channel ? 'Bottom wall' : 'Right wall']) assert.equal(await hud().getByLabel(name, { exact: true }).count(), 0);
     await hud().locator('.status').getByText('preview', { exact: true }).waitFor();
   }
   f.phase = 'preview Cancel and retry Apply';
@@ -149,33 +174,33 @@ await f.run(async () => {
   await button('Apply', hud()).click();
   await f.changed(stock);
   const created = await f.doc();
-  await prove('created', created, 2);
+  await prove('created', created, editedWall.thickness);
   await f.snapshot('corner-shell-applied');
 
   await f.openFeatureEditor(2, 'wall thickness refusal');
-  await f.editor().getByLabel('Bottom wall', { exact: true }).fill('20');
+  await f.editor().getByLabel(editedWall.label, { exact: true }).fill(channel ? '37' : '20');
   await button('Apply', f.editor()).click();
   await f.editor().locator('.hud-error').waitFor();
   await f.same(created);
   await f.snapshot('corner-shell-collapse-refused');
   await f.closeEditor();
-  await f.openFeatureEditor(2, 'edit the bottom wall');
-  await f.editor().getByLabel('Bottom wall', { exact: true }).fill('6');
-  await f.applyEditor(created, 'updated-bottom');
+  await f.openFeatureEditor(2, 'edit one retained wall');
+  await f.editor().getByLabel(editedWall.label, { exact: true }).fill(String(editedWidth));
+  await f.applyEditor(created, 'updated-wall');
   const edited = await f.doc();
-  const digest = await prove('edited', edited, 6);
+  const digest = await prove('edited', edited, editedWidth);
   await f.undo();
   await f.same(created);
-  await prove('undo', created, 2);
+  await prove('undo', created, editedWall.thickness);
   await f.redo();
   await f.same(edited);
-  assert.equal(await prove('redo', edited, 6), digest);
+  assert.equal(await prove('redo', edited, editedWidth), digest);
   const saved = await f.save('corner-wall-shell');
   await f.freshOpen(saved.file, edited, 'corner-shell-reopened');
-  assert.equal(await prove('reopened', edited, 6), digest);
+  assert.equal(await prove('reopened', edited, editedWidth), digest);
   await view('Iso');
   await frame();
   await f.openFeatureEditor(2, 'verify reopened wall fields');
-  assert.equal(await f.editor().getByLabel('Bottom wall', { exact: true }).inputValue(), '6');
+  assert.equal(await f.editor().getByLabel(editedWall.label, { exact: true }).inputValue(), String(editedWidth));
   await f.snapshot('corner-shell-reopened-history');
 });

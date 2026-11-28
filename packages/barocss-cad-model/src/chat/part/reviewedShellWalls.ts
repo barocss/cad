@@ -27,7 +27,7 @@ export function reviewedShellWallsProblem(ctx: Ctx, names: NameSelection, args: 
 
   const box = boxShellSelection(ctx, 'shell');
   if (!box) return closed ? 'Closed per-face Shell needs one exact original rectangular body ID.'
-    : 'Use one or two distinct original faces or three faces sharing a corner on the same box.';
+    : 'Use one to three distinct original faces on the same box.';
   const invalid = box.walls.filter(({ key }) => !Object.hasOwn(values, key) || !Number.isFinite(values[key]));
   if (invalid.length) return `Give a finite thickness in mm for each kept wall: ${invalid.map(({ key }) => key).join(', ')}.`;
 }

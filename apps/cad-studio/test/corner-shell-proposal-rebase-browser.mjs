@@ -5,6 +5,7 @@ import { createFlow } from './flow-helper.mjs';
 import { currentPartRevision, withMcpSession } from './mcp-browser-session.mjs';
 
 const baseline = process.argv.includes('--baseline');
+const channel = process.argv.includes('--channel');
 const pins = ['apps/cad-studio/test/corner-shell-proposal-rebase-browser.mjs', 'apps/cad-studio/src/state/useProposalPreview.ts',
   'packages/barocss-cad-model/src/chat/part/proposals.ts', 'packages/barocss-cad-model/src/chat/part/reviewedShellWalls.ts',
   ...(!baseline ? ['packages/barocss-cad-model/src/chat/cornerShellProposalRebase.ts'] : [])];
@@ -33,6 +34,9 @@ const stock = {
     { id: 'n3', kind: 'extrude', sketch: 2, height: 5 }],
   outputs: { b1: { node: 1, side: 'solid' }, b3: { node: 3, side: 'solid' } },
 };
+const openings = channel ? ['n1.top', 'n1.bottom', 'n1.side0'] : ['n1.top', 'n1.side1', 'n1.side0'];
+const walls = channel ? { leftWall: 3, rightWall: 5, backWall: 4 } : { leftWall: 3, backWall: 4, bottomWall: 2 };
+const acceptedVolume = channel ? 7360 : 6684;
 const button = (name, scope = f.page) => scope.getByRole('button', { name, exact: true });
 const card = () => f.page.getByRole('listitem', { name: 'Proposal P1', exact: true });
 const alert = () => f.page.getByText('P1 could not be rebased', { exact: true });
@@ -62,9 +66,9 @@ await f.run(async () => {
   await writeFile(file, JSON.stringify(stock));
   await withMcpSession({ app: f.app, output: f.output, clientName: 'corner-shell-rebase', autonomy: 1 }, file, 'stage', async call => {
     const expectedRevision = await currentPartRevision(call);
-    const result = await call('proposals', { action: 'propose', title: 'Open the original box corner', ops: [{ tool: 'features', args: {
-      action: 'command', command: 'shell', faces: ['n1.side0', 'n1.top', 'n1.side1'], expectedRevision,
-      values: { wallMode: 'per-face', leftWall: 3, backWall: 4, bottomWall: 2 },
+    const result = await call('proposals', { action: 'propose', title: channel ? 'Open both original caps and the front face' : 'Open the original box corner', ops: [{ tool: 'features', args: {
+      action: 'command', command: 'shell', faces: [...openings].reverse(), expectedRevision,
+      values: { wallMode: 'per-face', ...walls },
     } }] });
     assert.deepEqual([result.proposal, result.applied], ['P1', false]);
   });
@@ -100,18 +104,18 @@ await f.run(async () => {
   const accepted = await f.doc();
   assert.deepEqual(accepted.history.map(entry => [entry.kind, entry.by.agent]), [['proposal', 'chat'], ['rebase', 'user'], ['accept', 'user']]);
   assert.deepEqual(accepted.nodes.slice(0, 4), changed.nodes);
-  const outcome = await inspect('user-approved', accepted, [800, 6684]);
+  const outcome = await inspect('user-approved', accepted, [800, acceptedVolume]);
   assert.equal(nativeOf(outcome, 'n3').digest, nativeOf(current, 'n3').digest);
-  assert.ok(Math.abs(nativeOf(outcome, 'n4').volume - 6684) < 1e-7);
+  assert.ok(Math.abs(nativeOf(outcome, 'n4').volume - acceptedVolume) < 1e-7);
   const shell = accepted.nodes[4];
-  assert.deepEqual([shell.parent.node, shell.opening, shell.secondOpening, shell.thirdOpening], [1, 'n1.top', 'n1.side1', 'n1.side0']);
+  assert.deepEqual([shell.parent.node, shell.opening, shell.secondOpening, shell.thirdOpening], [1, ...openings]);
   await f.undo();
   await f.same(rebased);
   await f.redo();
   await f.same(accepted);
   const saved = await f.save('reviewed-corner-shell');
   await f.freshOpen(saved.file, accepted, 'approved-fresh-open');
-  assert.deepEqual(await inspect('reopened', accepted, [800, 6684]), outcome);
+  assert.deepEqual(await inspect('reopened', accepted, [800, acceptedVolume]), outcome);
 
   await f.freshOpen(file, pending, 'pending-source-edit');
   const retargeted = await edit(1, 22, pending, 'the-original-stock-changed');

@@ -89,7 +89,7 @@ test('a corner Shell refuses malformed ownership and collapse without changing t
   const shell = shellAt([1, 0, 1]), snapshot = evaluateCadPart(doc(shell)), saved = saveCadPart(snapshot);
   for (const [patch, code] of [
     [{ opening: null }, 'INPUT'], [{ secondOpening: undefined }, 'INPUT'], [{ thirdOpening: shell.opening }, 'INPUT'],
-    [{ thirdOpening: null }, 'INPUT'], [{ thirdOpening: 'absent' }, 'SELECTION'], [{ thirdOpening: 'box.side3' }, 'SELECTION'],
+    [{ thirdOpening: null }, 'INPUT'], [{ thirdOpening: 'absent' }, 'SELECTION'], [{ thirdOpening: shell.secondOpening }, 'INPUT'],
     [{ thirdOpening: undefined }, 'REFERENCE'], [{ walls: { ...shell.walls, 'box.top': 2 } }, 'REFERENCE'],
     [{ walls: { ...shell.walls, 'box.bottom': 0 } }, 'PARAMETER'], [{ walls: { ...shell.walls, 'box.bottom': NaN } }, 'PARAMETER'],
     [{ walls: { ...shell.walls, 'box.bottom': 20 } }, 'PARAMETER'], [{ walls: { ...shell.walls, 'box.bottom': 19.99995 } }, 'PARAMETER'],
@@ -110,5 +110,70 @@ test('each axis accepts a small positive corner cavity and refuses a below-minim
     near(massPropertiesOf(output).volume, 24000 - removed);
     assert.ok(checkBrep(output.brep, { strict: true }).valid);
     assert.throws(() => reevaluate(snapshot, { document: atWidth(minimum / 2) }), error => error.code === 'PARAMETER');
+  }
+});
+
+
+test('opposite openings and a third lateral opening preserve every material section of the three-wall channel', () => {
+  const faceNames = names.flat();
+  const orders = [[0, 1, 2], [0, 2, 1], [1, 0, 2], [1, 2, 0], [2, 0, 1], [2, 1, 0]];
+  for (const [through, pair] of names.entries()) {
+    for (const third of faceNames.filter(name => !pair.includes(name))) {
+      const openings = [...pair, third];
+      const walls = Object.fromEntries(faceNames.flatMap((name, index) => openings.includes(name) ? [] : [[name, widths.flat()[index]]]));
+      const feature = { id: 'wall', kind: 'shell-walls', target: 'box', opening: pair[0], secondOpening: pair[1], thirdOpening: third, walls };
+      const snapshot = evaluateCadPart(doc(feature)), output = snapshot.outputs[0], { brep } = output;
+      const report = checkBrep(brep, { strict: true, pcurveSamples: 7 });
+      assert.ok(report.valid, JSON.stringify(report.issues));
+      const [faces, edges, vertices] = through === 2 ? [10, 24, 16] : [14, 32, 20];
+      assert.deepEqual(report.counts, { bodies: 1, shells: 1, faces, loops: faces, coedges: 2 * edges, edges, vertices });
+      assert.equal(report.topology[0].genus, 0);
+      assert.ok(brep.loops.every(loop => loop.kind === 'outer'));
+      assert.ok(brep.coedges.every(use => use.pcurve));
+      const cavity = bounds.map(([min, max], axis) => [min + (walls[names[axis][0]] ?? 0), max - (walls[names[axis][1]] ?? 0)]);
+      const size = cavity.map(([min, max]) => max - min);
+      const removed = size.reduce((volume, length) => volume * length, 1);
+      const expectedVolume = 24000 - removed;
+      for (const mass of [massPropertiesOf(output), brepMassProperties(brep, 1)]) {
+        near(mass.volume, expectedVolume);
+        mass.centroid.forEach((value, axis) =>
+          near(value, (24000 * (bounds[axis][0] + bounds[axis][1]) - removed * (cavity[axis][0] + cavity[axis][1])) / (2 * expectedVolume)));
+      }
+      let area = 5200;
+      for (const [axis, [min, max]] of bounds.entries()) {
+        const coordinates = brep.vertices.map(vertex => vertex.point[axis]);
+        assert.deepEqual([Math.min(...coordinates), Math.max(...coordinates)], [min, max]);
+        assert.ok(coordinates.every(value => [min, max, ...cavity[axis]].includes(value)));
+        for (const [side, name] of names[axis].entries()) {
+          const open = openings.includes(name), outward = side === 1 ? 1 : -1;
+          area += (open ? -1 : 1) * size[(axis + 1) % 3] * size[(axis + 2) % 3];
+          const outer = brep.faces.filter(face => face.name?.replace(/#\d+$/, '') === name);
+          const inner = brep.faces.filter(face => face.name === `wall.in.${name}`);
+          assert.ok(outer.length > 0);
+          assert.equal(inner.length, open ? 0 : 1);
+          for (const [patches, station, normal] of [[outer, bounds[axis][side], outward], [inner, cavity[axis][side], -outward]]) {
+            for (const face of patches) {
+              const support = faceGeometry(face);
+              assert.equal(support.kind, 'plane');
+              assert.equal(support.o[axis], station);
+              assert.equal(support.n[axis], normal);
+              assert.ok(face.surface.controlPoints.every(row => row.every(point => point[axis] === station)));
+            }
+          }
+        }
+      }
+      near(surfaceAreaOf(output), area);
+      checkMesh(brep);
+      assert.deepEqual(loadCadPart(saveCadPart(snapshot)).outputs[0].brep, brep);
+      for (const [a, b, c] of orders) {
+        const ordered = { ...feature, opening: openings[a], secondOpening: openings[b], thirdOpening: openings[c] };
+        assert.deepEqual(reevaluate(snapshot, { document: doc(ordered) }).outputs[0].brep, brep);
+      }
+      const pairedWallAxis = names.findIndex(group => group.every(name => Object.hasOwn(walls, name)));
+      const [lowWall, highWall] = names[pairedWallAxis];
+      const span = bounds[pairedWallAxis][1] - bounds[pairedWallAxis][0];
+      const collapsed = { ...feature, walls: { ...walls, [highWall]: span - walls[lowWall] } };
+      assert.throws(() => reevaluate(snapshot, { document: doc(collapsed) }), error => error.code === 'PARAMETER');
+    }
   }
 });

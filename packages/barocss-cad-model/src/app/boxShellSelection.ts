@@ -31,9 +31,10 @@ export function boxShellSelection(ctx: Ctx, command: 'shell' | 'rib') {
   if (planes.length !== 6 || new Set(planes.map(plane => plane.name)).size !== 6) return;
   const selected = faces.map(({ face }) => planes.find(plane => plane.name === body.mesh.faces[face]?.nativePlaneName));
   if (selected.some(plane => !plane)) return;
-  // Store a corner in Z, X, Y order. Keep the existing order for one or two picks.
+  // Order three picks by axis Z, X, Y. Sort an opposite pair positive first.
   const axisOrder = (plane: typeof planes[number] | undefined) => [2, 0, 1].findIndex(axis => !!plane?.sig.d?.[axis]);
-  const [first, second, third] = selected.length === 3 ? selected.sort((a, b) => axisOrder(a) - axisOrder(b)) : selected;
+  const normalSign = (plane: typeof planes[number] | undefined) => plane?.sig.d?.find(value => value !== 0) ?? 0;
+  const [first, second, third] = selected.length === 3 ? selected.sort((a, b) => axisOrder(a) - axisOrder(b) || normalSign(b) - normalSign(a)) : selected;
   const sides = closed ? boxShellWalls : boxShellOpeningWalls(first?.sig.d, second?.sig.d, third?.sig.d);
   if (!sides) return;
   const [opening, secondOpening] = first && second && sameWallNormal(second.sig.d, [0, 0, 1])
@@ -49,7 +50,7 @@ export function boxShellSelection(ctx: Ctx, command: 'shell' | 'rib') {
 
 export function buildBoxWallShell(ctx: Ctx, values: Values) {
   const target = boxShellSelection(ctx, 'shell');
-  if (!target) throw refusal('BAD_REFERENCE', 'Select one original rectangular box, one or two of its faces, or three faces sharing a corner.');
+  if (!target) throw refusal('BAD_REFERENCE', 'Select one original rectangular box or up to three distinct faces on it.');
   const { parent, opening, secondOpening, thirdOpening, sigs } = target;
   const walls = Object.fromEntries(target.walls.map(face => [face.name, Number(values[face.key])]));
   return withNode(ctx.doc, { kind: 'shell-walls', parent, opening, ...(secondOpening === undefined ? {} : { secondOpening }),

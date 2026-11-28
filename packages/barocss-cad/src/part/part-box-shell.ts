@@ -160,7 +160,7 @@ function matchesBoxSupport(face: Brep['faces'][number], axis: number, boundary: 
     && face.surface.controlPoints.every(row => row.every(point => point[axis] === boundary));
 }
 
-/** Subtract a rectangular cavity through the three original faces that share a corner. */
+/** Subtract a rectangular cavity through three original cardinal faces. */
 export function threeOpeningBoxShellWithWalls(stock: PrismaticSolid, source: Brep, openings: readonly [string, string, string],
   walls: Readonly<Record<string, unknown>>, id: string, fail: Tools['fail']): { solid: PrismaticSolid; brep: Brep } {
   const box = cardinalBoxOf(source);
@@ -170,9 +170,10 @@ export function threeOpeningBoxShellWithWalls(stock: PrismaticSolid, source: Bre
   if (!names.every((name): name is string => typeof name === 'string' && !!name) || new Set(names).size !== 6)
     return fail('REFERENCE', 'Per-face Shell needs six unique original face names.');
   const opened = openings.map(name => source.faces.find(face => face.name === name));
-  const axes = new Set(opened.map(face => face && box.sides.get(face.id)?.axis));
-  if (axes.has(undefined) || axes.size !== 3)
-    return fail('SELECTION', 'The three original Shell openings must share a corner.');
+  if (new Set(openings).size !== 3 || opened.some(face => !face))
+    return fail('SELECTION', 'Three-opening per-face Shell needs three distinct original cardinal faces.');
+  const axes = opened.map(face => box.sides.get(face!.id)!.axis);
+  const oppositeAxis = axes.find((axis, index) => axes.indexOf(axis) !== index);
   if (Object.keys(walls).length !== 3 || openings.some(name => Object.hasOwn(walls, name))
     || names.some(name => !openings.includes(name) && !Object.hasOwn(walls, name)))
     return fail('REFERENCE', 'Three-opening per-face Shell needs one thickness for each of the three kept faces.');
@@ -196,18 +197,23 @@ export function threeOpeningBoxShellWithWalls(stock: PrismaticSolid, source: Bre
   const solid = booleanPrismatic(stock, namedBoxPrism(cavity, innerNames), 'difference');
   const brep = brepFromPrismatic(solid, { id });
   const report = checkBrep(brep, { strict: true }), counts = report.counts;
-  if (!report.valid || counts.bodies !== 1 || counts.shells !== 1 || counts.faces !== 11 || counts.loops !== 11
-    || counts.coedges !== 50 || counts.edges !== 25 || counts.vertices !== 16
+  // World-Z slabs split a channel across more coplanar patches when its through axis is horizontal.
+  const [faces, edges, vertices] = oppositeAxis === undefined ? [11, 25, 16]
+    : oppositeAxis === 2 ? [10, 24, 16] : [14, 32, 20];
+  if (!report.valid || counts.bodies !== 1 || counts.shells !== 1 || counts.faces !== faces || counts.loops !== faces
+    || counts.coedges !== 2 * edges || counts.edges !== edges || counts.vertices !== vertices
     || report.topology.length !== 1 || report.topology[0].genus !== 0 || !brep.coedges.every(use => use.pcurve)
-    || new Set(brep.faces.map(face => face.name)).size !== 11 || !brep.shells[0].closed)
-    return fail('GEOMETRY', 'Three-opening per-face Shell could not retain the exact open corner and its three walls.');
+    || new Set(brep.faces.map(face => face.name)).size !== faces || !brep.shells[0].closed)
+    return fail('GEOMETRY', 'Three-opening per-face Shell could not retain its exact rims and three walls.');
 
   for (const original of source.faces) {
     const name = original.name!, { axis, side } = box.sides.get(original.id)!, normal = side === 0 ? -1 : 1;
     const open = openings.includes(name);
     const outer = brep.faces.filter(face => face.name === name || face.name?.replace(/#\d+$/, '') === name);
     const inner = brep.faces.find(face => face.name === innerNames[axis][side]);
-    if (outer.length !== (open && axis !== 2 ? 2 : 1)
+    const patches = !open ? 1 : oppositeAxis === undefined || oppositeAxis === 2 ? (axis === 2 ? 1 : 2)
+      : axis === oppositeAxis ? 3 : 2;
+    if (outer.length !== patches
       || outer.some(face => !matchesBoxSupport(face, axis, box.ranges[axis][side], normal))
       || (open ? inner !== undefined : !inner || !matchesBoxSupport(inner, axis, cavity[axis][side], -normal)))
       return fail('GEOMETRY', 'Three-opening per-face Shell moved an original wall or lost an exact interior support.');

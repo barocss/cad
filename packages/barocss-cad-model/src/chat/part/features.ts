@@ -154,7 +154,7 @@ export const COMMAND_DOCS: Record<string, { selection: string; values: Record<st
   shell: { selection: 'Choose distinct faces to open on one body, or choose one body for a closed hollow. For an original full capsule Revolve, use one or both complete hemisphere names from query.summary. Pass expectedRevision from query.rebuild for the reviewed part.', values: {
     t: 'uniform wall thickness in mm',
     join: 'default | sharp | arc. Sharp and Round need expectedRevision from query.rebuild and one exact original upright L body ID or its single original end cap name.',
-    wallMode: 'uniform | per-face. Give expectedRevision from query.rebuild. For a closed rectangular Shell, name its original body and supply all six thicknesses. For an open rectangular Shell, name one or two original faces, or three original faces sharing a corner, and give every kept wall thickness.',
+    wallMode: 'uniform | per-face. Give expectedRevision from query.rebuild. For a closed rectangular Shell, name its original body and supply all six thicknesses. For an open rectangular Shell, name one or two original faces, or three original faces sharing a corner or including an opposite pair, and give every kept wall thickness.',
     bottomWall: 'bottom thickness in mm', frontWall: 'front thickness in mm', rightWall: 'right thickness in mm',
     backWall: 'back thickness in mm', leftWall: 'left thickness in mm', topWall: 'top thickness in mm',
   } },

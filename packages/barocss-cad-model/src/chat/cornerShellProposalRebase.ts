@@ -26,7 +26,7 @@ function originalStock(doc: StudioDoc, openings: readonly string[]) {
   }
 }
 
-/** Renew one corner Shell pin only after the user has retained the exact stock in this document's Undo history. */
+/** Renew one three-opening Shell pin only after the user has retained the exact stock in this document's Undo history. */
 export function rebindReviewedCornerShell(doc: StudioDoc, proposal: Proposal, history: readonly StudioDoc[]):
   { op: Op } | { error: string } | undefined {
   if (proposal.status !== 'open' || proposal.ops.length !== 1 || proposal.merge || proposal.follow_up_repair) return;
