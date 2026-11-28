@@ -43,7 +43,7 @@ import { BATCHABLE, MUTATORS, PART_SCOPED, describe, unknownArguments } from './
 import { isObj, isVec3 } from '../util/guards';
 import { revisionOf } from '../util/revision';
 import { BROWSER_PROPOSAL_AUTHOR, browserExtrudeTarget, browserHoleTarget, canProposeBrowserPrimitive,
-  browserBoxWidthValues, type BrowserBoxReferenceSide, browserCylinderTarget, validBoxDimension, validClosedShellDimensions, validCylinderRadius, validExtrudeDistance, validHoleDiameter } from './browserProposalTargets';
+  browserBoxDepthValues, browserBoxWidthValues, type BrowserBoxDepthReferenceSide, type BrowserBoxReferenceSide, browserCylinderTarget, validBoxDimension, validClosedShellDimensions, validCylinderRadius, validExtrudeDistance, validHoleDiameter } from './browserProposalTargets';
 import { firstProblem, isRefusal } from '../engine/refusal';
 import { REFERENCE_CODES } from '../engine/schema/references';
 // ./outputs is loaded on first use: it reaches team/bundle → baseline → assembly → parts, which import this
@@ -146,6 +146,19 @@ export function proposeBrowserBoxWidth(state: ChatState, args: { body: string; r
   }
   return proposeWith(runProposalTool, state, {
     title: `Match Box width to X=${match.targetX} mm`,
+    ops: [{ tool: 'features', args: { action: 'edit', index: 0, values: match.values, expectedRevision } }],
+  }, evaluate, undefined, { agent: BROWSER_PROPOSAL_AUTHOR });
+}
+
+export function proposeBrowserBoxDepth(state: ChatState, args: { body: string; referenceBody: string;
+  referenceSide: BrowserBoxDepthReferenceSide; expectedRevision: string }, evaluate: Evaluate) {
+  const { body, referenceBody, referenceSide, expectedRevision } = args;
+  const match = browserBoxDepthValues(state.doc, state.bodies, body, referenceBody, referenceSide);
+  if (state.partOf || !match || revisionOf(state.doc) !== expectedRevision) {
+    return Promise.resolve(fail(state, 'The browser depth proposal needs two current original Boxes and a different supported depth.'));
+  }
+  return proposeWith(runProposalTool, state, {
+    title: `Match Box depth to Y=${match.targetY} mm`,
     ops: [{ tool: 'features', args: { action: 'edit', index: 0, values: match.values, expectedRevision } }],
   }, evaluate, undefined, { agent: BROWSER_PROPOSAL_AUTHOR });
 }

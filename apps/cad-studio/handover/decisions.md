@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D2273: [D2273](notes/browser-box-depth-match-2026-11-29/README.md), #204. Share a one-use native Box depth proposal through actual browser WebMCP and verify explicit Studio approval.
+
 - D2272: [D2272](notes/closed-trapezoidal-cavity-step-2026-11-29/README.md), #16. Qualify exact STEP exchange of the tapered ring cavity and report the original omitted Direct geometry.
 
 - D2271: [D2271](notes/agent-box-depth-from-corners-2026-11-29/README.md), #629. Propose one exact Box depth match through the local Agent and require explicit Studio approval.

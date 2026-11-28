@@ -113,26 +113,45 @@ export function browserBoxWidthTargets(doc: StudioDoc, bodies: readonly BodyResu
   return { first, second, source, reference };
 }
 
-function nativeBoxCornerOnX(body: BodyResult, box: OriginalBox, x: number) {
+function nativeBoxCornerOnPlane(body: BodyResult, box: OriginalBox, axis: 0 | 1, at: number) {
   for (const [index, candidate] of body.mesh.edges.entries()) {
-    if (candidate.a[0] !== x && candidate.b[0] !== x) continue;
+    if (candidate.a[axis] !== at && candidate.b[axis] !== at) continue;
     const edge = nativeSolidLine(body, index);
     if (!edge) continue;
-    if (edge.a[0] === x && isOriginalBoxCorner(box, edge.a)) return { edge: edge.names[0], endpoint: 'from' };
-    if (edge.b[0] === x && isOriginalBoxCorner(box, edge.b)) return { edge: edge.names[0], endpoint: 'to' };
+    if (edge.a[axis] === at && isOriginalBoxCorner(box, edge.a)) return { edge: edge.names[0], endpoint: 'from' };
+    if (edge.b[axis] === at && isOriginalBoxCorner(box, edge.b)) return { edge: edge.names[0], endpoint: 'to' };
   }
+}
+
+function browserBoxMatchValues(doc: StudioDoc, bodies: readonly BodyResult[], body: string,
+  referenceBody: string, axis: 0 | 1, minimum: boolean) {
+  const targets = browserBoxWidthTargets(doc, bodies);
+  if (!targets || targets.first.key !== body || targets.second.key !== referenceBody) return;
+  const current = targets.source.sketch.max[axis], fixed = targets.source.sketch.min[axis];
+  const target = (minimum ? targets.reference.sketch.min : targets.reference.sketch.max)[axis];
+  if (typeof current !== 'number' || typeof fixed !== 'number' || typeof target !== 'number'
+    || target === current || !validBoxDimension(target - fixed)) return;
+  const source = nativeBoxCornerOnPlane(targets.first, targets.source, axis, current);
+  const reference = nativeBoxCornerOnPlane(targets.second, targets.reference, axis, target);
+  if (source && reference) return { target, values: { boxVertexEdge: source.edge, boxVertexEndpoint: source.endpoint,
+    boxTargetVertexEdge: reference.edge, boxTargetVertexEndpoint: reference.endpoint } };
 }
 
 export function browserBoxWidthValues(doc: StudioDoc, bodies: readonly BodyResult[], body: string,
   referenceBody: string, side: BrowserBoxReferenceSide) {
-  const targets = browserBoxWidthTargets(doc, bodies);
-  if (!targets || targets.first.key !== body || targets.second.key !== referenceBody || !isBrowserBoxReferenceSide(side)) return;
-  const sourceX = targets.source.sketch.max[0], fixedX = targets.source.sketch.min[0];
-  const targetX = (side === 'left' ? targets.reference.sketch.min : targets.reference.sketch.max)[0];
-  if (typeof sourceX !== 'number' || typeof fixedX !== 'number' || typeof targetX !== 'number'
-    || targetX === sourceX || !validBoxDimension(targetX - fixedX)) return;
-  const source = nativeBoxCornerOnX(targets.first, targets.source, sourceX);
-  const reference = nativeBoxCornerOnX(targets.second, targets.reference, targetX);
-  if (source && reference) return { targetX, values: { boxVertexEdge: source.edge, boxVertexEndpoint: source.endpoint,
-    boxTargetVertexEdge: reference.edge, boxTargetVertexEndpoint: reference.endpoint } };
+  const match = isBrowserBoxReferenceSide(side) && browserBoxMatchValues(doc, bodies, body, referenceBody, 0, side === 'left');
+  if (match) return { targetX: match.target, values: match.values };
+}
+
+export const browserBoxDepthReferenceSides = ['min-y', 'max-y'] as const;
+export type BrowserBoxDepthReferenceSide = typeof browserBoxDepthReferenceSides[number];
+
+export function isBrowserBoxDepthReferenceSide(value: unknown): value is BrowserBoxDepthReferenceSide {
+  return value === 'min-y' || value === 'max-y';
+}
+
+export function browserBoxDepthValues(doc: StudioDoc, bodies: readonly BodyResult[], body: string,
+  referenceBody: string, side: BrowserBoxDepthReferenceSide) {
+  const match = isBrowserBoxDepthReferenceSide(side) && browserBoxMatchValues(doc, bodies, body, referenceBody, 1, side === 'min-y');
+  if (match) return { targetY: match.target, values: { ...match.values, boxVertexAxis: 'y' as const } };
 }

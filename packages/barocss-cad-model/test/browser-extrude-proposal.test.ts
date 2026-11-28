@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { checkBrep } from '@barocss/cad';
-import { acceptProposal, dispatchTool, previewProposal, proposeBrowserBox, proposeBrowserBoxWidth, proposeBrowserClosedShell, proposeBrowserCylinder, proposeBrowserExtrude, proposeBrowserHole, runTool, type ChatState } from '../src/chat/tools';
+import { acceptProposal, dispatchTool, previewProposal, proposeBrowserBox, proposeBrowserBoxDepth, proposeBrowserBoxWidth, proposeBrowserClosedShell, proposeBrowserCylinder, proposeBrowserExtrude, proposeBrowserHole, runTool, type ChatState } from '../src/chat/tools';
 import { emptyDoc, withNode, type StudioDoc } from '../src/engine/doc';
 import { evaluatePart, partBreps } from '../src/engine/evaluate';
 import { canonical, revisionOf } from '../src/util/revision';
@@ -309,7 +309,7 @@ test('browser Extrude stages one exact value change for the user to approve', as
   assert.equal(applied.state.doc.proposals?.at(-1)?.decided?.by, 'user');
 });
 
-test('browser Box width resolves both reference X sides and requires explicit approval', async () => {
+async function browserBoxes() {
   let stock: ChatState = { doc: emptyDoc(), bodies: [] };
   for (const values of [
     { x: 2.25, y: -4.5, z: 2.125, w: 12, d: 8, h: 6 },
@@ -319,6 +319,11 @@ test('browser Box width resolves both reference X sides and requires explicit ap
     assert.ok(authored.changed && !authored.isError, authored.content);
     stock = authored.state;
   }
+  return stock;
+}
+
+test('browser Box width resolves both reference X sides and requires explicit approval', async () => {
+  const stock = await browserBoxes();
   const args = { body: 'b1', referenceBody: 'b3', referenceSide: 'left' as const, expectedRevision: revisionOf(stock.doc) };
   for (const bad of [{ ...args, body: 'b3' }, { ...args, referenceBody: 'b1' }, { ...args, expectedRevision: '0000000000000000' }]) {
     const refusal = await proposeBrowserBoxWidth(stock, bad, neverEvaluate);
@@ -345,5 +350,31 @@ test('browser Box width resolves both reference X sides and requires explicit ap
     assert.equal(result?.mesh.bounds.min[0], 2.25);
     assert.equal(result?.mesh.bounds.max[0], targetX);
     assert.ok(Math.abs((result?.volume ?? 0) - (targetX - 2.25) * 8 * 6) < 1e-9);
+  }
+});
+
+test('browser Box depth resolves either original Y side while retaining the reference and approval gate', async () => {
+  const stock = await browserBoxes(), expectedRevision = revisionOf(stock.doc);
+  const args = { body: 'b1', referenceBody: 'b3', referenceSide: 'min-y' as const, expectedRevision };
+  for (const bad of [{ ...args, body: 'b3' }, { ...args, referenceBody: 'b1' }, { ...args, expectedRevision: '0000000000000000' }]) {
+    const refused = await proposeBrowserBoxDepth(stock, bad, neverEvaluate);
+    assert.ok(refused.isError && !refused.changed);
+    assert.equal(refused.state, stock);
+  }
+  for (const [referenceSide, targetY] of [['min-y', 9], ['max-y', 14]] as const) {
+    const staged = await proposeBrowserBoxDepth(stock, { ...args, referenceSide }, evaluate);
+    assert.ok(staged.changed && !staged.isError, staged.content);
+    assert.equal(staged.state.doc.nodes, stock.doc.nodes);
+    const proposal = staged.state.doc.proposals?.at(-1);
+    assert.ok(proposal && proposal.status === 'open');
+    assert.equal(proposal.by.agent, 'browser');
+    assert.ok((await proposeBrowserBoxDepth(staged.state, args, neverEvaluate)).isError);
+    assert.ok('error' in await acceptProposal(staged.state, proposal.id, neverEvaluate, { by: { agent: 'chat' } }));
+    const approved = await acceptProposal(staged.state, proposal.id, evaluate);
+    assert.ok('state' in approved);
+    const { doc, bodies } = approved.state, source = bodies.find(body => body.key === 'b1');
+    assert.deepEqual(partBreps(doc)[1], partBreps(stock.doc)[1]);
+    assert.deepEqual(source?.mesh.bounds, { min: [2.25, -4.5, 2.125], max: [14.25, targetY, 8.125] });
+    assert.ok(Math.abs((source?.volume ?? 0) - (targetY + 4.5) * 12 * 6) < 1e-9);
   }
 });
