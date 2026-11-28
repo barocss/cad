@@ -1,4 +1,5 @@
 import { useStudioDirectCommit } from './state/useStudioDirectCommit';
+import { useFitTableCommit } from './state/useFitTableCommit';
 import { useVertexExtrudeEntry } from './state/useVertexExtrudeEntry';
 import { useStudioSheetPatterns } from './app/useStudioSheetPatterns';
 import { useStudioEvaluatedSource, useStudioModelEvaluation, type RouteEvaluationHandoff, type StudioParameterEdit } from './state/useStudioModelEvaluation';
@@ -768,29 +769,12 @@ export function App() {
       retireBodies: () => { setBodies([]); claimBodies.current = true; } },
   }), [doc, marker, bodies, acceptanceScope]);
   commitRef.current = commit; cageEdRef.current = cageEd;
-  const fitTableRequest = useRef<object | null>(null);
-  const commitFitTables = async (next: StudioDoc) => {
-    if (project.opening() || !canChangeDocument()) return;
-    if (shownVariant.current) {
-      setToast({ title: 'Can’t change the part now', hint: `Showing ${shownVariant.current}: show the master to edit.`, detail: '' });
-      return;
-    }
-    const request = {}, open = openIntent.current, generation = workOwnership.current.generation;
-    fitTableRequest.current = request;
-    const current = () => fitTableRequest.current === request && docNow.current === doc &&
-      openIntent.current === open && workOwnership.current.generation === generation &&
-      workerSessionNow.current === workerSession && evaluatedRef.current === evaluated;
-    // The library commit returns to the end of History. Check that full model before changing it.
-    const candidate = inPlace ? resolveShopRows(next, inPlace.assembly).doc : next;
-    try {
-      const reply = await engine.part(prefixDoc(candidate, candidate.nodes.length), revision.current++, 'read');
-      if (!current()) return;
-      if (!reply.ok) { setToast({ ...reply.error, documentSource: { doc } }); return; }
-      commit(next, false);
-    } catch (cause) {
-      if (current()) setToast({ title: 'Fit tables not changed', hint: 'The current tables are still in use.', detail: String(cause), documentSource: { doc } });
-    }
-  };
+  const commitFitTables = useFitTableCommit({
+    model: { doc, evaluated, workerSession, assembly: inPlace?.assembly },
+    current: { doc: docNow, evaluated: evaluatedRef, workerSession: workerSessionNow, workOwnership,
+      openIntent, variant: shownVariant },
+    worker: { engine, revision }, opening: project.opening, canChangeDocument, commit, setToast,
+  });
   /** One undoable change of the render settings (the model and the rollback marker stay). */
   const commitRender = useCallback((next: RenderSettings) => {
     if (!canChangeDocument()) return;

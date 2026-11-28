@@ -16,6 +16,7 @@ const fixture = {
 };
 const files = [
   'apps/cad-studio/src/App.tsx',
+  'apps/cad-studio/src/state/useFitTableCommit.ts',
   'apps/cad-studio/src/ui/FitTables.tsx',
   'apps/cad-studio/src/files/documentFile.ts',
   'apps/cad-studio/src/files/useStudioDocumentFiles.ts',
