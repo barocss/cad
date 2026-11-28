@@ -541,6 +541,89 @@ export function boreWallOffsetFrame(brep: Brep, faceName: string): { anchor: Poi
   return { anchor, normal: [(round.center[0] - point[0]) / round.radius, (round.center[1] - point[1]) / round.radius, 0], faces };
 }
 
+/** Draft only the complete inner native wall of a coaxial tube, preserving its exterior and cap surface charts. */
+export function draftAnnularBoreWallIfAdmitted(brep: Brep, faceNames: readonly string[], angle: number, pull: 'z' | '-z', neutral?: number): Brep | undefined {
+  if (faceNames.length !== 2 || new Set(faceNames).size !== 2 || brep.faces.length !== stockCounts.annular[0]) return undefined;
+  const admitted = admittedBoreWall(brep, faceNames[0]);
+  if (!admitted?.annular || !admitted.faces.every(name => faceNames.includes(name))) return undefined;
+  const { stock, walls, round, edges, vertices, capLoops } = admitted;
+  const sign = pull === 'z' ? 1 : -1, zN = neutral ?? (sign === 1 ? stock.lo : stock.hi);
+  if ((pull !== 'z' && pull !== '-z') || !Number.isFinite(angle) || angle === 0 || Math.abs(angle) >= Math.PI / 4
+    || !Number.isFinite(zN) || zN < stock.lo || zN > stock.hi)
+    throw new BrepError('INPUT', 'annular bore draft: use a nonzero angle below 45 degrees and a neutral within the original caps');
+  // Positive Draft leans into the material: the inner radius grows along the signed pull.
+  const slope = sign * Math.tan(angle), radiusAt = (z: number) => round.radius + slope * (z - zN);
+  const radii = [radiusAt(stock.lo), radiusAt(stock.hi)], extent = Math.max(geometryScaleMM(brep.vertices.map(vertex => vertex.point)), ...radii.map(Math.abs));
+  const tolerance = linearToleranceMM(extent), separation = dist(round.center, [stock.center[0], stock.center[1], stock.lo]);
+  if (radii.some(radius => !Number.isFinite(radius) || !(radius > tolerance)))
+    throw new BrepError('GEOMETRY', 'annular bore draft: the draft reaches or crosses the bore axis');
+  if (radii.some(radius => !(stock.radius - radius > separation + tolerance)))
+    throw new BrepError('GEOMETRY', 'annular bore draft: the draft reaches or crosses the outer tube wall');
+  const [cx, cy] = round.center;
+  const moved = (point: Point): Point => {
+    const radius = radiusAt(point[2]);
+    if (radius === round.radius) return point;
+    const factor = radius / round.radius;
+    return [cx + (point[0] - cx) * factor, cy + (point[1] - cy) * factor, point[2]];
+  };
+  // Exact on the admitted two-station recipe: ruled half-circle charts with equal axial weights,
+  // constant-Z rim curves and straight radial seams. No generic deformation is admitted.
+  const nextEdges = brep.edges.map(edge => {
+    if (!edges.has(edge.id)) return edge;
+    const controlPoints = edge.curve.controlPoints.map(moved);
+    return controlPoints.every((point, i) => point === edge.curve.controlPoints[i]) ? edge : { ...edge, curve: { ...edge.curve, controlPoints } };
+  });
+  if (!nextEdges.some((edge, i) => !samePoles(edge.curve.controlPoints, brep.edges[i].curve.controlPoints)))
+    throw new BrepError('GEOMETRY', 'annular bore draft: the angle is too small to move the native bore');
+  const edgeById = byId(nextEdges), originalEdges = byId(brep.edges), capTrims = new Map<string, (point: Point) => Point>();
+  for (const cap of [stock.bottom, stock.top]) for (const id of cap.loops)
+    if (capLoops.has(id)) capTrims.set(id, capProjection(stock.min, stock.max, cap === stock.top));
+  const candidate: Brep = {
+    ...brep, edges: nextEdges,
+    vertices: brep.vertices.map(vertex => {
+      if (!vertices.has(vertex.id)) return vertex;
+      const point = moved(vertex.point); return point === vertex.point ? vertex : { ...vertex, point };
+    }),
+    faces: brep.faces.map(face => {
+      const surface = face.surface;
+      if (!walls.includes(face) || surface.kind !== 'surface') return face;
+      const controlPoints = surface.controlPoints.map(row => row.map(moved));
+      return controlPoints.every((row, i) => row.every((point, j) => point === surface.controlPoints[i][j]))
+        ? face : { ...face, surface: { ...surface, controlPoints } };
+    }),
+    coedges: brep.coedges.map(use => {
+      const project = capTrims.get(use.loop), edge = edgeById.get(use.edge)!;
+      return project && use.pcurve && edge !== originalEdges.get(use.edge)
+        ? { ...use, pcurve: { ...use.pcurve, controlPoints: edge.curve.controlPoints.map(project) } } : use;
+    }),
+  };
+  const poles = [...candidate.vertices.map(vertex => vertex.point), ...nextEdges.flatMap(edge => edge.curve.controlPoints),
+    ...candidate.faces.flatMap(face => face.surface.kind === 'surface' ? face.surface.controlPoints.flat() : [])];
+  const nextExtent = geometryScaleMM(poles), roundoff = 128 * Number.EPSILON * Math.max(1, nextExtent);
+  if (!poles.every(point => point.every(Number.isFinite)) || !(nextExtent <= CadNumericPolicy.coordinateAbs))
+    throw new BrepError('GEOMETRY', 'annular bore draft: the drafted bore leaves the modeling range');
+  for (const [i, cap] of [stock.bottom, stock.top].entries()) {
+    const z = i === 0 ? stock.lo : stock.hi, nextCap = candidate.faces.find(face => face.id === cap.id)!, plane = faceGeometry(nextCap, nextExtent);
+    const rims = nextEdges.filter(edge => edges.has(edge.id) && edge.curve.degree === 2 && level(edge, z));
+    if (nextCap !== cap || plane.kind !== 'plane' || plane.o[2] !== z || !same(plane.n, [0, 0, i === 0 ? -1 : 1]) || rims.length !== 2
+      || rims.some(edge => { const circle = circleOf(edge.curve); return !circle || Math.abs(circle.r - radii[i]) > roundoff || dist(circle.c, [cx, cy, z]) > roundoff; }))
+      throw new BrepError('GEOMETRY', 'annular bore draft: the native cap or circular bore boundary could not be preserved');
+  }
+  for (const wall of walls) {
+    const face = candidate.faces.find(item => item.id === wall.id)!, surface = face.surface;
+    if (surface.kind !== 'surface') throw new BrepError('GEOMETRY', 'annular bore draft: a native bore wall lost its surface');
+    for (const u of [0, .25, .5, .75, 1]) for (const v of [0, .5, 1]) {
+      const point = evaluateSurface(surface, u, v);
+      if (Math.abs(Math.hypot(point[0] - cx, point[1] - cy) - radiusAt(point[2])) > roundoff)
+        throw new BrepError('GEOMETRY', 'annular bore draft: the mapped native bore does not retain its conical support');
+    }
+  }
+  const report = checkBrep(candidate, { strict: true });
+  if (!report.valid || report.topology[0]?.genus !== 1)
+    throw new BrepError('GEOMETRY', `annular bore draft: the drafted solid is invalid: ${report.issues[0] ?? 'unexpected genus'}`, report);
+  return candidate;
+}
+
 /** Change one through-bore radius while keeping the stock supports and native boundary ownership. */
 export function offsetBoreWallIfAdmitted(brep: Brep, faceName: string, distance: number): Brep | undefined {
   const admitted = admittedBoreWall(brep, faceName);

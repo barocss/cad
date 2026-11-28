@@ -18,37 +18,48 @@ function exactAxis(vector: readonly number[]): number {
   return vector.length === 3 && axis >= 0 && vector.every((value, i) => i === axis || value === 0) ? axis : -1;
 }
 
-function originalCylinderDraftSource(doc: StudioDoc, ref: BodyRef, axis: number): string | undefined {
+function originalCylinderDraftSource(doc: StudioDoc, ref: BodyRef, axis: number) {
   if (ref.side !== 'solid') return;
   const extrusion = doc.nodes[ref.node];
   if (extrusion?.kind !== 'extrude' || extrusion.cutDepth !== undefined || (extrusion.draft !== undefined && extrusion.draft !== 0)) return;
   const sketch = doc.nodes[extrusion.sketch];
   if (sketch?.kind !== 'sketch' || sketch.profile !== 'circle' || sketch.on || sketch.association
-    || sketch.pocketFloor || sketch.holes?.length || sketch.regions?.length) return;
+    || sketch.pocketFloor || sketch.regions?.length) return;
   const plane = sketch.plane;
+  const owner = featureId(doc.nodes, ref.node);
+  if (sketch.holes?.length) {
+    const [bore] = sketch.holes, [arc] = bore;
+    if (axis !== 2 || plane || sketch.holes.length !== 1 || bore.length !== 1 || arc.kind !== 'arc'
+      || typeof extrusion.height !== 'number' || !Number.isFinite(extrusion.height) || extrusion.height <= 0
+      || extrusion.from !== undefined && (typeof extrusion.from !== 'number' || !Number.isFinite(extrusion.from))
+      || typeof sketch.radius !== 'number' || !Number.isFinite(sketch.radius) || sketch.radius <= 0
+      || !arc.center.every((value, i) => typeof value === 'number' && Number.isFinite(value) && value === sketch.center[i])
+      || !arc.start.every(value => typeof value === 'number' && Number.isFinite(value))) return;
+    return { owner, wall: `${owner}.hole0.side`, faceCount: 6, bore: true };
+  }
   if (plane) {
     const x = exactAxis(plane.xAxis);
     if (exactAxis(plane.normal) !== axis || x < 0 || x === axis || !plane.origin.every(Number.isFinite)) return;
   } else if (axis !== 2) return;
-  return featureId(doc.nodes, ref.node);
+  return { owner, wall: `${owner}.side`, faceCount: 4, bore: false };
 }
 
 const draftEnd = (pull: DraftPull, bottom: number, top: number) => pull.startsWith('-') ? Math.max(bottom, top) : Math.min(bottom, top);
 
-/** A pick of the complete native wall on an original cardinal circle extrusion. */
+/** A pick of the complete native wall on original circular or coaxial annular stock. */
 export function originalCylinderDraftSelection(ctx: Ctx, pull: DraftPull): { faces: string[]; end: number } | undefined {
   if (ctx.selection.faces.length !== 1) return;
   const direction = pull.slice(-1), axis = 'xyz'.indexOf(direction);
   const pick = ctx.selection.faces[0], body = ctx.bodies[pick.body], ref = body?.ref;
-  if (!ref || body.mesh.faces.length !== 3 || body.topology?.bodyCount !== 1) return;
-  const name = originalCylinderDraftSource(ctx.doc, ref, axis);
-  if (!name) return;
+  if (!ref || body.topology?.bodyCount !== 1) return;
+  const source = originalCylinderDraftSource(ctx.doc, ref, axis);
+  if (!source || body.mesh.faces.length !== (source.bore ? 4 : 3)) return;
   const face = body.mesh.faces[pick.face];
-  if (!face?.name.startsWith(name + '.side') || face.exact?.kind !== 'cylinder'
+  if (!face?.name.startsWith(source.wall) || face.exact?.kind !== 'cylinder'
     || exactAxis(face.exact.a) !== axis || face.nativeFaces?.length !== 2) return;
   const faces = face.nativeFaces.map(member => member.name).sort();
   if (faces[0] !== face.name + '#1' || faces[1] !== face.name + '#2') return;
-  const [bottom, top] = ['bottom', 'top'].map(cap => body.mesh.faces.find(candidate => candidate.nativePlaneName === name + '.' + cap)?.nativeAxisPlane);
+  const [bottom, top] = ['bottom', 'top'].map(cap => body.mesh.faces.find(candidate => candidate.nativePlaneName === source.owner + '.' + cap)?.nativeAxisPlane);
   if (bottom?.axis !== direction || top?.axis !== direction) return;
   return { faces, end: draftEnd(pull, bottom.at, top.at) };
 }
@@ -90,17 +101,17 @@ export function draftNeutralDefault(values: Values, changed: readonly string[], 
 interface SavedDraftWall { parent: BodyRef; faces: readonly string[] }
 
 function cylinderDraftBodyEnd(doc: StudioDoc, target: Brep, wall: SavedDraftWall, pull: DraftPull, axis: number): number | undefined {
-  const owner = originalCylinderDraftSource(doc, wall.parent, axis);
-  if (!owner || target.bodies.length !== 1 || target.bodies[0].kind !== 'solid' || target.faces.length !== 4 || wall.faces.length !== 2) return;
+  const source = originalCylinderDraftSource(doc, wall.parent, axis);
+  if (!source || target.bodies.length !== 1 || target.bodies[0].kind !== 'solid' || target.faces.length !== source.faceCount || wall.faces.length !== 2) return;
   const first = wall.faces.find(name => name.endsWith('#1'));
-  if (!first?.startsWith(owner + '.side') || !wall.faces.includes(first.slice(0, -1) + '2')) return;
+  if (!first?.startsWith(source.wall) || !wall.faces.includes(first.slice(0, -1) + '2')) return;
   const sameWall = target.faces.filter(face => face.name !== undefined && wall.faces.includes(face.name));
   if (sameWall.length !== 2 || sameWall.some(face => {
     const geometry = faceGeometry(face);
-    return geometry.kind !== 'cylinder' || exactAxis(geometry.a) !== axis;
+    return geometry.kind !== 'cylinder' || exactAxis(geometry.a) !== axis || source.bore && geometry.out !== -1;
   })) return;
   const stations = ['bottom', 'top'].map(end => {
-    const surface = target.faces.find(face => face.name === owner + '.' + end)?.surface;
+    const surface = target.faces.find(face => face.name === source.owner + '.' + end)?.surface;
     if (!surface || surface.kind !== 'surface') return undefined;
     const poles = surface.controlPoints.flat(), at = poles[0]?.[axis];
     return typeof at === 'number' && Number.isFinite(at) && poles.every(p => p[axis] === at) ? at : undefined;

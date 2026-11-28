@@ -7,6 +7,8 @@ import { commands, patchValues, type Ctx } from '../src/app/commands';
 import { editSavedDraftCommand, editSavedPivotFaceCommand } from '../src/app/draftEdit';
 import { pivotFaceCommand } from '../src/app/pivotFaceCommand';
 import { part, type BodyQuery } from '../src/api';
+import { dispatchTool } from '../src/chat/tools';
+import { revisionOf } from '../src/util/revision';
 
 // The Studio Draft command's Pull choice (K05 in Studio). +Z keeps the old command's documents byte for byte;
 // another axis writes the same draft node as the public API (StudioPart.draft) for the same faces and angle.
@@ -328,6 +330,45 @@ test('Studio Draft on a translated XY cylinder derives signed world caps for new
     const expectedVolume = pull === 'z' ? 5912.958606927207 : 6799.274682484619;
     assert.ok(Math.abs(volume(interior) - expectedVolume) < 1e-7);
   }
+});
+
+test('Studio Draft selects both original bore halves and keeps the signed neutral cap through History', async () => {
+  const source = cylinderPart(12, 16), [sketch, extrusion] = source.nodes;
+  assert.ok(sketch.kind === 'sketch' && sketch.profile === 'circle' && extrusion.kind === 'extrude');
+  const doc: StudioDoc = { ...source, nodes: [{ ...sketch, center: [14, 9],
+    holes: [[{ kind: 'arc', start: [18, 9], center: [14, 9], direction: 'ccw' }]] }, { ...extrusion, from: 3 }] };
+  const bodies = bodiesOf(doc), face = bodies[0].mesh.faces.findIndex(candidate => candidate.name === 'n1.hole0.side0');
+  assert.ok(face >= 0);
+  const ctx: Ctx = { doc, bodies, selection: { bodies: [], faces: [{ body: 0, face }], edges: [] } };
+  assert.equal(draft.available(ctx).ok, true);
+  const defaults = draft.defaults!(ctx);
+  assert.equal(defaults.pull, 'z');
+  assert.equal(patchValues(draft, ctx, defaults, { neutralMode: 'fixed' }).neutral, 3);
+  assert.equal(patchValues(draft, ctx, { ...defaults, pull: '-z' }, { neutralMode: 'fixed' }).neutral, 19);
+  assert.throws(() => draft.build!(ctx, { ...defaults, pull: 'x' }), /flat side faces/);
+  const outer = bodies[0].mesh.faces.findIndex(candidate => candidate.name === 'n1.side0');
+  assert.equal(draft.available({ ...ctx, selection: { ...ctx.selection, faces: [{ body: 0, face: outer }] } }).ok, false);
+  const accepted = draft.build!(ctx, { ...defaults, deg: 8 });
+  const node = accepted.nodes[2];
+  assert.ok(node.kind === 'draft');
+  assert.deepEqual(node.faces, ['n1.hole0.side0#1', 'n1.hole0.side0#2']);
+  const saved = editSavedDraftCommand(accepted, 2);
+  assert.ok(saved?.defaults && saved.build);
+  const history = { ...ctx, doc: accepted };
+  const values = saved.defaults(history);
+  assert.equal(patchValues(saved, history, values, { neutralMode: 'fixed' }).neutral, 3);
+  const negativePull = patchValues(saved, history, { ...values, pull: '-z' }, { neutralMode: 'fixed' });
+  assert.equal(negativePull.neutral, 19);
+  const angle = -8, changed = saved.build(history, { ...negativePull, deg: angle });
+  for (const [candidate, cap] of [[accepted, 4 + 16 * Math.tan(8 * Math.PI / 180)],
+    [changed, 4 + 16 * Math.tan(angle * Math.PI / 180)]] as const) {
+    const expected = Math.PI * 16 * (144 - (16 + 4 * cap + cap * cap) / 3);
+    assert.ok(Math.abs(volume(candidate) - expected) < 1e-7);
+  }
+  const agent = await dispatchTool({ doc, bodies }, 'features', { action: 'command', command: 'draft',
+    faces: ['n1.hole0.side0'], values: { deg: 8 }, expectedRevision: revisionOf(doc) }, async next => evaluateDoc(next, 2));
+  assert.ok(agent.changed && !agent.isError, agent.content);
+  assert.deepEqual(agent.state.doc.nodes[2], node);
 });
 
 test('Studio Draft retains three selected box sides through its editable History command', () => {

@@ -15,7 +15,7 @@ import { draftBoxCorner, draftBoxHinge } from './part-box-draft.js';
 import { draftRotatedBoxHinge } from './part-rotated-box-draft.js';
 import { draftRotatedPolygonHinge, type RotatedPivotStock } from './part-rotated-polygon-draft.js';
 import { pivotPrismWall } from '../features/prism-wall-offset.js';
-import { draftCircularWallIfAdmitted } from '../features/bored-cap-offset.js';
+import { draftAnnularBoreWallIfAdmitted, draftCircularWallIfAdmitted } from '../features/bored-cap-offset.js';
 
 // Private structural contract. Original functions retain their caches, profiling and closure state.
 interface FaceFinishHelpers {
@@ -46,6 +46,27 @@ function originalCircularDraftStock(reference: unknown, part: Part, t: Tools): b
     || sketch.result.kind !== 'sketch' || sketch.result.frame || sketch.result.holes?.length || sketch.result.regions?.length) return false;
   const slabs = part.solid.solid.slabs;
   return slabs.length === 1 && slabs[0].regions.length === 1 && slabs[0].regions[0].holes.length === 0;
+}
+
+/** One literal unplaced circle with one intrinsic coaxial full-circle hole; native charts are proved separately. */
+function originalAnnularBoreDraftStock(reference: unknown, part: Part, t: Tools): boolean {
+  const owner = t.ref(reference, 'Inner circular Draft stock'), author = owner.author;
+  if (author?.kind !== 'extrude' || owner.result.kind !== 'solid' || owner.result.parts.length !== 1 || owner.result.parts[0] !== part
+    || (author.draft !== undefined && author.draft !== 0) || part.solid.kind !== 'upright'
+    || typeof author.height !== 'number' || !Number.isFinite(author.height) || author.height <= 0
+    || (author.from !== undefined && (typeof author.from !== 'number' || !Number.isFinite(author.from)))) return false;
+  const sketch = t.ref(author.sketch, 'Inner circular Draft sketch'), source = sketch.author;
+  if (source?.kind !== 'sketch' || source.profile !== 'circle' || source.plane !== undefined || source.regions?.length
+    || typeof source.radius !== 'number' || !Number.isFinite(source.radius) || !(source.radius > 0)
+    || !Array.isArray(source.center) || source.center.length !== 2 || source.center.some(value => typeof value !== 'number' || !Number.isFinite(value))
+    || source.holes?.length !== 1 || source.holes[0].length !== 1 || sketch.result.kind !== 'sketch' || sketch.result.frame
+    || sketch.result.regions?.length || sketch.result.holes?.length !== 1) return false;
+  const hole = source.holes[0][0];
+  if (hole.kind !== 'arc' || !hole.center.every((value, axis) => typeof value === 'number' && Number.isFinite(value) && value === source.center[axis])
+    || !hole.start.every(value => typeof value === 'number' && Number.isFinite(value))) return false;
+  const slabs = part.solid.solid.slabs, slab = slabs[0], from = author.from ?? 0;
+  return slabs.length === 1 && slab.z0 === from && slab.z1 === from + author.height
+    && slab.regions.length === 1 && slab.regions[0].holes.length === 1;
 }
 
 interface CardinalCircularStock { readonly matrix: BrepAffine['matrix']; readonly axis: 0 | 1 | 2; readonly sign: 1 | -1; readonly retainedCardinalTrims: boolean }
@@ -275,9 +296,18 @@ export function faceFinishOperation(f: CadPartFeature & Record<string, unknown>,
       const pull = f.pull === undefined ? 'z' : f.pull as unknown;
       if (pull !== 'x' && pull !== 'y' && pull !== 'z' && pull !== '-x' && pull !== '-y' && pull !== '-z') fail('INPUT', 'pull must be x, y or z (a positive coordinate axis), or -x, -y or -z');
       const circularStock = hinge === undefined && originalCircularDraftStock(f.target, target[0], t);
-      const cardinalCircle = hinge === undefined && !circularStock ? cardinalCircularDraftStock(f.target, target[0], t) : undefined;
+      const annularBoreStock = hinge === undefined && !circularStock && originalAnnularBoreDraftStock(f.target, target[0], t);
+      const cardinalCircle = hinge === undefined && !circularStock && !annularBoreStock ? cardinalCircularDraftStock(f.target, target[0], t) : undefined;
       return () => {
         if (target[0].solid.kind === 'brep' && target[0].solid.brep.faces.some(isFacetFace)) fail('CAPABILITY', 'draft on mesh faces is not supported yet (general draft and offset arrive with R11)');
+        if (annularBoreStock) {
+          if (pull !== 'z' && pull !== '-z') return fail('SELECTION', 'Inner circular wall Draft needs a signed world Z pull.');
+          const box = bounds(target[0].solid), zN = neutral ?? (pull === 'z' ? box.min[2] : box.max[2]);
+          if (zN < box.min[2] || zN > box.max[2]) fail('SELECTION', 'Inner circular wall Draft neutral must lie within the original caps.');
+          const brep = draftAnnularBoreWallIfAdmitted(k.namedFaceTargetBrep(t, f.target, target[0]), names, (angle as number) * Math.PI / 180, pull, zN);
+          if (!brep) return fail('CAPABILITY', 'Inner circular wall Draft needs both distinct original native halves of one original coaxial annular extrusion.');
+          return one({ kind: 'brep', brep });
+        }
         if (circularStock) {
           if (pull !== 'z' && pull !== '-z') return fail('SELECTION', 'Circular wall Draft needs a signed world Z pull.');
           const box = bounds(target[0].solid), zN = neutral ?? (pull === 'z' ? box.min[2] : box.max[2]);
