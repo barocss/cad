@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D2255: [D2255](notes/exact-axial-oring-outline-2026-11-29/README.md), #778. Draw the complete original O-ring equators axially and keep sampled output when exact visible replacement is incomplete.
+
 - D2254: [D2254](notes/common-gauge-native-circle-2026-11-29/README.md), #772. Preserve the native Drawing arc for the same circle under a common positive weight scale.
 
 - D2253: [D2253](notes/agent-box-vertex-width-2026-11-29/README.md), #629. Connect one original native Box corner to an explicitly approved, revision-pinned width edit.

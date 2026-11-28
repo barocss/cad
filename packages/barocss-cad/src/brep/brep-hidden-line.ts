@@ -15,6 +15,7 @@ import { authoredBrepEdgeRadii } from './authored-circle-nominal.js';
 import type { Brep } from './brep-core.js';
 import { sharedConeMeridianNormal } from './brep-hidden-cone-meridian.js';
 import { createNativeLoftProbe, tracksNativeLoftOutline, type NativeLoftMesh, type NativeLoftProbe } from './brep-hidden-native-loft.js';
+import { axialRimInterval, createAxialTorusRimProof } from './brep-hidden-axial-torus.js';
 import { convexCylinderRimSupport } from './brep-hidden-rim-support.js';
 import { circleOf, tessellateBrep, tessellateBrepWithEdgeParameters } from './brep-tessellate.js';
 import { hiddenGeneratorAlias, type HiddenGenerator, type HiddenGeneratorRun } from './brep-hidden-alias.js';
@@ -87,6 +88,8 @@ interface Candidate {
   /** Where visibility is tested at s (default `at`): a circle's chord on the tessellation, so its own faces' facets do not stand in front of it. */
   probe?(s: number): Point;
   rimHidden?(s: number): boolean;
+  axialRim?: true;
+  axialRimDuplicate?: { owner: Candidate; interval: [number, number] };
   /** Sample parameters (increasing, from s0 to s1). */
   samples(): number[];
   /** Depth margin below which a nearer face does not hide this curve. */
@@ -140,6 +143,7 @@ export function projectBrepHiddenLines(breps: readonly Brep[], view: HiddenLineV
   const perQuarter = options.segmentsPerQuarter ?? 12;
   const meshSources = breps.map(b => meshOf(b, perQuarter)), meshes = meshSources.map(source => source.mesh);
   const nativeLoftProbe = createNativeLoftProbe(breps, P, toward);
+  const proveAxialRim = createAxialTorusRimProof(toward);
   const rimBudget = new Error('Native rim binding budget exhausted');
   let rimBindingWork = 0, rimQueryWork = 0;
   const proveRim = convexCylinderRimSupport(toward, {
@@ -212,6 +216,7 @@ export function projectBrepHiddenLines(breps: readonly Brep[], view: HiddenLineV
     const polylineOf = new Map(mesh.edges.map(e => [e.edgeId, e.points]));
     const vertex = new Map(brep.vertices.map(v => [v.id, v.point]));
     const authoredRadii = authoredBrepEdgeRadii.get(brep);
+    const axialRims = new Map<string, { owner: Candidate; circle: NonNullable<ReturnType<typeof circleOf>> }[]>();
 
     for (const edge of brep.edges) {
       const fs = facesOf.get(edge.id) ?? [];
@@ -219,12 +224,15 @@ export function projectBrepHiddenLines(breps: readonly Brep[], view: HiddenLineV
       const pts = polylineOf.get(edge.id);
       if (!pts || pts.length < 6) continue;
       let kind: 'edge' | 'silhouette' | 'tangent' = 'edge';
+      let axialRim: ReturnType<typeof proveAxialRim>;
       if (fs.length === 2) {
         const ga = geomOf(fs[0]), gb = geomOf(fs[1]);
         if (ga.kind === 'plane' && gb.kind === 'plane' && Math.abs(dot(ga.n, gb.n)) > 1 - 1e-9 && Math.abs(dot(sub(ga.o, gb.o), ga.n)) < 1e-6 * size) continue;
         const coneNormal = pts.length === 6 && ga.kind === 'other' && gb.kind === 'other'
           ? sharedConeMeridianNormal(edge.curve, faceById.get(fs[0])!, faceById.get(fs[1])!, size) : undefined;
-        if (coneNormal) {
+        axialRim = ga.kind === 'other' && gb.kind === 'other' ? proveAxialRim(brep, edge, faceById.get(fs[0])!, faceById.get(fs[1])!) : undefined;
+        if (axialRim) kind = 'silhouette';
+        else if (coneNormal) {
           if (Math.abs(dot(coneNormal, toward)) >= 1e-6) continue;
           kind = 'silhouette';
         } else {
@@ -270,7 +278,7 @@ export function projectBrepHiddenLines(breps: readonly Brep[], view: HiddenLineV
           samples: () => steps(0, 1, Math.ceil(L / h)) });
         continue;
       }
-      const circle = circleOf(c);
+      const circle = axialRim?.circle ?? circleOf(c);
       if (circle) {
         const total = circle.spans.reduce((t, s) => t + s.phi, 0), full = total > 2 * Math.PI - 1e-9;
         const theta = (s: number) => circle.a0 + circle.sign * s;
@@ -305,12 +313,18 @@ export function projectBrepHiddenLines(breps: readonly Brep[], view: HiddenLineV
         const nominalRadius = authoredRadii?.get(edge.id);
         const projectedCircle: ProjectedCircle = { center: circle.c, radius: circle.r, normal, full, sweep: total };
         if (nominalRadius !== undefined) projectedCircle.nominalRadius = nominalRadius;
-        into.push({ name, ...tangent, kind: kind === 'silhouette' ? 'silhouette' : 'circle', ends: full ? null : [a, b],
-          circle: projectedCircle, s0: 0, s1: total, eps, at,
-          probe: front ? s => { const p = at(s); return front(p) ? p : probe(s); } : probe,
+        const arc: Candidate = { name, ...tangent, kind: kind === 'silhouette' ? 'silhouette' : 'circle', ends: full ? null : [a, b],
+          circle: projectedCircle, s0: 0, s1: total, eps, at, axialRim: axialRim ? true : undefined,
+          probe: axialRim?.outer ? at : front ? s => { const p = at(s); return front(p) ? p : probe(s); } : probe,
           rimHidden: nativeHidden ? s => nativeHidden(at(s), eps) : undefined,
           out: (s0, s1) => arcOut(C, U, V, theta(s0), theta(s1)),
-          samples: () => steps(0, total, stepsCount) });
+          samples: () => steps(0, total, stepsCount) };
+        into.push(arc);
+        if (axialRim) for (const faceId of fs) {
+          let owners = axialRims.get(faceId);
+          if (!owners) { owners = []; axialRims.set(faceId, owners); }
+          owners.push({ owner: arc, circle });
+        }
         continue;
       }
       const poly: Point[] = []; for (let k = 0; k < pts.length; k += 3) poly.push([pts[k], pts[k + 1], pts[k + 2]]);
@@ -400,7 +414,11 @@ export function projectBrepHiddenLines(breps: readonly Brep[], view: HiddenLineV
             face: adjacent, eps: 4 * (faceSag[faceIndex] + faceSag[adjacent]) + eps,
             rho: 2.5 * Math.max(faceSpan[faceIndex], faceSpan[adjacent]),
           } } : undefined;
-          silhouettes.push({ ...cand, own, nativeProbe });
+          const matches = (axialRims.get(face.id) ?? []).flatMap(({ owner, circle }) => {
+            const interval = axialRimInterval(ch, circle);
+            return interval ? [{ owner, interval }] : [];
+          });
+          silhouettes.push({ ...cand, own, nativeProbe, axialRimDuplicate: matches.length === 1 ? matches[0] : undefined });
         }
       });
     });
@@ -440,10 +458,22 @@ export function projectBrepHiddenLines(breps: readonly Brep[], view: HiddenLineV
     return edgeInk.near(P(c.at(s)), cover, [b[0] - a[0], b[1] - a[1]]);
   };
   let edgeInk = segmentGrid(visibleInk);
+  const omittedAxial = new Set<Candidate>();
   for (const c of silhouettes) {
+    const duplicate = c.axialRimDuplicate;
+    if (duplicate && visibleRuns.get(duplicate.owner)?.some(([a, b, visible]) =>
+      visible && a <= duplicate.interval[0] + 1e-10 && b >= duplicate.interval[1] - 1e-10)) {
+      omittedAxial.add(c);
+      continue;
+    }
     const runs = runsOf(c).flatMap(([s0, s1, vis]): [number, number, boolean][] => vis
       ? intervals({ ...c, s0, s1, samples: () => c.samples().filter(s => s > s0 && s < s1).concat([s0, s1]).sort((x, y) => x - y) }, s => !onInk(c, s), P, minRun).filter(r => r[2]).map(r => [r[0], r[1], true])
       : [[s0, s1, false]]);
+    // A clipped axial rim keeps the existing sampled visibility and hidden-line output.
+    if (c.axialRim && !runs.some(([a, b, visible]) => visible && a === c.s0 && b === c.s1)) {
+      omittedAxial.add(c);
+      continue;
+    }
     visibleRuns.set(c, runs);
     for (const [s0, s1, vis] of runs) if (vis) visibleInk.push(flatten(c.out(s0, s1), 2e-6 * size));
   }
@@ -452,6 +482,7 @@ export function projectBrepHiddenLines(breps: readonly Brep[], view: HiddenLineV
   // Only roundoff-equivalent 3D runs on the same native cylinder joint are aliases. In particular,
   // projected coincidence, another instance/depth, and partial overlaps do not establish ownership.
   for (const c of [...candidates, ...silhouettes]) {
+    if (omittedAxial.has(c)) continue;
     const pieces: ProjectedPiece[] = [];
     for (const [s0, s1, vis] of visibleRuns.get(c)!) {
       if (vis) { pieces.push({ curve: c.out(s0, s1), visible: true }); continue; }
