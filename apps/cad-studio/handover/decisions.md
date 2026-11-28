@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D2240: [D2240](notes/agent-cardinal-edge-rotate-2026-11-29/README.md). Reuse exact cardinal-edge admission for a local Agent Rotate proposal and verify approval, fixed endpoints and native project reopen.
+
 - D2120: [Verify Union at one exact sphere-box vertex contact](notes/sphere-box-point-union-2026-11-28/README.md), #7. Match both actual Studio pick orders, two native solids, independent mass properties and exact fresh Open.
 
 - D2119: [Pin a local Agent Shell corner to the original bottom cap](notes/agent-open-bottom-l-shell-2026-11-28/README.md), #324. Verify the exact bottom cap and current revision through explicit Studio approval and native reopen.

@@ -1,6 +1,7 @@
 // The v2 `features` group's handlers (R3, moved verbatim from chat/tools.ts's runPartTool): the feature tree's
 // commands, raw nodes, edits and deletes, materials, and the person's rows (stock, frame stock, sections, welds).
 import { commandById, commands, givenValues, shownFields, type Ctx, type Values } from '../../app/commands';
+import { cardinalEdgeRotation } from '../../app/rotateCommand';
 import { canSetAgentClosedShellCaps, canSetAgentShellCap, canSetAgentShellCorner } from '../../app/shellCorner';
 import { PIVOT_FACE } from '../../app/pivotFaceCommand';
 import { isEditableBox, isEditableCylinder, updateBoxFootprint } from '../../app/editCommand';
@@ -161,7 +162,8 @@ export const COMMAND_DOCS: Record<string, { selection: string; values: Record<st
     backWall: 'back thickness in mm', leftWall: 'left thickness in mm', topWall: 'top thickness in mm',
   } },
   move: { selection: 'bodies: [one body]', values: { x: 'ΔX', y: 'ΔY', z: 'ΔZ', ax: 'to X (the box corner; the HUD keeps it with ΔX — give one of the two)', ay: 'to Y', az: 'to Z' } },
-  rotate: { selection: 'bodies: [one body]', values: { axis: 'x | y | z', angle: 'degrees', px: 'pivot x mm (default: the body\'s centre)', py: 'pivot y mm', pz: 'pivot z mm' } },
+  rotate: { selection: 'Choose one body for ordinary Rotate. For about=edge, give one exact native edge name in edges and expectedRevision from query.rebuild for the same standalone solid. Stage the edge rotation with proposals.propose for Studio review.',
+    values: { axis: 'x | y | z for ordinary Rotate', angle: 'signed degrees (for about=edge, nonzero with magnitude below 360)', px: 'pivot x mm (default: the body\'s centre)', py: 'pivot y mm', pz: 'pivot z mm', about: 'edge: use the exact straight X, Y or Z edge as the axis. Give only angle with this mode.' } },
   scale: { selection: 'bodies: [one body]', values: { factor: 'uniform factor (1 = unchanged)', px: 'pivot x mm (default: the body\'s centre)', py: 'pivot y mm', pz: 'pivot z mm' } },
   mount: { selection: 'faces: [one flat face facing ±X/±Y/±Z]', values: { row: 'a mount row\'s id (the person\'s datasheet rows, loaded with features.load_rows kind mounts)', x: 'the output axis on the face, first axis (as hole)', y: 'the output axis, second axis', turn: '0 | 90 | 180 | 270 (degrees about the face\'s normal)', pilot: 'through | recess (the pilot its depth, the shaft through), for a row with a pilot depth' } },
   fastener: { selection: 'none', values: { kind: 'hex-bolt (ISO 4017) | socket-screw (ISO 4762) | csk-screw (ISO 10642, countersunk: the head sinks below z, its top flush) | hex-nut (ISO 4032) | washer (ISO 7089)', size: 'M3 | M4 | M5 | M6 | M8 | M10 | M12 (coarse pitch)', length: 'bolt/screw length in mm, from the size\'s standard lengths (ISO 4017 for hex bolts, ISO 4762 for cap screws, ISO 10642 for countersunk screws, overall; as text, e.g. "20")', joint: 'free (on its own) | nut (through a clearance hole: washer + nut under the far face, `grip` below the seat) | tapped (into a tapped hole)', grip: 'with joint nut: the clamped thickness in mm below the seat (the bolt must reach grip + washer + nut + 2 pitches)', x: 'axis X', y: 'axis Y', z: 'seat Z: heads, nuts and washers sit on it, a shank goes down from it (a hole\'s rim)', insert: 'part (its features join this part) | instance (a part of its own placed in the assembly: in the bill of materials, mated like any part)', model: 'hex-bolt and hex-nut: cosmetic (a plain cylinder, the thread drawn) | modelled (the ISO 68-1 thread as helical B-spline faces: true shape and mass)' } },
@@ -307,7 +309,21 @@ async function runCommandTool(state: ChatState, args: Record<string, unknown>, e
     return fail(state, `${cmd.id === 'offset-face' ? 'Offset face to plane' : cmd.label} needs two unique native face names in source, reference order.`);
   let ctx: Ctx = { doc: state.doc, bodies: state.bodies, selection: toPlane ? { ...selection, faces: [sourceFace] } : selection, pick: point };
   let cutSource: { source: string; target: string; body: string } | undefined;
-  if (cmd.id === 'sweep-curve') {
+  let rotateEdge: string | undefined;
+  if (cmd.id === 'rotate' && Object.hasOwn(given, 'about')) {
+    const name = Array.isArray(args.edges) && args.edges.length === 1 ? args.edges[0] : undefined;
+    const { about, angle } = given;
+    if (about !== 'edge' || state.partOf || state.doc.instances?.length || args.expectedRevision === undefined
+      || typeof name !== 'string' || args.faces !== undefined || args.bodies !== undefined || args.point !== undefined
+      || typeof angle !== 'number' || !Number.isFinite(angle) || angle === 0 || Math.abs(angle) >= 360
+      || Object.keys(given).some(key => key !== 'about' && key !== 'angle'))
+      return fail(state, 'Rotate about edge needs the current expectedRevision, one exact native edge name and one finite nonzero angle below 360 degrees in magnitude.', { code: 'COMMAND_INPUT' });
+    const pivot = cardinalEdgeRotation(ctx), [pick] = selection.edges;
+    if (!pivot || state.bodies[pick.body].mesh.edges[pick.edge].names[0] !== name)
+      return fail(state, 'Rotate about edge needs one exact native straight X, Y or Z edge on the current solid.', { code: 'COMMAND_INPUT' });
+    rotateEdge = name;
+    given = { ...pivot, angle };
+  } else if (cmd.id === 'sweep-curve') {
     const { sketch, path, pathRevision, representation, ...other } = given;
     if (typeof sketch !== 'string' || typeof path !== 'string' || !sketch.trim() || !path.trim()
       || typeof pathRevision !== 'string' || !/^[0-9a-f]{64}$/.test(pathRevision))
@@ -377,6 +393,7 @@ async function runCommandTool(state: ChatState, args: Record<string, unknown>, e
   try { next = cmd.build(ctx, values); } catch (e) { return fail(state, `${cmd.label}: ${e instanceof Error ? e.message : String(e)}`); }
   const shown: Values = {};
   if (cutSource) shown.source = cutSource.source;
+  if (rotateEdge) shown.edge = rotateEdge;
   for (const field of shownFields(fields, values)) shown[field.key] = field.kind === 'file' ? field.filename(values[field.key]) ?? 'Font file' : values[field.key];
   const offset = next.nodes[state.doc.nodes.length];
   if (toPlane && offset?.kind === 'offset-face' && offset.target && state.doc.nodes[offset.parent.node]?.kind === 'sweep-curve') {
