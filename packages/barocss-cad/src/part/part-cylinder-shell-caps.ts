@@ -70,41 +70,54 @@ export function closedCylinderCaps(part: Part, cylinder: NonNullable<ReturnType<
 /** The cutter ends at the original top station: the surviving top is an annular rim, with no inner ceiling. */
 export function topOpenCylinderFloor(part: Part, cylinder: NonNullable<ReturnType<typeof originalCylinderCaps>>, thickness: number,
   floor: number, opening: string, id: string, fail: Tools['fail']): Part {
+  return singleOpenCylinderCap(part, cylinder, thickness, floor, opening, id, fail, 1);
+}
+
+/** The cutter starts at the original bottom station: the retained inner cap is the downward ceiling. */
+export function bottomOpenCylinderCeiling(part: Part, cylinder: NonNullable<ReturnType<typeof originalCylinderCaps>>, thickness: number,
+  ceiling: number, opening: string, id: string, fail: Tools['fail']): Part {
+  return singleOpenCylinderCap(part, cylinder, thickness, ceiling, opening, id, fail, -1);
+}
+
+/** Both signs use the original upright charts and datum, without reflecting or extending the stock. */
+function singleOpenCylinderCap(part: Part, cylinder: NonNullable<ReturnType<typeof originalCylinderCaps>>, thickness: number,
+  depth: number, opening: string, id: string, fail: Tools['fail'], sign: 1 | -1): Part {
   const { stock, center, radius } = cylinder, slab = stock.slabs[0], r = radius - thickness;
   if (!(thickness >= ExtrudedProfileLimits.minimumLengthMM && r >= ExtrudedProfileLimits.minimumRadiusMM))
     fail('PARAMETER', 'The Shell wall thickness leaves no supported cylindrical cavity.');
-  const z0 = slab.z0 + floor, z1 = slab.z1;
-  if (!(slab.z1 - slab.z0 - floor >= ExtrudedProfileLimits.minimumLengthMM
-    && z1 - z0 >= ExtrudedProfileLimits.minimumLengthMM && z0 > slab.z0 && z0 < z1))
-    fail('PARAMETER', 'The Shell floor thickness leaves no cavity height.');
+  const label = sign === 1 ? 'floor' : 'ceiling', cap = sign === 1 ? 'top' : 'bottom';
+  const z0 = sign === 1 ? slab.z0 + depth : slab.z0, z1 = sign === 1 ? slab.z1 : slab.z1 - depth;
+  if (!(slab.z1 - slab.z0 - depth >= ExtrudedProfileLimits.minimumLengthMM
+    && z1 - z0 >= ExtrudedProfileLimits.minimumLengthMM && (sign === 1 ? z0 > slab.z0 : z1 < slab.z1) && z0 < z1))
+    fail('PARAMETER', `The Shell ${label} thickness leaves no cavity height.`);
   const original = brepOf(part, id), input = checkBrep(original, { strict: true });
-  const tops = original.faces.filter(face => face.name === opening), top = tops[0], g = top && faceGeometry(top);
+  const selected = original.faces.filter(face => face.name === opening), face = selected[0], g = face && faceGeometry(face);
   if (!input.valid || original.bodies.length !== 1 || original.bodies[0].kind !== 'solid'
     || original.shells.length !== 1 || !original.shells[0].closed || original.faces.length !== 4
-    || new Set(original.faces.map(face => face.name)).size !== 4 || tops.length !== 1 || top.loops.length !== 1
-    || g?.kind !== 'plane' || g.n[2] !== 1 || g.o[2] !== z1)
-    fail('REFERENCE', 'Independent cylindrical Shell floor needs one strict original cylinder and its exact top cap.');
+    || new Set(original.faces.map(face => face.name)).size !== 4 || selected.length !== 1 || face.loops.length !== 1
+    || g?.kind !== 'plane' || g.n[2] !== sign || g.o[2] !== (sign === 1 ? slab.z1 : slab.z0))
+    fail('REFERENCE', `Independent cylindrical Shell ${label} needs one strict original cylinder and its exact ${cap} cap.`);
   const ring = slab.regions[0].outer.map(segment => segment.kind === 'arc'
     ? { ...segment, r, tag: `${id}.in.${segment.tag}` } : segment);
   const hollow = prismaticExtrude([ring], z0, z1), regions = hollow.slabs[0]?.regions;
   if (hollow.slabs.length !== 1 || regions?.length !== 1 || regions[0].holes.length
     || !regions[0].outer.length || !regions[0].outer.every(segment => segment.kind === 'arc' && segment.r === r))
-    return fail('GEOMETRY', '[SHELL_NOT_CLOSED] independent cylindrical floor lost the circular cavity section.');
-  const cutter = { ...hollow, caps: [{ z: z0, regions, tag: `${id}.floor` }] };
+    return fail('GEOMETRY', `[SHELL_NOT_CLOSED] independent cylindrical ${label} lost the circular cavity section.`);
+  const cutter = { ...hollow, caps: [{ z: sign === 1 ? z0 : z1, regions, tag: `${id}.${label}` }] };
   const result: Part = { solid: { kind: 'upright', solid: booleanPrismatic(stock, cutter, 'difference') } };
   const brep = brepOf(result, id), report = checkBrep(brep, { strict: true });
   if (!report.valid || brep.bodies.length !== 1 || brep.bodies[0].kind !== 'solid' || brep.bodies[0].shells.length !== 1
     || brep.shells.length !== 1 || !brep.shells[0].closed || report.topology[0]?.genus !== 0
     || report.counts.faces !== 7 || report.counts.loops !== 8 || report.counts.coedges !== 24
     || report.counts.edges !== 12 || report.counts.vertices !== 8 || !brep.coedges.every(use => !!use.pcurve)
-    || !cylinderCapSupports(brep, original, center, radius, r, slab.z0, slab.z1, z0, z1, id, opening))
-    fail('GEOMETRY', '[SHELL_NOT_CLOSED] independent cylindrical floor could not retain one strict top opening and the original outer supports.');
+    || !cylinderCapSupports(brep, original, center, radius, r, slab.z0, slab.z1, z0, z1, id, opening, sign))
+    fail('GEOMETRY', `[SHELL_NOT_CLOSED] independent cylindrical ${label} could not retain one strict ${cap} opening and the original outer supports.`);
   return { ...result, brep };
 }
 
 /** Certify actual shell ownership, opposing caps and complete native circular trims, beyond mass alone. */
 function cylinderCapSupports(brep: Brep, original: Brep, center: Readonly<XY>, radius: number, innerRadius: number,
-  lo: number, hi: number, z0: number, z1: number, id: string, opening?: string): boolean {
+  lo: number, hi: number, z0: number, z1: number, id: string, opening?: string, openingSign: 1 | -1 = 1): boolean {
   const [outer, cavity] = brep.bodies[0].shells, inner = opening ? outer : cavity, roundoff = 128 * Number.EPSILON * Math.max(1, radius, ...center.map(Math.abs), Math.abs(lo), Math.abs(hi));
   const near = (a: number, b: number) => Math.abs(a - b) <= roundoff;
   const loops = new Map(brep.loops.map(loop => [loop.id, loop])), uses = new Map(brep.coedges.map(use => [use.id, use])), edges = new Map(brep.edges.map(edge => [edge.id, edge]));
@@ -134,8 +147,8 @@ function cylinderCapSupports(brep: Brep, original: Brep, center: Readonly<XY>, r
   const capSpecs = original.faces.filter(face => faceGeometry(face).kind === 'plane').map(face => {
     const g = faceGeometry(face);
     return { name: face.name, shell: outer, z: g.kind === 'plane' ? g.o[2] : NaN, normal: g.kind === 'plane' ? g.n[2] : NaN, r: radius };
-  }).concat([{ name: `${id}.floor`, shell: inner, z: z0, normal: 1, r: innerRadius },
-    ...(opening ? [] : [{ name: `${id}.ceiling`, shell: inner, z: z1, normal: -1, r: innerRadius }])]);
+  }).concat([...(opening && openingSign === -1 ? [] : [{ name: `${id}.floor`, shell: inner, z: z0, normal: 1, r: innerRadius }]),
+    ...(!opening || openingSign === -1 ? [{ name: `${id}.ceiling`, shell: inner, z: z1, normal: -1, r: innerRadius }] : [])]);
   return capSpecs.length === (opening ? 3 : 4) && capSpecs.every(spec => {
     const face = brep.faces.find(candidate => candidate.name === spec.name), g = face && faceGeometry(face), rim = spec.name === opening;
     if (!face || face.shell !== spec.shell || face.loops.length !== (rim ? 2 : 1) || g?.kind !== 'plane' || !near(g.o[2], spec.z)

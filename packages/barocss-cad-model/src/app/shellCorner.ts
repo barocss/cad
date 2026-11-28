@@ -30,7 +30,7 @@ export function separateShellCap(nodes: readonly ModelNode[], parent: BodyRef, o
   if (open.length !== 1) return;
   const owner = featureId(nodes, parent.node);
   const cap = open[0] === owner + '.top' ? 'floor' : open[0] === owner + '.bottom' ? 'ceiling' : undefined;
-  return cap && (canSetClosedShellCorner(nodes, parent) || cap === 'floor' && canSetCylinderShellCaps(nodes, parent)) ? cap : undefined;
+  return cap && (canSetClosedShellCorner(nodes, parent) || canSetCylinderShellCaps(nodes, parent)) ? cap : undefined;
 }
 
 export function canSetShellFloor(nodes: readonly ModelNode[], parent: BodyRef, open: readonly string[]): boolean {

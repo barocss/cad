@@ -51,36 +51,45 @@ test('closed cylinder Shell admits two independent caps without exposing an L co
   assert.deepEqual(agent.state.doc.nodes[2], closed.nodes[2]);
 });
 
-test('top-open cylinder Shell admits one independent floor and retains the original opening in the Agent', async () => {
-  const original = evaluateDoc(cylinder, 1);
-  assert.ok(original.ok);
-  const top = original.bodies[0].mesh.faces.findIndex(face => face.nativePlaneName === 'n1.top');
-  const bottom = original.bodies[0].mesh.faces.findIndex(face => face.nativePlaneName === 'n1.bottom');
-  assert.ok(top >= 0 && bottom >= 0);
-  const ctx = { doc: cylinder, bodies: original.bodies, selection: { bodies: [], faces: [{ body: 0, face: top }], edges: [] } };
-  const values = { ...shell.defaults!(ctx), wallMode: 'separate-floor', t: 2, floorThickness: 3 };
-  assert.deepEqual(shell.fields!(ctx, values).map(field => field.key), ['wallMode', 't', 'floorThickness']);
-  assert.throws(() => shell.build!(ctx, { ...values, join: 'sharp' }), /original upright L-shaped extrusion/);
-  const unsupported = { ...ctx, selection: { ...ctx.selection, faces: [{ body: 0, face: bottom }] } };
-  assert.deepEqual(shell.fields!(unsupported, values).map(field => field.key), ['t']);
-  assert.throws(() => shell.build!(unsupported, values), /original top cap/);
-  const opened = shell.build!(ctx, values);
-  const node = opened.nodes[2];
-  assert.ok(node.kind === 'shell');
-  assert.deepEqual([node.open, node.floorThickness, node.ceilingThickness, node.join], [['n1.top'], 3, undefined, undefined]);
-  const result = evaluateDoc(opened, 2);
-  assert.ok(result.ok && Math.abs(result.bodies[0].volume! - 1627 * Math.PI) < 1e-7);
-  const agent = await dispatchTool({ doc: cylinder, bodies: original.bodies }, 'features', { action: 'command', command: 'shell',
-    faces: ['n1.top'], values, expectedRevision: revisionOf(cylinder) }, async next => evaluateDoc(next, 3));
-  assert.ok(agent.changed && !agent.isError, agent.content);
-  const agentNode = agent.state.doc.nodes[2];
-  assert.ok(agentNode.kind === 'shell');
-  const { sigs, ...command } = agentNode;
-  assert.deepEqual(command, node);
-  assert.deepEqual(Object.keys(sigs ?? {}), ['n1.top']);
-  assert.deepEqual(sigs?.['n1.top']?.d, [0, 0, 1]);
-  assert.deepEqual(partBreps(agent.state.doc)[0].brep, partBreps(opened)[0].brep);
-});
+for (const [opening, cap, normal] of [['top', 'floor', 1], ['bottom', 'ceiling', -1]] as const) {
+  test(`original cylinder Shell with its ${opening} open edits only the ${cap} and retains the opening in the Agent`, async () => {
+    const original = evaluateDoc(cylinder, 1);
+    assert.ok(original.ok);
+    const faces = original.bodies[0].mesh.faces;
+    const name = `n1.${opening}`, otherName = opening === 'top' ? 'n1.bottom' : 'n1.top';
+    const face = faces.findIndex(member => member.nativePlaneName === name);
+    const other = faces.findIndex(member => member.nativePlaneName === otherName);
+    assert.ok(face >= 0 && other >= 0);
+    const ctx = { doc: cylinder, bodies: original.bodies, selection: { bodies: [], faces: [{ body: 0, face }], edges: [] } };
+    const field = `${cap}Thickness` as const, wallMode = `separate-${cap}`;
+    const values = { ...shell.defaults!(ctx), wallMode, t: 2, [field]: 3 };
+    assert.deepEqual(shell.fields!(ctx, values).map(member => member.key), ['wallMode', 't', field]);
+    assert.throws(() => shell.build!(ctx, { ...values, join: 'sharp' }), /original upright L-shaped extrusion/);
+    const unsupported = { ...ctx, selection: { ...ctx.selection, faces: [{ body: 0, face: other }] } };
+    assert.deepEqual(shell.fields!(unsupported, values).map(member => member.key), ['wallMode', 't']);
+    assert.throws(() => shell.build!(unsupported, values), new RegExp(`original ${opening} cap`));
+    const opened = shell.build!(ctx, values);
+    const node = opened.nodes[2];
+    assert.ok(node.kind === 'shell');
+    assert.deepEqual([node.open, node[field], node.join], [[name], 3, undefined]);
+    const result = evaluateDoc(opened, 2);
+    assert.ok(result.ok && Math.abs(result.bodies[0].volume! - 1627 * Math.PI) < 1e-7);
+    const editor = editFields(opened.nodes, 2).find(member => member.key === field);
+    assert.ok(editor?.kind === 'number');
+    const edited = evaluateDoc({ ...opened, nodes: editor.set(opened.nodes, 4) }, 3);
+    assert.ok(edited.ok && Math.abs(edited.bodies[0].volume! - 1796 * Math.PI) < 1e-7);
+    const agent = await dispatchTool({ doc: cylinder, bodies: original.bodies }, 'features', { action: 'command', command: 'shell',
+      faces: [name], values, expectedRevision: revisionOf(cylinder) }, async next => evaluateDoc(next, 4));
+    assert.ok(agent.changed && !agent.isError, agent.content);
+    const agentNode = agent.state.doc.nodes[2];
+    assert.ok(agentNode.kind === 'shell');
+    const { sigs, ...command } = agentNode;
+    assert.deepEqual(command, node);
+    assert.deepEqual(Object.keys(sigs ?? {}), [name]);
+    assert.deepEqual(sigs?.[name]?.d, [0, 0, normal]);
+    assert.deepEqual(partBreps(agent.state.doc)[0].brep, partBreps(opened)[0].brep);
+  });
+}
 
 test('closed L Shell carries explicit corner values through History and native read', () => {
   const evaluated = evaluateDoc(doc, 1);

@@ -75,8 +75,7 @@ export const shellCommand: Command = {
       const cap = v.wallMode === 'separate-floor' ? 'floor' : 'ceiling';
       if (separateShellCap(ctx.doc.nodes, parent, open) !== cap) {
         const opening = cap === 'floor' ? 'top' : 'bottom';
-        const stock = cap === 'floor' ? 'upright L or circular' : 'upright L';
-        throw refusal('BAD_REFERENCE', `Select the original ${opening} cap of one ${stock} extrusion for a separate Shell ${cap}.`);
+        throw refusal('BAD_REFERENCE', `Select the original ${opening} cap of one upright L or circular extrusion for a separate Shell ${cap}.`);
       }
       if (join !== undefined && !canSetShellCorner(ctx.doc.nodes, parent, open))
         throw refusal('BAD_REFERENCE', 'An explicit Shell inner corner needs an original upright L-shaped extrusion.');

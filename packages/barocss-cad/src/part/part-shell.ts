@@ -16,7 +16,7 @@ import { withCavities } from '../brep/brep-glue.js';
 import { generalShell } from '../blend/general-shell.js';
 import { closedLShellWallLimit } from '../features/closed-l-shell-profile.js';
 import { closedBoxShellWithWalls, threeOrFourOpeningBoxShellWithWalls, twoOpeningBoxShellWithWalls, boxShellWallLimit, boxShellWithWalls } from './part-box-shell.js';
-import { originalCylinderCaps, closedCylinderCaps, topOpenCylinderFloor } from './part-cylinder-shell-caps.js';
+import { originalCylinderCaps, closedCylinderCaps, topOpenCylinderFloor, bottomOpenCylinderCeiling } from './part-cylinder-shell-caps.js';
 import { openRevolvedCapsuleShell } from './part-capsule-shell.js';
 import { offsetCavity, offsetShell, smoothOffsetBody } from '../blend/offset-cavity.js';
 import { regionShell } from '../blend/region-shell.js';
@@ -81,7 +81,7 @@ export function shellOperation(f: CadPartFeature & Record<string, unknown>, t: T
         fail('INPUT', 'Independent Shell floor and ceiling thicknesses need a closed body with no openings.');
       const capThickness = floorThickness ?? ceilingThickness, capLabel = floorThickness !== undefined ? 'floor' : 'ceiling';
       const limit = join === undefined && capThickness === undefined ? undefined : originalClosedLShellLimit(f.target, part, t);
-      const cylinder = floorThickness !== undefined ? originalCylinderCaps(f.target, part, t) : undefined;
+      const cylinder = capThickness !== undefined ? originalCylinderCaps(f.target, part, t) : undefined;
       if (cylinder && join !== undefined)
         fail('CAPABILITY', 'Independent cylindrical Shell caps do not support an explicit join.');
       const [targetId, output] = f.target.split('/'), capPrefix = `${targetId}.cut.`;
@@ -91,8 +91,8 @@ export function shellOperation(f: CadPartFeature & Record<string, unknown>, t: T
         fail('CAPABILITY', 'Independent closed Shell caps need one original zero-draft upright orthogonal L extrusion.');
       if (!pairedCaps && floorThickness !== undefined && (limit === undefined && cylinder === undefined || names.length !== 1 || names[0] !== `${targetId}.top`))
         fail('CAPABILITY', 'Independent Shell floor needs one original zero-draft upright orthogonal L or literal unplaced XY solid-circle extrusion with only its exact top cap opened.');
-      if (!pairedCaps && ceilingThickness !== undefined && (limit === undefined || names.length !== 1 || names[0] !== `${targetId}.bottom`))
-        fail('CAPABILITY', 'Independent Shell ceiling needs one original zero-draft upright orthogonal L extrusion with only its exact bottom cap opened.');
+      if (!pairedCaps && ceilingThickness !== undefined && (limit === undefined && cylinder === undefined || names.length !== 1 || names[0] !== `${targetId}.bottom`))
+        fail('CAPABILITY', 'Independent Shell ceiling needs one original zero-draft upright orthogonal L or literal unplaced XY solid-circle extrusion with only its exact bottom cap opened.');
       if (join !== undefined && (names.length > 0 && !capOpening || limit === undefined))
         fail('CAPABILITY', 'Explicit Shell join needs one original closed zero-draft upright orthogonal L extrusion, or its single exact original top cap or bottom cap.');
       if (capThickness !== undefined && limit !== undefined
@@ -136,7 +136,9 @@ export function shellOperation(f: CadPartFeature & Record<string, unknown>, t: T
           return { kind: 'solid', parts: [{ ...result, brep }] };
         }
         if (capThickness !== undefined) {
-          if (cylinder && floorThickness !== undefined) return { kind: 'solid', parts: [topOpenCylinderFloor(part, cylinder, thickness, floorThickness, names[0], at, fail)] };
+          if (cylinder) return { kind: 'solid', parts: [floorThickness !== undefined
+            ? topOpenCylinderFloor(part, cylinder, thickness, floorThickness, names[0], at, fail)
+            : bottomOpenCylinderCeiling(part, cylinder, thickness, capThickness, names[0], at, fail)] };
           const original = brepOf(part, f.target), input = checkBrep(original, { strict: true });
           const caps = original.faces.filter(face => face.name === names[0]), support = caps[0] && faceGeometry(caps[0]);
           const capName = openingSign === 1 ? 'top' : 'bottom', station = (openingSign === 1 ? Math.max : Math.min)(...original.vertices.map(vertex => vertex.point[2]));
