@@ -3,6 +3,8 @@ import { createFlow } from './flow-helper.mjs';
 
 const baseline = process.argv.includes('--baseline');
 const rotated = process.argv.includes('--rotated');
+const acute = process.argv.includes('--acute');
+const caseName = acute ? 'acute-sector' : 'quarter-disk';
 const pins = [
   'apps/cad-studio/test/quarter-disk-draft-extrude-browser.mjs',
   'packages/barocss-cad/src/features/drafted-extrusion.ts',
@@ -12,7 +14,7 @@ const pins = [
 const f = await createFlow({
   name: 'quarter-disk-draft-extrude', output: process.argv[2], envFrozen: 'QUARTER_DISK_DRAFT_FROZEN',
   initialFiles: pins, requiredFrozen: pins,
-  qualification: 'Draft the two radial walls and arc of an original quadrant, then edit and reopen it.',
+  qualification: 'Draft the two radial walls and arc of an original circular sector, then edit and reopen it.',
   inspectorSource: `
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
@@ -42,7 +44,11 @@ console.log(JSON.stringify({
 `,
 });
 const radius = 10, height = 10;
-const arcStart = rotated ? [8, 6] : [10, 0], arcEnd = rotated ? [-6, 8] : [0, 10];
+const arcStart = rotated ? [8, 6] : [10, 0];
+const arcEnd = acute ? (rotated ? [0, 10] : [6, 8]) : (rotated ? [-6, 8] : [0, 10]);
+const halfAngle = acute ? Math.atan2(4, 3) / 2 : Math.PI / 4;
+const cotangent = acute ? 2 : 1;
+const lastWallDistance = (x, y) => acute ? 0.8 * x - 0.6 * y : x;
 const inSketchFrame = ([x, y, z]) => rotated ? [(4 * x + 3 * y) / 5, (-3 * x + 4 * y) / 5, z] : [x, y, z];
 const seed = {
   format: 'barocss-cad-model', schema: 3, units: 'mm', parameters: {}, nextId: 1,
@@ -62,7 +68,7 @@ function volumeAt(slope) {
   const n = 4096;
   const area = z => {
     const d = z * slope, r = radius - d, q = Math.sqrt(r * r - d * d);
-    return r * r * (Math.PI / 4 - Math.atan2(d, q)) + d * (d - q);
+    return r * r * (halfAngle - Math.atan2(d, q)) + d * (cotangent * d - q);
   };
   let sum = area(0) + area(height);
   for (let i = 1; i < n; i++) sum += (i % 2 ? 4 : 2) * area(i * height / n);
@@ -87,13 +93,13 @@ async function check(label, doc, angle) {
   for (const seam of joins) {
     const alongY = seam.name.includes('n1.side0');
     for (const [x, y, z] of seam.points.map(inSketchFrame)) {
-      near(alongY ? y : x, slope * z);
+      near(alongY ? y : lastWallDistance(x, y), slope * z);
       near(Math.hypot(x, y), radius - slope * z);
     }
   }
   const corner = result.seams.find(seam => seam.name === 'n1.side0|n1.side2');
   assert.equal(corner.degree, 1);
-  for (const [x, y, z] of corner.points.map(inSketchFrame)) { near(x, slope * z); near(y, slope * z); }
+  for (const [x, y, z] of corner.points.map(inSketchFrame)) { near(x, cotangent * slope * z); near(y, slope * z); }
   const { bodies } = await f.bodies();
   assert.equal(bodies.length, 1);
   near(result.mass.volume, volume, 1e-6);
@@ -103,10 +109,10 @@ async function check(label, doc, angle) {
 }
 
 await f.run(async () => {
-  f.phase = 'Open the original quadrant and start Extrude';
+  f.phase = 'Open the original circular sector and start Extrude';
   await f.newPage();
   const [chooser] = await Promise.all([f.page.waitForEvent('filechooser'), button('Open').click()]);
-  await chooser.setFiles({ name: 'quarter-disk-sketch.bcad', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(seed)) });
+  await chooser.setFiles({ name: caseName + '-sketch.bcad', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(seed)) });
   await f.same(seed);
   const browser = f.page.getByRole('complementary', { name: 'Browser', exact: true });
   const prepare = async angle => {
@@ -122,12 +128,12 @@ await f.run(async () => {
     assert.match(await hud.locator('details code').textContent(), /not tangent/);
     assert.equal(await button('Apply', hud).isDisabled(), true);
     await f.same(seed);
-    await f.snapshot('baseline-quarter-disk-refused');
+    await f.snapshot('baseline-' + caseName + '-refused');
     return;
   }
   await status('preview');
   await f.same(seed);
-  await f.snapshot('quarter-disk-preview');
+  await f.snapshot(caseName + '-preview');
   await button('Cancel', hud).click();
   await f.same(seed);
   await prepare(10);
@@ -138,25 +144,27 @@ await f.run(async () => {
   assert.deepEqual(first.nodes[0], seed.nodes[0]);
   assert.equal(first.nodes[1].draft, 10);
   await check('inward-draft', first, 10);
-  await f.snapshot('inward-quarter-disk');
+  await f.snapshot('inward-' + caseName);
 
   f.phase = 'Refuse collapse and edit to a signed outward Draft';
   await f.openFeatureEditor(1, 'Draft Extrude');
   const editor = f.editor(), draft = field('Draft', editor);
-  await draft.fill('30');
-  await button('Apply', editor).click();
-  await editor.locator('.hud-error-title').waitFor();
-  await f.same(first);
-  await f.snapshot('quarter-disk-collapse-refused');
+  for (const [angle, suffix] of acute ? [[20, 'inward'], [-40, 'outward']] : [[30, '']]) {
+    await draft.fill(String(angle));
+    await button('Apply', editor).click();
+    await editor.locator('.hud-error-title').waitFor();
+    await f.same(first);
+    await f.snapshot(caseName + '-collapse-refused' + (suffix ? '-' + suffix : ''));
+  }
   await draft.fill('-10');
-  const second = (await f.applyEditor(first, 'outward-quarter-disk')).doc;
+  const second = (await f.applyEditor(first, 'outward-' + caseName)).doc;
   assert.deepEqual(second.nodes[1], { ...first.nodes[1], draft: -10 });
   const digest = await check('outward-draft', second, -10);
   await f.undo();
   await f.same(first);
   await f.redo();
   await f.same(second);
-  const saved = await f.save('quarter-disk-draft');
-  const reopened = (await f.freshOpen(saved.file, second, 'quarter-disk-draft-reopened')).doc;
+  const saved = await f.save(caseName + '-draft');
+  const reopened = (await f.freshOpen(saved.file, second, caseName + '-draft-reopened')).doc;
   assert.equal(await check('outward-native-reopen', reopened, -10), digest);
 });

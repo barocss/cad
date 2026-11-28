@@ -99,6 +99,63 @@ function quadrant(center, start, end, direction = 'ccw') {
   ];
 }
 
+test('an exact acute sector has both radial parabolas, correct signed volume and original endpoints', () => {
+  const source = quadrant([0, 0], [10, 0], [6, 8]);
+  for (const [draft, volume, centroid] of [
+    [10, 252.36192253802574, [5.864593902445914, 2.932296951222957, 3.7603125905175845]],
+    [-10, 767.5866568647912, [5.560648596914583, 2.7803242984572916, 5.709491493406435]],
+  ]) {
+    const brep = make(draft, { profile: source });
+    const report = checkBrep(brep, { strict: true, pcurveSamples: 9 });
+    assert.ok(report.valid, report.issues.join('\n'));
+    assert.deepEqual(report.counts, { bodies: 1, shells: 1, faces: 6, loops: 6, coedges: 24, edges: 12, vertices: 8 });
+    assert.ok(report.maximumEdgeSurfaceGap < 1e-10);
+    const retained = new Map([['b0', [0, 0, 0]], ['b1', [10, 0, 0]], ['b3', [6, 8, 0]]]);
+    for (const vertex of brep.vertices) if (retained.has(vertex.id)) assert.deepEqual(vertex.point, retained.get(vertex.id));
+    const k = Math.tan(draft * Math.PI / 180);
+    for (const [edge, linear, quadratic] of [
+      ['se1', (x, y) => y, x => x],
+      ['se3', (x, y) => 0.8 * x - 0.6 * y, (x, y) => 0.6 * x + 0.8 * y],
+    ]) {
+      const { curve } = brep.edges.find(item => item.id === edge);
+      assert.deepEqual([curve.degree, curve.weights], [2, [1, 1, 1]]);
+      for (let j = 0; j <= 32; j++) {
+        const [x, y, z] = evaluateCurve(curve, j / 32);
+        near(linear(x, y), k * z);
+        near(quadratic(x, y) ** 2, 100 - 20 * k * z);
+      }
+    }
+    for (const segmentsPerQuarter of [4, 8, 16]) {
+      assert.equal(openEdgesByBody(brep, tessellateBrep(brep, { segmentsPerQuarter })), 0);
+    }
+    const mass = brepMassProperties(brep, 1);
+    near(mass.volume, volume, 1e-8);
+    for (const [i, value] of centroid.entries()) near(mass.centroid[i], value, 1e-8);
+  }
+  for (const draft of [20, -40]) assert.throws(() => make(draft, { profile: source }), /closes the acute sector/);
+  const almostRadial = quadrant([0, 0], [10, 0], [6, 8 + 2 ** -49]);
+  assert.throws(() => make(10, { profile: almostRadial }), /not tangent/);
+});
+
+test('an acute sector remains exact when the input frame is translated, rotated or reversed', () => {
+  const center = [21, -3], start = [29, 3], end = [21, 7];
+  const source = quadrant(center, start, end);
+  const reversed = [{ ...source[1], start: end, direction: 'cw' }, { ...source[0], start }, source[0]];
+  for (const profile of [source, source.slice(1).concat(source[0]), reversed]) {
+    const brep = make(10, { profile, z0: 2, z1: 12 });
+    const report = checkBrep(brep, { strict: true });
+    assert.ok(report.valid && report.maximumEdgeSurfaceGap < 1e-10, report.issues.join('\n'));
+    for (const [x, y] of [center, start, end]) {
+      assert.ok(brep.vertices.some(vertex => vertex.point[0] === x && vertex.point[1] === y && vertex.point[2] === 2));
+    }
+    const mass = brepMassProperties(brep, 1);
+    near(mass.volume, 252.36192253802574, 1e-8);
+    near(mass.centroid[0], 21 + 0.8 * 5.864593902445914 - 0.6 * 2.932296951222957, 1e-8);
+    near(mass.centroid[1], -3 + 0.6 * 5.864593902445914 + 0.8 * 2.932296951222957, 1e-8);
+    near(mass.centroid[2], 2 + 3.7603125905175845, 1e-8);
+  }
+});
+
 test('both signed Drafts on a noncardinal quarter disk match rotated native supports and mass', () => {
   const center = [21, -3], start = [29, 3], end = [15, 5];
   const selected = quadrant(center, start, end), axis = ([x, y, z]) => {
