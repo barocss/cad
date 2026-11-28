@@ -12,6 +12,7 @@ import type { Proposal } from '@barocss/cad-model/engine/schema/proposals';
 import { ACCEPT, imageUrl, prepareImage, type ChatImage } from '../chat/images';
 import { AUTONOMY_TIPS, useStudioChat } from '../chat/useStudioChat';
 import { START_CHAT_COMMAND } from '../chat/client';
+import { useBrowserPartSummary, type BrowserPartSummarySource } from '../chat/useBrowserPartSummary';
 import { compactLocalPaths } from '../chat/localPathDisplay';
 import type { StudioMessage } from '../chat/transport';
 import { isLocalTaskRunHost, type SavedTaskRunPlan, type TaskRunChatOutput, type TaskRunCheckpointRequest, type TaskRunFindingSelection, type TaskRunLaunch, type TaskRunReplanSelection, type TaskRunReviewRequest, type TaskRunStatus } from '../chat/taskRunOffer';
@@ -20,6 +21,7 @@ import type { RequirementEvidence } from '@barocss/cad-model/chat/requirementEvi
 import type { WorkingApprovalChecks } from '../files/workingApprovalChecks';
 import type { CheckpointReview } from '../files/taskCheckpoint';
 import { Message } from '@/components/ai/message';
+import { Button } from '@/components/ui/button';
 import { Tool } from '@/components/ai/tool';
 import { ProposalLink } from '@/components/ai/proposal';
 import { Reasoning } from '@/components/ai/reasoning';
@@ -30,6 +32,7 @@ import './chat.css';
 const toolLabel = (name: string, input: unknown) => { const a = input && typeof input === 'object' ? (input as { action?: unknown }).action : undefined; return typeof a === 'string' ? `${name}.${a}` : name; };
 
 export interface ChatPanelProps {
+  browserSummary?: BrowserPartSummarySource;
   approvalAttachment?: import('../chat/useApprovalEvidenceAttachment').ApprovalEvidenceAttachment;
   onClearApprovalAttachment?(attachment: NonNullable<ChatPanelProps['approvalAttachment']>): void;
   faceDiagnosis?: import('../chat/useFaceDiagnosisAttachment').FaceDiagnosisAttachment;
@@ -102,6 +105,7 @@ interface RunStatuses {
 
 export function ChatPanel(props: ChatPanelProps) {
   const chat = useStudioChat(props), { status, autonomy, messages, running } = chat;
+  const browserSummary = useBrowserPartSummary(props.browserSummary);
   useEffect(() => { props.onRunning?.(running); return () => props.onRunning?.(false); }, [running]);
   const [text, setText] = useState('');
   const [taskFinding, setTaskFinding] = useState<TaskRunFindingSelection>();
@@ -195,6 +199,10 @@ export function ChatPanel(props: ChatPanelProps) {
       onDrop={e => { if (!e.dataTransfer.files.length) return; e.preventDefault(); if (enabled && !running) void attach(e.dataTransfer.files); }}>
       <div className="card-title">CHAT <span className="muted">{status?.model ?? ''}</span>
         <span className="grow" />
+        {browserSummary && <Button type="button" size="xs" variant={browserSummary.enabled ? 'default' : 'outline'}
+          aria-label="Share part summary with browser tools"
+          title="Share this part's read-only summary with browser tools" aria-pressed={browserSummary.enabled}
+          disabled={!browserSummary.ready && !browserSummary.enabled} onClick={browserSummary.toggle}>WebMCP</Button>}
         <select className="chat-autonomy" aria-label="Autonomy" title={AUTONOMY_TIPS[autonomy - 1]} value={autonomy} disabled={running}
           onChange={e => chat.setAutonomy(Number(e.currentTarget.value))}>
           {AUTONOMY_TIPS.map((t, i) => <option key={i} value={i + 1} title={t}>L{i + 1}</option>)}</select>
@@ -202,6 +210,7 @@ export function ChatPanel(props: ChatPanelProps) {
         <button className="tool small" aria-label="Close chat" title="Close" onClick={props.onClose}><Icon name="close" small /></button>
       </div>
       <div className="chat-log" ref={log} aria-live="polite">
+        {browserSummary?.failed && <div className="chat-msg notice" role="status">Browser tools are unavailable.</div>}
         {status && !enabled && <div className="chat-setup" role="note">
           <b>Chat is off.</b>
           {status.reason ? <span>{status.reason}</span> : <>

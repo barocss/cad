@@ -2147,6 +2147,11 @@ export function App() {
   const routeAvailable = !!doc.routeBundles?.length || (doc.direct?.objects.filter(object => {
     try { return !!D && D.geometryOf(doc.direct!, object).kind === 'curve'; } catch { return false; }
   }).length ?? 0) >= 2;
+  const browserSummaryOpen = openIntent.current;
+  const browserSummaryReady = fresh && !busy && !workerFailure && marker === null && shownDoc === doc
+    && !inPlace && !doc.instances?.length && !doc.direct && !sketch && !active && !section && !chatRunning
+    && !previewBodies && !workingComparison && !ghost && !project.opening();
+
   return (
     <div className={'studio' + (historyLayout.visible ? ' has-history' : '') + (historyLayout.row.stacked ? ' history-stacked' : '') + (historyLayout.row.cramped ? ' stage-cramped' : '')} style={{ '--history-left': historyLeft + 'px', '--strip-w': chatColumnShown ? '0px' : CHAT_STRIP + 'px', '--dock-strip-w': dockEdge + 'px', '--chat-col-w': (chatColumnShown ? layout.chatShown : CHAT_STRIP) + 'px', '--rail-w': sketch || rendering || drawing ? '44px' : '116px' } as CSSProperties}>
       <Profiler id="topbar" onRender={onBlockRender}>
@@ -2283,6 +2288,8 @@ export function App() {
         decided={decidedProposals} decidedShown={decidedShown} onShowDecided={() => setDecidedShown(true)}
         proposals={<ProposalBrowser controller={proposals} reviewRecovery={proposalReviewRecovery} doc={doc} bodies={bodies} fresh={fresh} massReady={massReady} placedPreviewEnabled={placedPreviewEnabled} decidedShown={decidedShown} setDecidedShown={setDecidedShown} />}
         content={rendering || drawing ? null : <Suspense fallback={null}><ChatPanel versions={inPlace ? undefined : project.chat} scope={inPlace}
+        browserSummary={{ doc, bodies, scope: browserSummaryOpen, ready: browserSummaryReady,
+          isCurrent: () => ownsEvaluatedSource() && openIntent.current === browserSummaryOpen && !project.opening() }}
         approvalAttachment={approvalAttachments.selected} onClearApprovalAttachment={approvalAttachments.clear}
         faceDiagnosis={faceDiagnosis.selected} onClearFaceDiagnosis={faceDiagnosis.clear}
         taskRun={inPlace ? undefined : { reopened: reopenedTaskRun, decided: decidedTaskRun, sourceKey: project.taskSourceKey, export: exportTaskRun, start: startTaskRun, stop: stopTaskRun, refresh: refreshTaskRun, rebuild: rebuildTaskRun, observe: observeTaskRunStatus, openCheckpoint: openTaskRunCheckpoint, openBaseline: openTaskRunBaseline, readApproval: readTaskRunApproval, checkWorkingApproval, prepareWorkingRepair, prepareTaskReplacement, workingVersion: saveAcceptanceScope, review: reviewTaskRun, modelViewBlocked: !reviewView }} onRunning={setChatRunning} onRowFiles={files => { if (files === chatRowFiles.current || (files && !isPersonRowFiles(files))) return; revokePersonRowFiles(chatRowFiles.current); chatRowFiles.current = files; }} base={() => prefixDoc(doc, marker ?? doc.nodes.length)} evaluate={d => engine.part(d, revision.current++, 'agent').then(r => r.ok ? r.bodies : null)} check={partEval}
