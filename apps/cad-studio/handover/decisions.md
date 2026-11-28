@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D2262: [D2262](notes/studio-document-adoption-2026-11-29/README.md), #44. Move accepted document installation out of App and compare actual desktop edit, history and Open.
+
 - D2261: [D2261](notes/browser-box-width-match-2026-11-29/README.md), #204. Use a one-use browser grant and exact two-Box ownership to stage a user-approved width match.
 
 - D2260: [D2260](notes/drawing-tolerance-pdf-closeout-2026-11-29/README.md), #35. Verify the original diameter tolerance and H7 fit values in actual Studio PDF and reconcile the original acceptance.

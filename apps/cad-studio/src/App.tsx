@@ -1,4 +1,5 @@
 import { useStudioDirectCommit } from './state/useStudioDirectCommit';
+import { adoptStudioDocument, canChangeStudioDocument, type StudioDocumentUndo } from './state/studioDocumentAdoption';
 import { useFitTableCommit } from './state/useFitTableCommit';
 import { useVertexExtrudeEntry } from './state/useVertexExtrudeEntry';
 import { useBoxWidthEntry } from './state/useBoxWidthEntry';
@@ -100,7 +101,7 @@ import { useRouteBundleEditor } from './state/useRouteBundleEditor';
 import { prepareCutPatternLaunch } from './app/commandLaunchContext';
 import { prepareStudioFeatureCommand, useStudioCommandEntry } from './app/useStudioCommandEntry';
 import { moveRenderAppearance } from './app/moveRenderAppearance';
-import { curvePatternInputKey, curvePatternDocumentProblem, directCommandDocument } from './app/directCurveCandidate';
+import { curvePatternInputKey, directCommandDocument } from './app/directCurveCandidate';
 import { createRoundedInsetHistoryEdit, LINKED_INSET_EXTRUDE } from './app/roundedInsetCommand';
 import { ReferenceDecisions } from './ui/ReferenceDecisions';
 import { useRobotExports } from './robot/useRobotExports';
@@ -114,7 +115,6 @@ import { launchDerivedSketch } from './app/launchDerivedSketch';
 import { useModelExports } from './files/useModelExports';
 import { ModelExportDialogs } from './files/ModelExportDialogs';
 import { StepExportPanel } from './files/StepExportPanel';
-import { changesBeyondVariability } from './app/documentChanges';
 import { sameMeshes, withMasses, samePlacement } from './app/bodyResults';
 import { sketchRegion } from './app/sketchControls';
 import { createDocumentReplacement, type ReplacementIntent } from './app/documentReplacement';
@@ -130,7 +130,7 @@ import { CursorReadout } from './ui/CursorReadout';
 import { revokePersonRowFiles, isPersonRowFiles, type PersonRowFiles } from '@barocss/cad-model/engine/rowFiles';
 import { Profiler, Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties } from 'react';
 import { EngineClient } from './engine/client';
-import { createWorkOwnership, finishWork, reserveAcceptedChange, workEditRefusal, type WorkHistory } from './state/workOwnership';
+import { createWorkOwnership, finishWork, workEditRefusal, type WorkHistory } from './state/workOwnership';
 import type { OpenScope } from './state/openOwnership';
 import { createStudioProjectCallbacks } from './app/studioProjectCallbacks';
 import type { SectionPick } from './viewport/useSectionSelection';
@@ -143,7 +143,7 @@ import { contentKey } from '@barocss/cad-model/engine/evalMemo';
 import { bearingFaceInput } from './app/bearingEdit';
 import { usePlacedBearingEditor } from './app/usePlacedBearingEditor';
 import { featureLabel, fmt, prefixDoc, starterDoc, type StudioDoc } from '@barocss/cad-model/engine/doc';
-import { featureId, nextSerial } from '@barocss/cad-model/engine/ids';
+import { nextSerial } from '@barocss/cad-model/engine/ids';
 import type { Problem as RefProblem } from '@barocss/cad-model/engine/references';
 import type { BodyResult } from '@barocss/cad-model/engine/evaluate';
 import type { FriendlyError } from '@barocss/cad-model/engine/errors';
@@ -318,53 +318,15 @@ export function App() {
   const replacement = useRef<ReplacementIntent | null>(null);
   const workCompletion = useRef<object | null>(null);
   const shownVariant = useRef<string | null>(null);
-  const undoFor = useRef<{ entry: WorkHistory<StudioDoc>; scope: object; base: StudioDoc; beforeInput: StudioDoc } | null>(null);
-  const canChangeDocument = () => {
-    const why = !replacement.current && doc !== docNow.current ? 'stale' : workEditRefusal(workOwnership.current, replacement.current?.scope ?? acceptanceScope, workCompletion.current);
-    if (!why) return true;
-    undoFor.current = null;
-    setToast({ title: 'Change not applied', hint: why === 'pending' ? 'Wait for the computation to finish, or stop it, before changing the document.' : 'The document or operation changed. Try this edit again.', detail: '' });
-    return false;
-  };
-  const setDoc = (next: StudioDoc, whole = false): boolean => {
-    const intent = undoFor.current; undoFor.current = null;
-    const why = !replacement.current && (intent?.base ?? doc) !== docNow.current ? 'stale' : workEditRefusal(workOwnership.current, replacement.current?.scope ?? intent?.scope ?? acceptanceScope, workCompletion.current);
-    if (why) { setToast({ title: 'Change not applied', hint: why === 'pending' ? 'Wait for the computation to finish, or stop it, before changing the document.' : 'The document or operation changed. Try this edit again.', detail: '' }); return false; }
-    const insetEdit = parameterEditNow.current;
-    const acceptsInsetEdit = !whole && workCompletion.current !== null && insetEdit?.roundedInset
-      && insetEdit.base === docNow.current && insetEdit.next === next;
-    if (!replacement.current && !acceptsInsetEdit && (docNow.current.nodes.some(node => node.kind === 'rounded-rectangle-inset')
-      || next.nodes.some(node => node.kind === 'rounded-rectangle-inset'))) {
-      setToast({ title: 'Change not applied', hint: 'Use the Extrude editor to change the inset distance or detach it.', detail: 'The document is unchanged.' });
-      return false;
-    }
-    const pathProblem = curvePatternDocumentProblem(next);
-    if (pathProblem) { setToast({ title: 'Change not applied', hint: pathProblem, detail: 'The document is unchanged.' }); return false; }
-    if (!whole && shownVariant.current && changesBeyondVariability(docNow.current, next)) { setToast({ title: 'Can’t change the part now', hint: `Showing ${shownVariant.current}: show the master to edit.`, detail: '' }); return false; }
-    if (next !== docNow.current) discardRouteRef.current();
-    if (routeAcceptedHandoff.current?.doc !== next) routeAcceptedHandoff.current = null;
-    if (intent) {
-      const copied = clipboard.current;
-      const current = docNow.current;
-      // Undo may restore the earlier ID counter. A new edit can then reuse the absent producer's ID.
-      if (copied && !Object.hasOwn(current.outputs, copied.key)
-        && !current.nodes.some((_, i) => featureId(current.nodes, i) === copied.featureId)
-        && next.nodes.some((_, i) => featureId(next.nodes, i) === copied.featureId)) {
-        clearBodyClipboard();
-      }
-      const identity = replacement.current?.identity;
-      const entry: WorkHistory<StudioDoc> = replacement.current
-        ? { ...intent.entry, documentBoundary: true, ...(identity ? { documentIdentity: identity } : {}) } : intent.entry;
-      setUndo(u => [...u.slice(-49), entry]); setRedo([]);
-      workOwnership.current = reserveAcceptedChange(workOwnership.current, entry, next, intent.beforeInput);
-    }
-    const previous = docNow.current;
-    const problems = referenceProblems.current.get(previous);
-    if (!whole && problems?.length && next.nodes === previous.nodes && next.drawing === previous.drawing
-        && next.mates === previous.mates && next.bodies === previous.bodies) referenceProblems.current.set(next, problems);
-    docNow.current = next; setDocState(next);
-    return true;
-  };
+  const undoFor = useRef<StudioDocumentUndo | null>(null);
+  const documentOwner = { doc, docNow, acceptanceScope, replacement, workOwnership, workCompletion, undoFor,
+    setToast: (next: StudioNotice) => setToast(next) };
+  const canChangeDocument = () => canChangeStudioDocument(documentOwner);
+  const setDoc = (next: StudioDoc, whole = false) => adoptStudioDocument(documentOwner, {
+    edit: { parameterEdit: parameterEditNow, shownVariant, discardRoute: discardRouteRef, routeAcceptedHandoff },
+    history: { clipboard, clearBodyClipboard, setUndo, setRedo },
+    install: { referenceProblems, setDocState },
+  }, next, whole);
   const [marker, setMarker] = useState<number | null>(null);
   const markerNow = useRef(marker); markerNow.current = marker;
   const [undo, setUndo] = useState<WorkHistory<StudioDoc>[]>([]);
