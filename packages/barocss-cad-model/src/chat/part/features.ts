@@ -154,7 +154,7 @@ export const COMMAND_DOCS: Record<string, { selection: string; values: Record<st
   shell: { selection: 'Choose distinct faces to open on one body, or choose one body for a closed hollow. For an original full capsule Revolve, use one or both complete hemisphere names from query.summary. Pass expectedRevision from query.rebuild for the reviewed part.', values: {
     t: 'uniform wall thickness in mm',
     join: 'default | sharp | arc. Sharp and Round need expectedRevision from query.rebuild and one exact original upright L body ID or its single original end cap name.',
-    wallMode: 'uniform | per-face | separate-floor | separate-ceiling | separate-caps. Give expectedRevision from query.rebuild. For a closed rectangular Shell, name its original body and supply all six thicknesses. For an open rectangular Shell, name one or two original faces, three original faces sharing a corner or including an opposite pair, or four original faces leaving two adjacent walls. Give every kept wall thickness. For separate-floor, name the single exact original top cap of an upright L extrusion and supply t and floorThickness. For separate-ceiling, name the single exact original bottom cap and supply t and ceilingThickness. For separate-caps, name one original upright L or cylindrical body and supply t, floorThickness, and ceilingThickness. On an L body the inner corner can be Default, Sharp, or Round.',
+    wallMode: 'uniform | per-face | separate-floor | separate-ceiling | separate-caps. Give expectedRevision from query.rebuild. For a closed rectangular Shell, name its original body and supply all six thicknesses. For an open rectangular Shell, name one or two original faces, three original faces sharing a corner or including an opposite pair, or four original faces leaving two adjacent walls. Give every kept wall thickness. For separate-floor, name the single exact original top cap of an upright L or circular extrusion and supply t and floorThickness. For separate-ceiling, name the single exact original bottom cap of an upright L extrusion and supply t and ceilingThickness. For separate-caps, name one original upright L or cylindrical body and supply t, floorThickness, and ceilingThickness. On an L body the inner corner can be Default, Sharp, or Round.',
     floorThickness: 'positive literal floor thickness in mm for separate-floor or separate-caps',
     ceilingThickness: 'positive literal ceiling thickness in mm for separate-ceiling or separate-caps',
     bottomWall: 'bottom thickness in mm', frontWall: 'front thickness in mm', rightWall: 'right thickness in mm',
@@ -284,7 +284,8 @@ async function runCommandTool(state: ChatState, args: Record<string, unknown>, e
     if (state.partOf || args.expectedRevision === undefined || args.bodies !== undefined || args.edges !== undefined ||
       args.point !== undefined || typeof thickness !== 'number' || !Number.isFinite(thickness) || thickness <= 0 ||
       !canSetAgentShellCap({ doc: state.doc, bodies: state.bodies, selection }, args.faces, separateShellCap)) {
-      return fail(state, `A separate Shell ${separateShellCap} needs a revision, one exact original upright L ${opening} face and a positive numeric ${separateShellCap} thickness.`, { code: 'COMMAND_INPUT' });
+      const stock = separateShellCap === 'floor' ? 'upright L or circular' : 'upright L';
+      return fail(state, `A separate Shell ${separateShellCap} needs a revision, one exact original ${stock} ${opening} face and a positive numeric ${separateShellCap} thickness.`, { code: 'COMMAND_INPUT' });
     }
   }
   if (separateShellCaps) {

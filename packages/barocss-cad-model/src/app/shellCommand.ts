@@ -20,9 +20,9 @@ export const shellCommand: Command = {
       if (!body) return [wall];
       const parent = refOf(body), open = shellOpenFaces(ctx, body);
       const hasCorner = canSetShellCorner(ctx.doc.nodes, parent, open);
-      if (!hasCorner && (open.length || !canSetClosedShellCaps(ctx.doc.nodes, parent))) return [wall];
-      const corner: Field = { key: 'join', label: 'Inner corner', kind: 'choice', options: shellCornerOptions };
       const cap = separateShellCap(ctx.doc.nodes, parent, open);
+      if (!hasCorner && !cap && (open.length || !canSetClosedShellCaps(ctx.doc.nodes, parent))) return [wall];
+      const corner: Field = { key: 'join', label: 'Inner corner', kind: 'choice', options: shellCornerOptions };
       const separate = cap ? `separate-${cap}` : 'separate-caps';
       const mode: Field = { key: 'wallMode', label: 'Wall thickness', kind: 'choice',
         options: [{ value: 'uniform', label: 'Uniform' }, { value: separate, label: cap ? `Separate ${cap}` : 'Separate floor and ceiling' }] };
@@ -41,10 +41,10 @@ export const shellCommand: Command = {
     if (!body) return { t: 2 };
     const parent = refOf(body), open = shellOpenFaces(ctx, body);
     const cap = separateShellCap(ctx.doc.nodes, parent, open);
-    if (cap) return { t: 2, join: 'default', wallMode: 'uniform', [`${cap}Thickness`]: 2 };
+    const corner: Values = canSetShellCorner(ctx.doc.nodes, parent, open) ? { join: 'default' } : {};
+    if (cap) return { t: 2, ...corner, wallMode: 'uniform', [`${cap}Thickness`]: 2 };
     if (open.length || !canSetClosedShellCaps(ctx.doc.nodes, parent)) return { t: 2 };
-    return { t: 2, wallMode: 'uniform', floorThickness: 2, ceilingThickness: 2,
-      ...(canSetClosedShellCorner(ctx.doc.nodes, parent) ? { join: 'default' } : {}) };
+    return { t: 2, ...corner, wallMode: 'uniform', floorThickness: 2, ceilingThickness: 2 };
   },
   // The wall: an arrow into the body from the (first) open face; deeper is thicker.
   handles: (ctx, v) => {
@@ -75,8 +75,11 @@ export const shellCommand: Command = {
       const cap = v.wallMode === 'separate-floor' ? 'floor' : 'ceiling';
       if (separateShellCap(ctx.doc.nodes, parent, open) !== cap) {
         const opening = cap === 'floor' ? 'top' : 'bottom';
-        throw refusal('BAD_REFERENCE', `Select the original ${opening} cap of one upright L extrusion for a separate Shell ${cap}.`);
+        const stock = cap === 'floor' ? 'upright L or circular' : 'upright L';
+        throw refusal('BAD_REFERENCE', `Select the original ${opening} cap of one ${stock} extrusion for a separate Shell ${cap}.`);
       }
+      if (join !== undefined && !canSetShellCorner(ctx.doc.nodes, parent, open))
+        throw refusal('BAD_REFERENCE', 'An explicit Shell inner corner needs an original upright L-shaped extrusion.');
       const capThickness = cap === 'floor' ? { floorThickness: Number(v.floorThickness) } : { ceilingThickness: Number(v.ceilingThickness) };
       return withNode(ctx.doc, { kind: 'shell', parent, thickness: Number(v.t), open, ...capThickness,
         ...(join === undefined ? {} : { join }) });

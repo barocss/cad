@@ -30,7 +30,7 @@ export function separateShellCap(nodes: readonly ModelNode[], parent: BodyRef, o
   if (open.length !== 1) return;
   const owner = featureId(nodes, parent.node);
   const cap = open[0] === owner + '.top' ? 'floor' : open[0] === owner + '.bottom' ? 'ceiling' : undefined;
-  return cap && canSetClosedShellCorner(nodes, parent) ? cap : undefined;
+  return cap && (canSetClosedShellCorner(nodes, parent) || cap === 'floor' && canSetCylinderShellCaps(nodes, parent)) ? cap : undefined;
 }
 
 export function canSetShellFloor(nodes: readonly ModelNode[], parent: BodyRef, open: readonly string[]): boolean {
@@ -38,9 +38,8 @@ export function canSetShellFloor(nodes: readonly ModelNode[], parent: BodyRef, o
 }
 
 export function canSetAgentShellCap(ctx: Ctx, faceInput: unknown, cap: 'floor' | 'ceiling'): boolean {
-  if (!canSetAgentShellCorner(ctx, undefined, faceInput)) return false;
-  const pick = ctx.selection.faces[0], body = ctx.bodies[pick.body], parent = body.ref;
-  return !!parent && separateShellCap(ctx.doc.nodes, parent, [body.mesh.faces[pick.face].name]) === cap;
+  const target = agentShellEndCap(ctx, faceInput);
+  return !!target && separateShellCap(ctx.doc.nodes, target.parent, [target.name]) === cap;
 }
 
 export function canSetAgentShellFloor(ctx: Ctx, faceInput: unknown): boolean {
@@ -59,19 +58,24 @@ export function canSetAgentClosedShellCaps(ctx: Ctx, bodyInput: unknown): boolea
   return !!parent && canSetClosedShellCaps(ctx.doc.nodes, parent);
 }
 
-/** An explicit Agent corner needs one literal original body or one unique literal original end cap. */
-export function canSetAgentShellCorner(ctx: Ctx, bodyInput: unknown, faceInput: unknown): boolean {
+function agentShellEndCap(ctx: Ctx, faceInput: unknown): { parent: BodyRef; name: string } | undefined {
   const { doc, bodies, selection } = ctx;
-  if (selection.edges.length) return false;
-  const parentBody = agentClosedShellBody(ctx, bodyInput);
-  if (parentBody) return canSetClosedShellCorner(doc.nodes, parentBody);
-  if (bodyInput !== undefined || !Array.isArray(faceInput) || faceInput.length !== 1 || typeof faceInput[0] !== 'string'
-    || selection.bodies.length || selection.faces.length !== 1) return false;
+  if (!Array.isArray(faceInput) || faceInput.length !== 1 || typeof faceInput[0] !== 'string'
+    || selection.bodies.length || selection.faces.length !== 1 || selection.edges.length) return;
   const name = faceInput[0], pick = selection.faces[0], body = bodies[pick.body], parent = body?.ref;
   const face = body?.mesh.faces[pick.face];
-  return !!parent && face?.name === name && face.nativePlaneName === name
-    && isOriginalShellCap(doc.nodes, parent, name) && canSetClosedShellCorner(doc.nodes, parent)
-    && bodies.flatMap(candidate => candidate.mesh.faces.filter(member => member.nativePlaneName === name)).length === 1;
+  if (parent && face?.name === name && face.nativePlaneName === name && isOriginalShellCap(doc.nodes, parent, name)
+    && bodies.flatMap(candidate => candidate.mesh.faces.filter(member => member.nativePlaneName === name)).length === 1)
+    return { parent, name };
+}
+
+/** An explicit Agent corner needs one literal original body or one unique literal original end cap. */
+export function canSetAgentShellCorner(ctx: Ctx, bodyInput: unknown, faceInput: unknown): boolean {
+  const parentBody = agentClosedShellBody(ctx, bodyInput);
+  if (parentBody) return canSetClosedShellCorner(ctx.doc.nodes, parentBody);
+  if (bodyInput !== undefined) return false;
+  const target = agentShellEndCap(ctx, faceInput);
+  return !!target && canSetClosedShellCorner(ctx.doc.nodes, target.parent);
 }
 
 function originalUprightShellSketch(nodes: readonly ModelNode[], parent: BodyRef) {
@@ -84,15 +88,17 @@ function originalUprightShellSketch(nodes: readonly ModelNode[], parent: BodyRef
   return { sketch, height: source.height, from: source.from };
 }
 
-export function canSetClosedShellCaps(nodes: readonly ModelNode[], parent: BodyRef): boolean {
+function canSetCylinderShellCaps(nodes: readonly ModelNode[], parent: BodyRef): boolean {
   const original = originalUprightShellSketch(nodes, parent);
-  if (original?.sketch.profile === 'circle') {
-    const { sketch, height, from } = original;
-    return Number.isFinite(height) && height > 0 && (from === undefined || typeof from === 'number' && Number.isFinite(from))
-      && typeof sketch.radius === 'number' && Number.isFinite(sketch.radius) && sketch.radius > 0
-      && sketch.center.every(value => typeof value === 'number' && Number.isFinite(value));
-  }
-  return canSetClosedShellCorner(nodes, parent);
+  if (original?.sketch.profile !== 'circle') return false;
+  const { sketch, height, from } = original;
+  return Number.isFinite(height) && height > 0 && (from === undefined || typeof from === 'number' && Number.isFinite(from))
+    && typeof sketch.radius === 'number' && Number.isFinite(sketch.radius) && sketch.radius > 0
+    && sketch.center.every(value => typeof value === 'number' && Number.isFinite(value));
+}
+
+export function canSetClosedShellCaps(nodes: readonly ModelNode[], parent: BodyRef): boolean {
+  return canSetCylinderShellCaps(nodes, parent) || canSetClosedShellCorner(nodes, parent);
 }
 
 export function canSetClosedShellCorner(nodes: readonly ModelNode[], parent: BodyRef): boolean {
