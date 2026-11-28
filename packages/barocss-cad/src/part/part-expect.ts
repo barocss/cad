@@ -38,8 +38,8 @@ export function storedNames(f: { readonly kind: string } & Record<string, unknow
   }
   if (f.kind === 'offset-face' || f.kind === 'delete-face' || f.kind === 'replace-face') return { names: typeof f.face === 'string' ? [f.face] : [], edges: false };
   if (f.kind === 'shell-walls') return {
-    names: typeof f.opening === 'string' && f.walls && typeof f.walls === 'object'
-      ? [f.opening, ...(typeof f.secondOpening === 'string' ? [f.secondOpening] : []), ...Object.keys(f.walls)] : [],
+    names: f.walls && typeof f.walls === 'object'
+      ? [...(typeof f.opening === 'string' ? [f.opening] : []), ...(typeof f.secondOpening === 'string' ? [f.secondOpening] : []), ...Object.keys(f.walls)] : [],
     edges: false,
   };
   const list = f.kind === 'fillet' || f.kind === 'chamfer' ? f.edges : f.kind === 'shell' ? f.open : f.kind === 'draft' || f.kind === 'full-round' || f.kind === 'face-fillet' || f.kind === 'profile-relief' || f.kind === 'cylindrical-wrap' ? f.faces : undefined;

@@ -7,6 +7,38 @@ import { dispatchTool } from '../src/chat/tools';
 import { evaluateDoc } from '../src/engine/evaluate';
 import { readStudioDoc } from '../src/engine/migrate';
 
+test('a selected original rectangular body has six closed Shell walls and round-trips their ownership', () => {
+  const doc = rectanglePart(40, 30, 20), stock = evaluateDoc(doc, 1);
+  assert.ok(stock.ok);
+  const shell = commandById('shell')!;
+  const ctx = { doc, bodies: stock.bodies, selection: { bodies: [0], edges: [], faces: [] } };
+  const defaults = shell.defaults!(ctx);
+  const uniform = shell.build!(ctx, defaults).nodes[2];
+  assert.ok(uniform.kind === 'shell');
+  assert.deepEqual(uniform.open, []);
+  const values = { ...defaults, wallMode: 'per-face', leftWall: 3, rightWall: 5, frontWall: 2, backWall: 4, bottomWall: 2, topWall: 3 };
+  const created = shell.build!(ctx, values), feature = created.nodes[2];
+  assert.ok(feature.kind === 'shell-walls');
+  assert.equal(feature.opening, null);
+  assert.deepEqual(feature.walls, { 'n1.side3': 3, 'n1.side1': 5, 'n1.side0': 2, 'n1.side2': 4, 'n1.bottom': 2, 'n1.top': 3 });
+  const input = readStudioDoc(JSON.stringify(created));
+  assert.ok('doc' in input);
+  assert.deepEqual(input.doc.nodes[2], feature);
+  const result = evaluateDoc(input.doc, 2);
+  assert.ok(result.ok && Math.abs(result.bodies[0].volume! - 12480) < 1e-7);
+  const fields = editFields(created.nodes, 2);
+  assert.deepEqual(fields.map(field => field.label), ['Bottom wall', 'Front wall', 'Right wall', 'Back wall', 'Left wall', 'Top wall']);
+  const right = fields.find(field => field.key === 'rightWall');
+  assert.ok(right?.kind === 'number');
+  const invalid = evaluateDoc({ ...created, nodes: right.set(created.nodes, 37) }, 3);
+  assert.equal(invalid.ok, false);
+  for (const malformed of [
+    { ...feature, opening: undefined },
+    { ...feature, secondOpening: 'n1.top' },
+    { ...feature, sigs: { ...feature.sigs, 'n1.top': feature.sigs['n1.bottom'] } },
+  ]) assert.ok('error' in readStudioDoc(JSON.stringify({ ...created, nodes: [...created.nodes.slice(0, 2), malformed] })));
+});
+
 test('Shell saves and edits all original box-wall names and refuses absent or changed ownership', () => {
   const doc = rectanglePart(40, 30, 20);
   const stock = evaluateDoc(doc, 1);

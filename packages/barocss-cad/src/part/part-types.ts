@@ -534,7 +534,7 @@ export type CadPartFeature = Base & (
   /** Hollowed to walls `thickness` thick; `open` names removed faces. Explicit `join` is for an original upright orthogonal L, closed or with only its original top or bottom opened; absent keeps the incumbent route. */
   | { readonly kind: 'shell'; readonly target: string; readonly thickness: CadPartDim; readonly open?: readonly string[]; readonly join?: 'sharp' | 'arc'; readonly expect?: Readonly<Record<string, CadPartNameSignature>> }
   /** Independent walls of an original cardinal box. The optional second opening names a distinct original face. */
-  | { readonly kind: 'shell-walls'; readonly target: string; readonly opening: string; readonly secondOpening?: string; readonly walls: Readonly<Record<string, number>>; readonly expect?: Readonly<Record<string, CadPartNameSignature>> }
+  | { readonly kind: 'shell-walls'; readonly target: string; readonly opening: string | null; readonly secondOpening?: string; readonly walls: Readonly<Record<string, number>>; readonly expect?: Readonly<Record<string, CadPartNameSignature>> }
   | { readonly kind: 'chamfer'; readonly target: string; readonly edges: readonly string[]; readonly distance: CadPartDim; readonly expect?: Readonly<Record<string, CadPartNameSignature>> }
   /** Vertical edges of upright bodies. */
   /**

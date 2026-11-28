@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { brepMassProperties, checkBrep, evaluateCadPart, faceGeometry, loadCadPart, massPropertiesOf, saveCadPart } from '../dist/index.js';
+import { brepMassProperties, brepSurfaceArea, checkBrep, evaluateCadPart, faceGeometry, loadCadPart, massPropertiesOf, saveCadPart } from '../dist/index.js';
 
 const sketch = { id: 'profile', kind: 'sketch', profile: 'rectangle', min: [0, 0], max: [40, 30] };
 const extrude = { id: 'box', kind: 'extrude', sketch: 'profile', height: 20 };
@@ -10,6 +10,33 @@ const evaluate = (features = [sketch, extrude, shell]) => evaluateCadPart({
   format: 'barocss-cad-part', version: 1, units: 'mm', parameters: {}, features,
 });
 const near = (actual, expected) => assert.ok(Math.abs(actual - expected) < 1e-8, `${actual} != ${expected}`);
+
+test('six original box walls form one exact solid with a closed interior shell', () => {
+  const closed = { ...shell, opening: null, walls: { ...walls, 'box.bottom': 2, 'box.top': 3 } };
+  const snapshot = evaluate([sketch, extrude, closed]);
+  const [result] = snapshot.outputs, { brep } = result;
+  const report = checkBrep(brep, { strict: true, pcurveSamples: 7 });
+  assert.ok(report.valid, report.issues.join('\n'));
+  assert.deepEqual(report.counts, { bodies: 1, shells: 2, faces: 12, loops: 12, coedges: 48, edges: 24, vertices: 16 });
+  assert.equal(report.topology[0].genus, 0);
+  assert.ok(brep.coedges.every(use => use.pcurve));
+  near(brepSurfaceArea(brep), 8416);
+  for (const properties of [massPropertiesOf(result, 1), brepMassProperties(brep, 1)]) {
+    near(properties.volume, 12480);
+    [20 + 12 / 13, 15 + 12 / 13, 10 + 6 / 13].forEach((value, axis) => near(properties.centroid[axis], value));
+  }
+  assert.deepEqual(loadCadPart(saveCadPart(snapshot)).outputs[0].brep, brep);
+  for (const [change, expected] of [
+    [{ opening: undefined }, /opening name/],
+    [{ secondOpening: 'box.top' }, /two distinct original opening names/],
+    [{ walls }, /six original faces/],
+    [{ walls: { ...closed.walls, 'box.top': 18 } }, /no cavity/],
+    [{ walls: { ...closed.walls, 'box.side0': 0 } }, /must be at least/],
+  ]) assert.throws(() => evaluate([sketch, extrude, { ...closed, ...change }]), expected);
+  assert.throws(() => evaluate([sketch, { ...extrude, draft: 4 }, closed]), /original upright box extrusion/);
+  const sameOutline = { id: sketch.id, kind: 'sketch', profile: 'polygon', points: [[0, 0], [40, 0], [40, 30], [0, 30]] };
+  assert.throws(() => evaluate([sameOutline, extrude, closed]), /zero-draft rectangular extrusion/);
+});
 
 test('per-face box Shell preserves native names and the exact asymmetric cavity', () => {
   const [result] = evaluate().outputs, { brep } = result;

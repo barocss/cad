@@ -11,7 +11,7 @@ const engagement = 1;
 export function ribAttachment(ctx: Ctx) {
   if (ctx.selection.sketches?.length || ctx.selection.vertices?.length || ctx.direct?.length) return;
   const box = boxShellSelection(ctx);
-  if (!box) return;
+  if (!box?.opening) return;
   const { parent, opening, sigs } = box;
   const source = ctx.doc.nodes[parent.node], signature = sigs[opening], sign = signature.d?.[2];
   if (box.secondOpening && sign !== 1) return;

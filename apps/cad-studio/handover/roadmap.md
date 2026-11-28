@@ -1,13 +1,13 @@
 # CAD roadmap — current status and execution order
 
-Updated 2026-11-28 · Priority authority: D520 · Latest delivery: D2137 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
+Updated 2026-11-28 · Priority authority: D520 · Latest delivery: D2138 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
 
 This is the only current status index. Detailed tracks define acceptance; the 34 stable row pages retain scope and issue navigation. Immutable decision notes retain results. Do not append chronological status paragraphs here. [D520 decision](notes/cad-roadmap-replan-2026-11-04/README.md) supersedes D445 execution order and historical next-item text, while retaining its safeguards and bounded proofs.
 
 ## Now and next
 
-- **Current position:** [D2137](notes/sketch-fixed-edge-pair-conflict-2026-11-28/README.md), P1 rows 09 and 16. Studio links the Fix rows that prevent Parallel or Perpendicular on two separately fixed straight edges. Both recover after removing one Fix and survive native reopen. [#183](https://github.com/barocss/cad/issues/183) remains open.
-- **Next MAIN:** D2138, P5 rows 07, 16 and 30. Check the missing closed rectangular Shell with independently authored wall thicknesses. Reuse the one- and two-opening box Shell path where it fits and preserve the wider surface HOLDs ([#13](https://github.com/barocss/cad/issues/13)).
+- **Current position:** [D2138](notes/closed-per-face-box-shell-2026-11-28/README.md), P5 rows 07, 16 and 30. A closed original rectangular Shell accepts six independent wall thicknesses. Studio verifies refusal of cavity collapse, exact dimensions, History and fresh Open ([#13](https://github.com/barocss/cad/issues/13)).
+- **Next MAIN:** D2139, P0 row 04, B09 and P5 row 07. Make the same six-wall Shell available as a reviewed local Agent proposal on one exact body ID. Verify refusal, explicit Studio approval and matching native geometry ([#324](https://github.com/barocss/cad/issues/324)).
 - **Separate follow-ups:** Continue Studio App extraction in cohesive parts with affected desktop checks. [#608 Rendering](https://github.com/barocss/cad/issues/608) stays on HOLD. API inventory drift remains open. The issue tracker records [#126](https://github.com/barocss/cad/issues/126), [#613](https://github.com/barocss/cad/issues/613), [#152](https://github.com/barocss/cad/issues/152) and [#22](https://github.com/barocss/cad/issues/22) as closed.
 - **Active repository:** [barocss/cad](https://github.com/barocss/cad), based on `origin/main`. Fetch before work and preserve unexpected changes. The [migration record](../../../docs/migration/README.md) maps the former `local/cad-dev` history and issue numbers.
 - **Evidence correction:** D482 records2167 PASS/0 FAIL/2 existing SKIP in a later full-kernel run than D433. Neither result is a new full-suite PASS at this audit HEAD. [D482 record](notes/vertical-contact-refusal-2026-11-04/README.md).
