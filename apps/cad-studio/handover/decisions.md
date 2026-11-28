@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D2254: [D2254](notes/common-gauge-native-circle-2026-11-29/README.md), #772. Preserve the native Drawing arc for the same circle under a common positive weight scale.
+
 - D2253: [D2253](notes/agent-box-vertex-width-2026-11-29/README.md), #629. Connect one original native Box corner to an explicitly approved, revision-pinned width edit.
 
 - D2252: [D2252](notes/cylinder-cap-rim-visibility-2026-11-29/README.md), #766. Restore both native cylinder rim intervals while retaining physical occlusion and the original grazing allowance.

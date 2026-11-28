@@ -1,4 +1,5 @@
 import { assertBoundaryBindings } from './brep-boundary-binding-internal.js';
+import { circleFromCommonWeightGauge } from './brep-circle-gauge.js';
 // Display tessellation of a shared B-rep (brep-core step 2). Every edge is sampled once and both of
 // its faces use those exact points, so the mesh is watertight by construction (no welding). The B-rep
 // edges come out as polylines too, so viewers can draw real model edges instead of guessing creases.
@@ -31,11 +32,16 @@ type XY = [number, number];
 const isLine = (c: Curve) => c.degree === 1 && c.controlPoints.length === 2;
 
 /**
- * A rational quadratic circular arc (spans of control points P2s, P2s+1, P2s+2 with end weights 1):
+ * A rational quadratic circular arc (spans of control points P2s, P2s+1, P2s+2 with one common positive endpoint weight):
  * centre, radius, and a frame fixed by the plane alone (canonical normal; first axis from world X),
  * so every circle in one plane shares it.
  */
 export function circleOf(curve: Curve): { c: Point; r: number; e1: Point; e2: Point; spans: { k0: number; k1: number; phi: number }[]; a0: number; sign: number } | null {
+  return unitCircleOf(curve) ?? circleFromCommonWeightGauge(curve, unitCircleOf);
+}
+
+/** Original unit-weight recognition and arithmetic. */
+function unitCircleOf(curve: Curve): ReturnType<typeof circleOf> {
   const p = curve.controlPoints, w = curve.weights, n = (p.length - 1) / 2;
   if (curve.degree !== 2 || !Number.isInteger(n) || n < 1 || curve.knots.length !== 2 * n + 4) return null;
   const spans: { k0: number; k1: number; phi: number }[] = [];
