@@ -16,6 +16,7 @@ export interface BrowserPartProposalSource {
 const revisionField = { type: 'string', maxLength: 16 } as const;
 const distanceField = { type: 'number' } as const;
 const bodyField = { type: 'string', maxLength: 128 } as const;
+const proposalTimeoutMs = 30_000;
 const proposalTools = {
   Box: {
     name: 'cad_part_propose_box',
@@ -51,6 +52,20 @@ const emptyPartKinds = ['Box', 'Cylinder'] as const;
 const extrusionKinds = ['Extrude'] as const;
 const cylinderKinds = ['Extrude', 'Hole'] as const;
 type Grant = { owner: StudioDoc; scope: object; kind: ProposalKind };
+
+function cancellableEvaluation(evaluate: Evaluate, signal: AbortSignal): Evaluate {
+  return async (doc, screwWinding) => {
+    if (signal.aborted) return null;
+    let cancel!: () => void;
+    const stopped = new Promise<null>(resolve => { cancel = () => resolve(null); });
+    signal.addEventListener('abort', cancel, { once: true });
+    try {
+      return await Promise.race([evaluate(doc, screwWinding), stopped]);
+    } finally {
+      signal.removeEventListener('abort', cancel);
+    }
+  };
+}
 
 function proposalInput(kind: ProposalKind, input: unknown, required: readonly string[]) {
   if (!plainInput(input) || Reflect.ownKeys(input).length !== required.length ||
@@ -134,12 +149,17 @@ export function useBrowserPartProposal(source: BrowserPartSummarySource | undefi
             try {
               const { doc, bodies } = snapshot;
               const state: ChatState = { doc, bodies, approvalRequired: true };
-              const pending = request.kind === 'Box' ? proposeBrowserBox(state, request.args, evaluateWith.evaluate)
-                : request.kind === 'Cylinder' ? proposeBrowserCylinder(state, request.args, evaluateWith.evaluate)
-                : request.kind === 'Extrude' ? proposeBrowserExtrude(state, request.args, evaluateWith.evaluate)
-                : proposeBrowserHole(state, request.args, evaluateWith.evaluate);
+              const deadline = AbortSignal.timeout(proposalTimeoutMs);
+              const execution = AbortSignal.any(signal ? [signal, controller.signal, deadline] : [controller.signal, deadline]);
+              const evaluate = cancellableEvaluation(evaluateWith.evaluate, execution);
+              const pending = request.kind === 'Box' ? proposeBrowserBox(state, request.args, evaluate)
+                : request.kind === 'Cylinder' ? proposeBrowserCylinder(state, request.args, evaluate)
+                : request.kind === 'Extrude' ? proposeBrowserExtrude(state, request.args, evaluate)
+                : proposeBrowserHole(state, request.args, evaluate);
               const outcome = await pending.catch(() => null);
               if (!current(snapshot, signal)) return stale;
+              if (deadline.aborted)
+                return browserToolFailure('proposal_timeout', 'The proposal timed out. You can try again.');
               const proposal = outcome?.state.doc.proposals?.at(-1);
               if (!outcome || outcome.isError || !outcome.changed || !proposal)
                 return browserToolFailure('proposal_unavailable', `The ${kind} proposal could not be evaluated.`);
