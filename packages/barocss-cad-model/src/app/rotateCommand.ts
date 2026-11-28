@@ -2,6 +2,7 @@ import { withNode, type Axis } from '../engine/doc';
 import { refusal } from '../engine/refusal';
 import { centreOf, refOf, selectedBodies } from './bodyRef';
 import type { Command, Ctx } from './commands';
+import { nativeSolidLine } from './nativeSolidLine';
 
 const selectSource = 'Select one body or one native vertex to rotate.';
 const axes: readonly Axis[] = ['x', 'y', 'z'];
@@ -14,15 +15,7 @@ function rotationLine({ bodies, selection, direct }: RotationSelection) {
   if (bodies.length !== 1 || edges.length !== 1 || faces.length || selected.length
     || vertices?.length || sketches?.length || profileRegions || direct?.length) return;
   const [pick] = edges;
-  const body = bodies[pick.body];
-  if (!body || body.ref?.side !== 'solid' || body.topology?.kind !== 'solid' || body.topology.bodyCount !== 1) return;
-  const edge = body.mesh.edges[pick.edge];
-  if (!edge?.nativeLine || !edge.nativeVertices || !edge.nativeJoint || edge.names.length !== 1
-    || edge.nativeVertices[0] === edge.nativeVertices[1] || edge.nativeJoint.faces[0] === edge.nativeJoint.faces[1]) return;
-  const { edgeId } = edge.nativeJoint;
-  if (body.mesh.edges.some(other => other !== edge && (other.nativeJoint?.edgeId === edgeId || other.names.includes(edge.names[0])))) return;
-  if (![...edge.a, ...edge.b].every(Number.isFinite)) return;
-  return edge;
+  return nativeSolidLine(bodies[pick.body], pick.edge);
 }
 
 /** The initial Rotate values from one complete, axis-aligned native edge. */
@@ -38,7 +31,7 @@ export function cardinalEdgeRotation(ctx: RotationSelection) {
 /** Use the exact vertex behind the named edge endpoint reported by the part summary. */
 export function edgeEndpointRotation(ctx: RotationSelection, endpoint: 'from' | 'to', axis: Axis) {
   const edge = rotationLine(ctx);
-  if (!edge || edge.a.every((coordinate, index) => coordinate === edge.b[index])) return;
+  if (!edge) return;
   const [px, py, pz] = endpoint === 'from' ? edge.a : edge.b;
   return { axis, angle: 0, px, py, pz };
 }

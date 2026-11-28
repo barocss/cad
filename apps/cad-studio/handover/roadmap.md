@@ -1,13 +1,13 @@
 # CAD roadmap — current status and execution order
 
-Updated 2026-11-29 · Priority authority: D520 · Latest delivery: D2247 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
+Updated 2026-11-29 · Priority authority: D520 · Latest delivery: D2248 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
 
 This is the only current status index. Detailed tracks define acceptance; the 34 stable row pages retain scope and issue navigation. Immutable decision notes retain results. Do not append chronological status paragraphs here. [D520 decision](notes/cad-roadmap-replan-2026-11-04/README.md) supersedes D445 execution order and historical next-item text, while retaining its safeguards and bounded proofs.
 
 ## Now and next
 
-- **Current position:** [D2247](notes/agent-native-vertex-rotate-2026-11-29/README.md), P5 rows 04 and 31. The local Agent can propose Rotate about one exact native vertex. Explicit Studio approval, native geometry and fresh Open pass.
-- **Next MAIN:** D2248, P5 rows 04 and 31. Connect the existing vertex-to-vertex Move between two standalone solids to a local Agent proposal ([#629](https://github.com/barocss/cad/issues/629)). Preserve the source and destination roles, revision and explicit Studio approval.
+- **Current position:** [D2248](notes/agent-native-vertex-move-2026-11-29/README.md), P5 rows 04 and 31. The local Agent can propose Move between two exact native vertices. Desktop approval and fresh Open preserve the destination and the source displacement.
+- **Next MAIN:** D2249, P2 rows 11 and 30. Reproduce the reported FRONT and RIGHT smooth Loft outline gaps in [#769](https://github.com/barocss/cad/issues/769) on current main. Compare the native curve and actual occlusion with the isolated Projection evidence before adopting a fix.
 - **Separate follow-ups:** Continue Studio App extraction in cohesive parts with affected desktop checks. [#608 Rendering](https://github.com/barocss/cad/issues/608) stays on HOLD. API inventory drift remains open. The issue tracker records [#126](https://github.com/barocss/cad/issues/126), [#613](https://github.com/barocss/cad/issues/613), [#152](https://github.com/barocss/cad/issues/152) and [#22](https://github.com/barocss/cad/issues/22) as closed.
 - **Active repository:** [barocss/cad](https://github.com/barocss/cad), based on `origin/main`. Fetch before work and preserve unexpected changes. The [migration record](../../../docs/migration/README.md) maps the former `local/cad-dev` history and issue numbers.
 - **Evidence correction:** D482 records2167 PASS/0 FAIL/2 existing SKIP in a later full-kernel run than D433. Neither result is a new full-suite PASS at this audit HEAD. [D482 record](notes/vertical-contact-refusal-2026-11-04/README.md).

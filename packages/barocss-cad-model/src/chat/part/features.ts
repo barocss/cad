@@ -2,6 +2,7 @@
 // commands, raw nodes, edits and deletes, materials, and the person's rows (stock, frame stock, sections, welds).
 import { commandById, commands, givenValues, shownFields, type Ctx, type Values } from '../../app/commands';
 import { agentRotatePivot } from './agentRotatePivot';
+import { agentVertexMove } from './agentVertexMove';
 import { canSetAgentClosedShellCaps, canSetAgentShellCap, canSetAgentShellCorner } from '../../app/shellCorner';
 import { PIVOT_FACE } from '../../app/pivotFaceCommand';
 import { isEditableBox, isEditableCylinder, updateBoxFootprint } from '../../app/editCommand';
@@ -161,7 +162,8 @@ export const COMMAND_DOCS: Record<string, { selection: string; values: Record<st
     bottomWall: 'bottom thickness in mm', frontWall: 'front thickness in mm', rightWall: 'right thickness in mm',
     backWall: 'back thickness in mm', leftWall: 'left thickness in mm', topWall: 'top thickness in mm',
   } },
-  move: { selection: 'bodies: [one body]', values: { x: 'ΔX', y: 'ΔY', z: 'ΔZ', ax: 'to X (the box corner; the HUD keeps it with ΔX — give one of the two)', ay: 'to Y', az: 'to Z' } },
+  move: { selection: 'Choose one body for ordinary Move. For mode=vertex-to-vertex, give two exact native straight edges from query.summary in source, destination order and the current expectedRevision from query.rebuild. Use proposals.propose for Studio review.',
+    values: { x: 'ΔX', y: 'ΔY', z: 'ΔZ', ax: 'to X (the box corner; the HUD keeps it with ΔX — give one of the two)', ay: 'to Y', az: 'to Z', mode: 'vertex-to-vertex: place one original native vertex at the other', sourceEndpoint: 'from | to on the first edge', destinationEndpoint: 'from | to on the second edge' } },
   rotate: { selection: 'Choose one body for ordinary Rotate. For about=edge or about=vertex, give one exact native edge name from query.summary in edges and expectedRevision from query.rebuild for the same standalone solid. Stage with proposals.propose for Studio review.',
     values: { axis: 'x | y | z for ordinary Rotate or about=vertex', angle: 'signed degrees (for about=edge or about=vertex, nonzero with magnitude below 360)', px: 'pivot x mm (default: the body\'s centre)', py: 'pivot y mm', pz: 'pivot z mm', about: 'edge: use the exact straight X, Y or Z edge as the axis and give angle. vertex: use one exact native endpoint as the pivot and give endpoint, axis and angle.', endpoint: 'from | to, matching the named edge in query.summary, for about=vertex' } },
   scale: { selection: 'bodies: [one body]', values: { factor: 'uniform factor (1 = unchanged)', px: 'pivot x mm (default: the body\'s centre)', py: 'pivot y mm', pz: 'pivot z mm' } },
@@ -310,11 +312,18 @@ async function runCommandTool(state: ChatState, args: Record<string, unknown>, e
   let ctx: Ctx = { doc: state.doc, bodies: state.bodies, selection: toPlane ? { ...selection, faces: [sourceFace] } : selection, pick: point };
   let cutSource: { source: string; target: string; body: string } | undefined;
   let rotatePivot: { edge: string; endpoint?: 'from' | 'to' } | undefined;
+  let moveReferences: Values | undefined;
   if (cmd.id === 'rotate' && Object.hasOwn(given, 'about')) {
     const pivot = agentRotatePivot(ctx, args, given, state.partOf);
     if ('error' in pivot) return fail(state, pivot.error, { code: 'COMMAND_INPUT' });
     rotatePivot = pivot;
     given = pivot.values;
+  } else if (cmd.id === 'move' && given.mode === 'vertex-to-vertex') {
+    const move = agentVertexMove(ctx, args, given, state.partOf);
+    if ('error' in move) return fail(state, move.error, { code: 'COMMAND_INPUT' });
+    ctx = move.context;
+    moveReferences = move.references;
+    given = {};
   } else if (cmd.id === 'sweep-curve') {
     const { sketch, path, pathRevision, representation, ...other } = given;
     if (typeof sketch !== 'string' || typeof path !== 'string' || !sketch.trim() || !path.trim()
@@ -383,7 +392,7 @@ async function runCommandTool(state: ChatState, args: Record<string, unknown>, e
   // (A command's own refusal — its build throws it — comes back as the tool's, the part unchanged; O14's typed ones among them.)
   let next: StudioDoc;
   try { next = cmd.build(ctx, values); } catch (e) { return fail(state, `${cmd.label}: ${e instanceof Error ? e.message : String(e)}`); }
-  const shown: Values = {};
+  const shown: Values = { ...moveReferences };
   if (cutSource) shown.source = cutSource.source;
   if (rotatePivot) {
     shown.edge = rotatePivot.edge;

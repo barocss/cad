@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D2248: [D2248](notes/agent-native-vertex-move-2026-11-29/README.md), #629. Move one original native vertex to another through local Agent proposal and verify explicit desktop approval and native reopen.
+
 - D2247: [D2247](notes/agent-native-vertex-rotate-2026-11-29/README.md), #629. Propose Rotate about a named original native vertex and verify exact Studio approval and project reopen.
 
 - D2246: [D2246](notes/non-gp-quadratic-cap-2026-11-29/README.md), #776. Restore the original non-GP quadratic cap in strict validation, native mesh and drawing, and verify the closed STEP mass.
