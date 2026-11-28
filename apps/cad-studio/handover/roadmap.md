@@ -1,13 +1,13 @@
 # CAD roadmap — current status and execution order
 
-Updated 2026-11-28 · Priority authority: D520 · Latest delivery: D2180 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
+Updated 2026-11-28 · Priority authority: D520 · Latest delivery: D2181 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
 
 This is the only current status index. Detailed tracks define acceptance; the 34 stable row pages retain scope and issue navigation. Immutable decision notes retain results. Do not append chronological status paragraphs here. [D520 decision](notes/cad-roadmap-replan-2026-11-04/README.md) supersedes D445 execution order and historical next-item text, while retaining its safeguards and bounded proofs.
 
 ## Now and next
 
-- **Current position:** [D2180](notes/coincident-native-gear-union-2026-11-28/README.md), P1 rows 16 and 30. Union and Intersect return the original strict solid for exactly coincident native gear copies and retain both face sources.
-- **Next MAIN:** D2181, P1 rows 16 and 30. Run the original four Boolean seeds, select a reproducible manifold-answer refusal, and repair its smallest supported case ([#7](https://github.com/barocss/cad/issues/7)).
+- **Current position:** [D2181](notes/seeded-sphere-cylinder-difference-validity-2026-11-28/README.md), P0 rows 16 and 30. The seeded audit found an inherited invalid sphere-cylinder Difference. Studio now preserves the originals and reports a typed refusal.
+- **Next MAIN:** D2182, P1 rows 16 and 30. Repair the common-edge refusal for three distinct closed lumps in seed 20261023 case 4. Verify the source pair and the native result in Studio ([#7](https://github.com/barocss/cad/issues/7)).
 - **Separate follow-ups:** Continue Studio App extraction in cohesive parts with affected desktop checks. [#608 Rendering](https://github.com/barocss/cad/issues/608) stays on HOLD. API inventory drift remains open. The issue tracker records [#126](https://github.com/barocss/cad/issues/126), [#613](https://github.com/barocss/cad/issues/613), [#152](https://github.com/barocss/cad/issues/152) and [#22](https://github.com/barocss/cad/issues/22) as closed.
 - **Active repository:** [barocss/cad](https://github.com/barocss/cad), based on `origin/main`. Fetch before work and preserve unexpected changes. The [migration record](../../../docs/migration/README.md) maps the former `local/cad-dev` history and issue numbers.
 - **Evidence correction:** D482 records2167 PASS/0 FAIL/2 existing SKIP in a later full-kernel run than D433. Neither result is a new full-suite PASS at this audit HEAD. [D482 record](notes/vertical-contact-refusal-2026-11-04/README.md).
@@ -43,7 +43,7 @@ P0 findings that can lose work, export stale geometry or misattribute results ta
 
 ## GitHub requirement and issue inventory
 
-- GitHub lists 162 open issues in the November 28 D2177 inventory. The [closeout queue](roadmap-tracks/18-issue-closeout.md) retains the evidence and unresolved acceptance for tracked items.
+- GitHub lists 163 open issues in the November 28 D2181 inventory. The [closeout queue](roadmap-tracks/18-issue-closeout.md) retains the evidence and unresolved acceptance for tracked items.
 
 The [November 20 routing snapshot](notes/open-issue-routing-2026-11-20/README.md) covers all 229 open issues in the standalone CAD repository. It links each issue to a primary route and identifies model-version tracking for agent visual review as the next AI workflow to measure (#324).
 

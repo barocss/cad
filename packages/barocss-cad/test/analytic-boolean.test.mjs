@@ -1,7 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { booleanAnalytic, brepFromPrismatic, prismaticFromProfile, transformBrep, quarterTurn, checkBrep, tessellateBrep, brepMassProperties } from '../dist/index.js';
+import { booleanAnalytic, brepFromPrismatic, prismaticFromProfile, transformBrep, quarterTurn, checkBrep, tessellateBrep, brepMassProperties, evaluateCadPart, outputOf } from '../dist/index.js';
+import { caseOf, documentOf } from '../scripts/rb/fuzz-gen.mjs';
+import { random } from '../scripts/rb/property.mjs';
 const load = name => JSON.parse(readFileSync(new URL(`./fixtures/legacy-inputs/${name}.json`, import.meta.url), 'utf8'));
 
 const mulberry = seed => () => { seed = (seed + 0x6D2B79F5) >>> 0; let t = seed; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
@@ -17,6 +19,31 @@ function cylinder(axis, c, r, h0, h1, id = 'c') {
   return transformBrep(z, { matrix: axis === 'x' ? [0, 0, 1, 1, 0, 0, 0, 1, 0] : [0, 1, 0, 0, 0, 1, 1, 0, 0] });
 }
 const pi = Math.PI;
+
+test('an internally tangent sphere bore refuses an invalid boundary and nearby offsets stay strict', () => {
+  const a = { leaf: { kind: 'sphere', r: 3, rot: [{ axis: 'y', deg: 270 }, { axis: 'z', deg: 270 }], move: [2, -2, -2] } };
+  const b = { leaf: { kind: 'cyl', r: 2, h: 6, rot: [{ axis: 'x', deg: 90 }], move: [2, 1, -3] } };
+  const reduced = documentOf({ op: 'difference', a, b });
+  const source = random(20261025);
+  let seeded;
+  for (let index = 0; index <= 137; index++) seeded = caseOf(source);
+  const original = documentOf(seeded.tree);
+  for (const [document, id] of [[reduced.document, 'n0'], [original.document, 'n6']]) {
+    assert.throws(() => evaluateCadPart(document), failure =>
+      failure.code === 'GEOMETRY' && failure.message.includes(id + ':') &&
+      /sphere\/cylinder difference is not a valid manifold solid/.test(failure.message));
+  }
+
+  // Integrate the intersection of two disks in each cross-section of the sphere.
+  for (const [z, expected] of [[-3.01, 53.26749899325459], [-2.99, 52.96581854361838]]) {
+    const candidate = documentOf({ op: 'difference', a, b: { leaf: { ...b.leaf, move: [2, 1, z] } } });
+    const { brep } = outputOf(evaluateCadPart(candidate.document), candidate.root);
+    const report = checkBrep(brep, { strict: true });
+    assert.ok(report.valid, report.issues.join('\n'));
+    assert.ok(Math.abs(brepMassProperties(brep, 1).volume - expected) < 2e-6);
+  }
+});
+
 function mesh(brep, q) {
   const m = tessellateBrep(brep, { segmentsPerQuarter: q }), p = m.positions, ix = m.indices, he = new Map(), key = i => p[i * 3] + ',' + p[i * 3 + 1] + ',' + p[i * 3 + 2];
   let volume = 0;

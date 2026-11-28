@@ -122,6 +122,8 @@ interface GFace {
   solid: 0 | 1; surf: Surf; region: CurveRegion2; out: 1 | -1; min: P3; max: P3; name?: string; cuts: CurveSegment2[];
   /** A clipped marched cut against a general patch of the other input. */
   tracedGeneralPair?: boolean;
+  /** A clipped cut made against the other input by a supported sphere/cylinder surface pair. */
+  sphereCylinderCut?: boolean;
   /** The source face's id. */
   id: string;
   /** Whole, natively bound cylinder joins inherited from an Exact Sweep, including their planar peers. */
@@ -817,12 +819,18 @@ function cutPair(fa: GFace, fb: GFace, tol: number, span: number, touching = fal
     }
     return;
   }
+  let sphereCylinderPair = false;
   const addCut = (k: Curve3): void => {
     // (A traced curve through a pole of either face — Viviani's curve through a ball's poles — is cut there: on the pole's
     // surface its two halves arrive at the pole's side of the domain at two places, and one curve across it left the face
     // with no region at all. L4 fuzz 110, D235.)
     if (k.kind === 'param') { const tp = throughPole(k, fa, fb, tol); if (tp !== null) { addCut({ ...k, t1: tp }); addCut({ ...k, t0: tp }); return; } }
-    fa.cuts.push(curve2(fa, k, tol)); fb.cuts.push(curve2(fb, k, tol)); };
+    fa.cuts.push(curve2(fa, k, tol)); fb.cuts.push(curve2(fb, k, tol));
+    if (sphereCylinderPair) {
+      fa.sphereCylinderCut = true;
+      fb.sphereCylinderCut = true;
+    }
+  };
   // (Each probe on fa first: where it misses fa, fb's search — on a cylinder, its seam scan — is skipped; the overlap is empty either way.)
   const lineCuts = (p: P3, d: P3) => {
     const ia = intervals(fa, { kind: 'line', p, d, lo: -span, hi: span }, tol); if (!ia.length) return;
@@ -1028,6 +1036,8 @@ function cutPair(fa: GFace, fb: GFace, tol: number, span: number, touching = fal
       return false;
     };
     const RA = revOf(A), RB = revOf(B);
+    const sphere = (R: Revolution | null) => R?.profile.kind === 'arc' && Math.abs(R.profile.c[0]) <= tol;
+    sphereCylinderPair = (A.kind === 'cylinder' && sphere(RB)) || (B.kind === 'cylinder' && sphere(RA));
     if (A.kind === 'plane' && RB) return withPlane(A, RB);
     if (B.kind === 'plane' && RA) return withPlane(B, RA);
     if (RA && RB && len(cross(RA.a, RB.a)) <= 1e-12 && len(cross(sub(RB.c, RA.c), RA.a)) <= tol) {
@@ -1671,7 +1681,13 @@ function analyticBoolean(a: Brep, b: Brep, operation: AnalyticBooleanOperation, 
     const sources = trace.results.get(stitched);
     if (sources) trace.results.set(result, sources);
   }
-  if (!touches.length) return touchChecked(result, touchedAt);
+  if (!touches.length) {
+    if (operation === 'difference' && A.some(f => f.sphereCylinderCut)) {
+      const report = checkBrep(result, { strict: true });
+      if (!report.valid) throw new BrepError('GEOMETRY', `analytic Boolean: sphere/cylinder difference is not a valid manifold solid: ${report.issues[0]}`, report);
+    }
+    return touchChecked(result, touchedAt);
+  }
   // (A piece re-judged where a surface only touches it leaves the result's boundary touching there. Two lumps meeting
   // there are two bodies, as D204 has them; one lump touching itself — empty on both sides of the touch, or the same
   // body on both — is not a manifold solid: refused as such, even with no vertex there. A result that is not valid or
