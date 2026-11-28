@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import { createFlow } from './flow-helper.mjs';
 
 const baseline = process.argv.includes('--baseline');
+const editBaseline = process.argv.includes('--edit-baseline');
+const edit = process.argv.includes('--edit') || editBaseline;
 const points = [[0, 0], [40, 0], [40, 30], [0, 30]];
 const pins = [
   'apps/cad-studio/test/sketch-two-setback-chamfer-browser.mjs',
@@ -9,6 +11,7 @@ const pins = [
   'apps/cad-studio/src/sketch/cornerDraft.ts',
   'apps/cad-studio/src/sketch/constraintInspection.ts',
   'packages/barocss-cad-model/src/sketch/corner.ts',
+  'packages/barocss-cad-model/src/sketch/chamferEdit.ts',
 ];
 const f = await createFlow({
   name: 'sketch-two-setback-chamfer', output: process.argv[2], envFrozen: 'TWO_SETBACK_CHAMFER_FROZEN',
@@ -39,6 +42,8 @@ if (process.argv[3] === '"seed"') {
 const button = (name, scope = f.page) => scope.getByRole('button', { name, exact: true });
 const panel = () => f.sketchPanel().getByRole('group', { name: 'Chamfer', exact: true });
 const field = name => panel().getByLabel(name, { exact: true });
+const editPanel = () => f.sketchPanel().getByRole('group', { name: 'Edit Chamfer', exact: true });
+const editField = name => editPanel().getByLabel(name, { exact: true });
 const preview = () => f.page.locator('.sk-corner-preview');
 const near = (a, b) => assert.ok(Math.abs(a - b) < 1e-7, `${a} vs ${b}`);
 const cut = (incoming, outgoing) => [[0, 0], [40 - incoming, 0], [40, outgoing], [40, 30], [0, 30]];
@@ -131,6 +136,68 @@ await f.run(async () => {
   const saved = await f.save('two-setback-chamfer');
   const reopened = (await f.freshOpen(saved.file, accepted, 'two-setback-reopened')).doc;
   await verifyNative('two-setback-native-reopened', reopened, 3, 4);
+
+  if (edit) {
+    f.phase = 'Select the saved right-angle bevel and inspect its edit affordance';
+    await editSketch();
+    await f.worldClick([38.5, 2]);
+    const tools = f.sketchPanel().getByRole('group', { name: 'Corner tools', exact: true });
+    if (editBaseline) {
+      assert.match(await f.sketchPanel().innerText(), /Picked edge 2/);
+      assert.equal(await button('Edit Chamfer', tools).count(), 0);
+      await f.snapshot('missing-two-distance-edit');
+      await f.same(reopened);
+      return;
+    }
+
+    const startEdit = async () => {
+      await button('Edit Chamfer', tools).click();
+      await editPanel().waitFor();
+      assert.equal(await editField('Incoming distance').inputValue(), '3');
+      assert.equal(await editField('Outgoing distance').inputValue(), '4');
+      assert.equal(await button('Apply', editPanel()).isDisabled(), true);
+    };
+    await startEdit();
+    await editField('Incoming distance').fill('6');
+    await preview().waitFor();
+    await f.same(reopened);
+    await f.snapshot('independent-incoming-preview');
+    await editField('Incoming distance').fill('40');
+    await preview().waitFor({ state: 'hidden' });
+    assert.equal(await button('Apply', editPanel()).isDisabled(), true);
+    await f.same(reopened);
+    await f.snapshot('collapsed-carrier-refused');
+    await button('Cancel', editPanel()).click();
+    await f.same(reopened);
+
+    await startEdit();
+    await editField('Incoming distance').fill('6');
+    await button('Apply', editPanel()).click();
+    const incomingOnly = (await f.finishSketch('independent-incoming-applied')).doc;
+    await verifyNative('independent-incoming-native', incomingOnly, 6, 4);
+    await f.undo();
+    await f.same(reopened);
+    await f.redo();
+    await f.same(incomingOnly);
+
+    await editSketch();
+    await f.worldClick([37, 2]);
+    await button('Edit Chamfer', tools).click();
+    assert.equal(await editField('Incoming distance').inputValue(), '6');
+    assert.equal(await editField('Outgoing distance').inputValue(), '4');
+    await editField('Outgoing distance').fill('8');
+    await button('Apply', editPanel()).click();
+    const revised = (await f.finishSketch('independent-outgoing-applied')).doc;
+    await verifyNative('independent-outgoing-native', revised, 6, 8);
+    await f.undo();
+    await f.same(incomingOnly);
+    await f.redo();
+    await f.same(revised);
+    const savedEdit = await f.save('independent-two-distance-edit');
+    const reopenedEdit = (await f.freshOpen(savedEdit.file, revised, 'independent-edit-reopened')).doc;
+    await verifyNative('independent-edit-native-reopened', reopenedEdit, 6, 8);
+    return;
+  }
 
   f.phase = 'Edit the persisted bevel length while keeping the angle and original carriers';
   await editSketch();

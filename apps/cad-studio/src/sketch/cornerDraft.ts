@@ -1,6 +1,6 @@
 import type { StudioDoc } from '@barocss/cad-model/engine/doc';
 import { canChamferWithTwoSetbacks, chamferCorner, roundCorner } from '@barocss/cad-model/sketch/corner';
-import { editChamferSetbacks, savedChamferSetback } from '@barocss/cad-model/sketch/chamferEdit';
+import { editChamferSetbacks, editTwoDistanceChamfer, savedChamferSetback, savedTwoDistanceChamfer } from '@barocss/cad-model/sketch/chamferEdit';
 import { prepareStraightCornerBatch } from '@barocss/cad-model/sketch/cornerBatch';
 import { nextIdOf, withIds } from '@barocss/cad-model/sketch/entityIds';
 import { editFilletRadii, savedFilletRadius } from '@barocss/cad-model/sketch/filletEdit';
@@ -15,7 +15,7 @@ export type SketchCornerOperation = 'fillet' | 'chamfer';
 type SketchCornerResize = 'resize-fillet' | 'resize-chamfer';
 export type SketchCornerAction = SketchCornerOperation | SketchCornerResize;
 export type SketchCornerResult = { shape: Polygon; display: Polygon } | { error: string };
-export type SavedSketchCorners = { edges: readonly [number, ...number[]]; operation: SketchCornerResize; value: number | null };
+export type SavedSketchCorners = { edges: readonly [number, ...number[]]; operation: SketchCornerResize; value: number | null; outgoing?: number };
 
 function independentCornerOutline(owner: SketchState, source: Polygon, doc: StudioDoc): boolean {
   const stored = owner.editNode === undefined ? undefined : doc.nodes[owner.editNode];
@@ -31,6 +31,10 @@ export function selectedSavedCorners(owner: SketchState, source: Polygon, doc: S
     !independentCornerOutline(owner, source, doc)) return;
   const edges = [first.i, ...others.map(pick => pick.i)] as const;
   const fillet = !!source.bulges?.[first.i];
+  if (!fillet && !others.length) {
+    const pair = savedTwoDistanceChamfer(source, first.i);
+    if (pair) return { edges, value: pair.incoming, outgoing: pair.outgoing, operation: 'resize-chamfer' };
+  }
   const sizeOf = fillet ? savedFilletRadius : savedChamferSetback;
   const sizes = edges.map(edge => sizeOf(source, edge));
   const [firstSize] = sizes;
@@ -40,14 +44,17 @@ export function selectedSavedCorners(owner: SketchState, source: Polygon, doc: S
 }
 
 export function prepareSavedSketchCorners(owner: SketchState, source: Polygon, doc: StudioDoc,
-  resize: SavedSketchCorners, input: string): SketchCornerResult {
+  resize: SavedSketchCorners, input: string, outgoing?: string): SketchCornerResult {
   const fillet = resize.operation === 'resize-fillet';
   const name = fillet ? 'fillet' : 'chamfer';
   if (!independentCornerOutline(owner, source, doc)) return { error: `Edit the selected ${name} on an independent outline.` };
   if (resize.value === null && input.trim() === '') return { shape: source, display: source };
   const value = input.trim() === '' ? NaN : Number(input);
   const editSizes = fillet ? editFilletRadii : editChamferSetbacks;
-  const edited = editSizes(source, resize.edges, value);
+  if (outgoing !== undefined && (fillet || resize.edges.length !== 1 || resize.outgoing === undefined))
+    return { error: 'Select one saved two-distance Chamfer.' };
+  const edited = outgoing === undefined ? editSizes(source, resize.edges, value)
+    : editTwoDistanceChamfer(source, resize.edges[0], value, outgoing.trim() === '' ? NaN : Number(outgoing));
   if ('error' in edited) return edited;
   const { shape } = edited;
   if (shape === source) return { shape, display: shape };

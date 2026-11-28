@@ -38,7 +38,7 @@ export function SketchCornerTools({ owner, source, doc, corners, resize, inspect
   const preview = (operation: SketchCornerAction, value: string, outgoing?: string) => {
     const next = operation === 'fillet' || operation === 'chamfer'
       ? prepareSketchCorners(owner, source, doc, operation, corners, value, outgoing)
-      : resize?.operation === operation && prepareSavedSketchCorners(owner, source, doc, resize, value);
+      : resize?.operation === operation && prepareSavedSketchCorners(owner, source, doc, resize, value, outgoing);
     if (!next) return;
     inspection.set({
       target: 'corner', owner, input: 'focus', doc, operation, resize, value, outgoing,
@@ -69,7 +69,10 @@ export function SketchCornerTools({ owner, source, doc, corners, resize, inspect
       {choices.map(item => <Button key={item.operation} type="button" data-sketch-action
         variant={item.operation === draft?.operation ? 'default' : 'outline'}
         aria-pressed={item.operation === draft?.operation} onKeyDown={ownKeyboard}
-        onClick={() => { if (item.operation !== draft?.operation) preview(item.operation, mixedSize ? '' : String(resize?.value ?? 2)); }}>
+        onClick={() => {
+          if (item.operation === draft?.operation) return;
+          preview(item.operation, mixedSize ? '' : String(resize?.value ?? 2), resize?.outgoing === undefined ? undefined : String(resize.outgoing));
+        }}>
         <Icon name={item.icon} small />{item.label}
       </Button>)}
     </div>

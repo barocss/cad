@@ -3,7 +3,7 @@ import test from 'node:test';
 import { checkBrep, faceGeometry, massPropertiesOf } from '@barocss/cad';
 import { emptyDoc, withNode } from '../src/engine/doc';
 import { partSnapshot } from '../src/engine/part';
-import { editChamferSetback, editChamferSetbacks, savedChamferSetback } from '../src/sketch/chamferEdit';
+import { editChamferSetback, editChamferSetbacks, editTwoDistanceChamfer, savedChamferSetback, savedTwoDistanceChamfer } from '../src/sketch/chamferEdit';
 import { chamferCorner } from '../src/sketch/corner';
 import { prepareStraightCornerBatch } from '../src/sketch/cornerBatch';
 import { profileOf } from '../src/sketch/loops';
@@ -11,6 +11,7 @@ import { dragOutlinePoint } from '../src/sketch/pointDrag';
 import { sketchShapes } from '../src/sketch/reopen';
 import { type Polygon } from '../src/sketch/rules';
 import { settleShape } from '../src/sketch/settle';
+import { edgeAngle } from '../src/sketch/terms';
 
 const near = (a: number, b: number, tolerance = 2e-6) => assert.ok(Math.abs(a - b) <= tolerance, `${a} != ${b}`);
 const rectangle = (): Polygon => ({ kind: 'polygon', closed: true,
@@ -346,4 +347,107 @@ test('oblique oversized, conflicting and anchor-moving setback edits refuse atom
       : rule.kind === 'angle' ? { ...rule, a: shift(rule.a), b: shift(rule.b) } : rule) };
   const original = structuredClone(wrap); assert.equal(savedChamferSetback(wrap, 0), 6);
   assert.match((editChamferSetback(wrap, 0, 9) as { error: string }).error, /anchor/); assert.deepEqual(wrap, original);
+});
+
+function twoDistanceChamfer(shape: Polygon, corner: number, incoming = 3, outgoing = 4): Polygon {
+  const created = chamferCorner(shape, corner, incoming, outgoing);
+  if ('error' in created) assert.fail(created.error);
+  return created.shape;
+}
+
+function resizeTwoDistance(shape: Polygon, bevel: number, incoming: number, outgoing: number): Polygon {
+  const edited = editTwoDistanceChamfer(shape, bevel, incoming, outgoing);
+  if ('error' in edited) assert.fail(edited.error);
+  return edited.shape;
+}
+
+test('reopened unequal Chamfer edits each setback independently and preserves the bevel identity', () => {
+  const source = reopened(twoDistanceChamfer(rectangle(), 1), 2388);
+  const before = structuredClone(source);
+  assert.deepEqual(savedTwoDistanceChamfer(source, 1), { incoming: 3, outgoing: 4 });
+  assert.equal(resizeTwoDistance(source, 1, 3, 4), source);
+  assert.equal(savedChamferSetback(source, 1), undefined);
+  assert.ok('error' in editChamferSetbacks(source, [1], 6));
+
+  const incoming = resizeTwoDistance(source, 1, 6, 4);
+  assert.deepEqual(incoming.points, [[0, 0], [34, 0], [40, 4], [40, 30], [0, 30]]);
+  assert.deepEqual(incoming.ids, source.ids);
+  near(incoming.lengths![1], Math.sqrt(52), 1e-13);
+  const outgoing = resizeTwoDistance(reopened(incoming, 2376), 1, 6, 8);
+  assert.deepEqual(outgoing.points, [[0, 0], [34, 0], [40, 8], [40, 30], [0, 30]]);
+  assert.deepEqual(reopened(outgoing, 2352).ids, source.ids);
+  assert.deepEqual(source, before);
+
+  const fractional = resizeTwoDistance(source, 1, 3.0000000004, 4);
+  near(savedTwoDistanceChamfer(fractional, 1)!.incoming, 3.0000000004, 1e-13);
+  const equal = resizeTwoDistance(source, 1, 6, 6);
+  assert.equal(savedTwoDistanceChamfer(equal, 1), undefined);
+  near(savedChamferSetback(equal, 1)!, 6, 1e-13);
+});
+
+test('two-distance edit retains signed turns and the angle rule argument order', () => {
+  const l: Polygon = {
+    ...rectangle(), points: [[0, 0], [40, 0], [40, 10], [10, 10], [10, 30], [0, 30]],
+    hv: { h: [0, 2, 4], v: [1, 3, 5] }, lengths: { 0: 40 }, ids: ['e1', 'e2', 'e3', 'e4', 'e5', 'e6'],
+  };
+  for (const [outline, corner, carrierSign] of [[rectangle(), 1, 1], [l, 3, -1]] as const) {
+    for (const reflect of [false, true]) {
+      const points = outline.points.map(([x, y]): [number, number] => [x, reflect ? -y : y]);
+      const source = twoDistanceChamfer({ ...outline, points }, corner);
+      const prev = corner - 1;
+      for (const reversed of [false, true]) {
+        const [a, b] = reversed ? [corner, prev] : [prev, corner];
+        const seeded = { ...source, rules: source.rules?.map(rule => rule.kind === 'angle' ? { ...rule, a, b } : rule) };
+        const edited = resizeTwoDistance(seeded, corner, 5, 2);
+        const rule = edited.rules!.find(rule => rule.kind === 'angle')!;
+        assert.deepEqual([rule.a, rule.b], [a, b]);
+        const expected = 180 - Math.atan2(2, 5) * 180 / Math.PI;
+        near(rule.value, expected, 1e-13);
+        const measured = edgeAngle(edited.points, a, b);
+        near(measured.sign * measured.degrees, -carrierSign * (reflect ? -1 : 1) * (reversed ? -1 : 1) * expected);
+        const reopenedShape = reopened(edited, corner === 1 ? 2390 : 1210);
+        const pair = savedTwoDistanceChamfer(reopenedShape, corner)!;
+        near(pair.incoming, 5, 1e-13);
+        near(pair.outgoing, 2, 1e-13);
+      }
+    }
+  }
+});
+
+test('a saved two-distance edit refuses false recipes, consumed carriers and pinned ends atomically', () => {
+  const source = twoDistanceChamfer(rectangle(), 1);
+  const before = structuredClone(source);
+  for (const [incoming, outgoing] of [[40, 4], [3, 30], [0, 4], [3, NaN], [Infinity, 4]])
+    assert.ok('error' in editTwoDistanceChamfer(source, 1, incoming, outgoing));
+  assert.deepEqual(source, before);
+  for (const forged of [
+    { ...source, lengths: { ...source.lengths, 1: 6 } },
+    { ...source, hv: { h: [], v: [] } },
+    { ...source, rules: [...source.rules!, ...source.rules!] },
+    { ...source, rules: [{ kind: 'angle' as const, a: 1, b: 2, value: 126.86989764584402 }] },
+    { ...source, rules: [{ kind: 'angle' as const, a: 0, b: 1, value: 123 }] },
+  ]) assert.equal(savedTwoDistanceChamfer(forged, 1), undefined);
+  const pinned: Polygon = { ...source, rules: [...source.rules!, { kind: 'fix', point: 1, at: source.points[1] }] };
+  const pinnedBefore = structuredClone(pinned);
+  assert.ok('error' in editTwoDistanceChamfer(pinned, 1, 6, 4));
+  assert.deepEqual(pinned, pinnedBefore);
+
+  const wrap = twoDistanceChamfer(rectangle(), 0);
+  assert.deepEqual(savedTwoDistanceChamfer(wrap, 0), { incoming: 3, outgoing: 4 });
+  assert.match((editTwoDistanceChamfer(wrap, 0, 5, 4) as { error: string }).error, /anchor/);
+});
+
+test('adjacent equal and unequal Chamfers keep their shared carrier and both saved recipes', () => {
+  const source = twoDistanceChamfer({ ...rectangle(), lengths: {} }, 1);
+  const joined = twoDistanceChamfer(source, 3, 2, 2);
+  const opened = reopened(joined, 2384);
+  const longer = resizeTwoDistance(opened, 1, 3, 26);
+  assert.deepEqual(longer.points.slice(2, 5), [[40, 26], [40, 28], [38, 30]]);
+  near(savedChamferSetback(longer, 3)!, 2);
+  assert.ok('error' in editTwoDistanceChamfer(opened, 1, 3, 28));
+
+  const resizedNeighbor = resized(longer, 3, 3);
+  assert.deepEqual(resizedNeighbor.points.slice(2, 5), [[40, 26], [40, 27], [37, 30]]);
+  const pair = savedTwoDistanceChamfer(reopened(resizedNeighbor, 2313), 1)!;
+  near(pair.incoming, 3); near(pair.outgoing, 26);
 });
