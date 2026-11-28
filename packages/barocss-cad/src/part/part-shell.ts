@@ -76,8 +76,8 @@ export function shellOperation(f: CadPartFeature & Record<string, unknown>, t: T
       const [targetId, output] = f.target.split('/'), capPrefix = `${targetId}.cut.`;
       const capOpening = names.length === 1 && (names[0] === `${targetId}.top` || names[0] === `${targetId}.bottom`);
       const openingSign = names[0] === `${targetId}.bottom` ? -1 : 1;
-      if (floorThickness !== undefined && (join !== undefined || limit === undefined || names.length !== 1 || names[0] !== `${targetId}.top`))
-        fail('CAPABILITY', 'Independent Shell floor needs one original zero-draft upright orthogonal L extrusion with only its exact top cap opened and the default Round join.');
+      if (floorThickness !== undefined && (limit === undefined || names.length !== 1 || names[0] !== `${targetId}.top`))
+        fail('CAPABILITY', 'Independent Shell floor needs one original zero-draft upright orthogonal L extrusion with only its exact top cap opened.');
       if (join !== undefined && (names.length > 0 && !capOpening || limit === undefined))
         fail('CAPABILITY', 'Explicit Shell join needs one original closed zero-draft upright orthogonal L extrusion, or its single exact original top cap or bottom cap.');
       if (floorThickness !== undefined && limit !== undefined
@@ -108,21 +108,22 @@ export function shellOperation(f: CadPartFeature & Record<string, unknown>, t: T
           const height = stock.slabs[0].z1 - stock.slabs[0].z0;
           if (!(height - floorThickness >= ExtrudedProfileLimits.minimumLengthMM))
             fail('PARAMETER', 'The Shell floor thickness leaves no cavity height.');
-          const hollow = hollowOf(stock, thickness, names, at, fail, floorThickness);
-          const result: Part = { solid: { kind: 'upright', solid: booleanPrismatic(stock, hollow.hollow, 'difference') } };
+          const sharp = join === 'sharp', hollow = sharp ? sharpLFloorHollow(stock, thickness, floorThickness, at, fail)
+            : hollowOf(stock, thickness, names, at, fail, floorThickness).hollow;
+          const result: Part = { solid: { kind: 'upright', solid: booleanPrismatic(stock, hollow, 'difference') } };
           const brep = brepOf(result, at), report = checkBrep(brep, { strict: true });
           if (!report.valid || brep.bodies.length !== 1 || brep.bodies[0].kind !== 'solid' || brep.shells.length !== 1
-            || !brep.shells[0].closed || report.topology[0]?.genus !== 0 || report.counts.faces !== 16
-            || report.counts.loops !== 17 || report.counts.edges !== 39 || report.counts.vertices !== 26
+            || !brep.shells[0].closed || report.topology[0]?.genus !== 0 || report.counts.faces !== (sharp ? 15 : 16)
+            || report.counts.loops !== (sharp ? 16 : 17) || report.counts.edges !== (sharp ? 36 : 39) || report.counts.vertices !== (sharp ? 24 : 26)
             || !brep.coedges.every(use => !!use.pcurve) || !singleLCapOpening(brep, original, names[0], floorThickness, 1)
-            || !roundLWallSupports(brep, original, stock, thickness, at)
+            || !lWallSupports(brep, original, stock, thickness, at, sharp)
             || !original.faces.every(face => {
               const matches = brep.faces.filter(candidate => candidate.name === face.name), old = faceGeometry(face);
               const current = matches[0] && faceGeometry(matches[0]);
               return matches.length === 1 && old.kind === 'plane' && current?.kind === 'plane'
                 && old.n.every((value, axis) => value === current.n[axis]) && dot(old.n, sub(current.o, old.o)) === 0;
             }))
-            fail('GEOMETRY', '[SHELL_NOT_CLOSED] independent L floor could not retain one strict Round top opening and its original outer supports.');
+            fail('GEOMETRY', `[SHELL_NOT_CLOSED] independent L floor could not retain one strict ${sharp ? 'Sharp' : 'Round'} top opening and its original outer supports.`);
           return { kind: 'solid', parts: [{ ...result, brep }] };
         }
         if (join !== undefined) {
@@ -215,8 +216,8 @@ function singleLCapOpening(brep: Brep, original: Brep, capName: string, thicknes
   }));
 }
 
-/** The six named inner planes and the one Round chart belong to the certified original side supports. */
-function roundLWallSupports(brep: Brep, original: Brep, stock: PrismaticSolid, thickness: number, id: string): boolean {
+/** The named inner planes and optional Round chart belong to the certified original side supports. */
+function lWallSupports(brep: Brep, original: Brep, stock: PrismaticSolid, thickness: number, id: string, sharp: boolean): boolean {
   const roundoff = 128 * Number.EPSILON * Math.max(1, thickness, ...original.vertices.flatMap(vertex => vertex.point.map(Math.abs)));
   for (const face of original.faces) {
     const source = faceGeometry(face);
@@ -234,11 +235,41 @@ function roundLWallSupports(brep: Brep, original: Brep, stock: PrismaticSolid, t
       && (previous.b[0] - previous.a[0]) * (segment.b[1] - segment.a[1]) - (previous.b[1] - previous.a[1]) * (segment.b[0] - segment.a[0]) < 0;
   });
   const cylinders = brep.faces.map(face => faceGeometry(face)).filter(geometry => geometry.kind === 'cylinder'), corner = reflex[0];
+  if (sharp) return reflex.length === 1 && cylinders.length === 0 && brep.faces.every(face => faceGeometry(face).kind === 'plane');
   const cylinder = cylinders[0];
   return reflex.length === 1 && corner?.kind === 'line' && cylinders.length === 1 && cylinder?.kind === 'cylinder'
     && Math.abs(cylinder.r - thickness) <= roundoff && Math.abs(cylinder.c[0] - corner.a[0]) <= roundoff
     && Math.abs(cylinder.c[1] - corner.a[1]) <= roundoff && cylinder.out === 1
     && Math.abs(cylinder.a[2]) === 1;
+}
+
+/** A certified CCW cardinal L's six inset supports meet sharply; only its cavity's start height changes. */
+function sharpLFloorHollow(stock: PrismaticSolid, thickness: number, floor: number, id: string, fail: Tools['fail']): PrismaticSolid {
+  const slab = stock.slabs[0], ring = slab.regions[0].outer;
+  const lines = ring.filter((segment): segment is Extract<CurveSegment2, { kind: 'line' }> => segment.kind === 'line');
+  if (stock.slabs.length !== 1 || slab.regions.length !== 1 || slab.regions[0].holes.length || lines.length !== 6 || ring.length !== 6)
+    return fail('CAPABILITY', 'Independent Sharp Shell floor needs one certified original L section.');
+  const normals = lines.map(segment => [-Math.sign(segment.b[1] - segment.a[1]), Math.sign(segment.b[0] - segment.a[0])] as XY);
+  if (normals.some((normal, i) => {
+    const previous = normals[(i + 5) % 6];
+    return Math.abs(normal[0]) + Math.abs(normal[1]) !== 1 || normal[0] * previous[0] + normal[1] * previous[1] !== 0;
+  })) return fail('CAPABILITY', 'Independent Sharp Shell floor needs exact orthogonal side supports.');
+  const points = lines.map((segment, i): XY => {
+    const normal = normals[i], previous = normals[(i + 5) % 6];
+    return [segment.a[0] + thickness * (previous[0] + normal[0]), segment.a[1] + thickness * (previous[1] + normal[1])];
+  });
+  const inner = lines.map((segment, i): CurveSegment2 => ({ kind: 'line', a: points[i], b: points[(i + 1) % 6], tag: `${id}.in.${segment.tag ?? 'wall'}` }));
+  if (points.some(point => point.some(value => !Number.isFinite(value))) || lines.some((segment, i) => {
+    const a = points[i], b = points[(i + 1) % 6];
+    return (b[0] - a[0]) * Math.sign(segment.b[0] - segment.a[0])
+      + (b[1] - a[1]) * Math.sign(segment.b[1] - segment.a[1]) < ExtrudedProfileLimits.minimumLengthMM;
+  })) return fail('PARAMETER', 'The Shell side thickness leaves no supported Sharp L cavity.');
+  const hollow = prismaticExtrude([inner], slab.z0 + floor, slab.z1 + 1), cavity = hollow.slabs[0];
+  if (hollow.slabs.length !== 1 || !cavity || cavity.regions.length !== 1 || cavity.regions[0].holes.length
+    || cavity.regions[0].outer.length !== 6 || cavity.regions[0].outer.some(segment => segment.kind !== 'line'))
+    return fail('GEOMETRY', 'Independent Sharp Shell floor could not retain one exact six-wall L cavity.');
+  const regions = cavity.regions;
+  return { ...hollow, caps: [{ z: slab.z0 + floor, regions, tag: `${id}.floor` }, { z: slab.z1 + 1, regions, tag: `${id}.ceiling` }] };
 }
 
 /** Authored ownership and the evaluated straight section must describe the same unplaced original L. */

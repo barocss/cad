@@ -91,7 +91,7 @@ test('a literal top-open L floor edits independently and needs a revision-pinned
   const defaults = shell.defaults!(ctx);
   const fields = shell.fields!(ctx, { wallMode: 'separate-floor' });
   assert.ok(fields.some(field => field.key === 'floorThickness'));
-  assert.ok(!fields.some(field => field.key === 'join'));
+  assert.ok(fields.some(field => field.key === 'join'));
   const values = { wallMode: 'separate-floor', t: 2, floorThickness: 3 };
   const candidate = shell.build!(ctx, { ...defaults, ...values });
   const exact = candidate.nodes[2];
@@ -103,7 +103,17 @@ test('a literal top-open L floor edits independently and needs a revision-pinned
   assert.ok('doc' in read);
   assert.equal((read.doc.nodes[2] as typeof exact).floorThickness, 4);
   assert.ok('error' in readStudioDoc(JSON.stringify({ ...candidate, nodes: [...doc.nodes, { ...exact, floorThickness: '3' }] })));
-  assert.ok('error' in readStudioDoc(JSON.stringify({ ...candidate, nodes: [...doc.nodes, { ...exact, join: 'arc' }] })));
+  for (const join of ['sharp', 'arc'] as const) {
+    const corner = editFields(heightChange.nodes, 2).find(candidate => candidate.key === 'join');
+    assert.ok(corner?.kind === 'choice');
+    const edited = { ...heightChange, nodes: corner.set(heightChange.nodes, join) };
+    const opened = readStudioDoc(JSON.stringify(edited));
+    assert.ok('doc' in opened);
+    const feature = opened.doc.nodes[2];
+    assert.ok(feature.kind === 'shell');
+    assert.equal(feature.floorThickness, 4);
+    assert.equal(feature.join, join);
+  }
 
   const state = { doc, bodies: evaluated.bodies };
   const evaluate = async (next: StudioDoc) => evaluateDoc(next, 2);
@@ -126,4 +136,18 @@ test('a literal top-open L floor edits independently and needs a revision-pinned
   assert.ok(Math.abs(preview.bodies[0].volume! - (12000 - cavityArea * 17)) < 1e-7);
   assert.ok(Math.abs(next.bodies[0].volume! - preview.bodies[0].volume! - cavityArea) < 1e-7);
   assert.ok(Math.abs(outcome.state.bodies[0].volume! - preview.bodies[0].volume!) < 1e-7);
+  for (const join of ['sharp', 'arc'] as const) {
+    const manual = shell.build!(ctx, { ...defaults, ...values, join });
+    const requested = await dispatchTool(state, 'features', { ...arg, values: { ...values, join }, expectedRevision: revisionOf(doc) }, evaluate);
+    assert.ok(!requested.isError && requested.changed, requested.content);
+    const direct = evaluateDoc(manual, 2);
+    assert.ok(direct.ok);
+    const node = requested.state.doc.nodes[2];
+    assert.ok(node.kind === 'shell' && node.floorThickness === 3 && node.join === join);
+    const authored = manual.nodes[2];
+    assert.ok(authored.kind === 'shell');
+    assert.deepEqual([node.parent, node.open, node.thickness, node.floorThickness, node.join],
+      [authored.parent, authored.open, authored.thickness, authored.floorThickness, authored.join]);
+    assert.equal(requested.state.bodies[0].volume, direct.bodies[0].volume);
+  }
 });

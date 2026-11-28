@@ -3,6 +3,7 @@ import { createFlow } from './flow-helper.mjs';
 import { clickModelCommand } from './model-rail-helper.mjs';
 
 const baseline = process.argv.includes('--baseline');
+const cornerModes = process.argv.includes('--corner');
 const pins = [
   'apps/cad-studio/test/top-l-shell-floor-browser.mjs',
   'packages/barocss-cad-model/src/app/commands.ts',
@@ -14,7 +15,7 @@ const f = await createFlow({
   name: 'top-l-shell-floor', envFrozen: 'TOP_L_SHELL_FLOOR_FROZEN', output: process.argv[2],
   initialFiles: pins, requiredFrozen: pins,
   qualification: 'Choose the exact original top rim and an independent floor thickness on one upright L shell.',
-  limits: ['One positive, upright, top-open orthogonal L with a uniform round side-wall offset.'],
+  limits: ['One positive, upright, top-open orthogonal L with a uniform side-wall offset. The --corner run compares Sharp and Round.'],
   inspectorSource: `
     import { readFileSync } from 'node:fs';
     import { checkBrep, faceGeometry, massPropertiesOf } from '@barocss/cad';
@@ -39,6 +40,7 @@ const button = (name, scope = f.page) => scope.getByRole('button', { name, exact
 const hud = () => f.page.getByRole('dialog', { name: 'Shell', exact: true });
 const panel = () => f.page.getByRole('complementary', { name: 'Versions panel', exact: true });
 const floor = scope => scope.getByLabel('Floor thickness', { exact: true });
+const corner = scope => scope.getByLabel('Inner corner', { exact: true });
 const thicknessMode = () => hud().getByLabel('Wall thickness', { exact: true });
 const waitPreview = () => hud().locator('.status').getByText('preview', { exact: true }).waitFor();
 async function frameIsometric() {
@@ -73,7 +75,10 @@ async function check(doc, floorThickness, tag) {
   assert.equal(measured.report.counts.bodies, 1);
   assert.equal(measured.report.counts.shells, 1);
   assert.equal(measured.report.topology[0].genus, 0);
-  const volume = 864 * 20 - (600 + 4 - Math.PI) * (20 - floorThickness);
+  const sharp = doc.nodes[2].join === 'sharp';
+  const cavityArea = sharp ? 600 : 600 + 4 - Math.PI;
+  const volume = 864 * 20 - cavityArea * (20 - floorThickness);
+  assert.equal(measured.faces.filter(({ support }) => support.kind === 'cylinder').length, sharp ? 0 : 1);
   assert.ok(Math.abs(measured.volume - volume) < 1e-7, `${measured.volume} vs ${volume}`);
   const levels = measured.faces.filter(({ support: s }) => s.kind === 'plane' && Math.abs(s.n[2]) === 1)
     .map(({ name, support: s, loops }) => ({ name, z: s.o[2], normal: s.n[2], loops: loops.slice().sort() }))
@@ -86,7 +91,7 @@ async function check(doc, floorThickness, tag) {
   const bodies = (await f.bodies()).bodies;
   assert.equal(bodies.length, 1);
   assert.ok(Math.abs(bodies[0].volume - volume) < 1e-7);
-  f.report.observations.push({ floorThickness, measured: measured.volume, volume, levels });
+  f.report.observations.push({ join: doc.nodes[2].join ?? 'default', floorThickness, measured: measured.volume, volume, levels });
 }
 
 await f.run(async () => {
@@ -104,7 +109,9 @@ await f.run(async () => {
     return;
   }
 
+  if (cornerModes) await corner(hud()).selectOption('sharp');
   await thicknessMode().selectOption('separate-floor');
+  if (cornerModes) assert.equal(await corner(hud()).inputValue(), 'sharp');
   await floor(hud()).fill('3');
   await waitPreview();
   await f.same(stock);
@@ -113,6 +120,7 @@ await f.run(async () => {
   await f.same(stock);
   await startShell();
   await thicknessMode().selectOption('separate-floor');
+  if (cornerModes) await corner(hud()).selectOption('sharp');
   await floor(hud()).fill('20');
   await hud().getByText('The Shell floor is too thick', { exact: true }).waitFor();
   assert.equal(await button('Apply', hud()).isEnabled(), false);
@@ -125,13 +133,14 @@ await f.run(async () => {
   const first = await f.doc();
   assert.equal(first.nodes[2].thickness, 2);
   assert.equal(first.nodes[2].floorThickness, 3);
+  assert.equal(first.nodes[2].join, cornerModes ? 'sharp' : undefined);
   assert.deepEqual(first.nodes[2].open, ['n1.top']);
   await check(first, 3, 'accepted-floor-3');
   await frameIsometric();
   await f.snapshot('independent-floor-applied');
   await f.openFeatureEditor(2);
   await floor(f.editor()).fill('5');
-  const edited = (await f.applyEditor(first, 'history-floor-5')).doc;
+  let edited = (await f.applyEditor(first, 'history-floor-5')).doc;
   assert.equal(edited.nodes[2].floorThickness, 5);
   assert.equal(edited.nodes[2].thickness, 2);
   await check(edited, 5, 'edited-floor-5');
@@ -139,6 +148,22 @@ await f.run(async () => {
   await f.same(first);
   await f.redo();
   await f.same(edited);
+  if (cornerModes) {
+    const sharp = edited;
+    assert.equal(sharp.nodes[2].join, 'sharp');
+    await f.openFeatureEditor(2);
+    assert.equal(await floor(f.editor()).inputValue(), '5');
+    await corner(f.editor()).selectOption('arc');
+    const round = (await f.applyEditor(sharp, 'history-round-floor-5')).doc;
+    assert.equal(round.nodes[2].join, 'arc');
+    assert.equal(round.nodes[2].floorThickness, 5);
+    await check(round, 5, 'round-floor-5');
+    await f.undo();
+    await f.same(sharp);
+    await f.redo();
+    await f.same(round);
+    edited = round;
+  }
 
   await openProject();
   await button('Save').click();
@@ -153,5 +178,15 @@ await f.run(async () => {
   await check(edited, 5, 'reopened-floor-5');
   await frameIsometric();
   await f.snapshot('independent-floor-fresh-open');
+  if (cornerModes) {
+    await f.openFeatureEditor(2);
+    assert.equal(await floor(f.editor()).inputValue(), '5');
+    assert.equal(await corner(f.editor()).inputValue(), 'arc');
+    await corner(f.editor()).selectOption('sharp');
+    const reopenedSharp = (await f.applyEditor(edited, 'reopened-sharp-floor-5')).doc;
+    assert.equal(reopenedSharp.nodes[2].join, 'sharp');
+    assert.equal(reopenedSharp.nodes[2].floorThickness, 5);
+    await check(reopenedSharp, 5, 'reopened-sharp');
+  }
   assert.deepEqual(f.report.downloads, []);
 });

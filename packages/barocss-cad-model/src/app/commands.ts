@@ -821,7 +821,7 @@ const allCommands: Command[] = [
         const mode: Field = { key: 'wallMode', label: 'Wall thickness', kind: 'choice',
           options: [{ value: 'uniform', label: 'Uniform' }, { value: 'separate-floor', label: 'Separate floor' }] };
         const floor: Field = { key: 'floorThickness', label: 'Floor thickness', kind: 'mm', min: 0.1 };
-        return [mode, wall, values?.wallMode === 'separate-floor' ? floor : corner];
+        return [mode, wall, corner, ...(values?.wallMode === 'separate-floor' ? [floor] : [])];
       }
       const mode: Field = { key: 'wallMode', label: 'Wall thickness', kind: 'choice',
         options: [{ value: 'uniform', label: 'Uniform' }, { value: 'per-face', label: 'Per face' }] };
@@ -857,7 +857,8 @@ const allCommands: Command[] = [
       if (v.wallMode === 'separate-floor') {
         if (!canSetShellFloor(ctx.doc.nodes, parent, open))
           throw refusal('BAD_REFERENCE', 'Select the original top cap of one upright L extrusion for a separate Shell floor.');
-        return withNode(ctx.doc, { kind: 'shell', parent, thickness: Number(v.t), open, floorThickness: Number(v.floorThickness) });
+        return withNode(ctx.doc, { kind: 'shell', parent, thickness: Number(v.t), open,
+          floorThickness: Number(v.floorThickness), ...(join === undefined ? {} : { join }) });
       }
       if (join !== undefined && !canSetShellCorner(ctx.doc.nodes, parent, open))
         throw refusal('BAD_REFERENCE', 'Choose an inner corner on an original upright L-shaped extrusion, closed or with one end cap open.');

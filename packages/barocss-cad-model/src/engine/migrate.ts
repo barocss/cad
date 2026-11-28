@@ -81,8 +81,8 @@ export function readStudioDoc(text: string): { doc: StudioDoc; notes: string[] }
       return { error: 'A Shell inner corner must be Sharp or Round.' };
     }
     if (record(node) && node.kind === 'shell' && Object.hasOwn(node, 'floorThickness') &&
-      (node.join !== undefined || typeof node.floorThickness !== 'number' || !Number.isFinite(node.floorThickness) || node.floorThickness <= 0)) {
-      return { error: 'A separate Shell floor needs a positive finite thickness and the default inner corner.' };
+      (typeof node.floorThickness !== 'number' || !Number.isFinite(node.floorThickness) || node.floorThickness <= 0)) {
+      return { error: 'A separate Shell floor needs a positive finite thickness.' };
     }
     if (record(node) && node.kind === 'shell-walls') {
       const problem = shellWallFieldsProblem(node);

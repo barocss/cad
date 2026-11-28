@@ -1133,7 +1133,7 @@ function editFieldsRaw(nodes: Nodes, i: number, bearingAssembly?: BearingAssembl
       if (node.floorThickness !== undefined)
         number('floorThickness', 'Floor thickness', 'mm', n => (n as typeof node).floorThickness!,
           (n, v) => ({ ...(n as typeof node), floorThickness: v }));
-      else if (node.join !== undefined || canSetShellCorner(nodes, node.parent, node.open)) out.push(shellCornerField(i));
+      if (node.join !== undefined || canSetShellCorner(nodes, node.parent, node.open)) out.push(shellCornerField(i));
       break;
     case 'shell-walls':
       for (const side of boxShellWalls) {
