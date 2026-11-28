@@ -131,8 +131,7 @@ import { Profiler, Suspense, lazy, useCallback, useEffect, useMemo, useRef, useS
 import { EngineClient } from './engine/client';
 import { createWorkOwnership, finishWork, reserveAcceptedChange, workEditRefusal, type WorkHistory } from './state/workOwnership';
 import type { OpenScope } from './state/openOwnership';
-import { scheduleProjectOpenFit } from './app/projectOpenFit';
-import { prepareSignedFinishOpen, verifyStoredNativeOpen } from './files/documentFile';
+import { createStudioProjectCallbacks } from './app/studioProjectCallbacks';
 import type { SectionPick } from './viewport/useSectionSelection';
 import { useViewportSelectionPresentation } from './viewport/useViewportSelectionPresentation';
 import { usePlacedCandidatePreview } from './viewport/usePlacedCandidatePreview';
@@ -498,39 +497,17 @@ export function App() {
   // the document (until a copy is written again).
   const recoveryOff = useRef<string | null>(null);
   // (CG6: with a project open and the document saved in it, the work is kept in the project instead: storage/project.ts.)
-  const project = useProject({
-    onOpenIntent: beginOpenIntent,
-    currentOpenScope,
-    isOpenCurrent,
-    confirmOpen: focus => new Promise(resolve => workspaceModeExit.switchWhenReady(() => resolve(true), {
-      originFocus: focus, onKeep: () => resolve(false),
-    })),
-    validateRestore: (doc, current) => verifyStoredNativeOpen(doc, d => engine.part(d, revision.current++, 'read'), d => engine.verifyStoredInsets(d), current),
-    validateOpen: async (doc, current) => {
-      await verifyStoredNativeOpen(doc, d => engine.part(d, revision.current++, 'read'), d => engine.verifyStoredInsets(d), current);
-      return prepareSignedFinishOpen(doc, d => engine.part(d, revision.current++, 'refs'), current);
+  const project = useProject(createStudioProjectCallbacks({
+    owner: { onOpenIntent: beginOpenIntent, currentOpenScope, isOpenCurrent },
+    evaluation: { part: (next, mode) => engine.part(next, revision.current++, mode), insets: next => engine.verifyStoredInsets(next) },
+    document: {
+      canReplace: () => openAccepted(inPlaceNow.current), replace: next => replaceDoc(next, 'project-open'),
+      recordProblems: (next, problems) => referenceProblems.current.set(next, problems),
+      clearReferenceChoices: () => clearReferenceChoices(), clearComparison: () => setCompareBase(null),
+      setFileName, setDirty, commitLinkedParts: next => commitParts(next),
     },
-    onOpened: (d, path, notes, prepared) => {
-      const next = prepared?.doc ?? d;
-      if (!openAccepted(inPlaceNow.current) || !replaceDoc(next, 'project-open')) return false;
-      if (prepared?.problems.length) referenceProblems.current.set(next, prepared.problems);
-      clearReferenceChoices();
-      setCompareBase(null);
-      const accepted = openIntent.current;
-      setFileName(path.replace(/\.bcad$/i, '').split('/').pop()!); setDirty(notes.length > 0 || next !== d);
-      return accepted;
-    },
-    onOpenReady: accepted => scheduleProjectOpenFit(accepted, isOpenCurrent, () => viewport.current?.fit()),
-    onError: (title, hint) => setToast({ title, hint, detail: '' }),
-    canOpen: () => { if (openAccepted(inPlaceNow.current)) return true; setToast({ title: 'A part is being edited', hint: 'Finish or cancel it before opening a project file.', detail: '' }); return false; },
-    onLinked: l => {
-      if (!openAccepted(inPlaceNow.current)) return;
-      const accepted = l.offered.length && commitParts(l.doc) ? openIntent.current : undefined;
-      setToast({ title: l.offered.length ? `Newer files for ${l.offered.length} placed part${l.offered.length > 1 ? 's' : ''}` : 'Placed parts without their files',
-        hint: [l.offered.length ? `${l.offered.join(', ')}: Revision waiting in the part's panel (Accept or Keep).` : '', l.missing.length ? `Not in the project any more: ${l.missing.join(', ')}.` : ''].filter(Boolean).join(' '), detail: '' });
-      return accepted;
-    },
-  });
+    switchWhenReady: workspaceModeExit.switchWhenReady, fit: () => viewport.current?.fit(), notice: setToast,
+  }));
   const [versionsOpen, setVersionsOpen] = useState(false);
   const [reopenedTaskRun, setReopenedTaskRun] = useState<TaskRunLaunch>();
   const [decidedTaskRun, setDecidedTaskRun] = useState<TaskRunStatus>();

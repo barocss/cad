@@ -7,6 +7,7 @@ import { randomUUID } from 'node:crypto';
 import { isAbsolute, relative, resolve } from 'node:path';
 import { createFlow } from './flow-helper.mjs';
 import { installD322NativeSaveScheduler } from './late-save-native-scheduler.mjs';
+import { clickModelCommand } from './model-rail-helper.mjs';
 
 const output = process.argv[2];
 const args = new Map(process.argv.slice(3).map(arg => { const [key, value] = arg.split('='); return [key, value]; }));
@@ -78,7 +79,7 @@ await f.run(async () => {
   const newBox = async (name, dimensions) => {
     await f.page.getByRole('button', { name: 'New part', exact: true }).click();
     await f.page.waitForFunction(() => window.__studioDoc.nodes.length === 0);
-    await f.page.keyboard.press('b'); await f.page.locator('.hud').waitFor();
+    await clickModelCommand(f.page, 'Shapes', 'Box'); await f.page.locator('.hud').waitFor();
     for (const [label, value] of [['Width X', dimensions[0]], ['Depth Y', dimensions[1]], ['Height Z', dimensions[2]]]) {
       await f.page.locator('.hud .field', { has: f.page.locator(`span:text-is("${label}")`) }).locator('input').fill(String(value));
     }
