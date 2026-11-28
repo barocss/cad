@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D2265: [D2265](notes/closed-trapezoid-inner-rim-fillet-2026-11-29/README.md), #12. Verify the original complete inner-rim Fillet after a closed trapezoidal Sweep and an upstream width edit.
+
 - D2264: [D2264](notes/exact-closed-trapezoidal-sweep-2026-11-29/README.md), #10. Sweep one filled radial trapezoid on the native closed circle and verify its editable Studio history.
 
 - D2263: [D2263](notes/exact-closed-triangular-sweep-2026-11-29/README.md), #10. Add one exact closed circular Sweep profile for a straight filled triangular section and verify actual native history.
