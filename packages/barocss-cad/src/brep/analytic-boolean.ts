@@ -54,7 +54,7 @@ type Cylinder = { kind: 'cylinder'; c: P3; a: P3; e1: P3; e2: P3; r: number; s: 
  * Any other smooth surface patch: domain coordinates (ku·u, kv·v), scaled to arc length, with ku < 0 for
  * a reversed face so loops run counter-clockwise in the domain. Points map back by Newton projection.
  */
-type Nurbs = { kind: 'nurbs'; S: Surface; rev?: Revolution | null; ev: (u: number, v: number) => P3; ku: number; kv: number; U: [number, number]; V: [number, number]; sense: 1 | -1;
+type Nurbs = { kind: 'nurbs'; exactDomainMap?: boolean; S: Surface; rev?: Revolution | null; ev: (u: number, v: number) => P3; ku: number; kv: number; U: [number, number]; V: [number, number]; sense: 1 | -1;
   /** 25 × 25 samples of the patch (made on first use). */
   readonly grid: { p: XY; x: P3; pole?: boolean }[]; last: { p: XY }; size: number;
   /** The box of the control points: the patch lies inside it (positive weights). */
@@ -119,6 +119,8 @@ const nurbsNormal = (s: Nurbs, p: XY): P3 => {
 };
 interface GFace {
   solid: 0 | 1; surf: Surf; region: CurveRegion2; out: 1 | -1; min: P3; max: P3; name?: string; cuts: CurveSegment2[];
+  /** A clipped marched cut against a general patch of the other input. */
+  tracedGeneralPair?: boolean;
   /** The source face's id. */
   id: string;
   /** Whole, natively bound cylinder joins inherited from an Exact Sweep, including their planar peers. */
@@ -237,7 +239,7 @@ function curve2(f: { surf: Surf }, k: Curve3, tol: number, tag?: string): CurveS
     };
     // (The source curve's interior knots as fractions of the range: its pieces' joins, D150.)
     const breaks = k.kind === 'param' && k.src ? [...new Set(k.src.knots)].map(x => (x - t0) / (t1 - t0)).filter(u => u > 0 && u < 1) : [];
-    return { kind: 'curve', f: tabulated(s, g, at3, t0, t1, breaks), t0, t1, src: at3, ...t, ...(k.kind !== 'param' || k.exact ? { exact: true } : {}), ...(k.kind === 'param' && k.src ? { srcCurve: k.src } : {}) } as CurveSegment2;
+    return { kind: 'curve', f: s.exactDomainMap ? memo(g) : tabulated(s, g, at3, t0, t1, breaks), t0, t1, src: at3, ...t, ...(k.kind !== 'param' || k.exact ? { exact: true } : {}), ...(k.kind === 'param' && k.src ? { srcCurve: k.src } : {}) } as CurveSegment2;
   }
   if (k.kind === 'param') return { kind: 'curve', f: cached(x => to2(f, k.at(x))), t0: k.t0, t1: k.t1, src: k.at, ...t, ...(k.src ? { srcCurve: k.src } : {}) } as CurveSegment2;
   if (k.kind === 'line') {
@@ -478,13 +480,14 @@ function planarRulingBinding(edge: Curve, surface: Surface, roundoff: number): C
   return affinePlaneBinding(edge, surface, roundoff);
 }
 
-function facesOf(brep: Brep, solid: 0 | 1, tol: number): GFace[] {
+function facesOf(brep: Brep, solid: 0 | 1, tol: number, exactDomainMap = false): GFace[] {
   const edges = new Map(brep.edges.map(e => [e.id, e])), coedges = new Map(brep.coedges.map(c => [c.id, c])), loops = new Map(brep.loops.map(l => [l.id, l]));
   const nativeSource = brep.source.family === 'sweep-curve';
   const owners = nativeSource ? new Map(brep.faces.flatMap(face => face.loops.map(loop => [loop, face] as const))) : undefined;
   const roundoff = nativeSource ? 512 * Number.EPSILON * Math.max(1, geometryScaleMM(brep.vertices.map(vertex => vertex.point))) : 0;
   return brep.faces.map(face => {
     const surf = surfaceOf(face, tol), g = { surf };
+    if (surf.kind === 'nurbs' && exactDomainMap) surf.exactDomainMap = true;
     const outer = face.loops.find(l => loops.get(l)!.kind === 'outer')!, ordered = [outer, ...face.loops.filter(l => l !== outer)];
     // A full-turn wall uses its seam (a generator) twice. Its domain is centred opposite the seam, so the
     // seam lies on both domain edges: the coedge going up (V increasing) on the right, down on the left
@@ -750,6 +753,7 @@ const boxesMeet = (f: GFace, g: GFace, tol: number) => [0, 1, 2].every(k => f.mi
 
 /** Where a cut is tested for lying along its face's boundary, and where, then, for running off it too (D258). */
 const ON_BOUNDARY_AT = [0.2, 0.5, 0.8], PARTLY_OFF_AT = [0.05, 0.1, 0.35, 0.65, 0.9, 0.95];
+class StitchIncidenceError extends BrepError { constructor(detail: string) { super('TOPOLOGY', detail); } }
 class Refused extends BrepError { constructor(detail: string) { super('GEOMETRY', 'analytic Boolean: ' + detail); } }
 
 /** The source curves already cut into a face along a contact (each once). */
@@ -834,7 +838,13 @@ function cutPair(fa: GFace, fb: GFace, tol: number, span: number, touching = fal
   const paramCuts = (at: (t: number) => P3, lo: number, hi: number, march = false) => {
     const ia = intervals(fa, { kind: 'param', at, lo, hi }, tol); if (!ia.length) return;
     for (const [a, b] of overlaps(ia, intervals(fb, { kind: 'param', at, lo, hi }, tol)))
-      if (len(sub(at(b), at(a))) > tol || b - a > 1e-6 * (hi - lo)) addCut(march && (A.kind === 'plane' || B.kind === 'plane') ? snapEnds(fa, fb, at, a, b, tol) : { kind: 'param', at, t0: a, t1: b });
+      if (len(sub(at(b), at(a))) > tol || b - a > 1e-6 * (hi - lo)) {
+        if (march && A.kind === 'nurbs' && B.kind === 'nurbs') {
+          fa.tracedGeneralPair = true;
+          fb.tracedGeneralPair = true;
+        }
+        addCut(march && (A.kind === 'plane' || B.kind === 'plane') ? snapEnds(fa, fb, at, a, b, tol) : { kind: 'param', at, t0: a, t1: b });
+      }
   };
   const same = (g: GFace, into: GFace) => { for (const ring of [g.region.outer, ...g.region.holes]) for (const seg of ring) into.cuts.push(curve2(into, curve3Of(g, seg), tol)); };
   const A = fa.surf, B = fb.surf;
@@ -1557,7 +1567,7 @@ export function booleanAnalyticTraced(a: Brep, b: Brep, operation: AnalyticBoole
   for (const face of brep.faces) faceSources.set(face.id, trace.unknown);
   return { brep, faceSources, complete: false };
 }
-function analyticBoolean(a: Brep, b: Brep, operation: AnalyticBooleanOperation, options: AnalyticOptions, rejudge: boolean, trace?: BooleanFaceSourceTrace): Brep {
+function analyticBoolean(a: Brep, b: Brep, operation: AnalyticBooleanOperation, options: AnalyticOptions, rejudge: boolean, trace?: BooleanFaceSourceTrace, exactDomainMap = false): Brep {
   // (An operation not named exactly is refused: it would otherwise fall through to another one's selection.)
   if (operation !== 'union' && operation !== 'intersection' && operation !== 'difference') throw new BrepError('INPUT', `analytic Boolean: operation must be union, intersection or difference, not ${String(operation)}`);
   const id = options.id ?? `analytic-${operation}`;
@@ -1566,7 +1576,7 @@ function analyticBoolean(a: Brep, b: Brep, operation: AnalyticBooleanOperation, 
   const tol = linearToleranceMM(scale) * 10, span = 4 * scale + 1;
   if (options.edgeFitTolerance !== undefined && !(Number.isFinite(options.edgeFitTolerance) && options.edgeFitTolerance > 0)) throw new BrepError('INPUT', 'analytic Boolean: edge fit tolerance must be positive and finite');
   const edgeFit = options.edgeFitTolerance === undefined ? undefined : Math.min(tol / 4, options.edgeFitTolerance);
-  const A = facesOf(a, 0, tol), B = facesOf(b, 1, tol);
+  const A = facesOf(a, 0, tol, exactDomainMap), B = facesOf(b, 1, tol, exactDomainMap);
   if (trace) { registerFaceSources(A, trace); registerFaceSources(B, trace); }
   // 1. Cuts.
   const contact = new Set(options.contactFaces ?? []), rounded = new Set((options.contactWith ?? []).map(baseName));
@@ -1628,7 +1638,19 @@ function analyticBoolean(a: Brep, b: Brep, operation: AnalyticBooleanOperation, 
     return [q]; });
   // (A tolerant input's — a fitted offset's, D110, D113 — pieces keep its tolerance: the result is tolerant as its worst.)
   const inputTol = Math.max(0, ...[a, b].flatMap(x => [...x.edges.map(e => e.tolerance), ...x.vertices.map(v => v.tolerance)]));
-  const stitched = stitch(mergePieces(kept, tol, trace), id, tol, options.exactEdges !== false, inputTol, undefined, edgeFit, frozen, trace);
+  let stitched: Brep;
+  try { stitched = stitch(mergePieces(kept, tol, trace), id, tol, options.exactEdges !== false, inputTol, undefined, edgeFit, frozen, trace); }
+  catch (failure) {
+    if (operation !== 'intersection' || !(failure instanceof StitchIncidenceError) || exactDomainMap
+      || !A.some(f => f.tracedGeneralPair) || !B.some(f => f.tracedGeneralPair)) throw failure;
+    // A sampled inverse chart can overshoot near a singular flank. Rebuild with the original
+    // surfaces and tolerance, evaluating the domain maps directly.
+    try {
+      const retry = analyticBoolean(a, b, operation, options, rejudge, trace, true);
+      if (retry.bodies.length && checkBrep(retry, { strict: true }).valid && !openByBody(retry)) return retry;
+    } catch (retryFailure) { if (!(retryFailure instanceof BrepError)) throw retryFailure; }
+    throw failure;
+  }
   const result = operation === 'intersection' && options.exactEdges !== false
     ? bindHalfRingIntersection(a, b, stitched, tol) ?? bindHalfRectangularDuctIntersection(a, b, stitched, tol) ?? stitched : stitched;
   if (trace && result !== stitched) {
@@ -1645,7 +1667,7 @@ function analyticBoolean(a: Brep, b: Brep, operation: AnalyticBooleanOperation, 
     const self = selfTouch(result, t.x, t.n, tol);
     if (self) throw new Refused(`the result's boundary touches itself at (${t.x.map(v => +v.toFixed(4)).join(', ')}), where one surface only touches another: not a manifold solid (the inputs touch along an edge or at a vertex)`);
   }
-  if (!checkBrep(result, { strict: true }).valid || openByBody(result)) return analyticBoolean(a, b, operation, options, false, trace);
+  if (!checkBrep(result, { strict: true }).valid || openByBody(result)) return analyticBoolean(a, b, operation, options, false, trace, exactDomainMap);
   return touchChecked(result, touchedAt);
 }
 /**
@@ -2477,7 +2499,7 @@ function stitchWith(pieces: Piece[], id: string, tol: number, exactEdges = false
   const uses = new Map<number, { piece: number; sense: string }[]>();
   loops.forEach((ls, pi) => ls.flat().forEach(u => { const list = uses.get(u.index), use = { piece: pi, sense: u.sense }; if (list) list.push(use); else uses.set(u.index, [use]); }));
   for (const [e, list] of uses) if (list.length !== 2 || list[0].sense === list[1].sense)
-    throw new BrepError('TOPOLOGY', `analytic Boolean: the result is not a manifold solid (edge ${e} from ${P[edges[e].v[0]].map(x => +x.toFixed(4))} to ${P[edges[e].v[1]].map(x => +x.toFixed(4))} has ${list.length} uses; the inputs touch along an edge or at a vertex)`);
+    throw new StitchIncidenceError(`analytic Boolean: the result is not a manifold solid (edge ${e} from ${P[edges[e].v[0]].map(x => +x.toFixed(4))} to ${P[edges[e].v[1]].map(x => +x.toFixed(4))} has ${list.length} uses; the inputs touch along an edge or at a vertex)`);
   // Shells by connectivity, signed volume by the divergence theorem (exact on these pieces).
   const root = pieces.map((_, i) => i), find = (x: number): number => { while (root[x] !== x) x = root[x] = root[root[x]]; return x; };
   for (const list of uses.values()) root[find(list[0].piece)] = find(list[1].piece);

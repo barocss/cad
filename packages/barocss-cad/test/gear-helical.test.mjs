@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { spurRack, checkPlacedSpurRack, spurGear, spurGearDimensions, spurGearPairNominal, spurGearCenterDistance, checkSpurGearPair, checkSpurGearRack, checkPlacedSpurGears, evaluateCadPart, evaluateSurface, isGearError, checkBrep, brepMassProperties, exportStep, importStep, outputOf } from '../dist/index.js';
 
 // R6a.5c (issue #2167, D59): helical gears — normal module and pressure angle, helix angle and hand; the transverse
@@ -7,6 +8,24 @@ import { spurRack, checkPlacedSpurRack, spurGear, spurGearDimensions, spurGearPa
 const close = (a, b, tol, what) => assert.ok(Math.abs(a - b) <= tol, `${what}: ${a} vs ${b}`);
 const inv = p => Math.tan(p) - p, D = features => ({ format: 'barocss-cad-part', version: 1, units: 'mm', parameters: {}, features });
 const KHK1 = { normalModule: 3, teeth: 12, faceWidth: 20, helixAngle: 30, hand: 'right' }, KHK2 = { normalModule: 3, teeth: 60, faceWidth: 20, helixAngle: 30, hand: 'left' };
+
+test('the original 3 degree helical Intersect returns two native solids in either selection order', () => {
+  const fixture = JSON.parse(readFileSync(new URL('../robustness/corpus/oracle/gear-helical-pair-crossing-intersect.json', import.meta.url), 'utf8'));
+  const part = fixture.input.partDocument;
+  const [first, second, operation] = part.features;
+  const expected = fixture.expect.outputs[0];
+  for (const [target, tool] of [[first.id, second.id], [second.id, first.id]]) {
+    const snapshot = evaluateCadPart({ ...part, features: [first, second, { ...operation, target, tool }] });
+    const { brep } = outputOf(snapshot, operation.id);
+    const report = checkBrep(brep, { strict: true });
+    assert.ok(report.valid, report.issues.join('\n'));
+    assert.equal(report.counts.bodies, expected.bodies);
+    assert.deepEqual(report.topology.map(({ shells, genus }) => ({ shells, genus })), expected.topology);
+    const mass = brepMassProperties(brep, 1);
+    close(mass.volume, expected.volume.value, expected.volume.value * expected.volume.relTol, 'overlap volume');
+    mass.centroid.forEach((coord, axis) => close(coord, expected.centroid.value[axis], expected.centroid.absTol, `overlap centroid ${axis}`));
+  }
+});
 
 /** The transverse profile's exact area (Green's theorem over the analytic involute; transverse module, normal addendum). */
 function transverseArea(mn, z, beta, x = 0, red = 0) {

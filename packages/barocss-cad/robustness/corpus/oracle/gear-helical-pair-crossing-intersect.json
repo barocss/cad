@@ -58,8 +58,12 @@
           ],
           "absTol": 0.005
         },
-        "bodies": 1,
+        "bodies": 2,
         "topology": [
+          {
+            "shells": 1,
+            "genus": 0
+          },
           {
             "shells": 1,
             "genus": 0
@@ -68,5 +72,5 @@
       }
     ]
   },
-  "oracle": "numeric: at 60 heights, the exact transverse profiles (exactProfile, turned along their helices from the placements) intersected by scanlines 5e-4 mm apart, the areas and moments integrated over the face (converged to 1e-5 against 30 heights and 1e-3 mm); the same integrator on a spur pair 4.5\u00b0 off gives 196.7188 mm\u00b3 against the exact Boolean's 196.7163. Topology: one overlap body assumed (the crossing at the pitch point)."
+  "oracle": "numeric: at 60 heights, the exact transverse profiles (exactProfile, turned along their helices from the placements) intersected by scanlines 5e-4 mm apart, the areas and moments integrated over the face (converged to 1e-5 against 30 heights and 1e-3 mm); the same integrator on a spur pair 4.5\u00b0 off gives 196.7188 mm\u00b3 against the exact Boolean's 196.7163. Independent involute sections at 480 axial levels give two overlap components of approximately 14.66826 and 9.48208 mm\u00b3. The plane Y = -1 mm separates them over the full height. Chord and axial motion bounds give at least 1.02036 mm horizontal clearance between the ideal gear sections on that plane."
 }
