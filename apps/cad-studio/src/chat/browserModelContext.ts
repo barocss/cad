@@ -10,10 +10,22 @@ interface ModelContext {
   }, options: { signal: AbortSignal }): Promise<void>;
 }
 
+interface ToolPolicy {
+  features?(): string[];
+  allowsFeature?(name: string): boolean;
+}
+
 export function modelContext() {
   if (!window.isSecureContext) return;
   try {
-    const api = (document as Document & { modelContext?: ModelContext }).modelContext;
+    const current = document as Document & {
+      modelContext?: ModelContext;
+      permissionsPolicy?: ToolPolicy;
+      featurePolicy?: ToolPolicy;
+    };
+    const policy = current.permissionsPolicy ?? current.featurePolicy;
+    if (policy?.features?.().includes('tools') && policy.allowsFeature?.('tools') === false) return;
+    const api = current.modelContext;
     if (typeof api?.registerTool === 'function') return api;
   } catch {
     // A browser or its Permissions Policy can deny access to the API.
