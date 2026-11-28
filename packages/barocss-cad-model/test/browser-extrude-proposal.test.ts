@@ -4,7 +4,7 @@ import { checkBrep } from '@barocss/cad';
 import { acceptProposal, previewProposal, proposeBrowserBox, proposeBrowserCylinder, proposeBrowserExtrude, proposeBrowserHole, runTool, type ChatState } from '../src/chat/tools';
 import { emptyDoc, withNode, type StudioDoc } from '../src/engine/doc';
 import { evaluatePart, partBreps } from '../src/engine/evaluate';
-import { revisionOf } from '../src/util/revision';
+import { canonical, revisionOf } from '../src/util/revision';
 import { commandById } from '../src/app/commands';
 import { isEditableBox, isEditableCylinder } from '../src/app/editCommand';
 
@@ -49,7 +49,8 @@ test('browser Box stages one origin-aligned solid in an empty part', async () =>
     assert.equal(bodies[0].volume, 40000);
     assert.deepEqual(bodies[0].mesh.bounds, { min: [0, 0, 0], max: [80, 50, 10] });
   }
-  const box = applied.state;
+  const box = { ...applied.state, doc: JSON.parse(canonical(applied.state.doc)) as StudioDoc };
+  assert.equal(revisionOf(box.doc), revisionOf(applied.state.doc));
   const edit = { body: box.bodies[0].key, height: 15, expectedRevision: revisionOf(box.doc) };
   const belowMinimum = await proposeBrowserExtrude(box, { ...edit, height: 0.5 }, neverEvaluate);
   assert.ok(belowMinimum.isError && !belowMinimum.changed);
@@ -101,18 +102,24 @@ test('browser Cylinder stages a replayable round part at the origin', async () =
 test('browser Hole stages a native axial through cut on a translated Cylinder', async () => {
   const command = commandById('cylinder');
   assert.ok(command?.build);
-  const doc = command.build({ doc: emptyDoc(), bodies: [], selection: { faces: [], edges: [], bodies: [] } },
+  const authored = command.build({ doc: emptyDoc(), bodies: [], selection: { faces: [], edges: [], bodies: [] } },
     { r: 5, h: 10, x: 8, y: -3, z: 4 });
+  const doc = JSON.parse(canonical(authored)) as StudioDoc;
+  assert.notEqual(JSON.stringify(doc.nodes), JSON.stringify(authored.nodes));
+  assert.equal(revisionOf(doc), revisionOf(authored));
   const evaluated = await evaluate(doc);
   assert.ok(evaluated.ok);
   const state: ChatState = { doc, bodies: evaluated.bodies };
   const args = { body: state.bodies[0].key, diameter: 4, expectedRevision: revisionOf(doc) };
   const unknown = { ...state, bodies: [{ ...state.bodies[0], topology: undefined }] };
   const rectangle = await stock();
+  const mismatched = { ...doc, nodes: doc.nodes.map(node => node.kind === 'extrude' && node.made
+    ? { ...node, made: { ...node.made, values: { ...node.made.values, h: 11 } } } : node) };
   for (const [version, fields] of [
     [state, { ...args, diameter: 0.49 }], [state, { ...args, diameter: 10 }],
     [state, { ...args, body: 'other' }], [state, { ...args, expectedRevision: '0000000000000000' }],
     [unknown, args], [rectangle, { ...args, expectedRevision: revisionOf(rectangle.doc) }],
+    [{ ...state, doc: mismatched }, { ...args, expectedRevision: revisionOf(mismatched) }],
   ] as const) {
     const refused = await proposeBrowserHole(version, fields, neverEvaluate);
     assert.ok(refused.isError && !refused.changed);

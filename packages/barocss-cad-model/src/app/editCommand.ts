@@ -183,7 +183,9 @@ function shapeEdit(index: number, nodes: readonly ModelNode[], rows: Pick<Studio
       if (!top || !('made' in top) || top.made?.command !== 'fastener') return null;
       replay[replay.length - 1] = { ...top, made: { ...top.made, values: { ...top.made.values, holeD: made.values.holeD } } };
     }
-    if (JSON.stringify(replay) !== JSON.stringify(nodes.slice(start, index + 1))) return null;
+    // Box and Cylinder files can reorder object properties without changing the replayed shape.
+    const serialize = made.command === 'box' || made.command === 'cylinder' ? canonical : JSON.stringify;
+    if (serialize(replay) !== serialize(nodes.slice(start, index + 1))) return null;
   } catch { return null; }
   const steps = made.command === 'fastener' && cmd.steps
     ? (ctx: Ctx, values: Values) => cmd.steps!(ctx, values).map(step => step.label === 'Hole'
