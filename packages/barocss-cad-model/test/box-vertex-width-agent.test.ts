@@ -130,3 +130,50 @@ test('a Box target rejects ambiguous modes, stale revisions and both incorrect o
   const missing = await dispatchTool(lone, 'proposals', propose({ ...request, expectedRevision: revisionOf(lone.doc) }), neverEvaluate);
   assert.ok(missing.isError && !missing.changed);
 });
+
+const depthValues = {
+  boxVertexAxis: 'y',
+  boxVertexEdge: 'n1.side2|n1.side3', boxVertexEndpoint: 'to',
+  boxTargetVertexEdge: 'n3.side0|n3.top', boxTargetVertexEndpoint: 'from',
+};
+
+test('a two-Box depth proposal retains the source footprint and requires user approval', async () => {
+  const state = await independentBoxes();
+  const result = await dispatchTool(state, 'proposals', propose({ ...edit(state.doc), values: depthValues }), evaluate);
+  assert.ok(!result.isError && result.changed, result.content);
+  assert.deepEqual(result.state.doc.nodes, state.doc.nodes);
+  assert.deepEqual(result.state.doc.proposals?.[0].risk.approval, ['Box vertex depth edit']);
+  const auto = await acceptProposal(result.state, 'P1', evaluate, { by: { agent: 'chat' } });
+  assert.ok('error' in auto && /Box vertex depth proposal needs approval/.test(auto.error));
+  const preview = await previewProposal(result.state, 'P1', evaluate);
+  assert.ok(!('error' in preview));
+  const skipped = await acceptProposal(result.state, 'P1', evaluate, { leaveOut: ['n1'] });
+  assert.ok(!('error' in skipped));
+  assert.deepEqual(skipped.state.doc.nodes, state.doc.nodes);
+  const accepted = await acceptProposal(result.state, 'P1', evaluate);
+  assert.ok(!('error' in accepted));
+  assert.deepEqual(accepted.state.doc.nodes, preview.doc.nodes);
+  const original = partBreps(state.doc), changed = partBreps(accepted.state.doc);
+  assert.deepEqual(changed[1], original[1]);
+  const expected = original[0].brep.vertices.map(({ point: [x, y, z] }) => [x, y === 3.5 ? 9 : y, z]);
+  for (const at of expected) {
+    assert.equal(changed[0].brep.vertices.filter(({ point }) => point.every((value, i) => value === at[i])).length, 1);
+  }
+  assert.ok(Math.abs(accepted.state.bodies[0].volume! - 972) < 1e-9);
+  assert.ok(isEditableBox(accepted.state.doc.nodes, 0));
+});
+
+test('a depth edit refuses absent or mismatched native owners and mixed scalar input', async () => {
+  const state = await independentBoxes(), request = { ...edit(state.doc), values: depthValues };
+  const neverEvaluate = () => assert.fail('An invalid vertex depth edit must refuse before evaluation.');
+  assert.ok((await dispatchTool(state, 'features', request, neverEvaluate)).isError);
+  for (const patch of [
+    { boxVertexAxis: 'x' }, { boxMaxX: 9 }, { boxTargetVertexEndpoint: undefined },
+    { boxVertexEdge: 'n1.side0|n1.side1', boxVertexEndpoint: 'to' },
+    { boxTargetVertexEdge: depthValues.boxVertexEdge, boxTargetVertexEndpoint: depthValues.boxVertexEndpoint },
+  ]) {
+    const result = await dispatchTool(state, 'proposals', propose({ ...request, values: { ...depthValues, ...patch } }), neverEvaluate);
+    assert.ok(result.isError && !result.changed, JSON.stringify(patch));
+    assert.equal(result.state.doc, state.doc);
+  }
+});

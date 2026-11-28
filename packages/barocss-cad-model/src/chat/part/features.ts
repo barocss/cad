@@ -3,7 +3,7 @@
 import { commandById, commands, givenValues, shownFields, type Ctx, type Values } from '../../app/commands';
 import { agentRotatePivot } from './agentRotatePivot';
 import { agentVertexMove } from './agentVertexMove';
-import { boxVertexWidthSketch, hasBoxVertexWidthValues } from './agentBoxVertexWidth';
+import { boxVertexFootprintSketch, hasBoxVertexFootprintValues } from './agentBoxVertexFootprint';
 import { canSetAgentClosedShellCaps, canSetAgentShellCap, canSetAgentShellCorner } from '../../app/shellCorner';
 import { PIVOT_FACE } from '../../app/pivotFaceCommand';
 import { isEditableBox, isEditableCylinder, updateBoxFootprint } from '../../app/editCommand';
@@ -579,9 +579,10 @@ async function editFeatureTool(state: ChatState, args: Record<string, unknown>, 
   if (refusal) return refusal;
   const given = isObj(args.values) ? args.values : {};
   let boxFeature: ModelNode | undefined;
-  if (hasBoxVertexWidthValues(given)) {
-    if (!options.proposal) return fail(state, 'Use proposals.propose and approve the Box vertex width edit in Studio.', { code: 'EDIT_INPUT' });
-    const box = boxVertexWidthSketch(state, args, given);
+  if (hasBoxVertexFootprintValues(given)) {
+    const dimension = given.boxVertexAxis === 'y' ? 'depth' : 'width';
+    if (!options.proposal) return fail(state, `Use proposals.propose and approve the Box vertex ${dimension} edit in Studio.`, { code: 'EDIT_INPUT' });
+    const box = boxVertexFootprintSketch(state, args, given);
     if ('error' in box) return fail(state, box.error, { code: 'EDIT_INPUT' });
     boxFeature = box.feature;
   }

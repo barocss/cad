@@ -1,5 +1,7 @@
 # CAD decisions — current navigation
 
+- D2271: [D2271](notes/agent-box-depth-from-corners-2026-11-29/README.md), #629. Propose one exact Box depth match through the local Agent and require explicit Studio approval.
+
 - D2270: [D2270](notes/studio-box-depth-from-corners-2026-11-29/README.md), #629. Match authored Box depth to a second original native corner from the Studio viewport.
 
 - D2269: [D2269](notes/closed-trapezoid-outer-rim-fillet-2026-11-29/README.md), #12. Verify the complete native cone-to-plane exterior rim Fillet on an exact trapezoidal Sweep.
