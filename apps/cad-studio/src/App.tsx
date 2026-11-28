@@ -1,6 +1,7 @@
 import { useStudioDirectCommit } from './state/useStudioDirectCommit';
 import { useFitTableCommit } from './state/useFitTableCommit';
 import { useVertexExtrudeEntry } from './state/useVertexExtrudeEntry';
+import { useBoxWidthEntry } from './state/useBoxWidthEntry';
 import { useStudioSheetPatterns } from './app/useStudioSheetPatterns';
 import { useStudioEvaluatedSource, useStudioModelEvaluation, type RouteEvaluationHandoff, type StudioParameterEdit } from './state/useStudioModelEvaluation';
 import { useStudioWorkerRecovery } from './state/useStudioWorkerRecovery';
@@ -720,8 +721,9 @@ export function App() {
     !active && !rendering && !drawing && !section && previewMode === 'none';
   const nativePicks = nativeVertexReady && shownDoc === doc ? selection.vertices : undefined;
   const solidVertex = currentSolidVertexPick(doc, bodies, nativePicks);
+  const solidVertexPair = currentSolidMoveVertices(doc, bodies, nativePicks);
   const ctx: Ctx = { doc: commandDoc, placedPartCount: doc.instances?.length ?? 0, bodies, selection, pick: pick ?? undefined, direct: directSel,
-    rotateVertex: solidVertex, moveVertices: currentSolidMoveVertices(doc, bodies, nativePicks), bearingAssembly: { root: doc, owner: 'base' } };
+    rotateVertex: solidVertex, moveVertices: solidVertexPair, bearingAssembly: { root: doc, owner: 'base' } };
   const { evaluatedRef, source: evaluatedSource, ownsEvaluatedSource } = useStudioEvaluatedSource(
     { doc, evaluated, workerSession, marker }, { docNow, workOwnership, workerSessionNow, markerNow });
   const interference = useInterferenceCheck(evaluatedSource, ownsEvaluatedSource, engine,
@@ -1068,6 +1070,9 @@ export function App() {
   });
   const vertexExtrude = useVertexExtrudeEntry({ doc, bodies, vertex: solidVertex, editNode, open: openHistoryFeatureAt,
     canOpen: () => ownsEvaluatedSource() && !project.opening() && editNodeNow.current === null });
+  const matchBoxWidth = useBoxWidthEntry({ doc, bodies, start,
+    picks: editNode === null && !sketch && !measure && !variants.showing && !assembly.draft ? solidVertexPair : undefined,
+    canOpen: () => ownsEvaluatedSource() && !project.opening() && editNodeNow.current === null && !activeStore.get() });
 
   // Shift-Enter: once the part has its new bodies (and the selection followed them), the command again.
   useEffect(() => { if (restart && !active) { setRestart(null); start(commands.find(c => c.id === restart.id) ?? restart); } }, [restart, active, start]);
@@ -1992,7 +1997,7 @@ export function App() {
       {cageInputActive && cageEd.session && doc.nodes[cageEd.session.node] && <CagePanel editor={cageEd} name={featureLabel(doc.nodes[cageEd.session.node], cageEd.session.node, doc.nodes)} />}
       {sketch3dInputActive && skel.session && <SkeletonPanel editor={skel} name={skel.session.node === null ? 'new skeleton' : featureLabel(doc.nodes[skel.session.node], skel.session.node, doc.nodes)} />}
       {!cageEd.session && !skel.session && !rendering && !sketch && !measure && !active && !directSel.length && !instanceSel.length && !assembly.draft && <SelectionInspector model={{ doc, evaluated, bodies, fresh, busy, massReady }} selection={selection} materialSettings={{ material, setMaterial }}
-        display={{ showBox, setShowBox, inertiaAt, setInertiaAt }} changes={{ commit, setSelection, edgesToCurves, loadBendTable, setFlatView, setCutListView, separate, vertexExtrude }}>
+        display={{ showBox, setShowBox, inertiaAt, setInertiaAt }} changes={{ commit, setSelection, edgesToCurves, loadBendTable, setFlatView, setCutListView, separate, vertexExtrude, matchBoxWidth }}>
         {edgeInspection.panel}
         {edgeInspection.combControls}
         {editNode !== null && <HistoryFeatureEditor

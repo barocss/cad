@@ -1,4 +1,4 @@
-import { isEditableBox } from '../../app/editCommand';
+import { isOriginalBoxCorner, originalBox, type OriginalBox } from '../../app/originalBoxCorners';
 import { nativeSolidLine } from '../../app/nativeSolidLine';
 import type { ModelNode } from '../../engine/doc';
 import type { BodyResult } from '../../engine/evaluate';
@@ -20,25 +20,13 @@ export function isBoxVertexWidthOperation(op: Op): boolean {
   return op.tool === 'edit_feature' && isObj(op.args?.values) && hasBoxVertexWidthValues(op.args.values);
 }
 
-function originalBox(nodes: readonly ModelNode[], index: number) {
-  const sketch = nodes[index], extrusion = nodes[index + 1];
-  if (sketch?.kind !== 'sketch' || sketch.profile !== 'rectangle' || extrusion?.kind !== 'extrude'
-    || !isEditableBox(nodes, index)) return;
-  return { sketch, extrusion };
-}
-
-type OriginalBox = NonNullable<ReturnType<typeof originalBox>>;
 const isEdge = (value: unknown): value is string => typeof value === 'string' && value.length > 0;
 const isEndpoint = (value: unknown): value is 'from' | 'to' => value === 'from' || value === 'to';
 
 function originalCorner(box: OriginalBox, body: BodyResult, name: string, endpoint: 'from' | 'to') {
-  const { sketch, extrusion } = box;
-  const [minX, minY] = sketch.min, [maxX, maxY] = sketch.max, bottom = extrusion.from ?? 0;
   const edge = nativeSolidLine(body, body.mesh.edges.findIndex(item => item.names.includes(name)));
   const point = endpoint === 'from' ? edge?.a : edge?.b;
-  if (!point || edge?.names[0] !== name || typeof bottom !== 'number' || typeof extrusion.height !== 'number'
-    || (point[0] !== minX && point[0] !== maxX) || (point[1] !== minY && point[1] !== maxY)
-    || (point[2] !== bottom && point[2] !== bottom + extrusion.height)) return;
+  if (!point || edge?.names[0] !== name || !isOriginalBoxCorner(box, point)) return;
   return point;
 }
 
