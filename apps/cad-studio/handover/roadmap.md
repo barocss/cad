@@ -1,13 +1,13 @@
 # CAD roadmap — current status and execution order
 
-Updated 2026-11-28 · Priority authority: D520 · Latest delivery: D2184 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
+Updated 2026-11-28 · Priority authority: D520 · Latest delivery: D2185 · Audit baseline: `ccce78c671c8a5c09718c1cf6005a90027b75adc`
 
 This is the only current status index. Detailed tracks define acceptance; the 34 stable row pages retain scope and issue navigation. Immutable decision notes retain results. Do not append chronological status paragraphs here. [D520 decision](notes/cad-roadmap-replan-2026-11-04/README.md) supersedes D445 execution order and historical next-item text, while retaining its safeguards and bounded proofs.
 
 ## Now and next
 
-- **Current position:** [D2184](notes/linear-pattern-self-contact-classification-2026-11-28/README.md), P1 rows 16 and 30. Seed 20261023 case 49 retains a typed Linear Pattern refusal for true self-contact. Studio preserves the source and applies a disjoint control.
-- **Next MAIN:** D2185, P1 rows 16 and 30. Diagnose the ray-classification refusal in seed 20261023 case 158. Qualify the original Intersect against the independent wall volume ([#7](https://github.com/barocss/cad/issues/7)).
+- **Current position:** [D2185](notes/trimmed-sphere-pole-ray-classification-2026-11-28/README.md), P1 rows 16 and 30. An excluded sphere pole no longer blocks the exact wall Intersect in seed 20261023 case 158.
+- **Next MAIN:** D2186, P1 rows 16 and 30. Diagnose the cone and sphere surface-trace refusal in seed 20261023 case 30. Establish its independent boundary and valid output before changing the kernel ([#7](https://github.com/barocss/cad/issues/7)).
 - **Separate follow-ups:** Continue Studio App extraction in cohesive parts with affected desktop checks. [#608 Rendering](https://github.com/barocss/cad/issues/608) stays on HOLD. API inventory drift remains open. The issue tracker records [#126](https://github.com/barocss/cad/issues/126), [#613](https://github.com/barocss/cad/issues/613), [#152](https://github.com/barocss/cad/issues/152) and [#22](https://github.com/barocss/cad/issues/22) as closed.
 - **Active repository:** [barocss/cad](https://github.com/barocss/cad), based on `origin/main`. Fetch before work and preserve unexpected changes. The [migration record](../../../docs/migration/README.md) maps the former `local/cad-dev` history and issue numbers.
 - **Evidence correction:** D482 records2167 PASS/0 FAIL/2 existing SKIP in a later full-kernel run than D433. Neither result is a new full-suite PASS at this audit HEAD. [D482 record](notes/vertical-contact-refusal-2026-11-04/README.md).

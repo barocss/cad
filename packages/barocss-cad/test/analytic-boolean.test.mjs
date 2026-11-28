@@ -27,6 +27,31 @@ function seededTree(seed, index) {
   return sample.tree;
 }
 
+test('a sphere pole outside the trimmed face does not block a wall Intersect', () => {
+  const tree = seededTree(20261023, 158);
+  const reduced = tree.b;
+  const reversed = { ...reduced, a: reduced.b, b: reduced.a };
+  for (const stock of [reduced, reversed]) {
+    const { document, root } = documentOf(stock);
+    const { brep } = outputOf(evaluateCadPart(document), root);
+    const report = checkBrep(brep, { strict: true });
+    assert.ok(report.valid, report.issues.join('\n'));
+    assert.equal(report.counts.bodies, 1);
+    const mass = brepMassProperties(brep, 1);
+    assert.ok(Math.abs(mass.volume - 3 * 0.5 * 3) < 1e-8);
+    mass.centroid.forEach((coord, axis) => assert.ok(Math.abs(coord - [3.5, -0.25, 3.5][axis]) < 1e-8));
+  }
+  const { document, root } = documentOf(tree);
+  const { brep } = outputOf(evaluateCadPart(document), root);
+  const report = checkBrep(brep, { strict: true });
+  assert.ok(report.valid, report.issues.join('\n'));
+  const mass = brepMassProperties(brep, 1);
+  // Independent cylinder/cone cross-sections plus the disjoint strip give these mass properties.
+  assert.ok(Math.abs(mass.volume - 150.78229018370538) < 2e-6);
+  const centroid = [-1.9029447431909452, 1.9541906624166698, 3.0554750882153927];
+  mass.centroid.forEach((coord, axis) => assert.ok(Math.abs(coord - centroid[axis]) < 1e-7));
+});
+
 test('an internally tangent sphere bore refuses an invalid boundary and nearby offsets stay strict', () => {
   const a = { leaf: { kind: 'sphere', r: 3, rot: [{ axis: 'y', deg: 270 }, { axis: 'z', deg: 270 }], move: [2, -2, -2] } };
   const b = { leaf: { kind: 'cyl', r: 2, h: 6, rot: [{ axis: 'x', deg: 90 }], move: [2, 1, -3] } };

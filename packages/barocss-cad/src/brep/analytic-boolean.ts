@@ -1385,7 +1385,7 @@ function classify(x: P3, normal: P3 | null, faces: readonly GFace[], tol: number
         const den = dot(s.n, dir); if (Math.abs(den) < 1e-9) { if (Math.abs(dot(s.n, sub(x, s.o))) <= 10 * tol && locateInRegion(to2(g, x), g.region, 10 * tol) !== 'out') bad = true; continue; }
         hits.push(dot(s.n, sub(s.o, x)) / den);
       } else if (s.kind === 'nurbs') {
-        const r = rayHits(s, x, dir, tol); if (r === null) { bad = true; break; } hits.push(...r);
+        const r = rayHits(s, g.region, x, dir, tol); if (r === null) { bad = true; break; } hits.push(...r);
       } else {
         const w = sub(x, s.c), wp = sub(w, scale(s.a, dot(w, s.a))), dp = sub(dir, scale(s.a, dot(dir, s.a)));
         const A = dot(dp, dp), B = 2 * dot(wp, dp), C = dot(wp, wp) - s.r * s.r;
@@ -1416,9 +1416,21 @@ function classify(x: P3, normal: P3 | null, faces: readonly GFace[], tol: number
  * Ray parameters where x + t·dir meets a NURBS patch: candidate triangles of its grid, each refined by
  * Newton on (u, v, t). Null when a hit grazes the surface (degenerate ray).
  */
-function rayHits(s: Nurbs, x: P3, dir: P3, tol: number): number[] | null {
+function rayHits(s: Nurbs, region: CurveRegion2, x: P3, dir: P3, tol: number): number[] | null {
   // (The patch lies in its control points' box: a ray that misses the box, widened, meets nothing.)
   if (rayMissesBox(s.hullMin, s.hullMax, x, dir, 10 * tol)) return [];
+  const solveTolerance = tol * 1e-3;
+  const atExcludedPole = (point: P3, residual: P3, u: number, v: number) => {
+    if (!s.poles.length || !(len(residual) < solveTolerance)) return false;
+    const bounds = regionBox(region);
+    return s.poles.some(pole => {
+      // The varying coordinate is undefined at a pole. Its fixed coordinate must exclude the whole collapsed side.
+      const axis = pole.along === 0 ? 1 : 0;
+      const fixed = axis === 1 ? v * s.kv : u * s.ku;
+      return (pole.at < bounds[axis] - 20 * tol || pole.at > bounds[axis + 2] + 20 * tol)
+        && Math.abs(fixed - pole.at) <= solveTolerance && len(sub(point, pole.point)) <= solveTolerance;
+    });
+  };
   const n = 24, G = (i: number, j: number) => s.grid[i * 25 + j], out: number[] = [];
   for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) for (const tri of [[G(i, j), G(i + 1, j), G(i + 1, j + 1)], [G(i, j), G(i + 1, j + 1), G(i, j + 1)]]) {
     const e1 = sub(tri[1].x, tri[0].x), e2 = sub(tri[2].x, tri[0].x), h = cross(dir, e2), a = dot(e1, h);
@@ -1434,15 +1446,21 @@ function rayHits(s: Nurbs, x: P3, dir: P3, tol: number): number[] | null {
       const P = s.ev(pu, pv), Su = scale(sub(s.ev(ia, pv), P), 1 / (ia - pu)), Sv = scale(sub(s.ev(pu, ib), P), 1 / (ib - pv));
       const F = sub(P, add(x, scale(dir, t))), M = [[Su[0], Sv[0], -dir[0]], [Su[1], Sv[1], -dir[1]], [Su[2], Sv[2], -dir[2]]];
       const det = M[0][0] * (M[1][1] * M[2][2] - M[1][2] * M[2][1]) - M[0][1] * (M[1][0] * M[2][2] - M[1][2] * M[2][0]) + M[0][2] * (M[1][0] * M[2][1] - M[1][1] * M[2][0]);
-      if (Math.abs(det) < 1e-12 * len(Su) * len(Sv)) return null; // grazing
+      if (det === 0 || Math.abs(det) < 1e-12 * len(Su) * len(Sv)) {
+        if (atExcludedPole(P, F, pu, pv)) break;
+        return null; // grazing
+      }
       const inv = (r: number, c: number) => { const m = [0, 1, 2].filter(k => k !== r), q = [0, 1, 2].filter(k => k !== c); return ((r + c) % 2 ? -1 : 1) * (M[m[0]][q[0]] * M[m[1]][q[1]] - M[m[0]][q[1]] * M[m[1]][q[0]]) / det; };
       const du = inv(0, 0) * F[0] + inv(1, 0) * F[1] + inv(2, 0) * F[2], dv = inv(0, 1) * F[0] + inv(1, 1) * F[1] + inv(2, 1) * F[2], dt = inv(0, 2) * F[0] + inv(1, 2) * F[1] + inv(2, 2) * F[2];
       // (A step that is not a number — the patch degenerate there, a ball's pole — makes the ray degenerate: another is
       // cast, not the patch evaluated at NaN, R10.B, D99.)
-      if (!Number.isFinite(du) || !Number.isFinite(dv) || !Number.isFinite(dt)) return null;
+      if (!Number.isFinite(du) || !Number.isFinite(dv) || !Number.isFinite(dt)) {
+        if (atExcludedPole(P, F, pu, pv)) break;
+        return null;
+      }
       // Clamped to the domain (a hit beyond it is no hit: tested below).
       pu = Math.min(s.U[1], Math.max(s.U[0], pu - du)); pv = Math.min(s.V[1], Math.max(s.V[0], pv - dv)); t -= dt;
-      if (len(F) < tol * 1e-3) { ok = true; break; }
+      if (len(F) < solveTolerance) { ok = true; break; }
     }
     if (!ok || pu < s.U[0] - 1e-9 || pu > s.U[1] + 1e-9 || pv < s.V[0] - 1e-9 || pv > s.V[1] + 1e-9) continue;
     if (!out.some(o => Math.abs(o - t) <= 10 * tol)) out.push(t);
