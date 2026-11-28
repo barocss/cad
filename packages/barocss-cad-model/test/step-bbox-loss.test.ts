@@ -74,7 +74,7 @@ test('export names with section tokens or bbox decoys cannot refuse or hide the 
   const doc = withNode(emptyDoc(), { kind: 'import', name: 'sphere.step', step: sphereStep }), before = structuredClone(doc);
   const names = [
     { name: 'ENDSEC;', losses: [loss] },
-    { name: "sphere\n#123=REPRESENTATION('bounding box',(#1,#2),#3);", losses: ['Non-ASCII and control characters in the STEP header file name and product name are replaced with underscores.', loss] },
+    { name: "sphere\n#123=REPRESENTATION('bounding box',(#1,#2),#3);", losses: ['Control characters and invalid Unicode in the STEP header file name and product name are replaced with underscores.', loss] },
   ];
   for (const { name, losses } of names) {
     const result = exportStudioStep(doc, { ...options, name });

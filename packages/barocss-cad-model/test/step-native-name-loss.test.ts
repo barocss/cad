@@ -5,7 +5,7 @@ import { emptyDoc, withNode, type StudioDoc, type PartInstance } from '../src/en
 import { exportStudioStep, partBreps } from '../src/engine/evaluate';
 
 const loss = 'Non-ASCII and control characters in native face and edge names are not retained in this STEP file.';
-const headerLoss = 'Non-ASCII and control characters in the STEP header file name and product name are replaced with underscores.';
+const headerLoss = 'Control characters and invalid Unicode in the STEP header file name and product name are replaced with underscores.';
 const options = { name: 'exchange', timestamp: '2026-11-02T00:00:00' };
 const generated = evaluateCadPart({ format: 'barocss-cad-part', version: 1, units: 'mm', parameters: {}, features: [
   { id: 'n0', kind: 'sketch', profile: 'rectangle', min: [0, 0], max: [30, 12] },

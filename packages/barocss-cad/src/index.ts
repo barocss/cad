@@ -460,7 +460,7 @@ export type { RevolveInput } from './features/revolve.js';
 export { blindDrillPointHeight } from './part/part-blind-drill-hole.js';
 export { finishBrepEdges } from './blend/edge-finish.js';
 export { draftedExtrusion } from './features/drafted-extrusion.js';
-export { exportStep, importStep, MESH_PLANAR_LIMIT, MESH_PLANAR_TRIANGLES, stepMeshes, stepTessellatedChars, stepValidationProperties, compareValidationProperties, type StepValidationProperties, type ValidationCheck } from './io/step.js';
+export { exportStep, importStep, MESH_PLANAR_LIMIT, MESH_PLANAR_TRIANGLES, stepMeshes, stepProductNameHasLoss, stepTessellatedChars, stepValidationProperties, compareValidationProperties, type StepValidationProperties, type ValidationCheck } from './io/step.js';
 export { stepGeometryRecipeKey } from './io/step-import.js';
 export type { StepExportOptions } from './io/step.js';
 export type { DraftedExtrusionInput } from './features/drafted-extrusion.js';

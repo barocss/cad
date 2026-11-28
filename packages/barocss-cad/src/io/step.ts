@@ -23,7 +23,22 @@ const real = (x: number): string => {
   if (/e/i.test(s)) { const [m, e] = s.split(/e/i); return (m.includes('.') ? m : m + '.') + 'E' + e; }
   return s.includes('.') ? s : s + '.';
 };
-const text = (s: string) => `'${s.replace(/\\/g, '\\\\').replace(/'/g, "''").replace(/[^\x20-\x7e]/g, '_')}'`;
+const escapeStepText = (s: string) => s.replace(/\\/g, '\\\\').replace(/'/g, "''");
+const text = (s: string) => `'${escapeStepText(s).replace(/[^\x20-\x7e]/g, '_')}'`;
+const replaceProductNameControls = (s: string) => s.replace(/[\p{Cc}\p{Cs}]/gu, '_');
+
+/** Whether the STEP product and header names replace any characters. */
+export const stepProductNameHasLoss = (s: string): boolean => replaceProductNameControls(s) !== s;
+
+/** Part 21 extended four-octet characters keep the file's existing ASCII encoding level. */
+function productNameText(s: string): string {
+  const printable = escapeStepText(replaceProductNameControls(s));
+  const encoded = printable.replace(/[^\x20-\x7e]+/gu, run => {
+    const scalars = Array.from(run, glyph => glyph.codePointAt(0)!.toString(16).toUpperCase().padStart(8, '0')).join('');
+    return `\\X4\\${scalars}\\X0\\`;
+  });
+  return `'${encoded}'`;
+}
 /** A full knot vector as distinct knots and multiplicities. */
 function knotPairs(knots: readonly number[]): { values: number[]; mults: number[] } {
   const values: number[] = [], mults: number[] = [];
@@ -108,7 +123,8 @@ export function exportStep(input: Brep | readonly Brep[] | { readonly id: string
   const appContext = add_(`APPLICATION_CONTEXT('core data for automotive mechanical design processes')`);
   add_(`APPLICATION_PROTOCOL_DEFINITION('international standard','automotive_design',2000,${appContext})`);
   const productContext = add_(`PRODUCT_CONTEXT('',${appContext},'mechanical')`);
-  const product = add_(`PRODUCT(${text(name)},${text(name)},'',(${productContext}))`);
+  const productLabel = productNameText(name);
+  const product = add_(`PRODUCT(${productLabel},${productLabel},'',(${productContext}))`);
   add_(`PRODUCT_RELATED_PRODUCT_CATEGORY('part',$,(${product}))`);
   const formation = add_(`PRODUCT_DEFINITION_FORMATION('','',${product})`);
   const definitionContext = add_(`PRODUCT_DEFINITION_CONTEXT('part definition',${appContext},'design')`);
@@ -198,8 +214,8 @@ export function exportStep(input: Brep | readonly Brep[] | { readonly id: string
   }
   const origin = placement([0, 0, 0], [0, 0, 1], [1, 0, 0]);
   // (B-rep solids in the advanced B-rep representation; mesh bodies in a tessellated one beside it, related to it.)
-  const advanced = solids.length ? add_(`ADVANCED_BREP_SHAPE_REPRESENTATION(${text(name)},(${[...solids, origin].join(',')}),${context})`) : null;
-  const meshRep = tessellated.length ? add_(`TESSELLATED_SHAPE_REPRESENTATION(${text(name)},(${tessellated.join(',')}),${context})`) : null;
+  const advanced = solids.length ? add_(`ADVANCED_BREP_SHAPE_REPRESENTATION(${productLabel},(${[...solids, origin].join(',')}),${context})`) : null;
+  const meshRep = tessellated.length ? add_(`TESSELLATED_SHAPE_REPRESENTATION(${productLabel},(${tessellated.join(',')}),${context})`) : null;
   add_(`SHAPE_DEFINITION_REPRESENTATION(${shape},${advanced ?? meshRep})`);
   if (advanced && meshRep) add_(`SHAPE_REPRESENTATION_RELATIONSHIP('','tessellated bodies',${advanced},${meshRep})`);
   // (The validation properties of every body, mesh bodies too, whichever way they were written.)
@@ -207,7 +223,7 @@ export function exportStep(input: Brep | readonly Brep[] | { readonly id: string
 
   const stamp = options.timestamp ?? new Date().toISOString().slice(0, 19);
   const description = (options.description?.length ? options.description : ['BaroCSS CAD part']).map(text).join(',');
-  return ['ISO-10303-21;', 'HEADER;', `FILE_DESCRIPTION((${description}),'2;1');`, `FILE_NAME(${text(name + '.step')},${text(stamp)},(''),(''),'BaroCSS CAD','BaroCSS CAD','');`,
+  return ['ISO-10303-21;', 'HEADER;', `FILE_DESCRIPTION((${description}),'2;1');`, `FILE_NAME(${productNameText(name + '.step')},${text(stamp)},(''),(''),'BaroCSS CAD','BaroCSS CAD','');`,
     `FILE_SCHEMA(('${meshRep ? AP242 : AP214}'));`, 'ENDSEC;', 'DATA;', ...lines, 'ENDSEC;', 'END-ISO-10303-21;', ''].join('\n');
 }
 
@@ -230,7 +246,7 @@ function writeValidationProperties(breps: readonly Brep[], add_: (e: string) => 
     } else qualifiedBox = false;
   }
   if (!(volume > 0)) return;
-  const property = (what: string, representation: string) => { const def = add_(`PROPERTY_DEFINITION('geometric validation property',${text(`${what} of ${name}`)},${shape})`); add_(`PROPERTY_DEFINITION_REPRESENTATION(${def},${representation})`); };
+  const property = (what: string, representation: string) => { const def = add_(`PROPERTY_DEFINITION('geometric validation property',${productNameText(`${what} of ${name}`)},${shape})`); add_(`PROPERTY_DEFINITION_REPRESENTATION(${def},${representation})`); };
   // Plain derived units keep the mm powers readable by the declared AP214 profile and OCCT's unit select.
   const volumeUnit = add_(`DERIVED_UNIT((${add_(`DERIVED_UNIT_ELEMENT(${mm},3.)`)}))`), areaUnit = add_(`DERIVED_UNIT((${add_(`DERIVED_UNIT_ELEMENT(${mm},2.)`)}))`);
   property('volume', add_(`REPRESENTATION('volume',(${add_(`MEASURE_REPRESENTATION_ITEM('volume measure',VOLUME_MEASURE(${real(volume)}),${volumeUnit})`)}),${context})`));

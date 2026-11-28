@@ -11,7 +11,7 @@ import { faceTableFrom, rememberFaceTable } from '../assembly/faces';
 import { fitNotes } from './fits';
 import { boughtOf, elementOf, type BodyElement } from './elements';
 import type { FaceTable } from '../assembly/mates';
-import { BarocssError, checkOutput, massPropertiesOf, reevaluate, exportStl, type CadPartOutput, brepSurfaceArea, cutPiece, evaluateCadPart, transformBrep, FACET_PREVIEW_TRIANGLES, type Brep, type CadPartFeatureProfile, type CadPartSnapshot, type FlatPattern, type GearPlacement, type RackPlacement, type SubdSummary, type CutPiece, exportStep } from '@barocss/cad';
+import { BarocssError, checkOutput, massPropertiesOf, reevaluate, exportStl, type CadPartOutput, brepSurfaceArea, cutPiece, evaluateCadPart, transformBrep, FACET_PREVIEW_TRIANGLES, type Brep, type CadPartFeatureProfile, type CadPartSnapshot, type FlatPattern, type GearPlacement, type RackPlacement, type SubdSummary, type CutPiece, exportStep, stepProductNameHasLoss } from '@barocss/cad';
 import { bodyMesh, canonicalSweepCapSamples, withoutNativeFaces, type DisplayEdge, type DisplayMesh } from './mesh';
 import { cylinderDisplayMesh, steppedShaftDisplayMesh } from './cylinderDisplay';
 import { boreWallOffsetFrame } from '@barocss/cad/internal/bored-cap-offset';
@@ -771,10 +771,9 @@ export interface StudioStepScope {
   nativeBodies: number;
 }
 export interface StudioStep { text: string; source: string; omitted?: string[]; scope: StudioStepScope }
-// The writer keeps printable ASCII and replaces other header/product-name characters with underscores.
 function stepNameLosses(name: string): string[] {
-  return /[^\x20-\x7e]/.test(name)
-    ? ['Non-ASCII and control characters in the STEP header file name and product name are replaced with underscores.']
+  return stepProductNameHasLoss(name)
+    ? ['Control characters and invalid Unicode in the STEP header file name and product name are replaced with underscores.']
     : [];
 }
 const STEP_NATIVE_NAME_LOSS = 'Non-ASCII and control characters in native face and edge names are not retained in this STEP file.';

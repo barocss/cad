@@ -6,19 +6,20 @@ import { createFlow, sha256 } from './flow-helper.mjs';
 
 assert.ok(process.argv[2] && process.argv[3], 'Output and prepared native fixture folders are required');
 const input = resolve(process.argv[3]);
+const baseline = process.argv.includes('--baseline');
 const unicodeFile = join(input, '부품.bcad'), asciiFile = join(input, 'plate A_1.bcad');
 const expectedDoc = JSON.parse(await readFile(unicodeFile, 'utf8'));
 assert.deepEqual(JSON.parse(await readFile(asciiFile, 'utf8')), expectedDoc);
 const nameLoss = 'Non-ASCII and control characters in the STEP header file name and product name are replaced with underscores.';
 const f = await createFlow({
   name: 'step-name-loss', envFrozen: 'STEP_NAME_LOSS_SOURCE_FROZEN', output: process.argv[2],
-  qualification: 'D421_STEP_NAME_LOSS_REPORT',
+  qualification: baseline ? 'D421_STEP_NAME_LOSS_REPORT' : 'STEP product name keeps the declared Unicode characters',
   inspectorSource: "export { exportStudioStep } from '@barocss/cad-model/engine/evaluate';", // Build graph for source freezing only; no inspector assertion.
   initialFiles: ['apps/cad-studio/test/step-name-loss-browser.mjs', unicodeFile, asciiFile],
   requiredFrozen: ['packages/barocss-cad-model/src/engine/evaluate.ts', 'packages/barocss-cad/src/io/step.ts', 'apps/cad-studio/src/files/stepExportPreparation.ts', 'apps/cad-studio/src/files/StepExportPanel.tsx'],
   limits: [
-    'Existing native imported box and in-memory STEP preparation only; no new Unicode codec or geometry behavior.',
-    'The raw intended download basename is shown unchanged. STEP header file/product names use the existing underscore replacement. Actual outbound download filename acceptance is NOT_RUN.',
+    'Existing native imported box and in-memory STEP preparation only.',
+    'The raw intended download basename is shown unchanged. Actual outbound download filename acceptance is NOT_RUN.',
     'Korean name plus printable ASCII control; Latin/control/quote/backslash cases are focused real-Model tests, not additional actual UI states.',
     'No Save, outbound Export, downloads, OCP, paid calls or broad format acceptance.',
   ],
@@ -80,9 +81,9 @@ await f.run(async () => {
     return context;
   };
   try { await f.newPage(); } finally { f.browser.newContext = newContext; }
-  f.phase = 'Open Korean basename and prepare explicit header/product replacement loss';
+  f.phase = 'Open Korean basename and prepare the STEP header and product name';
   await open(unicodeFile, '부품');
-  const unicode = await prepare('부품', '__', '01-korean-name-loss', [nameLoss]);
+  const unicode = await prepare('부품', baseline ? '__' : '\\X4\\0000BD800000D488\\X0\\', '01-korean-name', baseline ? [nameLoss] : []);
   await unicode.getByRole('button', { name: 'Cancel', exact: true }).click();
   await unicode.waitFor({ state: 'hidden' });
   await f.same(expectedDoc);
